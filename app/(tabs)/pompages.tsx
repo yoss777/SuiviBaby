@@ -1,4 +1,4 @@
-import { ajouterMiction, ecouterMictions } from "@/services/mictionsService";
+import { ajouterPompage, ecouterPompages } from "@/services/pompagesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useCallback, useEffect, useState } from "react";
@@ -14,8 +14,8 @@ import {
 } from "react-native";
 import ModernActionButtons from "../components/ModernActionsButton";
 
-export default function MictionsScreen() {
-  const [mictions, setMictions] = useState<any[]>([]);
+export default function PompagesScreen() {
+  const [pompages, setPompages] = useState<any[]>([]);
   const [showModal, setShowModal] = useState<boolean>(false);
 
   // date + heure de la tétée
@@ -23,9 +23,14 @@ export default function MictionsScreen() {
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
 
+  // champs du formulaire
+  const [quantiteGauche, setQuantiteGauche] = useState<number>(100);
+  const [quantiteDroite, setQuantiteDroite] = useState<number>(100);
+  const [showPicker, setShowPicker] = useState(false);
+
   // écoute en temps réel
   useEffect(() => {
-    const unsubscribe = ecouterMictions(setMictions);
+    const unsubscribe = ecouterPompages(setPompages);
     return () => unsubscribe();
   }, []);
 
@@ -34,13 +39,17 @@ export default function MictionsScreen() {
   };
 
   const cancelForm = useCallback(() => {
+    setQuantiteGauche(100);
+    setQuantiteDroite(100);
     setDateHeure(new Date());
     toggleModal();
   }, [toggleModal]);
 
-  const handleAddMiction = async () => {
-    await ajouterMiction({
-      date: dateHeure,
+  const handleAddPompage = async () => {
+    await ajouterPompage({
+      quantiteGauche,
+      quantiteDroite,
+      date: dateHeure, // tu peux stocker directement le timestamp Firestore
     });
     toggleModal();
   };
@@ -72,63 +81,89 @@ export default function MictionsScreen() {
       });
     }
   };
+  
+  // Rendu d'un item de la liste
+  const renderItem = ({ item }: { item: any }) => {
+    
+    return (
+      <View style={styles.item}>
+        {/* Date & Heure */}
+        <View style={styles.itemRowData}>
+          <View style={styles.itemCategory}>
+            <FontAwesome name="calendar-alt" size={24} color="black" />
+            {/* Date seule */}
+            <Text style={styles.subtitle}>
+              {new Date(item.date?.seconds * 1000).toLocaleString("fr-FR", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </Text>
+          </View>
 
-  const renderItem = ({ item }: { item: any }) => (
-    <View style={styles.item}>
-      {/* Date & Heure */}
-      <View style={styles.itemRowData}>
-        <View style={styles.itemCategory}>
-          <FontAwesome name="calendar-alt" size={24} color="black" />
-          {/* Date seule */}
-          <Text style={styles.subtitle}>
-            {new Date(item.date?.seconds * 1000).toLocaleString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
+          <View style={styles.itemCategory}>
+            <FontAwesome name="clock" size={24} color="black" />
+            {/* Heure seule */}
+            <Text style={styles.subtitle}>
+              {new Date(item.date?.seconds * 1000).toLocaleString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.itemCategory}>
-          <FontAwesome name="clock" size={24} color="black" />
-          {/* Heure seule */}
-          <Text style={styles.subtitle}>
-            {new Date(item.date?.seconds * 1000).toLocaleString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
+        {/* Sein & Quantité */}
+        <View style={styles.itemRowData}>
+          <View style={styles.itemCategory}>
+            <FontAwesome size={20} name="leaf" color="#000000" />
+            <Text style={styles.title}>Sein Gauche</Text>
+          </View>
+          <View style={styles.itemCategory}>
+            <FontAwesome name="hand-holding-heart" size={24} color="black" />
+            <Text style={styles.title}>{item.quantiteGauche} ml</Text>
+          </View>
+        </View>
+        <View style={styles.itemRowData}>
+          <View style={styles.itemCategory}>
+            <FontAwesome size={20} name="leaf" color="#000000" />
+            <Text style={styles.title}>Sein Droit</Text>
+          </View>
+          <View style={styles.itemCategory}>
+            <FontAwesome name="hand-holding-heart" size={24} color="black" />
+            <Text style={styles.title}>{item.quantiteDroite} ml</Text>
+          </View>
+        </View>
+        <View style={[styles.itemRowData, { justifyContent: "center" }]}>
+          <View style={styles.itemCategory}>
+            <FontAwesome size={20} name="cloud-download-alt" color="#000000" />
+            <View
+              style={{ alignItems: "center", flexDirection: "row", gap: 5 }}
+            >
+              <Text style={styles.title}>Total tiré :</Text>
+              <Text
+                style={[styles.subtitle, { fontSize: 16, fontWeight: "bold" }]}
+              >
+                {(item.quantiteDroite || 0) + (item.quantiteGauche || 0)} ml
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
-      {/* Séparateur */}
-      {/* <View
-        style={{
-          borderBottomColor: "#cccccc",
-          borderBottomWidth: 1,
-          marginVertical: 5,
-        }}
-      />
-      <View style={styles.itemRowData}>
-        <View style={styles.itemCategory}>
-          <FontAwesome name="toilet" size={24} color="black" />
-          <Text style={styles.title}>Miction</Text>
-        </View>
-      </View> */}
-    </View>
-  );
-
+    );
+  };
   return (
     <View style={styles.container}>
-      <Button title="Ajouter une miction" onPress={toggleModal} />
+      <Button title="Ajouter une session tire-lait" onPress={toggleModal} />
 
       <FlatList
-        data={mictions}
+        data={pompages}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => renderItem({ item })}
         ListEmptyComponent={
           <View style={{ alignItems: "center", marginTop: 20 }}>
-            <Text>Aucune miction enregistrée.</Text>
+            <Text>Aucune tétée enregistrée.</Text>
           </View>
         }
       />
@@ -142,7 +177,50 @@ export default function MictionsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalCategoryLabel}>Ajouter une miction</Text>
+            <Text style={styles.modalCategoryLabel}>
+              Ajouter une session tire-lait
+            </Text>
+
+            {/* Quantité Sein Gauche */}
+            <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
+            <View style={styles.quantityRow}>
+              <TouchableOpacity
+                style={styles.quantityButton}
+                onPress={() => setQuantiteGauche((q) => Math.max(0, q - 5))}
+              >
+                <Text style={styles.quantityButtonText}>-</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.quantityValue}>{quantiteGauche} ml</Text>
+
+              <TouchableOpacity
+                style={styles.quantityButton}
+                onPress={() => setQuantiteGauche((q) => q + 5)}
+              >
+                <Text style={styles.quantityButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Quantité Sein Droit */}
+            <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
+            <View style={styles.quantityRow}>
+              <TouchableOpacity
+                style={styles.quantityButton}
+                onPress={() => setQuantiteDroite((q) => Math.max(0, q - 5))}
+              >
+                <Text style={styles.quantityButtonText}>-</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.quantityValue}>{quantiteDroite} ml</Text>
+
+              <TouchableOpacity
+                style={styles.quantityButton}
+                onPress={() => setQuantiteDroite((q) => q + 5)}
+              >
+                <Text style={styles.quantityButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Date & Heure */}
             <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
 
@@ -217,7 +295,7 @@ export default function MictionsScreen() {
             <View style={styles.actionButtonsContainer}>
               <ModernActionButtons
                 onCancel={cancelForm}
-                onValidate={handleAddMiction}
+                onValidate={handleAddPompage}
                 cancelText="Annuler"
                 validateText="Ajouter"
               />
@@ -243,7 +321,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     alignItems: "center",
-    // paddingBottom: 10,
+    paddingBottom: 10,
   },
   itemRowData: {
     alignItems: "center",
@@ -253,7 +331,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   title: { fontSize: 16, fontWeight: "bold" },
-  subtitle: { fontSize: 14, color: "#004cdaff", },
+  subtitle: { fontSize: 14, color: "#004cdaff" },
   actionButtonsContainer: {
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === "ios" ? 34 : 20,
@@ -276,6 +354,46 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     fontWeight: "bold",
     paddingVertical: 10,
+  },
+  seinRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 10,
+  },
+  seinButton: {
+    padding: 10,
+    backgroundColor: "#eee",
+    borderRadius: 12,
+    minWidth: 100,
+    alignItems: "center",
+  },
+  seinButtonActive: {
+    backgroundColor: "#4A90E2",
+  },
+  seinText: {
+    color: "#333",
+    fontSize: 16,
+  },
+  seinTextActive: {
+    color: "white",
+    fontWeight: "bold",
+  },
+  quantityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 10,
+  },
+  quantityButton: {
+    backgroundColor: "#eee",
+    padding: 12,
+    borderRadius: 8,
+  },
+  quantityButtonText: { fontSize: 20, fontWeight: "bold" },
+  quantityValue: {
+    fontSize: 20,
+    marginHorizontal: 20,
+    fontWeight: "bold",
   },
   dateButton: {
     backgroundColor: "#eee",
