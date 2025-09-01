@@ -3,7 +3,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useCallback, useEffect, useState } from "react";
 import {
-  Button,
   FlatList,
   Modal,
   Platform,
@@ -14,20 +13,87 @@ import {
 } from "react-native";
 import ModernActionButtons from "../components/ModernActionsButton";
 
+// Interface pour typer les données
+interface Miction {
+  id: string;
+  date: { seconds: number };
+  createdAt: { seconds: number };
+}
+
+interface MictionGroup {
+  date: string;
+  dateFormatted: string;
+  mictions: Miction[];
+  lastMiction: Miction;
+}
+
 export default function MictionsScreen() {
-  const [mictions, setMictions] = useState<any[]>([]);
+  const [mictions, setMictions] = useState<Miction[]>([]);
+  const [groupedMictions, setGroupedMictions] = useState<MictionGroup[]>([]);
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
 
-  // date + heure de la tétée
+  // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
 
-  // écoute en temps réel
+  // Écoute en temps réel
   useEffect(() => {
     const unsubscribe = ecouterMictions(setMictions);
     return () => unsubscribe();
   }, []);
+
+  // Regroupement par jour
+  useEffect(() => {
+    const grouped = groupMictionsByDay(mictions);
+    setGroupedMictions(grouped);
+  }, [mictions]);
+
+  const groupMictionsByDay = (mictions: Miction[]): MictionGroup[] => {
+    const groups: { [key: string]: Miction[] } = {};
+    
+    mictions.forEach((miction) => {
+      const date = new Date(miction.date?.seconds * 1000);
+      const dateKey = date.toISOString().split('T')[0];
+      
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(miction);
+    });
+
+    return Object.entries(groups)
+      .map(([dateKey, mictions]) => {
+        const date = new Date(dateKey);
+        const lastMiction = mictions.reduce((latest, current) => 
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0) ? current : latest
+        );
+
+        return {
+          date: dateKey,
+          dateFormatted: date.toLocaleDateString("fr-FR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          }),
+          mictions: mictions.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)),
+          lastMiction,
+        };
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  const toggleExpand = (dateKey: string) => {
+    const newExpandedDays = new Set(expandedDays);
+    if (newExpandedDays.has(dateKey)) {
+      newExpandedDays.delete(dateKey);
+    } else {
+      newExpandedDays.add(dateKey);
+    }
+    setExpandedDays(newExpandedDays);
+  };
 
   const toggleModal = () => {
     setShowModal(!showModal);
@@ -45,7 +111,6 @@ export default function MictionsScreen() {
     toggleModal();
   };
 
-  // Handlers pour date & heure
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
     if (selectedDate) {
@@ -73,62 +138,96 @@ export default function MictionsScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: any }) => (
-    <View style={styles.item}>
-      {/* Date & Heure */}
-      <View style={styles.itemRowData}>
-        <View style={styles.itemCategory}>
-          <FontAwesome name="calendar-alt" size={24} color="black" />
-          {/* Date seule */}
-          <Text style={styles.subtitle}>
-            {new Date(item.date?.seconds * 1000).toLocaleString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
-        </View>
-
-        <View style={styles.itemCategory}>
-          <FontAwesome name="clock" size={24} color="black" />
-          {/* Heure seule */}
-          <Text style={styles.subtitle}>
-            {new Date(item.date?.seconds * 1000).toLocaleString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
+  const renderMictionItem = (miction: Miction, isLast: boolean = false) => (
+    <View 
+      key={miction.id} 
+      style={[styles.mictionItem, isLast && styles.lastMictionItem]}
+    >
+      <View style={styles.mictionContent}>
+        <FontAwesome name="tint" size={16} color={isLast ? "#4A90E2" : "#666"} />
+        <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
+          {new Date(miction.date?.seconds * 1000).toLocaleTimeString("fr-FR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Text>
+        {isLast && (
+          <View style={styles.recentBadge}>
+            <Text style={styles.recentText}>Récent</Text>
+          </View>
+        )}
       </View>
-      {/* Séparateur */}
-      {/* <View
-        style={{
-          borderBottomColor: "#cccccc",
-          borderBottomWidth: 1,
-          marginVertical: 5,
-        }}
-      />
-      <View style={styles.itemRowData}>
-        <View style={styles.itemCategory}>
-          <FontAwesome name="toilet" size={24} color="black" />
-          <Text style={styles.title}>Miction</Text>
-        </View>
-      </View> */}
     </View>
   );
 
+  const renderDayGroup = ({ item }: { item: MictionGroup }) => {
+    const isExpanded = expandedDays.has(item.date);
+    const hasMultipleMictions = item.mictions.length > 1;
+
+    return (
+      <View style={styles.dayCard}>
+        {/* En-tête du jour */}
+        <View style={styles.dayHeader}>
+          <View style={styles.dayInfo}>
+            <Text style={styles.dayDate}>{item.dateFormatted}</Text>
+            <View style={styles.summaryInfo}>
+              <FontAwesome name="water" size={14} color="#666" />
+              <Text style={styles.summaryText}>
+                {item.mictions.length} miction{item.mictions.length > 1 ? 's' : ''}
+              </Text>
+            </View>
+          </View>
+          {hasMultipleMictions && (
+            <TouchableOpacity
+              style={styles.expandButton}
+              onPress={() => toggleExpand(item.date)}
+            >
+              <FontAwesome
+                name={isExpanded ? "chevron-up" : "chevron-down"}
+                size={16}
+                color="#666"
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Dernière miction (toujours visible) */}
+        {renderMictionItem(item.lastMiction, true)}
+
+        {/* Mictions supplémentaires (repliables) */}
+        {hasMultipleMictions && isExpanded && (
+          <View style={styles.expandedContent}>
+            <View style={styles.separator} />
+            <Text style={styles.historyLabel}>Historique du jour</Text>
+            {item.mictions
+              .filter(miction => miction.id !== item.lastMiction.id)
+              .map(miction => renderMictionItem(miction))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <Button title="Ajouter une miction" onPress={toggleModal} />
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.addButton} onPress={toggleModal}>
+          <FontAwesome name="plus" size={16} color="white" />
+          <Text style={styles.addButtonText}>Nouvelle miction</Text>
+        </TouchableOpacity>
+      </View>
 
       <FlatList
-        data={mictions}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => renderItem({ item })}
+        data={groupedMictions}
+        keyExtractor={(item) => item.date}
+        renderItem={renderDayGroup}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          <View style={{ alignItems: "center", marginTop: 20 }}>
-            <Text>Aucune miction enregistrée.</Text>
+          <View style={styles.emptyState}>
+            <FontAwesome name="tint" size={48} color="#ccc" />
+            <Text style={styles.emptyText}>Aucune miction enregistrée</Text>
+            <Text style={styles.emptySubtext}>Ajoutez votre première miction</Text>
           </View>
         }
       />
@@ -142,43 +241,32 @@ export default function MictionsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalCategoryLabel}>Ajouter une miction</Text>
+            <View style={styles.modalHeader}>
+              <FontAwesome name="tint" size={24} color="#4A90E2" />
+              <Text style={styles.modalTitle}>Nouvelle miction</Text>
+            </View>
+
             {/* Date & Heure */}
             <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-
-            <View
-              style={{
-                alignItems: "center",
-                flexDirection: "row",
-                marginBottom: 10,
-                justifyContent: "center",
-                gap: 10,
-              }}
-            >
+            <View style={styles.dateTimeContainer}>
               <TouchableOpacity
                 style={styles.dateButton}
                 onPress={() => setShowDate(true)}
               >
-                <Text style={styles.dateButtonText}>Choisir la Date</Text>
+                <FontAwesome name="calendar-alt" size={16} color="#666" />
+                <Text style={styles.dateButtonText}>Date</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.dateButton}
                 onPress={() => setShowTime(true)}
               >
-                <Text style={styles.dateButtonText}>Choisir l’Heure</Text>
+                <FontAwesome name="clock" size={16} color="#666" />
+                <Text style={styles.dateButtonText}>Heure</Text>
               </TouchableOpacity>
             </View>
 
-            <View
-              style={{
-                alignItems: "center",
-                marginBottom: 10,
-                justifyContent: "space-around",
-              }}
-            >
-              {/* Date seule */}
-              <Text style={styles.subtitle}>
+            <View style={styles.selectedDateTime}>
+              <Text style={styles.selectedDate}>
                 {dateHeure.toLocaleDateString("fr-FR", {
                   weekday: "long",
                   year: "numeric",
@@ -186,9 +274,7 @@ export default function MictionsScreen() {
                   day: "numeric",
                 })}
               </Text>
-
-              {/* Heure seule */}
-              <Text style={styles.subtitle}>
+              <Text style={styles.selectedTime}>
                 {dateHeure.toLocaleTimeString("fr-FR", {
                   hour: "2-digit",
                   minute: "2-digit",
@@ -213,7 +299,7 @@ export default function MictionsScreen() {
                 onChange={onChangeTime}
               />
             )}
-            {/* Boutons Annuler / Ajouter */}
+
             <View style={styles.actionButtonsContainer}>
               <ModernActionButtons
                 onCancel={cancelForm}
@@ -230,34 +316,142 @@ export default function MictionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 10 },
-  item: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    marginBottom: 10,
-    backgroundColor: "white",
+  container: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
   },
-  itemCategory: {
+  header: {
+    padding: 16,
+    paddingBottom: 8,
+  },
+  addButton: {
+    backgroundColor: "#17a2b8", // Couleur cyan pour les mictions
     flexDirection: "row",
-    gap: 10,
     alignItems: "center",
-    // paddingBottom: 10,
-  },
-  itemRowData: {
-    alignItems: "center",
-    marginVertical: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 10,
-  },
-  title: { fontSize: 16, fontWeight: "bold" },
-  subtitle: { fontSize: 14, color: "#004cdaff", },
-  actionButtonsContainer: {
+    justifyContent: "center",
+    paddingVertical: 12,
     paddingHorizontal: 20,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+    borderRadius: 12,
+    gap: 8,
   },
+  addButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  dayCard: {
+    backgroundColor: "white",
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  dayHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  dayInfo: {
+    flex: 1,
+  },
+  dayDate: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 4,
+  },
+  summaryInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  summaryText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  expandButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "#f0f0f0",
+  },
+  mictionItem: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  lastMictionItem: {
+    backgroundColor: "#e3f2fd",
+    borderLeftWidth: 4,
+    borderLeftColor: "#17a2b8",
+  },
+  mictionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  timeText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#666",
+    flex: 1,
+  },
+  lastTimeText: {
+    color: "#333",
+    fontWeight: "600",
+  },
+  recentBadge: {
+    backgroundColor: "#17a2b8",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  recentText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  expandedContent: {
+    marginTop: 8,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#eee",
+    marginBottom: 12,
+  },
+  historyLabel: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: "#666",
+    marginTop: 16,
+    fontWeight: "600",
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 4,
+  },
+  // Styles du modal
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -269,21 +463,70 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     backgroundColor: "white",
-    borderRadius: 10,
+    borderRadius: 12,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
   },
   modalCategoryLabel: {
-    fontSize: 18,
-    alignSelf: "center",
-    fontWeight: "bold",
-    paddingVertical: 10,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
+  },
+  dateTimeContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 20,
   },
   dateButton: {
-    backgroundColor: "#eee",
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
-    marginVertical: 10,
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
   },
-  dateButtonText: { fontSize: 16 },
+  dateButtonText: {
+    fontSize: 16,
+    color: "#666",
+    fontWeight: "500",
+  },
+  selectedDateTime: {
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+  },
+  selectedDate: {
+    fontSize: 16,
+    color: "#333",
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  selectedTime: {
+    fontSize: 20,
+    color: "#17a2b8",
+    fontWeight: "bold",
+  },
+  actionButtonsContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+  },
 });
-// Note: Le style des boutons Annuler / Ajouter est dans ModernActionsButton.js

@@ -2,37 +2,105 @@ import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useCallback, useEffect, useState } from "react";
 import {
-  Button,
   FlatList,
   Modal,
   Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { ajouterTetee, ecouterTetees } from "../../services/teteesService";
 import ModernActionButtons from "../components/ModernActionsButton";
 
+// Interface pour typer les données
+interface Tetee {
+  id: string;
+  sein: "sein gauche" | "sein droit" | "seins + biberon";
+  quantite: number;
+  date: { seconds: number };
+  createdAt: { seconds: number };
+}
+
+interface TeteeGroup {
+  date: string;
+  dateFormatted: string;
+  tetees: Tetee[];
+  totalQuantity: number;
+  lastTetee: Tetee;
+}
+
 export default function TeteesScreen() {
-  const [tetees, setTetees] = useState<any[]>([]);
+  const [tetees, setTetees] = useState<Tetee[]>([]);
+  const [groupedTetees, setGroupedTetees] = useState<TeteeGroup[]>([]);
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
 
-  // date + heure de la tétée
+  // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
-
-  // champs du formulaire
   const [sein, setSein] = useState<"sein gauche" | "sein droit" | "seins + biberon">("seins + biberon");
   const [quantite, setQuantite] = useState<number>(50);
-  const [showPicker, setShowPicker] = useState(false);
 
-  // écoute en temps réel
+  // Écoute en temps réel
   useEffect(() => {
     const unsubscribe = ecouterTetees(setTetees);
     return () => unsubscribe();
   }, []);
+
+  // Regroupement par jour
+  useEffect(() => {
+    const grouped = groupTeteesByDay(tetees);
+    setGroupedTetees(grouped);
+  }, [tetees]);
+
+  const groupTeteesByDay = (tetees: Tetee[]): TeteeGroup[] => {
+    const groups: { [key: string]: Tetee[] } = {};
+    
+    tetees.forEach((tetee) => {
+      const date = new Date(tetee.date?.seconds * 1000);
+      const dateKey = date.toISOString().split('T')[0];
+      
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(tetee);
+    });
+
+    return Object.entries(groups)
+      .map(([dateKey, tetees]) => {
+        const date = new Date(dateKey);
+        const totalQuantity = tetees.reduce((sum, tetee) => sum + (tetee.quantite || 0), 0);
+        const lastTetee = tetees.reduce((latest, current) => 
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0) ? current : latest
+        );
+
+        return {
+          date: dateKey,
+          dateFormatted: date.toLocaleDateString("fr-FR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          }),
+          tetees: tetees.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)),
+          totalQuantity,
+          lastTetee,
+        };
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  const toggleExpand = (dateKey: string) => {
+    const newExpandedDays = new Set(expandedDays);
+    if (newExpandedDays.has(dateKey)) {
+      newExpandedDays.delete(dateKey);
+    } else {
+      newExpandedDays.add(dateKey);
+    }
+    setExpandedDays(newExpandedDays);
+  };
 
   const toggleModal = () => {
     setShowModal(!showModal);
@@ -48,12 +116,11 @@ export default function TeteesScreen() {
     await ajouterTetee({
       sein,
       quantite,
-      date: dateHeure, // tu peux stocker directement le timestamp Firestore
+      date: dateHeure,
     });
     toggleModal();
   };
 
-  // Handlers pour date & heure
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
     if (selectedDate) {
@@ -81,65 +148,106 @@ export default function TeteesScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: any }) => (
-    <View style={styles.item}>
-      {/* Date & Heure */}
-      <View style={styles.itemRowData}>
-        <View style={styles.itemCategory}>
-          <FontAwesome name="calendar-alt" size={24} color="black" />
-          {/* Date seule */}
-          <Text style={styles.subtitle}>
-            {new Date(item.date?.seconds * 1000).toLocaleString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
+  const renderTeteeItem = (tetee: Tetee, isLast: boolean = false) => (
+    <View 
+      key={tetee.id} 
+      style={[styles.teteeItem, isLast && styles.lastTeteeItem]}
+    >
+      <View style={styles.teteeContent}>
+        <View style={styles.teteeInfo}>
+          <View style={styles.infoRow}>
+            <FontAwesome name="clock" size={16} color="#666" />
+            <Text style={styles.timeText}>
+              {new Date(tetee.date?.seconds * 1000).toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <FontAwesome name="leaf" size={14} color="#666" />
+            <Text style={styles.seinText}>{tetee.sein}</Text>
+          </View>
         </View>
-
-        <View style={styles.itemCategory}>
-          <FontAwesome name="clock" size={24} color="black" />
-          {/* Heure seule */}
-          <Text style={styles.subtitle}>
-            {new Date(item.date?.seconds * 1000).toLocaleString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-      </View>
-
-      {/* Sein & Quantité */}
-      <View style={styles.itemRowData}>
-        <View style={styles.itemCategory}>
-          <FontAwesome size={20} name="leaf" color="#000000" />
-          <Text style={styles.title}>{item.sein}</Text>
-        </View>
-        <View style={styles.itemCategory}>
-          <FontAwesome name="hand-holding-heart" size={24} color="black" />
-          <Text style={styles.title}>{item.quantite} ml</Text>
+        <View style={styles.quantityBadge}>
+          <Text style={styles.quantityText}>{tetee.quantite} ml</Text>
         </View>
       </View>
     </View>
   );
 
+  const renderDayGroup = ({ item }: { item: TeteeGroup }) => {
+    const isExpanded = expandedDays.has(item.date);
+    const hasMultipleTetees = item.tetees.length > 1;
+
+    return (
+      <View style={styles.dayCard}>
+        {/* En-tête du jour */}
+        <View style={styles.dayHeader}>
+          <View style={styles.dayInfo}>
+            <Text style={styles.dayDate}>{item.dateFormatted}</Text>
+            <View style={styles.summaryInfo}>
+              <Text style={styles.summaryText}>
+                {item.tetees.length} tétée{item.tetees.length > 1 ? 's' : ''} • {item.totalQuantity} ml total
+              </Text>
+            </View>
+          </View>
+          {hasMultipleTetees && (
+            <TouchableOpacity
+              style={styles.expandButton}
+              onPress={() => toggleExpand(item.date)}
+            >
+              <FontAwesome
+                name={isExpanded ? "chevron-up" : "chevron-down"}
+                size={16}
+                color="#666"
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Dernière tétée (toujours visible) */}
+        {renderTeteeItem(item.lastTetee, true)}
+
+        {/* Tétées supplémentaires (repliables) */}
+        {hasMultipleTetees && isExpanded && (
+          <View style={styles.expandedContent}>
+            <View style={styles.separator} />
+            <Text style={styles.historyLabel}>Historique du jour</Text>
+            {item.tetees
+              .filter(tetee => tetee.id !== item.lastTetee.id)
+              .map(tetee => renderTeteeItem(tetee))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <Button title="Ajouter une tétée" onPress={toggleModal} />
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.addButton} onPress={toggleModal}>
+          <FontAwesome name="plus" size={16} color="white" />
+          <Text style={styles.addButtonText}>Nouvelle tétée</Text>
+        </TouchableOpacity>
+      </View>
 
       <FlatList
-        data={tetees}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => renderItem({ item })}
+        data={groupedTetees}
+        keyExtractor={(item) => item.date}
+        renderItem={renderDayGroup}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          <View style={{ alignItems: "center", marginTop: 20 }}>
-            <Text>Aucune tétée enregistrée.</Text>
+          <View style={styles.emptyState}>
+            <FontAwesome name="baby" size={48} color="#ccc" />
+            <Text style={styles.emptyText}>Aucune tétée enregistrée</Text>
+            <Text style={styles.emptySubtext}>Ajoutez votre première tétée</Text>
           </View>
         }
       />
 
-      {/* MODAL */}
+      {/* MODAL (inchangée) */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -149,6 +257,7 @@ export default function TeteesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalCategoryLabel}>Ajouter une tétée</Text>
+            
             {/* Sélection du sein */}
             <View style={styles.seinRow}>
               {["sein gauche", "sein droit"].map((s) => (
@@ -171,6 +280,7 @@ export default function TeteesScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+
             {/* Quantité */}
             <Text style={styles.modalCategoryLabel}>Quantité</Text>
             <View style={styles.quantityRow}>
@@ -180,9 +290,7 @@ export default function TeteesScreen() {
               >
                 <Text style={styles.quantityButtonText}>-</Text>
               </TouchableOpacity>
-
               <Text style={styles.quantityValue}>{quantite} ml</Text>
-
               <TouchableOpacity
                 style={styles.quantityButton}
                 onPress={() => setQuantite((q) => q + 5)}
@@ -190,41 +298,25 @@ export default function TeteesScreen() {
                 <Text style={styles.quantityButtonText}>+</Text>
               </TouchableOpacity>
             </View>
+
             {/* Date & Heure */}
             <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-
-            <View
-              style={{
-                alignItems: "center",
-                flexDirection: "row",
-                marginBottom: 10,
-                justifyContent: "center",
-                gap: 10,
-              }}
-            >
+            <View style={styles.dateTimeContainer}>
               <TouchableOpacity
                 style={styles.dateButton}
                 onPress={() => setShowDate(true)}
               >
                 <Text style={styles.dateButtonText}>Choisir la Date</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.dateButton}
                 onPress={() => setShowTime(true)}
               >
-                <Text style={styles.dateButtonText}>Choisir l’Heure</Text>
+                <Text style={styles.dateButtonText}>{`Choisir l'Heure`}</Text>
               </TouchableOpacity>
             </View>
 
-            <View
-              style={{
-                alignItems: "center",
-                marginBottom: 10,
-                justifyContent: "space-around",
-              }}
-            >
-              {/* Date seule */}
+            <View style={styles.selectedDateTime}>
               <Text style={styles.subtitle}>
                 {dateHeure.toLocaleDateString("fr-FR", {
                   weekday: "long",
@@ -233,8 +325,6 @@ export default function TeteesScreen() {
                   day: "numeric",
                 })}
               </Text>
-
-              {/* Heure seule */}
               <Text style={styles.subtitle}>
                 {dateHeure.toLocaleTimeString("fr-FR", {
                   hour: "2-digit",
@@ -260,7 +350,7 @@ export default function TeteesScreen() {
                 onChange={onChangeTime}
               />
             )}
-            {/* Boutons Annuler / Ajouter */}
+
             <View style={styles.actionButtonsContainer}>
               <ModernActionButtons
                 onCancel={cancelForm}
@@ -277,34 +367,150 @@ export default function TeteesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 10 },
-  item: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    marginBottom: 10,
-    backgroundColor: "white",
+  container: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
   },
-  itemCategory: {
+  header: {
+    padding: 16,
+    paddingBottom: 8,
+  },
+  addButton: {
+    backgroundColor: "#4A90E2",
     flexDirection: "row",
-    gap: 10,
     alignItems: "center",
-    paddingBottom: 10,
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
   },
-  itemRowData: {
+  addButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  dayCard: {
+    backgroundColor: "white",
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  dayHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  dayInfo: {
+    flex: 1,
+  },
+  dayDate: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 4,
+  },
+  summaryInfo: {
+    flexDirection: "row",
     alignItems: "center",
-    marginVertical: 10,
+  },
+  summaryText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  expandButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "#f0f0f0",
+  },
+  teteeItem: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  lastTeteeItem: {
+    backgroundColor: "#e8f4fd",
+    borderLeftWidth: 4,
+    borderLeftColor: "#4A90E2",
+  },
+  teteeContent: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 10,
+    alignItems: "center",
   },
-  title: { fontSize: 16, fontWeight: "bold" },
-  subtitle: { fontSize: 14, color: "#004cdaff" },
-  actionButtonsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+  teteeInfo: {
+    flex: 1,
   },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    gap: 8,
+  },
+  timeText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  seinText: {
+    fontSize: 14,
+    color: "#666",
+    textTransform: "capitalize",
+  },
+  quantityBadge: {
+    backgroundColor: "#4A90E2",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  quantityText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  expandedContent: {
+    marginTop: 8,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#eee",
+    marginBottom: 12,
+  },
+  historyLabel: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: "#666",
+    marginTop: 16,
+    fontWeight: "600",
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 4,
+  },
+  // Styles du modal (simplifiés)
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -316,7 +522,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     backgroundColor: "white",
-    borderRadius: 10,
+    borderRadius: 12,
   },
   modalCategoryLabel: {
     fontSize: 18,
@@ -327,21 +533,17 @@ const styles = StyleSheet.create({
   seinRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginBottom: 10,
+    marginBottom: 20,
   },
   seinButton: {
-    padding: 10,
-    backgroundColor: "#eee",
+    padding: 12,
+    backgroundColor: "#f0f0f0",
     borderRadius: 12,
-    minWidth: 100,
+    minWidth: 120,
     alignItems: "center",
   },
   seinButtonActive: {
     backgroundColor: "#4A90E2",
-  },
-  seinText: {
-    color: "#333",
-    fontSize: 16,
   },
   seinTextActive: {
     color: "white",
@@ -351,26 +553,51 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginVertical: 10,
+    marginVertical: 20,
   },
   quantityButton: {
-    backgroundColor: "#eee",
+    backgroundColor: "#f0f0f0",
     padding: 12,
     borderRadius: 8,
+    minWidth: 40,
+    alignItems: "center",
   },
-  quantityButtonText: { fontSize: 20, fontWeight: "bold" },
+  quantityButtonText: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
   quantityValue: {
     fontSize: 20,
     marginHorizontal: 20,
     fontWeight: "bold",
   },
+  dateTimeContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
   dateButton: {
-    backgroundColor: "#eee",
+    backgroundColor: "#f0f0f0",
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
-    marginVertical: 10,
+    flex: 1,
   },
-  dateButtonText: { fontSize: 16 },
+  dateButtonText: {
+    fontSize: 16,
+  },
+  selectedDateTime: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#004cdaff",
+    marginBottom: 4,
+  },
+  actionButtonsContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+  },
 });
-// Note: Le style des boutons Annuler / Ajouter est dans ModernActionsButton.js
