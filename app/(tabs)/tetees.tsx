@@ -324,18 +324,20 @@ export default function TeteesScreen() {
                 style={styles.dateButton}
                 onPress={() => setShowDate(true)}
               >
-                <Text style={styles.dateButtonText}>Choisir la Date</Text>
+                <FontAwesome name="calendar-alt" size={16} color="#666" />
+                <Text style={styles.dateButtonText}>Date</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.dateButton}
                 onPress={() => setShowTime(true)}
               >
-                <Text style={styles.dateButtonText}>{`Choisir l'Heure`}</Text>
+                <FontAwesome name="clock" size={16} color="#666" />
+                <Text style={styles.dateButtonText}>Heure</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.selectedDateTime}>
-              <Text style={styles.subtitle}>
+              <Text style={styles.selectedDate}>
                 {dateHeure.toLocaleDateString("fr-FR", {
                   weekday: "long",
                   year: "numeric",
@@ -343,13 +345,14 @@ export default function TeteesScreen() {
                   day: "numeric",
                 })}
               </Text>
-              <Text style={styles.subtitle}>
+              <Text style={styles.selectedTime}>
                 {dateHeure.toLocaleTimeString("fr-FR", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
               </Text>
             </View>
+
 
             {showDate && (
               <DateTimePicker
@@ -547,6 +550,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     fontWeight: "bold",
     paddingVertical: 10,
+    color: "#000000",
   },
   seinRow: {
     flexDirection: "row",
@@ -583,11 +587,13 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 20,
     fontWeight: "bold",
+    color: "#666",
   },
   quantityValue: {
     fontSize: 20,
     marginHorizontal: 20,
     fontWeight: "bold",
+    color: "#000000",
   },
   dateTimeContainer: {
     flexDirection: "row",
@@ -604,6 +610,7 @@ const styles = StyleSheet.create({
   },
   dateButtonText: {
     fontSize: 16,
+    color: "#666",
   },
   selectedDateTime: {
     alignItems: "center",
@@ -617,5 +624,16 @@ const styles = StyleSheet.create({
   actionButtonsContainer: {
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === "ios" ? 34 : 20,
+  },
+    selectedDate: {
+    fontSize: 16,
+    color: "#333",
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  selectedTime: {
+    fontSize: 20,
+    color: "#004cdaff",
+    fontWeight: "bold",
   },
 });

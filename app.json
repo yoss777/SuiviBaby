@@ -7,7 +7,8 @@
     "icon": "./assets/images/icon.png",
     "scheme": "samaye",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
+    "sdkVersion": "53.0.0",
     "ios": {
       "supportsTablet": true
     },
@@ -16,8 +17,10 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "package": "com.yoss7.Samaye"
+      "package": "com.yoss7.samaye",
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35,
+      "minSdkVersion": 21
     },
     "web": {
       "bundler": "metro",
