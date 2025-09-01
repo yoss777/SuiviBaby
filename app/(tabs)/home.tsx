@@ -177,7 +177,7 @@ export default function HomeDashboard() {
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Bonjour";
-    if (hour < 18) return "Bonne après-midi";
+    if (hour < 18) return "Bon après-midi";
     return "Bonsoir";
   };
 

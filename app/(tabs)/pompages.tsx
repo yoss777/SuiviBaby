@@ -680,6 +680,7 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 20,
     fontWeight: "bold",
+    color: "#666",
   },
   dateTimeContainer: {
     flexDirection: "row",
