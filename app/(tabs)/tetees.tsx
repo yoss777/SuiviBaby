@@ -8,7 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { ajouterTetee, ecouterTetees } from "../../services/teteesService";
 import ModernActionButtons from "../components/ModernActionsButton";
@@ -40,7 +40,9 @@ export default function TeteesScreen() {
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
-  const [sein, setSein] = useState<"sein gauche" | "sein droit" | "seins + biberon">("seins + biberon");
+  const [sein, setSein] = useState<
+    "sein gauche" | "sein droit" | "seins + biberon"
+  >("seins + biberon");
   const [quantite, setQuantite] = useState<number>(50);
 
   // Écoute en temps réel
@@ -57,11 +59,14 @@ export default function TeteesScreen() {
 
   const groupTeteesByDay = (tetees: Tetee[]): TeteeGroup[] => {
     const groups: { [key: string]: Tetee[] } = {};
-    
+
     tetees.forEach((tetee) => {
       const date = new Date(tetee.date?.seconds * 1000);
-      const dateKey = date.toISOString().split('T')[0];
-      
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      const dateKey = `${year}-${month}-${day}`;
+
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
@@ -71,9 +76,14 @@ export default function TeteesScreen() {
     return Object.entries(groups)
       .map(([dateKey, tetees]) => {
         const date = new Date(dateKey);
-        const totalQuantity = tetees.reduce((sum, tetee) => sum + (tetee.quantite || 0), 0);
-        const lastTetee = tetees.reduce((latest, current) => 
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0) ? current : latest
+        const totalQuantity = tetees.reduce(
+          (sum, tetee) => sum + (tetee.quantite || 0),
+          0
+        );
+        const lastTetee = tetees.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
         );
 
         return {
@@ -84,7 +94,9 @@ export default function TeteesScreen() {
             month: "long",
             year: "numeric",
           }),
-          tetees: tetees.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)),
+          tetees: tetees.sort(
+            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+          ),
           totalQuantity,
           lastTetee,
         };
@@ -149,8 +161,8 @@ export default function TeteesScreen() {
   };
 
   const renderTeteeItem = (tetee: Tetee, isLast: boolean = false) => (
-    <View 
-      key={tetee.id} 
+    <View
+      key={tetee.id}
       style={[styles.teteeItem, isLast && styles.lastTeteeItem]}
     >
       <View style={styles.teteeContent}>
@@ -158,10 +170,13 @@ export default function TeteesScreen() {
           <View style={styles.infoRow}>
             <FontAwesome name="clock" size={16} color="#666" />
             <Text style={styles.timeText}>
-              {new Date(tetee.date?.seconds * 1000).toLocaleTimeString("fr-FR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {new Date(tetee.date?.seconds * 1000).toLocaleTimeString(
+                "fr-FR",
+                {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }
+              )}
             </Text>
           </View>
           <View style={styles.infoRow}>
@@ -188,7 +203,8 @@ export default function TeteesScreen() {
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
               <Text style={styles.summaryText}>
-                {item.tetees.length} tétée{item.tetees.length > 1 ? 's' : ''} • {item.totalQuantity} ml total
+                {item.tetees.length} tétée{item.tetees.length > 1 ? "s" : ""} •{" "}
+                {item.totalQuantity} ml total
               </Text>
             </View>
           </View>
@@ -215,8 +231,8 @@ export default function TeteesScreen() {
             <View style={styles.separator} />
             <Text style={styles.historyLabel}>Historique du jour</Text>
             {item.tetees
-              .filter(tetee => tetee.id !== item.lastTetee.id)
-              .map(tetee => renderTeteeItem(tetee))}
+              .filter((tetee) => tetee.id !== item.lastTetee.id)
+              .map((tetee) => renderTeteeItem(tetee))}
           </View>
         )}
       </View>
@@ -242,7 +258,9 @@ export default function TeteesScreen() {
           <View style={styles.emptyState}>
             <FontAwesome name="baby" size={48} color="#ccc" />
             <Text style={styles.emptyText}>Aucune tétée enregistrée</Text>
-            <Text style={styles.emptySubtext}>Ajoutez votre première tétée</Text>
+            <Text style={styles.emptySubtext}>
+              Ajoutez votre première tétée
+            </Text>
           </View>
         }
       />
@@ -257,7 +275,7 @@ export default function TeteesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalCategoryLabel}>Ajouter une tétée</Text>
-            
+
             {/* Sélection du sein */}
             <View style={styles.seinRow}>
               {["sein gauche", "sein droit"].map((s) => (

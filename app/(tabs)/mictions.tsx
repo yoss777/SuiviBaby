@@ -52,11 +52,14 @@ export default function MictionsScreen() {
 
   const groupMictionsByDay = (mictions: Miction[]): MictionGroup[] => {
     const groups: { [key: string]: Miction[] } = {};
-    
+
     mictions.forEach((miction) => {
       const date = new Date(miction.date?.seconds * 1000);
-      const dateKey = date.toISOString().split('T')[0];
-      
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      const dateKey = `${year}-${month}-${day}`;
+
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
@@ -66,8 +69,10 @@ export default function MictionsScreen() {
     return Object.entries(groups)
       .map(([dateKey, mictions]) => {
         const date = new Date(dateKey);
-        const lastMiction = mictions.reduce((latest, current) => 
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0) ? current : latest
+        const lastMiction = mictions.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
         );
 
         return {
@@ -78,7 +83,9 @@ export default function MictionsScreen() {
             month: "long",
             year: "numeric",
           }),
-          mictions: mictions.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)),
+          mictions: mictions.sort(
+            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+          ),
           lastMiction,
         };
       })
@@ -139,12 +146,16 @@ export default function MictionsScreen() {
   };
 
   const renderMictionItem = (miction: Miction, isLast: boolean = false) => (
-    <View 
-      key={miction.id} 
+    <View
+      key={miction.id}
       style={[styles.mictionItem, isLast && styles.lastMictionItem]}
     >
       <View style={styles.mictionContent}>
-        <FontAwesome name="tint" size={16} color={isLast ? "#4A90E2" : "#666"} />
+        <FontAwesome
+          name="tint"
+          size={16}
+          color={isLast ? "#4A90E2" : "#666"}
+        />
         <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
           {new Date(miction.date?.seconds * 1000).toLocaleTimeString("fr-FR", {
             hour: "2-digit",
@@ -173,7 +184,8 @@ export default function MictionsScreen() {
             <View style={styles.summaryInfo}>
               <FontAwesome name="water" size={14} color="#666" />
               <Text style={styles.summaryText}>
-                {item.mictions.length} miction{item.mictions.length > 1 ? 's' : ''}
+                {item.mictions.length} miction
+                {item.mictions.length > 1 ? "s" : ""}
               </Text>
             </View>
           </View>
@@ -200,8 +212,8 @@ export default function MictionsScreen() {
             <View style={styles.separator} />
             <Text style={styles.historyLabel}>Historique du jour</Text>
             {item.mictions
-              .filter(miction => miction.id !== item.lastMiction.id)
-              .map(miction => renderMictionItem(miction))}
+              .filter((miction) => miction.id !== item.lastMiction.id)
+              .map((miction) => renderMictionItem(miction))}
           </View>
         )}
       </View>
@@ -227,7 +239,9 @@ export default function MictionsScreen() {
           <View style={styles.emptyState}>
             <FontAwesome name="tint" size={48} color="#ccc" />
             <Text style={styles.emptyText}>Aucune miction enregistrée</Text>
-            <Text style={styles.emptySubtext}>Ajoutez votre première miction</Text>
+            <Text style={styles.emptySubtext}>
+              Ajoutez votre première miction
+            </Text>
           </View>
         }
       />
