@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { BarChart } from "react-native-chart-kit";
 
@@ -28,6 +28,9 @@ function addWeeks(date: Date, weeks: number) {
 }
 
 export default function TeteesChart({ tetees }: Props) {
+  const [viewMode, setViewMode] = useState<"quantity" | "frequency">(
+    "quantity"
+  );
   const [currentWeek, setCurrentWeek] = useState<Date>(
     getStartOfWeek(new Date())
   );
@@ -35,7 +38,10 @@ export default function TeteesChart({ tetees }: Props) {
   const chartWidth = Dimensions.get("window").width - 40;
   const chartHeight = 220;
 
-  if (!tetees || tetees.length === 0) {
+  // Vérification précoce pour éviter les problèmes de hooks
+  const isEmpty = !tetees || tetees.length === 0;
+
+  if (isEmpty) {
     return (
       <View style={styles.emptyContainer}>
         <FontAwesome name="baby" size={64} color="#e9ecef" />
@@ -70,7 +76,7 @@ export default function TeteesChart({ tetees }: Props) {
       const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
       const quantiteTotale =
         (t.quantiteDroite || 0) + (t.quantiteGauche || 0) + (t.quantite || 0);
-      
+
       if (weeklyData[jourKey]) {
         weeklyData[jourKey].quantity += quantiteTotale;
         weeklyData[jourKey].count += 1;
@@ -80,20 +86,21 @@ export default function TeteesChart({ tetees }: Props) {
 
   const quantityValues = jours.map((j) => weeklyData[j].quantity);
   const countValues = jours.map((j) => weeklyData[j].count);
-  
+
   const totalWeekQuantity = quantityValues.reduce((acc, v) => acc + v, 0);
   const totalWeekCount = countValues.reduce((acc, v) => acc + v, 0);
-  const dailyAverageQuantity = totalWeekQuantity > 0 ? Math.round(totalWeekQuantity / 7) : 0;
-  const dailyAverageCount = totalWeekCount > 0 ? Math.round((totalWeekCount / 7) * 10) / 10 : 0;
-  
+  const dailyAverageQuantity =
+    totalWeekQuantity > 0 ? Math.round(totalWeekQuantity / 7) : 0;
+  const dailyAverageCount =
+    totalWeekCount > 0 ? Math.round((totalWeekCount / 7) * 10) / 10 : 0;
+
   const maxQuantity = Math.max(...quantityValues);
   const maxCount = Math.max(...countValues);
   const bestQuantityDay = jours[quantityValues.indexOf(maxQuantity)];
   const bestCountDay = jours[countValues.indexOf(maxCount)];
 
-  const [viewMode, setViewMode] = useState<'quantity' | 'frequency'>('quantity');
-  const currentValues = viewMode === 'quantity' ? quantityValues : countValues;
-  const currentMax = viewMode === 'quantity' ? maxQuantity : maxCount;
+  const currentValues = viewMode === "quantity" ? quantityValues : countValues;
+  const currentMax = viewMode === "quantity" ? maxQuantity : maxCount;
 
   // Configuration du graphique
   const chartConfig = {
@@ -119,7 +126,13 @@ export default function TeteesChart({ tetees }: Props) {
 
         <View style={styles.dateHeader}>
           <Text style={styles.weekRange}>
-            {`${start.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} - ${new Date(end.getTime() - 1).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`}
+            {`${start.toLocaleDateString("fr-FR", {
+              day: "numeric",
+              month: "short",
+            })} - ${new Date(end.getTime() - 1).toLocaleDateString("fr-FR", {
+              day: "numeric",
+              month: "short",
+            })}`}
           </Text>
         </View>
 
@@ -131,14 +144,14 @@ export default function TeteesChart({ tetees }: Props) {
             <FontAwesome name="chevron-left" size={16} color="#666" />
             <Text style={styles.navText}>Préc.</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={styles.todayButton}
             onPress={() => setCurrentWeek(getStartOfWeek(new Date()))}
           >
             <Text style={styles.todayText}>Cette semaine</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={styles.navButton}
             onPress={() => setCurrentWeek(addWeeks(currentWeek, 1))}
@@ -151,20 +164,44 @@ export default function TeteesChart({ tetees }: Props) {
         {/* Toggle pour changer de vue */}
         <View style={styles.toggleContainer}>
           <TouchableOpacity
-            style={[styles.toggleButton, viewMode === 'quantity' && styles.toggleButtonActive]}
-            onPress={() => setViewMode('quantity')}
+            style={[
+              styles.toggleButton,
+              viewMode === "quantity" && styles.toggleButtonActive,
+            ]}
+            onPress={() => setViewMode("quantity")}
           >
-            <FontAwesome name="tint" size={16} color={viewMode === 'quantity' ? "white" : "#666"} />
-            <Text style={[styles.toggleText, viewMode === 'quantity' && styles.toggleTextActive]}>
+            <FontAwesome
+              name="tint"
+              size={16}
+              color={viewMode === "quantity" ? "white" : "#666"}
+            />
+            <Text
+              style={[
+                styles.toggleText,
+                viewMode === "quantity" && styles.toggleTextActive,
+              ]}
+            >
               Quantité
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.toggleButton, viewMode === 'frequency' && styles.toggleButtonActive]}
-            onPress={() => setViewMode('frequency')}
+            style={[
+              styles.toggleButton,
+              viewMode === "frequency" && styles.toggleButtonActive,
+            ]}
+            onPress={() => setViewMode("frequency")}
           >
-            <FontAwesome name="clock" size={16} color={viewMode === 'frequency' ? "white" : "#666"} />
-            <Text style={[styles.toggleText, viewMode === 'frequency' && styles.toggleTextActive]}>
+            <FontAwesome
+              name="clock"
+              size={16}
+              color={viewMode === "frequency" ? "white" : "#666"}
+            />
+            <Text
+              style={[
+                styles.toggleText,
+                viewMode === "frequency" && styles.toggleTextActive,
+              ]}
+            >
               Fréquence
             </Text>
           </TouchableOpacity>
@@ -173,23 +210,27 @@ export default function TeteesChart({ tetees }: Props) {
         <BarChart
           data={{
             labels: jours,
-            datasets: [{
-              data: currentValues.length > 0 ? currentValues : [0],
-              colors: currentValues.map((val, i) =>
-                val === currentMax && val > 0 ? () => "#ffc107" : () => "#4A90E2"
-              ),
-            }],
+            datasets: [
+              {
+                data: currentValues.length > 0 ? currentValues : [0],
+                colors: currentValues.map((val, i) =>
+                  val === currentMax && val > 0
+                    ? () => "#ffc107"
+                    : () => "#4A90E2"
+                ),
+              },
+            ],
           }}
           width={chartWidth}
           height={chartHeight}
           fromZero
-          yAxisSuffix={viewMode === 'quantity' ? " ml" : ""}
+          yAxisSuffix={viewMode === "quantity" ? " ml" : ""}
           chartConfig={{
             ...chartConfig,
             color: (opacity = 1, index?: number) => {
               const val = currentValues[index || 0];
-              return val === currentMax && val > 0 
-                ? `rgba(255, 193, 7, ${opacity})` 
+              return val === currentMax && val > 0
+                ? `rgba(255, 193, 7, ${opacity})`
                 : `rgba(74, 144, 226, ${opacity})`;
             },
           }}
@@ -199,7 +240,7 @@ export default function TeteesChart({ tetees }: Props) {
         />
 
         {/* Statistiques */}
-        {viewMode === 'quantity' ? (
+        {viewMode === "quantity" ? (
           <View style={styles.statsContainer}>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
@@ -213,7 +254,9 @@ export default function TeteesChart({ tetees }: Props) {
               {maxQuantity > 0 && (
                 <View style={styles.statItem}>
                   <FontAwesome name="trophy" size={16} color="#ffc107" />
-                  <Text style={[styles.statValue, { color: "#ffc107" }]}>{bestQuantityDay}</Text>
+                  <Text style={[styles.statValue, { color: "#ffc107" }]}>
+                    {bestQuantityDay}
+                  </Text>
                   <Text style={styles.statLabel}>Record: {maxQuantity} ml</Text>
                 </View>
               )}
@@ -233,8 +276,12 @@ export default function TeteesChart({ tetees }: Props) {
               {maxCount > 0 && (
                 <View style={styles.statItem}>
                   <FontAwesome name="trophy" size={16} color="#ffc107" />
-                  <Text style={[styles.statValue, { color: "#ffc107" }]}>{bestCountDay}</Text>
-                  <Text style={styles.statLabel}>Record: {maxCount} tétées</Text>
+                  <Text style={[styles.statValue, { color: "#ffc107" }]}>
+                    {bestCountDay}
+                  </Text>
+                  <Text style={styles.statLabel}>
+                    Record: {maxCount} tétées
+                  </Text>
                 </View>
               )}
             </View>
@@ -248,10 +295,17 @@ export default function TeteesChart({ tetees }: Props) {
             <View style={styles.insightContent}>
               <Text style={styles.insightTitle}>Aperçu de la semaine</Text>
               <Text style={styles.insightText}>
-                {viewMode === 'quantity' 
-                  ? `Consommation moyenne de ${dailyAverageQuantity} ml par jour. ${maxQuantity > dailyAverageQuantity * 1.5 ? `Le ${bestQuantityDay} a été particulièrement actif avec ${maxQuantity} ml.` : 'Consommation régulière cette semaine.'}`
-                  : `En moyenne ${dailyAverageCount} tétées par jour. ${maxCount > dailyAverageCount * 1.5 ? `Le ${bestCountDay} a eu le plus de tétées (${maxCount}).` : 'Rythme régulier cette semaine.'}`
-                }
+                {viewMode === "quantity"
+                  ? `Consommation moyenne de ${dailyAverageQuantity} ml par jour. ${
+                      maxQuantity > dailyAverageQuantity * 1.5
+                        ? `Le ${bestQuantityDay} a été particulièrement actif avec ${maxQuantity} ml.`
+                        : "Consommation régulière cette semaine."
+                    }`
+                  : `En moyenne ${dailyAverageCount} tétées par jour. ${
+                      maxCount > dailyAverageCount * 1.5
+                        ? `Le ${bestCountDay} a eu le plus de tétées (${maxCount}).`
+                        : "Rythme régulier cette semaine."
+                    }`}
               </Text>
             </View>
           </View>

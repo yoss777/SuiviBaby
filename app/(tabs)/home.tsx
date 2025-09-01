@@ -1,12 +1,12 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { router } from 'expo-router';
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { ecouterMictions } from "../../services/mictionsService";
 import { ecouterPompages } from "../../services/pompagesService";
@@ -67,18 +67,27 @@ export default function HomeDashboard() {
   // Calcul des statistiques du jour
   useEffect(() => {
     const today = new Date();
+    // Créer le début de journée dans le fuseau horaire local
     const startOfToday = new Date(
       today.getFullYear(),
       today.getMonth(),
       today.getDate()
     );
+    // Créer la fin de journée dans le fuseau horaire local
+    const endOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() + 1
+    );
 
+    // Filtrer les entrées pour ne garder que celles d'aujourd'hui
     const filterToday = (items: any[]) =>
       items.filter((item) => {
         const itemDate = item.date?.seconds
           ? new Date(item.date.seconds * 1000)
           : new Date(item.date);
-        return itemDate >= startOfToday;
+        // Vérifier que l'item est dans la plage du jour local
+        return itemDate >= startOfToday && itemDate < endOfToday;
       });
 
     const todayTetees = filterToday(data.tetees);
@@ -267,7 +276,7 @@ export default function HomeDashboard() {
           <StatsCard
             title="Tétées"
             value={todayStats.tetees.count}
-            unit={todayStats.tetees.count >1 ? "sessions" : "session"}
+            unit={todayStats.tetees.count > 1 ? "sessions" : "session"}
             icon="baby"
             color="#4A90E2"
             lastActivity={todayStats.tetees.lastTime}
@@ -284,7 +293,7 @@ export default function HomeDashboard() {
           <StatsCard
             title="Pompages"
             value={todayStats.pompages.count}
-            unit={todayStats.pompages.count >1 ? "sessions" : "session"}
+            unit={todayStats.pompages.count > 1 ? "sessions" : "session"}
             icon="pump-medical"
             color="#28a745"
             lastActivity={todayStats.pompages.lastTime}
@@ -336,7 +345,7 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.tetees.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push('/tetees')}
+            onPress={() => router.push("/tetees")}
           />
           <QuickActionCard
             title="Session tire-lait"
@@ -348,7 +357,7 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.pompages.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push('/pompages')}
+            onPress={() => router.push("/pompages")}
           />
           <QuickActionCard
             title="Miction"
@@ -360,7 +369,7 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.mictions.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push('/mictions')}
+            onPress={() => router.push("/mictions")}
           />
           <QuickActionCard
             title="Selle"
@@ -372,7 +381,7 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.selles.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push('/selles')}
+            onPress={() => router.push("/selles")}
           />
         </View>
       </View>
@@ -381,7 +390,7 @@ export default function HomeDashboard() {
       <View style={styles.section}>
         <TouchableOpacity
           style={styles.statsButton}
-          onPress={() => router.push('/stats')}
+          onPress={() => router.push("/stats")}
         >
           <FontAwesome name="chart-bar" size={20} color="#666" />
           <Text style={styles.statsButtonText}>

@@ -47,7 +47,10 @@ export default function PompagesChart({ pompages }: Props) {
     getStartOfWeek(new Date())
   );
 
-  if (!pompages || pompages.length === 0) {
+  // Vérification précoce pour éviter les problèmes de hooks
+  const isEmpty = !pompages || pompages.length === 0;
+
+  if (isEmpty) {
     return (
       <View style={styles.emptyContainer}>
         <FontAwesome name="pump-medical" size={64} color="#e9ecef" />
