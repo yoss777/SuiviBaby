@@ -1,27 +1,27 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { Stack } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { StatusBar, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function CustomHeader() {
+  const insets = useSafeAreaInsets();
+
   return (
     <View
       style={{
+        paddingTop: insets.top + 20, // ✅ seulement en haut
         backgroundColor: "white",
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: 20,
-        paddingVertical: 20,
+        paddingBottom: 20,
         borderBottomColor: "#cccccc",
         borderBottomWidth: 1,
         gap: 10,
       }}
     >
-      {/* <LinearGradient
-        colors={["#f8f9fa", "#7db4ebff", "#132f4cff"]}
-        style={styles.backgroundGradient}
-      /> */}
-
+      <StatusBar barStyle="dark-content" backgroundColor="white" />
       <FontAwesome name="baby" size={24} color="#000000" />
       <Text
         style={{ fontSize: 22, fontWeight: "bold", color: "#000000" }}
@@ -45,16 +45,3 @@ export default function Layout() {
     </Stack>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  backgroundGradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-  },
-});
