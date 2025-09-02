@@ -102,20 +102,26 @@ export default function SellesScreen() {
     setExpandedDays(newExpandedDays);
   };
 
-  const toggleModal = () => {
-    setShowModal(!showModal);
+  const openModal = () => {
+    // Réinitialiser avec la date/heure actuelle à l'ouverture
+    const now = new Date();
+    setDateHeure(new Date(now.getTime()));
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
   };
 
   const cancelForm = useCallback(() => {
-    setDateHeure(new Date());
-    toggleModal();
-  }, [toggleModal]);
+    closeModal();
+  }, []);
 
   const handleAddSelle = async () => {
     await ajouterSelle({
       date: dateHeure,
     });
-    toggleModal();
+    closeModal();
   };
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
@@ -222,7 +228,7 @@ export default function SellesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={toggleModal}>
+        <TouchableOpacity style={styles.addButton} onPress={openModal}>
           <FontAwesome name="plus" size={16} color="white" />
           <Text style={styles.addButtonText}>Nouvelle selle</Text>
         </TouchableOpacity>
@@ -250,7 +256,7 @@ export default function SellesScreen() {
         animationType="slide"
         transparent={true}
         visible={showModal}
-        onRequestClose={toggleModal}
+        onRequestClose={closeModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>

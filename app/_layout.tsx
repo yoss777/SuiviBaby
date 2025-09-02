@@ -1,9 +1,8 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { Stack } from "expo-router";
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 function CustomHeader() {
-
   return (
     <View
       style={{
@@ -18,6 +17,11 @@ function CustomHeader() {
         gap: 10,
       }}
     >
+      {/* <LinearGradient
+        colors={["#f8f9fa", "#7db4ebff", "#132f4cff"]}
+        style={styles.backgroundGradient}
+      /> */}
+
       <FontAwesome name="baby" size={24} color="#000000" />
       <Text
         style={{ fontSize: 22, fontWeight: "bold", color: "#000000" }}
@@ -41,3 +45,16 @@ export default function Layout() {
     </Stack>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  backgroundGradient: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+});

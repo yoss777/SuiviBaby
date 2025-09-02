@@ -1,4 +1,5 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -256,157 +257,172 @@ export default function HomeDashboard() {
   );
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* En-tête avec salutation */}
-      <View style={styles.header}>
-        <Text style={styles.greeting}>{getGreeting()}</Text>
-        <Text style={styles.date}>
-          {new Date().toLocaleDateString("fr-FR", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-          })}
-        </Text>
-      </View>
-
-      {/* Résumé du jour */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
-        <View style={styles.statsGrid}>
-          <StatsCard
-            title="Tétées"
-            value={todayStats.tetees.count}
-            unit={todayStats.tetees.count > 1 ? "sessions" : "session"}
-            icon="baby"
-            color="#4A90E2"
-            lastActivity={todayStats.tetees.lastTime}
-          />
-          <StatsCard
-            title="Volume consommé"
-            value={todayStats.tetees.quantity}
-            unit="ml"
-            icon="tint"
-            color="#4A90E2"
-          />
-        </View>
-        <View style={styles.statsGrid}>
-          <StatsCard
-            title="Pompages"
-            value={todayStats.pompages.count}
-            unit={todayStats.pompages.count > 1 ? "sessions" : "session"}
-            icon="pump-medical"
-            color="#28a745"
-            lastActivity={todayStats.pompages.lastTime}
-          />
-          <StatsCard
-            title="Volume tiré"
-            value={todayStats.pompages.quantity}
-            unit="ml"
-            icon="cloud-download-alt"
-            color="#28a745"
-          />
-        </View>
-      </View>
-
-      {/* Activités physiologiques */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Activités physiologiques</Text>
-        <View style={styles.statsGrid}>
-          <StatsCard
-            title="Mictions"
-            value={todayStats.mictions.count}
-            unit="fois"
-            icon="water"
-            color="#17a2b8"
-            lastActivity={todayStats.mictions.lastTime}
-          />
-          <StatsCard
-            title="Selles"
-            value={todayStats.selles.count}
-            unit="fois"
-            icon="poop"
-            color="#dc3545"
-            lastActivity={todayStats.selles.lastTime}
-          />
-        </View>
-      </View>
-
-      {/* Actions rapides */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Actions rapides</Text>
-        <View style={styles.quickActionsContainer}>
-          <QuickActionCard
-            title="Nouvelle tétée"
-            icon="baby"
-            color="#4A90E2"
-            count={todayStats.tetees.count}
-            subtitle={
-              todayStats.tetees.lastTime
-                ? `Dernière: ${todayStats.tetees.lastTime}`
-                : "Aucune aujourd'hui"
-            }
-            onPress={() => router.push("/tetees")}
-          />
-          <QuickActionCard
-            title="Session tire-lait"
-            icon="pump-medical"
-            color="#28a745"
-            count={todayStats.pompages.count}
-            subtitle={
-              todayStats.pompages.lastTime
-                ? `Dernière: ${todayStats.pompages.lastTime}`
-                : "Aucune aujourd'hui"
-            }
-            onPress={() => router.push("/pompages")}
-          />
-          <QuickActionCard
-            title="Miction"
-            icon="water"
-            color="#17a2b8"
-            count={todayStats.mictions.count}
-            subtitle={
-              todayStats.mictions.lastTime
-                ? `Dernière: ${todayStats.mictions.lastTime}`
-                : "Aucune aujourd'hui"
-            }
-            onPress={() => router.push("/mictions")}
-          />
-          <QuickActionCard
-            title="Selle"
-            icon="poop"
-            color="#dc3545"
-            count={todayStats.selles.count}
-            subtitle={
-              todayStats.selles.lastTime
-                ? `Dernière: ${todayStats.selles.lastTime}`
-                : "Aucune aujourd'hui"
-            }
-            onPress={() => router.push("/selles")}
-          />
-        </View>
-      </View>
-
-      {/* Lien vers les statistiques */}
-      <View style={styles.section}>
-        <TouchableOpacity
-          style={styles.statsButton}
-          onPress={() => router.push("/stats")}
-        >
-          <FontAwesome name="chart-bar" size={20} color="#666" />
-          <Text style={styles.statsButtonText}>
-            Voir les statistiques détaillées
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#f8f9fa', '#e9ecef', '#dee2e6']}
+        style={styles.backgroundGradient}
+      />
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* En-tête avec salutation */}
+        <View style={styles.header}>
+          <Text style={styles.greeting}>{getGreeting()}</Text>
+          <Text style={styles.date}>
+            {new Date().toLocaleDateString("fr-FR", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}
           </Text>
-          <FontAwesome name="chevron-right" size={16} color="#666" />
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+        </View>
+
+        {/* Résumé du jour */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
+          <View style={styles.statsGrid}>
+            <StatsCard
+              title="Tétées"
+              value={todayStats.tetees.count}
+              unit={todayStats.tetees.count > 1 ? "sessions" : "session"}
+              icon="baby"
+              color="#4A90E2"
+              lastActivity={todayStats.tetees.lastTime}
+            />
+            <StatsCard
+              title="Volume consommé"
+              value={todayStats.tetees.quantity}
+              unit="ml"
+              icon="tint"
+              color="#4A90E2"
+            />
+          </View>
+          <View style={styles.statsGrid}>
+            <StatsCard
+              title="Pompages"
+              value={todayStats.pompages.count}
+              unit={todayStats.pompages.count > 1 ? "sessions" : "session"}
+              icon="pump-medical"
+              color="#28a745"
+              lastActivity={todayStats.pompages.lastTime}
+            />
+            <StatsCard
+              title="Volume tiré"
+              value={todayStats.pompages.quantity}
+              unit="ml"
+              icon="cloud-download-alt"
+              color="#28a745"
+            />
+          </View>
+        </View>
+
+        {/* Activités physiologiques */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Activités physiologiques</Text>
+          <View style={styles.statsGrid}>
+            <StatsCard
+              title="Mictions"
+              value={todayStats.mictions.count}
+              unit="fois"
+              icon="water"
+              color="#17a2b8"
+              lastActivity={todayStats.mictions.lastTime}
+            />
+            <StatsCard
+              title="Selles"
+              value={todayStats.selles.count}
+              unit="fois"
+              icon="poop"
+              color="#dc3545"
+              lastActivity={todayStats.selles.lastTime}
+            />
+          </View>
+        </View>
+
+        {/* Actions rapides */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Actions rapides</Text>
+          <View style={styles.quickActionsContainer}>
+            <QuickActionCard
+              title="Nouvelle tétée"
+              icon="baby"
+              color="#4A90E2"
+              count={todayStats.tetees.count}
+              subtitle={
+                todayStats.tetees.lastTime
+                  ? `Dernière: ${todayStats.tetees.lastTime}`
+                  : "Aucune aujourd'hui"
+              }
+              onPress={() => router.push("/tetees")}
+            />
+            <QuickActionCard
+              title="Session tire-lait"
+              icon="pump-medical"
+              color="#28a745"
+              count={todayStats.pompages.count}
+              subtitle={
+                todayStats.pompages.lastTime
+                  ? `Dernière: ${todayStats.pompages.lastTime}`
+                  : "Aucune aujourd'hui"
+              }
+              onPress={() => router.push("/pompages")}
+            />
+            <QuickActionCard
+              title="Miction"
+              icon="water"
+              color="#17a2b8"
+              count={todayStats.mictions.count}
+              subtitle={
+                todayStats.mictions.lastTime
+                  ? `Dernière: ${todayStats.mictions.lastTime}`
+                  : "Aucune aujourd'hui"
+              }
+              onPress={() => router.push("/mictions")}
+            />
+            <QuickActionCard
+              title="Selle"
+              icon="poop"
+              color="#dc3545"
+              count={todayStats.selles.count}
+              subtitle={
+                todayStats.selles.lastTime
+                  ? `Dernière: ${todayStats.selles.lastTime}`
+                  : "Aucune aujourd'hui"
+              }
+              onPress={() => router.push("/selles")}
+            />
+          </View>
+        </View>
+
+        {/* Lien vers les statistiques */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.statsButton}
+            onPress={() => router.push("/stats")}
+          >
+            <FontAwesome name="chart-bar" size={20} color="#666" />
+            <Text style={styles.statsButtonText}>
+              Voir les statistiques détaillées
+            </Text>
+            <FontAwesome name="chevron-right" size={16} color="#666" />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+  },
+  backgroundGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
     padding: 20,

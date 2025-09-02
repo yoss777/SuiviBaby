@@ -17,9 +17,15 @@ type Props = {
 function getStartOfWeek(date: Date) {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.setHours(0, 0, 0, 0));
+  // Convertir dimanche (0) en 7 pour faciliter le calcul
+  const dayOfWeek = day === 0 ? 7 : day;
+  // Calculer combien de jours soustraire pour arriver au lundi
+  const diff = dayOfWeek - 1;
+  d.setDate(d.getDate() - diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
+
 
 function addWeeks(date: Date, weeks: number) {
   const d = new Date(date);

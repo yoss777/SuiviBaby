@@ -114,15 +114,21 @@ export default function TeteesScreen() {
     setExpandedDays(newExpandedDays);
   };
 
-  const toggleModal = () => {
-    setShowModal(!showModal);
+  const openModal = () => {
+    // Réinitialiser avec la date/heure actuelle à l'ouverture
+    const now = new Date();
+    setDateHeure(new Date(now.getTime()));
+    setQuantite(50);
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
   };
 
   const cancelForm = useCallback(() => {
-    setQuantite(50);
-    setDateHeure(new Date());
-    toggleModal();
-  }, [toggleModal]);
+    closeModal();
+  }, []);
 
   const handleAddTetee = async () => {
     await ajouterTetee({
@@ -130,7 +136,7 @@ export default function TeteesScreen() {
       quantite,
       date: dateHeure,
     });
-    toggleModal();
+    closeModal();
   };
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
@@ -242,7 +248,7 @@ export default function TeteesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={toggleModal}>
+        <TouchableOpacity style={styles.addButton} onPress={openModal}>
           <FontAwesome name="plus" size={16} color="white" />
           <Text style={styles.addButtonText}>Nouvelle tétée</Text>
         </TouchableOpacity>
@@ -270,7 +276,7 @@ export default function TeteesScreen() {
         animationType="slide"
         transparent={true}
         visible={showModal}
-        onRequestClose={toggleModal}
+        onRequestClose={closeModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -352,7 +358,6 @@ export default function TeteesScreen() {
                 })}
               </Text>
             </View>
-
 
             {showDate && (
               <DateTimePicker
@@ -625,7 +630,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
-    selectedDate: {
+  selectedDate: {
     fontSize: 16,
     color: "#333",
     fontWeight: "600",
