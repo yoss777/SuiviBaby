@@ -19,10 +19,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="mictions"
+        name="excretions"
         options={{
-          title: 'Mictions',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="water" color={color} />,
+          title: 'Pipi popo',
+          tabBarIcon: ({ color }) => <FontAwesome size={28} name="toilet" color={color} />,
         }}
       />
       <Tabs.Screen

@@ -1,4 +1,4 @@
-import { ajouterMiction, ecouterMictions } from "@/services/mictionsService";
+import { ajouterMiction } from "@/services/mictionsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -12,7 +12,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import ModernActionButtons from "../components/ModernActionsButton";
+import ModernActionButtons from "./components/ModernActionsButton";
+
+type Props = {
+  mictions: any[];
+};
 
 // Interface pour typer les données
 interface Miction {
@@ -28,8 +32,8 @@ interface MictionGroup {
   lastMiction: Miction;
 }
 
-export default function MictionsScreen() {
-  const [mictions, setMictions] = useState<Miction[]>([]);
+export default function MictionsScreen({ mictions }: Props) {
+  // const [mictions, setMictions] = useState<Miction[]>([]);
   const [groupedMictions, setGroupedMictions] = useState<MictionGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -50,7 +54,7 @@ export default function MictionsScreen() {
       const timer = setTimeout(() => {
         openModalHandler();
         // Nettoyer l'URL pour éviter que le modal se rouvre
-        router.replace("/mictions");
+        router.replace("/excretions");
       }, 100);
 
       return () => clearTimeout(timer);
@@ -58,10 +62,10 @@ export default function MictionsScreen() {
   }, [openModal]);
 
   // Écoute en temps réel
-  useEffect(() => {
-    const unsubscribe = ecouterMictions(setMictions);
-    return () => unsubscribe();
-  }, []);
+  // useEffect(() => {
+  //   const unsubscribe = ecouterMictions(setMictions);
+  //   return () => unsubscribe();
+  // }, []);
 
   // Regroupement par jour
   useEffect(() => {

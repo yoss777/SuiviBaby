@@ -1,4 +1,4 @@
-import { ajouterSelle, ecouterSelles } from "@/services/sellesService";
+import { ajouterSelle } from "@/services/sellesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -12,7 +12,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import ModernActionButtons from "../components/ModernActionsButton";
+import ModernActionButtons from "./components/ModernActionsButton";
+
+type Props = {
+  selles: any[];
+};
 
 // Interface pour typer les données
 interface Selle {
@@ -28,8 +32,9 @@ interface SelleGroup {
   lastSelle: Selle;
 }
 
-export default function SellesScreen() {
-  const [selles, setSelles] = useState<Selle[]>([]);
+export default function SellesScreen({ selles }: Props) {
+
+  // const [selles, setSelles] = useState<Selle[]>([]);
   const [groupedSelles, setGroupedSelles] = useState<SelleGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -50,7 +55,7 @@ export default function SellesScreen() {
       const timer = setTimeout(() => {
         openModalHandler();
         // Nettoyer l'URL pour éviter que le modal se rouvre
-        router.replace("/selles");
+        router.replace("/excretions");
       }, 100);
 
       return () => clearTimeout(timer);
@@ -58,10 +63,10 @@ export default function SellesScreen() {
   }, [openModal]);
 
   // Écoute en temps réel
-  useEffect(() => {
-    const unsubscribe = ecouterSelles(setSelles);
-    return () => unsubscribe();
-  }, []);
+  // useEffect(() => {
+  //   const unsubscribe = ecouterSelles(setSelles);
+  //   return () => unsubscribe();
+  // }, []);
 
   // Regroupement par jour
   useEffect(() => {

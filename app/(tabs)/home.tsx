@@ -418,7 +418,7 @@ export default function HomeDashboard() {
             color="#17a2b8"
             lastActivity={todayStats.mictions.lastTime}
             lastTimestamp={todayStats.mictions.lastTimestamp}
-            onPress={() => router.push("/mictions")}
+            onPress={() => router.push("/excretions?tab=mictions")}
           />
           <StatsCard
             title="Selles"
@@ -428,7 +428,7 @@ export default function HomeDashboard() {
             color="#dc3545"
             lastActivity={todayStats.selles.lastTime}
             lastTimestamp={todayStats.selles.lastTimestamp}
-            onPress={() => router.push("/selles")}
+            onPress={() => router.push("/excretions?tab=selles")}
           />
         </View>
       </View>
@@ -471,7 +471,7 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.mictions.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push("/mictions?openModal=true")}
+            onPress={() => router.push("/excretions?tab=mictions&openModal=true")}
           />
           <QuickActionCard
             title="Selle"
@@ -483,7 +483,7 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.selles.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push("/selles?openModal=true")}
+            onPress={() => router.push("/excretions?tab=selles&openModal=true")}
           />
         </View>
       </View>

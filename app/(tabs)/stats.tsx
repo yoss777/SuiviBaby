@@ -74,8 +74,10 @@ const styles = StyleSheet.create({
   tabContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginVertical: 10,
+    paddingTop: 10,
     gap: 10,
+        backgroundColor: "#f8f9fa",
+
   },
   tabButton: {
     paddingVertical: 10,
@@ -95,7 +97,7 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   scrollContainer: {
-    paddingBottom: 20,
+    // paddingBottom: 20,
     alignItems: 'center',
   },
 });
