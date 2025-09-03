@@ -1,5 +1,6 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
@@ -35,7 +36,7 @@ export default function TeteesScreen() {
   const [groupedTetees, setGroupedTetees] = useState<TeteeGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Nouvel état
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
@@ -45,6 +46,23 @@ export default function TeteesScreen() {
     "sein gauche" | "sein droit" | "seins + biberon"
   >("seins + biberon");
   const [quantite, setQuantite] = useState<number>(50);
+
+  // Récupérer les paramètres de l'URL
+  const { openModal } = useLocalSearchParams();
+
+  // Ouvrir automatiquement le modal si le paramètre openModal est présent
+  useEffect(() => {
+    if (openModal === "true") {
+      // Petit délai pour s'assurer que la navigation est terminée
+      const timer = setTimeout(() => {
+        openModalHandler();
+        // Nettoyer l'URL pour éviter que le modal se rouvre
+        router.replace("/tetees");
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [openModal]);
 
   // Écoute en temps réel
   useEffect(() => {
@@ -115,16 +133,19 @@ export default function TeteesScreen() {
     setExpandedDays(newExpandedDays);
   };
 
-  const openModal = () => {
+  const openModalHandler = () => {
     // Réinitialiser avec la date/heure actuelle à l'ouverture
     const now = new Date();
     setDateHeure(new Date(now.getTime()));
     setQuantite(50);
+    setSein("seins + biberon");
+    setIsSubmitting(false);
     setShowModal(true);
   };
 
   const closeModal = () => {
     setShowModal(false);
+    setIsSubmitting(false);
   };
 
   const cancelForm = useCallback(() => {
@@ -148,12 +169,11 @@ export default function TeteesScreen() {
 
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de l'ajout du pompage:", error);
+      console.error("Erreur lors de l'ajout de la tétée:", error);
       // Optionnel : afficher un message d'erreur à l'utilisateur
     } finally {
       setIsSubmitting(false); // Réactiver le bouton en cas d'erreur
     }
-    
   };
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
@@ -265,7 +285,7 @@ export default function TeteesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={openModal}>
+        <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
           <FontAwesome name="plus" size={16} color="white" />
           <Text style={styles.addButtonText}>Nouvelle tétée</Text>
         </TouchableOpacity>
@@ -288,7 +308,7 @@ export default function TeteesScreen() {
         }
       />
 
-      {/* MODAL (inchangée) */}
+      {/* MODAL */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -297,7 +317,10 @@ export default function TeteesScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalCategoryLabel}>Ajouter une tétée</Text>
+            <View style={styles.modalHeader}>
+              <FontAwesome name="baby" size={24} color="#4A90E2" />
+              <Text style={styles.modalTitle}>Nouvelle tétée</Text>
+            </View>
 
             {/* Sélection du sein */}
             <View style={styles.seinRow}>
@@ -307,13 +330,16 @@ export default function TeteesScreen() {
                   style={[
                     styles.seinButton,
                     sein === s && styles.seinButtonActive,
+                    isSubmitting && styles.seinButtonDisabled,
                   ]}
                   onPress={() => setSein(s as any)}
+                  disabled={isSubmitting}
                 >
                   <Text
                     style={[
                       styles.seinText,
                       sein === s && styles.seinTextActive,
+                      isSubmitting && styles.seinTextDisabled,
                     ]}
                   >
                     {s}
@@ -326,17 +352,39 @@ export default function TeteesScreen() {
             <Text style={styles.modalCategoryLabel}>Quantité</Text>
             <View style={styles.quantityRow}>
               <TouchableOpacity
-                style={styles.quantityButton}
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
                 onPress={() => setQuantite((q) => Math.max(0, q - 5))}
+                disabled={isSubmitting}
               >
-                <Text style={styles.quantityButtonText}>-</Text>
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  -
+                </Text>
               </TouchableOpacity>
               <Text style={styles.quantityValue}>{quantite} ml</Text>
               <TouchableOpacity
-                style={styles.quantityButton}
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
                 onPress={() => setQuantite((q) => q + 5)}
+                disabled={isSubmitting}
               >
-                <Text style={styles.quantityButtonText}>+</Text>
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  +
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -344,18 +392,48 @@ export default function TeteesScreen() {
             <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
             <View style={styles.dateTimeContainer}>
               <TouchableOpacity
-                style={styles.dateButton}
+                style={[
+                  styles.dateButton,
+                  isSubmitting && styles.dateButtonDisabled,
+                ]}
                 onPress={() => setShowDate(true)}
+                disabled={isSubmitting}
               >
-                <FontAwesome name="calendar-alt" size={16} color="#666" />
-                <Text style={styles.dateButtonText}>Date</Text>
+                <FontAwesome
+                  name="calendar-alt"
+                  size={16}
+                  color={isSubmitting ? "#ccc" : "#666"}
+                />
+                <Text
+                  style={[
+                    styles.dateButtonText,
+                    isSubmitting && styles.dateButtonTextDisabled,
+                  ]}
+                >
+                  Date
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.dateButton}
+                style={[
+                  styles.dateButton,
+                  isSubmitting && styles.dateButtonDisabled,
+                ]}
                 onPress={() => setShowTime(true)}
+                disabled={isSubmitting}
               >
-                <FontAwesome name="clock" size={16} color="#666" />
-                <Text style={styles.dateButtonText}>Heure</Text>
+                <FontAwesome
+                  name="clock"
+                  size={16}
+                  color={isSubmitting ? "#ccc" : "#666"}
+                />
+                <Text
+                  style={[
+                    styles.dateButtonText,
+                    isSubmitting && styles.dateButtonTextDisabled,
+                  ]}
+                >
+                  Heure
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -400,6 +478,9 @@ export default function TeteesScreen() {
                 onValidate={handleAddTetee}
                 cancelText="Annuler"
                 validateText="Ajouter"
+                isLoading={isSubmitting}
+                disabled={isSubmitting}
+                loadingText="Ajout en cours..."
               />
             </View>
           </View>
@@ -553,7 +634,7 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 4,
   },
-  // Styles du modal (simplifiés)
+  // Styles du modal
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -567,12 +648,24 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 12,
   },
-  modalCategoryLabel: {
-    fontSize: 18,
-    alignSelf: "center",
+    modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
     fontWeight: "bold",
-    paddingVertical: 10,
-    color: "#000000",
+    color: "#333",
+  },
+  modalCategoryLabel: {
+    alignSelf: "center",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
   },
   seinRow: {
     flexDirection: "row",
@@ -589,15 +682,22 @@ const styles = StyleSheet.create({
   seinButtonActive: {
     backgroundColor: "#4A90E2",
   },
+  seinButtonDisabled: {
+    backgroundColor: "#f8f8f8",
+    opacity: 0.5,
+  },
   seinTextActive: {
     color: "white",
     fontWeight: "bold",
+  },
+  seinTextDisabled: {
+    color: "#ccc",
   },
   quantityRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginVertical: 20,
+    marginBottom: 20,
   },
   quantityButton: {
     backgroundColor: "#f0f0f0",
@@ -606,10 +706,17 @@ const styles = StyleSheet.create({
     minWidth: 40,
     alignItems: "center",
   },
+  quantityButtonDisabled: {
+    backgroundColor: "#f8f8f8",
+    opacity: 0.5,
+  },
   quantityButtonText: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#666",
+  },
+  quantityButtonTextDisabled: {
+    color: "#ccc",
   },
   quantityValue: {
     fontSize: 20,
@@ -630,9 +737,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
   },
+  dateButtonDisabled: {
+    backgroundColor: "#f5f5f5",
+    opacity: 0.5,
+  },
   dateButtonText: {
     fontSize: 16,
     color: "#666",
+  },
+  dateButtonTextDisabled: {
+    color: "#ccc",
   },
   selectedDateTime: {
     alignItems: "center",

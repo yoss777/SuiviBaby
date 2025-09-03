@@ -1,5 +1,6 @@
 import { ecouterPompages } from '@/services/pompagesService';
 import { ecouterTetees } from '@/services/teteesService';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PompagesChart from '../components/PompagesChart';
@@ -9,6 +10,18 @@ export default function HomeScreen() {
   const [tetees, setTetees] = useState<any[]>([]);
   const [pompages, setPompages] = useState<any[]>([]);
   const [selectedTab, setSelectedTab] = useState<'tetees' | 'pompages'>('tetees');
+  
+  // Récupérer les paramètres de l'URL
+  const { tab } = useLocalSearchParams();
+
+  // Définir l'onglet initial en fonction du paramètre
+  useEffect(() => {
+    if (tab === 'pompages') {
+      setSelectedTab('pompages');
+    } else {
+      setSelectedTab('tetees'); // Par défaut, ou si tab === 'tetees'
+    }
+  }, [tab]);
 
   // écoute en temps réel des tetees
   useEffect(() => {

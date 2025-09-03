@@ -22,8 +22,18 @@ interface DashboardData {
 }
 
 interface TodayStats {
-  tetees: { count: number; quantity: number; lastTime?: string; lastTimestamp?: number };
-  pompages: { count: number; quantity: number; lastTime?: string; lastTimestamp?: number };
+  tetees: {
+    count: number;
+    quantity: number;
+    lastTime?: string;
+    lastTimestamp?: number;
+  };
+  pompages: {
+    count: number;
+    quantity: number;
+    lastTime?: string;
+    lastTimestamp?: number;
+  };
   mictions: { count: number; lastTime?: string; lastTimestamp?: number };
   selles: { count: number; lastTime?: string; lastTimestamp?: number };
 }
@@ -45,8 +55,9 @@ export default function HomeDashboard() {
 
   // Timer intelligent qui écoute les changements d'état de l'app
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    
+    // let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
+
     const updateTime = () => {
       setCurrentTime(new Date());
       // Programmer immédiatement le prochain update pour être précis
@@ -58,26 +69,30 @@ export default function HomeDashboard() {
       if (timer) {
         clearTimeout(timer);
       }
-      
+
       // Calculer le temps exact jusqu'à la prochaine minute
       const now = new Date();
-      const millisecondsUntilNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-      
+      const millisecondsUntilNextMinute =
+        (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+
       timer = setTimeout(() => {
         updateTime();
       }, millisecondsUntilNextMinute);
     };
 
     const handleAppStateChange = (nextAppState: string) => {
-      if (nextAppState === 'active') {
+      if (nextAppState === "active") {
         // L'app devient active, mettre à jour immédiatement
         updateTime();
       }
     };
 
     // Écouter les changements d'état de l'app
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+
     // Initialiser le premier update
     updateTime();
 
@@ -240,31 +255,33 @@ export default function HomeDashboard() {
 
   const getTimeSinceLastActivity = (lastTimestamp?: number) => {
     if (!lastTimestamp || isNaN(lastTimestamp)) return null;
-    
+
     const now = new Date(currentTime.getTime());
     const actionTime = new Date(lastTimestamp);
-    
+
     // Calculer les minutes totales depuis le début de l'époque pour chaque moment
     const nowTotalMinutes = Math.floor(now.getTime() / (1000 * 60));
     const actionTotalMinutes = Math.floor(actionTime.getTime() / (1000 * 60));
-    
+
     const diffMinutes = nowTotalMinutes - actionTotalMinutes;
-    
+
     // Vérification pour éviter les valeurs négatives
     if (diffMinutes < 0) return null;
-    
+
     // Si c'est la même minute
     if (diffMinutes === 0) {
       return "à l'instant";
     }
-    
+
     const diffHours = Math.floor(diffMinutes / 60);
     const remainingMinutes = diffMinutes % 60;
 
     if (diffHours > 0) {
-      return `il y a ${diffHours}h${remainingMinutes > 0 ? ` ${remainingMinutes}min` : ""}`;
+      return `il y a ${diffHours}h${
+        remainingMinutes > 0 ? ` ${remainingMinutes}min` : ""
+      }`;
     }
-    
+
     return `il y a ${diffMinutes}min`;
   };
 
@@ -303,8 +320,13 @@ export default function HomeDashboard() {
     color,
     lastActivity,
     lastTimestamp,
+    onPress,
   }: any) => (
-    <View style={styles.statsCard}>
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={onPress}
+      style={styles.statsCard}
+    >
       <View style={styles.statsHeader}>
         <FontAwesome name={icon} size={20} color={color} />
         <Text style={styles.statsTitle}>{title}</Text>
@@ -322,7 +344,7 @@ export default function HomeDashboard() {
           {getTimeSinceLastActivity(lastTimestamp)}
         </Text>
       )}
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -341,7 +363,7 @@ export default function HomeDashboard() {
 
       {/* Résumé du jour */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Résumé d'aujourd'hui</Text>
+        <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
         <View style={styles.statsGrid}>
           <StatsCard
             title="Tétées"
@@ -351,6 +373,7 @@ export default function HomeDashboard() {
             color="#4A90E2"
             lastActivity={todayStats.tetees.lastTime}
             lastTimestamp={todayStats.tetees.lastTimestamp}
+            onPress={() => router.push("/tetees")}
           />
           <StatsCard
             title="Volume consommé"
@@ -358,6 +381,7 @@ export default function HomeDashboard() {
             unit="ml"
             icon="tint"
             color="#4A90E2"
+            onPress={() => router.push("/stats?tab=tetees")}
           />
         </View>
         <View style={styles.statsGrid}>
@@ -369,6 +393,7 @@ export default function HomeDashboard() {
             color="#28a745"
             lastActivity={todayStats.pompages.lastTime}
             lastTimestamp={todayStats.pompages.lastTimestamp}
+            onPress={() => router.push("/pompages")}
           />
           <StatsCard
             title="Volume tiré"
@@ -376,6 +401,7 @@ export default function HomeDashboard() {
             unit="ml"
             icon="cloud-download-alt"
             color="#28a745"
+            onPress={() => router.push("/stats?tab=pompages")}
           />
         </View>
       </View>
@@ -392,6 +418,7 @@ export default function HomeDashboard() {
             color="#17a2b8"
             lastActivity={todayStats.mictions.lastTime}
             lastTimestamp={todayStats.mictions.lastTimestamp}
+            onPress={() => router.push("/mictions")}
           />
           <StatsCard
             title="Selles"
@@ -401,6 +428,7 @@ export default function HomeDashboard() {
             color="#dc3545"
             lastActivity={todayStats.selles.lastTime}
             lastTimestamp={todayStats.selles.lastTimestamp}
+            onPress={() => router.push("/selles")}
           />
         </View>
       </View>
@@ -419,7 +447,7 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.tetees.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push("/tetees")}
+            onPress={() => router.push("/tetees?openModal=true")}
           />
           <QuickActionCard
             title="Session tire-lait"
@@ -431,7 +459,7 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.pompages.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push("/pompages")}
+            onPress={() => router.push("/pompages?openModal=true")}
           />
           <QuickActionCard
             title="Miction"
@@ -443,7 +471,7 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.mictions.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push("/mictions")}
+            onPress={() => router.push("/mictions?openModal=true")}
           />
           <QuickActionCard
             title="Selle"
@@ -455,7 +483,7 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.selles.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push("/selles")}
+            onPress={() => router.push("/selles?openModal=true")}
           />
         </View>
       </View>

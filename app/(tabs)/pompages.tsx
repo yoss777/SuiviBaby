@@ -1,6 +1,7 @@
 import { ajouterPompage, ecouterPompages } from "@/services/pompagesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
@@ -45,6 +46,23 @@ export default function PompagesScreen() {
   const [showTime, setShowTime] = useState(false);
   const [quantiteGauche, setQuantiteGauche] = useState<number>(100);
   const [quantiteDroite, setQuantiteDroite] = useState<number>(100);
+
+  // Récupérer les paramètres de l'URL
+  const { openModal } = useLocalSearchParams();
+
+  // Ouvrir automatiquement le modal si le paramètre openModal est présent
+  useEffect(() => {
+    if (openModal === "true") {
+      // Petit délai pour s'assurer que la navigation est terminée
+      const timer = setTimeout(() => {
+        openModalHandler();
+        // Nettoyer l'URL pour éviter que le modal se rouvre
+        router.replace("/pompages");
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [openModal]);
 
   // Écoute en temps réel
   useEffect(() => {
@@ -122,7 +140,7 @@ export default function PompagesScreen() {
     setExpandedDays(newExpandedDays);
   };
 
-  const openModal = () => {
+  const openModalHandler = () => {
     // Réinitialiser avec la date/heure actuelle à l'ouverture
     const now = new Date();
     setDateHeure(new Date(now.getTime()));
@@ -142,7 +160,6 @@ export default function PompagesScreen() {
   }, []);
 
   const handleAddPompage = async () => {
-    
     // Vérifier si une soumission est déjà en cours
     if (isSubmitting) {
       return;
@@ -164,7 +181,6 @@ export default function PompagesScreen() {
     } finally {
       setIsSubmitting(false); // Réactiver le bouton en cas d'erreur
     }
-    
   };
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
@@ -316,7 +332,7 @@ export default function PompagesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={openModal}>
+        <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
           <FontAwesome name="plus" size={16} color="white" />
           <Text style={styles.addButtonText}>Nouvelle session</Text>
         </TouchableOpacity>
@@ -768,6 +784,7 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   modalCategoryLabel: {
+    alignSelf: "center",
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
