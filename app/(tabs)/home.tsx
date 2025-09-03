@@ -2,6 +2,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  AppState,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,10 +22,10 @@ interface DashboardData {
 }
 
 interface TodayStats {
-  tetees: { count: number; quantity: number; lastTime?: string };
-  pompages: { count: number; quantity: number; lastTime?: string };
-  mictions: { count: number; lastTime?: string };
-  selles: { count: number; lastTime?: string };
+  tetees: { count: number; quantity: number; lastTime?: string; lastTimestamp?: number };
+  pompages: { count: number; quantity: number; lastTime?: string; lastTimestamp?: number };
+  mictions: { count: number; lastTime?: string; lastTimestamp?: number };
+  selles: { count: number; lastTime?: string; lastTimestamp?: number };
 }
 
 export default function HomeDashboard() {
@@ -40,6 +41,53 @@ export default function HomeDashboard() {
     mictions: { count: 0 },
     selles: { count: 0 },
   });
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Timer intelligent qui écoute les changements d'état de l'app
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    
+    const updateTime = () => {
+      setCurrentTime(new Date());
+      // Programmer immédiatement le prochain update pour être précis
+      scheduleNextUpdate();
+    };
+
+    const scheduleNextUpdate = () => {
+      // Nettoyer l'ancien timer
+      if (timer) {
+        clearTimeout(timer);
+      }
+      
+      // Calculer le temps exact jusqu'à la prochaine minute
+      const now = new Date();
+      const millisecondsUntilNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+      
+      timer = setTimeout(() => {
+        updateTime();
+      }, millisecondsUntilNextMinute);
+    };
+
+    const handleAppStateChange = (nextAppState: string) => {
+      if (nextAppState === 'active') {
+        // L'app devient active, mettre à jour immédiatement
+        updateTime();
+      }
+    };
+
+    // Écouter les changements d'état de l'app
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    // Initialiser le premier update
+    updateTime();
+
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      subscription?.remove();
+    };
+  }, []);
 
   // Écoute en temps réel de toutes les données
   useEffect(() => {
@@ -152,24 +200,33 @@ export default function HomeDashboard() {
       });
     };
 
+    const getTimestamp = (item: any) => {
+      if (!item?.date?.seconds) return undefined;
+      return item.date.seconds * 1000;
+    };
+
     setTodayStats({
       tetees: {
         count: todayTetees.length,
         quantity: teteesQuantity,
         lastTime: formatTime(lastTetee),
+        lastTimestamp: getTimestamp(lastTetee),
       },
       pompages: {
         count: todayPompages.length,
         quantity: pompagesQuantity,
         lastTime: formatTime(lastPompage),
+        lastTimestamp: getTimestamp(lastPompage),
       },
       mictions: {
         count: todayMictions.length,
         lastTime: formatTime(lastMiction),
+        lastTimestamp: getTimestamp(lastMiction),
       },
       selles: {
         count: todaySelles.length,
         lastTime: formatTime(lastSelle),
+        lastTimestamp: getTimestamp(lastSelle),
       },
     });
   }, [data]);
@@ -181,21 +238,33 @@ export default function HomeDashboard() {
     return "Bonsoir";
   };
 
-  const getTimeSinceLastActivity = (lastTime?: string) => {
-    if (!lastTime) return null;
-    const now = new Date();
-    const [hours, minutes] = lastTime.split(":").map(Number);
-    const lastActivityTime = new Date();
-    lastActivityTime.setHours(hours, minutes, 0, 0);
+  const getTimeSinceLastActivity = (lastTimestamp?: number) => {
+    if (!lastTimestamp || isNaN(lastTimestamp)) return null;
+    
+    const now = new Date(currentTime.getTime());
+    const actionTime = new Date(lastTimestamp);
+    
+    // Calculer les minutes totales depuis le début de l'époque pour chaque moment
+    const nowTotalMinutes = Math.floor(now.getTime() / (1000 * 60));
+    const actionTotalMinutes = Math.floor(actionTime.getTime() / (1000 * 60));
+    
+    const diffMinutes = nowTotalMinutes - actionTotalMinutes;
+    
+    // Vérification pour éviter les valeurs négatives
+    if (diffMinutes < 0) return null;
+    
+    // Si c'est la même minute
+    if (diffMinutes === 0) {
+      return "à l'instant";
+    }
+    
+    const diffHours = Math.floor(diffMinutes / 60);
+    const remainingMinutes = diffMinutes % 60;
 
-    const diffMs = now.getTime() - lastActivityTime.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-    if (diffHours > 0)
-      return `il y a ${diffHours}h${
-        diffMinutes > 0 ? ` ${diffMinutes}min` : ""
-      }`;
+    if (diffHours > 0) {
+      return `il y a ${diffHours}h${remainingMinutes > 0 ? ` ${remainingMinutes}min` : ""}`;
+    }
+    
     return `il y a ${diffMinutes}min`;
   };
 
@@ -233,6 +302,7 @@ export default function HomeDashboard() {
     icon,
     color,
     lastActivity,
+    lastTimestamp,
   }: any) => (
     <View style={styles.statsCard}>
       <View style={styles.statsHeader}>
@@ -247,9 +317,9 @@ export default function HomeDashboard() {
           Dernière fois: {lastActivity}
         </Text>
       )}
-      {lastActivity && (
+      {lastTimestamp && (
         <Text style={styles.statsTimeSince}>
-          {getTimeSinceLastActivity(lastActivity)}
+          {getTimeSinceLastActivity(lastTimestamp)}
         </Text>
       )}
     </View>
@@ -271,7 +341,7 @@ export default function HomeDashboard() {
 
       {/* Résumé du jour */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
+        <Text style={styles.sectionTitle}>Résumé d'aujourd'hui</Text>
         <View style={styles.statsGrid}>
           <StatsCard
             title="Tétées"
@@ -280,6 +350,7 @@ export default function HomeDashboard() {
             icon="baby"
             color="#4A90E2"
             lastActivity={todayStats.tetees.lastTime}
+            lastTimestamp={todayStats.tetees.lastTimestamp}
           />
           <StatsCard
             title="Volume consommé"
@@ -297,6 +368,7 @@ export default function HomeDashboard() {
             icon="pump-medical"
             color="#28a745"
             lastActivity={todayStats.pompages.lastTime}
+            lastTimestamp={todayStats.pompages.lastTimestamp}
           />
           <StatsCard
             title="Volume tiré"
@@ -319,6 +391,7 @@ export default function HomeDashboard() {
             icon="water"
             color="#17a2b8"
             lastActivity={todayStats.mictions.lastTime}
+            lastTimestamp={todayStats.mictions.lastTimestamp}
           />
           <StatsCard
             title="Selles"
@@ -327,6 +400,7 @@ export default function HomeDashboard() {
             icon="poop"
             color="#dc3545"
             lastActivity={todayStats.selles.lastTime}
+            lastTimestamp={todayStats.selles.lastTimestamp}
           />
         </View>
       </View>

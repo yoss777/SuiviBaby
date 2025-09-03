@@ -32,6 +32,7 @@ export default function MictionsScreen() {
   const [groupedMictions, setGroupedMictions] = useState<MictionGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Nouvel état
 
   // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
@@ -118,10 +119,25 @@ export default function MictionsScreen() {
   }, []);
 
   const handleAddMiction = async () => {
-    await ajouterMiction({
-      date: dateHeure,
-    });
-    closeModal();
+    // Vérifier si une soumission est déjà en cours
+    if (isSubmitting) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true); // Désactiver le bouton
+
+      await ajouterMiction({
+        date: dateHeure,
+      });
+
+      closeModal();
+    } catch (error) {
+      console.error("Erreur lors de l'ajout du pompage:", error);
+      // Optionnel : afficher un message d'erreur à l'utilisateur
+    } finally {
+      setIsSubmitting(false); // Réactiver le bouton en cas d'erreur
+    }
   };
 
   const onChangeDate = (event: any, selectedDate?: Date) => {

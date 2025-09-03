@@ -32,6 +32,7 @@ export default function SellesScreen() {
   const [groupedSelles, setGroupedSelles] = useState<SelleGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Nouvel état
 
   // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
@@ -118,10 +119,27 @@ export default function SellesScreen() {
   }, []);
 
   const handleAddSelle = async () => {
-    await ajouterSelle({
+
+// Vérifier si une soumission est déjà en cours
+    if (isSubmitting) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true); // Désactiver le bouton
+
+      await ajouterSelle({
       date: dateHeure,
     });
-    closeModal();
+
+      closeModal();
+    } catch (error) {
+      console.error("Erreur lors de l'ajout du pompage:", error);
+      // Optionnel : afficher un message d'erreur à l'utilisateur
+    } finally {
+      setIsSubmitting(false); // Réactiver le bouton en cas d'erreur
+    }
+
   };
 
   const onChangeDate = (event: any, selectedDate?: Date) => {

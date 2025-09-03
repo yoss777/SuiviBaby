@@ -37,6 +37,7 @@ export default function PompagesScreen() {
   const [groupedPompages, setGroupedPompages] = useState<PompageGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Nouvel état
 
   // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
@@ -127,11 +128,13 @@ export default function PompagesScreen() {
     setDateHeure(new Date(now.getTime()));
     setQuantiteGauche(100);
     setQuantiteDroite(100);
+    setIsSubmitting(false); // Réinitialiser l'état de soumission
     setShowModal(true);
   };
 
   const closeModal = () => {
     setShowModal(false);
+    setIsSubmitting(false); // Réinitialiser l'état de soumission à la fermeture
   };
 
   const cancelForm = useCallback(() => {
@@ -139,12 +142,29 @@ export default function PompagesScreen() {
   }, []);
 
   const handleAddPompage = async () => {
-    await ajouterPompage({
-      quantiteGauche,
-      quantiteDroite,
-      date: dateHeure,
-    });
-    closeModal();
+    
+    // Vérifier si une soumission est déjà en cours
+    if (isSubmitting) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true); // Désactiver le bouton
+
+      await ajouterPompage({
+        quantiteGauche,
+        quantiteDroite,
+        date: dateHeure,
+      });
+
+      closeModal();
+    } catch (error) {
+      console.error("Erreur lors de l'ajout du pompage:", error);
+      // Optionnel : afficher un message d'erreur à l'utilisateur
+    } finally {
+      setIsSubmitting(false); // Réactiver le bouton en cas d'erreur
+    }
+    
   };
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
@@ -337,17 +357,39 @@ export default function PompagesScreen() {
             <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
             <View style={styles.quantityRow}>
               <TouchableOpacity
-                style={styles.quantityButton}
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
                 onPress={() => setQuantiteGauche((q) => Math.max(0, q - 5))}
+                disabled={isSubmitting}
               >
-                <Text style={styles.quantityButtonText}>-</Text>
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  -
+                </Text>
               </TouchableOpacity>
               <Text style={styles.quantityValue}>{quantiteGauche} ml</Text>
               <TouchableOpacity
-                style={styles.quantityButton}
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
                 onPress={() => setQuantiteGauche((q) => q + 5)}
+                disabled={isSubmitting}
               >
-                <Text style={styles.quantityButtonText}>+</Text>
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  +
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -355,17 +397,39 @@ export default function PompagesScreen() {
             <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
             <View style={styles.quantityRow}>
               <TouchableOpacity
-                style={styles.quantityButton}
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
                 onPress={() => setQuantiteDroite((q) => Math.max(0, q - 5))}
+                disabled={isSubmitting}
               >
-                <Text style={styles.quantityButtonText}>-</Text>
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  -
+                </Text>
               </TouchableOpacity>
               <Text style={styles.quantityValue}>{quantiteDroite} ml</Text>
               <TouchableOpacity
-                style={styles.quantityButton}
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
                 onPress={() => setQuantiteDroite((q) => q + 5)}
+                disabled={isSubmitting}
               >
-                <Text style={styles.quantityButtonText}>+</Text>
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  +
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -373,18 +437,48 @@ export default function PompagesScreen() {
             <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
             <View style={styles.dateTimeContainer}>
               <TouchableOpacity
-                style={styles.dateButton}
+                style={[
+                  styles.dateButton,
+                  isSubmitting && styles.dateButtonDisabled,
+                ]}
                 onPress={() => setShowDate(true)}
+                disabled={isSubmitting}
               >
-                <FontAwesome name="calendar-alt" size={16} color="#666" />
-                <Text style={styles.dateButtonText}>Date</Text>
+                <FontAwesome
+                  name="calendar-alt"
+                  size={16}
+                  color={isSubmitting ? "#ccc" : "#666"}
+                />
+                <Text
+                  style={[
+                    styles.dateButtonText,
+                    isSubmitting && styles.dateButtonTextDisabled,
+                  ]}
+                >
+                  Date
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.dateButton}
+                style={[
+                  styles.dateButton,
+                  isSubmitting && styles.dateButtonDisabled,
+                ]}
                 onPress={() => setShowTime(true)}
+                disabled={isSubmitting}
               >
-                <FontAwesome name="clock" size={16} color="#666" />
-                <Text style={styles.dateButtonText}>Heure</Text>
+                <FontAwesome
+                  name="clock"
+                  size={16}
+                  color={isSubmitting ? "#ccc" : "#666"}
+                />
+                <Text
+                  style={[
+                    styles.dateButtonText,
+                    isSubmitting && styles.dateButtonTextDisabled,
+                  ]}
+                >
+                  Heure
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -429,6 +523,9 @@ export default function PompagesScreen() {
                 onValidate={handleAddPompage}
                 cancelText="Annuler"
                 validateText="Ajouter"
+                isLoading={isSubmitting}
+                disabled={isSubmitting}
+                loadingText="Ajout en cours..."
               />
             </View>
           </View>
@@ -683,10 +780,17 @@ const styles = StyleSheet.create({
     minWidth: 40,
     alignItems: "center",
   },
+  quantityButtonDisabled: {
+    backgroundColor: "#f8f8f8",
+    opacity: 0.5,
+  },
   quantityButtonText: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#666",
+  },
+  quantityButtonTextDisabled: {
+    color: "#ccc",
   },
   dateTimeContainer: {
     flexDirection: "row",
@@ -705,10 +809,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e9ecef",
   },
+  dateButtonDisabled: {
+    backgroundColor: "#f5f5f5",
+    opacity: 0.5,
+  },
   dateButtonText: {
     fontSize: 16,
     color: "#666",
     fontWeight: "500",
+  },
+  dateButtonTextDisabled: {
+    color: "#ccc",
   },
   selectedDateTime: {
     backgroundColor: "#f8f9fa",
