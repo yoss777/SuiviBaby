@@ -1,4 +1,4 @@
-import { ajouterSelle } from "@/services/sellesService";
+import { ajouterSelle, modifierSelle } from "@/services/sellesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -33,12 +33,11 @@ interface SelleGroup {
 }
 
 export default function SellesScreen({ selles }: Props) {
-
-  // const [selles, setSelles] = useState<Selle[]>([]);
   const [groupedSelles, setGroupedSelles] = useState<SelleGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Nouvel état
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [editingSelle, setEditingSelle] = useState<Selle | null>(null);
 
   // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
@@ -51,22 +50,14 @@ export default function SellesScreen({ selles }: Props) {
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
     if (openModal === "true") {
-      // Petit délai pour s'assurer que la navigation est terminée
       const timer = setTimeout(() => {
         openModalHandler();
-        // Nettoyer l'URL pour éviter que le modal se rouvre
         router.replace("/excretions");
       }, 100);
 
       return () => clearTimeout(timer);
     }
   }, [openModal]);
-
-  // Écoute en temps réel
-  // useEffect(() => {
-  //   const unsubscribe = ecouterSelles(setSelles);
-  //   return () => unsubscribe();
-  // }, []);
 
   // Regroupement par jour
   useEffect(() => {
@@ -127,39 +118,53 @@ export default function SellesScreen({ selles }: Props) {
   };
 
   const openModalHandler = () => {
-    // Réinitialiser avec la date/heure actuelle à l'ouverture
     const now = new Date();
     setDateHeure(new Date(now.getTime()));
+    setEditingSelle(null);
+    setIsSubmitting(false);
+    setShowModal(true);
+  };
+
+  const openEditModal = (selle: Selle) => {
+    setDateHeure(new Date(selle.date.seconds * 1000));
+    setEditingSelle(selle);
+    setIsSubmitting(false);
     setShowModal(true);
   };
 
   const closeModal = () => {
     setShowModal(false);
+    setIsSubmitting(false);
+    setEditingSelle(null);
   };
 
   const cancelForm = useCallback(() => {
     closeModal();
   }, []);
 
-  const handleAddSelle = async () => {
-    // Vérifier si une soumission est déjà en cours
+  const handleSubmitSelle = async () => {
     if (isSubmitting) {
       return;
     }
 
     try {
-      setIsSubmitting(true); // Désactiver le bouton
+      setIsSubmitting(true);
 
-      await ajouterSelle({
-        date: dateHeure,
-      });
+      if (editingSelle) {
+        await modifierSelle(editingSelle.id, {
+          date: dateHeure,
+        });
+      } else {
+        await ajouterSelle({
+          date: dateHeure,
+        });
+      }
 
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de l'ajout du pompage:", error);
-      // Optionnel : afficher un message d'erreur à l'utilisateur
+      console.error("Erreur lors de la sauvegarde de la selle:", error);
     } finally {
-      setIsSubmitting(false); // Réactiver le bouton en cas d'erreur
+      setIsSubmitting(false);
     }
   };
 
@@ -191,9 +196,11 @@ export default function SellesScreen({ selles }: Props) {
   };
 
   const renderSelleItem = (selle: Selle, isLast: boolean = false) => (
-    <View
+    <TouchableOpacity
       key={selle.id}
       style={[styles.selleItem, isLast && styles.lastSelleItem]}
+      onPress={() => openEditModal(selle)}
+      activeOpacity={0.7}
     >
       <View style={styles.selleContent}>
         <FontAwesome
@@ -207,13 +214,16 @@ export default function SellesScreen({ selles }: Props) {
             minute: "2-digit",
           })}
         </Text>
-        {isLast && (
-          <View style={styles.recentBadge}>
-            <Text style={styles.recentText}>Récent</Text>
-          </View>
-        )}
+        <View style={styles.selleActions}>
+          {isLast && (
+            <View style={styles.recentBadge}>
+              <Text style={styles.recentText}>Récent</Text>
+            </View>
+          )}
+          <FontAwesome name="edit" size={16} color="#dc3545" style={styles.editIcon} />
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderDayGroup = ({ item }: { item: SelleGroup }) => {
@@ -222,7 +232,6 @@ export default function SellesScreen({ selles }: Props) {
 
     return (
       <View style={styles.dayCard}>
-        {/* En-tête du jour */}
         <View style={styles.dayHeader}>
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
@@ -247,10 +256,8 @@ export default function SellesScreen({ selles }: Props) {
           )}
         </View>
 
-        {/* Dernière selle (toujours visible) */}
         {renderSelleItem(item.lastSelle, true)}
 
-        {/* Selles supplémentaires (repliables) */}
         {hasMultipleSelles && isExpanded && (
           <View style={styles.expandedContent}>
             <View style={styles.separator} />
@@ -300,26 +307,62 @@ export default function SellesScreen({ selles }: Props) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <FontAwesome name="circle" size={20} color="#dc3545" />
-              <Text style={styles.modalTitle}>Nouvelle selle</Text>
+              <FontAwesome 
+                name={editingSelle ? "edit" : "circle"} 
+                size={20} 
+                color="#dc3545" 
+              />
+              <Text style={styles.modalTitle}>
+                {editingSelle ? "Modifier la selle" : "Nouvelle selle"}
+              </Text>
             </View>
 
             {/* Date & Heure */}
             <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
             <View style={styles.dateTimeContainer}>
               <TouchableOpacity
-                style={styles.dateButton}
+                style={[
+                  styles.dateButton,
+                  isSubmitting && styles.dateButtonDisabled,
+                ]}
                 onPress={() => setShowDate(true)}
+                disabled={isSubmitting}
               >
-                <FontAwesome name="calendar-alt" size={16} color="#666" />
-                <Text style={styles.dateButtonText}>Date</Text>
+                <FontAwesome
+                  name="calendar-alt"
+                  size={16}
+                  color={isSubmitting ? "#ccc" : "#666"}
+                />
+                <Text
+                  style={[
+                    styles.dateButtonText,
+                    isSubmitting && styles.dateButtonTextDisabled,
+                  ]}
+                >
+                  Date
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.dateButton}
+                style={[
+                  styles.dateButton,
+                  isSubmitting && styles.dateButtonDisabled,
+                ]}
                 onPress={() => setShowTime(true)}
+                disabled={isSubmitting}
               >
-                <FontAwesome name="clock" size={16} color="#666" />
-                <Text style={styles.dateButtonText}>Heure</Text>
+                <FontAwesome
+                  name="clock"
+                  size={16}
+                  color={isSubmitting ? "#ccc" : "#666"}
+                />
+                <Text
+                  style={[
+                    styles.dateButtonText,
+                    isSubmitting && styles.dateButtonTextDisabled,
+                  ]}
+                >
+                  Heure
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -361,9 +404,12 @@ export default function SellesScreen({ selles }: Props) {
             <View style={styles.actionButtonsContainer}>
               <ModernActionButtons
                 onCancel={cancelForm}
-                onValidate={handleAddSelle}
+                onValidate={handleSubmitSelle}
                 cancelText="Annuler"
-                validateText="Ajouter"
+                validateText={editingSelle ? "Mettre à jour" : "Ajouter"}
+                isLoading={isSubmitting}
+                disabled={isSubmitting}
+                loadingText={editingSelle ? "Mise à jour..." : "Ajout en cours..."}
               />
             </View>
           </View>
@@ -383,7 +429,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   addButton: {
-    backgroundColor: "#dc3545", // Couleur rouge pour les selles
+    backgroundColor: "#dc3545",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -467,6 +513,11 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "600",
   },
+  selleActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   recentBadge: {
     backgroundColor: "#dc3545",
     paddingHorizontal: 8,
@@ -477,6 +528,9 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 12,
     fontWeight: "600",
+  },
+  editIcon: {
+    opacity: 0.7,
   },
   expandedContent: {
     marginTop: 8,
@@ -509,7 +563,6 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 4,
   },
-  // Styles du modal
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -559,10 +612,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e9ecef",
   },
+  dateButtonDisabled: {
+    backgroundColor: "#f5f5f5",
+    opacity: 0.5,
+  },
   dateButtonText: {
     fontSize: 16,
     color: "#666",
     fontWeight: "500",
+  },
+  dateButtonTextDisabled: {
+    color: "#ccc",
   },
   selectedDateTime: {
     backgroundColor: "#f8f9fa",

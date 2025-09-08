@@ -1,4 +1,4 @@
-import { ajouterMiction } from "@/services/mictionsService";
+import { ajouterMiction, modifierMiction } from "@/services/mictionsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -33,11 +33,11 @@ interface MictionGroup {
 }
 
 export default function MictionsScreen({ mictions }: Props) {
-  // const [mictions, setMictions] = useState<Miction[]>([]);
   const [groupedMictions, setGroupedMictions] = useState<MictionGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Nouvel état
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [editingMiction, setEditingMiction] = useState<Miction | null>(null);
 
   // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
@@ -50,22 +50,14 @@ export default function MictionsScreen({ mictions }: Props) {
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
     if (openModal === "true") {
-      // Petit délai pour s'assurer que la navigation est terminée
       const timer = setTimeout(() => {
         openModalHandler();
-        // Nettoyer l'URL pour éviter que le modal se rouvre
         router.replace("/excretions");
       }, 100);
 
       return () => clearTimeout(timer);
     }
   }, [openModal]);
-
-  // Écoute en temps réel
-  // useEffect(() => {
-  //   const unsubscribe = ecouterMictions(setMictions);
-  //   return () => unsubscribe();
-  // }, []);
 
   // Regroupement par jour
   useEffect(() => {
@@ -126,39 +118,53 @@ export default function MictionsScreen({ mictions }: Props) {
   };
 
   const openModalHandler = () => {
-    // Réinitialiser avec la date/heure actuelle à l'ouverture
     const now = new Date();
     setDateHeure(new Date(now.getTime()));
+    setEditingMiction(null);
+    setIsSubmitting(false);
+    setShowModal(true);
+  };
+
+  const openEditModal = (miction: Miction) => {
+    setDateHeure(new Date(miction.date.seconds * 1000));
+    setEditingMiction(miction);
+    setIsSubmitting(false);
     setShowModal(true);
   };
 
   const closeModal = () => {
     setShowModal(false);
+    setIsSubmitting(false);
+    setEditingMiction(null);
   };
 
   const cancelForm = useCallback(() => {
     closeModal();
   }, []);
 
-  const handleAddMiction = async () => {
-    // Vérifier si une soumission est déjà en cours
+  const handleSubmitMiction = async () => {
     if (isSubmitting) {
       return;
     }
 
     try {
-      setIsSubmitting(true); // Désactiver le bouton
+      setIsSubmitting(true);
 
-      await ajouterMiction({
-        date: dateHeure,
-      });
+      if (editingMiction) {
+        await modifierMiction(editingMiction.id, {
+          date: dateHeure,
+        });
+      } else {
+        await ajouterMiction({
+          date: dateHeure,
+        });
+      }
 
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de l'ajout du pompage:", error);
-      // Optionnel : afficher un message d'erreur à l'utilisateur
+      console.error("Erreur lors de la sauvegarde de la miction:", error);
     } finally {
-      setIsSubmitting(false); // Réactiver le bouton en cas d'erreur
+      setIsSubmitting(false);
     }
   };
 
@@ -190,9 +196,11 @@ export default function MictionsScreen({ mictions }: Props) {
   };
 
   const renderMictionItem = (miction: Miction, isLast: boolean = false) => (
-    <View
+    <TouchableOpacity
       key={miction.id}
       style={[styles.mictionItem, isLast && styles.lastMictionItem]}
+      onPress={() => openEditModal(miction)}
+      activeOpacity={0.7}
     >
       <View style={styles.mictionContent}>
         <FontAwesome
@@ -206,13 +214,16 @@ export default function MictionsScreen({ mictions }: Props) {
             minute: "2-digit",
           })}
         </Text>
-        {isLast && (
-          <View style={styles.recentBadge}>
-            <Text style={styles.recentText}>Récent</Text>
-          </View>
-        )}
+        <View style={styles.mictionActions}>
+          {isLast && (
+            <View style={styles.recentBadge}>
+              <Text style={styles.recentText}>Récent</Text>
+            </View>
+          )}
+          <FontAwesome name="edit" size={16} color="#17a2b8" style={styles.editIcon} />
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderDayGroup = ({ item }: { item: MictionGroup }) => {
@@ -221,7 +232,6 @@ export default function MictionsScreen({ mictions }: Props) {
 
     return (
       <View style={styles.dayCard}>
-        {/* En-tête du jour */}
         <View style={styles.dayHeader}>
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
@@ -247,10 +257,8 @@ export default function MictionsScreen({ mictions }: Props) {
           )}
         </View>
 
-        {/* Dernière miction (toujours visible) */}
         {renderMictionItem(item.lastMiction, true)}
 
-        {/* Mictions supplémentaires (repliables) */}
         {hasMultipleMictions && isExpanded && (
           <View style={styles.expandedContent}>
             <View style={styles.separator} />
@@ -300,26 +308,62 @@ export default function MictionsScreen({ mictions }: Props) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <FontAwesome name="tint" size={24} color="#4A90E2" />
-              <Text style={styles.modalTitle}>Nouvelle miction</Text>
+              <FontAwesome 
+                name={editingMiction ? "edit" : "tint"} 
+                size={24} 
+                color="#4A90E2" 
+              />
+              <Text style={styles.modalTitle}>
+                {editingMiction ? "Modifier la miction" : "Nouvelle miction"}
+              </Text>
             </View>
 
             {/* Date & Heure */}
             <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
             <View style={styles.dateTimeContainer}>
               <TouchableOpacity
-                style={styles.dateButton}
+                style={[
+                  styles.dateButton,
+                  isSubmitting && styles.dateButtonDisabled,
+                ]}
                 onPress={() => setShowDate(true)}
+                disabled={isSubmitting}
               >
-                <FontAwesome name="calendar-alt" size={16} color="#666" />
-                <Text style={styles.dateButtonText}>Date</Text>
+                <FontAwesome
+                  name="calendar-alt"
+                  size={16}
+                  color={isSubmitting ? "#ccc" : "#666"}
+                />
+                <Text
+                  style={[
+                    styles.dateButtonText,
+                    isSubmitting && styles.dateButtonTextDisabled,
+                  ]}
+                >
+                  Date
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.dateButton}
+                style={[
+                  styles.dateButton,
+                  isSubmitting && styles.dateButtonDisabled,
+                ]}
                 onPress={() => setShowTime(true)}
+                disabled={isSubmitting}
               >
-                <FontAwesome name="clock" size={16} color="#666" />
-                <Text style={styles.dateButtonText}>Heure</Text>
+                <FontAwesome
+                  name="clock"
+                  size={16}
+                  color={isSubmitting ? "#ccc" : "#666"}
+                />
+                <Text
+                  style={[
+                    styles.dateButtonText,
+                    isSubmitting && styles.dateButtonTextDisabled,
+                  ]}
+                >
+                  Heure
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -361,9 +405,12 @@ export default function MictionsScreen({ mictions }: Props) {
             <View style={styles.actionButtonsContainer}>
               <ModernActionButtons
                 onCancel={cancelForm}
-                onValidate={handleAddMiction}
+                onValidate={handleSubmitMiction}
                 cancelText="Annuler"
-                validateText="Ajouter"
+                validateText={editingMiction ? "Mettre à jour" : "Ajouter"}
+                isLoading={isSubmitting}
+                disabled={isSubmitting}
+                loadingText={editingMiction ? "Mise à jour..." : "Ajout en cours..."}
               />
             </View>
           </View>
@@ -383,7 +430,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   addButton: {
-    backgroundColor: "#17a2b8", // Couleur cyan pour les mictions
+    backgroundColor: "#17a2b8",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -467,6 +514,11 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "600",
   },
+  mictionActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   recentBadge: {
     backgroundColor: "#17a2b8",
     paddingHorizontal: 8,
@@ -477,6 +529,9 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 12,
     fontWeight: "600",
+  },
+  editIcon: {
+    opacity: 0.7,
   },
   expandedContent: {
     marginTop: 8,
@@ -509,7 +564,6 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 4,
   },
-  // Styles du modal
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -559,10 +613,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e9ecef",
   },
+  dateButtonDisabled: {
+    backgroundColor: "#f5f5f5",
+    opacity: 0.5,
+  },
   dateButtonText: {
     fontSize: 16,
     color: "#666",
     fontWeight: "500",
+  },
+  dateButtonTextDisabled: {
+    color: "#ccc",
   },
   selectedDateTime: {
     backgroundColor: "#f8f9fa",

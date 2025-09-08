@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ajouterTetee, ecouterTetees } from "../../services/teteesService";
+import { ajouterTetee, ecouterTetees, modifierTetee } from "../../services/teteesService";
 import ModernActionButtons from "../components/ModernActionsButton";
 
 // Interface pour typer les données
@@ -37,6 +37,7 @@ export default function TeteesScreen() {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [editingTetee, setEditingTetee] = useState<Tetee | null>(null);
 
   // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
@@ -140,19 +141,31 @@ export default function TeteesScreen() {
     setQuantite(50);
     setSein("seins + biberon");
     setIsSubmitting(false);
+    setEditingTetee(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (tetee: Tetee) => {
+    // Pré-remplir le formulaire avec les données de la tétée
+    setDateHeure(new Date(tetee.date.seconds * 1000));
+    setQuantite(tetee.quantite);
+    setSein(tetee.sein);
+    setEditingTetee(tetee);
+    setIsSubmitting(false);
     setShowModal(true);
   };
 
   const closeModal = () => {
     setShowModal(false);
     setIsSubmitting(false);
+    setEditingTetee(null);
   };
 
   const cancelForm = useCallback(() => {
     closeModal();
   }, []);
 
-  const handleAddTetee = async () => {
+  const handleSubmitTetee = async () => {
     // Vérifier si une soumission est déjà en cours
     if (isSubmitting) {
       return;
@@ -161,15 +174,25 @@ export default function TeteesScreen() {
     try {
       setIsSubmitting(true); // Désactiver le bouton
 
-      await ajouterTetee({
-        sein,
-        quantite,
-        date: dateHeure,
-      });
+      if (editingTetee) {
+        // Mode modification
+        await modifierTetee(editingTetee.id, {
+          sein,
+          quantite,
+          date: dateHeure,
+        });
+      } else {
+        // Mode ajout
+        await ajouterTetee({
+          sein,
+          quantite,
+          date: dateHeure,
+        });
+      }
 
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de l'ajout de la tétée:", error);
+      console.error("Erreur lors de la sauvegarde de la tétée:", error);
       // Optionnel : afficher un message d'erreur à l'utilisateur
     } finally {
       setIsSubmitting(false); // Réactiver le bouton en cas d'erreur
@@ -204,9 +227,11 @@ export default function TeteesScreen() {
   };
 
   const renderTeteeItem = (tetee: Tetee, isLast: boolean = false) => (
-    <View
+    <TouchableOpacity
       key={tetee.id}
       style={[styles.teteeItem, isLast && styles.lastTeteeItem]}
+      onPress={() => openEditModal(tetee)}
+      activeOpacity={0.7}
     >
       <View style={styles.teteeContent}>
         <View style={styles.teteeInfo}>
@@ -227,11 +252,14 @@ export default function TeteesScreen() {
             <Text style={styles.seinText}>{tetee.sein}</Text>
           </View>
         </View>
-        <View style={styles.quantityBadge}>
-          <Text style={styles.quantityText}>{tetee.quantite} ml</Text>
+        <View style={styles.teteeActions}>
+          <View style={styles.quantityBadge}>
+            <Text style={styles.quantityText}>{tetee.quantite} ml</Text>
+          </View>
+          <FontAwesome name="edit" size={16} color="#4A90E2" style={styles.editIcon} />
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderDayGroup = ({ item }: { item: TeteeGroup }) => {
@@ -246,8 +274,7 @@ export default function TeteesScreen() {
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
               <Text style={styles.summaryText}>
-                {item.tetees.length} tétée{item.tetees.length > 1 ? "s" : ""} •{" "}
-                {item.totalQuantity} ml total
+                {item.tetees.length} tétée{item.tetees.length > 1 ? "s" : ""} • {item.totalQuantity} ml total
               </Text>
             </View>
           </View>
@@ -318,8 +345,14 @@ export default function TeteesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <FontAwesome name="baby" size={24} color="#4A90E2" />
-              <Text style={styles.modalTitle}>Nouvelle tétée</Text>
+              <FontAwesome 
+                name={editingTetee ? "edit" : "baby"} 
+                size={24} 
+                color="#4A90E2" 
+              />
+              <Text style={styles.modalTitle}>
+                {editingTetee ? "Modifier la tétée" : "Nouvelle tétée"}
+              </Text>
             </View>
 
             {/* Sélection du sein */}
@@ -475,12 +508,12 @@ export default function TeteesScreen() {
             <View style={styles.actionButtonsContainer}>
               <ModernActionButtons
                 onCancel={cancelForm}
-                onValidate={handleAddTetee}
+                onValidate={handleSubmitTetee}
                 cancelText="Annuler"
-                validateText="Ajouter"
+                validateText={editingTetee ? "Mettre à jour" : "Ajouter"}
                 isLoading={isSubmitting}
                 disabled={isSubmitting}
-                loadingText="Ajout en cours..."
+                loadingText={editingTetee ? "Mise à jour..." : "Ajout en cours..."}
               />
             </View>
           </View>
@@ -592,6 +625,11 @@ const styles = StyleSheet.create({
     color: "#666",
     textTransform: "capitalize",
   },
+  teteeActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   quantityBadge: {
     backgroundColor: "#4A90E2",
     paddingHorizontal: 12,
@@ -602,6 +640,9 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 14,
     fontWeight: "600",
+  },
+  editIcon: {
+    opacity: 0.7,
   },
   expandedContent: {
     marginTop: 8,
@@ -648,7 +689,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 12,
   },
-    modalHeader: {
+  modalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

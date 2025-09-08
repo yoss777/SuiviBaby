@@ -1,4 +1,4 @@
-import { ajouterPompage, ecouterPompages } from "@/services/pompagesService";
+import { ajouterPompage, ecouterPompages, modifierPompage } from "@/services/pompagesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -38,7 +38,8 @@ export default function PompagesScreen() {
   const [groupedPompages, setGroupedPompages] = useState<PompageGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Nouvel état
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [editingPompage, setEditingPompage] = useState<Pompage | null>(null);
 
   // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
@@ -53,10 +54,8 @@ export default function PompagesScreen() {
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
     if (openModal === "true") {
-      // Petit délai pour s'assurer que la navigation est terminée
       const timer = setTimeout(() => {
         openModalHandler();
-        // Nettoyer l'URL pour éviter que le modal se rouvre
         router.replace("/pompages");
       }, 100);
 
@@ -141,45 +140,61 @@ export default function PompagesScreen() {
   };
 
   const openModalHandler = () => {
-    // Réinitialiser avec la date/heure actuelle à l'ouverture
     const now = new Date();
     setDateHeure(new Date(now.getTime()));
     setQuantiteGauche(100);
     setQuantiteDroite(100);
-    setIsSubmitting(false); // Réinitialiser l'état de soumission
+    setIsSubmitting(false);
+    setEditingPompage(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (pompage: Pompage) => {
+    setDateHeure(new Date(pompage.date.seconds * 1000));
+    setQuantiteGauche(pompage.quantiteGauche);
+    setQuantiteDroite(pompage.quantiteDroite);
+    setEditingPompage(pompage);
+    setIsSubmitting(false);
     setShowModal(true);
   };
 
   const closeModal = () => {
     setShowModal(false);
-    setIsSubmitting(false); // Réinitialiser l'état de soumission à la fermeture
+    setIsSubmitting(false);
+    setEditingPompage(null);
   };
 
   const cancelForm = useCallback(() => {
     closeModal();
   }, []);
 
-  const handleAddPompage = async () => {
-    // Vérifier si une soumission est déjà en cours
+  const handleSubmitPompage = async () => {
     if (isSubmitting) {
       return;
     }
 
     try {
-      setIsSubmitting(true); // Désactiver le bouton
+      setIsSubmitting(true);
 
-      await ajouterPompage({
-        quantiteGauche,
-        quantiteDroite,
-        date: dateHeure,
-      });
+      if (editingPompage) {
+        await modifierPompage(editingPompage.id, {
+          quantiteGauche,
+          quantiteDroite,
+          date: dateHeure,
+        });
+      } else {
+        await ajouterPompage({
+          quantiteGauche,
+          quantiteDroite,
+          date: dateHeure,
+        });
+      }
 
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de l'ajout du pompage:", error);
-      // Optionnel : afficher un message d'erreur à l'utilisateur
+      console.error("Erreur lors de la sauvegarde du pompage:", error);
     } finally {
-      setIsSubmitting(false); // Réactiver le bouton en cas d'erreur
+      setIsSubmitting(false);
     }
   };
 
@@ -211,9 +226,11 @@ export default function PompagesScreen() {
   };
 
   const renderPompageItem = (pompage: Pompage, isLast: boolean = false) => (
-    <View
+    <TouchableOpacity
       key={pompage.id}
       style={[styles.pompageItem, isLast && styles.lastPompageItem]}
+      onPress={() => openEditModal(pompage)}
+      activeOpacity={0.7}
     >
       <View style={styles.pompageHeader}>
         <View style={styles.timeContainer}>
@@ -232,11 +249,14 @@ export default function PompagesScreen() {
             )}
           </Text>
         </View>
-        {isLast && (
-          <View style={styles.recentBadge}>
-            <Text style={styles.recentText}>Récent</Text>
-          </View>
-        )}
+        <View style={styles.headerActions}>
+          {isLast && (
+            <View style={styles.recentBadge}>
+              <Text style={styles.recentText}>Récent</Text>
+            </View>
+          )}
+          <FontAwesome name="edit" size={16} color="#28a745" style={styles.editIcon} />
+        </View>
       </View>
 
       <View style={styles.quantitiesContainer}>
@@ -263,7 +283,7 @@ export default function PompagesScreen() {
           </Text>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderDayGroup = ({ item }: { item: PompageGroup }) => {
@@ -272,7 +292,6 @@ export default function PompagesScreen() {
 
     return (
       <View style={styles.dayCard}>
-        {/* En-tête du jour avec résumé */}
         <View style={styles.dayHeader}>
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
@@ -312,10 +331,8 @@ export default function PompagesScreen() {
           )}
         </View>
 
-        {/* Dernier pompage (toujours visible) */}
         {renderPompageItem(item.lastPompage, true)}
 
-        {/* Pompages supplémentaires (repliables) */}
         {hasMultiplePompages && isExpanded && (
           <View style={styles.expandedContent}>
             <View style={styles.separator} />
@@ -365,8 +382,14 @@ export default function PompagesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <FontAwesome name="pump-medical" size={24} color="#28a745" />
-              <Text style={styles.modalTitle}>Nouvelle session</Text>
+              <FontAwesome 
+                name={editingPompage ? "edit" : "pump-medical"} 
+                size={24} 
+                color="#28a745" 
+              />
+              <Text style={styles.modalTitle}>
+                {editingPompage ? "Modifier la session" : "Nouvelle session"}
+              </Text>
             </View>
 
             {/* Quantité Sein Gauche */}
@@ -536,12 +559,12 @@ export default function PompagesScreen() {
             <View style={styles.actionButtonsContainer}>
               <ModernActionButtons
                 onCancel={cancelForm}
-                onValidate={handleAddPompage}
+                onValidate={handleSubmitPompage}
                 cancelText="Annuler"
-                validateText="Ajouter"
+                validateText={editingPompage ? "Mettre à jour" : "Ajouter"}
                 isLoading={isSubmitting}
                 disabled={isSubmitting}
-                loadingText="Ajout en cours..."
+                loadingText={editingPompage ? "Mise à jour..." : "Ajout en cours..."}
               />
             </View>
           </View>
@@ -561,7 +584,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   addButton: {
-    backgroundColor: "#28a745", // Couleur verte pour les pompages
+    backgroundColor: "#28a745",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -669,6 +692,11 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "600",
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   recentBadge: {
     backgroundColor: "#28a745",
     paddingHorizontal: 8,
@@ -679,6 +707,9 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 12,
     fontWeight: "600",
+  },
+  editIcon: {
+    opacity: 0.7,
   },
   quantitiesContainer: {
     gap: 8,
@@ -757,7 +788,6 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 4,
   },
-  // Styles du modal
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
