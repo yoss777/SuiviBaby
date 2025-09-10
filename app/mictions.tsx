@@ -204,7 +204,7 @@ export default function MictionsScreen({ mictions }: Props) {
     >
       <View style={styles.mictionContent}>
         <FontAwesome
-          name="tint"
+          name="clock"
           size={16}
           color={isLast ? "#4A90E2" : "#666"}
         />

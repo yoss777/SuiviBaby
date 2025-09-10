@@ -1,4 +1,4 @@
-import { ajouterSelle, modifierSelle } from "@/services/sellesService";
+import { ajouterVaccin, modifierVaccin } from "@/services/vaccinsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -7,89 +7,94 @@ import {
   FlatList,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import ModernActionButtons from "./components/ModernActionsButton";
+import { Vaccin, VaccinGroup } from "./types/interfaces";
 
 type Props = {
-  selles: any[];
+  vaccins: any[];
 };
 
-// Interface pour typer les données
-interface Selle {
-  id: string;
-  date: { seconds: number };
-  createdAt: { seconds: number };
-}
+// Liste des vaccins pour enfants de 0 à 3 ans
+const VACCINS_LIST = [
+  "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
+  "Pneumocoque (PCV13)",
+  "Rotavirus",
+  "DTCaP-Hib (2ème injection)",
+  "Pneumocoque (2ème injection)",
+  "Rotavirus (2ème dose)",
+  "DTCaP-Hib (3ème injection)",
+  "Pneumocoque (3ème injection)",
+  "Rotavirus (3ème dose)",
+  "ROR (Rougeole, Oreillons, Rubéole)",
+  "Méningocoque C",
+  "DTCaP-Hib (rappel)",
+  "ROR (2ème injection)",
+  "Pneumocoque (rappel)",
+  "Méningocoque C (rappel)",
+  "DTCaP (rappel)",
+  "Hépatite B",
+  "BCG (Tuberculose)",
+  "Varicelle",
+  "Grippe saisonnière",
+  "Autre vaccin",
+];
 
-interface SelleGroup {
-  date: string;
-  dateFormatted: string;
-  selles: Selle[];
-  lastSelle: Selle;
-}
-
-export default function SellesScreen({ selles }: Props) {
-  const [groupedSelles, setGroupedSelles] = useState<SelleGroup[]>([]);
+export default function VaccinsScreen({ vaccins }: Props) {
+  const [groupedVaccins, setGroupedVaccins] = useState<VaccinGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingSelle, setEditingSelle] = useState<Selle | null>(null);
-
-  // États du formulaire
+  const [editingVaccin, setEditingVaccin] = useState<Vaccin | null>(null);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
+  const [selectedVaccin, setSelectedVaccin] = useState<string>("");
+  const [showVaccinList, setShowVaccinList] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Récupérer les paramètres de l'URL
   const { openModal } = useLocalSearchParams();
 
-  // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
     if (openModal === "true") {
       const timer = setTimeout(() => {
         openModalHandler();
-        router.replace("/excretions");
+        router.replace("/immunos");
       }, 100);
-
       return () => clearTimeout(timer);
     }
   }, [openModal]);
 
-  // Regroupement par jour
   useEffect(() => {
-    const grouped = groupSellesByDay(selles);
-    setGroupedSelles(grouped);
-  }, [selles]);
+    const grouped = groupVaccinsByDay(vaccins);
+    setGroupedVaccins(grouped);
+  }, [vaccins]);
 
-  const groupSellesByDay = (selles: Selle[]): SelleGroup[] => {
-    const groups: { [key: string]: Selle[] } = {};
-
-    selles.forEach((selle) => {
-      const date = new Date(selle.date?.seconds * 1000);
+  const groupVaccinsByDay = (vaccins: Vaccin[]): VaccinGroup[] => {
+    const groups: { [key: string]: Vaccin[] } = {};
+    vaccins.forEach((vaccin) => {
+      const date = new Date(vaccin.date?.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
       const dateKey = `${year}-${month}-${day}`;
-
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
-      groups[dateKey].push(selle);
+      groups[dateKey].push(vaccin);
     });
-
     return Object.entries(groups)
-      .map(([dateKey, selles]) => {
+      .map(([dateKey, vaccins]) => {
         const date = new Date(dateKey);
-        const lastSelle = selles.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
+        const lastVaccin = vaccins.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0) ? current : latest
         );
-
         return {
           date: dateKey,
           dateFormatted: date.toLocaleDateString("fr-FR", {
@@ -98,10 +103,10 @@ export default function SellesScreen({ selles }: Props) {
             month: "long",
             year: "numeric",
           }),
-          selles: selles.sort(
+          vaccins: vaccins.sort(
             (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
           ),
-          lastSelle,
+          lastVaccin,
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -120,14 +125,16 @@ export default function SellesScreen({ selles }: Props) {
   const openModalHandler = () => {
     const now = new Date();
     setDateHeure(new Date(now.getTime()));
-    setEditingSelle(null);
+    setSelectedVaccin("");
+    setEditingVaccin(null);
     setIsSubmitting(false);
     setShowModal(true);
   };
 
-  const openEditModal = (selle: Selle) => {
-    setDateHeure(new Date(selle.date.seconds * 1000));
-    setEditingSelle(selle);
+  const openEditModal = (vaccin: Vaccin) => {
+    setDateHeure(new Date(vaccin.date.seconds * 1000));
+    setSelectedVaccin(vaccin.lib || "");
+    setEditingVaccin(vaccin);
     setIsSubmitting(false);
     setShowModal(true);
   };
@@ -135,34 +142,39 @@ export default function SellesScreen({ selles }: Props) {
   const closeModal = () => {
     setShowModal(false);
     setIsSubmitting(false);
-    setEditingSelle(null);
+    setEditingVaccin(null);
+    setSelectedVaccin("");
+    setShowVaccinList(false);
+    setSearchQuery("");
+    setTimeout(() => {
+      setDateHeure(new Date());
+    }, 100);
   };
 
   const cancelForm = useCallback(() => {
     closeModal();
   }, []);
 
-  const handleSubmitSelle = async () => {
-    if (isSubmitting) {
+  const handleSubmitVaccin = async () => {
+    if (isSubmitting || !selectedVaccin.trim()) {
       return;
     }
-
     try {
       setIsSubmitting(true);
-
-      if (editingSelle) {
-        await modifierSelle(editingSelle.id, {
+      if (editingVaccin) {
+        await modifierVaccin(editingVaccin.id, {
           date: dateHeure,
+          lib: selectedVaccin,
         });
       } else {
-        await ajouterSelle({
+        await ajouterVaccin({
           date: dateHeure,
+          lib: selectedVaccin,
         });
       }
-
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde de la selle:", error);
+      console.error("Erreur lors de la sauvegarde de la vaccination:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -195,54 +207,69 @@ export default function SellesScreen({ selles }: Props) {
     }
   };
 
-  const renderSelleItem = (selle: Selle, isLast: boolean = false) => (
+  const selectVaccin = (vaccin: string) => {
+    setSelectedVaccin(vaccin);
+    setShowVaccinList(false);
+    setSearchQuery("");
+    setTimeout(() => {
+      setShowModal(true);
+    }, 300);
+  };
+
+  const renderVaccinItem = (vaccin: Vaccin, isLast: boolean = false) => (
     <TouchableOpacity
-      key={selle.id}
-      style={[styles.selleItem, isLast && styles.lastSelleItem]}
-      onPress={() => openEditModal(selle)}
+      key={vaccin.id}
+      style={[styles.vaccinItem, isLast && styles.lastVaccinItem]}
+      onPress={() => openEditModal(vaccin)}
       activeOpacity={0.7}
     >
-      <View style={styles.selleContent}>
+      <View style={styles.vaccinContent}>
         <FontAwesome
           name="clock"
-          size={12}
-          color={isLast ? "#dc3545" : "#666"}
+          size={16}
+          color={isLast ? "#9C27B0" : "#666"}
         />
-        <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
-          {new Date(selle.date?.seconds * 1000).toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-        <View style={styles.selleActions}>
+        <View style={styles.vaccinInfo}>
+          <Text style={[styles.vaccinName, isLast && styles.lastVaccinName]}>
+            {vaccin.lib || "Vaccin non spécifié"}
+          </Text>
+          <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
+            {new Date(vaccin.date?.seconds * 1000).toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
+        <View style={styles.vaccinActions}>
           {isLast && (
             <View style={styles.recentBadge}>
               <Text style={styles.recentText}>Récent</Text>
             </View>
           )}
-          <FontAwesome name="edit" size={16} color="#dc3545" style={styles.editIcon} />
+          <FontAwesome name="edit" size={16} color="#9C27B0" style={styles.editIcon} />
         </View>
       </View>
     </TouchableOpacity>
   );
 
-  const renderDayGroup = ({ item }: { item: SelleGroup }) => {
+  const renderDayGroup = ({ item }: { item: VaccinGroup }) => {
     const isExpanded = expandedDays.has(item.date);
-    const hasMultipleSelles = item.selles.length > 1;
-
+    const hasMultipleVaccins = item.vaccins.length > 1;
     return (
       <View style={styles.dayCard}>
         <View style={styles.dayHeader}>
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
-              <FontAwesome name="circle" size={12} color="#666" />
+              <FontAwesome name="syringe" size={14} color="#666" />
               <Text style={styles.summaryText}>
-                {item.selles.length} selle{item.selles.length > 1 ? "s" : ""}
+                {item.vaccins.length} vaccin
+                {item.vaccins.length > 1 ? "s" : ""} reçu
+                {item.vaccins.length > 1 ? "s" : ""}
               </Text>
             </View>
           </View>
-          {hasMultipleSelles && (
+          {hasMultipleVaccins && (
             <TouchableOpacity
               style={styles.expandButton}
               onPress={() => toggleExpand(item.date)}
@@ -255,68 +282,107 @@ export default function SellesScreen({ selles }: Props) {
             </TouchableOpacity>
           )}
         </View>
-
-        {renderSelleItem(item.lastSelle, true)}
-
-        {hasMultipleSelles && isExpanded && (
+        {renderVaccinItem(item.lastVaccin, true)}
+        {hasMultipleVaccins && isExpanded && (
           <View style={styles.expandedContent}>
             <View style={styles.separator} />
             <Text style={styles.historyLabel}>Historique du jour</Text>
-            {item.selles
-              .filter((selle) => selle.id !== item.lastSelle.id)
-              .map((selle) => renderSelleItem(selle))}
+            {item.vaccins
+              .filter((vaccin) => vaccin.id !== item.lastVaccin.id)
+              .map((vaccin) => renderVaccinItem(vaccin))}
           </View>
         )}
       </View>
     );
   };
 
+  const filteredVaccins = VACCINS_LIST.filter((vaccin) =>
+    vaccin.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
           <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Nouvelle selle</Text>
+          <Text style={styles.addButtonText}>Nouveau vaccin</Text>
         </TouchableOpacity>
       </View>
-
       <FlatList
-        data={groupedSelles}
+        data={groupedVaccins}
         keyExtractor={(item) => item.date}
         renderItem={renderDayGroup}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <FontAwesome name="circle" size={48} color="#ccc" />
-            <Text style={styles.emptyText}>Aucune selle enregistrée</Text>
+            <FontAwesome name="syringe" size={48} color="#ccc" />
+            <Text style={styles.emptyText}>Aucun vaccin enregistré</Text>
             <Text style={styles.emptySubtext}>
-              Ajoutez votre première selle
+              Ajoutez votre premier vaccin
             </Text>
           </View>
         }
       />
-
       {/* MODAL */}
       <Modal
         animationType="slide"
         transparent={true}
         visible={showModal}
         onRequestClose={closeModal}
+        presentationStyle="overFullScreen"
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <FontAwesome 
-                name={editingSelle ? "edit" : "circle"} 
-                size={20} 
-                color="#dc3545" 
+              <FontAwesome
+                name={editingVaccin ? "edit" : "syringe"}
+                size={24}
+                color="#9C27B0"
               />
               <Text style={styles.modalTitle}>
-                {editingSelle ? "Modifier la selle" : "Nouvelle selle"}
+                {editingVaccin ? "Modifier le vaccin" : "Nouveau vaccin"}
               </Text>
             </View>
-
+            {/* Sélection du vaccin */}
+            <Text style={styles.modalCategoryLabel}>Type de vaccin</Text>
+            <TouchableOpacity
+              style={[
+                styles.vaccinSelector,
+                isSubmitting && styles.vaccinSelectorDisabled,
+              ]}
+              onPress={() => {
+                if (!isSubmitting) {
+                  console.log("Closing main modal to open list");
+                  setShowModal(false);
+                  setTimeout(() => {
+                    setShowVaccinList(true);
+                    console.log("showVaccinList set to true");
+                  }, 300);
+                }
+              }}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="syringe"
+                size={16}
+                color={isSubmitting ? "#ccc" : "#9C27B0"}
+              />
+              <Text
+                style={[
+                  styles.vaccinSelectorText,
+                  selectedVaccin && styles.vaccinSelectorTextSelected,
+                  isSubmitting && styles.vaccinSelectorTextDisabled,
+                ]}
+              >
+                {selectedVaccin || "Sélectionner un vaccin"}
+              </Text>
+              <FontAwesome
+                name="chevron-down"
+                size={16}
+                color={isSubmitting ? "#ccc" : "#666"}
+              />
+            </TouchableOpacity>
             {/* Date & Heure */}
             <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
             <View style={styles.dateTimeContainer}>
@@ -365,7 +431,6 @@ export default function SellesScreen({ selles }: Props) {
                 </Text>
               </TouchableOpacity>
             </View>
-
             <View style={styles.selectedDateTime}>
               <Text style={styles.selectedDate}>
                 {dateHeure.toLocaleDateString("fr-FR", {
@@ -382,7 +447,6 @@ export default function SellesScreen({ selles }: Props) {
                 })}
               </Text>
             </View>
-
             {showDate && (
               <DateTimePicker
                 value={dateHeure}
@@ -400,18 +464,101 @@ export default function SellesScreen({ selles }: Props) {
                 onChange={onChangeTime}
               />
             )}
-
             <View style={styles.actionButtonsContainer}>
               <ModernActionButtons
                 onCancel={cancelForm}
-                onValidate={handleSubmitSelle}
+                onValidate={handleSubmitVaccin}
                 cancelText="Annuler"
-                validateText={editingSelle ? "Mettre à jour" : "Ajouter"}
+                validateText={editingVaccin ? "Mettre à jour" : "Ajouter"}
                 isLoading={isSubmitting}
-                disabled={isSubmitting}
-                loadingText={editingSelle ? "Mise à jour..." : "Ajout en cours..."}
+                disabled={isSubmitting || !selectedVaccin.trim()}
+                loadingText={editingVaccin ? "Mise à jour..." : "Ajout en cours..."}
               />
             </View>
+          </View>
+        </View>
+      </Modal>
+      {/* MODAL LISTE DES VACCINS */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showVaccinList}
+        onRequestClose={() => setShowVaccinList(false)}
+        statusBarTranslucent={true}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.vaccinListModal}>
+            <View style={styles.vaccinListHeader}>
+              <Text style={styles.vaccinListTitle}>Sélectionner un vaccin</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => {
+                  setShowVaccinList(false);
+                  setSearchQuery("");
+                  setTimeout(() => {
+                    setShowModal(true);
+                  }, 300);
+                }}
+              >
+                <FontAwesome name="times" size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.searchContainer}>
+              <FontAwesome name="search" size={16} color="#666" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Rechercher un vaccin..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus={true}
+                returnKeyType="done"
+                accessibilityLabel="Rechercher un vaccin"
+                placeholderTextColor="#999"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearButton}
+                  onPress={() => setSearchQuery("")}
+                  accessibilityLabel="Effacer la recherche"
+                >
+                  <FontAwesome name="times-circle" size={16} color="#666" style={styles.clearIcon} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView style={styles.vaccinList} showsVerticalScrollIndicator={false}>
+              {filteredVaccins.length > 0 ? (
+                filteredVaccins.map((vaccin, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.vaccinListItem,
+                      selectedVaccin === vaccin && styles.vaccinListItemSelected,
+                    ]}
+                    onPress={() => selectVaccin(vaccin)}
+                    activeOpacity={0.7}
+                  >
+                    <FontAwesome
+                      name="syringe"
+                      size={16}
+                      color={selectedVaccin === vaccin ? "#9C27B0" : "#666"}
+                    />
+                    <Text
+                      style={[
+                        styles.vaccinListItemText,
+                        selectedVaccin === vaccin && styles.vaccinListItemTextSelected,
+                      ]}
+                    >
+                      {vaccin}
+                    </Text>
+                    {selectedVaccin === vaccin && (
+                      <FontAwesome name="check" size={16} color="#9C27B0" />
+                    )}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={styles.noResultsText}>Aucun vaccin trouvé</Text>
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -429,7 +576,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   addButton: {
-    backgroundColor: "#dc3545",
+    backgroundColor: "#9C27B0",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -487,39 +634,50 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
-  selleItem: {
+  vaccinItem: {
     backgroundColor: "#f8f9fa",
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
   },
-  lastSelleItem: {
-    backgroundColor: "#fdf2f2",
+  lastVaccinItem: {
+    backgroundColor: "#f3e5f5",
     borderLeftWidth: 4,
-    borderLeftColor: "#dc3545",
+    borderLeftColor: "#9C27B0",
   },
-  selleContent: {
+  vaccinContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  timeText: {
+  vaccinInfo: {
+    flex: 1,
+  },
+  vaccinName: {
     fontSize: 16,
     fontWeight: "500",
     color: "#666",
-    flex: 1,
+    marginBottom: 2,
   },
-  lastTimeText: {
+  lastVaccinName: {
     color: "#333",
     fontWeight: "600",
   },
-  selleActions: {
+  timeText: {
+    fontSize: 14,
+    color: "#999",
+  },
+  lastTimeText: {
+    color: "#666",
+    fontWeight: "500",
+  },
+  vaccinActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
   recentBadge: {
-    backgroundColor: "#dc3545",
+    backgroundColor: "#9C27B0",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -594,6 +752,34 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#333",
     marginBottom: 12,
+    marginTop: 8,
+  },
+  vaccinSelector: {
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+    marginBottom: 20,
+  },
+  vaccinSelectorDisabled: {
+    backgroundColor: "#f5f5f5",
+    opacity: 0.5,
+  },
+  vaccinSelectorText: {
+    flex: 1,
+    fontSize: 16,
+    color: "#999",
+  },
+  vaccinSelectorTextSelected: {
+    color: "#333",
+    fontWeight: "500",
+  },
+  vaccinSelectorTextDisabled: {
+    color: "#ccc",
   },
   dateTimeContainer: {
     flexDirection: "row",
@@ -641,11 +827,89 @@ const styles = StyleSheet.create({
   },
   selectedTime: {
     fontSize: 20,
-    color: "#dc3545",
+    color: "#9C27B0",
     fontWeight: "bold",
   },
   actionButtonsContainer: {
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === "ios" ? 34 : 20,
+  },
+  vaccinListModal: {
+    width: "90%",
+    maxHeight: "80%",
+    backgroundColor: "white",
+    borderRadius: 12,
+    paddingBottom: 20,
+  },
+  vaccinListHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  vaccinListTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  closeButton: {
+    padding: 8,
+  },
+  vaccinList: {
+    maxHeight: 400,
+  },
+  vaccinListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  vaccinListItemSelected: {
+    backgroundColor: "#f3e5f5",
+  },
+  vaccinListItemText: {
+    flex: 1,
+    fontSize: 16,
+    color: "#333",
+  },
+  vaccinListItemTextSelected: {
+    color: "#9C27B0",
+    fontWeight: "500",
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginHorizontal: 20,
+    marginVertical: 12,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#333",
+    paddingVertical: 10,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  clearButton: {
+    padding: 8,
+  },
+  clearIcon: {
+    marginLeft: 8,
+  },
+  noResultsText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    padding: 20,
   },
 });

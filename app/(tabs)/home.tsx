@@ -13,12 +13,16 @@ import { ecouterMictions } from "../../services/mictionsService";
 import { ecouterPompages } from "../../services/pompagesService";
 import { ecouterSelles } from "../../services/sellesService";
 import { ecouterTetees } from "../../services/teteesService";
+import { ecouterVaccins } from "../../services/vaccinsService";
+import { ecouterVitamines } from "../../services/vitaminesService";
 
 interface DashboardData {
   tetees: any[];
   pompages: any[];
   mictions: any[];
   selles: any[];
+  vitamines: any[];
+  vaccins: any[];
 }
 
 interface TodayStats {
@@ -36,6 +40,8 @@ interface TodayStats {
   };
   mictions: { count: number; lastTime?: string; lastTimestamp?: number };
   selles: { count: number; lastTime?: string; lastTimestamp?: number };
+  vitamines: { count: number; lastTime?: string; lastTimestamp?: number };
+  vaccins: { count: number; lastTime?: string; lastTimestamp?: number };
 }
 
 export default function HomeDashboard() {
@@ -44,12 +50,16 @@ export default function HomeDashboard() {
     pompages: [],
     mictions: [],
     selles: [],
+    vitamines: [],
+    vaccins: [],
   });
   const [todayStats, setTodayStats] = useState<TodayStats>({
     tetees: { count: 0, quantity: 0 },
     pompages: { count: 0, quantity: 0 },
     mictions: { count: 0 },
     selles: { count: 0 },
+    vitamines: { count: 0 },
+    vaccins: { count: 0 },
   });
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -118,12 +128,20 @@ export default function HomeDashboard() {
     const unsubscribeSelles = ecouterSelles((selles) => {
       setData((prev) => ({ ...prev, selles }));
     });
+    const unsubscribeVitamines = ecouterVitamines((vitamines) => {
+      setData((prev) => ({ ...prev, vitamines }));
+    });
+    const unsubscribeVaccins = ecouterVaccins((vaccins) => {
+      setData((prev) => ({ ...prev, vaccins }));
+    });
 
     return () => {
       unsubscribeTetees();
       unsubscribePompages();
       unsubscribeMictions();
       unsubscribeSelles();
+      unsubscribeVitamines();
+      unsubscribeVaccins();
     };
   }, []);
 
@@ -157,6 +175,8 @@ export default function HomeDashboard() {
     const todayPompages = filterToday(data.pompages);
     const todayMictions = filterToday(data.mictions);
     const todaySelles = filterToday(data.selles);
+    const todayVitamines = filterToday(data.vitamines);
+    const todayVaccins = filterToday(data.vaccins);
 
     // Calculs pour tétées
     const teteesQuantity = todayTetees.reduce(
@@ -207,6 +227,24 @@ export default function HomeDashboard() {
           )
         : null;
 
+    const lastVitamine =
+      todayVitamines.length > 0
+        ? todayVitamines.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest
+          )
+        : null;
+
+    const lastVaccin =
+      todayVaccins.length > 0
+        ? todayVaccins.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest
+          )
+        : null;
+
     const formatTime = (item: any) => {
       if (!item?.date?.seconds) return undefined;
       return new Date(item.date.seconds * 1000).toLocaleTimeString("fr-FR", {
@@ -242,6 +280,16 @@ export default function HomeDashboard() {
         count: todaySelles.length,
         lastTime: formatTime(lastSelle),
         lastTimestamp: getTimestamp(lastSelle),
+      },
+      vitamines: {
+        count: todayVitamines.length,
+        lastTime: formatTime(lastVitamine),
+        lastTimestamp: getTimestamp(lastVitamine),
+      },
+      vaccins: {
+        count: todayVaccins.length,
+        lastTime: formatTime(lastVaccin),
+        lastTimestamp: getTimestamp(lastVaccin),
       },
     });
   }, [data]);
@@ -404,6 +452,28 @@ export default function HomeDashboard() {
             onPress={() => router.push("/stats?tab=pompages")}
           />
         </View>
+        <View style={styles.statsGrid}>
+          <StatsCard
+            title="Vitamines"
+            value={todayStats.vitamines.count}
+            unit={todayStats.vitamines.count > 1 ? "prises" : "prise"}
+            icon="pills"
+            color="#FF9800"
+            lastActivity={todayStats.vitamines.lastTime}
+            lastTimestamp={todayStats.vitamines.lastTimestamp}
+            onPress={() => router.push("/immunos?tab=vitamines")}
+          />
+          <StatsCard
+            title="Vaccins"
+            value={todayStats.vaccins.count}
+            unit={todayStats.vaccins.count > 1 ? "reçus" : "reçu"}
+            icon="syringe"
+            color="#9C27B0"
+            lastActivity={todayStats.vaccins.lastTime}
+            lastTimestamp={todayStats.vaccins.lastTimestamp}
+            onPress={() => router.push("/immunos?tab=vaccins")}
+          />
+        </View>
       </View>
 
       {/* Activités physiologiques */}
@@ -471,7 +541,9 @@ export default function HomeDashboard() {
                 ? `Dernière: ${todayStats.mictions.lastTime}`
                 : "Aucune aujourd'hui"
             }
-            onPress={() => router.push("/excretions?tab=mictions&openModal=true")}
+            onPress={() =>
+              router.push("/excretions?tab=mictions&openModal=true")
+            }
           />
           <QuickActionCard
             title="Selle"
@@ -484,6 +556,30 @@ export default function HomeDashboard() {
                 : "Aucune aujourd'hui"
             }
             onPress={() => router.push("/excretions?tab=selles&openModal=true")}
+          />
+          <QuickActionCard
+            title="Prise de vitamines"
+            icon="pills"
+            color="#FF9800"
+            count={todayStats.vitamines.count}
+            subtitle={
+              todayStats.vitamines.lastTime
+                ? `Dernière: ${todayStats.vitamines.lastTime}`
+                : "Aucune aujourd'hui"
+            }
+            onPress={() => router.push("/immunos?tab=vitamines&openModal=true")}
+          />
+          <QuickActionCard
+            title="Vaccin"
+            icon="syringe"
+            color="#9C27B0"
+            count={todayStats.vaccins.count}
+            subtitle={
+              todayStats.vaccins.lastTime
+                ? `Dernière: ${todayStats.vaccins.lastTime}`
+                : "Aucun aujourd'hui"
+            }
+            onPress={() => router.push("/immunos?tab=vaccins&openModal=true")}
           />
         </View>
       </View>

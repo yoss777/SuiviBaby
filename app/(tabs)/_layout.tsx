@@ -40,6 +40,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="immunos"
+        options={{
+          title: 'Immunos',
+          tabBarIcon: ({ color }) => <FontAwesome size={28} name="prescription-bottle" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="stats"
         options={{
           title: 'Stats',

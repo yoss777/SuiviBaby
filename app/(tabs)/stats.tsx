@@ -6,7 +6,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import PompagesChart from '../components/PompagesChart';
 import TeteesChart from '../components/TeteesChart';
 
-export default function HomeScreen() {
+export default function StatsScreen() {
   const [tetees, setTetees] = useState<any[]>([]);
   const [pompages, setPompages] = useState<any[]>([]);
   const [selectedTab, setSelectedTab] = useState<'tetees' | 'pompages'>('tetees');

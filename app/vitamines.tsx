@@ -1,3 +1,4 @@
+import { ajouterVitamine, modifierVitamine } from "@/services/vitaminesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -11,40 +12,24 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ajouterTetee, ecouterTetees, modifierTetee } from "../../services/teteesService";
-import ModernActionButtons from "../components/ModernActionsButton";
+import ModernActionButtons from "./components/ModernActionsButton";
+import { Vitamine, VitamineGroup } from "./types/interfaces";
 
-// Interface pour typer les données (avec optionnel pour compatibilité avec anciennes données)
-interface Tetee {
-  id: string;
-  type?: "seins" | "biberons"; // Optionnel pour éviter les erreurs sur anciennes données
-  quantite?: number | null; // Optionnel pour compatibilité
-  date: { seconds: number };
-  createdAt: { seconds: number };
-}
+type Props = {
+  vitamines: any[];
+};
 
-interface TeteeGroup {
-  date: string;
-  dateFormatted: string;
-  tetees: Tetee[];
-  totalQuantity: number;
-  lastTetee: Tetee;
-}
-
-export default function TeteesScreen() {
-  const [tetees, setTetees] = useState<Tetee[]>([]);
-  const [groupedTetees, setGroupedTetees] = useState<TeteeGroup[]>([]);
+export default function VitaminesScreen({ vitamines }: Props) {
+  const [groupedVitamines, setGroupedVitamines] = useState<VitamineGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingTetee, setEditingTetee] = useState<Tetee | null>(null);
+  const [editingVitamine, setEditingVitamine] = useState<Vitamine | null>(null);
 
   // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
-  const [typeTetee, setTypeTetee] = useState<"seins" | "biberons">("seins");
-  const [quantite, setQuantite] = useState<number>(50);
 
   // Récupérer les paramètres de l'URL
   const { openModal } = useLocalSearchParams();
@@ -54,29 +39,24 @@ export default function TeteesScreen() {
     if (openModal === "true") {
       const timer = setTimeout(() => {
         openModalHandler();
-        router.replace("/tetees");
+        router.replace("/immunos");
       }, 100);
+
       return () => clearTimeout(timer);
     }
   }, [openModal]);
 
-  // Écoute en temps réel
-  useEffect(() => {
-    const unsubscribe = ecouterTetees(setTetees);
-    return () => unsubscribe();
-  }, []);
-
   // Regroupement par jour
   useEffect(() => {
-    const grouped = groupTeteesByDay(tetees);
-    setGroupedTetees(grouped);
-  }, [tetees]);
+    const grouped = groupVitaminesByDay(vitamines);
+    setGroupedVitamines(grouped);
+  }, [vitamines]);
 
-  const groupTeteesByDay = (tetees: Tetee[]): TeteeGroup[] => {
-    const groups: { [key: string]: Tetee[] } = {};
+  const groupVitaminesByDay = (vitamines: Vitamine[]): VitamineGroup[] => {
+    const groups: { [key: string]: Vitamine[] } = {};
 
-    tetees.forEach((tetee) => {
-      const date = new Date(tetee.date?.seconds * 1000);
+    vitamines.forEach((vitamine) => {
+      const date = new Date(vitamine.date?.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
@@ -85,21 +65,13 @@ export default function TeteesScreen() {
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
-      groups[dateKey].push(tetee);
+      groups[dateKey].push(vitamine);
     });
 
     return Object.entries(groups)
-      .map(([dateKey, tetees]) => {
+      .map(([dateKey, vitamines]) => {
         const date = new Date(dateKey);
-        // Correction : Vérification pour quantite undefined/null
-        const totalQuantity = tetees.reduce(
-          (sum, tetee) => {
-            const q = tetee.quantite;
-            return sum + (typeof q === 'number' ? q : 0);
-          },
-          0
-        );
-        const lastTetee = tetees.reduce((latest, current) =>
+        const lastVitamine = vitamines.reduce((latest, current) =>
           (current.date?.seconds || 0) > (latest.date?.seconds || 0)
             ? current
             : latest
@@ -113,11 +85,10 @@ export default function TeteesScreen() {
             month: "long",
             year: "numeric",
           }),
-          tetees: tetees.sort(
+          vitamines: vitamines.sort(
             (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
           ),
-          totalQuantity,
-          lastTetee,
+          lastVitamine,
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -136,25 +107,14 @@ export default function TeteesScreen() {
   const openModalHandler = () => {
     const now = new Date();
     setDateHeure(new Date(now.getTime()));
-    setTypeTetee("seins");
-    setQuantite(50);
+    setEditingVitamine(null);
     setIsSubmitting(false);
-    setEditingTetee(null);
     setShowModal(true);
   };
 
-  const openEditModal = (tetee: Tetee) => {
-    setDateHeure(new Date(tetee.date.seconds * 1000));
-    
-    // Correction : Gestion si type est undefined (anciennes données)
-    const safeType = tetee.type || "seins"; // Défaut à "seins" pour anciennes tétées
-    setTypeTetee(safeType as "seins" | "biberons");
-    
-    // Correction : Gestion si quantite est undefined/null
-    const safeQuantite = tetee.quantite ?? 50;
-    setQuantite(safeQuantite);
-    
-    setEditingTetee(tetee);
+  const openEditModal = (vitamine: Vitamine) => {
+    setDateHeure(new Date(vitamine.date.seconds * 1000));
+    setEditingVitamine(vitamine);
     setIsSubmitting(false);
     setShowModal(true);
   };
@@ -162,14 +122,14 @@ export default function TeteesScreen() {
   const closeModal = () => {
     setShowModal(false);
     setIsSubmitting(false);
-    setEditingTetee(null);
+    setEditingVitamine(null);
   };
 
   const cancelForm = useCallback(() => {
     closeModal();
   }, []);
 
-  const handleSubmitTetee = async () => {
+  const handleSubmitVitamine = async () => {
     if (isSubmitting) {
       return;
     }
@@ -177,22 +137,19 @@ export default function TeteesScreen() {
     try {
       setIsSubmitting(true);
 
-      const dataToSave = {
-        type: typeTetee,
-        quantite: typeTetee === "seins" ? null : quantite,
-        date: dateHeure,
-      };
-
-      if (editingTetee) {
-        await modifierTetee(editingTetee.id, dataToSave);
+      if (editingVitamine) {
+        await modifierVitamine(editingVitamine.id, {
+          date: dateHeure,
+        });
       } else {
-        await ajouterTetee(dataToSave);
+        await ajouterVitamine({
+          date: dateHeure,
+        });
       }
 
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde de la tétée:", error);
-      // Optionnel : ajouter une alerte utilisateur ici
+      console.error("Erreur lors de la sauvegarde de la prise de vitamines:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -218,66 +175,47 @@ export default function TeteesScreen() {
     if (selectedDate) {
       setDateHeure((prev) => {
         const newDate = new Date(prev);
-        newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
+        newDate.setHours(selectedDate.getHours());
+        newDate.setMinutes(selectedDate.getMinutes());
         return newDate;
       });
     }
   };
 
-  const renderTeteeItem = (tetee: Tetee, isLast: boolean = false) => {
-    // Correction clé : Vérification pour éviter charAt sur undefined
-    const typeDisplay = tetee.type ? 
-      tetee.type.charAt(0).toUpperCase() + tetee.type.slice(1) : 
-      "Inconnu"; // Ou "Seins" si vous voulez mapper les anciennes valeurs
-
-    const quantityDisplay = tetee.quantite !== null && tetee.quantite !== undefined ? 
-      `${tetee.quantite} ml` : 
-      "N/A";
-
-    return (
-      <TouchableOpacity
-        key={tetee.id}
-        style={[styles.teteeItem, isLast && styles.lastTeteeItem]}
-        onPress={() => openEditModal(tetee)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.teteeContent}>
-          <View style={styles.teteeInfo}>
-            <View style={styles.infoRow}>
-              <FontAwesome name="clock" size={16} color="#666" />
-              <Text style={styles.timeText}>
-                {new Date(tetee.date?.seconds * 1000).toLocaleTimeString(
-                  "fr-FR",
-                  {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }
-                )}
-              </Text>
+  const renderVitamineItem = (vitamine: Vitamine, isLast: boolean = false) => (
+    <TouchableOpacity
+      key={vitamine.id}
+      style={[styles.vitamineItem, isLast && styles.lastVitamineItem]}
+      onPress={() => openEditModal(vitamine)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.vitamineContent}>
+        <FontAwesome
+          name="clock"
+          size={16}
+          color={isLast ? "#FF9800" : "#666"}
+        />
+        <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
+          {new Date(vitamine.date?.seconds * 1000).toLocaleTimeString("fr-FR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Text>
+        <View style={styles.vitamineActions}>
+          {isLast && (
+            <View style={styles.recentBadge}>
+              <Text style={styles.recentText}>Récent</Text>
             </View>
-            <View style={styles.infoRow}>
-              <FontAwesome name="leaf" size={14} color="#666" />
-              <Text style={styles.seinText}>
-                {typeDisplay}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.teteeActions}>
-            <View style={styles.quantityBadge}>
-              <Text style={styles.quantityText}>
-                {quantityDisplay}
-              </Text>
-            </View>
-            <FontAwesome name="edit" size={16} color="#4A90E2" style={styles.editIcon} />
-          </View>
+          )}
+          <FontAwesome name="edit" size={16} color="#FF9800" style={styles.editIcon} />
         </View>
-      </TouchableOpacity>
-    );
-  };
+      </View>
+    </TouchableOpacity>
+  );
 
-  const renderDayGroup = ({ item }: { item: TeteeGroup }) => {
+  const renderDayGroup = ({ item }: { item: VitamineGroup }) => {
     const isExpanded = expandedDays.has(item.date);
-    const hasMultipleTetees = item.tetees.length > 1;
+    const hasMultipleVitamines = item.vitamines.length > 1;
 
     return (
       <View style={styles.dayCard}>
@@ -285,12 +223,14 @@ export default function TeteesScreen() {
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
+              <FontAwesome name="pills" size={14} color="#666" />
               <Text style={styles.summaryText}>
-                {item.tetees.length} tétée{item.tetees.length > 1 ? "s" : ""} • {item.totalQuantity} ml total
+                {item.vitamines.length} prise
+                {item.vitamines.length > 1 ? "s" : ""} de vitamines
               </Text>
             </View>
           </View>
-          {hasMultipleTetees && (
+          {hasMultipleVitamines && (
             <TouchableOpacity
               style={styles.expandButton}
               onPress={() => toggleExpand(item.date)}
@@ -303,48 +243,49 @@ export default function TeteesScreen() {
             </TouchableOpacity>
           )}
         </View>
-        {renderTeteeItem(item.lastTetee, true)}
-        {hasMultipleTetees && isExpanded && (
+
+        {renderVitamineItem(item.lastVitamine, true)}
+
+        {hasMultipleVitamines && isExpanded && (
           <View style={styles.expandedContent}>
             <View style={styles.separator} />
             <Text style={styles.historyLabel}>Historique du jour</Text>
-            {item.tetees
-              .filter((tetee) => tetee.id !== item.lastTetee.id)
-              .map((tetee) => renderTeteeItem(tetee))}
+            {item.vitamines
+              .filter((vitamine) => vitamine.id !== item.lastVitamine.id)
+              .map((vitamine) => renderVitamineItem(vitamine))}
           </View>
         )}
       </View>
     );
   };
 
-  const isQuantiteVisible = typeTetee === "biberons";
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
           <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Nouvelle tétée</Text>
+          <Text style={styles.addButtonText}>Nouvelle prise de vitamines</Text>
         </TouchableOpacity>
       </View>
 
       <FlatList
-        data={groupedTetees}
+        data={groupedVitamines}
         keyExtractor={(item) => item.date}
         renderItem={renderDayGroup}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <FontAwesome name="baby" size={48} color="#ccc" />
-            <Text style={styles.emptyText}>Aucune tétée enregistrée</Text>
+            <FontAwesome name="pills" size={48} color="#ccc" />
+            <Text style={styles.emptyText}>Aucune prise de vitamines enregistrée</Text>
             <Text style={styles.emptySubtext}>
-              Ajoutez votre première tétée
+              Ajoutez votre première prise de vitamines
             </Text>
           </View>
         }
       />
 
+      {/* MODAL */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -354,93 +295,17 @@ export default function TeteesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <FontAwesome
-                name={editingTetee ? "edit" : "baby"}
-                size={24}
-                color="#4A90E2"
+              <FontAwesome 
+                name={editingVitamine ? "edit" : "pills"} 
+                size={24} 
+                color="#FF9800" 
               />
               <Text style={styles.modalTitle}>
-                {editingTetee ? "Modifier la tétée" : "Nouvelle tétée"}
+                {editingVitamine ? "Modifier la prise de vitamines" : "Nouvelle prise de vitamines"}
               </Text>
             </View>
 
-            <Text style={styles.modalCategoryLabel}>Type de tétée</Text>
-            <View style={styles.typeRow}>
-              {["seins", "biberons"].map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  style={[
-                    styles.typeButton,
-                    typeTetee === t && styles.typeButtonActive,
-                    isSubmitting && styles.typeButtonDisabled,
-                  ]}
-                  onPress={() => {
-                    setTypeTetee(t as "seins" | "biberons");
-                    if (t === "seins") setQuantite(50); // Réinitialiser si seins
-                  }}
-                  disabled={isSubmitting}
-                >
-                  <Text
-                    style={[
-                      styles.typeText,
-                      typeTetee === t && styles.typeTextActive,
-                      isSubmitting && styles.typeTextDisabled,
-                    ]}
-                  >
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {isQuantiteVisible && (
-              <>
-                <Text style={styles.modalCategoryLabel}>Quantité</Text>
-                <View style={styles.quantityRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.quantityButton,
-                      isSubmitting && styles.quantityButtonDisabled,
-                    ]}
-                    onPress={() => setQuantite((q) => Math.max(0, q - 5))}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.quantityButtonText,
-                        isSubmitting && styles.quantityButtonTextDisabled,
-                      ]}
-                    >
-                      -
-                    </Text>
-                  </TouchableOpacity>
-                  <Text style={styles.quantityValue}>{quantite} ml</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.quantityButton,
-                      isSubmitting && styles.quantityButtonDisabled,
-                    ]}
-                    onPress={() => setQuantite((q) => q + 5)}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.quantityButtonText,
-                        isSubmitting && styles.quantityButtonTextDisabled,
-                      ]}
-                    >
-                      +
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-            {!isQuantiteVisible && (
-              <View style={styles.quantityNA}>
-                <Text style={styles.quantityNAText}>Quantité : N/A</Text>
-              </View>
-            )}
-
+            {/* Date & Heure */}
             <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
             <View style={styles.dateTimeContainer}>
               <TouchableOpacity
@@ -527,12 +392,12 @@ export default function TeteesScreen() {
             <View style={styles.actionButtonsContainer}>
               <ModernActionButtons
                 onCancel={cancelForm}
-                onValidate={handleSubmitTetee}
+                onValidate={handleSubmitVitamine}
                 cancelText="Annuler"
-                validateText={editingTetee ? "Mettre à jour" : "Ajouter"}
+                validateText={editingVitamine ? "Mettre à jour" : "Ajouter"}
                 isLoading={isSubmitting}
                 disabled={isSubmitting}
-                loadingText={editingTetee ? "Mise à jour..." : "Ajout en cours..."}
+                loadingText={editingVitamine ? "Mise à jour..." : "Ajout en cours..."}
               />
             </View>
           </View>
@@ -552,7 +417,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   addButton: {
-    backgroundColor: "#4A90E2",
+    backgroundColor: "#FF9800",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -599,6 +464,7 @@ const styles = StyleSheet.create({
   summaryInfo: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
   },
   summaryText: {
     fontSize: 14,
@@ -609,55 +475,46 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
-  teteeItem: {
+  vitamineItem: {
     backgroundColor: "#f8f9fa",
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
   },
-  lastTeteeItem: {
-    backgroundColor: "#e8f4fd",
+  lastVitamineItem: {
+    backgroundColor: "#fff3e0",
     borderLeftWidth: 4,
-    borderLeftColor: "#4A90E2",
+    borderLeftColor: "#FF9800",
   },
-  teteeContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  teteeInfo: {
-    flex: 1,
-  },
-  infoRow: {
+  vitamineContent: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 4,
-    gap: 8,
+    gap: 12,
   },
   timeText: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  seinText: {
-    fontSize: 14,
+    fontWeight: "500",
     color: "#666",
-    textTransform: "capitalize",
+    flex: 1,
   },
-  teteeActions: {
+  lastTimeText: {
+    color: "#333",
+    fontWeight: "600",
+  },
+  vitamineActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  quantityBadge: {
-    backgroundColor: "#4A90E2",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+  recentBadge: {
+    backgroundColor: "#FF9800",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  quantityText: {
+  recentText: {
     color: "white",
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
   },
   editIcon: {
@@ -726,89 +583,22 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 12,
   },
-  typeRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 20,
-  },
-  typeButton: {
-    padding: 12,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 12,
-    minWidth: 120,
-    alignItems: "center",
-  },
-  typeButtonActive: {
-    backgroundColor: "#4A90E2",
-  },
-  typeButtonDisabled: {
-    backgroundColor: "#f8f8f8",
-    opacity: 0.5,
-  },
-  typeText: {
-    fontSize: 16,
-    color: "#666",
-    textTransform: "capitalize",
-  },
-  typeTextActive: {
-    color: "white",
-    fontWeight: "bold",
-  },
-  typeTextDisabled: {
-    color: "#ccc",
-  },
-  quantityNA: {
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  quantityNAText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#999",
-  },
-  quantityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  quantityButton: {
-    backgroundColor: "#f0f0f0",
-    padding: 12,
-    borderRadius: 8,
-    minWidth: 40,
-    alignItems: "center",
-  },
-  quantityButtonDisabled: {
-    backgroundColor: "#f8f8f8",
-    opacity: 0.5,
-  },
-  quantityButtonText: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#666",
-  },
-  quantityButtonTextDisabled: {
-    color: "#ccc",
-  },
-  quantityValue: {
-    fontSize: 20,
-    marginHorizontal: 20,
-    fontWeight: "bold",
-    color: "#000000",
-  },
   dateTimeContainer: {
     flexDirection: "row",
-    justifyContent: "center",
-    gap: 10,
-    marginBottom: 10,
+    gap: 12,
+    marginBottom: 20,
   },
   dateButton: {
-    backgroundColor: "#f0f0f0",
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
     flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
   },
   dateButtonDisabled: {
     backgroundColor: "#f5f5f5",
@@ -817,13 +607,19 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 16,
     color: "#666",
+    fontWeight: "500",
   },
   dateButtonTextDisabled: {
     color: "#ccc",
   },
   selectedDateTime: {
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
   },
   selectedDate: {
     fontSize: 16,
@@ -833,7 +629,7 @@ const styles = StyleSheet.create({
   },
   selectedTime: {
     fontSize: 20,
-    color: "#004cdaff",
+    color: "#FF9800",
     fontWeight: "bold",
   },
   actionButtonsContainer: {

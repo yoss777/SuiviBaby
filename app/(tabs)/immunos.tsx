@@ -1,17 +1,17 @@
-import { ecouterMictions } from "@/services/mictionsService";
-import { ecouterSelles } from "@/services/sellesService";
+import { ecouterVaccins } from "@/services/vaccinsService";
+import { ecouterVitamines } from "@/services/vitaminesService";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import MictionsScreen from "../mictions";
-import SellesScreen from "../selles";
-import { Miction, Selle } from "../types/interfaces";
+import { Vaccin, Vitamine } from "../types/interfaces";
+import VaccinsScreen from "../vaccins";
+import VitaminesScreen from "../vitamines";
 
-export default function ExcretionsScreen() {
-  const [mictions, setMictions] = useState<Miction[]>([]);
-  const [selles, setSelles] = useState<Selle[]>([]);
-  const [selectedTab, setSelectedTab] = useState<"mictions" | "selles">(
-    "mictions"
+export default function ImmunosScreen() {
+  const [vitamines, setVitamines] = useState<Vitamine[]>([]);
+  const [vaccins, setVaccins] = useState<Vaccin[]>([]);
+  const [selectedTab, setSelectedTab] = useState<"vitamines" | "vaccins">(
+    "vitamines"
   );
 
   // Récupérer les paramètres de l'URL
@@ -19,24 +19,24 @@ export default function ExcretionsScreen() {
 
   // Définir l'onglet initial en fonction du paramètre
   useEffect(() => {
-    if (tab === "selles") {
-      setSelectedTab("selles");
-    } else if (tab === "mictions") {
-      setSelectedTab("mictions");
+    if (tab === "vaccins") {
+      setSelectedTab("vaccins");
+    } else if (tab === "vitamines") {
+      setSelectedTab("vitamines");
     }
     // Ne pas changer l'onglet si aucun paramètre 'tab' n'est fourni
   }, [tab]);
 
   // écoute en temps réel des tetees
   useEffect(() => {
-    const unsubscribeMictions = ecouterMictions(setMictions);
-    return () => unsubscribeMictions();
+    const unsubscribeVitamines = ecouterVitamines(setVitamines);
+    return () => unsubscribeVitamines();
   }, []);
 
   // écoute en temps réel des pompages
   useEffect(() => {
-    const unsubscribeSelles = ecouterSelles(setSelles);
-    return () => unsubscribeSelles();
+    const unsubscribeVaccins = ecouterVaccins(setVaccins);
+    return () => unsubscribeVaccins();
   }, []);
 
   return (
@@ -46,44 +46,44 @@ export default function ExcretionsScreen() {
         <TouchableOpacity
           style={[
             styles.tabButton,
-            selectedTab === "mictions" && styles.tabButtonActive,
+            selectedTab === "vitamines" && styles.tabButtonActive,
           ]}
-          onPress={() => setSelectedTab("mictions")}
+          onPress={() => setSelectedTab("vitamines")}
         >
           <Text
             style={[
               styles.tabText,
-              selectedTab === "mictions" && styles.tabTextActive,
+              selectedTab === "vitamines" && styles.tabTextActive,
             ]}
           >
-            Mictions
+            Vitamines
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[
             styles.tabButton,
-            selectedTab === "selles" && styles.tabButtonActive,
+            selectedTab === "vaccins" && styles.tabButtonActive,
           ]}
-          onPress={() => setSelectedTab("selles")}
+          onPress={() => setSelectedTab("vaccins")}
         >
           <Text
             style={[
               styles.tabText,
-              selectedTab === "selles" && styles.tabTextActive,
+              selectedTab === "vaccins" && styles.tabTextActive,
             ]}
           >
-            Selles
+            Vaccins
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* SCROLLVIEW DES CHARTS */}
       <View style={styles.container}>
-        {selectedTab === "mictions" ? (
-          <MictionsScreen mictions={mictions} />
+        {selectedTab === "vitamines" ? (
+          <VitaminesScreen vitamines={vitamines} />
         ) : (
-          <SellesScreen selles={selles} />
+          <VaccinsScreen vaccins={vaccins} />
         )}
       </View>
     </View>
