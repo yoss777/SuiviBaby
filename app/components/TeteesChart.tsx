@@ -1,4 +1,4 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { Timestamp } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
@@ -205,8 +205,8 @@ export default function TeteesChart({ tetees }: Props) {
         <View style={styles.typeFilterContainer}>
           {[
             { key: "tous", label: "Tous", icon: "baby" },
-            { key: "seins", label: "Seins", icon: "leaf" },
-            { key: "biberons", label: "Biberons", icon: "tint" }
+            { key: "seins", label: "Seins", icon: "person-breastfeeding" },
+            { key: "biberons", label: "Biberons", icon: "jar-wheat" }
           ].map((type) => (
             <TouchableOpacity
               key={type.key}
@@ -246,7 +246,7 @@ export default function TeteesChart({ tetees }: Props) {
       onPress={() => setViewMode("quantity")}
     >
       <FontAwesome
-        name="tint"
+        name="droplet"
         size={16}
         color={viewMode === "quantity" ? "white" : "#666"}
       />
@@ -318,12 +318,12 @@ export default function TeteesChart({ tetees }: Props) {
                 <Text style={styles.statLabel}>Total tétées</Text>
               </View>
               <View style={styles.statItem}>
-                <FontAwesome name="leaf" size={14} color="#28a745" />
+                <FontAwesome name="person-breastfeeding" size={14} color="#28a745" />
                 <Text style={[styles.statValue, { color: "#28a745" }]}>{totalSeinsCount}</Text>
                 <Text style={styles.statLabel}>Seins</Text>
               </View>
               <View style={styles.statItem}>
-                <FontAwesome name="tint" size={14} color="#17a2b8" />
+                <FontAwesome name="jar-wheat" size={14} color="#17a2b8" />
                 <Text style={[styles.statValue, { color: "#17a2b8" }]}>{totalBiberonsCount}</Text>
                 <Text style={styles.statLabel}>Biberons</Text>
               </View>

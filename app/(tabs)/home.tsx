@@ -1,4 +1,4 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -27,10 +27,23 @@ interface DashboardData {
 
 interface TodayStats {
   tetees: {
-    count: number;
-    quantity: number;
-    lastTime?: string;
-    lastTimestamp?: number;
+    total: {
+      count: number;
+      quantity: number;
+      lastTime?: string;
+      lastTimestamp?: number;
+    };
+    seins: {
+      count: number;
+      lastTime?: string;
+      lastTimestamp?: number;
+    };
+    biberons: {
+      count: number;
+      quantity: number;
+      lastTime?: string;
+      lastTimestamp?: number;
+    };
   };
   pompages: {
     count: number;
@@ -54,7 +67,11 @@ export default function HomeDashboard() {
     vaccins: [],
   });
   const [todayStats, setTodayStats] = useState<TodayStats>({
-    tetees: { count: 0, quantity: 0 },
+    tetees: {
+      total: { count: 0, quantity: 0 },
+      seins: { count: 0 },
+      biberons: { count: 0, quantity: 0 },
+    },
     pompages: { count: 0, quantity: 0 },
     mictions: { count: 0 },
     selles: { count: 0 },
@@ -65,22 +82,18 @@ export default function HomeDashboard() {
 
   // Timer intelligent qui écoute les changements d'état de l'app
   useEffect(() => {
-    // let timer: NodeJS.Timeout;
     let timer: ReturnType<typeof setTimeout>;
 
     const updateTime = () => {
       setCurrentTime(new Date());
-      // Programmer immédiatement le prochain update pour être précis
       scheduleNextUpdate();
     };
 
     const scheduleNextUpdate = () => {
-      // Nettoyer l'ancien timer
       if (timer) {
         clearTimeout(timer);
       }
 
-      // Calculer le temps exact jusqu'à la prochaine minute
       const now = new Date();
       const millisecondsUntilNextMinute =
         (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
@@ -92,18 +105,15 @@ export default function HomeDashboard() {
 
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === "active") {
-        // L'app devient active, mettre à jour immédiatement
         updateTime();
       }
     };
 
-    // Écouter les changements d'état de l'app
     const subscription = AppState.addEventListener(
       "change",
       handleAppStateChange
     );
 
-    // Initialiser le premier update
     updateTime();
 
     return () => {
@@ -148,13 +158,11 @@ export default function HomeDashboard() {
   // Calcul des statistiques du jour
   useEffect(() => {
     const today = new Date();
-    // Créer le début de journée dans le fuseau horaire local
     const startOfToday = new Date(
       today.getFullYear(),
       today.getMonth(),
       today.getDate()
     );
-    // Créer la fin de journée dans le fuseau horaire local
     const endOfToday = new Date(
       today.getFullYear(),
       today.getMonth(),
@@ -167,7 +175,6 @@ export default function HomeDashboard() {
         const itemDate = item.date?.seconds
           ? new Date(item.date.seconds * 1000)
           : new Date(item.date);
-        // Vérifier que l'item est dans la plage du jour local
         return itemDate >= startOfToday && itemDate < endOfToday;
       });
 
@@ -178,72 +185,87 @@ export default function HomeDashboard() {
     const todayVitamines = filterToday(data.vitamines);
     const todayVaccins = filterToday(data.vaccins);
 
-    // Calculs pour tétées
-    const teteesQuantity = todayTetees.reduce(
-      (sum, t) =>
-        sum +
-        ((t.quantiteDroite || 0) + (t.quantiteGauche || 0) + (t.quantite || 0)),
+    // Séparer les tétées par type
+    const seinsToday = todayTetees.filter((t) => !t.type || t.type === "seins");
+    const biberonsToday = todayTetees.filter((t) => t.type === "biberons");
+
+    // Calculs pour tétées seins
+    const lastSeins = seinsToday.length > 0
+      ? seinsToday.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
+        )
+      : null;
+
+    // Calculs pour tétées biberons
+    const biberonsQuantity = biberonsToday.reduce(
+      (sum, t) => sum + (t.quantite || 0),
       0
     );
-    const lastTetee =
-      todayTetees.length > 0
-        ? todayTetees.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-              ? current
-              : latest
-          )
-        : null;
+    const lastBiberons = biberonsToday.length > 0
+      ? biberonsToday.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
+        )
+      : null;
+
+    // Calculs totaux pour tétées
+    const teteesTotalQuantity = biberonsQuantity; // Seuls les biberons ont une quantité mesurable
+    const lastTeteeOverall = todayTetees.length > 0
+      ? todayTetees.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
+        )
+      : null;
 
     // Calculs pour pompages
     const pompagesQuantity = todayPompages.reduce(
       (sum, p) => sum + ((p.quantiteDroite || 0) + (p.quantiteGauche || 0)),
       0
     );
-    const lastPompage =
-      todayPompages.length > 0
-        ? todayPompages.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-              ? current
-              : latest
-          )
-        : null;
+    const lastPompage = todayPompages.length > 0
+      ? todayPompages.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
+        )
+      : null;
 
     // Dernières activités
-    const lastMiction =
-      todayMictions.length > 0
-        ? todayMictions.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-              ? current
-              : latest
-          )
-        : null;
+    const lastMiction = todayMictions.length > 0
+      ? todayMictions.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
+        )
+      : null;
 
-    const lastSelle =
-      todaySelles.length > 0
-        ? todaySelles.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-              ? current
-              : latest
-          )
-        : null;
+    const lastSelle = todaySelles.length > 0
+      ? todaySelles.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
+        )
+      : null;
 
-    const lastVitamine =
-      todayVitamines.length > 0
-        ? todayVitamines.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-              ? current
-              : latest
-          )
-        : null;
+    const lastVitamine = todayVitamines.length > 0
+      ? todayVitamines.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
+        )
+      : null;
 
-    const lastVaccin =
-      todayVaccins.length > 0
-        ? todayVaccins.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-              ? current
-              : latest
-          )
-        : null;
+    const lastVaccin = todayVaccins.length > 0
+      ? todayVaccins.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
+        )
+      : null;
 
     const formatTime = (item: any) => {
       if (!item?.date?.seconds) return undefined;
@@ -260,10 +282,23 @@ export default function HomeDashboard() {
 
     setTodayStats({
       tetees: {
-        count: todayTetees.length,
-        quantity: teteesQuantity,
-        lastTime: formatTime(lastTetee),
-        lastTimestamp: getTimestamp(lastTetee),
+        total: {
+          count: todayTetees.length,
+          quantity: teteesTotalQuantity,
+          lastTime: formatTime(lastTeteeOverall),
+          lastTimestamp: getTimestamp(lastTeteeOverall),
+        },
+        seins: {
+          count: seinsToday.length,
+          lastTime: formatTime(lastSeins),
+          lastTimestamp: getTimestamp(lastSeins),
+        },
+        biberons: {
+          count: biberonsToday.length,
+          quantity: biberonsQuantity,
+          lastTime: formatTime(lastBiberons),
+          lastTimestamp: getTimestamp(lastBiberons),
+        },
       },
       pompages: {
         count: todayPompages.length,
@@ -307,16 +342,13 @@ export default function HomeDashboard() {
     const now = new Date(currentTime.getTime());
     const actionTime = new Date(lastTimestamp);
 
-    // Calculer les minutes totales depuis le début de l'époque pour chaque moment
     const nowTotalMinutes = Math.floor(now.getTime() / (1000 * 60));
     const actionTotalMinutes = Math.floor(actionTime.getTime() / (1000 * 60));
 
     const diffMinutes = nowTotalMinutes - actionTotalMinutes;
 
-    // Vérification pour éviter les valeurs négatives
     if (diffMinutes < 0) return null;
 
-    // Si c'est la même minute
     if (diffMinutes === 0) {
       return "à l'instant";
     }
@@ -412,26 +444,54 @@ export default function HomeDashboard() {
       {/* Résumé du jour */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
+        
+        {/* Tétées - Vue d'ensemble */}
         <View style={styles.statsGrid}>
           <StatsCard
-            title="Tétées"
-            value={todayStats.tetees.count}
-            unit={todayStats.tetees.count > 1 ? "sessions" : "session"}
+            title="Tétées total"
+            value={todayStats.tetees.total.count}
+            unit={todayStats.tetees.total.count > 1 ? "sessions" : "session"}
             icon="baby"
             color="#4A90E2"
-            lastActivity={todayStats.tetees.lastTime}
-            lastTimestamp={todayStats.tetees.lastTimestamp}
+            lastActivity={todayStats.tetees.total.lastTime}
+            lastTimestamp={todayStats.tetees.total.lastTimestamp}
             onPress={() => router.push("/tetees")}
           />
           <StatsCard
-            title="Volume consommé"
-            value={todayStats.tetees.quantity}
+            title="Volume total"
+            value={todayStats.tetees.total.quantity}
             unit="ml"
-            icon="tint"
+            icon="droplet"
             color="#4A90E2"
             onPress={() => router.push("/stats?tab=tetees")}
           />
         </View>
+
+        {/* Tétées - Détail par type */}
+        <View style={styles.statsGrid}>
+          <StatsCard
+            title="Seins"
+            value={todayStats.tetees.seins.count}
+            unit={todayStats.tetees.seins.count > 1 ? "fois" : "fois"}
+            icon="person-breastfeeding"
+            color="#E91E63"
+            lastActivity={todayStats.tetees.seins.lastTime}
+            lastTimestamp={todayStats.tetees.seins.lastTimestamp}
+            onPress={() => router.push("/tetees")}
+          />
+          <StatsCard
+            title="Biberons"
+            value={`${todayStats.tetees.biberons.count} • ${todayStats.tetees.biberons.quantity}ml`}
+            unit=""
+            icon="jar-wheat"
+            color="#FF5722"
+            lastActivity={todayStats.tetees.biberons.lastTime}
+            lastTimestamp={todayStats.tetees.biberons.lastTimestamp}
+            onPress={() => router.push("/tetees")}
+          />
+        </View>
+
+        {/* Pompages */}
         <View style={styles.statsGrid}>
           <StatsCard
             title="Pompages"
@@ -447,11 +507,13 @@ export default function HomeDashboard() {
             title="Volume tiré"
             value={todayStats.pompages.quantity}
             unit="ml"
-            icon="cloud-download-alt"
+            icon="cloud-arrow-down"
             color="#28a745"
             onPress={() => router.push("/stats?tab=pompages")}
           />
         </View>
+
+        {/* Immunité et soins */}
         <View style={styles.statsGrid}>
           <StatsCard
             title="Vitamines"
@@ -511,10 +573,10 @@ export default function HomeDashboard() {
             title="Nouvelle tétée"
             icon="baby"
             color="#4A90E2"
-            count={todayStats.tetees.count}
+            count={todayStats.tetees.total.count}
             subtitle={
-              todayStats.tetees.lastTime
-                ? `Dernière: ${todayStats.tetees.lastTime}`
+              todayStats.tetees.total.lastTime
+                ? `Dernière: ${todayStats.tetees.total.lastTime}`
                 : "Aucune aujourd'hui"
             }
             onPress={() => router.push("/tetees?openModal=true")}

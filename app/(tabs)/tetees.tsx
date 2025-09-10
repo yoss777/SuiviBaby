@@ -1,4 +1,4 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -256,7 +256,7 @@ export default function TeteesScreen() {
               </Text>
             </View>
             <View style={styles.infoRow}>
-              <FontAwesome name="leaf" size={14} color="#666" />
+              <FontAwesome name={tetee.type==="seins" ? "person-breastfeeding" : "jar-wheat"} size={16} color="#666" />
               <Text style={styles.seinText}>
                 {typeDisplay}
               </Text>
@@ -631,7 +631,7 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: 6,
     gap: 8,
   },
   timeText: {
