@@ -36,19 +36,17 @@ export default function TeteesChart({ tetees }: Props) {
   const [viewMode, setViewMode] = useState<"quantity" | "frequency">("quantity");
   const [typeFilter, setTypeFilter] = useState<"tous" | "seins" | "biberons">("tous");
   const [currentWeek, setCurrentWeek] = useState<Date>(getStartOfWeek(new Date()));
-  
+
   const jours = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
   const chartWidth = Dimensions.get("window").width - 40;
   const chartHeight = 220;
 
-// Forcer viewMode à "frequency" quand typeFilter est "seins"
+  // Forcer viewMode à "frequency" quand typeFilter est "seins"
   useEffect(() => {
     if (typeFilter === "seins") {
       setViewMode("frequency");
     }
   }, [typeFilter]);
-
-
 
   // Vérification précoce pour éviter les problèmes de hooks
   const isEmpty = !tetees || tetees.length === 0;
@@ -77,13 +75,16 @@ export default function TeteesChart({ tetees }: Props) {
   });
 
   // Calcul des totaux journaliers avec séparation par type
-  const weeklyData: Record<string, { 
-    quantity: number; 
-    count: number;
-    seinsCount: number;
-    biberonsCount: number;
-    biberonsQuantity: number;
-  }> = {
+  const weeklyData: Record<
+    string,
+    {
+      quantity: number;
+      count: number;
+      seinsCount: number;
+      biberonsCount: number;
+      biberonsQuantity: number;
+    }
+  > = {
     Lun: { quantity: 0, count: 0, seinsCount: 0, biberonsCount: 0, biberonsQuantity: 0 },
     Mar: { quantity: 0, count: 0, seinsCount: 0, biberonsCount: 0, biberonsQuantity: 0 },
     Mer: { quantity: 0, count: 0, seinsCount: 0, biberonsCount: 0, biberonsQuantity: 0 },
@@ -95,7 +96,6 @@ export default function TeteesChart({ tetees }: Props) {
 
   filteredTetees.forEach((t) => {
     const d = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
-
     if (d >= start && d < end) {
       const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
       const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
@@ -104,7 +104,6 @@ export default function TeteesChart({ tetees }: Props) {
 
       if (weeklyData[jourKey]) {
         weeklyData[jourKey].count += 1;
-        
         if (type === "seins") {
           weeklyData[jourKey].seinsCount += 1;
         } else if (type === "biberons") {
@@ -135,12 +134,21 @@ export default function TeteesChart({ tetees }: Props) {
   const currentValues = viewMode === "quantity" ? quantityValues : countValues;
   const currentMax = viewMode === "quantity" ? maxQuantity : maxCount;
 
-  // Configuration du graphique avec couleurs selon le type
-  const getBarColor = (value: number, index: number) => {
-    if (value === 0) return "#e9ecef";
-    if (typeFilter === "seins") return "#28a745"; // Vert pour seins
-    if (typeFilter === "biberons") return "#17a2b8"; // Bleu cyan pour biberons
-    return value === currentMax ? "#ffc107" : "#4A90E2"; // Couleurs par défaut
+  // Configuration du graphique avec couleurs pour les barres et les étiquettes
+  const getBarAndLabelColor = (value: number, index: number) => {
+    if (value === 0) {
+      return { barColor: "#e9ecef", labelColor: "#333333" };
+    }
+    if (typeFilter === "seins") {
+      return { barColor: "#28a745", labelColor: "#1a7431" }; // Vert plus foncé pour les étiquettes
+    }
+    if (typeFilter === "biberons") {
+      return { barColor: "#17a2b8", labelColor: "#0c5460" }; // Bleu cyan foncé pour les étiquettes
+    }
+    return {
+      barColor: value === currentMax ? "#ffc107" : "#4A90E2",
+      labelColor: value === currentMax ? "#b28704" : "#2a6395",
+    };
   };
 
   const chartConfig = {
@@ -149,11 +157,18 @@ export default function TeteesChart({ tetees }: Props) {
     backgroundGradientTo: "#f8f9fa",
     decimalPlaces: 0,
     color: (opacity = 1) => `rgba(74, 144, 226, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+    labelColor: (opacity = 1, index?: number) => {
+      const val = currentValues[index || 0];
+      return getBarAndLabelColor(val, index || 0).labelColor.replace(")", `, ${opacity})`).replace("rgb", "rgba");
+    },
     strokeWidth: 2,
     barPercentage: 0.7,
     fillShadowGradient: "#4A90E2",
     fillShadowGradientOpacity: 0.3,
+    propsForLabels: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
   };
 
   return (
@@ -206,7 +221,7 @@ export default function TeteesChart({ tetees }: Props) {
           {[
             { key: "tous", label: "Tous", icon: "baby" },
             { key: "seins", label: "Seins", icon: "person-breastfeeding" },
-            { key: "biberons", label: "Biberons", icon: "jar-wheat" }
+            { key: "biberons", label: "Biberons", icon: "jar-wheat" },
           ].map((type) => (
             <TouchableOpacity
               key={type.key}
@@ -237,51 +252,51 @@ export default function TeteesChart({ tetees }: Props) {
 
         {/* Toggle pour changer de vue */}
         <View style={styles.toggleContainer}>
-  {typeFilter !== "seins" && (
-    <TouchableOpacity
-      style={[
-        styles.toggleButton,
-        viewMode === "quantity" && styles.toggleButtonActive,
-      ]}
-      onPress={() => setViewMode("quantity")}
-    >
-      <FontAwesome
-        name="droplet"
-        size={16}
-        color={viewMode === "quantity" ? "white" : "#666"}
-      />
-      <Text
-        style={[
-          styles.toggleText,
-          viewMode === "quantity" && styles.toggleTextActive,
-        ]}
-      >
-        Quantité
-      </Text>
-    </TouchableOpacity>
-  )}
-  <TouchableOpacity
-    style={[
-      styles.toggleButton,
-      viewMode === "frequency" && styles.toggleButtonActive,
-    ]}
-    onPress={() => setViewMode("frequency")}
-  >
-    <FontAwesome
-      name="clock"
-      size={16}
-      color={viewMode === "frequency" ? "white" : "#666"}
-    />
-    <Text
-      style={[
-        styles.toggleText,
-        viewMode === "frequency" && styles.toggleTextActive,
-      ]}
-    >
-      Fréquence
-    </Text>
-  </TouchableOpacity>
-</View>
+          {typeFilter !== "seins" && (
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                viewMode === "quantity" && styles.toggleButtonActive,
+              ]}
+              onPress={() => setViewMode("quantity")}
+            >
+              <FontAwesome
+                name="droplet"
+                size={16}
+                color={viewMode === "quantity" ? "white" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.toggleText,
+                  viewMode === "quantity" && styles.toggleTextActive,
+                ]}
+              >
+                Quantité
+              </Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              viewMode === "frequency" && styles.toggleButtonActive,
+            ]}
+            onPress={() => setViewMode("frequency")}
+          >
+            <FontAwesome
+              name="clock"
+              size={16}
+              color={viewMode === "frequency" ? "white" : "#666"}
+            />
+            <Text
+              style={[
+                styles.toggleText,
+                viewMode === "frequency" && styles.toggleTextActive,
+              ]}
+            >
+              Fréquence
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <BarChart
           data={{
@@ -289,7 +304,7 @@ export default function TeteesChart({ tetees }: Props) {
             datasets: [
               {
                 data: currentValues.length > 0 ? currentValues : [0],
-                colors: currentValues.map((val, i) => () => getBarColor(val, i)),
+                colors: currentValues.map((val, i) => () => getBarAndLabelColor(val, i).barColor),
               },
             ],
           }}
@@ -297,13 +312,7 @@ export default function TeteesChart({ tetees }: Props) {
           height={chartHeight}
           fromZero
           yAxisSuffix={viewMode === "quantity" ? " ml" : ""}
-          chartConfig={{
-            ...chartConfig,
-            color: (opacity = 1, index?: number) => {
-              const val = currentValues[index || 0];
-              return getBarColor(val, index || 0).replace(")", `, ${opacity})`).replace("rgb", "rgba");
-            },
-          }}
+          chartConfig={chartConfig}
           style={styles.chart}
           showValuesOnTopOfBars
           withCustomBarColorFromData
@@ -337,19 +346,17 @@ export default function TeteesChart({ tetees }: Props) {
           <View style={styles.statsContainer}>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{totalWeekQuantity} ml</Text>
+                <Text style={[styles.statValue, { color: "#17a2b8" }]}>{totalWeekQuantity} ml</Text>
                 <Text style={styles.statLabel}>Total semaine</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{dailyAverageQuantity} ml</Text>
+                <Text style={[styles.statValue, { color: "#17a2b8" }]}>{dailyAverageQuantity} ml</Text>
                 <Text style={styles.statLabel}>Moyenne/jour</Text>
               </View>
               {maxQuantity > 0 && (
                 <View style={styles.statItem}>
                   <FontAwesome name="trophy" size={16} color="#ffc107" />
-                  <Text style={[styles.statValue, { color: "#ffc107" }]}>
-                    {bestQuantityDay}
-                  </Text>
+                  <Text style={[styles.statValue, { color: "#ffc107" }]}>{bestQuantityDay}</Text>
                   <Text style={styles.statLabel}>Record: {maxQuantity} ml</Text>
                 </View>
               )}
@@ -359,11 +366,15 @@ export default function TeteesChart({ tetees }: Props) {
           <View style={styles.statsContainer}>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{totalWeekCount}</Text>
+                <Text style={[styles.statValue, typeFilter === "seins" ? { color: "#28a745" } : { color: "#17a2b8" }]}>
+                  {totalWeekCount}
+                </Text>
                 <Text style={styles.statLabel}>Total tétées</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{dailyAverageCount}</Text>
+                <Text style={[styles.statValue, typeFilter === "seins" ? { color: "#28a745" } : { color: "#17a2b8" }]}>
+                  {dailyAverageCount}
+                </Text>
                 <Text style={styles.statLabel}>Moyenne/jour</Text>
               </View>
               {maxCount > 0 && (
@@ -387,16 +398,15 @@ export default function TeteesChart({ tetees }: Props) {
             <FontAwesome name="lightbulb" size={16} color="#17a2b8" />
             <View style={styles.insightContent}>
               <Text style={styles.insightTitle}>
-                {typeFilter === "tous" 
+                {typeFilter === "tous"
                   ? "Aperçu global de la semaine"
-                  : `Aperçu ${typeFilter} de la semaine`
-                }
+                  : `Aperçu ${typeFilter} de la semaine`}
               </Text>
               <Text style={styles.insightText}>
-                {typeFilter === "tous" 
+                {typeFilter === "tous"
                   ? `Cette semaine: ${totalSeinsCount} tétées au sein, ${totalBiberonsCount} biberons (${totalWeekQuantity} ml au total). ${
-                      totalSeinsCount > totalBiberonsCount 
-                        ? "L'allaitement domine cette semaine." 
+                      totalSeinsCount > totalBiberonsCount
+                        ? "L'allaitement domine cette semaine."
                         : totalBiberonsCount > totalSeinsCount
                         ? "Les biberons dominent cette semaine."
                         : "Équilibre entre seins et biberons."
@@ -407,8 +417,7 @@ export default function TeteesChart({ tetees }: Props) {
                         ? `Le ${bestCountDay} a été particulièrement actif.`
                         : "Rythme régulier cette semaine."
                     }`
-                  : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberons). Moyenne de ${dailyAverageQuantity} ml par jour.`
-                }
+                  : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberons). Moyenne de ${dailyAverageQuantity} ml par jour.`}
               </Text>
             </View>
           </View>
