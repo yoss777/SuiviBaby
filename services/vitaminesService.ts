@@ -1,3 +1,4 @@
+// services/vitaminesService.ts
 import {
   addDoc,
   collection,
@@ -9,15 +10,23 @@ import {
   onSnapshot,
   orderBy,
   query,
-  updateDoc
+  updateDoc,
+  where
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db } from "../config/firebase";
 
-// ➕ Ajouter une prise de Vitamine
+const getUserId = () => {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Utilisateur non connecté");
+  return user.uid;
+};
+
 export async function ajouterVitamine(data: any) {
   try {
+    const userId = getUserId();
     const ref = await addDoc(collection(db, "vitamines"), {
       ...data,
+      userId,
       createdAt: new Date(),
     });
     console.log("Prise de Vitamines ajoutée avec l'ID :", ref.id);
@@ -28,16 +37,16 @@ export async function ajouterVitamine(data: any) {
   }
 }
 
-// 📖 Obtenir une prise de Vitamine par ID
 export async function obtenirVitamine(id: string) {
   try {
+    const userId = getUserId();
     const docRef = doc(db, "vitamines", id);
     const docSnap = await getDoc(docRef);
     
-    if (docSnap.exists()) {
+    if (docSnap.exists() && docSnap.data().userId === userId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
-      console.log("Aucune prise de vitamines trouvée avec cet ID");
+      console.log("Aucune prise de vitamines trouvée avec cet ID ou accès refusé");
       return null;
     }
   } catch (e) {
@@ -46,10 +55,14 @@ export async function obtenirVitamine(id: string) {
   }
 }
 
-// 📖 Obtenir toutes les vitamines (une seule fois)
 export async function obtenirToutesLesVitamines() {
   try {
-    const q = query(collection(db, "vitamines"), orderBy("createdAt", "desc"));
+    const userId = getUserId();
+    const q = query(
+      collection(db, "vitamines"),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc")
+    );
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map((doc) => ({
@@ -62,11 +75,12 @@ export async function obtenirToutesLesVitamines() {
   }
 }
 
-// 📖 Obtenir les prises de vitamines avec limite
 export async function obtenirVitaminesAvecLimite(nombreLimit: number) {
   try {
+    const userId = getUserId();
     const q = query(
-      collection(db, "vitamines"), 
+      collection(db, "vitamines"),
+      where("userId", "==", userId),
       orderBy("createdAt", "desc"), 
       limit(nombreLimit)
     );
@@ -82,9 +96,13 @@ export async function obtenirVitaminesAvecLimite(nombreLimit: number) {
   }
 }
 
-// 🔄 Écouter en temps réel toutes les prises de vitamines
 export function ecouterVitamines(callback: (docs: any[]) => void) {
-  const q = query(collection(db, "vitamines"), orderBy("createdAt", "desc"));
+  const userId = getUserId();
+  const q = query(
+    collection(db, "vitamines"),
+    where("userId", "==", userId),
+    orderBy("createdAt", "desc")
+  );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const liste = snapshot.docs.map((doc) => ({
@@ -94,13 +112,19 @@ export function ecouterVitamines(callback: (docs: any[]) => void) {
     callback(liste);
   });
 
-  return unsubscribe; // 🔥 permet d'arrêter l'écoute
+  return unsubscribe;
 }
 
-// ✏️ Modifier une prise de vitamines
 export async function modifierVitamine(id: string, nouveausDonnees: any) {
   try {
+    const userId = getUserId();
     const docRef = doc(db, "vitamines", id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+      throw new Error("Accès refusé");
+    }
+    
     await updateDoc(docRef, {
       ...nouveausDonnees,
       updatedAt: new Date(),
@@ -113,10 +137,17 @@ export async function modifierVitamine(id: string, nouveausDonnees: any) {
   }
 }
 
-// 🗑️ Supprimer une prise de vitamines
 export async function supprimerVitamine(id: string) {
   try {
-    await deleteDoc(doc(db, "vitamines", id));
+    const userId = getUserId();
+    const docRef = doc(db, "vitamines", id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+      throw new Error("Accès refusé");
+    }
+    
+    await deleteDoc(docRef);
     console.log("Prise de vitamines supprimée avec succès");
     return true;
   } catch (e) {

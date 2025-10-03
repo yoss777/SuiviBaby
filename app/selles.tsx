@@ -1,9 +1,14 @@
-import { ajouterSelle, modifierSelle } from "@/services/sellesService";
+import {
+  ajouterSelle,
+  modifierSelle,
+  supprimerSelle,
+} from "@/services/sellesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -168,6 +173,46 @@ export default function SellesScreen({ selles }: Props) {
     }
   };
 
+  const handleDeleteSelle = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      if (editingSelle) {
+        Alert.alert("Suppression", "Voulez-vous vraiment vous supprimer ?", [
+          {
+            text: "Annuler",
+            style: "cancel",
+          },
+          {
+            text: "Supprimer",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await supprimerSelle(editingSelle.id);
+                closeModal();
+              } catch (error) {
+                Alert.alert(
+                  "Erreur",
+                  "Impossible de se supprimer. Veuillez réessayer plus tard."
+                );
+              }
+            },
+          },
+        ]);
+      } else {
+        throw new Error("Aucune miction sélectionnée pour la suppression.");
+      }
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde de la miction:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
     if (selectedDate) {
@@ -220,7 +265,12 @@ export default function SellesScreen({ selles }: Props) {
               <Text style={styles.recentText}>Récent</Text>
             </View>
           )}
-          <FontAwesome name="edit" size={16} color="#dc3545" style={styles.editIcon} />
+          <FontAwesome
+            name="edit"
+            size={16}
+            color="#dc3545"
+            style={styles.editIcon}
+          />
         </View>
       </View>
     </TouchableOpacity>
@@ -307,14 +357,19 @@ export default function SellesScreen({ selles }: Props) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <FontAwesome 
-                name={editingSelle ? "edit" : "circle"} 
-                size={20} 
-                color="#dc3545" 
+              <FontAwesome
+                name={editingSelle ? "edit" : "circle"}
+                size={20}
+                color="#dc3545"
               />
               <Text style={styles.modalTitle}>
                 {editingSelle ? "Modifier la selle" : "Nouvelle selle"}
               </Text>
+              {editingSelle && (
+                <TouchableOpacity onPress={handleDeleteSelle}>
+                  <FontAwesome name="trash" size={24} color="red" />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Date & Heure */}
@@ -409,7 +464,9 @@ export default function SellesScreen({ selles }: Props) {
                 validateText={editingSelle ? "Mettre à jour" : "Ajouter"}
                 isLoading={isSubmitting}
                 disabled={isSubmitting}
-                loadingText={editingSelle ? "Mise à jour..." : "Ajout en cours..."}
+                loadingText={
+                  editingSelle ? "Mise à jour..." : "Ajout en cours..."
+                }
               />
             </View>
           </View>

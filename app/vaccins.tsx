@@ -1,9 +1,10 @@
-import { ajouterVaccin, modifierVaccin } from "@/services/vaccinsService";
+import { ajouterVaccin, modifierVaccin, supprimerVaccin } from "@/services/vaccinsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -180,6 +181,48 @@ export default function VaccinsScreen({ vaccins }: Props) {
     }
   };
 
+  const handleDeleteVaccin = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      if (editingVaccin) {
+        Alert.alert("Suppression", "Voulez-vous vraiment vous supprimer ?", [
+          {
+            text: "Annuler",
+            style: "cancel",
+          },
+          {
+            text: "Supprimer",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await supprimerVaccin(editingVaccin.id);
+                closeModal();
+              } catch (error) {
+                Alert.alert(
+                  "Erreur",
+                  "Impossible de se supprimer. Veuillez réessayer plus tard."
+                );
+              }
+            },
+          },
+        ]);
+      } else {
+        throw new Error("Aucune miction sélectionnée pour la suppression.");
+      }
+
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde de la miction:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
     if (selectedDate) {
@@ -343,7 +386,13 @@ export default function VaccinsScreen({ vaccins }: Props) {
               <Text style={styles.modalTitle}>
                 {editingVaccin ? "Modifier le vaccin" : "Nouveau vaccin"}
               </Text>
+              {editingVaccin && (
+                <TouchableOpacity onPress={handleDeleteVaccin}>
+                  <FontAwesome name="trash" size={24} color="red" />
+                </TouchableOpacity>
+              )}
             </View>
+
             {/* Sélection du vaccin */}
             <Text style={styles.modalCategoryLabel}>Type de vaccin</Text>
             <TouchableOpacity

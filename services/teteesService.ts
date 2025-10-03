@@ -1,3 +1,4 @@
+// services/teteesService.ts
 import {
   addDoc,
   collection,
@@ -9,15 +10,23 @@ import {
   onSnapshot,
   orderBy,
   query,
-  updateDoc
+  updateDoc,
+  where
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db } from "../config/firebase";
 
-// ➕ Ajouter une tétée
+const getUserId = () => {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Utilisateur non connecté");
+  return user.uid;
+};
+
 export async function ajouterTetee(data: any) {
   try {
+    const userId = getUserId();
     const ref = await addDoc(collection(db, "tetees"), {
       ...data,
+      userId,
       createdAt: new Date(),
     });
     console.log("Tétée ajoutée avec l'ID :", ref.id);
@@ -28,16 +37,16 @@ export async function ajouterTetee(data: any) {
   }
 }
 
-// 📖 Obtenir une tétée par ID
 export async function obtenirTetee(id: string) {
   try {
+    const userId = getUserId();
     const docRef = doc(db, "tetees", id);
     const docSnap = await getDoc(docRef);
     
-    if (docSnap.exists()) {
+    if (docSnap.exists() && docSnap.data().userId === userId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
-      console.log("Aucune tétée trouvée avec cet ID");
+      console.log("Aucune tétée trouvée avec cet ID ou accès refusé");
       return null;
     }
   } catch (e) {
@@ -46,10 +55,14 @@ export async function obtenirTetee(id: string) {
   }
 }
 
-// 📖 Obtenir toutes les tétées (une seule fois)
 export async function obtenirToutesLesTetees() {
   try {
-    const q = query(collection(db, "tetees"), orderBy("createdAt", "desc"));
+    const userId = getUserId();
+    const q = query(
+      collection(db, "tetees"),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc")
+    );
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map((doc) => ({
@@ -62,11 +75,12 @@ export async function obtenirToutesLesTetees() {
   }
 }
 
-// 📖 Obtenir les tétées avec limite
 export async function obtenirTeteesAvecLimite(nombreLimit: number) {
   try {
+    const userId = getUserId();
     const q = query(
-      collection(db, "tetees"), 
+      collection(db, "tetees"),
+      where("userId", "==", userId),
       orderBy("createdAt", "desc"), 
       limit(nombreLimit)
     );
@@ -82,9 +96,13 @@ export async function obtenirTeteesAvecLimite(nombreLimit: number) {
   }
 }
 
-// 🔄 Écouter en temps réel toutes les tétées
 export function ecouterTetees(callback: (docs: any[]) => void) {
-  const q = query(collection(db, "tetees"), orderBy("createdAt", "desc"));
+  const userId = getUserId();
+  const q = query(
+    collection(db, "tetees"),
+    where("userId", "==", userId),
+    orderBy("createdAt", "desc")
+  );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const liste = snapshot.docs.map((doc) => ({
@@ -94,13 +112,19 @@ export function ecouterTetees(callback: (docs: any[]) => void) {
     callback(liste);
   });
 
-  return unsubscribe; // 🔥 permet d'arrêter l'écoute
+  return unsubscribe;
 }
 
-// ✏️ Modifier une tétée
 export async function modifierTetee(id: string, nouveausDonnees: any) {
   try {
+    const userId = getUserId();
     const docRef = doc(db, "tetees", id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+      throw new Error("Accès refusé");
+    }
+    
     await updateDoc(docRef, {
       ...nouveausDonnees,
       updatedAt: new Date(),
@@ -113,10 +137,17 @@ export async function modifierTetee(id: string, nouveausDonnees: any) {
   }
 }
 
-// 🗑️ Supprimer une tétée
 export async function supprimerTetee(id: string) {
   try {
-    await deleteDoc(doc(db, "tetees", id));
+    const userId = getUserId();
+    const docRef = doc(db, "tetees", id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+      throw new Error("Accès refusé");
+    }
+    
+    await deleteDoc(docRef);
     console.log("Tétée supprimée avec succès");
     return true;
   } catch (e) {

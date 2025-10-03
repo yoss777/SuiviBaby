@@ -1,3 +1,4 @@
+// services/vaccinsService.ts
 import {
   addDoc,
   collection,
@@ -9,15 +10,23 @@ import {
   onSnapshot,
   orderBy,
   query,
-  updateDoc
+  updateDoc,
+  where
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db } from "../config/firebase";
 
-// ➕ Ajouter une prise de vaccin
+const getUserId = () => {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Utilisateur non connecté");
+  return user.uid;
+};
+
 export async function ajouterVaccin(data: any) {
   try {
+    const userId = getUserId();
     const ref = await addDoc(collection(db, "vaccins"), {
       ...data,
+      userId,
       createdAt: new Date(),
     });
     console.log("Prise de Vaccins ajoutée avec l'ID :", ref.id);
@@ -28,16 +37,16 @@ export async function ajouterVaccin(data: any) {
   }
 }
 
-// 📖 Obtenir une prise de Vaccin par ID
 export async function obtenirVaccin(id: string) {
   try {
+    const userId = getUserId();
     const docRef = doc(db, "vaccins", id);
     const docSnap = await getDoc(docRef);
     
-    if (docSnap.exists()) {
+    if (docSnap.exists() && docSnap.data().userId === userId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
-      console.log("Aucune prise de vaccins trouvée avec cet ID");
+      console.log("Aucune prise de vaccins trouvée avec cet ID ou accès refusé");
       return null;
     }
   } catch (e) {
@@ -46,10 +55,14 @@ export async function obtenirVaccin(id: string) {
   }
 }
 
-// 📖 Obtenir toutes les vaccins (une seule fois)
 export async function obtenirToutesLesVaccins() {
   try {
-    const q = query(collection(db, "vaccins"), orderBy("createdAt", "desc"));
+    const userId = getUserId();
+    const q = query(
+      collection(db, "vaccins"),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc")
+    );
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map((doc) => ({
@@ -62,11 +75,12 @@ export async function obtenirToutesLesVaccins() {
   }
 }
 
-// 📖 Obtenir les prises de vaccins avec limite
 export async function obtenirVaccinsAvecLimite(nombreLimit: number) {
   try {
+    const userId = getUserId();
     const q = query(
-      collection(db, "vaccins"), 
+      collection(db, "vaccins"),
+      where("userId", "==", userId),
       orderBy("createdAt", "desc"), 
       limit(nombreLimit)
     );
@@ -82,9 +96,13 @@ export async function obtenirVaccinsAvecLimite(nombreLimit: number) {
   }
 }
 
-// 🔄 Écouter en temps réel toutes les prises de vaccins
 export function ecouterVaccins(callback: (docs: any[]) => void) {
-  const q = query(collection(db, "vaccins"), orderBy("createdAt", "desc"));
+  const userId = getUserId();
+  const q = query(
+    collection(db, "vaccins"),
+    where("userId", "==", userId),
+    orderBy("createdAt", "desc")
+  );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const liste = snapshot.docs.map((doc) => ({
@@ -94,13 +112,19 @@ export function ecouterVaccins(callback: (docs: any[]) => void) {
     callback(liste);
   });
 
-  return unsubscribe; // 🔥 permet d'arrêter l'écoute
+  return unsubscribe;
 }
 
-// ✏️ Modifier une prise de vaccins
 export async function modifierVaccin(id: string, nouveausDonnees: any) {
   try {
+    const userId = getUserId();
     const docRef = doc(db, "vaccins", id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+      throw new Error("Accès refusé");
+    }
+    
     await updateDoc(docRef, {
       ...nouveausDonnees,
       updatedAt: new Date(),
@@ -113,10 +137,17 @@ export async function modifierVaccin(id: string, nouveausDonnees: any) {
   }
 }
 
-// 🗑️ Supprimer une prise de vaccins
 export async function supprimerVaccin(id: string) {
   try {
-    await deleteDoc(doc(db, "vaccins", id));
+    const userId = getUserId();
+    const docRef = doc(db, "vaccins", id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+      throw new Error("Accès refusé");
+    }
+    
+    await deleteDoc(docRef);
     console.log("Prise de vaccins supprimée avec succès");
     return true;
   } catch (e) {

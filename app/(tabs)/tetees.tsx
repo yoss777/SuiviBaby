@@ -3,6 +3,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -11,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ajouterTetee, ecouterTetees, modifierTetee } from "../../services/teteesService";
+import { ajouterTetee, ecouterTetees, modifierTetee, supprimerTetee } from "../../services/teteesService";
 import ModernActionButtons from "../components/ModernActionsButton";
 
 // Interface pour typer les données (avec optionnel pour compatibilité avec anciennes données)
@@ -198,6 +199,49 @@ export default function TeteesScreen() {
     }
   };
 
+  const handleDeleteTetee = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      if (editingTetee) {
+        Alert.alert("Suppression", "Voulez-vous vraiment vous supprimer ?", [
+          {
+            text: "Annuler",
+            style: "cancel",
+          },
+          {
+            text: "Supprimer",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await supprimerTetee(editingTetee.id);
+                closeModal();
+              } catch (error) {
+                Alert.alert(
+                  "Erreur",
+                  "Impossible de se supprimer. Veuillez réessayer plus tard."
+                );
+              }
+            },
+          },
+        ]);
+      } else {
+        throw new Error("Aucune miction sélectionnée pour la suppression.");
+      }
+
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde de la miction:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+
+
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
     if (selectedDate) {
@@ -362,6 +406,11 @@ export default function TeteesScreen() {
               <Text style={styles.modalTitle}>
                 {editingTetee ? "Modifier la tétée" : "Nouvelle tétée"}
               </Text>
+              {editingTetee && (
+                <TouchableOpacity onPress={handleDeleteTetee}>
+                  <FontAwesome name="trash" size={24} color="red" />
+                </TouchableOpacity>
+              )}
             </View>
 
             <Text style={styles.modalCategoryLabel}>Type de tétée</Text>

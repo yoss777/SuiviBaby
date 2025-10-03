@@ -1,47 +1,54 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { Stack } from "expo-router";
-import { StatusBar, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+// app/_layout.tsx
+import { Slot, useRouter, useSegments } from 'expo-router';
+import { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
 
-function CustomHeader() {
-  const insets = useSafeAreaInsets();
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
+  useEffect(() => {
+    if (loading) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!user && !inAuthGroup) {
+      // Rediriger vers le login si pas connecté
+      router.replace('/login');
+    } else if (user && inAuthGroup) {
+      // Rediriger vers home si déjà connecté
+      router.replace('/(tabs)/home');
+    }
+  }, [user, loading, segments]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4A90E2" />
+      </View>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+export default function RootLayout() {
   return (
-    <View
-      style={{
-        paddingTop: insets.top + 20, // ✅ seulement en haut
-        backgroundColor: "white",
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: 20,
-        paddingBottom: 20,
-        borderBottomColor: "#cccccc",
-        borderBottomWidth: 1,
-        gap: 10,
-      }}
-    >
-      <StatusBar barStyle="dark-content" backgroundColor="white" />
-      <FontAwesome name="baby" size={24} color="#000000" />
-      <Text
-        style={{ fontSize: 22, fontWeight: "bold", color: "#000000" }}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        Suivi Samaye Utéti B.
-      </Text>
-    </View>
+    <AuthProvider>
+      <AuthGuard>
+        <Slot />
+      </AuthGuard>
+    </AuthProvider>
   );
 }
 
-export default function Layout() {
-  return (
-    <Stack
-      screenOptions={{
-        header: () => <CustomHeader />,
-      }}
-    >
-      <Stack.Screen name="(tabs)" options={{ headerShown: true }} />
-    </Stack>
-  );
-}
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
+});

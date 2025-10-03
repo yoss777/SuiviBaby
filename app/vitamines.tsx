@@ -1,9 +1,10 @@
-import { ajouterVitamine, modifierVitamine } from "@/services/vitaminesService";
+import { ajouterVitamine, modifierVitamine, supprimerVitamine } from "@/services/vitaminesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -150,6 +151,47 @@ export default function VitaminesScreen({ vitamines }: Props) {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde de la prise de vitamines:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteVitamine = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      if (editingVitamine) {
+        Alert.alert("Suppression", "Voulez-vous vraiment vous supprimer ?", [
+          {
+            text: "Annuler",
+            style: "cancel",
+          },
+          {
+            text: "Supprimer",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await supprimerVitamine(editingVitamine.id);
+                closeModal();
+              } catch (error) {
+                Alert.alert(
+                  "Erreur",
+                  "Impossible de se supprimer. Veuillez réessayer plus tard."
+                );
+              }
+            },
+          },
+        ]);
+      } else {
+        throw new Error("Aucune miction sélectionnée pour la suppression.");
+      }
+
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde de la miction:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -303,6 +345,11 @@ export default function VitaminesScreen({ vitamines }: Props) {
               <Text style={styles.modalTitle}>
                 {editingVitamine ? "Modifier la prise de vitamines" : "Nouvelle prise de vitamines"}
               </Text>
+              {editingVitamine && (
+                <TouchableOpacity onPress={handleDeleteVitamine}>
+                  <FontAwesome name="trash" size={24} color="red" />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Date & Heure */}

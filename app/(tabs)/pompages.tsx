@@ -1,9 +1,10 @@
-import { ajouterPompage, ecouterPompages, modifierPompage } from "@/services/pompagesService";
+import { ajouterPompage, ecouterPompages, modifierPompage, supprimerPompage } from "@/services/pompagesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -193,6 +194,47 @@ export default function PompagesScreen() {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde du pompage:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeletePompage = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      if (editingPompage) {
+        Alert.alert("Suppression", "Voulez-vous vraiment vous supprimer ?", [
+          {
+            text: "Annuler",
+            style: "cancel",
+          },
+          {
+            text: "Supprimer",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await supprimerPompage(editingPompage.id);
+                closeModal();
+              } catch (error) {
+                Alert.alert(
+                  "Erreur",
+                  "Impossible de se supprimer. Veuillez réessayer plus tard."
+                );
+              }
+            },
+          },
+        ]);
+      } else {
+        throw new Error("Aucune miction sélectionnée pour la suppression.");
+      }
+
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde de la miction:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -390,6 +432,11 @@ export default function PompagesScreen() {
               <Text style={styles.modalTitle}>
                 {editingPompage ? "Modifier la session" : "Nouvelle session"}
               </Text>
+              {editingPompage && (
+                <TouchableOpacity onPress={handleDeletePompage}>
+                  <FontAwesome name="trash" size={24} color="red" />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Quantité Sein Gauche */}

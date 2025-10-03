@@ -1,9 +1,14 @@
-import { ajouterMiction, modifierMiction } from "@/services/mictionsService";
+import {
+  ajouterMiction,
+  modifierMiction,
+  supprimerMiction,
+} from "@/services/mictionsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -168,6 +173,47 @@ export default function MictionsScreen({ mictions }: Props) {
     }
   };
 
+  const handleDeleteMiction = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      if (editingMiction) {
+        Alert.alert("Suppression", "Voulez-vous vraiment vous supprimer ?", [
+          {
+            text: "Annuler",
+            style: "cancel",
+          },
+          {
+            text: "Supprimer",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await supprimerMiction(editingMiction.id);
+                closeModal();
+              } catch (error) {
+                Alert.alert(
+                  "Erreur",
+                  "Impossible de se supprimer. Veuillez réessayer plus tard."
+                );
+              }
+            },
+          },
+        ]);
+      } else {
+        throw new Error("Aucune miction sélectionnée pour la suppression.");
+      }
+
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde de la miction:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
     if (selectedDate) {
@@ -220,7 +266,12 @@ export default function MictionsScreen({ mictions }: Props) {
               <Text style={styles.recentText}>Récent</Text>
             </View>
           )}
-          <FontAwesome name="edit" size={16} color="#17a2b8" style={styles.editIcon} />
+          <FontAwesome
+            name="edit"
+            size={16}
+            color="#17a2b8"
+            style={styles.editIcon}
+          />
         </View>
       </View>
     </TouchableOpacity>
@@ -308,14 +359,19 @@ export default function MictionsScreen({ mictions }: Props) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <FontAwesome 
-                name={editingMiction ? "edit" : "tint"} 
-                size={24} 
-                color="#4A90E2" 
+              <FontAwesome
+                name={editingMiction ? "edit" : "tint"}
+                size={24}
+                color="#4A90E2"
               />
               <Text style={styles.modalTitle}>
                 {editingMiction ? "Modifier la miction" : "Nouvelle miction"}
               </Text>
+              {editingMiction && (
+                <TouchableOpacity onPress={handleDeleteMiction}>
+                  <FontAwesome name="trash" size={24} color="red" />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Date & Heure */}
@@ -410,7 +466,9 @@ export default function MictionsScreen({ mictions }: Props) {
                 validateText={editingMiction ? "Mettre à jour" : "Ajouter"}
                 isLoading={isSubmitting}
                 disabled={isSubmitting}
-                loadingText={editingMiction ? "Mise à jour..." : "Ajout en cours..."}
+                loadingText={
+                  editingMiction ? "Mise à jour..." : "Ajout en cours..."
+                }
               />
             </View>
           </View>

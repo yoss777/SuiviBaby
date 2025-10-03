@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "samaye",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "sdkVersion": "53.0.0",
     "ios": {
       "supportsTablet": true

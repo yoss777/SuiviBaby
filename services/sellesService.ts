@@ -1,3 +1,4 @@
+// services/sellesService.ts
 import {
   addDoc,
   collection,
@@ -9,15 +10,23 @@ import {
   onSnapshot,
   orderBy,
   query,
-  updateDoc
+  updateDoc,
+  where
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db } from "../config/firebase";
 
-// ➕ Ajouter une selle
+const getUserId = () => {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Utilisateur non connecté");
+  return user.uid;
+};
+
 export async function ajouterSelle(data: any) {
   try {
+    const userId = getUserId();
     const ref = await addDoc(collection(db, "selles"), {
       ...data,
+      userId,
       createdAt: new Date(),
     });
     console.log("Selle ajoutée avec l'ID :", ref.id);
@@ -28,16 +37,16 @@ export async function ajouterSelle(data: any) {
   }
 }
 
-// 📖 Obtenir une selle par ID
 export async function obtenirSelle(id: string) {
   try {
+    const userId = getUserId();
     const docRef = doc(db, "selles", id);
     const docSnap = await getDoc(docRef);
     
-    if (docSnap.exists()) {
+    if (docSnap.exists() && docSnap.data().userId === userId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
-      console.log("Aucune selle trouvée avec cet ID");
+      console.log("Aucune selle trouvée avec cet ID ou accès refusé");
       return null;
     }
   } catch (e) {
@@ -46,10 +55,14 @@ export async function obtenirSelle(id: string) {
   }
 }
 
-// 📖 Obtenir toutes les selles (une seule fois)
 export async function obtenirToutesLesSelles() {
   try {
-    const q = query(collection(db, "selles"), orderBy("createdAt", "desc"));
+    const userId = getUserId();
+    const q = query(
+      collection(db, "selles"),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc")
+    );
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map((doc) => ({
@@ -62,11 +75,12 @@ export async function obtenirToutesLesSelles() {
   }
 }
 
-// 📖 Obtenir les selles avec limite
 export async function obtenirSellesAvecLimite(nombreLimit: number) {
   try {
+    const userId = getUserId();
     const q = query(
-      collection(db, "selles"), 
+      collection(db, "selles"),
+      where("userId", "==", userId),
       orderBy("createdAt", "desc"), 
       limit(nombreLimit)
     );
@@ -82,9 +96,13 @@ export async function obtenirSellesAvecLimite(nombreLimit: number) {
   }
 }
 
-// 🔄 Écouter en temps réel toutes les selles
 export function ecouterSelles(callback: (docs: any[]) => void) {
-  const q = query(collection(db, "selles"), orderBy("createdAt", "desc"));
+  const userId = getUserId();
+  const q = query(
+    collection(db, "selles"),
+    where("userId", "==", userId),
+    orderBy("createdAt", "desc")
+  );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const liste = snapshot.docs.map((doc) => ({
@@ -94,13 +112,19 @@ export function ecouterSelles(callback: (docs: any[]) => void) {
     callback(liste);
   });
 
-  return unsubscribe; // 🔥 permet d'arrêter l'écoute
+  return unsubscribe;
 }
 
-// ✏️ Modifier une selle
 export async function modifierSelle(id: string, nouveausDonnees: any) {
   try {
+    const userId = getUserId();
     const docRef = doc(db, "selles", id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+      throw new Error("Accès refusé");
+    }
+    
     await updateDoc(docRef, {
       ...nouveausDonnees,
       updatedAt: new Date(),
@@ -113,10 +137,17 @@ export async function modifierSelle(id: string, nouveausDonnees: any) {
   }
 }
 
-// 🗑️ Supprimer une selle
 export async function supprimerSelle(id: string) {
   try {
-    await deleteDoc(doc(db, "selles", id));
+    const userId = getUserId();
+    const docRef = doc(db, "selles", id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+      throw new Error("Accès refusé");
+    }
+    
+    await deleteDoc(docRef);
     console.log("Selle supprimée avec succès");
     return true;
   } catch (e) {

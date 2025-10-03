@@ -1,10 +1,10 @@
-// firebase.ts
+// config/firebase.ts
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// 🔑 Remplace par ta config Firebase Web
 const firebaseConfig = {
   apiKey: "AIzaSyBJUP-b3NPExx-4RfWFLvrbAM5pEfHvAOg",
   authDomain: "samaye-53723.firebaseapp.com",
@@ -18,7 +18,10 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// 🔹 Services Firebase
-export const auth = getAuth(app);
+// Auth avec persistance AsyncStorage pour React Native
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+});
+
 export const db = getFirestore(app);
 export const storage = getStorage(app);
