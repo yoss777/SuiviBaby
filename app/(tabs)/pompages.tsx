@@ -1,8 +1,13 @@
-import { ajouterPompage, ecouterPompages, modifierPompage, supprimerPompage } from "@/services/pompagesService";
+import {
+  ajouterPompage,
+  ecouterPompages,
+  modifierPompage,
+  supprimerPompage,
+} from "@/services/pompagesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -52,6 +57,9 @@ export default function PompagesScreen() {
   // Récupérer les paramètres de l'URL
   const { openModal } = useLocalSearchParams();
 
+    // interval ref pour la gestion du picker
+  const intervalRef = useRef<number | undefined>(undefined);
+
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
     if (openModal === "true") {
@@ -76,7 +84,41 @@ export default function PompagesScreen() {
     setGroupedPompages(grouped);
   }, [pompages]);
 
-  const groupPompagesByDay = (pompages: Pompage[]): PompageGroup[] => {
+// Nettoyage de l'intervalle lors du démontage
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  const handlePressIn = (action: () => void) => {
+    action();
+
+    let speed = 200; // Démarre lentement
+
+    const accelerate = () => {
+      action();
+      if (speed > 50) {
+        speed -= 20; // Accélère progressivement
+        clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(accelerate, speed);
+      }
+    };
+
+    intervalRef.current = setInterval(accelerate, speed);
+  };
+
+  const handlePressOut = () => {
+    // Arrête la répétition quand l'utilisateur relâche
+   if (intervalRef.current !== undefined) {
+    clearInterval(intervalRef.current);
+    intervalRef.current = undefined;
+  }
+  };
+
+    const groupPompagesByDay = (pompages: Pompage[]): PompageGroup[] => {
     const groups: { [key: string]: Pompage[] } = {};
 
     pompages.forEach((pompage) => {
@@ -129,6 +171,7 @@ export default function PompagesScreen() {
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
+
 
   const toggleExpand = (dateKey: string) => {
     const newExpandedDays = new Set(expandedDays);
@@ -232,7 +275,6 @@ export default function PompagesScreen() {
       } else {
         throw new Error("Aucune miction sélectionnée pour la suppression.");
       }
-
     } catch (error) {
       console.error("Erreur lors de la sauvegarde de la miction:", error);
     } finally {
@@ -297,7 +339,12 @@ export default function PompagesScreen() {
               <Text style={styles.recentText}>Récent</Text>
             </View>
           )}
-          <FontAwesome name="edit" size={16} color="#28a745" style={styles.editIcon} />
+          <FontAwesome
+            name="edit"
+            size={16}
+            color="#28a745"
+            style={styles.editIcon}
+          />
         </View>
       </View>
 
@@ -424,10 +471,10 @@ export default function PompagesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <FontAwesome 
-                name={editingPompage ? "edit" : "pump-medical"} 
-                size={24} 
-                color="#28a745" 
+              <FontAwesome
+                name={editingPompage ? "edit" : "pump-medical"}
+                size={24}
+                color="#28a745"
               />
               <Text style={styles.modalTitle}>
                 {editingPompage ? "Modifier la session" : "Nouvelle session"}
@@ -447,7 +494,13 @@ export default function PompagesScreen() {
                   styles.quantityButton,
                   isSubmitting && styles.quantityButtonDisabled,
                 ]}
-                onPress={() => setQuantiteGauche((q) => Math.max(0, q - 5))}
+                // onPress={() => setQuantiteGauche((q) => Math.max(0, q - 5))}
+                onPressIn={() =>
+                  handlePressIn(() =>
+                    setQuantiteGauche((q) => Math.max(0, q - 5))
+                  )
+                }
+                onPressOut={handlePressOut}
                 disabled={isSubmitting}
               >
                 <Text
@@ -465,7 +518,13 @@ export default function PompagesScreen() {
                   styles.quantityButton,
                   isSubmitting && styles.quantityButtonDisabled,
                 ]}
-                onPress={() => setQuantiteGauche((q) => q + 5)}
+                // onPress={() => setQuantiteGauche((q) => q + 5)}
+                onPressIn={() =>
+                  handlePressIn(() =>
+                    setQuantiteGauche((q) => Math.max(0, q + 5))
+                  )
+                }
+                onPressOut={handlePressOut}
                 disabled={isSubmitting}
               >
                 <Text
@@ -487,7 +546,13 @@ export default function PompagesScreen() {
                   styles.quantityButton,
                   isSubmitting && styles.quantityButtonDisabled,
                 ]}
-                onPress={() => setQuantiteDroite((q) => Math.max(0, q - 5))}
+                // onPress={() => setQuantiteDroite((q) => Math.max(0, q - 5))}
+                onPressIn={() =>
+                  handlePressIn(() =>
+                    setQuantiteDroite((q) => Math.max(0, q - 5))
+                  )
+                }
+                onPressOut={handlePressOut}
                 disabled={isSubmitting}
               >
                 <Text
@@ -505,7 +570,13 @@ export default function PompagesScreen() {
                   styles.quantityButton,
                   isSubmitting && styles.quantityButtonDisabled,
                 ]}
-                onPress={() => setQuantiteDroite((q) => q + 5)}
+                // onPress={() => setQuantiteDroite((q) => q + 5)}
+                onPressIn={() =>
+                  handlePressIn(() =>
+                    setQuantiteDroite((q) => Math.max(0, q + 5))
+                  )
+                }
+                onPressOut={handlePressOut}
                 disabled={isSubmitting}
               >
                 <Text
@@ -589,7 +660,7 @@ export default function PompagesScreen() {
               <DateTimePicker
                 value={dateHeure}
                 mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
+                display={Platform.OS === "ios" ? "spinner" : "spinner"}
                 onChange={onChangeDate}
               />
             )}
@@ -598,7 +669,7 @@ export default function PompagesScreen() {
                 value={dateHeure}
                 mode="time"
                 is24Hour={true}
-                display={Platform.OS === "ios" ? "spinner" : "default"}
+                display={Platform.OS === "ios" ? "spinner" : "spinner"}
                 onChange={onChangeTime}
               />
             )}
@@ -611,7 +682,9 @@ export default function PompagesScreen() {
                 validateText={editingPompage ? "Mettre à jour" : "Ajouter"}
                 isLoading={isSubmitting}
                 disabled={isSubmitting}
-                loadingText={editingPompage ? "Mise à jour..." : "Ajout en cours..."}
+                loadingText={
+                  editingPompage ? "Mise à jour..." : "Ajout en cours..."
+                }
               />
             </View>
           </View>

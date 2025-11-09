@@ -1,7 +1,7 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -12,7 +12,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ajouterTetee, ecouterTetees, modifierTetee, supprimerTetee } from "../../services/teteesService";
+import {
+  ajouterTetee,
+  ecouterTetees,
+  modifierTetee,
+  supprimerTetee,
+} from "../../services/teteesService";
 import ModernActionButtons from "../components/ModernActionsButton";
 
 // Interface pour typer les données (avec optionnel pour compatibilité avec anciennes données)
@@ -45,10 +50,13 @@ export default function TeteesScreen() {
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
   const [typeTetee, setTypeTetee] = useState<"seins" | "biberons">("seins");
-  const [quantite, setQuantite] = useState<number>(50);
+  const [quantite, setQuantite] = useState<number>(100);
 
   // Récupérer les paramètres de l'URL
   const { openModal } = useLocalSearchParams();
+
+  // interval ref pour la gestion du picker
+const intervalRef = useRef<number | undefined>(undefined);
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
@@ -73,6 +81,40 @@ export default function TeteesScreen() {
     setGroupedTetees(grouped);
   }, [tetees]);
 
+  // Nettoyage de l'intervalle lors du démontage
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  const handlePressIn = (action: () => void) => {
+    action();
+
+    let speed = 200; // Démarre lentement
+
+    const accelerate = () => {
+      action();
+      if (speed > 50) {
+        speed -= 20; // Accélère progressivement
+        clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(accelerate, speed);
+      }
+    };
+
+    intervalRef.current = setInterval(accelerate, speed);
+  };
+
+  const handlePressOut = () => {
+    // Arrête la répétition quand l'utilisateur relâche
+   if (intervalRef.current !== undefined) {
+    clearInterval(intervalRef.current);
+    intervalRef.current = undefined;
+  }
+  };
+
   const groupTeteesByDay = (tetees: Tetee[]): TeteeGroup[] => {
     const groups: { [key: string]: Tetee[] } = {};
 
@@ -93,13 +135,10 @@ export default function TeteesScreen() {
       .map(([dateKey, tetees]) => {
         const date = new Date(dateKey);
         // Correction : Vérification pour quantite undefined/null
-        const totalQuantity = tetees.reduce(
-          (sum, tetee) => {
-            const q = tetee.quantite;
-            return sum + (typeof q === 'number' ? q : 0);
-          },
-          0
-        );
+        const totalQuantity = tetees.reduce((sum, tetee) => {
+          const q = tetee.quantite;
+          return sum + (typeof q === "number" ? q : 0);
+        }, 0);
         const lastTetee = tetees.reduce((latest, current) =>
           (current.date?.seconds || 0) > (latest.date?.seconds || 0)
             ? current
@@ -138,7 +177,7 @@ export default function TeteesScreen() {
     const now = new Date();
     setDateHeure(new Date(now.getTime()));
     setTypeTetee("seins");
-    setQuantite(50);
+    setQuantite(100);
     setIsSubmitting(false);
     setEditingTetee(null);
     setShowModal(true);
@@ -146,15 +185,15 @@ export default function TeteesScreen() {
 
   const openEditModal = (tetee: Tetee) => {
     setDateHeure(new Date(tetee.date.seconds * 1000));
-    
+
     // Correction : Gestion si type est undefined (anciennes données)
     const safeType = tetee.type || "seins"; // Défaut à "seins" pour anciennes tétées
     setTypeTetee(safeType as "seins" | "biberons");
-    
+
     // Correction : Gestion si quantite est undefined/null
-    const safeQuantite = tetee.quantite ?? 50;
+    const safeQuantite = tetee.quantite ?? 100;
     setQuantite(safeQuantite);
-    
+
     setEditingTetee(tetee);
     setIsSubmitting(false);
     setShowModal(true);
@@ -232,15 +271,12 @@ export default function TeteesScreen() {
       } else {
         throw new Error("Aucune miction sélectionnée pour la suppression.");
       }
-
     } catch (error) {
       console.error("Erreur lors de la sauvegarde de la miction:", error);
     } finally {
       setIsSubmitting(false);
     }
   };
-
-
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
@@ -270,13 +306,14 @@ export default function TeteesScreen() {
 
   const renderTeteeItem = (tetee: Tetee, isLast: boolean = false) => {
     // Correction clé : Vérification pour éviter charAt sur undefined
-    const typeDisplay = tetee.type ? 
-      tetee.type.charAt(0).toUpperCase() + tetee.type.slice(1) : 
-      "Inconnu"; // Ou "Seins" si vous voulez mapper les anciennes valeurs
+    const typeDisplay = tetee.type
+      ? tetee.type.charAt(0).toUpperCase() + tetee.type.slice(1)
+      : "Inconnu"; // Ou "Seins" si vous voulez mapper les anciennes valeurs
 
-    const quantityDisplay = tetee.quantite !== null && tetee.quantite !== undefined ? 
-      `${tetee.quantite} ml` : 
-      "N/A";
+    const quantityDisplay =
+      tetee.quantite !== null && tetee.quantite !== undefined
+        ? `${tetee.quantite} ml`
+        : "N/A";
 
     return (
       <TouchableOpacity
@@ -300,19 +337,26 @@ export default function TeteesScreen() {
               </Text>
             </View>
             <View style={styles.infoRow}>
-              <FontAwesome name={tetee.type==="seins" ? "person-breastfeeding" : "jar-wheat"} size={16} color="#666" />
-              <Text style={styles.seinText}>
-                {typeDisplay}
-              </Text>
+              <FontAwesome
+                name={
+                  tetee.type === "seins" ? "person-breastfeeding" : "jar-wheat"
+                }
+                size={16}
+                color="#666"
+              />
+              <Text style={styles.seinText}>{typeDisplay}</Text>
             </View>
           </View>
           <View style={styles.teteeActions}>
             <View style={styles.quantityBadge}>
-              <Text style={styles.quantityText}>
-                {quantityDisplay}
-              </Text>
+              <Text style={styles.quantityText}>{quantityDisplay}</Text>
             </View>
-            <FontAwesome name="edit" size={16} color="#4A90E2" style={styles.editIcon} />
+            <FontAwesome
+              name="edit"
+              size={16}
+              color="#4A90E2"
+              style={styles.editIcon}
+            />
           </View>
         </View>
       </TouchableOpacity>
@@ -330,7 +374,8 @@ export default function TeteesScreen() {
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
               <Text style={styles.summaryText}>
-                {item.tetees.length} tétée{item.tetees.length > 1 ? "s" : ""} • {item.totalQuantity} ml total
+                {item.tetees.length} tétée{item.tetees.length > 1 ? "s" : ""} •{" "}
+                {item.totalQuantity} ml total
               </Text>
             </View>
           </View>
@@ -425,7 +470,7 @@ export default function TeteesScreen() {
                   ]}
                   onPress={() => {
                     setTypeTetee(t as "seins" | "biberons");
-                    if (t === "seins") setQuantite(50); // Réinitialiser si seins
+                    if (t === "seins") setQuantite(100); // Réinitialiser si seins
                   }}
                   disabled={isSubmitting}
                 >
@@ -451,7 +496,13 @@ export default function TeteesScreen() {
                       styles.quantityButton,
                       isSubmitting && styles.quantityButtonDisabled,
                     ]}
-                    onPress={() => setQuantite((q) => Math.max(0, q - 5))}
+                    // onPress={() => setQuantite((q) => Math.max(0, q - 5))}
+                    onPressIn={() =>
+                      handlePressIn(() =>
+                        setQuantite((q) => Math.max(0, q - 5))
+                      )
+                    }
+                    onPressOut={handlePressOut}
                     disabled={isSubmitting}
                   >
                     <Text
@@ -469,7 +520,13 @@ export default function TeteesScreen() {
                       styles.quantityButton,
                       isSubmitting && styles.quantityButtonDisabled,
                     ]}
-                    onPress={() => setQuantite((q) => q + 5)}
+                    // onPress={() => setQuantite((q) => q + 5)}
+                    onPressIn={() =>
+                      handlePressIn(() =>
+                        setQuantite((q) => Math.max(0, q + 5))
+                      )
+                    }
+                    onPressOut={handlePressOut}
                     disabled={isSubmitting}
                   >
                     <Text
@@ -559,7 +616,7 @@ export default function TeteesScreen() {
               <DateTimePicker
                 value={dateHeure}
                 mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
+                display={Platform.OS === "ios" ? "spinner" : "spinner"}
                 onChange={onChangeDate}
               />
             )}
@@ -568,7 +625,7 @@ export default function TeteesScreen() {
                 value={dateHeure}
                 mode="time"
                 is24Hour={true}
-                display={Platform.OS === "ios" ? "spinner" : "default"}
+                display={Platform.OS === "ios" ? "spinner" : "spinner"}
                 onChange={onChangeTime}
               />
             )}
@@ -581,7 +638,9 @@ export default function TeteesScreen() {
                 validateText={editingTetee ? "Mettre à jour" : "Ajouter"}
                 isLoading={isSubmitting}
                 disabled={isSubmitting}
-                loadingText={editingTetee ? "Mise à jour..." : "Ajout en cours..."}
+                loadingText={
+                  editingTetee ? "Mise à jour..." : "Ajout en cours..."
+                }
               />
             </View>
           </View>

@@ -205,82 +205,90 @@ export default function HomeDashboard() {
     const biberonsToday = todayTetees.filter((t) => t.type === "biberons");
 
     // Calculs pour tétées seins
-    const lastSeins = seinsToday.length > 0
-      ? seinsToday.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
-        )
-      : null;
+    const lastSeins =
+      seinsToday.length > 0
+        ? seinsToday.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest
+          )
+        : null;
 
     // Calculs pour tétées biberons
     const biberonsQuantity = biberonsToday.reduce(
       (sum, t) => sum + (t.quantite || 0),
       0
     );
-    const lastBiberons = biberonsToday.length > 0
-      ? biberonsToday.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
-        )
-      : null;
+    const lastBiberons =
+      biberonsToday.length > 0
+        ? biberonsToday.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest
+          )
+        : null;
 
     // Calculs totaux pour tétées
     const teteesTotalQuantity = biberonsQuantity; // Seuls les biberons ont une quantité mesurable
-    const lastTeteeOverall = todayTetees.length > 0
-      ? todayTetees.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
-        )
-      : null;
+    const lastTeteeOverall =
+      todayTetees.length > 0
+        ? todayTetees.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest
+          )
+        : null;
 
     // Calculs pour pompages
     const pompagesQuantity = todayPompages.reduce(
       (sum, p) => sum + ((p.quantiteDroite || 0) + (p.quantiteGauche || 0)),
       0
     );
-    const lastPompage = todayPompages.length > 0
-      ? todayPompages.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
-        )
-      : null;
+    const lastPompage =
+      todayPompages.length > 0
+        ? todayPompages.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest
+          )
+        : null;
 
     // Dernières activités
-    const lastMiction = todayMictions.length > 0
-      ? todayMictions.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
-        )
-      : null;
+    const lastMiction =
+      todayMictions.length > 0
+        ? todayMictions.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest
+          )
+        : null;
 
-    const lastSelle = todaySelles.length > 0
-      ? todaySelles.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
-        )
-      : null;
+    const lastSelle =
+      todaySelles.length > 0
+        ? todaySelles.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest
+          )
+        : null;
 
-    const lastVitamine = todayVitamines.length > 0
-      ? todayVitamines.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
-        )
-      : null;
+    const lastVitamine =
+      todayVitamines.length > 0
+        ? todayVitamines.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest
+          )
+        : null;
 
-    const lastVaccin = todayVaccins.length > 0
-      ? todayVaccins.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
-        )
-      : null;
+    const lastVaccin =
+      todayVaccins.length > 0
+        ? todayVaccins.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest
+          )
+        : null;
 
     const formatTime = (item: any) => {
       if (!item?.date?.seconds) return undefined;
@@ -416,51 +424,100 @@ export default function HomeDashboard() {
     lastActivity,
     lastTimestamp,
     onPress,
-  }: any) => (
-    <TouchableOpacity
-      activeOpacity={0.7}
-      onPress={onPress}
-      style={styles.statsCard}
-    >
-      <View style={styles.statsHeader}>
-        <FontAwesome name={icon} size={20} color={color} />
-        <Text style={styles.statsTitle}>{title}</Text>
-      </View>
-      <Text style={[styles.statsValue, { color }]}>
-        {value} {unit}
-      </Text>
-      {lastActivity && (
-        <Text style={styles.statsLastActivity}>
-          Dernière fois: {lastActivity}
-        </Text>
-      )}
-      {lastTimestamp && (
-        <Text style={styles.statsTimeSince}>
-          {getTimeSinceLastActivity(lastTimestamp)}
-        </Text>
-      )}
-    </TouchableOpacity>
-  );
+  }: any) => {
+    const fourHours = 4 * 60 * 60 * 1000; // 3 heures en millisecondes
 
+    return (
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={onPress}
+        style={styles.statsCard}
+      >
+        <View style={styles.statsHeader}>
+          <FontAwesome name={icon} size={20} color={color} />
+          <Text style={styles.statsTitle}>{title}</Text>
+        </View>
+        <Text style={[styles.statsValue, { color }]}>
+          {value} {unit}
+        </Text>
+        {lastActivity && (
+          <Text style={styles.statsLastActivity}>
+            Dernière fois: {lastActivity}
+          </Text>
+        )}
+        {title === "Pompages" && lastTimestamp > fourHours ? (
+          <Text style={[styles.statsTimeSince, { color: "#dc3545" }]}>
+            {getTimeSinceLastActivity(lastTimestamp)}
+          </Text>
+        ) : (
+          <Text style={styles.statsTimeSince}>
+            {getTimeSinceLastActivity(lastTimestamp)}
+          </Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
   const LoadingCard = () => (
     <View style={styles.statsCard}>
       <View style={[styles.statsHeader, { opacity: 0.5 }]}>
-        <View style={{ width: 20, height: 20, backgroundColor: '#e9ecef', borderRadius: 10 }} />
-        <View style={{ width: 60, height: 12, backgroundColor: '#e9ecef', borderRadius: 6 }} />
+        <View
+          style={{
+            width: 20,
+            height: 20,
+            backgroundColor: "#e9ecef",
+            borderRadius: 10,
+          }}
+        />
+        <View
+          style={{
+            width: 60,
+            height: 12,
+            backgroundColor: "#e9ecef",
+            borderRadius: 6,
+          }}
+        />
       </View>
-      <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 10 }}>
+      <View
+        style={{
+          alignItems: "center",
+          justifyContent: "center",
+          paddingVertical: 10,
+        }}
+      >
         <ActivityIndicator size="small" color="#6c757d" />
       </View>
     </View>
   );
 
   const LoadingQuickActionCard = () => (
-    <View style={[styles.quickActionCard, { borderLeftColor: '#e9ecef' }]}>
+    <View style={[styles.quickActionCard, { borderLeftColor: "#e9ecef" }]}>
       <View style={styles.quickActionHeader}>
-        <View style={{ width: 24, height: 24, backgroundColor: '#e9ecef', borderRadius: 12 }} />
+        <View
+          style={{
+            width: 24,
+            height: 24,
+            backgroundColor: "#e9ecef",
+            borderRadius: 12,
+          }}
+        />
         <View style={styles.quickActionContent}>
-          <View style={{ width: 120, height: 14, backgroundColor: '#e9ecef', borderRadius: 7, marginBottom: 4 }} />
-          <View style={{ width: 80, height: 12, backgroundColor: '#e9ecef', borderRadius: 6 }} />
+          <View
+            style={{
+              width: 120,
+              height: 14,
+              backgroundColor: "#e9ecef",
+              borderRadius: 7,
+              marginBottom: 4,
+            }}
+          />
+          <View
+            style={{
+              width: 80,
+              height: 12,
+              backgroundColor: "#e9ecef",
+              borderRadius: 6,
+            }}
+          />
         </View>
         <ActivityIndicator size="small" color="#6c757d" />
       </View>
@@ -484,12 +541,11 @@ export default function HomeDashboard() {
       {/* Résumé du jour */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
-        
-        {/* Tétées - Vue d'ensemble */}
+
+        {/* Tétées & Pompages - Vue d'ensemble */}
         <View style={styles.statsGrid}>
           {loading.tetees ? (
             <>
-              <LoadingCard />
               <LoadingCard />
             </>
           ) : (
@@ -497,13 +553,46 @@ export default function HomeDashboard() {
               <StatsCard
                 title="Tétées total"
                 value={todayStats.tetees.total.count}
-                unit={todayStats.tetees.total.count > 1 ? "sessions" : "session"}
+                unit={
+                  todayStats.tetees.total.count > 1 ? "sessions" : "session"
+                }
                 icon="baby"
                 color="#4A90E2"
                 lastActivity={todayStats.tetees.total.lastTime}
                 lastTimestamp={todayStats.tetees.total.lastTimestamp}
                 onPress={() => router.push("/tetees")}
               />
+            </>
+          )}
+
+          {loading.pompages ? (
+            <>
+              <LoadingCard />
+            </>
+          ) : (
+            <>
+              <StatsCard
+                title="Pompages"
+                value={todayStats.pompages.count}
+                unit={todayStats.pompages.count > 1 ? "sessions" : "session"}
+                icon="pump-medical"
+                color="#28a745"
+                lastActivity={todayStats.pompages.lastTime}
+                lastTimestamp={todayStats.pompages.lastTimestamp}
+                onPress={() => router.push("/pompages")}
+              />
+            </>
+          )}
+        </View>
+
+        {/* Tétées & Pompages - Volumétrie */}
+        <View style={styles.statsGrid}>
+          {loading.tetees ? (
+            <>
+              <LoadingCard />
+            </>
+          ) : (
+            <>
               <StatsCard
                 title="Volume total"
                 value={todayStats.tetees.total.quantity}
@@ -511,6 +600,22 @@ export default function HomeDashboard() {
                 icon="droplet"
                 color="#4A90E2"
                 onPress={() => router.push("/stats?tab=tetees")}
+              />
+            </>
+          )}
+          {loading.pompages ? (
+            <>
+              <LoadingCard />
+            </>
+          ) : (
+            <>
+              <StatsCard
+                title="Volume tiré"
+                value={todayStats.pompages.quantity}
+                unit="ml"
+                icon="cloud-arrow-down"
+                color="#28a745"
+                onPress={() => router.push("/stats?tab=pompages")}
               />
             </>
           )}
@@ -549,42 +654,13 @@ export default function HomeDashboard() {
           )}
         </View>
 
-        {/* Pompages */}
-        <View style={styles.statsGrid}>
-          {loading.pompages ? (
-            <>
-              <LoadingCard />
-              <LoadingCard />
-            </>
-          ) : (
-            <>
-              <StatsCard
-                title="Pompages"
-                value={todayStats.pompages.count}
-                unit={todayStats.pompages.count > 1 ? "sessions" : "session"}
-                icon="pump-medical"
-                color="#28a745"
-                lastActivity={todayStats.pompages.lastTime}
-                lastTimestamp={todayStats.pompages.lastTimestamp}
-                onPress={() => router.push("/pompages")}
-              />
-              <StatsCard
-                title="Volume tiré"
-                value={todayStats.pompages.quantity}
-                unit="ml"
-                icon="cloud-arrow-down"
-                color="#28a745"
-                onPress={() => router.push("/stats?tab=pompages")}
-              />
-            </>
-          )}
-        </View>
-
         {/* Immunité et soins */}
         <View style={styles.statsGrid}>
           {loading.vitamines || loading.vaccins ? (
             <>
-              {loading.vitamines ? <LoadingCard /> : 
+              {loading.vitamines ? (
+                <LoadingCard />
+              ) : (
                 <StatsCard
                   title="Vitamines"
                   value={todayStats.vitamines.count}
@@ -595,8 +671,10 @@ export default function HomeDashboard() {
                   lastTimestamp={todayStats.vitamines.lastTimestamp}
                   onPress={() => router.push("/immunos?tab=vitamines")}
                 />
-              }
-              {loading.vaccins ? <LoadingCard /> :
+              )}
+              {loading.vaccins ? (
+                <LoadingCard />
+              ) : (
                 <StatsCard
                   title="Vaccins"
                   value={todayStats.vaccins.count}
@@ -607,7 +685,7 @@ export default function HomeDashboard() {
                   lastTimestamp={todayStats.vaccins.lastTimestamp}
                   onPress={() => router.push("/immunos?tab=vaccins")}
                 />
-              }
+              )}
             </>
           ) : (
             <>
@@ -642,7 +720,9 @@ export default function HomeDashboard() {
         <View style={styles.statsGrid}>
           {loading.mictions || loading.selles ? (
             <>
-              {loading.mictions ? <LoadingCard /> : 
+              {loading.mictions ? (
+                <LoadingCard />
+              ) : (
                 <StatsCard
                   title="Mictions"
                   value={todayStats.mictions.count}
@@ -653,8 +733,10 @@ export default function HomeDashboard() {
                   lastTimestamp={todayStats.mictions.lastTimestamp}
                   onPress={() => router.push("/excretions?tab=mictions")}
                 />
-              }
-              {loading.selles ? <LoadingCard /> :
+              )}
+              {loading.selles ? (
+                <LoadingCard />
+              ) : (
                 <StatsCard
                   title="Selles"
                   value={todayStats.selles.count}
@@ -665,7 +747,7 @@ export default function HomeDashboard() {
                   lastTimestamp={todayStats.selles.lastTimestamp}
                   onPress={() => router.push("/excretions?tab=selles")}
                 />
-              }
+              )}
             </>
           ) : (
             <>
@@ -761,7 +843,9 @@ export default function HomeDashboard() {
                   ? `Dernière: ${todayStats.selles.lastTime}`
                   : "Aucune aujourd'hui"
               }
-              onPress={() => router.push("/excretions?tab=selles&openModal=true")}
+              onPress={() =>
+                router.push("/excretions?tab=selles&openModal=true")
+              }
             />
           )}
           {loading.vitamines ? (
@@ -777,7 +861,9 @@ export default function HomeDashboard() {
                   ? `Dernière: ${todayStats.vitamines.lastTime}`
                   : "Aucune aujourd'hui"
               }
-              onPress={() => router.push("/immunos?tab=vitamines&openModal=true")}
+              onPress={() =>
+                router.push("/immunos?tab=vitamines&openModal=true")
+              }
             />
           )}
           {loading.vaccins ? (

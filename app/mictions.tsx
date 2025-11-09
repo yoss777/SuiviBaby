@@ -444,7 +444,7 @@ export default function MictionsScreen({ mictions }: Props) {
               <DateTimePicker
                 value={dateHeure}
                 mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
+                display={Platform.OS === "ios" ? "spinner" : "spinner"}
                 onChange={onChangeDate}
               />
             )}
@@ -453,7 +453,7 @@ export default function MictionsScreen({ mictions }: Props) {
                 value={dateHeure}
                 mode="time"
                 is24Hour={true}
-                display={Platform.OS === "ios" ? "spinner" : "default"}
+                display={Platform.OS === "ios" ? "spinner" : "spinner"}
                 onChange={onChangeTime}
               />
             )}
