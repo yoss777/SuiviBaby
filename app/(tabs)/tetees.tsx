@@ -616,7 +616,7 @@ const intervalRef = useRef<number | undefined>(undefined);
               <DateTimePicker
                 value={dateHeure}
                 mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "spinner"}
+                display={Platform.OS === "ios" ? "spinner" : "default"}
                 onChange={onChangeDate}
               />
             )}
@@ -625,7 +625,7 @@ const intervalRef = useRef<number | undefined>(undefined);
                 value={dateHeure}
                 mode="time"
                 is24Hour={true}
-                display={Platform.OS === "ios" ? "spinner" : "spinner"}
+                display={Platform.OS === "ios" ? "spinner" : "default"}
                 onChange={onChangeTime}
               />
             )}

@@ -660,7 +660,7 @@ export default function PompagesScreen() {
               <DateTimePicker
                 value={dateHeure}
                 mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "spinner"}
+                display={Platform.OS === "ios" ? "spinner" : "default"}
                 onChange={onChangeDate}
               />
             )}
@@ -669,7 +669,7 @@ export default function PompagesScreen() {
                 value={dateHeure}
                 mode="time"
                 is24Hour={true}
-                display={Platform.OS === "ios" ? "spinner" : "spinner"}
+                display={Platform.OS === "ios" ? "spinner" : "default"}
                 onChange={onChangeTime}
               />
             )}

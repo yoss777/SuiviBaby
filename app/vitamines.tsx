@@ -422,7 +422,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
               <DateTimePicker
                 value={dateHeure}
                 mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "spinner"}
+                display={Platform.OS === "ios" ? "spinner" : "default"}
                 onChange={onChangeDate}
               />
             )}
@@ -431,7 +431,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
                 value={dateHeure}
                 mode="time"
                 is24Hour={true}
-                display={Platform.OS === "ios" ? "spinner" : "spinner"}
+                display={Platform.OS === "ios" ? "spinner" : "default"}
                 onChange={onChangeTime}
               />
             )}
