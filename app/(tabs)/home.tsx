@@ -426,6 +426,7 @@ export default function HomeDashboard() {
     onPress,
   }: any) => {
     const fourHours = 4 * 60 * 60 * 1000; // 3 heures en millisecondes
+    const lastSessionDate = currentTime.getTime() - (lastTimestamp || 0);
 
     return (
       <TouchableOpacity
@@ -445,14 +446,16 @@ export default function HomeDashboard() {
             Dernière fois: {lastActivity}
           </Text>
         )}
-        {title === "Pompages" && lastTimestamp > fourHours ? (
+        {title === "Pompages" && lastSessionDate > fourHours ? (
           <Text style={[styles.statsTimeSince, { color: "#dc3545" }]}>
             {getTimeSinceLastActivity(lastTimestamp)}
           </Text>
         ) : (
-          <Text style={styles.statsTimeSince}>
-            {getTimeSinceLastActivity(lastTimestamp)}
-          </Text>
+          lastTimestamp && (
+            <Text style={styles.statsTimeSince}>
+              {getTimeSinceLastActivity(lastTimestamp)}
+            </Text>
+          )
         )}
       </TouchableOpacity>
     );
