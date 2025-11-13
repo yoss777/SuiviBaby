@@ -21,6 +21,7 @@ import ModernActionButtons from "./components/ModernActionsButton";
 
 type Props = {
   selles: any[];
+  onEditSelle?: (selle: Selle) => void;
 };
 
 // Interface pour typer les données
@@ -37,7 +38,7 @@ interface SelleGroup {
   lastSelle: Selle;
 }
 
-export default function SellesScreen({ selles }: Props) {
+export default function SellesScreen({ selles, onEditSelle }: Props) {
   const [groupedSelles, setGroupedSelles] = useState<SelleGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -54,15 +55,15 @@ export default function SellesScreen({ selles }: Props) {
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
-    if (openModal === "true") {
+    if (openModal === "true" && onEditSelle) {
       const timer = setTimeout(() => {
         openModalHandler();
-        router.replace("/excretions");
+        router.replace("/excretions?openModal=true&tab=selles");
       }, 100);
 
       return () => clearTimeout(timer);
     }
-  }, [openModal]);
+  }, [openModal, onEditSelle]);
 
   // Regroupement par jour
   useEffect(() => {
@@ -323,12 +324,7 @@ export default function SellesScreen({ selles }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
-          <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Nouvelle selle</Text>
-        </TouchableOpacity>
-      </View>
+      {/* <View style={styles.header} /> */}
 
       <FlatList
         data={groupedSelles}

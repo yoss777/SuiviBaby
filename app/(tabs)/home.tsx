@@ -425,7 +425,7 @@ export default function HomeDashboard() {
     lastTimestamp,
     onPress,
   }: any) => {
-    const fourHours = 4 * 60 * 60 * 1000; // 3 heures en millisecondes
+    const fourHours = 4 * 60 * 60 * 1000; // 4 heures en millisecondes
     const lastSessionDate = currentTime.getTime() - (lastTimestamp || 0);
 
     return (
@@ -781,13 +781,13 @@ export default function HomeDashboard() {
 
       {/* Actions rapides */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Actions rapides</Text>
+        <Text style={styles.sectionTitle}>Actions rapides - Ajouter</Text>
         <View style={styles.quickActionsContainer}>
           {loading.tetees ? (
             <LoadingQuickActionCard />
           ) : (
             <QuickActionCard
-              title="Nouvelle tétée"
+              title="Tétée"
               icon="baby"
               color="#4A90E2"
               count={todayStats.tetees.total.count}

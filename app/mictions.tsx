@@ -21,6 +21,7 @@ import ModernActionButtons from "./components/ModernActionsButton";
 
 type Props = {
   mictions: any[];
+  onEditMiction?: (miction: Miction) => void;
 };
 
 // Interface pour typer les données
@@ -37,7 +38,7 @@ interface MictionGroup {
   lastMiction: Miction;
 }
 
-export default function MictionsScreen({ mictions }: Props) {
+export default function MictionsScreen({ mictions, onEditMiction }: Props) {
   const [groupedMictions, setGroupedMictions] = useState<MictionGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -54,10 +55,10 @@ export default function MictionsScreen({ mictions }: Props) {
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
-    if (openModal === "true") {
+    if (openModal === "true" && onEditMiction) {
       const timer = setTimeout(() => {
         openModalHandler();
-        router.replace("/excretions");
+        router.replace("/excretions?openModal=true");
       }, 100);
 
       return () => clearTimeout(timer);
@@ -325,12 +326,7 @@ export default function MictionsScreen({ mictions }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
-          <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Nouvelle miction</Text>
-        </TouchableOpacity>
-      </View>
+      {/* <View style={styles.header} /> */}
 
       <FlatList
         data={groupedMictions}
