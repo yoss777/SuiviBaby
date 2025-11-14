@@ -58,12 +58,12 @@ export default function MictionsScreen({ mictions, onEditMiction }: Props) {
     if (openModal === "true" && onEditMiction) {
       const timer = setTimeout(() => {
         openModalHandler();
-        router.replace("/excretions?openModal=true");
+        router.replace("/excretions?openModal=true&tab=mictions");
       }, 100);
 
       return () => clearTimeout(timer);
     }
-  }, [openModal]);
+  }, [openModal, onEditMiction]);
 
   // Regroupement par jour
   useEffect(() => {
@@ -207,7 +207,6 @@ export default function MictionsScreen({ mictions, onEditMiction }: Props) {
       } else {
         throw new Error("Aucune miction sélectionnée pour la suppression.");
       }
-
     } catch (error) {
       console.error("Erreur lors de la sauvegarde de la miction:", error);
     } finally {
@@ -290,8 +289,7 @@ export default function MictionsScreen({ mictions, onEditMiction }: Props) {
             <View style={styles.summaryInfo}>
               <FontAwesome name="water" size={14} color="#666" />
               <Text style={styles.summaryText}>
-                {item.mictions.length} miction
-                {item.mictions.length > 1 ? "s" : ""}
+                {item.mictions.length} miction{item.mictions.length > 1 ? "s" : ""}
               </Text>
             </View>
           </View>

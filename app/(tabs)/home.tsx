@@ -563,7 +563,7 @@ export default function HomeDashboard() {
                 color="#4A90E2"
                 lastActivity={todayStats.tetees.total.lastTime}
                 lastTimestamp={todayStats.tetees.total.lastTimestamp}
-                onPress={() => router.push("/tetees")}
+                onPress={() => router.push("/stats?tab=tetees")}
               />
             </>
           )}
@@ -576,48 +576,12 @@ export default function HomeDashboard() {
             <>
               <StatsCard
                 title="Pompages"
-                value={todayStats.pompages.count}
-                unit={todayStats.pompages.count > 1 ? "sessions" : "session"}
+                value={`${todayStats.pompages.count} • ${todayStats.pompages.quantity}`}
+                unit="ml"
                 icon="pump-medical"
                 color="#28a745"
                 lastActivity={todayStats.pompages.lastTime}
                 lastTimestamp={todayStats.pompages.lastTimestamp}
-                onPress={() => router.push("/pompages")}
-              />
-            </>
-          )}
-        </View>
-
-        {/* Tétées & Pompages - Volumétrie */}
-        <View style={styles.statsGrid}>
-          {loading.tetees ? (
-            <>
-              <LoadingCard />
-            </>
-          ) : (
-            <>
-              <StatsCard
-                title="Volume total"
-                value={todayStats.tetees.total.quantity}
-                unit="ml"
-                icon="droplet"
-                color="#4A90E2"
-                onPress={() => router.push("/stats?tab=tetees")}
-              />
-            </>
-          )}
-          {loading.pompages ? (
-            <>
-              <LoadingCard />
-            </>
-          ) : (
-            <>
-              <StatsCard
-                title="Volume tiré"
-                value={todayStats.pompages.quantity}
-                unit="ml"
-                icon="cloud-arrow-down"
-                color="#28a745"
                 onPress={() => router.push("/stats?tab=pompages")}
               />
             </>
@@ -879,7 +843,7 @@ export default function HomeDashboard() {
               count={todayStats.vaccins.count}
               subtitle={
                 todayStats.vaccins.lastTime
-                  ? `Dernière: ${todayStats.vaccins.lastTime}`
+                  ? `Dernier: ${todayStats.vaccins.lastTime}`
                   : "Aucun aujourd'hui"
               }
               onPress={() => router.push("/immunos?tab=vaccins&openModal=true")}

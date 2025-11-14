@@ -320,7 +320,7 @@ export default function PompagesScreen() {
         <View style={styles.timeContainer}>
           <FontAwesome
             name="clock"
-            size={14}
+            size={16}
             color={isLast ? "#28a745" : "#666"}
           />
           <Text style={[styles.timeText, isLast && styles.lastTimeText]}>

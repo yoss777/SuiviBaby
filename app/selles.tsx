@@ -251,7 +251,7 @@ export default function SellesScreen({ selles, onEditSelle }: Props) {
       <View style={styles.selleContent}>
         <FontAwesome
           name="clock"
-          size={12}
+          size={16}
           color={isLast ? "#dc3545" : "#666"}
         />
         <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
@@ -287,7 +287,7 @@ export default function SellesScreen({ selles, onEditSelle }: Props) {
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
-              <FontAwesome name="circle" size={12} color="#666" />
+              <FontAwesome name="circle" size={14} color="#666" />
               <Text style={styles.summaryText}>
                 {item.selles.length} selle{item.selles.length > 1 ? "s" : ""}
               </Text>
