@@ -582,7 +582,7 @@ export default function HomeDashboard() {
                 color="#28a745"
                 lastActivity={todayStats.pompages.lastTime}
                 lastTimestamp={todayStats.pompages.lastTimestamp}
-                onPress={() => router.push("/stats?tab=pompages")}
+                onPress={() => router.push("/pompages?openModal=true")}
               />
             </>
           )}

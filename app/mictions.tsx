@@ -5,7 +5,7 @@ import {
 } from "@/services/mictionsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
@@ -54,16 +54,16 @@ export default function MictionsScreen({ mictions, onEditMiction }: Props) {
   const { openModal } = useLocalSearchParams();
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
-  useEffect(() => {
-    if (openModal === "true" && onEditMiction) {
-      const timer = setTimeout(() => {
-        openModalHandler();
-        router.replace("/excretions?openModal=true&tab=mictions");
-      }, 100);
+  // useEffect(() => {
+  //   if (openModal === "true" && onEditMiction) {
+  //     const timer = setTimeout(() => {
+  //       openModalHandler();
+  //       router.replace("/excretions?openModal=true&tab=mictions");
+  //     }, 100);
 
-      return () => clearTimeout(timer);
-    }
-  }, [openModal, onEditMiction]);
+  //     return () => clearTimeout(timer);
+  //   }
+  // }, [openModal, onEditMiction]);
 
   // Regroupement par jour
   useEffect(() => {

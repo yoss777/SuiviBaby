@@ -5,7 +5,7 @@ import {
 } from "@/services/sellesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
@@ -54,16 +54,16 @@ export default function SellesScreen({ selles, onEditSelle }: Props) {
   const { openModal } = useLocalSearchParams();
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
-  useEffect(() => {
-    if (openModal === "true" && onEditSelle) {
-      const timer = setTimeout(() => {
-        openModalHandler();
-        router.replace("/excretions?openModal=true&tab=selles");
-      }, 100);
+  // useEffect(() => {
+  //   if (openModal === "true" && onEditSelle) {
+  //     const timer = setTimeout(() => {
+  //       openModalHandler();
+  //       router.replace("/excretions?openModal=true&tab=selles");
+  //     }, 100);
 
-      return () => clearTimeout(timer);
-    }
-  }, [openModal, onEditSelle]);
+  //     return () => clearTimeout(timer);
+  //   }
+  // }, [openModal, onEditSelle]);
 
   // Regroupement par jour
   useEffect(() => {
