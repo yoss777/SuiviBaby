@@ -32,6 +32,14 @@ export function CustomDrawerContent(props: any) {
     setSearchQuery("");
   }, [pathname]);
 
+  // Rediriger vers explore si tous les enfants sont masqués
+  useEffect(() => {
+    if (children.length === 0 && pathname.includes('/baby')) {
+      console.log('[CustomDrawer] Tous les enfants masqués, redirection vers explore');
+      router.replace('/explore');
+    }
+  }, [children.length, pathname]);
+
   // Calculate baby's age in years and months
   const calculateAge = (birthDate: string) => {
     const [day, month, year] = birthDate.split("/").map(Number);
@@ -72,33 +80,6 @@ export function CustomDrawerContent(props: any) {
     ]);
   };
 
-  const handleSearchButtonClick = () => {
-    setIsSearchActive(true);
-    // Focus automatiquement le TextInput pour ouvrir le clavier
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
-  };
-
-  const handleSearch = () => {
-    if (searchQuery.trim()) {
-      router.push({
-        pathname: "/(drawer)/mediscope",
-        params: { search: searchQuery.trim() },
-      });
-      // Réinitialiser après la recherche
-      setSearchQuery("");
-      setIsSearchActive(false);
-    }
-  };
-
-  const handleBlur = () => {
-    // Si le champ est vide au blur, revenir au bouton
-    if (!searchQuery.trim()) {
-      setIsSearchActive(false);
-    }
-  };
-
   const handleHideChild = (childId: string, childName: string) => {
     setChildToHide({ id: childId, name: childName });
     setShowHideModal(true);
@@ -111,6 +92,8 @@ export function CustomDrawerContent(props: any) {
       await masquerEnfant(childToHide.id);
       setShowHideModal(false);
       setChildToHide(null);
+      
+      // Si c'était le dernier enfant visible, la redirection se fera via useEffect
     } catch (error) {
       Alert.alert('Erreur', 'Impossible de masquer l\'enfant.');
     }
@@ -267,7 +250,7 @@ export function CustomDrawerContent(props: any) {
             <Text style={[styles.modalSubtitle, { color: Colors[colorScheme].text }]}>
               Êtes-vous sûr de vouloir masquer <Text style={styles.childNameInModal}>{childToHide?.name}</Text> de votre liste de suivi ?
               {'\n\n'}
-              L'enfant restera accessible aux autres parents et vous pourrez le réafficher à tout moment depuis les paramètres.
+              L&apos;enfant restera accessible aux autres parents et vous pourrez le réafficher à tout moment depuis les paramètres.
             </Text>
 
             <View style={styles.modalButtons}>
@@ -329,11 +312,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  babySection: {
-    // borderTopWidth: 1,
-    // borderTopColor: "#e0e0e0",
-    // paddingTop: 12,
-  },
+  babySection: {},
   childAvatar: {
     width: 24,
     height: 24,
@@ -417,9 +396,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-  searchInputWrapper: {
-    // Même style que searchButton, pas besoin d'override
-  },
+  searchInputWrapper: {},
   searchInput: {
     flex: 1,
     fontSize: 13,
