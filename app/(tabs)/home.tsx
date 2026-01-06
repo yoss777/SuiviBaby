@@ -492,41 +492,6 @@ export default function HomeDashboard() {
     </View>
   );
 
-  const LoadingQuickActionCard = () => (
-    <View style={[styles.quickActionCard, { borderLeftColor: "#e9ecef" }]}>
-      <View style={styles.quickActionHeader}>
-        <View
-          style={{
-            width: 24,
-            height: 24,
-            backgroundColor: "#e9ecef",
-            borderRadius: 12,
-          }}
-        />
-        <View style={styles.quickActionContent}>
-          <View
-            style={{
-              width: 120,
-              height: 14,
-              backgroundColor: "#e9ecef",
-              borderRadius: 7,
-              marginBottom: 4,
-            }}
-          />
-          <View
-            style={{
-              width: 80,
-              height: 12,
-              backgroundColor: "#e9ecef",
-              borderRadius: 6,
-            }}
-          />
-        </View>
-        <ActivityIndicator size="small" color="#6c757d" />
-      </View>
-    </View>
-  );
-
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* En-tête avec salutation */}
@@ -605,7 +570,7 @@ export default function HomeDashboard() {
                 color="#E91E63"
                 lastActivity={todayStats.tetees.seins.lastTime}
                 lastTimestamp={todayStats.tetees.seins.lastTimestamp}
-                onPress={() => router.push("/tetees")}
+                onPress={() => router.push("/tetees?tab=seins&openModal=true")}
               />
               <StatsCard
                 title="Biberons"
@@ -615,7 +580,9 @@ export default function HomeDashboard() {
                 color="#FF5722"
                 lastActivity={todayStats.tetees.biberons.lastTime}
                 lastTimestamp={todayStats.tetees.biberons.lastTimestamp}
-                onPress={() => router.push("/tetees")}
+                onPress={() =>
+                  router.push("/tetees?tab=biberons&openModal=true")
+                }
               />
             </>
           )}
@@ -623,60 +590,35 @@ export default function HomeDashboard() {
 
         {/* Immunité et soins */}
         <View style={styles.statsGrid}>
-          {loading.vitamines || loading.vaccins ? (
-            <>
-              {loading.vitamines ? (
-                <LoadingCard />
-              ) : (
-                <StatsCard
-                  title="Vitamines"
-                  value={todayStats.vitamines.count}
-                  unit={todayStats.vitamines.count > 1 ? "prises" : "prise"}
-                  icon="pills"
-                  color="#FF9800"
-                  lastActivity={todayStats.vitamines.lastTime}
-                  lastTimestamp={todayStats.vitamines.lastTimestamp}
-                  onPress={() => router.push("/immunos?tab=vitamines")}
-                />
-              )}
-              {loading.vaccins ? (
-                <LoadingCard />
-              ) : (
-                <StatsCard
-                  title="Vaccins"
-                  value={todayStats.vaccins.count}
-                  unit={todayStats.vaccins.count > 1 ? "reçus" : "reçu"}
-                  icon="syringe"
-                  color="#9C27B0"
-                  lastActivity={todayStats.vaccins.lastTime}
-                  lastTimestamp={todayStats.vaccins.lastTimestamp}
-                  onPress={() => router.push("/immunos?tab=vaccins")}
-                />
-              )}
-            </>
+          {loading.vitamines ? (
+            <LoadingCard />
           ) : (
-            <>
-              <StatsCard
-                title="Vitamines"
-                value={todayStats.vitamines.count}
-                unit={todayStats.vitamines.count > 1 ? "prises" : "prise"}
-                icon="pills"
-                color="#FF9800"
-                lastActivity={todayStats.vitamines.lastTime}
-                lastTimestamp={todayStats.vitamines.lastTimestamp}
-                onPress={() => router.push("/immunos?tab=vitamines")}
-              />
-              <StatsCard
-                title="Vaccins"
-                value={todayStats.vaccins.count}
-                unit={todayStats.vaccins.count > 1 ? "reçus" : "reçu"}
-                icon="syringe"
-                color="#9C27B0"
-                lastActivity={todayStats.vaccins.lastTime}
-                lastTimestamp={todayStats.vaccins.lastTimestamp}
-                onPress={() => router.push("/immunos?tab=vaccins")}
-              />
-            </>
+            <StatsCard
+              title="Vitamines"
+              value={todayStats.vitamines.count}
+              unit={todayStats.vitamines.count > 1 ? "prises" : "prise"}
+              icon="pills"
+              color="#FF9800"
+              lastActivity={todayStats.vitamines.lastTime}
+              lastTimestamp={todayStats.vitamines.lastTimestamp}
+              onPress={() =>
+                router.push("/immunos?tab=vitamines&openModal=true")
+              }
+            />
+          )}
+          {loading.vaccins ? (
+            <LoadingCard />
+          ) : (
+            <StatsCard
+              title="Vaccins"
+              value={todayStats.vaccins.count}
+              unit={todayStats.vaccins.count > 1 ? "reçus" : "reçu"}
+              icon="syringe"
+              color="#9C27B0"
+              lastActivity={todayStats.vaccins.lastTime}
+              lastTimestamp={todayStats.vaccins.lastTimestamp}
+              onPress={() => router.push("/immunos?tab=vaccins&openModal=true")}
+            />
           )}
         </View>
       </View>
@@ -685,185 +627,39 @@ export default function HomeDashboard() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Activités physiologiques</Text>
         <View style={styles.statsGrid}>
-          {loading.mictions || loading.selles ? (
-            <>
-              {loading.mictions ? (
-                <LoadingCard />
-              ) : (
-                <StatsCard
-                  title="Mictions"
-                  value={todayStats.mictions.count}
-                  unit="fois"
-                  icon="water"
-                  color="#17a2b8"
-                  lastActivity={todayStats.mictions.lastTime}
-                  lastTimestamp={todayStats.mictions.lastTimestamp}
-                  onPress={() => router.push("/excretions?tab=mictions")}
-                />
-              )}
-              {loading.selles ? (
-                <LoadingCard />
-              ) : (
-                <StatsCard
-                  title="Selles"
-                  value={todayStats.selles.count}
-                  unit="fois"
-                  icon="poop"
-                  color="#dc3545"
-                  lastActivity={todayStats.selles.lastTime}
-                  lastTimestamp={todayStats.selles.lastTimestamp}
-                  onPress={() => router.push("/excretions?tab=selles")}
-                />
-              )}
-            </>
-          ) : (
-            <>
-              <StatsCard
-                title="Mictions"
-                value={todayStats.mictions.count}
-                unit="fois"
-                icon="water"
-                color="#17a2b8"
-                lastActivity={todayStats.mictions.lastTime}
-                lastTimestamp={todayStats.mictions.lastTimestamp}
-                onPress={() => router.push("/excretions?tab=mictions")}
-              />
-              <StatsCard
-                title="Selles"
-                value={todayStats.selles.count}
-                unit="fois"
-                icon="poop"
-                color="#dc3545"
-                lastActivity={todayStats.selles.lastTime}
-                lastTimestamp={todayStats.selles.lastTimestamp}
-                onPress={() => router.push("/excretions?tab=selles")}
-              />
-            </>
-          )}
-        </View>
-      </View>
-
-      {/* Actions rapides */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Actions rapides - Ajouter</Text>
-        <View style={styles.quickActionsContainer}>
-          {loading.tetees ? (
-            <LoadingQuickActionCard />
-          ) : (
-            <QuickActionCard
-              title="Tétée"
-              icon="baby"
-              color="#4A90E2"
-              count={todayStats.tetees.total.count}
-              subtitle={
-                todayStats.tetees.total.lastTime
-                  ? `Dernière: ${todayStats.tetees.total.lastTime}`
-                  : "Aucune aujourd'hui"
-              }
-              onPress={() => router.push("/tetees?openModal=true")}
-            />
-          )}
-          {loading.pompages ? (
-            <LoadingQuickActionCard />
-          ) : (
-            <QuickActionCard
-              title="Session tire-lait"
-              icon="pump-medical"
-              color="#28a745"
-              count={todayStats.pompages.count}
-              subtitle={
-                todayStats.pompages.lastTime
-                  ? `Dernière: ${todayStats.pompages.lastTime}`
-                  : "Aucune aujourd'hui"
-              }
-              onPress={() => router.push("/pompages?openModal=true")}
-            />
-          )}
           {loading.mictions ? (
-            <LoadingQuickActionCard />
+            <LoadingCard />
           ) : (
-            <QuickActionCard
-              title="Miction"
+            <StatsCard
+              title="Mictions"
+              value={todayStats.mictions.count}
+              unit="fois"
               icon="water"
               color="#17a2b8"
-              count={todayStats.mictions.count}
-              subtitle={
-                todayStats.mictions.lastTime
-                  ? `Dernière: ${todayStats.mictions.lastTime}`
-                  : "Aucune aujourd'hui"
-              }
+              lastActivity={todayStats.mictions.lastTime}
+              lastTimestamp={todayStats.mictions.lastTimestamp}
               onPress={() =>
                 router.push("/excretions?tab=mictions&openModal=true")
               }
             />
           )}
           {loading.selles ? (
-            <LoadingQuickActionCard />
+            <LoadingCard />
           ) : (
-            <QuickActionCard
-              title="Selle"
+            <StatsCard
+              title="Selles"
+              value={todayStats.selles.count}
+              unit="fois"
               icon="poop"
               color="#dc3545"
-              count={todayStats.selles.count}
-              subtitle={
-                todayStats.selles.lastTime
-                  ? `Dernière: ${todayStats.selles.lastTime}`
-                  : "Aucune aujourd'hui"
-              }
+              lastActivity={todayStats.selles.lastTime}
+              lastTimestamp={todayStats.selles.lastTimestamp}
               onPress={() =>
                 router.push("/excretions?tab=selles&openModal=true")
               }
             />
           )}
-          {loading.vitamines ? (
-            <LoadingQuickActionCard />
-          ) : (
-            <QuickActionCard
-              title="Prise de vitamines"
-              icon="pills"
-              color="#FF9800"
-              count={todayStats.vitamines.count}
-              subtitle={
-                todayStats.vitamines.lastTime
-                  ? `Dernière: ${todayStats.vitamines.lastTime}`
-                  : "Aucune aujourd'hui"
-              }
-              onPress={() =>
-                router.push("/immunos?tab=vitamines&openModal=true")
-              }
-            />
-          )}
-          {loading.vaccins ? (
-            <LoadingQuickActionCard />
-          ) : (
-            <QuickActionCard
-              title="Vaccin"
-              icon="syringe"
-              color="#9C27B0"
-              count={todayStats.vaccins.count}
-              subtitle={
-                todayStats.vaccins.lastTime
-                  ? `Dernier: ${todayStats.vaccins.lastTime}`
-                  : "Aucun aujourd'hui"
-              }
-              onPress={() => router.push("/immunos?tab=vaccins&openModal=true")}
-            />
-          )}
         </View>
-      </View>
-
-      {/* Lien vers les statistiques */}
-      <View style={styles.section}>
-        <TouchableOpacity
-          style={styles.statsButton}
-          onPress={() => router.push("/stats")}
-        >
-          <FontAwesome name="chart-bar" size={20} color="#666" />
-          <Text style={styles.statsButtonText}>
-            Voir les statistiques détaillées
-          </Text>
-          <FontAwesome name="chevron-right" size={16} color="#666" />
-        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -890,7 +686,7 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 20,

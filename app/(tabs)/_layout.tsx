@@ -109,13 +109,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="excretions"
-        options={{
-          title: 'Pipi popo',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="toilet" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="pompages"
         options={{
           title: 'Tire-lait',
@@ -129,6 +122,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <FontAwesome size={28} name="prescription-bottle" color={color} />,
         }}
       />
+        <Tabs.Screen
+          name="excretions"
+          options={{
+            title: 'Pipi popo',
+            tabBarIcon: ({ color }) => <FontAwesome size={28} name="toilet" color={color} />,
+          }}
+        />
       <Tabs.Screen
         name="stats"
         options={{

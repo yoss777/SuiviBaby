@@ -43,31 +43,43 @@ export default function TeteesScreen() {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingTetee, setEditingTetee] = useState<Tetee | null>(null);
 
   // États du formulaire
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
-  const [typeTetee, setTypeTetee] = useState<"seins" | "biberons">("seins");
   const [quantite, setQuantite] = useState<number>(100);
 
+  // États pour l'édition
+  const [editingTetee, setEditingTetee] = useState<Tetee | null>(null);
+  const [typeTetee, setTypeTetee] = useState<"seins" | "biberons">("seins");
+
   // Récupérer les paramètres de l'URL
-  const { openModal } = useLocalSearchParams();
+  const { tab, openModal } = useLocalSearchParams();
 
   // interval ref pour la gestion du picker
-const intervalRef = useRef<number | undefined>(undefined);
+  const intervalRef = useRef<number | undefined>(undefined);
+
+  // Définir l'onglet initial en fonction du paramètre
+  useEffect(() => {
+    if (tab === "seins") {
+      setTypeTetee("seins");
+    } else if (tab === "biberons") {
+      setTypeTetee("biberons");
+    }
+  }, [tab]);
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
     if (openModal === "true") {
       const timer = setTimeout(() => {
-        openModalHandler();
+        openModalHandler(tab as "seins" | "biberons" | undefined);
         router.replace("/tetees");
       }, 100);
+
       return () => clearTimeout(timer);
     }
-  }, [openModal]);
+  }, [openModal, tab]);
 
   // Écoute en temps réel
   useEffect(() => {
@@ -109,10 +121,10 @@ const intervalRef = useRef<number | undefined>(undefined);
 
   const handlePressOut = () => {
     // Arrête la répétition quand l'utilisateur relâche
-   if (intervalRef.current !== undefined) {
-    clearInterval(intervalRef.current);
-    intervalRef.current = undefined;
-  }
+    if (intervalRef.current !== undefined) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = undefined;
+    }
   };
 
   const groupTeteesByDay = (tetees: Tetee[]): TeteeGroup[] => {
@@ -173,11 +185,21 @@ const intervalRef = useRef<number | undefined>(undefined);
     setExpandedDays(newExpandedDays);
   };
 
-  const openModalHandler = () => {
+  const openModalHandler = (preferredType?: "seins" | "biberons") => {
     const now = new Date();
     setDateHeure(new Date(now.getTime()));
-    setTypeTetee("seins");
-    setQuantite(100);
+
+    // Définir les toggles selon le type préféré
+    if (preferredType === "seins") {
+      setTypeTetee("seins");
+    } else if (preferredType === "biberons") {
+      setTypeTetee("biberons");
+      setQuantite(100);
+    } else {
+      // Par défaut, sein est sélectionné
+      setTypeTetee("seins");
+    }
+
     setIsSubmitting(false);
     setEditingTetee(null);
     setShowModal(true);
@@ -413,7 +435,7 @@ const intervalRef = useRef<number | undefined>(undefined);
       <View style={styles.header}>
         <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
           <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Nouvelle tétée</Text>
+          <Text style={styles.addButtonText}>Ajouter une tétée</Text>
         </TouchableOpacity>
       </View>
 

@@ -24,6 +24,7 @@ type Props = {
 
 // Liste des vaccins pour enfants de 0 à 3 ans
 const VACCINS_LIST = [
+  "Bronchiolite",
   "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
   "Pneumocoque (PCV13)",
   "Rotavirus",
@@ -34,11 +35,13 @@ const VACCINS_LIST = [
   "Pneumocoque (3ème injection)",
   "Rotavirus (3ème dose)",
   "ROR (Rougeole, Oreillons, Rubéole)",
-  "Méningocoque C",
-  "DTCaP-Hib (rappel)",
   "ROR (2ème injection)",
+  "Méningocoque A,C,W,Y",
+  "Méningocoque A,C,W,Y (rappel)",
+  "Méningocoque B",
+  "Méningocoque B (rappel)",
+  "DTCaP-Hib (rappel)",
   "Pneumocoque (rappel)",
-  "Méningocoque C (rappel)",
   "DTCaP (rappel)",
   "Hépatite B",
   "BCG (Tuberculose)",
@@ -341,14 +344,14 @@ export default function VaccinsScreen({ vaccins }: Props) {
 
   const filteredVaccins = VACCINS_LIST.filter((vaccin) =>
     vaccin.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ).sort((a, b) => a.localeCompare(b));
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
           <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Nouveau vaccin</Text>
+          <Text style={styles.addButtonText}>Ajouter une injection de vaccin</Text>
         </TouchableOpacity>
       </View>
       <FlatList

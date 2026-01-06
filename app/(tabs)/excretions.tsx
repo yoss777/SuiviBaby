@@ -87,7 +87,7 @@ export default function ExcretionsScreen() {
   const openModalHandler = (preferredType?: "mictions" | "selles") => {
     const now = new Date();
     setDateHeure(new Date(now.getTime()));
-    
+
     // Définir les toggles selon le type préféré
     if (preferredType === "selles") {
       setIncludeMiction(false);
@@ -100,7 +100,7 @@ export default function ExcretionsScreen() {
       setIncludeMiction(true);
       setIncludeSelle(false);
     }
-    
+
     setEditingMiction(null);
     setEditingSelle(null);
     setIsSubmitting(false);
@@ -287,7 +287,7 @@ export default function ExcretionsScreen() {
         <TouchableOpacity
           style={[
             styles.tabButton,
-            selectedTab === "mictions" && styles.tabButtonActiveMictions,
+            selectedTab === "mictions" && styles.tabButtonActive,
           ]}
           onPress={() => setSelectedTab("mictions")}
         >
@@ -304,7 +304,7 @@ export default function ExcretionsScreen() {
         <TouchableOpacity
           style={[
             styles.tabButton,
-            selectedTab === "selles" && styles.tabButtonActiveSelles,
+            selectedTab === "selles" && styles.tabButtonActive,
           ]}
           onPress={() => setSelectedTab("selles")}
         >
@@ -322,15 +322,19 @@ export default function ExcretionsScreen() {
       {/* BOUTON D'AJOUT */}
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.addButton}
-          onPress={openModalHandler}
+          style={[
+            styles.addButton,
+            selectedTab === "mictions"
+              ? styles.tabButtonActiveMictions
+              : styles.tabButtonActiveSelles,
+          ]}
+          onPress={() => openModalHandler(selectedTab)}
           activeOpacity={0.7}
         >
           <FontAwesome name="plus" size={18} color="white" />
           <Text style={styles.addButtonText}>Ajouter une excrétion</Text>
         </TouchableOpacity>
       </View>
-
 
       {/* SCROLLVIEW DES LISTES */}
       <View style={styles.container}>
@@ -534,8 +538,13 @@ export default function ExcretionsScreen() {
                 cancelText="Annuler"
                 validateText={isEditMode ? "Mettre à jour" : "Ajouter"}
                 isLoading={isSubmitting}
-                disabled={isSubmitting || (!isEditMode && !includeMiction && !includeSelle)}
-                loadingText={isEditMode ? "Mise à jour..." : "Ajout en cours..."}
+                disabled={
+                  isSubmitting ||
+                  (!isEditMode && !includeMiction && !includeSelle)
+                }
+                loadingText={
+                  isEditMode ? "Mise à jour..." : "Ajout en cours..."
+                }
               />
             </View>
           </View>

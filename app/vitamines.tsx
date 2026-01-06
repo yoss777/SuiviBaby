@@ -306,7 +306,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
       <View style={styles.header}>
         <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
           <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Nouvelle prise de vitamines</Text>
+          <Text style={styles.addButtonText}>Ajouter une prise de vitamines</Text>
         </TouchableOpacity>
       </View>
 

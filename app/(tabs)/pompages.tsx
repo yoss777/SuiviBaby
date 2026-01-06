@@ -440,7 +440,7 @@ export default function PompagesScreen() {
       <View style={styles.header}>
         <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
           <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Nouvelle session</Text>
+          <Text style={styles.addButtonText}>Ajourter un pompage</Text>
         </TouchableOpacity>
       </View>
 
