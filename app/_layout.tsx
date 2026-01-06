@@ -1,54 +1,46 @@
-// app/_layout.tsx
-import { Slot, useRouter, useSegments } from 'expo-router';
-import { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { Colors } from "@/constants/theme";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { BabyProvider } from "@/contexts/BabyContext";
+import { DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import "react-native-reanimated";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  const segments = useSegments();
-  const router = useRouter();
+export const unstable_settings = {
+  anchor: "(drawer)",
+};
 
-  useEffect(() => {
-    if (loading) return;
-
-    const inAuthGroup = segments[0] === '(auth)';
-
-    if (!user && !inAuthGroup) {
-      // Rediriger vers le login si pas connecté
-      router.replace('/login');
-    } else if (user && inAuthGroup) {
-      // Rediriger vers home si déjà connecté
-      router.replace('/(tabs)/home');
-    }
-  }, [user, loading, segments]);
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4A90E2" />
-      </View>
-    );
-  }
-
-  return <>{children}</>;
-}
+// Thème personnalisé avec fond blanc forcé
+const CustomTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: Colors.light.background, // Force le fond blanc
+    card: Colors.light.background,
+  },
+};
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <AuthGuard>
-        <Slot />
-      </AuthGuard>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <BabyProvider>
+          <ThemeProvider value={CustomTheme}>
+            <Stack>
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
+              <Stack.Screen name="explore" options={{ headerShown: false }} />
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="modal"
+                options={{ presentation: "modal", title: "Modal" }}
+              />
+            </Stack>
+            <StatusBar style="dark" />
+          </ThemeProvider>
+        </BabyProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-  },
-});

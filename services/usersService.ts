@@ -11,7 +11,7 @@ import { auth, db } from "../config/firebase";
 // Interface pour le profil utilisateur
 interface UserProfile {
   id: string;
-  babyName: string;
+  userName: string;
   email?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -25,18 +25,18 @@ const getUserId = () => {
 
 // Créer ou mettre à jour le profil utilisateur
 export async function creerOuMettreAJourProfil(data: {
-  babyName: string;
+  userName: string;
   email?: string;
 }) {
   try {
     const userId = getUserId();
     const userRef = doc(db, "users", userId);
-    
+
     await setDoc(userRef, {
       ...data,
       updatedAt: new Date(),
     }, { merge: true });
-    
+
     console.log("Profil utilisateur mis à jour");
     return true;
   } catch (e) {
@@ -80,18 +80,18 @@ export function ecouterProfil(callback: (data: UserProfile | null) => void) {
   return unsubscribe;
 }
 
-// Mettre à jour uniquement le nom du bébé
-export async function modifierNomBebe(nouveauNom: string) {
+// Mettre à jour le nom d'utilisateur
+export async function modifierNomUtilisateur(nouveauNom: string) {
   try {
     const userId = getUserId();
     const userRef = doc(db, "users", userId);
-    
+
     await updateDoc(userRef, {
-      babyName: nouveauNom.trim(),
+      userName: nouveauNom.trim(),
       updatedAt: new Date(),
     });
-    
-    console.log("Nom du bébé modifié avec succès");
+
+    console.log("Nom d'utilisateur modifié avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification du nom :", e);
@@ -99,13 +99,13 @@ export async function modifierNomBebe(nouveauNom: string) {
   }
 }
 
-// Obtenir le nom du bébé directement
-export async function obtenirNomBebe(): Promise<string | null> {
+// Obtenir le nom d'utilisateur directement
+export async function obtenirNomUtilisateur(): Promise<string | null> {
   try {
     const profil = await obtenirProfil();
-    return profil?.babyName || null;
+    return profil?.userName || null;
   } catch (e) {
-    console.error("Erreur lors de la récupération du nom du bébé :", e);
+    console.error("Erreur lors de la récupération du nom d'utilisateur :", e);
     return null;
   }
 }

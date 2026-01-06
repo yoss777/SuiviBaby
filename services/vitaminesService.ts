@@ -21,11 +21,12 @@ const getUserId = () => {
   return user.uid;
 };
 
-export async function ajouterVitamine(data: any) {
+export async function ajouterVitamine(childId: string, data: any) {
   try {
     const userId = getUserId();
     const ref = await addDoc(collection(db, "vitamines"), {
       ...data,
+      childId,
       userId,
       createdAt: new Date(),
     });
@@ -37,13 +38,13 @@ export async function ajouterVitamine(data: any) {
   }
 }
 
-export async function obtenirVitamine(id: string) {
+export async function obtenirVitamine(childId: string, id: string) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "vitamines", id);
     const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists() && docSnap.data().userId === userId) {
+
+    if (docSnap.exists() && docSnap.data().userId === userId && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
       console.log("Aucune prise de vitamines trouvée avec cet ID ou accès refusé");
@@ -55,16 +56,17 @@ export async function obtenirVitamine(id: string) {
   }
 }
 
-export async function obtenirToutesLesVitamines() {
+export async function obtenirToutesLesVitamines(childId: string) {
   try {
     const userId = getUserId();
     const q = query(
       collection(db, "vitamines"),
       where("userId", "==", userId),
+      where("childId", "==", childId),
       orderBy("createdAt", "desc")
     );
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -75,17 +77,18 @@ export async function obtenirToutesLesVitamines() {
   }
 }
 
-export async function obtenirVitaminesAvecLimite(nombreLimit: number) {
+export async function obtenirVitaminesAvecLimite(childId: string, nombreLimit: number) {
   try {
     const userId = getUserId();
     const q = query(
       collection(db, "vitamines"),
       where("userId", "==", userId),
-      orderBy("createdAt", "desc"), 
+      where("childId", "==", childId),
+      orderBy("createdAt", "desc"),
       limit(nombreLimit)
     );
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -96,11 +99,12 @@ export async function obtenirVitaminesAvecLimite(nombreLimit: number) {
   }
 }
 
-export function ecouterVitamines(callback: (docs: any[]) => void) {
+export function ecouterVitamines(childId: string, callback: (docs: any[]) => void) {
   const userId = getUserId();
   const q = query(
     collection(db, "vitamines"),
     where("userId", "==", userId),
+    where("childId", "==", childId),
     orderBy("createdAt", "desc")
   );
 
@@ -115,16 +119,16 @@ export function ecouterVitamines(callback: (docs: any[]) => void) {
   return unsubscribe;
 }
 
-export async function modifierVitamine(id: string, nouveausDonnees: any) {
+export async function modifierVitamine(childId: string, id: string, nouveausDonnees: any) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "vitamines", id);
     const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+
+    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
-    
+
     await updateDoc(docRef, {
       ...nouveausDonnees,
       updatedAt: new Date(),
@@ -137,16 +141,16 @@ export async function modifierVitamine(id: string, nouveausDonnees: any) {
   }
 }
 
-export async function supprimerVitamine(id: string) {
+export async function supprimerVitamine(childId: string, id: string) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "vitamines", id);
     const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+
+    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
-    
+
     await deleteDoc(docRef);
     console.log("Prise de vitamines supprimée avec succès");
     return true;

@@ -21,11 +21,12 @@ const getUserId = () => {
   return user.uid;
 };
 
-export async function ajouterPompage(data: any) {
+export async function ajouterPompage(childId: string, data: any) {
   try {
     const userId = getUserId();
     const ref = await addDoc(collection(db, "pompages"), {
       ...data,
+      childId,
       userId,
       createdAt: new Date(),
     });
@@ -37,13 +38,13 @@ export async function ajouterPompage(data: any) {
   }
 }
 
-export async function obtenirPompage(id: string) {
+export async function obtenirPompage(childId: string, id: string) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "pompages", id);
     const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists() && docSnap.data().userId === userId) {
+
+    if (docSnap.exists() && docSnap.data().userId === userId && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
       console.log("Aucune session de pompage trouvée avec cet ID ou accès refusé");
@@ -55,16 +56,17 @@ export async function obtenirPompage(id: string) {
   }
 }
 
-export async function obtenirTousLesPompages() {
+export async function obtenirTousLesPompages(childId: string) {
   try {
     const userId = getUserId();
     const q = query(
       collection(db, "pompages"),
       where("userId", "==", userId),
+      where("childId", "==", childId),
       orderBy("createdAt", "desc")
     );
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -75,17 +77,18 @@ export async function obtenirTousLesPompages() {
   }
 }
 
-export async function obtenirPompagesAvecLimite(nombreLimit: number) {
+export async function obtenirPompagesAvecLimite(childId: string, nombreLimit: number) {
   try {
     const userId = getUserId();
     const q = query(
       collection(db, "pompages"),
       where("userId", "==", userId),
-      orderBy("createdAt", "desc"), 
+      where("childId", "==", childId),
+      orderBy("createdAt", "desc"),
       limit(nombreLimit)
     );
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -96,11 +99,12 @@ export async function obtenirPompagesAvecLimite(nombreLimit: number) {
   }
 }
 
-export function ecouterPompages(callback: (docs: any[]) => void) {
+export function ecouterPompages(childId: string, callback: (docs: any[]) => void) {
   const userId = getUserId();
   const q = query(
     collection(db, "pompages"),
     where("userId", "==", userId),
+    where("childId", "==", childId),
     orderBy("createdAt", "desc")
   );
 
@@ -115,16 +119,16 @@ export function ecouterPompages(callback: (docs: any[]) => void) {
   return unsubscribe;
 }
 
-export async function modifierPompage(id: string, nouveausDonnees: any) {
+export async function modifierPompage(childId: string, id: string, nouveausDonnees: any) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "pompages", id);
     const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+
+    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
-    
+
     await updateDoc(docRef, {
       ...nouveausDonnees,
       updatedAt: new Date(),
@@ -137,16 +141,16 @@ export async function modifierPompage(id: string, nouveausDonnees: any) {
   }
 }
 
-export async function supprimerPompage(id: string) {
+export async function supprimerPompage(childId: string, id: string) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "pompages", id);
     const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+
+    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
-    
+
     await deleteDoc(docRef);
     console.log("Session de pompage supprimée avec succès");
     return true;

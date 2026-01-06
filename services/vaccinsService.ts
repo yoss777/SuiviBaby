@@ -21,11 +21,12 @@ const getUserId = () => {
   return user.uid;
 };
 
-export async function ajouterVaccin(data: any) {
+export async function ajouterVaccin(childId: string, data: any) {
   try {
     const userId = getUserId();
     const ref = await addDoc(collection(db, "vaccins"), {
       ...data,
+      childId,
       userId,
       createdAt: new Date(),
     });
@@ -37,13 +38,13 @@ export async function ajouterVaccin(data: any) {
   }
 }
 
-export async function obtenirVaccin(id: string) {
+export async function obtenirVaccin(childId: string, id: string) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "vaccins", id);
     const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists() && docSnap.data().userId === userId) {
+
+    if (docSnap.exists() && docSnap.data().userId === userId && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
       console.log("Aucune prise de vaccins trouvée avec cet ID ou accès refusé");
@@ -55,16 +56,17 @@ export async function obtenirVaccin(id: string) {
   }
 }
 
-export async function obtenirToutesLesVaccins() {
+export async function obtenirToutesLesVaccins(childId: string) {
   try {
     const userId = getUserId();
     const q = query(
       collection(db, "vaccins"),
       where("userId", "==", userId),
+      where("childId", "==", childId),
       orderBy("createdAt", "desc")
     );
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -75,17 +77,18 @@ export async function obtenirToutesLesVaccins() {
   }
 }
 
-export async function obtenirVaccinsAvecLimite(nombreLimit: number) {
+export async function obtenirVaccinsAvecLimite(childId: string, nombreLimit: number) {
   try {
     const userId = getUserId();
     const q = query(
       collection(db, "vaccins"),
       where("userId", "==", userId),
-      orderBy("createdAt", "desc"), 
+      where("childId", "==", childId),
+      orderBy("createdAt", "desc"),
       limit(nombreLimit)
     );
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -96,11 +99,12 @@ export async function obtenirVaccinsAvecLimite(nombreLimit: number) {
   }
 }
 
-export function ecouterVaccins(callback: (docs: any[]) => void) {
+export function ecouterVaccins(childId: string, callback: (docs: any[]) => void) {
   const userId = getUserId();
   const q = query(
     collection(db, "vaccins"),
     where("userId", "==", userId),
+    where("childId", "==", childId),
     orderBy("createdAt", "desc")
   );
 
@@ -115,16 +119,16 @@ export function ecouterVaccins(callback: (docs: any[]) => void) {
   return unsubscribe;
 }
 
-export async function modifierVaccin(id: string, nouveausDonnees: any) {
+export async function modifierVaccin(childId: string, id: string, nouveausDonnees: any) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "vaccins", id);
     const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+
+    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
-    
+
     await updateDoc(docRef, {
       ...nouveausDonnees,
       updatedAt: new Date(),
@@ -137,16 +141,16 @@ export async function modifierVaccin(id: string, nouveausDonnees: any) {
   }
 }
 
-export async function supprimerVaccin(id: string) {
+export async function supprimerVaccin(childId: string, id: string) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "vaccins", id);
     const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+
+    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
-    
+
     await deleteDoc(docRef);
     console.log("Prise de vaccins supprimée avec succès");
     return true;

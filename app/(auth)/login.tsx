@@ -1,8 +1,8 @@
 // app/(auth)/login.tsx
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore"; // ✅ Import ajouté
-import { useState } from "react";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,15 +15,26 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth, db } from "../../config/firebase"; // ✅ Import de db ajouté
+import { auth } from "../../config/firebase";
+import { useAuth } from "@/contexts/AuthContext";
+import { createPatientUser } from "@/services/userService";
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [babyName, setBabyName] = useState(""); // ✅ État pour le nom du bébé
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Rediriger automatiquement si l'utilisateur est déjà authentifié
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace("/explore");
+    }
+  }, [authLoading, user, router]);
 
   const handleAuth = async () => {
     if (!email.trim() || !password.trim()) {
@@ -50,17 +61,19 @@ export default function LoginScreen() {
       } else {
         // ✅ Création du compte
         const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        
-        // ✅ Sauvegarde du profil avec le nom du bébé dans Firestore
-        await setDoc(doc(db, "users", userCredential.user.uid), {
-          babyName: babyName.trim(),
-          email: email.trim(),
-          createdAt: new Date(),
-        });
-        
+
+        // ✅ Sauvegarde du profil patient complet dans Firestore
+        const defaultUserName = email.trim().split("@")[0];
+        await createPatientUser(
+          userCredential.user.uid,
+          email.trim(),
+          defaultUserName,
+          babyName.trim()
+        );
+
         Alert.alert("Succès", "Compte créé avec succès !");
       }
-      // La navigation sera gérée automatiquement par AuthGuard
+      // Une fois connecté, l'effet d'auth redirige vers l'écran principal
     } catch (error: any) {
       let errorMessage = "Une erreur est survenue";
       

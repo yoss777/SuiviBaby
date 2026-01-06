@@ -17,15 +17,18 @@ import { auth, db } from "../config/firebase";
 
 const getUserId = () => {
   const user = auth.currentUser;
-  if (!user) throw new Error("Utilisateur non connecté");
+  if (!user) {
+    throw new Error("Utilisateur non connecté");
+  }
   return user.uid;
 };
 
-export async function ajouterTetee(data: any) {
+export async function ajouterTetee(childId: string, data: any) {
   try {
     const userId = getUserId();
     const ref = await addDoc(collection(db, "tetees"), {
       ...data,
+      childId,
       userId,
       createdAt: new Date(),
     });
@@ -37,13 +40,13 @@ export async function ajouterTetee(data: any) {
   }
 }
 
-export async function obtenirTetee(id: string) {
+export async function obtenirTetee(childId: string, id: string) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "tetees", id);
     const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists() && docSnap.data().userId === userId) {
+
+    if (docSnap.exists() && docSnap.data().userId === userId && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
       console.log("Aucune tétée trouvée avec cet ID ou accès refusé");
@@ -55,16 +58,17 @@ export async function obtenirTetee(id: string) {
   }
 }
 
-export async function obtenirToutesLesTetees() {
+export async function obtenirToutesLesTetees(childId: string) {
   try {
     const userId = getUserId();
     const q = query(
       collection(db, "tetees"),
       where("userId", "==", userId),
+      where("childId", "==", childId),
       orderBy("createdAt", "desc")
     );
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -75,17 +79,18 @@ export async function obtenirToutesLesTetees() {
   }
 }
 
-export async function obtenirTeteesAvecLimite(nombreLimit: number) {
+export async function obtenirTeteesAvecLimite(childId: string, nombreLimit: number) {
   try {
     const userId = getUserId();
     const q = query(
       collection(db, "tetees"),
       where("userId", "==", userId),
-      orderBy("createdAt", "desc"), 
+      where("childId", "==", childId),
+      orderBy("createdAt", "desc"),
       limit(nombreLimit)
     );
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -96,11 +101,12 @@ export async function obtenirTeteesAvecLimite(nombreLimit: number) {
   }
 }
 
-export function ecouterTetees(callback: (docs: any[]) => void) {
+export function ecouterTetees(childId: string, callback: (docs: any[]) => void) {
   const userId = getUserId();
   const q = query(
     collection(db, "tetees"),
     where("userId", "==", userId),
+    where("childId", "==", childId),
     orderBy("createdAt", "desc")
   );
 
@@ -115,16 +121,16 @@ export function ecouterTetees(callback: (docs: any[]) => void) {
   return unsubscribe;
 }
 
-export async function modifierTetee(id: string, nouveausDonnees: any) {
+export async function modifierTetee(childId: string, id: string, nouveausDonnees: any) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "tetees", id);
     const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+
+    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
-    
+
     await updateDoc(docRef, {
       ...nouveausDonnees,
       updatedAt: new Date(),
@@ -137,16 +143,16 @@ export async function modifierTetee(id: string, nouveausDonnees: any) {
   }
 }
 
-export async function supprimerTetee(id: string) {
+export async function supprimerTetee(childId: string, id: string) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "tetees", id);
     const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+
+    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
-    
+
     await deleteDoc(docRef);
     console.log("Tétée supprimée avec succès");
     return true;

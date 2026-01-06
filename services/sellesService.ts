@@ -21,11 +21,12 @@ const getUserId = () => {
   return user.uid;
 };
 
-export async function ajouterSelle(data: any) {
+export async function ajouterSelle(childId: string, data: any) {
   try {
     const userId = getUserId();
     const ref = await addDoc(collection(db, "selles"), {
       ...data,
+      childId,
       userId,
       createdAt: new Date(),
     });
@@ -37,13 +38,13 @@ export async function ajouterSelle(data: any) {
   }
 }
 
-export async function obtenirSelle(id: string) {
+export async function obtenirSelle(childId: string, id: string) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "selles", id);
     const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists() && docSnap.data().userId === userId) {
+
+    if (docSnap.exists() && docSnap.data().userId === userId && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
       console.log("Aucune selle trouvée avec cet ID ou accès refusé");
@@ -55,16 +56,17 @@ export async function obtenirSelle(id: string) {
   }
 }
 
-export async function obtenirToutesLesSelles() {
+export async function obtenirToutesLesSelles(childId: string) {
   try {
     const userId = getUserId();
     const q = query(
       collection(db, "selles"),
       where("userId", "==", userId),
+      where("childId", "==", childId),
       orderBy("createdAt", "desc")
     );
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -75,17 +77,18 @@ export async function obtenirToutesLesSelles() {
   }
 }
 
-export async function obtenirSellesAvecLimite(nombreLimit: number) {
+export async function obtenirSellesAvecLimite(childId: string, nombreLimit: number) {
   try {
     const userId = getUserId();
     const q = query(
       collection(db, "selles"),
       where("userId", "==", userId),
-      orderBy("createdAt", "desc"), 
+      where("childId", "==", childId),
+      orderBy("createdAt", "desc"),
       limit(nombreLimit)
     );
     const querySnapshot = await getDocs(q);
-    
+
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -96,11 +99,12 @@ export async function obtenirSellesAvecLimite(nombreLimit: number) {
   }
 }
 
-export function ecouterSelles(callback: (docs: any[]) => void) {
+export function ecouterSelles(childId: string, callback: (docs: any[]) => void) {
   const userId = getUserId();
   const q = query(
     collection(db, "selles"),
     where("userId", "==", userId),
+    where("childId", "==", childId),
     orderBy("createdAt", "desc")
   );
 
@@ -115,16 +119,16 @@ export function ecouterSelles(callback: (docs: any[]) => void) {
   return unsubscribe;
 }
 
-export async function modifierSelle(id: string, nouveausDonnees: any) {
+export async function modifierSelle(childId: string, id: string, nouveausDonnees: any) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "selles", id);
     const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+
+    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
-    
+
     await updateDoc(docRef, {
       ...nouveausDonnees,
       updatedAt: new Date(),
@@ -137,16 +141,16 @@ export async function modifierSelle(id: string, nouveausDonnees: any) {
   }
 }
 
-export async function supprimerSelle(id: string) {
+export async function supprimerSelle(childId: string, id: string) {
   try {
     const userId = getUserId();
     const docRef = doc(db, "selles", id);
     const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists() || docSnap.data().userId !== userId) {
+
+    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
-    
+
     await deleteDoc(docRef);
     console.log("Selle supprimée avec succès");
     return true;
