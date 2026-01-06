@@ -83,7 +83,7 @@ export default function DrawerLayout() {
       <Drawer.Screen
         name="add-baby"
         options={{
-          title: "SMILE",
+          title: "Ajouter un enfant",
           drawerItemStyle: { display: 'none' },
         }}
       />

@@ -1,19 +1,15 @@
 import { ThemedView } from '@/components/themed-view';
+import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
-import { useBaby } from "@/contexts/BabyContext";
+import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import {
-  BabyData,
-  createAttachmentRequest,
-  searchBabyBySimId,
-} from "@/services/babyAttachmentService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { router } from "expo-router";
+import { addDoc, collection } from 'firebase/firestore';
 import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,214 +19,110 @@ import {
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// Import conditionnel de la caméra pour éviter les erreurs
-let CameraView: any = null;
-let CameraPermissionComponent: any = null;
-let cameraAvailable = false;
-
-try {
-  const cameraModule = require("expo-camera");
-  CameraView = cameraModule.CameraView;
-  const useCameraPermissions = cameraModule.useCameraPermissions;
-
-  // Composant qui utilise le hook de permissions
-  CameraPermissionComponent = function CameraPermissions({
-    children,
-  }: {
-    children: (permission: any, requestPermission: any) => React.ReactNode;
-  }) {
-    const [permission, requestPermission] = useCameraPermissions();
-    return <>{children(permission, requestPermission)}</>;
-  };
-
-  cameraAvailable = true;
-} catch (error) {
-  console.log("expo-camera not available, QR scanner will be disabled");
-
-  // Composant fallback qui ne fait rien
-  CameraPermissionComponent = function NoCamera({
-    children,
-  }: {
-    children: (permission: any, requestPermission: any) => React.ReactNode;
-  }) {
-    return <>{children(null, null)}</>;
-  };
-}
-
-function AddBabyScreenContent({
-  permission,
-  requestPermission,
-}: {
-  permission: any;
-  requestPermission: any;
-}) {
-  const { addBaby } = useBaby();
+export default function AddBabyScreen() {
   const colorScheme = useColorScheme();
-  const [simId, setSimId] = useState("");
+  const { user } = useAuth();
+  const [name, setName] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [gender, setGender] = useState<'male' | 'female' | ''>('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
-  const [babyInfo, setBabyInfo] = useState<BabyData | null>(null);
-  const [selectedParentEmail, setSelectedParentEmail] = useState<string>("");
 
-  // Vérifier si la caméra est disponible
-  const isCameraAvailable = cameraAvailable && CameraView !== null;
-
-  // Masquer partiellement l'email pour la confidentialité
-  const maskEmail = (email: string): string => {
-    const [localPart, domain] = email.split("@");
-    if (!localPart || !domain) return email;
-
-    const visibleStart = localPart.slice(0, 2);
-    const visibleEnd = localPart.slice(-1);
-    const masked = `${visibleStart}***${visibleEnd}@${domain}`;
-    return masked;
+  // Formater la date pendant la saisie (DD/MM/YYYY)
+  const handleDateChange = (text: string) => {
+    // Supprimer tout sauf les chiffres
+    const cleaned = text.replace(/\D/g, '');
+    
+    // Ajouter les slashes automatiquement
+    let formatted = cleaned;
+    if (cleaned.length >= 2) {
+      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2);
+    }
+    if (cleaned.length >= 4) {
+      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2, 4) + '/' + cleaned.slice(4, 8);
+    }
+    
+    setBirthDate(formatted);
   };
 
-  // Gérer le scan du QR code
-  const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    setShowScanner(false);
-    setSimId(data);
-    await handleSearchBaby(data);
+  // Valider la date
+  const isValidDate = (dateStr: string): boolean => {
+    if (dateStr.length !== 10) return false;
+    
+    const [day, month, year] = dateStr.split('/').map(Number);
+    if (!day || !month || !year) return false;
+    
+    // Vérifier les plages valides
+    if (day < 1 || day > 31) return false;
+    if (month < 1 || month > 12) return false;
+    if (year < 1900 || year > new Date().getFullYear()) return false;
+    
+    // Vérifier que la date existe
+    const date = new Date(year, month - 1, day);
+    return date.getDate() === day && date.getMonth() === month - 1;
   };
 
-  // Rechercher le bébé et afficher les informations
-  const handleSearchBaby = async (scannedSimId?: string) => {
-    const idToUse = scannedSimId || simId;
+  // Valider le formulaire
+  const validateForm = (): boolean => {
+    if (!name.trim()) {
+      Alert.alert('Erreur', 'Veuillez saisir le nom de l\'enfant');
+      return false;
+    }
+    
+    if (!isValidDate(birthDate)) {
+      Alert.alert('Erreur', 'Veuillez saisir une date de naissance valide (JJ/MM/AAAA)');
+      return false;
+    }
+    
+    if (!gender) {
+      Alert.alert('Erreur', 'Veuillez sélectionner le sexe de l\'enfant');
+      return false;
+    }
+    
+    return true;
+  };
 
-    if (!idToUse.trim()) {
-      Alert.alert("Erreur", "Veuillez saisir un ID SIM valide");
+  // Ajouter l'enfant
+  const handleAddBaby = async () => {
+    if (!validateForm()) return;
+    if (!user?.uid) {
+      Alert.alert('Erreur', 'Utilisateur non connecté');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Rechercher le bébé dans la base de données
-      const babyData = await searchBabyBySimId(idToUse);
+      const childData = {
+        name: name.trim(),
+        birthDate: birthDate,
+        gender: gender,
+        parentIds: [user.uid],
+        photoUri: "",
+      };
 
-      if (!babyData) {
-        Alert.alert(
-          "Bébé introuvable",
-          "Aucun bébé n'a été trouvé avec cet ID SIM. Veuillez vérifier l'ID et réessayer."
-        );
-        setBabyInfo(null);
-        setIsLoading(false);
-        return;
-      }
-
-      // Vérifier qu'au moins un email parent est présent
-      if (!babyData.parentEmails || babyData.parentEmails.length === 0) {
-        Alert.alert(
-          "Erreur de configuration",
-          "Aucun email parent n'est enregistré pour ce bébé. Veuillez contacter la maternité."
-        );
-        setBabyInfo(null);
-        setIsLoading(false);
-        return;
-      }
-
-      // Afficher les informations du bébé
-      setBabyInfo(babyData);
-
-      // Si un seul parent, le sélectionner automatiquement
-      if (babyData.parentEmails.length === 1) {
-        setSelectedParentEmail(babyData.parentEmails[0]);
-      } else {
-        // Réinitialiser la sélection pour forcer le choix
-        setSelectedParentEmail("");
-      }
-
-      setIsLoading(false);
-    } catch (error: any) {
-      console.error("Erreur lors de la recherche du bébé:", error);
-      Alert.alert(
-        "Erreur",
-        "Une erreur est survenue lors de la recherche. Veuillez réessayer."
-      );
-      setBabyInfo(null);
-      setIsLoading(false);
-    }
-  };
-
-  // Envoyer la demande de rattachement
-  const handleSendRequest = async () => {
-    if (!babyInfo || !simId) {
-      Alert.alert("Erreur", "Veuillez d'abord scanner ou saisir un ID SIM");
-      return;
-    }
-
-    if (!selectedParentEmail) {
-      Alert.alert("Erreur", "Veuillez sélectionner l'email du parent");
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      // Créer une demande de rattachement avec l'email sélectionné
-      const requestId = await createAttachmentRequest(
-        simId,
-        babyInfo,
-        selectedParentEmail
-      );
+      await addDoc(collection(db, 'children'), childData);
 
       Alert.alert(
-        "Demande envoyée",
-        `Un email de validation a été envoyé à ${maskEmail(
-          selectedParentEmail
-        )}. Vous devez valider le lien reçu par email pour confirmer le rattachement de ${
-          babyInfo.name
-        }.`,
+        'Succès',
+        `${name} a été ajouté avec succès !`,
         [
           {
-            text: "OK",
-            onPress: () => {
-              // Retourner à la page d'accueil ou à la liste des bébés
-              router.back();
-            },
+            text: 'OK',
+            onPress: () => router.back(),
           },
         ]
       );
 
-      // Réinitialiser les champs
-      setSimId("");
-      setBabyInfo(null);
-      setSelectedParentEmail("");
-    } catch (error: any) {
-      console.error("Erreur lors de la demande de rattachement:", error);
-      Alert.alert(
-        "Erreur",
-        error.message ||
-          "Une erreur est survenue lors de la demande de rattachement. Veuillez réessayer."
-      );
+      // Réinitialiser le formulaire
+      setName('');
+      setBirthDate('');
+      setGender('');
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout de l\'enfant:', error);
+      Alert.alert('Erreur', 'Impossible d\'ajouter l\'enfant. Veuillez réessayer.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Ouvrir le scanner
-  const openScanner = async () => {
-    if (!isCameraAvailable) {
-      Alert.alert(
-        "Caméra non disponible",
-        "Le module caméra n'est pas encore configuré. Veuillez redémarrer l'application après avoir exécuté 'npx expo prebuild'. Pour l'instant, utilisez la saisie manuelle de l'ID SIM."
-      );
-      return;
-    }
-
-    if (!permission?.granted) {
-      if (requestPermission) {
-        const { granted } = await requestPermission();
-        if (!granted) {
-          Alert.alert(
-            "Permission refusée",
-            "Vous devez autoriser l'accès à la caméra pour scanner un QR code"
-          );
-          return;
-        }
-      }
-    }
-    setShowScanner(true);
   };
 
   return (
@@ -239,235 +131,141 @@ function AddBabyScreenContent({
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <FontAwesome name="baby" size={48} color="#4A90E2" />
-            <Text style={styles.title}>Ajouter un bébé</Text>
-
-            <Text style={styles.subtitle}>
-              Scannez le QR code fourni par la maternité ou saisissez l&apos;ID SIM
+            {/* <Text style={styles.title}>Ajouter un enfant</Text> */}
+            <Text style={[styles.subtitle,{ marginTop: 20, }]}>
+              Renseignez les informations de votre enfant
             </Text>
           </View>
 
-          {/* Bouton de scan QR code en premier */}
-          <View style={styles.section}>
-            <TouchableOpacity
-              style={[
-                styles.scanButton,
-                !isCameraAvailable && styles.scanButtonDisabled,
-              ]}
-              onPress={openScanner}
-              disabled={isLoading || !isCameraAvailable}
-              activeOpacity={0.7}
-            >
-              <FontAwesome name="qrcode" size={24} color="white" />
-              <Text style={styles.scanButtonText}>
-                {isCameraAvailable
-                  ? "Scanner le QR Code"
-                  : "Scanner QR (Configuration requise)"}
+          {/* Formulaire */}
+          <View style={styles.form}>
+            {/* Nom de l'enfant */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                Nom complet <Text style={styles.required}>*</Text>
               </Text>
-            </TouchableOpacity>
-            {!isCameraAvailable && (
-              <Text style={styles.cameraNotAvailableText}>
-                ⚠️ Scanner QR désactivé. Exécutez &apos;npx expo prebuild&apos; et
-                redémarrez l&apos;app.
-              </Text>
-            )}
-          </View>
-
-          {/* Saisie manuelle de l'ID SIM */}
-          <View style={styles.section}>
-            <Text style={styles.dividerText}>OU</Text>
-            <Text style={styles.label}>ID SIM de l&apos;enfant</Text>
-            <View style={styles.inputContainer}>
-              <FontAwesome name="id-card" size={16} color="#666" />
-              <TextInput
-                style={styles.input}
-                placeholder="Saisissez l'ID SIM"
-                value={simId}
-                onChangeText={setSimId}
-                autoCapitalize="characters"
-                editable={!isLoading}
-              />
+              <View style={styles.inputContainer}>
+                <FontAwesome name="user" size={16} color="#666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: Marie Dubois"
+                  value={name}
+                  onChangeText={setName}
+                  editable={!isLoading}
+                  autoCapitalize="words"
+                />
+              </View>
             </View>
-            <Text style={styles.helperText}>
-              L&apos;ID SIM se trouve sur le bracelet ou la carte fournie par la
-              maternité
-            </Text>
 
-            {/* Bouton de recherche */}
+            {/* Date de naissance */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                Date de naissance <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.inputContainer}>
+                <FontAwesome name="calendar" size={16} color="#666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="JJ/MM/AAAA"
+                  value={birthDate}
+                  onChangeText={handleDateChange}
+                  editable={!isLoading}
+                  keyboardType="numeric"
+                  maxLength={10}
+                />
+              </View>
+              <Text style={styles.helperText}>
+                Format: jour/mois/année (ex: 15/03/2024)
+              </Text>
+            </View>
+
+            {/* Sexe de l'enfant */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                Sexe <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.genderContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.genderButton,
+                    gender === 'female' && styles.genderButtonSelected,
+                  ]}
+                  onPress={() => setGender('female')}
+                  disabled={isLoading}
+                  activeOpacity={0.7}
+                >
+                  <FontAwesome
+                    name="venus"
+                    size={24}
+                    color={gender === 'female' ? '#fff' : '#FF69B4'}
+                  />
+                  <Text
+                    style={[
+                      styles.genderText,
+                      gender === 'female' && styles.genderTextSelected,
+                    ]}
+                  >
+                    Fille
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.genderButton,
+                    gender === 'male' && styles.genderButtonSelected,
+                  ]}
+                  onPress={() => setGender('male')}
+                  disabled={isLoading}
+                  activeOpacity={0.7}
+                >
+                  <FontAwesome
+                    name="mars"
+                    size={24}
+                    color={gender === 'male' ? '#fff' : '#4A90E2'}
+                  />
+                  <Text
+                    style={[
+                      styles.genderText,
+                      gender === 'male' && styles.genderTextSelected,
+                    ]}
+                  >
+                    Garçon
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Bouton d'ajout */}
             <TouchableOpacity
               style={[
-                styles.searchButton,
-                isLoading && styles.searchButtonDisabled,
+                styles.submitButton,
+                isLoading && styles.submitButtonDisabled,
               ]}
-              onPress={() => handleSearchBaby()}
-              disabled={isLoading || !simId.trim()}
+              onPress={handleAddBaby}
+              disabled={isLoading}
               activeOpacity={0.7}
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
                 <>
-                  <FontAwesome name="search" size={16} color="white" />
-                  <Text style={styles.searchButtonText}>Rechercher</Text>
+                  <FontAwesome name="plus-circle" size={18} color="white" />
+                  <Text style={styles.submitButtonText}>Ajouter l'enfant</Text>
                 </>
               )}
             </TouchableOpacity>
           </View>
 
-          {/* Affichage des informations du bébé */}
-          {babyInfo && (
-            <View style={styles.babyInfoCard}>
-              <View style={styles.babyInfoHeader}>
-                <FontAwesome name="baby" size={24} color="#28a745" />
-                <Text style={styles.babyInfoTitle}>Bébé trouvé</Text>
-              </View>
-
-              <View style={styles.babyInfoRow}>
-                <Text style={styles.babyInfoLabel}>Nom:</Text>
-                <Text style={styles.babyInfoValue}>{babyInfo.name}</Text>
-              </View>
-
-              <View style={styles.babyInfoRow}>
-                <Text style={styles.babyInfoLabel}>Date de naissance:</Text>
-                <Text style={styles.babyInfoValue}>{babyInfo.birthDate}</Text>
-              </View>
-
-              {/* Sélection du parent (si plusieurs) */}
-              {babyInfo.parentEmails.length > 1 ? (
-                <View style={styles.parentSelection}>
-                  <Text style={styles.parentSelectionLabel}>
-                    Sélectionnez votre email:
-                  </Text>
-                  {babyInfo.parentEmails.map((email, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.parentEmailOption,
-                        selectedParentEmail === email &&
-                          styles.parentEmailOptionSelected,
-                      ]}
-                      onPress={() => setSelectedParentEmail(email)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.radioButton}>
-                        {selectedParentEmail === email && (
-                          <View style={styles.radioButtonSelected} />
-                        )}
-                      </View>
-                      <Text
-                        style={[
-                          styles.parentEmailText,
-                          selectedParentEmail === email &&
-                            styles.parentEmailTextSelected,
-                        ]}
-                      >
-                        {maskEmail(email)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : (
-                <View style={styles.babyInfoRow}>
-                  <Text style={styles.babyInfoLabel}>Email du parent:</Text>
-                  <Text style={styles.babyInfoValue}>
-                    {maskEmail(babyInfo.parentEmails[0])}
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.securityNotice}>
-                <FontAwesome name="shield-alt" size={16} color="#17a2b8" />
-                <Text style={styles.securityText}>
-                  Un email de validation sera automatiquement envoyé à
-                  l&apos;adresse sélectionnée
-                </Text>
-              </View>
-
-              {/* Bouton d'envoi de la demande */}
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  isLoading && styles.submitButtonDisabled,
-                ]}
-                onPress={handleSendRequest}
-                disabled={isLoading}
-                activeOpacity={0.7}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <>
-                    <FontAwesome name="paper-plane" size={18} color="white" />
-                    <Text style={styles.submitButtonText}>Envoyer la demande</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Information supplémentaire */}
+          {/* Information */}
           <View style={styles.infoBox}>
             <FontAwesome name="info-circle" size={20} color="#17a2b8" />
             <Text style={styles.infoText}>
-              Après avoir scanné ou saisi l&apos;ID SIM, un email de validation sera
-              envoyé au parent enregistré à la maternité. Le bébé n&apos;apparaîtra
-              dans l&apos;application qu&apos;après validation du lien reçu par
-              email.
+              L'enfant sera immédiatement ajouté à votre liste de suivi. Vous pourrez modifier ses informations plus tard depuis les paramètres.
             </Text>
           </View>
-
-          {/* Modal Scanner QR Code */}
-          {isCameraAvailable && CameraView && (
-            <Modal
-              visible={showScanner}
-              animationType="slide"
-              onRequestClose={() => setShowScanner(false)}
-            >
-              <View style={styles.scannerContainer}>
-                <View style={styles.scannerHeader}>
-                  <Text style={styles.scannerTitle}>Scanner le QR Code</Text>
-                  <TouchableOpacity
-                    style={styles.closeButton}
-                    onPress={() => setShowScanner(false)}
-                  >
-                    <FontAwesome name="times" size={24} color="#666" />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.cameraContainer}>
-                  <CameraView
-                    style={styles.camera}
-                    facing="back"
-                    onBarcodeScanned={handleBarcodeScanned}
-                    barcodeScannerSettings={{
-                      barcodeTypes: ["qr"],
-                    }}
-                  />
-                  <View style={styles.scannerOverlay}>
-                    <View style={styles.scannerFrame} />
-                    <Text style={styles.scannerInstruction}>
-                      Placez le QR code dans le cadre
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </Modal>
-          )}
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
-  );
-}
-
-export default function AddBabyScreen() {
-  return (
-    <CameraPermissionComponent>
-      {(permission: any, requestPermission: any) => (
-        <AddBabyScreenContent
-          permission={permission}
-          requestPermission={requestPermission}
-        />
-      )}
-    </CameraPermissionComponent>
   );
 }
 
@@ -509,16 +307,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     lineHeight: 22,
   },
-  section: {
+  form: {
     paddingHorizontal: 20,
+  },
+  formGroup: {
     marginBottom: 24,
-    marginTop: 24,
   },
   label: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
     marginBottom: 8,
+  },
+  required: {
+    color: "#dc3545",
   },
   inputContainer: {
     flexDirection: "row",
@@ -540,18 +342,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6c757d",
     marginTop: 6,
-    marginBottom: 12,
     fontStyle: "italic",
   },
-  dividerText: {
-    textAlign: "center",
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#999",
-    marginBottom: 16,
+  genderContainer: {
+    flexDirection: "row",
+    gap: 12,
   },
-  scanButton: {
-    backgroundColor: "#9C27B0",
+  genderButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#e9ecef",
+    backgroundColor: "white",
+    gap: 8,
+  },
+  genderButtonSelected: {
+    borderColor: "#4A90E2",
+    backgroundColor: "#4A90E2",
+  },
+  genderText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  genderTextSelected: {
+    color: "white",
+  },
+  submitButton: {
+    backgroundColor: "#28a745",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -559,168 +382,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 12,
     gap: 12,
-    shadowColor: "#9C27B0",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  scanButtonText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  scanButtonDisabled: {
-    backgroundColor: "#ccc",
-    shadowOpacity: 0,
-  },
-  searchButton: {
-    backgroundColor: "#4A90E2",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
-  },
-  searchButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  searchButtonDisabled: {
-    backgroundColor: "#ccc",
-  },
-  cameraNotAvailableText: {
-    fontSize: 12,
-    color: "#dc3545",
-    textAlign: "center",
     marginTop: 8,
-    fontStyle: "italic",
-  },
-  babyInfoCard: {
-    backgroundColor: "white",
-    marginHorizontal: 20,
-    marginBottom: 24,
-    padding: 20,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    borderLeftWidth: 4,
-    borderLeftColor: "#28a745",
-  },
-  babyInfoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e9ecef",
-  },
-  babyInfoTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#28a745",
-  },
-  babyInfoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  babyInfoLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6c757d",
-  },
-  babyInfoValue: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#212529",
-    flex: 1,
-    textAlign: "right",
-  },
-  parentSelection: {
-    marginVertical: 12,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: "#e9ecef",
-  },
-  parentSelectionLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-  },
-  parentEmailOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: "#e9ecef",
-    marginBottom: 8,
-    backgroundColor: "#f8f9fa",
-  },
-  parentEmailOptionSelected: {
-    borderColor: "#28a745",
-    backgroundColor: "#e8f5e9",
-  },
-  radioButton: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#6c757d",
-    marginRight: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  radioButtonSelected: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#28a745",
-  },
-  parentEmailText: {
-    fontSize: 14,
-    color: "#333",
-    flex: 1,
-  },
-  parentEmailTextSelected: {
-    fontWeight: "600",
-    color: "#28a745",
-  },
-  securityNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#d1ecf1",
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  securityText: {
-    flex: 1,
-    fontSize: 12,
-    color: "#0c5460",
-    lineHeight: 16,
-  },
-  submitButton: {
-    backgroundColor: "#28a745",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    gap: 12,
     shadowColor: "#28a745",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -733,7 +395,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: "white",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
   },
   infoBox: {
@@ -741,6 +403,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#d1ecf1",
     padding: 16,
     marginHorizontal: 20,
+    marginTop: 24,
     marginBottom: 32,
     borderRadius: 12,
     gap: 12,
@@ -752,53 +415,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#0c5460",
     lineHeight: 20,
-  },
-  scannerContainer: {
-    flex: 1,
-    backgroundColor: "black",
-  },
-  scannerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: "white",
-  },
-  scannerTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#333",
-  },
-  closeButton: {
-    padding: 8,
-  },
-  cameraContainer: {
-    flex: 1,
-    position: "relative",
-  },
-  camera: {
-    flex: 1,
-  },
-  scannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  scannerFrame: {
-    width: 250,
-    height: 250,
-    borderWidth: 3,
-    borderColor: "white",
-    borderRadius: 12,
-    backgroundColor: "transparent",
-  },
-  scannerInstruction: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: 24,
-    textAlign: "center",
   },
 });
