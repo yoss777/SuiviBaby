@@ -25,19 +25,22 @@ interface BabyContextType {
 const BabyContext = createContext<BabyContextType | undefined>(undefined);
 
 export function BabyProvider({ children: childrenProp }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [children, setChildren] = useState<Child[]>([]);
   const [activeChild, setActiveChildState] = useState<Child | null>(null);
   const [loading, setLoading] = useState(true);
   const [hiddenChildrenIds, setHiddenChildrenIds] = useState<string[]>([]);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
 
   // Écouter les changements des préférences utilisateur en temps réel
   useEffect(() => {
     if (!user?.uid) {
       setHiddenChildrenIds([]);
+      setPreferencesLoaded(true);
       return;
     }
 
+    setPreferencesLoaded(false);
     const userPrefsRef = doc(db, 'user_preferences', user.uid);
 
     const unsubscribe = onSnapshot(userPrefsRef, (snapshot) => {
@@ -47,13 +50,16 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       } else {
         setHiddenChildrenIds([]);
       }
+      setPreferencesLoaded(true);
     }, (error) => {
       console.error('Erreur lors de l\'écoute des préférences:', error);
       // En cas d'erreur (document n'existe pas encore), charger de manière asynchrone
       obtenirPreferences().then(prefs => {
         setHiddenChildrenIds(prefs.hiddenChildrenIds || []);
+        setPreferencesLoaded(true);
       }).catch(err => {
         console.error('Erreur lors du chargement des préférences:', err);
+        setPreferencesLoaded(true);
       });
     });
 
@@ -61,9 +67,14 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   }, [user]);
 
   // Charger les enfants depuis Firestore
-  // Dans le SIM, un enfant peut être rattaché à plusieurs parents
-  // On cherche donc tous les enfants où parentIds contient l'userId actuel
   useEffect(() => {
+    // Si l'auth est encore en cours de chargement, rester en loading
+    if (authLoading) {
+      console.log('[BabyContext] Auth en cours de chargement...');
+      setLoading(true);
+      return;
+    }
+
     if (!user?.uid) {
       console.log('[BabyContext] Pas de user.uid, arrêt du chargement');
       setChildren([]);
@@ -72,11 +83,16 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       return;
     }
 
+    // Attendre que les préférences soient chargées
+    if (!preferencesLoaded) {
+      console.log('[BabyContext] En attente du chargement des préférences...');
+      setLoading(true); // IMPORTANT : rester en loading tant que les préférences ne sont pas chargées
+      return;
+    }
+
     console.log('[BabyContext] Chargement des enfants pour user.uid:', user.uid);
     setLoading(true);
 
-    // Écouter les changements dans la collection children
-    // où le tableau parentIds contient l'ID du parent connecté
     const q = query(
       collection(db, 'children'),
       where('parentIds', 'array-contains', user.uid)
@@ -124,7 +140,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     });
 
     return () => unsubscribe();
-  }, [user, hiddenChildrenIds]);
+  }, [user, hiddenChildrenIds, preferencesLoaded, authLoading]);
 
   const setActiveChild = (child: Child) => {
     setActiveChildState(child);

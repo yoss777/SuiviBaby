@@ -27,9 +27,10 @@ export default function RootLayout() {
       <AuthProvider>
         <BabyProvider>
           <ThemeProvider value={CustomTheme}>
-            <Stack>
+            <Stack initialRouteName="boot">
               <Stack.Screen name="(auth)" options={{ headerShown: false }} />
               <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
+              <Stack.Screen name="boot" options={{ headerShown: false }} />
               <Stack.Screen name="explore" options={{ headerShown: false }} />
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen
