@@ -10,13 +10,21 @@
     "newArchEnabled": true,
     "sdkVersion": "53.0.0",
     "ios": {
-      "supportsTablet": true
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser le microphone pour les commandes vocales.",
+        "NSSpeechRecognitionUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser la reconnaissance vocale pour les commandes vocales."},
+      "bundleIdentifier": "com.yoss7.samaye"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": [
+        "RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
       "package": "com.yoss7.samaye",
       "compileSdkVersion": 35,
       "targetSdkVersion": 35,
@@ -36,6 +44,19 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone for voice commands."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Microphone pour commandes vocales",
+          "speechRecognitionPermission": "Reconnaissance vocale"
         }
       ]
     ],

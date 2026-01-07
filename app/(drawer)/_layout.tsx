@@ -1,14 +1,17 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { useRouter } from "expo-router";
 import { Drawer } from "expo-router/drawer";
 import React, { useEffect } from "react";
-import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
+import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+
+// Importer la configuration AssemblyAI
+import '@/config/assemblyai.config';
 
 function BabyHeaderTitle() {
   const { activeChild } = useBaby();
@@ -32,9 +35,7 @@ function BabyHeaderTitle() {
       >
         {activeChild?.name || "Suivi Enfant"}
       </Text>
-      <Pressable onPress={() => {Alert.alert("Microphone", "Implémentation en cours");}} style={{ paddingRight: 10 }}>
-        <FontAwesome name="microphone" size={18} color="#4A90E2" />
-      </Pressable>
+      <VoiceCommandButton size={18} color="#4A90E2" showTestToggle={true} />
     </View>
   );
 }
