@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, ScrollView, Sty
 import Animated, { useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AddChildModal } from '@/components/suivibaby/AddChildModal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { db } from '@/config/firebase';
@@ -35,6 +36,7 @@ export default function Explore() {
   const [hiddenChildren, setHiddenChildren] = useState<Child[]>([]);
   const [toggledIds, setToggledIds] = useState<Set<string>>(new Set());
   const [loadingHidden, setLoadingHidden] = useState(false);
+  const [showAddChildModal, setShowAddChildModal] = useState(false);
 
   const categories: MedicalCategory[] = useMemo(() => {
     const childTiles = children.map((child) => ({
@@ -142,6 +144,11 @@ export default function Explore() {
     if (category.route === 'baby' && category.child) {
       setActiveChild(category.child);
       router.push('/(drawer)/baby' as any);
+      return;
+    }
+
+    if (category.route === 'add-baby') {
+      setShowAddChildModal(true);
       return;
     }
 
@@ -269,7 +276,7 @@ export default function Explore() {
               Suivi Baby
             </ThemedText>
             <ThemedText style={styles.subtitle}>
-              L&apos;Amour au Cœur de la Vie
+              L'Amour au Cœur de la Vie
             </ThemedText>
 
             <TouchableOpacity
@@ -388,6 +395,12 @@ export default function Explore() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Modal de choix pour ajouter un enfant */}
+      <AddChildModal 
+        visible={showAddChildModal}
+        onClose={() => setShowAddChildModal(false)}
+      />
     </SafeAreaView>
   );
 }

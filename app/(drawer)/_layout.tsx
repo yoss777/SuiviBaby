@@ -87,6 +87,20 @@ export default function DrawerLayout() {
           drawerItemStyle: { display: 'none' },
         }}
       />
+      <Drawer.Screen
+        name="join-child"
+        options={{
+          title: "Ajouter avec un code",
+          drawerItemStyle: { display: 'none' },
+        }}
+      />
+      <Drawer.Screen
+        name="share-child"
+        options={{
+          title: "Partage",
+          drawerItemStyle: { display: 'none' },
+        }}
+      />
       </Drawer>
   );
 }

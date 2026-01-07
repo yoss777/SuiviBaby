@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Dimensions, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
+import { AddChildModal } from "@/components/suivibaby/AddChildModal";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -22,6 +23,7 @@ export function CustomDrawerContent(props: any) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showHideModal, setShowHideModal] = useState(false);
   const [childToHide, setChildToHide] = useState<{ id: string; name: string } | null>(null);
+  const [showAddChildModal, setShowAddChildModal] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   const isActive = (routeName: string) => pathname.includes(routeName);
@@ -173,14 +175,24 @@ export function CustomDrawerContent(props: any) {
                 </View>
               </TouchableOpacity>
 
-              {/* Bouton pour masquer l'enfant */}
-              <TouchableOpacity
-                style={styles.hideButton}
-                onPress={() => handleHideChild(child.id, child.name)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <FontAwesome name="trash-alt" size={16} color="#dc3545" />
-              </TouchableOpacity>
+              {/* Actions sur l'enfant */}
+              <View style={styles.childActions}>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => router.push(`/(drawer)/share-child?childId=${child.id}` as any)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <FontAwesome name="share-alt" size={16} color="#4A90E2" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => handleHideChild(child.id, child.name)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <FontAwesome name="trash-alt" size={16} color="#dc3545" />
+                </TouchableOpacity>
+              </View>
             </View>
           );
         })}
@@ -191,9 +203,7 @@ export function CustomDrawerContent(props: any) {
             styles.addBabyButton,
             { borderColor: Colors[colorScheme].tint },
           ]}
-          onPress={() => {
-            router.push("/(drawer)/add-baby");
-          }}
+          onPress={() => setShowAddChildModal(true)}
         >
           <Text
             style={[styles.addBabyText, { color: Colors[colorScheme].tint }]}
@@ -201,6 +211,8 @@ export function CustomDrawerContent(props: any) {
             ➕ Ajouter un enfant
           </Text>
         </TouchableOpacity>
+
+        {/* Bouton J'ai un code - Retiré car intégré dans la modale */}
       </View>
 
       {/* Section: Compte utilisateur */}
@@ -250,7 +262,7 @@ export function CustomDrawerContent(props: any) {
             <Text style={[styles.modalSubtitle, { color: Colors[colorScheme].text }]}>
               Êtes-vous sûr de vouloir masquer <Text style={styles.childNameInModal}>{childToHide?.name}</Text> de votre liste de suivi ?
               {'\n\n'}
-              L&apos;enfant restera accessible aux autres parents et vous pourrez le réafficher à tout moment depuis les paramètres.
+              L'enfant restera accessible aux autres parents et vous pourrez le réafficher à tout moment depuis les paramètres.
             </Text>
 
             <View style={styles.modalButtons}>
@@ -272,6 +284,12 @@ export function CustomDrawerContent(props: any) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Modal de choix pour ajouter un enfant */}
+      <AddChildModal 
+        visible={showAddChildModal}
+        onClose={() => setShowAddChildModal(false)}
+      />
     </DrawerContentScrollView>
   );
 }
@@ -416,7 +434,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: 8,
     marginVertical: 4,
-    gap: 8,
+    gap: 4,
   },
   childItem: {
     flex: 1,
@@ -427,8 +445,29 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 12,
   },
+  childActions: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  actionButton: {
+    padding: 8,
+  },
   hideButton: {
     padding: 8,
+  },
+  joinChildButton: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    alignItems: "center",
+    backgroundColor: '#f8f0ff',
+  },
+  joinChildText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   modalOverlay: {
     flex: 1,
