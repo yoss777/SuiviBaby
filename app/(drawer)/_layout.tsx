@@ -1,7 +1,8 @@
+import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { useRouter } from "expo-router";
 import { Drawer } from "expo-router/drawer";
 import React, { useEffect } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
 import { Colors } from "@/constants/theme";
@@ -13,9 +14,28 @@ function BabyHeaderTitle() {
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
   return (
-    <Text style={{ color: Colors[colorScheme].text, fontSize: 17, fontWeight: '600' }}>
-      {activeChild?.name || 'Suivi Enfant'}
-    </Text>
+    <View
+      style={{
+        flex: 1,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        width: "100%",
+      }}
+    >
+      <Text
+        style={{
+          color: Colors[colorScheme].text,
+          fontSize: 17,
+          fontWeight: "600",
+        }}
+      >
+        {activeChild?.name || "Suivi Enfant"}
+      </Text>
+      <Pressable onPress={() => {Alert.alert("Microphone", "Implémentation en cours");}} style={{ paddingRight: 10 }}>
+        <FontAwesome name="microphone" size={18} color="#4A90E2" />
+      </Pressable>
+    </View>
   );
 }
 
@@ -39,7 +59,14 @@ export default function DrawerLayout() {
   // Show loading screen while checking authentication
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors[colorScheme].background }}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: Colors[colorScheme].background,
+        }}
+      >
         <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
       </View>
     );
@@ -51,24 +78,24 @@ export default function DrawerLayout() {
   }
 
   return (
-      <Drawer
-        drawerContent={(props) => <CustomDrawerContent {...props} />}
-        screenOptions={{
-          drawerActiveTintColor: Colors[colorScheme].tint,
-          headerTintColor: Colors[colorScheme].text,
-          headerStyle: {
-            backgroundColor: Colors[colorScheme].background,
-          },
-          sceneContainerStyle: {
-            backgroundColor: Colors[colorScheme].background,
-          },
-        }}
-      >
+    <Drawer
+      drawerContent={(props) => <CustomDrawerContent {...props} />}
+      screenOptions={{
+        drawerActiveTintColor: Colors[colorScheme].tint,
+        headerTintColor: Colors[colorScheme].text,
+        headerStyle: {
+          backgroundColor: Colors[colorScheme].background,
+        },
+        sceneContainerStyle: {
+          backgroundColor: Colors[colorScheme].background,
+        },
+      }}
+    >
       <Drawer.Screen
         name="settings"
         options={{
           title: "Paramètres",
-          drawerItemStyle: { display: 'none' },
+          drawerItemStyle: { display: "none" },
         }}
       />
 
@@ -77,30 +104,30 @@ export default function DrawerLayout() {
         name="baby"
         options={{
           headerTitle: () => <BabyHeaderTitle />,
-          drawerItemStyle: { display: 'none' },
+          drawerItemStyle: { display: "none" },
         }}
       />
       <Drawer.Screen
         name="add-baby"
         options={{
           title: "Ajouter un enfant",
-          drawerItemStyle: { display: 'none' },
+          drawerItemStyle: { display: "none" },
         }}
       />
       <Drawer.Screen
         name="join-child"
         options={{
           title: "Ajouter avec un code",
-          drawerItemStyle: { display: 'none' },
+          drawerItemStyle: { display: "none" },
         }}
       />
       <Drawer.Screen
         name="share-child"
         options={{
           title: "Partage",
-          drawerItemStyle: { display: 'none' },
+          drawerItemStyle: { display: "none" },
         }}
       />
-      </Drawer>
+    </Drawer>
   );
 }
