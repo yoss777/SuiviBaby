@@ -126,6 +126,16 @@ export default function SettingsScreen() {
 
   const dataSettings: SettingItem[] = [
     {
+      id: 'migration',
+      icon: 'rocket-outline',
+      label: 'Migration des données',
+      description: 'Gérer la migration vers la nouvelle structure',
+      color: Colors.light.primary,
+      onPress: () => {
+        router.push('/settings/migration');
+      },
+    },
+    {
       id: 'export',
       icon: 'cloud-download-outline',
       label: 'Exporter les données',

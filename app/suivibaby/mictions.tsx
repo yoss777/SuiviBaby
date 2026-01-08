@@ -4,7 +4,7 @@ import {
   ajouterMiction,
   modifierMiction,
   supprimerMiction,
-} from "@/services/mictionsService";
+} from "@/migration/eventsDoubleWriteService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams } from "expo-router";

@@ -4,16 +4,16 @@ import ModernActionButtons from "@/components/suivibaby/ModernActionsButton";
 import { useBaby } from "@/contexts/BabyContext";
 import {
   ajouterMiction,
-  ecouterMictions,
-  modifierMiction,
-  supprimerMiction,
-} from "@/services/mictionsService";
-import {
   ajouterSelle,
-  ecouterSelles,
+  modifierMiction,
   modifierSelle,
+  supprimerMiction,
   supprimerSelle,
-} from "@/services/sellesService";
+} from "@/migration/eventsDoubleWriteService";
+import {
+  ecouterMictionsHybrid as ecouterMictions,
+  ecouterSellesHybrid as ecouterSelles,
+} from "@/migration/eventsHybridService";
 import { Miction, Selle } from "@/types/interfaces";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";

@@ -1,11 +1,13 @@
 import ModernActionButtons from "@/components/suivibaby/ModernActionsButton";
 import { useBaby } from "@/contexts/BabyContext";
 import {
+  ajouterBiberon,
   ajouterTetee,
-  ecouterTetees,
+  modifierBiberon,
   modifierTetee,
   supprimerTetee,
-} from "@/services/teteesService";
+} from "@/migration/eventsDoubleWriteService";
+import { ecouterTeteesHybrid as ecouterTetees } from "@/migration/eventsHybridService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -253,9 +255,9 @@ export default function TeteesScreen() {
       }
 
       if (editingTetee) {
-        await modifierTetee(activeChild.id, editingTetee.id, dataToSave);
+        dataToSave.type === "seins" ? await modifierTetee(activeChild.id, editingTetee.id, dataToSave) : await modifierBiberon(activeChild.id, editingTetee.id, dataToSave);
       } else {
-        await ajouterTetee(activeChild.id, dataToSave);
+        dataToSave.type === "seins" ? await ajouterTetee(activeChild.id, dataToSave) : await ajouterBiberon(activeChild.id, dataToSave);
       }
 
       closeModal();
@@ -443,7 +445,7 @@ export default function TeteesScreen() {
       <View style={styles.header}>
         <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
           <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Ajouter une tétée</Text>
+          <Text style={styles.addButtonText}>Ajouter un repas</Text>
         </TouchableOpacity>
       </View>
 
@@ -456,9 +458,9 @@ export default function TeteesScreen() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <FontAwesome name="baby" size={48} color="#ccc" />
-            <Text style={styles.emptyText}>Aucune tétée enregistrée</Text>
+            <Text style={styles.emptyText}>Aucun repas enregistré</Text>
             <Text style={styles.emptySubtext}>
-              Ajoutez votre première tétée
+              Ajoutez votre premier repas
             </Text>
           </View>
         }
@@ -479,7 +481,7 @@ export default function TeteesScreen() {
                 color="#4A90E2"
               />
               <Text style={styles.modalTitle}>
-                {editingTetee ? "Modifier la tétée" : "Nouvelle tétée"}
+                {editingTetee ? "Modifier le repas" : "Nouveau repas"}
               </Text>
               {editingTetee && (
                 <TouchableOpacity onPress={handleDeleteTetee}>
@@ -488,9 +490,9 @@ export default function TeteesScreen() {
               )}
             </View>
 
-            <Text style={styles.modalCategoryLabel}>Type de tétée</Text>
+            <Text style={styles.modalCategoryLabel}>Type de repas</Text>
             <View style={styles.typeRow}>
-              {["seins", "biberons"].map((t) => (
+              {["seins", "biberon"].map((t) => (
                 <TouchableOpacity
                   key={t}
                   style={[

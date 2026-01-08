@@ -1,6 +1,10 @@
 import ModernActionButtons from "@/components/suivibaby/ModernActionsButton";
 import { useBaby } from "@/contexts/BabyContext";
-import { ajouterVitamine, modifierVitamine, supprimerVitamine } from "@/services/vitaminesService";
+import {
+  ajouterVitamine,
+  modifierVitamine,
+  supprimerVitamine,
+} from "@/migration/eventsDoubleWriteService";
 import { Vitamine, VitamineGroup } from "@/types/interfaces";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";

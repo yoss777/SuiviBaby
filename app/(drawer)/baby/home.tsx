@@ -1,10 +1,13 @@
+import { MigrationBanner } from "@/components/migration";
 import { useBaby } from "@/contexts/BabyContext";
-import { ecouterMictions } from "@/services/mictionsService";
-import { ecouterPompages } from "@/services/pompagesService";
-import { ecouterSelles } from "@/services/sellesService";
-import { ecouterTetees } from "@/services/teteesService";
-import { ecouterVaccins } from "@/services/vaccinsService";
-import { ecouterVitamines } from "@/services/vitaminesService";
+import {
+  ecouterMictionsHybrid as ecouterMictions,
+  ecouterPompagesHybrid as ecouterPompages,
+  ecouterSellesHybrid as ecouterSelles,
+  ecouterTeteesHybrid as ecouterTetees,
+  ecouterVaccinsHybrid as ecouterVaccins,
+  ecouterVitaminesHybrid as ecouterVitamines,
+} from "@/migration/eventsHybridService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -471,6 +474,9 @@ export default function HomeDashboard() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Bannière de migration */}
+      {activeChild?.id && <MigrationBanner childId={activeChild.id} />}
+
       {/* En-tête avec salutation */}
       <View style={styles.header}>
         <Text style={styles.greeting}>{getGreeting()}</Text>

@@ -2,10 +2,10 @@ import ModernActionButtons from "@/components/suivibaby/ModernActionsButton";
 import { useBaby } from "@/contexts/BabyContext";
 import {
   ajouterPompage,
-  ecouterPompages,
   modifierPompage,
   supprimerPompage,
-} from "@/services/pompagesService";
+} from "@/migration/eventsDoubleWriteService";
+import { ecouterPompagesHybrid as ecouterPompages } from "@/migration/eventsHybridService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";

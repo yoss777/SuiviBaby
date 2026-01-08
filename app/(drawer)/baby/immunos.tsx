@@ -1,8 +1,10 @@
 import VaccinsScreen from "@/app/suivibaby/vaccins";
 import VitaminesScreen from "@/app/suivibaby/vitamines";
 import { useBaby } from "@/contexts/BabyContext";
-import { ecouterVaccins } from "@/services/vaccinsService";
-import { ecouterVitamines } from "@/services/vitaminesService";
+import {
+  ecouterVaccinsHybrid as ecouterVaccins,
+  ecouterVitaminesHybrid as ecouterVitamines,
+} from "@/migration/eventsHybridService";
 import { Vaccin, Vitamine } from "@/types/interfaces";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";

@@ -1,8 +1,10 @@
 import PompagesChart from '@/components/suivibaby/PompagesChart';
 import TeteesChart from '@/components/suivibaby/TeteesChart';
 import { useBaby } from '@/contexts/BabyContext';
-import { ecouterPompages } from '@/services/pompagesService';
-import { ecouterTetees } from '@/services/teteesService';
+import {
+  ecouterPompagesHybrid as ecouterPompages,
+  ecouterTeteesHybrid as ecouterTetees,
+} from '@/migration/eventsHybridService';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
