@@ -1,15 +1,15 @@
-// Script de migration des anciennes collections vers la collection unifiée "events"
+// Script de migration des anciennes collections vers la collection unifiÃ©e "events"
 
-import React from "react";
 import {
-    Timestamp,
-    collection,
-    doc,
-    getDocs,
-    query,
-    where,
-    writeBatch,
+  Timestamp,
+  collection,
+  doc,
+  getDocs,
+  query,
+  where,
+  writeBatch
 } from "firebase/firestore";
+import React from "react";
 import { db } from "../config/firebase";
 import type { Event, EventType } from "../services/eventsService";
 
@@ -21,6 +21,7 @@ interface MigrationResult {
     collection: string;
     success: number;
     errors: number;
+    skipped: number;
   }[];
 }
 
@@ -31,7 +32,7 @@ const COLLECTIONS_TO_MIGRATE = [
   { oldName: "tetees", newType: "tetee" as EventType },
   { oldName: "biberons", newType: "biberon" as EventType },
   { oldName: "pompages", newType: "pompage" as EventType },
-  { oldName: "couches", newType: "couche_mixte" as EventType }, // Sera ajusté selon pipi/popo
+  { oldName: "couches", newType: "couche_mixte" as EventType }, // Sera ajustÃ© selon pipi/popo
   { oldName: "sommeil", newType: "sommeil" as EventType },
   { oldName: "vaccins", newType: "vaccin" as EventType },
   { oldName: "vitamines", newType: "vitamine" as EventType },
@@ -53,7 +54,7 @@ function removeUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
 }
 
 /**
- * Transforme les données de l'ancien format vers le nouveau
+ * Transforme les donnÃ©es de l'ancien format vers le nouveau
  */
 function transformData(oldData: any, newType: EventType): Partial<Event> {
   const base = {
@@ -66,7 +67,7 @@ function transformData(oldData: any, newType: EventType): Partial<Event> {
 
   switch (newType) {
     case "tetee":
-      // Vérifier si c'est un biberon (ancien format avait type: "biberons")
+      // VÃ©rifier si c'est un biberon (ancien format avait type: "biberons")
       if (oldData.type === "biberons" || oldData.quantite) {
         return {
           ...base,
@@ -75,7 +76,7 @@ function transformData(oldData: any, newType: EventType): Partial<Event> {
         };
       }
 
-      // Sinon c'est une tétée au sein
+      // Sinon c'est une tÃ©tÃ©e au sein
       return {
         ...base,
         type: "tetee",
@@ -101,10 +102,9 @@ function transformData(oldData: any, newType: EventType): Partial<Event> {
         duree: oldData.duree,
       };
 
-    case "couche_mixte":
     case "couche":
-      // Pour les couches, on crée juste un simple event "couche"
-      // Les détails pipi/popo sont gérés dans mictions et selles
+      // Pour les couches, on crÃ©e juste un simple event "couche"
+      // Les dÃ©tails pipi/popo sont gÃ©rÃ©s dans mictions et selles
       return {
         ...base,
         type: "couche",
@@ -157,13 +157,15 @@ function transformData(oldData: any, newType: EventType): Partial<Event> {
 
 /**
  * Migre une collection spécifique
+ * MODIF PRINCIPALE : Utiliser l'ID original de oldDoc pour le nouveau document.
+ * AJOUT : Vérifier si l'ID existe déjà dans "events" pour skipper et éviter les doublons/écrasements.
  */
 async function migrateCollection(
   userId: string,
   childId: string,
   oldCollectionName: string,
   newType: EventType
-): Promise<{ success: number; errors: number }> {
+): Promise<{ success: number; errors: number; skipped: number }> {
   try {
     // Récupère tous les documents de l'ancienne collection
     const q = query(
@@ -176,13 +178,14 @@ async function migrateCollection(
     console.log(`📦 ${snapshot.size} documents trouvés dans ${oldCollectionName}`);
 
     if (snapshot.empty) {
-      return { success: 0, errors: 0 };
+      return { success: 0, errors: 0, skipped: 0 };
     }
 
     // Migration par batch de 500 (limite Firestore)
     const BATCH_SIZE = 500;
     let successCount = 0;
     let errorCount = 0;
+    let skippedCount = 0;
 
     for (let i = 0; i < snapshot.docs.length; i += BATCH_SIZE) {
       const batch = writeBatch(db);
@@ -200,8 +203,18 @@ async function migrateCollection(
             userId,
           });
 
-          // Crée le document dans la nouvelle collection
-          const newDocRef = doc(collection(db, "events"));
+          // MODIF : Utiliser l'ID original pour le nouveau document
+          const newDocRef = doc(db, "events", oldDoc.id);
+
+          // AJOUT : Vérifier si le document existe déjà dans "events"
+          // const existingDoc = await getDoc(newDocRef);
+          // if (existingDoc.exists()) {
+          //   console.log(`⚠️ Skip : ID ${oldDoc.id} existe déjà dans events`);
+          //   skippedCount++;
+          //   continue;
+          // }
+
+          // Créer le document dans la nouvelle collection avec le même ID
           batch.set(newDocRef, cleanData);
 
           successCount++;
@@ -215,7 +228,7 @@ async function migrateCollection(
       console.log(`✅ Batch ${i / BATCH_SIZE + 1} migré (${batchDocs.length} docs)`);
     }
 
-    return { success: successCount, errors: errorCount };
+    return { success: successCount, errors: errorCount, skipped: skippedCount };
   } catch (error) {
     console.error(`❌ Erreur migration ${oldCollectionName}:`, error);
     throw error;
@@ -224,6 +237,7 @@ async function migrateCollection(
 
 /**
  * Lance la migration complète pour un enfant
+ * MODIF : Mise à jour du result pour inclure skipped.
  */
 export async function migrerToutesLesCollections(
   userId: string,
@@ -233,7 +247,7 @@ export async function migrerToutesLesCollections(
     collectionsToMigrate?: string[]; // Permet de migrer seulement certaines collections
   }
 ): Promise<MigrationResult> {
-  console.log("🚀 Début de la migration");
+  console.log("ðŸš€ DÃ©but de la migration");
   console.log(`   User: ${userId}`);
   console.log(`   Child: ${childId}`);
   console.log(`   Dry Run: ${options?.dryRun || false}`);
@@ -245,14 +259,14 @@ export async function migrerToutesLesCollections(
     details: [],
   };
 
-  // Filtre les collections si spécifié
+  // Filtre les collections si spÃ©cifiÃ©
   const collectionsToProcess = COLLECTIONS_TO_MIGRATE.filter(
     (col) =>
       !options?.collectionsToMigrate ||
       options.collectionsToMigrate.includes(col.oldName)
   );
 
-  for (const { oldName, newType } of collectionsToProcess) {
+for (const { oldName, newType } of collectionsToProcess) {
     try {
       console.log(`\n📂 Migration de ${oldName}...`);
 
@@ -269,10 +283,11 @@ export async function migrerToutesLesCollections(
           collection: oldName,
           success: snapshot.size,
           errors: 0,
+          skipped: 0,
         });
       } else {
         // Migration réelle
-        const { success, errors } = await migrateCollection(
+        const { success, errors, skipped } = await migrateCollection(
           userId,
           childId,
           oldName,
@@ -280,10 +295,12 @@ export async function migrerToutesLesCollections(
         );
         result.success += success;
         result.errors += errors;
+        result.skipped += skipped;
         result.details.push({
           collection: oldName,
           success,
           errors,
+          skipped,
         });
       }
     } catch (error) {
@@ -295,12 +312,13 @@ export async function migrerToutesLesCollections(
   console.log("\n✅ Migration terminée");
   console.log(`   Succès: ${result.success}`);
   console.log(`   Erreurs: ${result.errors}`);
-  
+  console.log(`   Skipped: ${result.skipped}`);
+
   return result;
 }
 
 /**
- * Vérifie si la migration a déjà été effectuée
+ * VÃ©rifie si la migration a dÃ©jÃ  Ã©tÃ© effectuÃ©e
  */
 export async function verifierMigration(
   userId: string,
@@ -389,13 +407,13 @@ function MigrationButton() {
         onPress={() => migrate(userId, childId)}
         disabled={isLoading}
       >
-        {isLoading ? "Migration..." : "Migrer les données"}
+        {isLoading ? "Migration..." : "Migrer les donnÃ©es"}
       </Button>
       
       {result && (
         <Text>
-          ✅ {result.success} événements migrés
-          {result.errors > 0 && `\n❌ ${result.errors} erreurs`}
+          âœ… {result.success} Ã©vÃ©nements migrÃ©s
+          {result.errors > 0 && `\nâŒ ${result.errors} erreurs`}
         </Text>
       )}
     </View>

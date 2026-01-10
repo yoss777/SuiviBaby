@@ -575,6 +575,98 @@ export function ecouterVitaminesHybrid(
 }
 
 // ============================================
+// LECTURE HYBRIDE - BIBERONS
+// ============================================
+
+export async function obtenirTousLesBiberonsHybrid(
+  childId: string
+): Promise<any[]> {
+  if (config.mode === "NEW_ONLY") {
+    return obtenirEvenements(childId, { type: "biberon" });
+  }
+
+  if (config.mode === "OLD_ONLY") {
+    // Dans OLD, les biberons sont dans tetees avec type: "biberons"
+    const allTetees = await teteesService.obtenirToutesLesTetees(childId);
+    return allTetees.filter((t: any) => t.type === "biberons");
+  }
+
+  // Mode HYBRID: récupérer des 2 et merger
+  const [oldTetees, newBiberons] = await Promise.all([
+    teteesService.obtenirToutesLesTetees(childId).catch(() => []),
+    obtenirEvenements(childId, { type: "biberon" }).catch(() => []),
+  ]);
+
+  // Filtrer seulement les biberons depuis OLD (tetees avec type: "biberons")
+  const oldBiberons = oldTetees.filter((t: any) => t.type === "biberons");
+
+  console.log(`📊 Biberons OLD: ${oldBiberons.length}, NEW: ${newBiberons.length}`);
+
+  return deduplicateEvents(
+    oldBiberons,
+    newBiberons,
+    config.preferSource,
+    config.deduplicationWindow
+  );
+}
+
+/**
+ * Listener hybride en temps réel pour les biberons
+ */
+export function ecouterBiberonsHybrid(
+  childId: string,
+  callback: (events: any[]) => void
+): () => void {
+  if (config.mode === "NEW_ONLY") {
+    return ecouterEvenements(childId, callback, { type: "biberon" });
+  }
+
+  if (config.mode === "OLD_ONLY") {
+    // Dans OLD, les biberons sont dans tetees avec type: "biberons"
+    return teteesService.ecouterTetees(childId, (tetees) => {
+      const biberons = tetees.filter((t: any) => t.type === "biberons");
+      callback(biberons);
+    });
+  }
+
+  // Mode HYBRID: écouter les 2 sources
+  let oldBiberons: any[] = [];
+  let newBiberons: any[] = [];
+
+  const merge = () => {
+    const merged = deduplicateEvents(
+      oldBiberons,
+      newBiberons,
+      config.preferSource,
+      config.deduplicationWindow
+    );
+    callback(merged);
+  };
+
+  // Écouter OLD tetees et filtrer les biberons
+  const unsubscribeOld = teteesService.ecouterTetees(childId, (tetees) => {
+    oldBiberons = tetees.filter((t: any) => t.type === "biberons");
+    merge();
+  });
+
+  // Écouter NEW biberons
+  const unsubscribeNew = ecouterEvenements(
+    childId,
+    (events) => {
+      newBiberons = events;
+      merge();
+    },
+    { type: "biberon" }
+  );
+
+  // Retourner une fonction qui désinscrit les 2
+  return () => {
+    unsubscribeOld();
+    unsubscribeNew();
+  };
+}
+
+// ============================================
 // STATISTIQUES & MONITORING
 // ============================================
 

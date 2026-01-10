@@ -1,6 +1,7 @@
 import { MigrationBanner } from "@/components/migration";
 import { useBaby } from "@/contexts/BabyContext";
 import {
+  ecouterBiberonsHybrid as ecouterBiberons,
   ecouterMictionsHybrid as ecouterMictions,
   ecouterPompagesHybrid as ecouterPompages,
   ecouterSellesHybrid as ecouterSelles,
@@ -23,6 +24,7 @@ import {
 
 interface DashboardData {
   tetees: any[];
+  biberons: any[];
   pompages: any[];
   mictions: any[];
   selles: any[];
@@ -66,6 +68,7 @@ export default function HomeDashboard() {
   const { activeChild } = useBaby();
   const [data, setData] = useState<DashboardData>({
     tetees: [],
+    biberons: [],
     pompages: [],
     mictions: [],
     selles: [],
@@ -87,6 +90,7 @@ export default function HomeDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState({
     tetees: true,
+    biberons: true,
     pompages: true,
     mictions: true,
     selles: true,
@@ -146,6 +150,10 @@ export default function HomeDashboard() {
       setData((prev) => ({ ...prev, tetees }));
       setLoading((prev) => ({ ...prev, tetees: false }));
     });
+    const unsubscribeBiberons = ecouterBiberons(activeChild.id, (biberons) => {
+      setData((prev) => ({ ...prev, biberons }));
+      setLoading((prev) => ({ ...prev, biberons: false }));
+    });
     const unsubscribePompages = ecouterPompages(activeChild.id, (pompages) => {
       setData((prev) => ({ ...prev, pompages }));
       setLoading((prev) => ({ ...prev, pompages: false }));
@@ -169,6 +177,7 @@ export default function HomeDashboard() {
 
     return () => {
       unsubscribeTetees();
+      unsubscribeBiberons();
       unsubscribePompages();
       unsubscribeMictions();
       unsubscribeSelles();
@@ -201,15 +210,17 @@ export default function HomeDashboard() {
       });
 
     const todayTetees = filterToday(data.tetees);
+    const todayBiberons = filterToday(data.biberons);
     const todayPompages = filterToday(data.pompages);
     const todayMictions = filterToday(data.mictions);
     const todaySelles = filterToday(data.selles);
     const todayVitamines = filterToday(data.vitamines);
     const todayVaccins = filterToday(data.vaccins);
 
-    // Séparer les tétées par type
-    const seinsToday = todayTetees.filter((t) => !t.type || t.type === "seins");
-    const biberonsToday = todayTetees.filter((t) => t.type === "biberons");
+    // Filtrer les tétées seins (OLD: type="seins" ou pas de type, NEW: type="tetee")
+    const seinsToday = todayTetees.filter((t) => !t.type || t.type === "seins" || t.type === "tetee");
+    // Les biberons viennent maintenant du listener séparé
+    const biberonsToday = todayBiberons;
 
     // Calculs pour tétées seins
     const lastSeins =
@@ -235,11 +246,12 @@ export default function HomeDashboard() {
           )
         : null;
 
-    // Calculs totaux pour tétées
+    // Calculs totaux pour tétées (seins + biberons)
     const teteesTotalQuantity = biberonsQuantity; // Seuls les biberons ont une quantité mesurable
+    const allTeteesAndBiberons = [...todayTetees, ...todayBiberons];
     const lastTeteeOverall =
-      todayTetees.length > 0
-        ? todayTetees.reduce((latest, current) =>
+      allTeteesAndBiberons.length > 0
+        ? allTeteesAndBiberons.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
               : latest
@@ -313,7 +325,7 @@ export default function HomeDashboard() {
     setTodayStats({
       tetees: {
         total: {
-          count: todayTetees.length,
+          count: allTeteesAndBiberons.length,
           quantity: teteesTotalQuantity,
           lastTime: formatTime(lastTeteeOverall),
           lastTimestamp: getTimestamp(lastTeteeOverall),
@@ -538,7 +550,7 @@ export default function HomeDashboard() {
 
         {/* Tétées - Détail par type */}
         <View style={styles.statsGrid}>
-          {loading.tetees ? (
+          {loading.tetees || loading.biberons ? (
             <>
               <LoadingCard />
               <LoadingCard />

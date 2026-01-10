@@ -32,7 +32,7 @@ export default function BabyTabLayout() {
       <Tabs.Screen
         name="tetees"
         options={{
-          title: 'Tétées',
+          title: 'Repas',
           tabBarIcon: ({ color }) => <FontAwesome size={28} name="baby" color={color} />,
         }}
       />

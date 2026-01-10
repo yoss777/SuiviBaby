@@ -54,6 +54,7 @@ export function MigrationAdminScreen({ childId }: MigrationAdminScreenProps) {
       );
     } catch (error) {
       Alert.alert('❌ Erreur', (error as Error).message);
+      console.error('Erreur lors de la vérification de la migration:', error);
     } finally {
       setChecking(false);
     }

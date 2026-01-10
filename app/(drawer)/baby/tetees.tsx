@@ -7,7 +7,10 @@ import {
   modifierTetee,
   supprimerTetee,
 } from "@/migration/eventsDoubleWriteService";
-import { ecouterTeteesHybrid as ecouterTetees } from "@/migration/eventsHybridService";
+import {
+  ecouterBiberonsHybrid as ecouterBiberons,
+  ecouterTeteesHybrid as ecouterTetees,
+} from "@/migration/eventsHybridService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -26,7 +29,7 @@ import {
 // Interface pour typer les données (avec optionnel pour compatibilité avec anciennes données)
 interface Tetee {
   id: string;
-  type?: "seins" | "biberons"; // Optionnel pour éviter les erreurs sur anciennes données
+  type?: "tetee" | "biberon"; // Optionnel pour éviter les erreurs sur anciennes données
   quantite?: number | null; // Optionnel pour compatibilité
   date: { seconds: number };
   createdAt: { seconds: number };
@@ -85,11 +88,35 @@ export default function TeteesScreen() {
     }
   }, [openModal, tab]);
 
-  // Écoute en temps réel
+  // Écoute en temps réel - Tétées ET Biberons
   useEffect(() => {
     if (!activeChild?.id) return;
-    const unsubscribe = ecouterTetees(activeChild.id, setTetees);
-    return () => unsubscribe();
+
+    let teteesData: Tetee[] = [];
+    let biberonsData: Tetee[] = [];
+
+    const mergeTeteesAndBiberons = () => {
+      // Merger les deux listes et trier par date
+      const merged = [...teteesData, ...biberonsData].sort(
+        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+      );
+      setTetees(merged);
+    };
+
+    const unsubscribeTetees = ecouterTetees(activeChild.id, (tetees) => {
+      teteesData = tetees;
+      mergeTeteesAndBiberons();
+    });
+
+    const unsubscribeBiberons = ecouterBiberons(activeChild.id, (biberons) => {
+      biberonsData = biberons;
+      mergeTeteesAndBiberons();
+    });
+
+    return () => {
+      unsubscribeTetees();
+      unsubscribeBiberons();
+    };
   }, [activeChild]);
 
   // Regroupement par jour
@@ -371,7 +398,7 @@ export default function TeteesScreen() {
             <View style={styles.infoRow}>
               <FontAwesome
                 name={
-                  tetee.type === "seins" ? "person-breastfeeding" : "jar-wheat"
+                  tetee.type === "tetee" ? "person-breastfeeding" : "jar-wheat"
                 }
                 size={16}
                 color="#666"
@@ -492,7 +519,7 @@ export default function TeteesScreen() {
 
             <Text style={styles.modalCategoryLabel}>Type de repas</Text>
             <View style={styles.typeRow}>
-              {["seins", "biberon"].map((t) => (
+              {["seins", "biberons"].map((t) => (
                 <TouchableOpacity
                   key={t}
                   style={[

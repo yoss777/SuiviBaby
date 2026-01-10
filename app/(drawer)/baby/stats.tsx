@@ -2,6 +2,7 @@ import PompagesChart from '@/components/suivibaby/PompagesChart';
 import TeteesChart from '@/components/suivibaby/TeteesChart';
 import { useBaby } from '@/contexts/BabyContext';
 import {
+  ecouterBiberonsHybrid as ecouterBiberons,
   ecouterPompagesHybrid as ecouterPompages,
   ecouterTeteesHybrid as ecouterTetees,
 } from '@/migration/eventsHybridService';
@@ -27,11 +28,35 @@ export default function StatsScreen() {
     }
   }, [tab]);
 
-  // écoute en temps réel des tetees
+  // écoute en temps réel des tetees ET biberons
   useEffect(() => {
     if (!activeChild?.id) return;
-    const unsubscribeTetees = ecouterTetees(activeChild.id, setTetees);
-    return () => unsubscribeTetees();
+
+    let teteesData: any[] = [];
+    let biberonsData: any[] = [];
+
+    const mergeTeteesAndBiberons = () => {
+      // Merger les deux listes et trier par date
+      const merged = [...teteesData, ...biberonsData].sort(
+        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+      );
+      setTetees(merged);
+    };
+
+    const unsubscribeTetees = ecouterTetees(activeChild.id, (tetees) => {
+      teteesData = tetees;
+      mergeTeteesAndBiberons();
+    });
+
+    const unsubscribeBiberons = ecouterBiberons(activeChild.id, (biberons) => {
+      biberonsData = biberons;
+      mergeTeteesAndBiberons();
+    });
+
+    return () => {
+      unsubscribeTetees();
+      unsubscribeBiberons();
+    };
   }, [activeChild]);
 
   // écoute en temps réel des pompages

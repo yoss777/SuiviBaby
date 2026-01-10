@@ -70,8 +70,18 @@ export default function TeteesChart({ tetees }: Props) {
   // Filtrer les tétées selon le type sélectionné
   const filteredTetees = tetees.filter((t) => {
     if (typeFilter === "tous") return true;
+    // OLD: type="seins" ou type="biberons", NEW: type="tetee" ou type="biberon"
     const type = t.type || "seins"; // Défaut pour les anciennes données
-    return type === typeFilter;
+
+    if (typeFilter === "seins") {
+      // Accepter: type="seins" (OLD) OU type="tetee" (NEW) OU undefined (très anciennes données)
+      return type === "seins" || type === "tetee" || !t.type;
+    }
+    if (typeFilter === "biberons") {
+      // Accepter: type="biberons" (OLD) OU type="biberon" (NEW)
+      return type === "biberons" || type === "biberon";
+    }
+    return false;
   });
 
   // Calcul des totaux journaliers avec séparation par type
@@ -104,9 +114,12 @@ export default function TeteesChart({ tetees }: Props) {
 
       if (weeklyData[jourKey]) {
         weeklyData[jourKey].count += 1;
-        if (type === "seins") {
+        // OLD: type="seins", NEW: type="tetee"
+        if (type === "seins" || type === "tetee" || !t.type) {
           weeklyData[jourKey].seinsCount += 1;
-        } else if (type === "biberons") {
+        }
+        // OLD: type="biberons", NEW: type="biberon"
+        else if (type === "biberons" || type === "biberon") {
           weeklyData[jourKey].biberonsCount += 1;
           weeklyData[jourKey].biberonsQuantity += quantite;
           weeklyData[jourKey].quantity += quantite;

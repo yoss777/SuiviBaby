@@ -204,14 +204,14 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
         break;
 
       case 'VALIDATION':
-        // Toujours double écriture mais plus confiant
+        // Toujours double écriture, lecture NEW_ONLY pour vraiment tester
         setMigrationConfig({
           phase: 'DOUBLE_WRITE',
           readFrom: 'NEW',
           failOnError: false,
         });
         setHybridConfig({
-          mode: 'NEW_ONLY', // Ne lire que NEW
+          mode: 'NEW_ONLY', // Tester la lecture depuis NEW uniquement
           preferSource: 'NEW',
           deduplicationWindow: 5000,
         });
@@ -240,6 +240,12 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
   // ============================================
 
   const startMigration = async (userId: string, childId: string) => {
+    // Protection anti-double-clic
+    if (state.phase === 'MIGRATING') {
+      console.log('⚠️ Migration déjà en cours, ignorer');
+      return;
+    }
+
     try {
       setState(prev => ({
         ...prev,

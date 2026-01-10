@@ -334,13 +334,16 @@ let config: MigrationConfig = {
 
 ```typescript
 let config: HybridReadConfig = {
-  mode: "HYBRID",              // ✅ Lit des 2 sources
+  mode: "HYBRID",              // ✅ Lit des 2 sources (OLD + NEW)
   preferSource: "NEW",          // ✅ Préfère NEW en cas de doublon
   deduplicationWindow: 5000,    // ✅ Fenêtre de déduplication
 };
 ```
 
-**⚠️ Aucun changement de config nécessaire pour l'instant**
+**⚠️ Configuration Corrigée**
+- Phase VALIDATION utilisait `NEW_ONLY` → causait des données manquantes
+- Maintenant utilise `HYBRID` → voit toutes les données (migrées + nouvelles)
+- Voir [PHASE_CONFIGS.md](PHASE_CONFIGS.md) pour plus de détails
 
 ---
 

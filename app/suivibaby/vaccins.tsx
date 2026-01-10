@@ -143,7 +143,8 @@ export default function VaccinsScreen({ vaccins }: Props) {
 
   const openEditModal = (vaccin: Vaccin) => {
     setDateHeure(new Date(vaccin.date.seconds * 1000));
-    setSelectedVaccin(vaccin.lib || "");
+    // MODIF : Fallback sur nomVaccin (nouveau champ) ou lib (ancien)
+    setSelectedVaccin(vaccin.nomVaccin || vaccin.lib || "");
     setEditingVaccin(vaccin);
     setIsSubmitting(false);
     setShowModal(true);
@@ -282,134 +283,111 @@ export default function VaccinsScreen({ vaccins }: Props) {
       activeOpacity={0.7}
     >
       <View style={styles.vaccinContent}>
-        <FontAwesome
-          name="clock"
-          size={16}
-          color={isLast ? "#9C27B0" : "#666"}
-        />
+        <FontAwesome name="syringe" size={24} color="#9C27B0" />
         <View style={styles.vaccinInfo}>
           <Text style={[styles.vaccinName, isLast && styles.lastVaccinName]}>
-            {vaccin.lib || "Vaccin non spécifié"}
+            {/* MODIF : Fallback sur nomVaccin (nouveau) ou lib (ancien) */}
+            {vaccin.nomVaccin || vaccin.lib || "Vaccin non spécifié"}
           </Text>
           <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
-            {new Date(vaccin.date?.seconds * 1000).toLocaleTimeString("fr-FR", {
+            {new Date(vaccin.date.seconds * 1000).toLocaleTimeString("fr-FR", {
               hour: "2-digit",
               minute: "2-digit",
             })}
           </Text>
         </View>
-        <View style={styles.vaccinActions}>
-          {isLast && (
-            <View style={styles.recentBadge}>
-              <Text style={styles.recentText}>Récent</Text>
-            </View>
-          )}
-          <FontAwesome name="edit" size={16} color="#9C27B0" style={styles.editIcon} />
-        </View>
+        {isLast && (
+          <View style={styles.recentBadge}>
+            <Text style={styles.recentText}>Récent</Text>
+          </View>
+        )}
+        <FontAwesome name="edit" size={18} color="#666" style={styles.editIcon} />
       </View>
     </TouchableOpacity>
   );
 
-  const renderDayGroup = ({ item }: { item: VaccinGroup }) => {
-    const isExpanded = expandedDays.has(item.date);
-    const hasMultipleVaccins = item.vaccins.length > 1;
-    return (
-      <View style={styles.dayCard}>
-        <View style={styles.dayHeader}>
-          <View style={styles.dayInfo}>
-            <Text style={styles.dayDate}>{item.dateFormatted}</Text>
-            <View style={styles.summaryInfo}>
-              <FontAwesome name="syringe" size={14} color="#666" />
-              <Text style={styles.summaryText}>
-                {item.vaccins.length} vaccin
-                {item.vaccins.length > 1 ? "s" : ""} reçu
-                {item.vaccins.length > 1 ? "s" : ""}
-              </Text>
-            </View>
-          </View>
-          {hasMultipleVaccins && (
-            <TouchableOpacity
-              style={styles.expandButton}
-              onPress={() => toggleExpand(item.date)}
-            >
-              <FontAwesome
-                name={isExpanded ? "chevron-up" : "chevron-down"}
-                size={16}
-                color="#666"
-              />
-            </TouchableOpacity>
-          )}
-        </View>
-        {renderVaccinItem(item.lastVaccin, true)}
-        {hasMultipleVaccins && isExpanded && (
-          <View style={styles.expandedContent}>
-            <View style={styles.separator} />
-            <Text style={styles.historyLabel}>Historique du jour</Text>
-            {item.vaccins
-              .filter((vaccin) => vaccin.id !== item.lastVaccin.id)
-              .map((vaccin) => renderVaccinItem(vaccin))}
-          </View>
-        )}
-      </View>
-    );
-  };
-
   const filteredVaccins = VACCINS_LIST.filter((vaccin) =>
     vaccin.toLowerCase().includes(searchQuery.toLowerCase())
-  ).sort((a, b) => a.localeCompare(b));
+  );
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={openModalHandler}
+          activeOpacity={0.7}
+        >
           <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Ajouter une injection de vaccin</Text>
+          <Text style={styles.addButtonText}>Ajouter un vaccin</Text>
         </TouchableOpacity>
       </View>
       <FlatList
         data={groupedVaccins}
         keyExtractor={(item) => item.date}
-        renderItem={renderDayGroup}
-        showsVerticalScrollIndicator={false}
+        renderItem={({ item: group }) => (
+          <View style={styles.dayCard}>
+            <TouchableOpacity
+              style={styles.dayHeader}
+              onPress={() => toggleExpand(group.date)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.dayInfo}>
+                <Text style={styles.dayDate}>{group.dateFormatted}</Text>
+                <View style={styles.summaryInfo}>
+                  <FontAwesome name="syringe" size={14} color="#666" />
+                  <Text style={styles.summaryText}>
+                    {group.vaccins.length} vaccin
+                    {group.vaccins.length > 1 ? "s" : ""}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.expandButton}
+                onPress={() => toggleExpand(group.date)}
+              >
+                <FontAwesome
+                  name={expandedDays.has(group.date) ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color="#666"
+                />
+              </TouchableOpacity>
+            </TouchableOpacity>
+            {renderVaccinItem(group.lastVaccin, true)}
+            {expandedDays.has(group.date) && group.vaccins.length > 1 && (
+              <View style={styles.expandedContent}>
+                <View style={styles.separator} />
+                <Text style={styles.historyLabel}>Historique</Text>
+                {group.vaccins.slice(1).map((vaccin) => renderVaccinItem(vaccin))}
+              </View>
+            )}
+          </View>
+        )}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <FontAwesome name="syringe" size={48} color="#ccc" />
+            <FontAwesome name="syringe" size={64} color="#ddd" />
             <Text style={styles.emptyText}>Aucun vaccin enregistré</Text>
             <Text style={styles.emptySubtext}>
-              Ajoutez votre premier vaccin
+              Ajoutez votre premier vaccin !
             </Text>
           </View>
         }
       />
-      {/* MODAL */}
       <Modal
-        animationType="slide"
-        transparent={true}
         visible={showModal}
+        animationType="fade"
+        transparent={true}
         onRequestClose={closeModal}
-        presentationStyle="overFullScreen"
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <FontAwesome
-                name={editingVaccin ? "edit" : "syringe"}
-                size={24}
-                color="#9C27B0"
-              />
+              <FontAwesome name="syringe" size={24} color="#9C27B0" />
               <Text style={styles.modalTitle}>
-                {editingVaccin ? "Modifier le vaccin" : "Nouveau vaccin"}
+                {editingVaccin ? "Modifier le vaccin" : "Ajouter un vaccin"}
               </Text>
-              {editingVaccin && (
-                <TouchableOpacity onPress={handleDeleteVaccin}>
-                  <FontAwesome name="trash" size={24} color="red" />
-                </TouchableOpacity>
-              )}
             </View>
-
-            {/* Sélection du vaccin */}
-            <Text style={styles.modalCategoryLabel}>Type de vaccin</Text>
             <TouchableOpacity
               style={[
                 styles.vaccinSelector,
@@ -417,21 +395,13 @@ export default function VaccinsScreen({ vaccins }: Props) {
               ]}
               onPress={() => {
                 if (!isSubmitting) {
-                  console.log("Closing main modal to open list");
+                  setShowVaccinList(true);
                   setShowModal(false);
-                  setTimeout(() => {
-                    setShowVaccinList(true);
-                    console.log("showVaccinList set to true");
-                  }, 300);
                 }
               }}
               disabled={isSubmitting}
             >
-              <FontAwesome
-                name="syringe"
-                size={16}
-                color={isSubmitting ? "#ccc" : "#9C27B0"}
-              />
+              <FontAwesome name="list" size={20} color="#666" />
               <Text
                 style={[
                   styles.vaccinSelectorText,
@@ -441,28 +411,19 @@ export default function VaccinsScreen({ vaccins }: Props) {
               >
                 {selectedVaccin || "Sélectionner un vaccin"}
               </Text>
-              <FontAwesome
-                name="chevron-down"
-                size={16}
-                color={isSubmitting ? "#ccc" : "#666"}
-              />
+              <FontAwesome name="chevron-right" size={16} color="#999" />
             </TouchableOpacity>
-            {/* Date & Heure */}
-            <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+            <Text style={styles.modalCategoryLabel}>Date et heure</Text>
             <View style={styles.dateTimeContainer}>
               <TouchableOpacity
                 style={[
                   styles.dateButton,
                   isSubmitting && styles.dateButtonDisabled,
                 ]}
-                onPress={() => setShowDate(true)}
+                onPress={() => !isSubmitting && setShowDate(true)}
                 disabled={isSubmitting}
               >
-                <FontAwesome
-                  name="calendar-alt"
-                  size={16}
-                  color={isSubmitting ? "#ccc" : "#666"}
-                />
+                <FontAwesome name="calendar" size={16} color="#666" />
                 <Text
                   style={[
                     styles.dateButtonText,
@@ -477,14 +438,10 @@ export default function VaccinsScreen({ vaccins }: Props) {
                   styles.dateButton,
                   isSubmitting && styles.dateButtonDisabled,
                 ]}
-                onPress={() => setShowTime(true)}
+                onPress={() => !isSubmitting && setShowTime(true)}
                 disabled={isSubmitting}
               >
-                <FontAwesome
-                  name="clock"
-                  size={16}
-                  color={isSubmitting ? "#ccc" : "#666"}
-                />
+                <FontAwesome name="clock" size={16} color="#666" />
                 <Text
                   style={[
                     styles.dateButtonText,
@@ -499,9 +456,9 @@ export default function VaccinsScreen({ vaccins }: Props) {
               <Text style={styles.selectedDate}>
                 {dateHeure.toLocaleDateString("fr-FR", {
                   weekday: "long",
-                  year: "numeric",
-                  month: "long",
                   day: "numeric",
+                  month: "long",
+                  year: "numeric",
                 })}
               </Text>
               <Text style={styles.selectedTime}>
@@ -523,7 +480,6 @@ export default function VaccinsScreen({ vaccins }: Props) {
               <DateTimePicker
                 value={dateHeure}
                 mode="time"
-                is24Hour={true}
                 display={Platform.OS === "ios" ? "spinner" : "default"}
                 onChange={onChangeTime}
               />
@@ -531,24 +487,21 @@ export default function VaccinsScreen({ vaccins }: Props) {
             <View style={styles.actionButtonsContainer}>
               <ModernActionButtons
                 onCancel={cancelForm}
-                onValidate={handleSubmitVaccin}
-                cancelText="Annuler"
-                validateText={editingVaccin ? "Mettre à jour" : "Ajouter"}
-                isLoading={isSubmitting}
-                disabled={isSubmitting || !selectedVaccin.trim()}
-                loadingText={editingVaccin ? "Mise à jour..." : "Ajout en cours..."}
+                onDelete={editingVaccin ? handleDeleteVaccin : undefined}
+                onSubmit={handleSubmitVaccin}
+                isSubmitting={isSubmitting}
+                isDisabled={!selectedVaccin.trim()}
+                submitLabel={editingVaccin ? "Modifier" : "Ajouter"}
               />
             </View>
           </View>
         </View>
       </Modal>
-      {/* MODAL LISTE DES VACCINS */}
       <Modal
+        visible={showVaccinList}
         animationType="slide"
         transparent={true}
-        visible={showVaccinList}
         onRequestClose={() => setShowVaccinList(false)}
-        statusBarTranslucent={true}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.vaccinListModal}>
@@ -558,34 +511,27 @@ export default function VaccinsScreen({ vaccins }: Props) {
                 style={styles.closeButton}
                 onPress={() => {
                   setShowVaccinList(false);
-                  setSearchQuery("");
-                  setTimeout(() => {
-                    setShowModal(true);
-                  }, 300);
+                  setShowModal(true);
                 }}
               >
                 <FontAwesome name="times" size={20} color="#666" />
               </TouchableOpacity>
             </View>
             <View style={styles.searchContainer}>
-              <FontAwesome name="search" size={16} color="#666" style={styles.searchIcon} />
+              <FontAwesome name="search" size={16} color="#999" style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Rechercher un vaccin..."
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus={true}
-                returnKeyType="done"
-                accessibilityLabel="Rechercher un vaccin"
-                placeholderTextColor="#999"
               />
-              {searchQuery.length > 0 && (
+              {searchQuery && (
                 <TouchableOpacity
                   style={styles.clearButton}
                   onPress={() => setSearchQuery("")}
-                  accessibilityLabel="Effacer la recherche"
                 >
-                  <FontAwesome name="times-circle" size={16} color="#666" style={styles.clearIcon} />
+                  <FontAwesome name="times-circle" size={16} color="#999" style={styles.clearIcon} />
                 </TouchableOpacity>
               )}
             </View>

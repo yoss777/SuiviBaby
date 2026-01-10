@@ -43,6 +43,7 @@ export interface SelleGroup {
 
 export interface Vitamine {
   id: string;
+  nomVitamine?: string;
   date: { seconds: number };
   createdAt: { seconds: number };
 }
@@ -56,7 +57,8 @@ export interface VitamineGroup {
 
 export interface Vaccin {
   id: string;
-  lib: string;
+  nomVaccin?: string;
+  lib?: string;
   date: { seconds: number };
   createdAt: { seconds: number };
 }
