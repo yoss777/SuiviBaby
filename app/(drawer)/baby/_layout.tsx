@@ -1,5 +1,4 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
 import { Platform } from 'react-native';
 
 import { Colors } from '@/constants/theme';
@@ -30,7 +29,7 @@ export default function BabyTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="tetees"
+        name="repas"
         options={{
           title: 'Repas',
           tabBarIcon: ({ color }) => <FontAwesome size={28} name="baby" color={color} />,

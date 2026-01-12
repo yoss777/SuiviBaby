@@ -1,4 +1,4 @@
-import ModernActionButtons from "@/components/suivibaby/ModernActionsButton";
+import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { useBaby } from "@/contexts/BabyContext";
 import {
   ajouterSelle,
@@ -6,13 +6,13 @@ import {
   supprimerSelle,
 } from "@/migration/eventsDoubleWriteService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
-  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -43,7 +43,6 @@ export default function SellesScreen({ selles, onEditSelle }: Props) {
   const { activeChild } = useBaby();
   const [groupedSelles, setGroupedSelles] = useState<SelleGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [showModal, setShowModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingSelle, setEditingSelle] = useState<Selle | null>(null);
 
@@ -51,6 +50,12 @@ export default function SellesScreen({ selles, onEditSelle }: Props) {
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
+
+  // Ref pour le BottomSheet
+  const bottomSheetRef = useRef<BottomSheet>(null);
+
+  // Snap points pour le BottomSheet
+  const snapPoints = useMemo(() => ["75%", "90%"], []);
 
   // Récupérer les paramètres de l'URL
   const { openModal } = useLocalSearchParams();
@@ -130,18 +135,18 @@ export default function SellesScreen({ selles, onEditSelle }: Props) {
     setDateHeure(new Date(now.getTime()));
     setEditingSelle(null);
     setIsSubmitting(false);
-    setShowModal(true);
+    bottomSheetRef.current?.expand();
   };
 
   const openEditModal = (selle: Selle) => {
     setDateHeure(new Date(selle.date.seconds * 1000));
     setEditingSelle(selle);
     setIsSubmitting(false);
-    setShowModal(true);
+    bottomSheetRef.current?.expand();
   };
 
   const closeModal = () => {
-    setShowModal(false);
+    bottomSheetRef.current?.close();
     setIsSubmitting(false);
     setEditingSelle(null);
   };
@@ -350,131 +355,106 @@ export default function SellesScreen({ selles, onEditSelle }: Props) {
         }
       />
 
-      {/* MODAL */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showModal}
-        onRequestClose={closeModal}
+      {/* Bottom Sheet d'ajout/édition */}
+      <FormBottomSheet
+        ref={bottomSheetRef}
+        title={editingSelle ? "Modifier la selle" : "Nouvelle selle"}
+        icon={editingSelle ? "edit" : "circle"}
+        accentColor="#dc3545"
+        isEditing={!!editingSelle}
+        isSubmitting={isSubmitting}
+        onSubmit={handleSubmitSelle}
+        onDelete={editingSelle ? handleDeleteSelle : undefined}
+        onCancel={cancelForm}
+        onClose={() => {
+          setIsSubmitting(false);
+          setEditingSelle(null);
+        }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <FontAwesome
-                name={editingSelle ? "edit" : "circle"}
-                size={20}
-                color="#dc3545"
-              />
-              <Text style={styles.modalTitle}>
-                {editingSelle ? "Modifier la selle" : "Nouvelle selle"}
-              </Text>
-              {editingSelle && (
-                <TouchableOpacity onPress={handleDeleteSelle}>
-                  <FontAwesome name="trash" size={24} color="red" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Date & Heure */}
-            <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-            <View style={styles.dateTimeContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  isSubmitting && styles.dateButtonDisabled,
-                ]}
-                onPress={() => setShowDate(true)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="calendar-alt"
-                  size={16}
-                  color={isSubmitting ? "#ccc" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.dateButtonText,
-                    isSubmitting && styles.dateButtonTextDisabled,
-                  ]}
-                >
-                  Date
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  isSubmitting && styles.dateButtonDisabled,
-                ]}
-                onPress={() => setShowTime(true)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="clock"
-                  size={16}
-                  color={isSubmitting ? "#ccc" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.dateButtonText,
-                    isSubmitting && styles.dateButtonTextDisabled,
-                  ]}
-                >
-                  Heure
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.selectedDateTime}>
-              <Text style={styles.selectedDate}>
-                {dateHeure.toLocaleDateString("fr-FR", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </Text>
-              <Text style={styles.selectedTime}>
-                {dateHeure.toLocaleTimeString("fr-FR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </Text>
-            </View>
-
-            {showDate && (
-              <DateTimePicker
-                value={dateHeure}
-                mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onChangeDate}
-              />
-            )}
-            {showTime && (
-              <DateTimePicker
-                value={dateHeure}
-                mode="time"
-                is24Hour={true}
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onChangeTime}
-              />
-            )}
-
-            <View style={styles.actionButtonsContainer}>
-              <ModernActionButtons
-                onCancel={cancelForm}
-                onValidate={handleSubmitSelle}
-                cancelText="Annuler"
-                validateText={editingSelle ? "Mettre à jour" : "Ajouter"}
-                isLoading={isSubmitting}
-                disabled={isSubmitting}
-                loadingText={
-                  editingSelle ? "Mise à jour..." : "Ajout en cours..."
-                }
-              />
-            </View>
-          </View>
+        {/* Date & Heure */}
+        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+        <View style={styles.dateTimeContainer}>
+          <TouchableOpacity
+            style={[
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
+            ]}
+            onPress={() => setShowDate(true)}
+            disabled={isSubmitting}
+          >
+            <FontAwesome
+              name="calendar-alt"
+              size={16}
+              color={isSubmitting ? "#ccc" : "#666"}
+            />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Date
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
+            ]}
+            onPress={() => setShowTime(true)}
+            disabled={isSubmitting}
+          >
+            <FontAwesome
+              name="clock"
+              size={16}
+              color={isSubmitting ? "#ccc" : "#666"}
+            />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Heure
+            </Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+
+        <View style={styles.selectedDateTime}>
+          <Text style={styles.selectedDate}>
+            {dateHeure.toLocaleDateString("fr-FR", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </Text>
+          <Text style={styles.selectedTime}>
+            {dateHeure.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
+
+        {showDate && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeDate}
+          />
+        )}
+        {showTime && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="time"
+            is24Hour={true}
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeTime}
+          />
+        )}
+      </FormBottomSheet>
     </View>
   );
 }

@@ -1,6 +1,6 @@
 import MictionsScreen from "@/app/suivibaby/mictions";
 import SellesScreen from "@/app/suivibaby/selles";
-import ModernActionButtons from "@/components/suivibaby/ModernActionsButton";
+import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { useBaby } from "@/contexts/BabyContext";
 import {
   ajouterMiction,
@@ -16,12 +16,12 @@ import {
 } from "@/migration/eventsHybridService";
 import { Miction, Selle } from "@/types/interfaces";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
-  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -38,7 +38,6 @@ export default function ExcretionsScreen() {
   );
 
   // États du modal unifié
-  const [showModal, setShowModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [includeMiction, setIncludeMiction] = useState<boolean>(true);
   const [includeSelle, setIncludeSelle] = useState<boolean>(false);
@@ -49,6 +48,12 @@ export default function ExcretionsScreen() {
   // États pour l'édition
   const [editingMiction, setEditingMiction] = useState<Miction | null>(null);
   const [editingSelle, setEditingSelle] = useState<Selle | null>(null);
+
+  // Ref pour le BottomSheet
+  const bottomSheetRef = useRef<BottomSheet>(null);
+
+  // Snap points pour le BottomSheet
+  const snapPoints = useMemo(() => ["75%", "90%"], []);
 
   // Récupérer les paramètres de l'URL
   const { tab, openModal } = useLocalSearchParams();
@@ -108,7 +113,7 @@ export default function ExcretionsScreen() {
     setEditingMiction(null);
     setEditingSelle(null);
     setIsSubmitting(false);
-    setShowModal(true);
+    bottomSheetRef.current?.expand();
   };
 
   const openEditModalFromMiction = (miction: Miction) => {
@@ -118,7 +123,7 @@ export default function ExcretionsScreen() {
     setIncludeMiction(true);
     setIncludeSelle(false);
     setIsSubmitting(false);
-    setShowModal(true);
+    bottomSheetRef.current?.expand();
   };
 
   const openEditModalFromSelle = (selle: Selle) => {
@@ -128,11 +133,11 @@ export default function ExcretionsScreen() {
     setIncludeMiction(false);
     setIncludeSelle(true);
     setIsSubmitting(false);
-    setShowModal(true);
+    bottomSheetRef.current?.expand();
   };
 
   const closeModal = () => {
-    setShowModal(false);
+    bottomSheetRef.current?.close();
     setIsSubmitting(false);
     setEditingMiction(null);
     setEditingSelle(null);
@@ -358,208 +363,182 @@ export default function ExcretionsScreen() {
         )}
       </View>
 
-      {/* MODAL UNIFIÉ */}
-      <Modal
-        visible={showModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={closeModal}
+      {/* Bottom Sheet unifié */}
+      <FormBottomSheet
+        ref={bottomSheetRef}
+        title={isEditMode ? "Modifier" : "Ajouter une excrétion"}
+        icon={isEditMode ? "edit" : "plus-circle"}
+        accentColor={selectedTab === "mictions" ? "#17a2b8" : "#dc3545"}
+        isEditing={isEditMode}
+        isSubmitting={isSubmitting}
+        onSubmit={handleSubmit}
+        onDelete={isEditMode ? handleDelete : undefined}
+        onCancel={cancelForm}
+        onClose={() => {
+          setIsSubmitting(false);
+          setEditingMiction(null);
+          setEditingSelle(null);
+        }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {/* Header */}
-            <View style={styles.modalHeader}>
-              <FontAwesome
-                name={isEditMode ? "edit" : "plus-circle"}
-                size={24}
-                color="#4A90E2"
-              />
-              <Text style={styles.modalTitle}>
-                {isEditMode ? "Modifier" : "Ajouter une excrétion"}
-              </Text>
-            </View>
-
-            {/* Toggles de sélection (uniquement en mode ajout) */}
-            {!isEditMode && (
-              <>
-                <Text style={styles.toggleLabel}>
-                  Sélectionnez au moins un type :
-                </Text>
-                <View style={styles.toggleContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.toggleButton,
-                      includeMiction && styles.toggleButtonActiveMiction,
-                    ]}
-                    onPress={() => setIncludeMiction(!includeMiction)}
-                    disabled={isSubmitting}
-                  >
-                    <FontAwesome
-                      name="water"
-                      size={16}
-                      color={includeMiction ? "white" : "#17a2b8"}
-                    />
-                    <Text
-                      style={[
-                        styles.toggleText,
-                        includeMiction && styles.toggleTextActive,
-                      ]}
-                    >
-                      Miction
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.toggleButton,
-                      includeSelle && styles.toggleButtonActiveSelle,
-                    ]}
-                    onPress={() => setIncludeSelle(!includeSelle)}
-                    disabled={isSubmitting}
-                  >
-                    <FontAwesome
-                      name="circle"
-                      size={16}
-                      color={includeSelle ? "white" : "#dc3545"}
-                    />
-                    <Text
-                      style={[
-                        styles.toggleText,
-                        includeSelle && styles.toggleTextActive,
-                      ]}
-                    >
-                      Selle
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                {!includeMiction && !includeSelle && (
-                  <Text style={styles.warningText}>
-                    ⚠️ Veuillez sélectionner au moins un type
-                  </Text>
-                )}
-              </>
-            )}
-
-            {/* Label pour le mode édition */}
-            {isEditMode && (
-              <View style={styles.editModeLabel}>
-                <FontAwesome
-                  name={editingMiction ? "water" : "circle"}
-                  size={16}
-                  color={editingMiction ? "#17a2b8" : "#dc3545"}
-                />
-                <Text style={styles.editModeLabelText}>
-                  Modification : {editingMiction ? "Miction" : "Selle"}
-                </Text>
-              </View>
-            )}
-
-            {/* Sélecteurs de date et heure */}
-            <View style={styles.dateTimeContainer}>
+        {/* Toggles de sélection (uniquement en mode ajout) */}
+        {!isEditMode && (
+          <>
+            <Text style={styles.toggleLabel}>
+              Sélectionnez au moins un type :
+            </Text>
+            <View style={styles.toggleContainer}>
               <TouchableOpacity
                 style={[
-                  styles.dateButton,
-                  isSubmitting && styles.dateButtonDisabled,
+                  styles.toggleButton,
+                  includeMiction && styles.toggleButtonActiveMiction,
                 ]}
-                onPress={() => setShowDate(true)}
+                onPress={() => setIncludeMiction(!includeMiction)}
                 disabled={isSubmitting}
               >
                 <FontAwesome
-                  name="calendar"
+                  name="water"
                   size={16}
-                  color={isSubmitting ? "#ccc" : "#666"}
+                  color={includeMiction ? "white" : "#17a2b8"}
                 />
                 <Text
                   style={[
-                    styles.dateButtonText,
-                    isSubmitting && styles.dateButtonTextDisabled,
+                    styles.toggleText,
+                    includeMiction && styles.toggleTextActive,
                   ]}
                 >
-                  Date
+                  Miction
                 </Text>
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={[
-                  styles.dateButton,
-                  isSubmitting && styles.dateButtonDisabled,
+                  styles.toggleButton,
+                  includeSelle && styles.toggleButtonActiveSelle,
                 ]}
-                onPress={() => setShowTime(true)}
+                onPress={() => setIncludeSelle(!includeSelle)}
                 disabled={isSubmitting}
               >
                 <FontAwesome
-                  name="clock"
+                  name="circle"
                   size={16}
-                  color={isSubmitting ? "#ccc" : "#666"}
+                  color={includeSelle ? "white" : "#dc3545"}
                 />
                 <Text
                   style={[
-                    styles.dateButtonText,
-                    isSubmitting && styles.dateButtonTextDisabled,
+                    styles.toggleText,
+                    includeSelle && styles.toggleTextActive,
                   ]}
                 >
-                  Heure
+                  Selle
                 </Text>
               </TouchableOpacity>
             </View>
-
-            {/* Date et heure sélectionnées */}
-            <View style={styles.selectedDateTime}>
-              <Text style={styles.selectedDate}>
-                {dateHeure.toLocaleDateString("fr-FR", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+            {!includeMiction && !includeSelle && (
+              <Text style={styles.warningText}>
+                ⚠️ Veuillez sélectionner au moins un type
               </Text>
-              <Text style={styles.selectedTime}>
-                {dateHeure.toLocaleTimeString("fr-FR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </Text>
-            </View>
-
-            {/* DateTimePickers */}
-            {showDate && (
-              <DateTimePicker
-                value={dateHeure}
-                mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onChangeDate}
-              />
             )}
-            {showTime && (
-              <DateTimePicker
-                value={dateHeure}
-                mode="time"
-                is24Hour={true}
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onChangeTime}
-              />
-            )}
+          </>
+        )}
 
-            {/* Boutons d'action */}
-            <View style={styles.actionButtonsContainer}>
-              <ModernActionButtons
-                onCancel={cancelForm}
-                onValidate={handleSubmit}
-                onDelete={isEditMode ? handleDelete : undefined}
-                cancelText="Annuler"
-                validateText={isEditMode ? "Mettre à jour" : "Ajouter"}
-                isLoading={isSubmitting}
-                disabled={
-                  isSubmitting ||
-                  (!isEditMode && !includeMiction && !includeSelle)
-                }
-                loadingText={
-                  isEditMode ? "Mise à jour..." : "Ajout en cours..."
-                }
-              />
-            </View>
+        {/* Label pour le mode édition */}
+        {isEditMode && (
+          <View style={styles.editModeLabel}>
+            <FontAwesome
+              name={editingMiction ? "water" : "circle"}
+              size={16}
+              color={editingMiction ? "#17a2b8" : "#dc3545"}
+            />
+            <Text style={styles.editModeLabelText}>
+              Modification : {editingMiction ? "Miction" : "Selle"}
+            </Text>
           </View>
+        )}
+
+        {/* Date & Heure */}
+        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+        <View style={styles.dateTimeContainer}>
+          <TouchableOpacity
+            style={[
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
+            ]}
+            onPress={() => setShowDate(true)}
+            disabled={isSubmitting}
+          >
+            <FontAwesome
+              name="calendar"
+              size={16}
+              color={isSubmitting ? "#ccc" : "#666"}
+            />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Date
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
+            ]}
+            onPress={() => setShowTime(true)}
+            disabled={isSubmitting}
+          >
+            <FontAwesome
+              name="clock"
+              size={16}
+              color={isSubmitting ? "#ccc" : "#666"}
+            />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Heure
+            </Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+
+        <View style={styles.selectedDateTime}>
+          <Text style={styles.selectedDate}>
+            {dateHeure.toLocaleDateString("fr-FR", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </Text>
+          <Text style={styles.selectedTime}>
+            {dateHeure.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
+
+        {showDate && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeDate}
+          />
+        )}
+        {showTime && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="time"
+            is24Hour={true}
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeTime}
+          />
+        )}
+      </FormBottomSheet>
     </View>
   );
 }
@@ -619,19 +598,6 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: "white",
   },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    width: "90%",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    backgroundColor: "white",
-    borderRadius: 12,
-  },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -643,6 +609,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     color: "#333",
+  },
+  modalCategoryLabel: {
+    alignSelf: "center",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
   },
   toggleLabel: {
     fontSize: 14,
@@ -756,9 +729,5 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: "#4A90E2",
     fontWeight: "bold",
-  },
-  actionButtonsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
 });

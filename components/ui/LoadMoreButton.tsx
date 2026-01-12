@@ -1,0 +1,99 @@
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import React from "react";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+// ============================================
+// TYPES
+// ============================================
+
+export interface LoadMoreButtonProps {
+  hasMore: boolean;
+  loading: boolean;
+  onPress: () => void;
+  text?: string;
+  endText?: string;
+  accentColor?: string;
+}
+
+// ============================================
+// COMPONENT
+// ============================================
+
+export function LoadMoreButton({
+  hasMore,
+  loading,
+  onPress,
+  text = "Charger plus de résultats",
+  endText = "📅 Fin de l'historique",
+  accentColor = "#4A90E2",
+}: LoadMoreButtonProps) {
+  if (!hasMore) {
+    return (
+      <View style={styles.endContainer}>
+        <Text style={styles.endText}>{endText}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity
+      style={[styles.loadMoreButton, { borderColor: accentColor }]}
+      onPress={onPress}
+      disabled={loading}
+    >
+      {loading ? (
+        <ActivityIndicator color={accentColor} size="small" />
+      ) : (
+        <>
+          <FontAwesome
+            name="chevron-down"
+            size={16}
+            color={accentColor}
+          />
+          <Text style={[styles.loadMoreText, { color: accentColor }]}>
+            {text}
+          </Text>
+        </>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+// ============================================
+// STYLES
+// ============================================
+
+const styles = StyleSheet.create({
+  loadMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: 16,
+    marginVertical: 16,
+    marginHorizontal: 16,
+    borderWidth: 1,
+    borderRadius: 12,
+    backgroundColor: "white",
+  },
+  loadMoreText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  endContainer: {
+    alignItems: "center",
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+  },
+  endText: {
+    fontSize: 14,
+    color: "#999",
+    fontWeight: "500",
+  },
+});

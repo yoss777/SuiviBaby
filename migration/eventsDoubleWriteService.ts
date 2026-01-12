@@ -53,9 +53,9 @@ interface MigrationConfig {
 
 // Configuration globale (à ajuster selon l'avancement)
 let config: MigrationConfig = {
-  phase: "DOUBLE_WRITE", // 🔄 Mode transition
-  readFrom: "NEW",        // Lire depuis la nouvelle collection
-  failOnError: false,     // Continuer même si ancien système échoue
+  phase: "NEW_ONLY",     // 🎯 MIGRATION TERMINÉE - Nouveau système uniquement
+  readFrom: "NEW",       // Lire depuis la nouvelle collection
+  failOnError: true,     // Les erreurs sont critiques maintenant
 };
 
 // Fonction pour changer la config (utile pour tests A/B)

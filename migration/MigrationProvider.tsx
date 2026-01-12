@@ -78,10 +78,10 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
   const { firebaseUser } = useAuth();
 
   const [state, setState] = useState<MigrationState>({
-    phase: 'NOT_STARTED',
+    phase: 'COMPLETE', // 🎯 MIGRATION TERMINÉE - Utilise uniquement le nouveau système
     userId: null,
     childId: null,
-    progress: 0,
+    progress: 100,
     error: null,
     stats: {},
     lastCheck: null,

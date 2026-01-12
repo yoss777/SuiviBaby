@@ -1,4 +1,4 @@
-import ModernActionButtons from "@/components/suivibaby/ModernActionsButton";
+import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { useBaby } from "@/contexts/BabyContext";
 import {
   ajouterBiberon,
@@ -12,13 +12,13 @@ import {
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
-  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -26,53 +26,70 @@ import {
   View,
 } from "react-native";
 
-// Interface pour typer les données (avec optionnel pour compatibilité avec anciennes données)
-interface Tetee {
+// ============================================
+// TYPES
+// ============================================
+
+type MealType = "tetee" | "biberon";
+
+interface Meal {
   id: string;
-  type?: "tetee" | "biberon"; // Optionnel pour éviter les erreurs sur anciennes données
-  quantite?: number | null; // Optionnel pour compatibilité
+  type?: MealType;
+  quantite?: number | null;
   date: { seconds: number };
   createdAt: { seconds: number };
 }
 
-interface TeteeGroup {
+interface MealGroup {
   date: string;
   dateFormatted: string;
-  tetees: Tetee[];
+  meals: Meal[];
   totalQuantity: number;
-  lastTetee: Tetee;
+  lastMeal: Meal;
 }
 
-export default function TeteesScreen() {
+// ============================================
+// COMPONENT
+// ============================================
+
+export default function RepasScreen() {
   const { activeChild } = useBaby();
-  const [tetees, setTetees] = useState<Tetee[]>([]);
-  const [groupedTetees, setGroupedTetees] = useState<TeteeGroup[]>([]);
+
+  // États des données
+  const [meals, setMeals] = useState<Meal[]>([]);
+  const [groupedMeals, setGroupedMeals] = useState<MealGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [showModal, setShowModal] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // États du formulaire
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
+  const [mealType, setMealType] = useState<MealType>("tetee");
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
   const [quantite, setQuantite] = useState<number>(100);
 
-  // États pour l'édition
-  const [editingTetee, setEditingTetee] = useState<Tetee | null>(null);
-  const [typeTetee, setTypeTetee] = useState<"seins" | "biberons">("seins");
+  // États des pickers
+  const [showDate, setShowDate] = useState(false);
+  const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
   const { tab, openModal } = useLocalSearchParams();
 
-  // interval ref pour la gestion du picker
+  // Ref pour la gestion du picker avec accélération
   const intervalRef = useRef<number | undefined>(undefined);
+
+  // Ref pour le BottomSheet
+  const bottomSheetRef = useRef<BottomSheet>(null);
+
+  // ============================================
+  // EFFECTS - URL PARAMS
+  // ============================================
 
   // Définir l'onglet initial en fonction du paramètre
   useEffect(() => {
     if (tab === "seins") {
-      setTypeTetee("seins");
+      setMealType("tetee");
     } else if (tab === "biberons") {
-      setTypeTetee("biberons");
+      setMealType("biberon");
     }
   }, [tab]);
 
@@ -80,37 +97,40 @@ export default function TeteesScreen() {
   useEffect(() => {
     if (openModal === "true") {
       const timer = setTimeout(() => {
-        openModalHandler(tab as "seins" | "biberons" | undefined);
-        router.replace("/(drawer)/baby/tetees");
+        openAddModal(tab as "seins" | "biberons" | undefined);
+        router.replace("/(drawer)/baby/repas");
       }, 100);
 
       return () => clearTimeout(timer);
     }
   }, [openModal, tab]);
 
+  // ============================================
+  // EFFECTS - DATA LISTENERS
+  // ============================================
+
   // Écoute en temps réel - Tétées ET Biberons
   useEffect(() => {
     if (!activeChild?.id) return;
 
-    let teteesData: Tetee[] = [];
-    let biberonsData: Tetee[] = [];
+    let teteesData: Meal[] = [];
+    let biberonsData: Meal[] = [];
 
-    const mergeTeteesAndBiberons = () => {
-      // Merger les deux listes et trier par date
+    const mergeAndSortMeals = () => {
       const merged = [...teteesData, ...biberonsData].sort(
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
       );
-      setTetees(merged);
+      setMeals(merged);
     };
 
     const unsubscribeTetees = ecouterTetees(activeChild.id, (tetees) => {
       teteesData = tetees;
-      mergeTeteesAndBiberons();
+      mergeAndSortMeals();
     });
 
     const unsubscribeBiberons = ecouterBiberons(activeChild.id, (biberons) => {
       biberonsData = biberons;
-      mergeTeteesAndBiberons();
+      mergeAndSortMeals();
     });
 
     return () => {
@@ -121,9 +141,9 @@ export default function TeteesScreen() {
 
   // Regroupement par jour
   useEffect(() => {
-    const grouped = groupTeteesByDay(tetees);
-    setGroupedTetees(grouped);
-  }, [tetees]);
+    const grouped = groupMealsByDay(meals);
+    setGroupedMeals(grouped);
+  }, [meals]);
 
   // Nettoyage de l'intervalle lors du démontage
   useEffect(() => {
@@ -133,6 +153,58 @@ export default function TeteesScreen() {
       }
     };
   }, []);
+
+  // ============================================
+  // HELPERS - GROUPING
+  // ============================================
+
+  const groupMealsByDay = (meals: Meal[]): MealGroup[] => {
+    const groups: { [key: string]: Meal[] } = {};
+
+    meals.forEach((meal) => {
+      const date = new Date(meal.date?.seconds * 1000);
+      const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(meal);
+    });
+
+    return Object.entries(groups)
+      .map(([dateKey, meals]) => {
+        const date = new Date(dateKey);
+        const totalQuantity = meals.reduce((sum, meal) => {
+          const q = meal.quantite;
+          return sum + (typeof q === "number" ? q : 0);
+        }, 0);
+        const lastMeal = meals.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
+        );
+
+        return {
+          date: dateKey,
+          dateFormatted: date.toLocaleDateString("fr-FR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          }),
+          meals: meals.sort(
+            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+          ),
+          totalQuantity,
+          lastMeal,
+        };
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  // ============================================
+  // HELPERS - QUANTITY PICKER
+  // ============================================
 
   const handlePressIn = (action: () => void) => {
     action();
@@ -152,60 +224,15 @@ export default function TeteesScreen() {
   };
 
   const handlePressOut = () => {
-    // Arrête la répétition quand l'utilisateur relâche
     if (intervalRef.current !== undefined) {
       clearInterval(intervalRef.current);
       intervalRef.current = undefined;
     }
   };
 
-  const groupTeteesByDay = (tetees: Tetee[]): TeteeGroup[] => {
-    const groups: { [key: string]: Tetee[] } = {};
-
-    tetees.forEach((tetee) => {
-      const date = new Date(tetee.date?.seconds * 1000);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-      const dateKey = `${year}-${month}-${day}`;
-
-      if (!groups[dateKey]) {
-        groups[dateKey] = [];
-      }
-      groups[dateKey].push(tetee);
-    });
-
-    return Object.entries(groups)
-      .map(([dateKey, tetees]) => {
-        const date = new Date(dateKey);
-        // Correction : Vérification pour quantite undefined/null
-        const totalQuantity = tetees.reduce((sum, tetee) => {
-          const q = tetee.quantite;
-          return sum + (typeof q === "number" ? q : 0);
-        }, 0);
-        const lastTetee = tetees.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
-        );
-
-        return {
-          date: dateKey,
-          dateFormatted: date.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          }),
-          tetees: tetees.sort(
-            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
-          ),
-          totalQuantity,
-          lastTetee,
-        };
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  };
+  // ============================================
+  // HELPERS - UI
+  // ============================================
 
   const toggleExpand = (dateKey: string) => {
     const newExpandedDays = new Set(expandedDays);
@@ -217,125 +244,146 @@ export default function TeteesScreen() {
     setExpandedDays(newExpandedDays);
   };
 
-  const openModalHandler = (preferredType?: "seins" | "biberons") => {
-    const now = new Date();
-    setDateHeure(new Date(now.getTime()));
-
-    // Définir les toggles selon le type préféré
-    if (preferredType === "seins") {
-      setTypeTetee("seins");
-    } else if (preferredType === "biberons") {
-      setTypeTetee("biberons");
-      setQuantite(100);
-    } else {
-      // Par défaut, sein est sélectionné
-      setTypeTetee("seins");
-    }
-
-    setIsSubmitting(false);
-    setEditingTetee(null);
-    setShowModal(true);
+  const getMealTypeLabel = (type?: MealType): string => {
+    if (!type) return "Inconnu";
+    return type === "tetee" ? "Sein" : "Biberon";
   };
 
-  const openEditModal = (tetee: Tetee) => {
-    setDateHeure(new Date(tetee.date.seconds * 1000));
+  const getMealIcon = (type?: MealType): string => {
+    if (type === "tetee") return "person-breastfeeding";
+    if (type === "biberon") return "jar-wheat";
+    return "utensils";
+  };
 
-    // Correction : Gestion si type est undefined (anciennes données)
-    const safeType = tetee.type || "seins"; // Défaut à "seins" pour anciennes tétées
-    setTypeTetee(safeType as "seins" | "biberons");
+  // ============================================
+  // HANDLERS - MODAL
+  // ============================================
 
-    // Correction : Gestion si quantite est undefined/null
-    const safeQuantite = tetee.quantite ?? 100;
-    setQuantite(safeQuantite);
-
-    setEditingTetee(tetee);
+  const openAddModal = (preferredType?: "seins" | "biberons") => {
+    setDateHeure(new Date());
+    setEditingMeal(null);
     setIsSubmitting(false);
-    setShowModal(true);
+
+    if (preferredType === "seins") {
+      setMealType("tetee");
+    } else if (preferredType === "biberons") {
+      setMealType("biberon");
+      setQuantite(100);
+    } else {
+      setMealType("tetee");
+    }
+
+    bottomSheetRef.current?.expand();
+  };
+
+  const openEditModal = (meal: Meal) => {
+    setDateHeure(new Date(meal.date.seconds * 1000));
+    setEditingMeal(meal);
+    setIsSubmitting(false);
+
+    // Déterminer le type (avec fallback pour anciennes données)
+    const type = meal.type || "tetee";
+    setMealType(type);
+
+    // Quantité (avec fallback)
+    const quantity = meal.quantite ?? 100;
+    setQuantite(quantity);
+
+    bottomSheetRef.current?.expand();
   };
 
   const closeModal = () => {
-    setShowModal(false);
+    bottomSheetRef.current?.close();
     setIsSubmitting(false);
-    setEditingTetee(null);
+    setEditingMeal(null);
   };
 
   const cancelForm = useCallback(() => {
     closeModal();
   }, []);
 
-  const handleSubmitTetee = async () => {
-    if (isSubmitting) {
-      return;
-    }
+  // ============================================
+  // HANDLERS - CRUD
+  // ============================================
+
+  const handleSubmit = async () => {
+    if (isSubmitting || !activeChild) return;
 
     try {
       setIsSubmitting(true);
 
+      const isTetee = mealType === "tetee";
       const dataToSave = {
-        type: typeTetee,
-        quantite: typeTetee === "seins" ? null : quantite,
+        type: mealType,
+        quantite: isTetee ? null : quantite,
         date: dateHeure,
       };
 
-      if (!activeChild) {
-        throw new Error("Aucun enfant sélectionné");
-      }
-
-      if (editingTetee) {
-        dataToSave.type === "seins" ? await modifierTetee(activeChild.id, editingTetee.id, dataToSave) : await modifierBiberon(activeChild.id, editingTetee.id, dataToSave);
+      if (editingMeal) {
+        // Modification
+        if (isTetee) {
+          await modifierTetee(activeChild.id, editingMeal.id, dataToSave);
+        } else {
+          await modifierBiberon(activeChild.id, editingMeal.id, dataToSave);
+        }
       } else {
-        dataToSave.type === "seins" ? await ajouterTetee(activeChild.id, dataToSave) : await ajouterBiberon(activeChild.id, dataToSave);
+        // Ajout
+        if (isTetee) {
+          await ajouterTetee(activeChild.id, dataToSave);
+        } else {
+          await ajouterBiberon(activeChild.id, dataToSave);
+        }
       }
 
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde de la tétée:", error);
-      // Optionnel : ajouter une alerte utilisateur ici
+      console.error("Erreur lors de la sauvegarde du repas:", error);
+      Alert.alert(
+        "Erreur",
+        "Impossible de sauvegarder le repas. Veuillez réessayer."
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDeleteTetee = async () => {
-    if (isSubmitting) {
-      return;
-    }
+  const handleDelete = async () => {
+    if (isSubmitting || !editingMeal || !activeChild) return;
 
-    try {
-      setIsSubmitting(true);
-
-      if (editingTetee) {
-        Alert.alert("Suppression", "Voulez-vous vraiment vous supprimer ?", [
-          {
-            text: "Annuler",
-            style: "cancel",
+    Alert.alert(
+      "Suppression",
+      "Voulez-vous vraiment supprimer ce repas ?",
+      [
+        {
+          text: "Annuler",
+          style: "cancel",
+        },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setIsSubmitting(true);
+              await supprimerTetee(activeChild.id, editingMeal.id);
+              closeModal();
+            } catch (error) {
+              console.error("Erreur lors de la suppression:", error);
+              Alert.alert(
+                "Erreur",
+                "Impossible de supprimer le repas. Veuillez réessayer."
+              );
+            } finally {
+              setIsSubmitting(false);
+            }
           },
-          {
-            text: "Supprimer",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                if (!activeChild) return;
-                await supprimerTetee(activeChild.id, editingTetee.id);
-                closeModal();
-              } catch (error) {
-                Alert.alert(
-                  "Erreur",
-                  "Impossible de se supprimer. Veuillez réessayer plus tard."
-                );
-              }
-            },
-          },
-        ]);
-      } else {
-        throw new Error("Aucune miction sélectionnée pour la suppression.");
-      }
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde de la miction:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
+        },
+      ]
+    );
   };
+
+  // ============================================
+  // HANDLERS - DATE/TIME PICKERS
+  // ============================================
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
@@ -363,30 +411,30 @@ export default function TeteesScreen() {
     }
   };
 
-  const renderTeteeItem = (tetee: Tetee, isLast: boolean = false) => {
-    // Correction clé : Vérification pour éviter charAt sur undefined
-    const typeDisplay = tetee.type
-      ? tetee.type.charAt(0).toUpperCase() + tetee.type.slice(1)
-      : "Inconnu"; // Ou "Seins" si vous voulez mapper les anciennes valeurs
+  // ============================================
+  // RENDER - MEAL ITEM
+  // ============================================
 
+  const renderMealItem = (meal: Meal, isLast: boolean = false) => {
+    const typeLabel = getMealTypeLabel(meal.type);
     const quantityDisplay =
-      tetee.quantite !== null && tetee.quantite !== undefined
-        ? `${tetee.quantite} ml`
+      meal.quantite !== null && meal.quantite !== undefined
+        ? `${meal.quantite} ml`
         : "N/A";
 
     return (
       <TouchableOpacity
-        key={tetee.id}
-        style={[styles.teteeItem, isLast && styles.lastTeteeItem]}
-        onPress={() => openEditModal(tetee)}
+        key={meal.id}
+        style={[styles.mealItem, isLast && styles.lastMealItem]}
+        onPress={() => openEditModal(meal)}
         activeOpacity={0.7}
       >
-        <View style={styles.teteeContent}>
-          <View style={styles.teteeInfo}>
+        <View style={styles.mealContent}>
+          <View style={styles.mealInfo}>
             <View style={styles.infoRow}>
               <FontAwesome name="clock" size={16} color="#666" />
               <Text style={styles.timeText}>
-                {new Date(tetee.date?.seconds * 1000).toLocaleTimeString(
+                {new Date(meal.date?.seconds * 1000).toLocaleTimeString(
                   "fr-FR",
                   {
                     hour: "2-digit",
@@ -397,16 +445,14 @@ export default function TeteesScreen() {
             </View>
             <View style={styles.infoRow}>
               <FontAwesome
-                name={
-                  tetee.type === "tetee" ? "person-breastfeeding" : "jar-wheat"
-                }
+                name={getMealIcon(meal.type)}
                 size={16}
                 color="#666"
               />
-              <Text style={styles.seinText}>{typeDisplay}</Text>
+              <Text style={styles.mealTypeText}>{typeLabel}</Text>
             </View>
           </View>
-          <View style={styles.teteeActions}>
+          <View style={styles.mealActions}>
             <View style={styles.quantityBadge}>
               <Text style={styles.quantityText}>{quantityDisplay}</Text>
             </View>
@@ -422,9 +468,13 @@ export default function TeteesScreen() {
     );
   };
 
-  const renderDayGroup = ({ item }: { item: TeteeGroup }) => {
+  // ============================================
+  // RENDER - DAY GROUP
+  // ============================================
+
+  const renderDayGroup = ({ item }: { item: MealGroup }) => {
     const isExpanded = expandedDays.has(item.date);
-    const hasMultipleTetees = item.tetees.length > 1;
+    const hasMultipleMeals = item.meals.length > 1;
 
     return (
       <View style={styles.dayCard}>
@@ -433,12 +483,11 @@ export default function TeteesScreen() {
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
               <Text style={styles.summaryText}>
-                {item.tetees.length} tétée{item.tetees.length > 1 ? "s" : ""} •{" "}
-                {item.totalQuantity} ml total
+                {item.meals.length} repas • {item.totalQuantity} ml total
               </Text>
             </View>
           </View>
-          {hasMultipleTetees && (
+          {hasMultipleMeals && (
             <TouchableOpacity
               style={styles.expandButton}
               onPress={() => toggleExpand(item.date)}
@@ -451,33 +500,39 @@ export default function TeteesScreen() {
             </TouchableOpacity>
           )}
         </View>
-        {renderTeteeItem(item.lastTetee, true)}
-        {hasMultipleTetees && isExpanded && (
+        {renderMealItem(item.lastMeal, true)}
+        {hasMultipleMeals && isExpanded && (
           <View style={styles.expandedContent}>
             <View style={styles.separator} />
             <Text style={styles.historyLabel}>Historique du jour</Text>
-            {item.tetees
-              .filter((tetee) => tetee.id !== item.lastTetee.id)
-              .map((tetee) => renderTeteeItem(tetee))}
+            {item.meals
+              .filter((meal) => meal.id !== item.lastMeal.id)
+              .map((meal) => renderMealItem(meal))}
           </View>
         )}
       </View>
     );
   };
 
-  const isQuantiteVisible = typeTetee === "biberons";
+  // ============================================
+  // RENDER - MAIN
+  // ============================================
+
+  const isQuantityVisible = mealType === "biberon";
 
   return (
     <View style={styles.container}>
+      {/* Header avec bouton d'ajout */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
+        <TouchableOpacity style={styles.addButton} onPress={() => openAddModal()}>
           <FontAwesome name="plus" size={16} color="white" />
           <Text style={styles.addButtonText}>Ajouter un repas</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Liste des repas groupés par jour */}
       <FlatList
-        data={groupedTetees}
+        data={groupedMeals}
         keyExtractor={(item) => item.date}
         renderItem={renderDayGroup}
         showsVerticalScrollIndicator={false}
@@ -493,60 +548,81 @@ export default function TeteesScreen() {
         }
       />
 
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showModal}
-        onRequestClose={closeModal}
+      {/* Bottom Sheet d'ajout/édition */}
+      <FormBottomSheet
+        ref={bottomSheetRef}
+        title={editingMeal ? "Modifier le repas" : "Nouveau repas"}
+        icon="baby"
+        accentColor="#4A90E2"
+        isEditing={!!editingMeal}
+        isSubmitting={isSubmitting}
+        onSubmit={handleSubmit}
+        onDelete={editingMeal ? handleDelete : undefined}
+        onCancel={cancelForm}
+        onClose={() => {
+          setIsSubmitting(false);
+          setEditingMeal(null);
+        }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <FontAwesome
-                name={editingTetee ? "edit" : "baby"}
-                size={24}
-                color="#4A90E2"
-              />
-              <Text style={styles.modalTitle}>
-                {editingTetee ? "Modifier le repas" : "Nouveau repas"}
-              </Text>
-              {editingTetee && (
-                <TouchableOpacity onPress={handleDeleteTetee}>
-                  <FontAwesome name="trash" size={24} color="red" />
-                </TouchableOpacity>
-              )}
-            </View>
-
+        {/* Sélection du type de repas */}
             <Text style={styles.modalCategoryLabel}>Type de repas</Text>
             <View style={styles.typeRow}>
-              {["seins", "biberons"].map((t) => (
-                <TouchableOpacity
-                  key={t}
+              <TouchableOpacity
+                style={[
+                  styles.typeButton,
+                  mealType === "tetee" && styles.typeButtonActive,
+                  isSubmitting && styles.typeButtonDisabled,
+                ]}
+                onPress={() => setMealType("tetee")}
+                disabled={isSubmitting}
+              >
+                <FontAwesome
+                  name="person-breastfeeding"
+                  size={20}
+                  color={mealType === "tetee" ? "white" : "#666"}
+                />
+                <Text
                   style={[
-                    styles.typeButton,
-                    typeTetee === t && styles.typeButtonActive,
-                    isSubmitting && styles.typeButtonDisabled,
+                    styles.typeText,
+                    mealType === "tetee" && styles.typeTextActive,
+                    isSubmitting && styles.typeTextDisabled,
                   ]}
-                  onPress={() => {
-                    setTypeTetee(t as "seins" | "biberons");
-                    if (t === "seins") setQuantite(100); // Réinitialiser si seins
-                  }}
-                  disabled={isSubmitting}
                 >
-                  <Text
-                    style={[
-                      styles.typeText,
-                      typeTetee === t && styles.typeTextActive,
-                      isSubmitting && styles.typeTextDisabled,
-                    ]}
-                  >
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                  Seins
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.typeButton,
+                  mealType === "biberon" && styles.typeButtonActive,
+                  isSubmitting && styles.typeButtonDisabled,
+                ]}
+                onPress={() => {
+                  setMealType("biberon");
+                  setQuantite(100);
+                }}
+                disabled={isSubmitting}
+              >
+                <FontAwesome
+                  name="jar-wheat"
+                  size={20}
+                  color={mealType === "biberon" ? "white" : "#666"}
+                />
+                <Text
+                  style={[
+                    styles.typeText,
+                    mealType === "biberon" && styles.typeTextActive,
+                    isSubmitting && styles.typeTextDisabled,
+                  ]}
+                >
+                  Biberon
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            {isQuantiteVisible && (
+            {/* Quantité (si biberon) */}
+            {isQuantityVisible ? (
               <>
                 <Text style={styles.modalCategoryLabel}>Quantité</Text>
                 <View style={styles.quantityRow}>
@@ -555,7 +631,6 @@ export default function TeteesScreen() {
                       styles.quantityButton,
                       isSubmitting && styles.quantityButtonDisabled,
                     ]}
-                    // onPress={() => setQuantite((q) => Math.max(0, q - 5))}
                     onPressIn={() =>
                       handlePressIn(() =>
                         setQuantite((q) => Math.max(0, q - 5))
@@ -579,11 +654,8 @@ export default function TeteesScreen() {
                       styles.quantityButton,
                       isSubmitting && styles.quantityButtonDisabled,
                     ]}
-                    // onPress={() => setQuantite((q) => q + 5)}
                     onPressIn={() =>
-                      handlePressIn(() =>
-                        setQuantite((q) => Math.max(0, q + 5))
-                      )
+                      handlePressIn(() => setQuantite((q) => q + 5))
                     }
                     onPressOut={handlePressOut}
                     disabled={isSubmitting}
@@ -599,13 +671,13 @@ export default function TeteesScreen() {
                   </TouchableOpacity>
                 </View>
               </>
-            )}
-            {!isQuantiteVisible && (
+            ) : (
               <View style={styles.quantityNA}>
                 <Text style={styles.quantityNAText}>Quantité : N/A</Text>
               </View>
             )}
 
+            {/* Date & Heure */}
             <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
             <View style={styles.dateTimeContainer}>
               <TouchableOpacity
@@ -671,6 +743,7 @@ export default function TeteesScreen() {
               </Text>
             </View>
 
+            {/* Date/Time Pickers */}
             {showDate && (
               <DateTimePicker
                 value={dateHeure}
@@ -689,25 +762,14 @@ export default function TeteesScreen() {
               />
             )}
 
-            <View style={styles.actionButtonsContainer}>
-              <ModernActionButtons
-                onCancel={cancelForm}
-                onValidate={handleSubmitTetee}
-                cancelText="Annuler"
-                validateText={editingTetee ? "Mettre à jour" : "Ajouter"}
-                isLoading={isSubmitting}
-                disabled={isSubmitting}
-                loadingText={
-                  editingTetee ? "Mise à jour..." : "Ajout en cours..."
-                }
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      </FormBottomSheet>
     </View>
   );
 }
+
+// ============================================
+// STYLES
+// ============================================
 
 const styles = StyleSheet.create({
   container: {
@@ -737,6 +799,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
+
+  // Day Card
   dayCard: {
     backgroundColor: "white",
     marginBottom: 12,
@@ -776,23 +840,25 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
-  teteeItem: {
+
+  // Meal Item
+  mealItem: {
     backgroundColor: "#f8f9fa",
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
   },
-  lastTeteeItem: {
+  lastMealItem: {
     backgroundColor: "#e8f4fd",
     borderLeftWidth: 4,
     borderLeftColor: "#4A90E2",
   },
-  teteeContent: {
+  mealContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  teteeInfo: {
+  mealInfo: {
     flex: 1,
   },
   infoRow: {
@@ -806,12 +872,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#333",
   },
-  seinText: {
+  mealTypeText: {
     fontSize: 14,
     color: "#666",
-    textTransform: "capitalize",
   },
-  teteeActions: {
+  mealActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -830,6 +895,8 @@ const styles = StyleSheet.create({
   editIcon: {
     opacity: 0.7,
   },
+
+  // Expanded Content
   expandedContent: {
     marginTop: 8,
   },
@@ -845,6 +912,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+
+  // Empty State
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
@@ -861,49 +930,31 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 4,
   },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    width: "90%",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    backgroundColor: "white",
-    borderRadius: 12,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-  },
+
+  // Modal Content
   modalCategoryLabel: {
     alignSelf: "center",
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
-    marginBottom: 12,
+    marginBottom: 10,
   },
+
+  // Type Selection
   typeRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginBottom: 20,
+    marginBottom: 16,
+    gap: 12,
   },
   typeButton: {
-    padding: 12,
+    flex: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 8,
+    padding: 16,
     backgroundColor: "#f0f0f0",
     borderRadius: 12,
-    minWidth: 120,
-    alignItems: "center",
   },
   typeButtonActive: {
     backgroundColor: "#4A90E2",
@@ -915,7 +966,7 @@ const styles = StyleSheet.create({
   typeText: {
     fontSize: 16,
     color: "#666",
-    textTransform: "capitalize",
+    fontWeight: "500",
   },
   typeTextActive: {
     color: "white",
@@ -924,9 +975,11 @@ const styles = StyleSheet.create({
   typeTextDisabled: {
     color: "#ccc",
   },
+
+  // Quantity
   quantityNA: {
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   quantityNAText: {
     fontSize: 16,
@@ -937,7 +990,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   quantityButton: {
     backgroundColor: "#f0f0f0",
@@ -964,6 +1017,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#000000",
   },
+
+  // Date/Time
   dateTimeContainer: {
     flexDirection: "row",
     justifyContent: "center",
@@ -984,13 +1039,14 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 16,
     color: "#666",
+    marginTop: 4,
   },
   dateButtonTextDisabled: {
     color: "#ccc",
   },
   selectedDateTime: {
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   selectedDate: {
     fontSize: 16,
@@ -1002,9 +1058,5 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: "#004cdaff",
     fontWeight: "bold",
-  },
-  actionButtonsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
 });

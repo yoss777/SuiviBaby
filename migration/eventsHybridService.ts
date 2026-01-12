@@ -29,7 +29,7 @@ interface HybridConfig {
 }
 
 let config: HybridConfig = {
-  mode: "HYBRID",
+  mode: "NEW_ONLY",         // 🎯 MIGRATION TERMINÉE - Nouveau système uniquement
   preferSource: "NEW",
   deduplicationWindow: 5000, // 5 secondes
 };

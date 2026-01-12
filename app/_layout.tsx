@@ -5,6 +5,7 @@ import { MigrationProvider } from "@/migration/MigrationProvider";
 import { DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -24,27 +25,29 @@ const CustomTheme = {
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <BabyProvider>
-          <MigrationProvider>
-            <ThemeProvider value={CustomTheme}>
-              <Stack initialRouteName="boot">
-                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
-                <Stack.Screen name="boot" options={{ headerShown: false }} />
-                <Stack.Screen name="explore" options={{ headerShown: false }} />
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen
-                  name="modal"
-                  options={{ presentation: "modal", title: "Modal" }}
-                />
-              </Stack>
-              <StatusBar style="dark" />
-            </ThemeProvider>
-          </MigrationProvider>
-        </BabyProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <BabyProvider>
+            <MigrationProvider>
+              <ThemeProvider value={CustomTheme}>
+                <Stack initialRouteName="boot">
+                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                  <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
+                  <Stack.Screen name="boot" options={{ headerShown: false }} />
+                  <Stack.Screen name="explore" options={{ headerShown: false }} />
+                  <Stack.Screen name="index" options={{ headerShown: false }} />
+                  <Stack.Screen
+                    name="modal"
+                    options={{ presentation: "modal", title: "Modal" }}
+                  />
+                </Stack>
+                <StatusBar style="dark" />
+              </ThemeProvider>
+            </MigrationProvider>
+          </BabyProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

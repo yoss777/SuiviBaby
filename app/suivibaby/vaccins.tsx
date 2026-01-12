@@ -1,4 +1,4 @@
-import ModernActionButtons from "@/components/suivibaby/ModernActionsButton";
+import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { useBaby } from "@/contexts/BabyContext";
 import {
   ajouterVaccin,
@@ -7,9 +7,10 @@ import {
 } from "@/migration/eventsDoubleWriteService";
 import { Vaccin, VaccinGroup } from "@/types/interfaces";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -59,7 +60,6 @@ export default function VaccinsScreen({ vaccins }: Props) {
   const { activeChild } = useBaby();
   const [groupedVaccins, setGroupedVaccins] = useState<VaccinGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [showModal, setShowModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingVaccin, setEditingVaccin] = useState<Vaccin | null>(null);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
@@ -68,6 +68,12 @@ export default function VaccinsScreen({ vaccins }: Props) {
   const [selectedVaccin, setSelectedVaccin] = useState<string>("");
   const [showVaccinList, setShowVaccinList] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Ref pour le BottomSheet
+  const bottomSheetRef = useRef<BottomSheet>(null);
+
+  // Snap points pour le BottomSheet
+  const snapPoints = useMemo(() => ["75%", "90%"], []);
 
   const { openModal } = useLocalSearchParams();
 
@@ -138,20 +144,19 @@ export default function VaccinsScreen({ vaccins }: Props) {
     setSelectedVaccin("");
     setEditingVaccin(null);
     setIsSubmitting(false);
-    setShowModal(true);
+    bottomSheetRef.current?.expand();
   };
 
   const openEditModal = (vaccin: Vaccin) => {
     setDateHeure(new Date(vaccin.date.seconds * 1000));
-    // MODIF : Fallback sur nomVaccin (nouveau champ) ou lib (ancien)
     setSelectedVaccin(vaccin.nomVaccin || vaccin.lib || "");
     setEditingVaccin(vaccin);
     setIsSubmitting(false);
-    setShowModal(true);
+    bottomSheetRef.current?.expand();
   };
 
   const closeModal = () => {
-    setShowModal(false);
+    bottomSheetRef.current?.close();
     setIsSubmitting(false);
     setEditingVaccin(null);
     setSelectedVaccin("");
@@ -230,14 +235,12 @@ export default function VaccinsScreen({ vaccins }: Props) {
       } else {
         throw new Error("Aucune miction sélectionnée pour la suppression.");
       }
-
     } catch (error) {
       console.error("Erreur lors de la sauvegarde de la miction:", error);
     } finally {
       setIsSubmitting(false);
     }
   };
-
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
@@ -271,7 +274,7 @@ export default function VaccinsScreen({ vaccins }: Props) {
     setShowVaccinList(false);
     setSearchQuery("");
     setTimeout(() => {
-      setShowModal(true);
+      bottomSheetRef.current?.expand();
     }, 300);
   };
 
@@ -286,7 +289,6 @@ export default function VaccinsScreen({ vaccins }: Props) {
         <FontAwesome name="syringe" size={24} color="#9C27B0" />
         <View style={styles.vaccinInfo}>
           <Text style={[styles.vaccinName, isLast && styles.lastVaccinName]}>
-            {/* MODIF : Fallback sur nomVaccin (nouveau) ou lib (ancien) */}
             {vaccin.nomVaccin || vaccin.lib || "Vaccin non spécifié"}
           </Text>
           <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
@@ -374,129 +376,127 @@ export default function VaccinsScreen({ vaccins }: Props) {
           </View>
         }
       />
-      <Modal
-        visible={showModal}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={closeModal}
+
+      {/* Bottom Sheet d'ajout/édition */}
+      <FormBottomSheet
+        ref={bottomSheetRef}
+        title={editingVaccin ? "Modifier le vaccin" : "Nouveau vaccin"}
+        icon={editingVaccin ? "edit" : "syringe"}
+        accentColor="#9C27B0"
+        isEditing={!!editingVaccin}
+        isSubmitting={isSubmitting}
+        onSubmit={handleSubmitVaccin}
+        onDelete={editingVaccin ? handleDeleteVaccin : undefined}
+        onCancel={cancelForm}
+        onClose={() => {
+          setIsSubmitting(false);
+          setEditingVaccin(null);
+        }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <FontAwesome name="syringe" size={24} color="#9C27B0" />
-              <Text style={styles.modalTitle}>
-                {editingVaccin ? "Modifier le vaccin" : "Ajouter un vaccin"}
-              </Text>
-            </View>
-            <TouchableOpacity
+        {/* Sélecteur de vaccin */}
+        <TouchableOpacity
+          style={[
+            styles.vaccinSelector,
+            isSubmitting && styles.vaccinSelectorDisabled,
+          ]}
+          onPress={() => {
+            if (!isSubmitting) {
+              setShowVaccinList(true);
+              bottomSheetRef.current?.close();
+            }
+          }}
+          disabled={isSubmitting}
+        >
+          <FontAwesome name="list" size={20} color="#666" />
+          <Text
+            style={[
+              styles.vaccinSelectorText,
+              selectedVaccin && styles.vaccinSelectorTextSelected,
+              isSubmitting && styles.vaccinSelectorTextDisabled,
+            ]}
+          >
+            {selectedVaccin || "Sélectionner un vaccin"}
+          </Text>
+          <FontAwesome name="chevron-right" size={16} color="#999" />
+        </TouchableOpacity>
+
+        {/* Date & Heure */}
+        <Text style={styles.modalCategoryLabel}>Date et heure</Text>
+        <View style={styles.dateTimeContainer}>
+          <TouchableOpacity
+            style={[
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
+            ]}
+            onPress={() => !isSubmitting && setShowDate(true)}
+            disabled={isSubmitting}
+          >
+            <FontAwesome name="calendar" size={16} color="#666" />
+            <Text
               style={[
-                styles.vaccinSelector,
-                isSubmitting && styles.vaccinSelectorDisabled,
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
               ]}
-              onPress={() => {
-                if (!isSubmitting) {
-                  setShowVaccinList(true);
-                  setShowModal(false);
-                }
-              }}
-              disabled={isSubmitting}
             >
-              <FontAwesome name="list" size={20} color="#666" />
-              <Text
-                style={[
-                  styles.vaccinSelectorText,
-                  selectedVaccin && styles.vaccinSelectorTextSelected,
-                  isSubmitting && styles.vaccinSelectorTextDisabled,
-                ]}
-              >
-                {selectedVaccin || "Sélectionner un vaccin"}
-              </Text>
-              <FontAwesome name="chevron-right" size={16} color="#999" />
-            </TouchableOpacity>
-            <Text style={styles.modalCategoryLabel}>Date et heure</Text>
-            <View style={styles.dateTimeContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  isSubmitting && styles.dateButtonDisabled,
-                ]}
-                onPress={() => !isSubmitting && setShowDate(true)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome name="calendar" size={16} color="#666" />
-                <Text
-                  style={[
-                    styles.dateButtonText,
-                    isSubmitting && styles.dateButtonTextDisabled,
-                  ]}
-                >
-                  Date
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  isSubmitting && styles.dateButtonDisabled,
-                ]}
-                onPress={() => !isSubmitting && setShowTime(true)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome name="clock" size={16} color="#666" />
-                <Text
-                  style={[
-                    styles.dateButtonText,
-                    isSubmitting && styles.dateButtonTextDisabled,
-                  ]}
-                >
-                  Heure
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.selectedDateTime}>
-              <Text style={styles.selectedDate}>
-                {dateHeure.toLocaleDateString("fr-FR", {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </Text>
-              <Text style={styles.selectedTime}>
-                {dateHeure.toLocaleTimeString("fr-FR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </Text>
-            </View>
-            {showDate && (
-              <DateTimePicker
-                value={dateHeure}
-                mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onChangeDate}
-              />
-            )}
-            {showTime && (
-              <DateTimePicker
-                value={dateHeure}
-                mode="time"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onChangeTime}
-              />
-            )}
-            <View style={styles.actionButtonsContainer}>
-              <ModernActionButtons
-                onCancel={cancelForm}
-                onDelete={editingVaccin ? handleDeleteVaccin : undefined}
-                onSubmit={handleSubmitVaccin}
-                isSubmitting={isSubmitting}
-                isDisabled={!selectedVaccin.trim()}
-                submitLabel={editingVaccin ? "Modifier" : "Ajouter"}
-              />
-            </View>
-          </View>
+              Date
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
+            ]}
+            onPress={() => !isSubmitting && setShowTime(true)}
+            disabled={isSubmitting}
+          >
+            <FontAwesome name="clock" size={16} color="#666" />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Heure
+            </Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+
+        <View style={styles.selectedDateTime}>
+          <Text style={styles.selectedDate}>
+            {dateHeure.toLocaleDateString("fr-FR", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </Text>
+          <Text style={styles.selectedTime}>
+            {dateHeure.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
+
+        {showDate && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeDate}
+          />
+        )}
+        {showTime && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="time"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeTime}
+          />
+        )}
+      </FormBottomSheet>
+
+      {/* Modal de sélection de vaccin */}
       <Modal
         visible={showVaccinList}
         animationType="slide"
@@ -511,7 +511,7 @@ export default function VaccinsScreen({ vaccins }: Props) {
                 style={styles.closeButton}
                 onPress={() => {
                   setShowVaccinList(false);
-                  setShowModal(true);
+                  bottomSheetRef.current?.expand();
                 }}
               >
                 <FontAwesome name="times" size={20} color="#666" />
@@ -681,11 +681,6 @@ const styles = StyleSheet.create({
     color: "#666",
     fontWeight: "500",
   },
-  vaccinActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
   recentBadge: {
     backgroundColor: "#9C27B0",
     paddingHorizontal: 8,
@@ -736,25 +731,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    width: "90%",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    backgroundColor: "white",
-    borderRadius: 12,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
   },
   modalCategoryLabel: {
     alignSelf: "center",
@@ -839,10 +815,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: "#9C27B0",
     fontWeight: "bold",
-  },
-  actionButtonsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
   vaccinListModal: {
     width: "90%",

@@ -22,6 +22,10 @@ import {
   View,
 } from "react-native";
 
+// ============================================
+// TYPES
+// ============================================
+
 interface DashboardData {
   tetees: any[];
   biberons: any[];
@@ -32,26 +36,28 @@ interface DashboardData {
   vaccins: any[];
 }
 
-interface TodayStats {
-  tetees: {
-    total: {
-      count: number;
-      quantity: number;
-      lastTime?: string;
-      lastTimestamp?: number;
-    };
-    seins: {
-      count: number;
-      lastTime?: string;
-      lastTimestamp?: number;
-    };
-    biberons: {
-      count: number;
-      quantity: number;
-      lastTime?: string;
-      lastTimestamp?: number;
-    };
+interface MealsStats {
+  total: {
+    count: number;
+    quantity: number;
+    lastTime?: string;
+    lastTimestamp?: number;
   };
+  seins: {
+    count: number;
+    lastTime?: string;
+    lastTimestamp?: number;
+  };
+  biberons: {
+    count: number;
+    quantity: number;
+    lastTime?: string;
+    lastTimestamp?: number;
+  };
+}
+
+interface TodayStats {
+  meals: MealsStats;
   pompages: {
     count: number;
     quantity: number;
@@ -64,8 +70,14 @@ interface TodayStats {
   vaccins: { count: number; lastTime?: string; lastTimestamp?: number };
 }
 
+// ============================================
+// COMPONENT
+// ============================================
+
 export default function HomeDashboard() {
   const { activeChild } = useBaby();
+
+  // États des données
   const [data, setData] = useState<DashboardData>({
     tetees: [],
     biberons: [],
@@ -75,8 +87,9 @@ export default function HomeDashboard() {
     vitamines: [],
     vaccins: [],
   });
+
   const [todayStats, setTodayStats] = useState<TodayStats>({
-    tetees: {
+    meals: {
       total: { count: 0, quantity: 0 },
       seins: { count: 0 },
       biberons: { count: 0, quantity: 0 },
@@ -87,6 +100,7 @@ export default function HomeDashboard() {
     vitamines: { count: 0 },
     vaccins: { count: 0 },
   });
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState({
     tetees: true,
@@ -97,6 +111,10 @@ export default function HomeDashboard() {
     vitamines: true,
     vaccins: true,
   });
+
+  // ============================================
+  // EFFECTS - TIMER
+  // ============================================
 
   // Timer intelligent qui écoute les changements d'état de l'app
   useEffect(() => {
@@ -142,6 +160,10 @@ export default function HomeDashboard() {
     };
   }, []);
 
+  // ============================================
+  // EFFECTS - DATA LISTENERS
+  // ============================================
+
   // Écoute en temps réel de toutes les données
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -150,26 +172,35 @@ export default function HomeDashboard() {
       setData((prev) => ({ ...prev, tetees }));
       setLoading((prev) => ({ ...prev, tetees: false }));
     });
+
     const unsubscribeBiberons = ecouterBiberons(activeChild.id, (biberons) => {
       setData((prev) => ({ ...prev, biberons }));
       setLoading((prev) => ({ ...prev, biberons: false }));
     });
+
     const unsubscribePompages = ecouterPompages(activeChild.id, (pompages) => {
       setData((prev) => ({ ...prev, pompages }));
       setLoading((prev) => ({ ...prev, pompages: false }));
     });
+
     const unsubscribeMictions = ecouterMictions(activeChild.id, (mictions) => {
       setData((prev) => ({ ...prev, mictions }));
       setLoading((prev) => ({ ...prev, mictions: false }));
     });
+
     const unsubscribeSelles = ecouterSelles(activeChild.id, (selles) => {
       setData((prev) => ({ ...prev, selles }));
       setLoading((prev) => ({ ...prev, selles: false }));
     });
-    const unsubscribeVitamines = ecouterVitamines(activeChild.id, (vitamines) => {
-      setData((prev) => ({ ...prev, vitamines }));
-      setLoading((prev) => ({ ...prev, vitamines: false }));
-    });
+
+    const unsubscribeVitamines = ecouterVitamines(
+      activeChild.id,
+      (vitamines) => {
+        setData((prev) => ({ ...prev, vitamines }));
+        setLoading((prev) => ({ ...prev, vitamines: false }));
+      }
+    );
+
     const unsubscribeVaccins = ecouterVaccins(activeChild.id, (vaccins) => {
       setData((prev) => ({ ...prev, vaccins }));
       setLoading((prev) => ({ ...prev, vaccins: false }));
@@ -185,6 +216,10 @@ export default function HomeDashboard() {
       unsubscribeVaccins();
     };
   }, [activeChild]);
+
+  // ============================================
+  // EFFECTS - STATS CALCULATION
+  // ============================================
 
   // Calcul des statistiques du jour
   useEffect(() => {
@@ -217,12 +252,15 @@ export default function HomeDashboard() {
     const todayVitamines = filterToday(data.vitamines);
     const todayVaccins = filterToday(data.vaccins);
 
-    // Filtrer les tétées seins (OLD: type="seins" ou pas de type, NEW: type="tetee")
-    const seinsToday = todayTetees.filter((t) => !t.type || t.type === "seins" || t.type === "tetee");
-    // Les biberons viennent maintenant du listener séparé
+    // Repas - Seins (OLD: type="seins" ou pas de type, NEW: type="tetee")
+    const seinsToday = todayTetees.filter(
+      (t) => !t.type || t.type === "seins" || t.type === "tetee"
+    );
+
+    // Repas - Biberons
     const biberonsToday = todayBiberons;
 
-    // Calculs pour tétées seins
+    // Calculer les statistiques pour les repas seins
     const lastSeins =
       seinsToday.length > 0
         ? seinsToday.reduce((latest, current) =>
@@ -232,9 +270,9 @@ export default function HomeDashboard() {
           )
         : null;
 
-    // Calculs pour tétées biberons
+    // Calculer les statistiques pour les repas biberons
     const biberonsQuantity = biberonsToday.reduce(
-      (sum, t) => sum + (t.quantite || 0),
+      (sum, b) => sum + (b.quantite || 0),
       0
     );
     const lastBiberons =
@@ -246,19 +284,19 @@ export default function HomeDashboard() {
           )
         : null;
 
-    // Calculs totaux pour tétées (seins + biberons)
-    const teteesTotalQuantity = biberonsQuantity; // Seuls les biberons ont une quantité mesurable
-    const allTeteesAndBiberons = [...todayTetees, ...todayBiberons];
-    const lastTeteeOverall =
-      allTeteesAndBiberons.length > 0
-        ? allTeteesAndBiberons.reduce((latest, current) =>
+    // Calculer les statistiques totales pour tous les repas
+    const allMeals = [...todayTetees, ...todayBiberons];
+    const totalMealsQuantity = biberonsQuantity; // Seuls les biberons ont une quantité mesurable
+    const lastMealOverall =
+      allMeals.length > 0
+        ? allMeals.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
               : latest
           )
         : null;
 
-    // Calculs pour pompages
+    // Calculer les statistiques pour les pompages
     const pompagesQuantity = todayPompages.reduce(
       (sum, p) => sum + ((p.quantiteDroite || 0) + (p.quantiteGauche || 0)),
       0
@@ -272,7 +310,7 @@ export default function HomeDashboard() {
           )
         : null;
 
-    // Dernières activités
+    // Calculer les dernières activités
     const lastMiction =
       todayMictions.length > 0
         ? todayMictions.reduce((latest, current) =>
@@ -309,6 +347,7 @@ export default function HomeDashboard() {
           )
         : null;
 
+    // Helpers pour formater le temps
     const formatTime = (item: any) => {
       if (!item?.date?.seconds) return undefined;
       return new Date(item.date.seconds * 1000).toLocaleTimeString("fr-FR", {
@@ -323,12 +362,12 @@ export default function HomeDashboard() {
     };
 
     setTodayStats({
-      tetees: {
+      meals: {
         total: {
-          count: allTeteesAndBiberons.length,
-          quantity: teteesTotalQuantity,
-          lastTime: formatTime(lastTeteeOverall),
-          lastTimestamp: getTimestamp(lastTeteeOverall),
+          count: allMeals.length,
+          quantity: totalMealsQuantity,
+          lastTime: formatTime(lastMealOverall),
+          lastTimestamp: getTimestamp(lastMealOverall),
         },
         seins: {
           count: seinsToday.length,
@@ -371,6 +410,10 @@ export default function HomeDashboard() {
     });
   }, [data]);
 
+  // ============================================
+  // HELPERS - UI
+  // ============================================
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Bonjour";
@@ -406,6 +449,10 @@ export default function HomeDashboard() {
 
     return `il y a ${diffMinutes}min`;
   };
+
+  // ============================================
+  // COMPONENTS - CARDS
+  // ============================================
 
   const StatsCard = ({
     title,
@@ -452,6 +499,7 @@ export default function HomeDashboard() {
       </TouchableOpacity>
     );
   };
+
   const LoadingCard = () => (
     <View style={styles.statsCard}>
       <View style={[styles.statsHeader, { opacity: 0.5 }]}>
@@ -484,6 +532,10 @@ export default function HomeDashboard() {
     </View>
   );
 
+  // ============================================
+  // RENDER
+  // ============================================
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Bannière de migration */}
@@ -505,50 +557,40 @@ export default function HomeDashboard() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
 
-        {/* Tétées & Pompages - Vue d'ensemble */}
+        {/* Repas & Pompages - Vue d'ensemble */}
         <View style={styles.statsGrid}>
           {loading.tetees ? (
-            <>
-              <LoadingCard />
-            </>
+            <LoadingCard />
           ) : (
-            <>
-              <StatsCard
-                title="Tétées total"
-                value={todayStats.tetees.total.count}
-                unit={
-                  todayStats.tetees.total.count > 1 ? "sessions" : "session"
-                }
-                icon="baby"
-                color="#4A90E2"
-                lastActivity={todayStats.tetees.total.lastTime}
-                lastTimestamp={todayStats.tetees.total.lastTimestamp}
-                onPress={() => router.push("/baby/stats?tab=tetees" as any)}
-              />
-            </>
+            <StatsCard
+              title="Repas total"
+              value={todayStats.meals.total.count}
+              unit={todayStats.meals.total.count > 1 ? "sessions" : "session"}
+              icon="baby"
+              color="#4A90E2"
+              lastActivity={todayStats.meals.total.lastTime}
+              lastTimestamp={todayStats.meals.total.lastTimestamp}
+              onPress={() => router.push("/baby/repas" as any)}
+            />
           )}
 
           {loading.pompages ? (
-            <>
-              <LoadingCard />
-            </>
+            <LoadingCard />
           ) : (
-            <>
-              <StatsCard
-                title="Pompages"
-                value={`${todayStats.pompages.count} • ${todayStats.pompages.quantity}`}
-                unit="ml"
-                icon="pump-medical"
-                color="#28a745"
-                lastActivity={todayStats.pompages.lastTime}
-                lastTimestamp={todayStats.pompages.lastTimestamp}
-                onPress={() => router.push("/baby/pompages?openModal=true" as any)}
-              />
-            </>
+            <StatsCard
+              title="Pompages"
+              value={`${todayStats.pompages.count} • ${todayStats.pompages.quantity}`}
+              unit="ml"
+              icon="pump-medical"
+              color="#28a745"
+              lastActivity={todayStats.pompages.lastTime}
+              lastTimestamp={todayStats.pompages.lastTimestamp}
+              onPress={() => router.push("/baby/pompages?openModal=true" as any)}
+            />
           )}
         </View>
 
-        {/* Tétées - Détail par type */}
+        {/* Repas - Détail par type */}
         <View style={styles.statsGrid}>
           {loading.tetees || loading.biberons ? (
             <>
@@ -559,24 +601,26 @@ export default function HomeDashboard() {
             <>
               <StatsCard
                 title="Seins"
-                value={todayStats.tetees.seins.count}
-                unit={todayStats.tetees.seins.count > 1 ? "fois" : "fois"}
+                value={todayStats.meals.seins.count}
+                unit={todayStats.meals.seins.count > 1 ? "fois" : "fois"}
                 icon="person-breastfeeding"
                 color="#E91E63"
-                lastActivity={todayStats.tetees.seins.lastTime}
-                lastTimestamp={todayStats.tetees.seins.lastTimestamp}
-                onPress={() => router.push("/baby/tetees?tab=seins&openModal=true" as any)}
+                lastActivity={todayStats.meals.seins.lastTime}
+                lastTimestamp={todayStats.meals.seins.lastTimestamp}
+                onPress={() =>
+                  router.push("/baby/repas?tab=seins&openModal=true" as any)
+                }
               />
               <StatsCard
                 title="Biberons"
-                value={`${todayStats.tetees.biberons.count} • ${todayStats.tetees.biberons.quantity}ml`}
+                value={`${todayStats.meals.biberons.count} • ${todayStats.meals.biberons.quantity}ml`}
                 unit=""
                 icon="jar-wheat"
                 color="#FF5722"
-                lastActivity={todayStats.tetees.biberons.lastTime}
-                lastTimestamp={todayStats.tetees.biberons.lastTimestamp}
+                lastActivity={todayStats.meals.biberons.lastTime}
+                lastTimestamp={todayStats.meals.biberons.lastTimestamp}
                 onPress={() =>
-                  router.push("/baby/tetees?tab=biberons&openModal=true" as any)
+                  router.push("/baby/repas?tab=biberons&openModal=true" as any)
                 }
               />
             </>
@@ -612,7 +656,9 @@ export default function HomeDashboard() {
               color="#9C27B0"
               lastActivity={todayStats.vaccins.lastTime}
               lastTimestamp={todayStats.vaccins.lastTimestamp}
-              onPress={() => router.push("/baby/immunos?tab=vaccins&openModal=true" as any)}
+              onPress={() =>
+                router.push("/baby/immunos?tab=vaccins&openModal=true" as any)
+              }
             />
           )}
         </View>
@@ -634,7 +680,9 @@ export default function HomeDashboard() {
               lastActivity={todayStats.mictions.lastTime}
               lastTimestamp={todayStats.mictions.lastTimestamp}
               onPress={() =>
-                router.push("/baby/excretions?tab=mictions&openModal=true" as any)
+                router.push(
+                  "/baby/excretions?tab=mictions&openModal=true" as any
+                )
               }
             />
           )}
@@ -659,6 +707,10 @@ export default function HomeDashboard() {
     </ScrollView>
   );
 }
+
+// ============================================
+// STYLES
+// ============================================
 
 const styles = StyleSheet.create({
   container: {

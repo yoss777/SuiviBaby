@@ -1,4 +1,4 @@
-import ModernActionButtons from "@/components/suivibaby/ModernActionsButton";
+import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { useBaby } from "@/contexts/BabyContext";
 import {
   ajouterPompage,
@@ -7,13 +7,13 @@ import {
 } from "@/migration/eventsDoubleWriteService";
 import { ecouterPompagesHybrid as ecouterPompages } from "@/migration/eventsHybridService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
-  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -45,7 +45,6 @@ export default function PompagesScreen() {
   const [pompages, setPompages] = useState<Pompage[]>([]);
   const [groupedPompages, setGroupedPompages] = useState<PompageGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [showModal, setShowModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingPompage, setEditingPompage] = useState<Pompage | null>(null);
 
@@ -59,8 +58,14 @@ export default function PompagesScreen() {
   // Récupérer les paramètres de l'URL
   const { openModal } = useLocalSearchParams();
 
-    // interval ref pour la gestion du picker
+  // interval ref pour la gestion du picker
   const intervalRef = useRef<number | undefined>(undefined);
+
+  // Ref pour le BottomSheet
+  const bottomSheetRef = useRef<BottomSheet>(null);
+
+  // Snap points pour le BottomSheet
+  const snapPoints = useMemo(() => ["75%", "90%"], []);
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
@@ -193,7 +198,7 @@ export default function PompagesScreen() {
     setQuantiteDroite(100);
     setIsSubmitting(false);
     setEditingPompage(null);
-    setShowModal(true);
+    bottomSheetRef.current?.expand();
   };
 
   const openEditModal = (pompage: Pompage) => {
@@ -202,11 +207,11 @@ export default function PompagesScreen() {
     setQuantiteDroite(pompage.quantiteDroite);
     setEditingPompage(pompage);
     setIsSubmitting(false);
-    setShowModal(true);
+    bottomSheetRef.current?.expand();
   };
 
   const closeModal = () => {
-    setShowModal(false);
+    bottomSheetRef.current?.close();
     setIsSubmitting(false);
     setEditingPompage(null);
   };
@@ -469,30 +474,22 @@ export default function PompagesScreen() {
         }
       />
 
-      {/* MODAL */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showModal}
-        onRequestClose={closeModal}
+      {/* Bottom Sheet d'ajout/édition */}
+      <FormBottomSheet
+        ref={bottomSheetRef}
+        title={editingPompage ? "Modifier la session" : "Nouvelle session"}
+        icon={editingPompage ? "edit" : "pump-medical"}
+        accentColor="#28a745"
+        isEditing={!!editingPompage}
+        isSubmitting={isSubmitting}
+        onSubmit={handleSubmitPompage}
+        onDelete={editingPompage ? handleDeletePompage : undefined}
+        onCancel={cancelForm}
+        onClose={() => {
+          setIsSubmitting(false);
+          setEditingPompage(null);
+        }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <FontAwesome
-                name={editingPompage ? "edit" : "pump-medical"}
-                size={24}
-                color="#28a745"
-              />
-              <Text style={styles.modalTitle}>
-                {editingPompage ? "Modifier la session" : "Nouvelle session"}
-              </Text>
-              {editingPompage && (
-                <TouchableOpacity onPress={handleDeletePompage}>
-                  <FontAwesome name="trash" size={24} color="red" />
-                </TouchableOpacity>
-              )}
-            </View>
 
             {/* Quantité Sein Gauche */}
             <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
@@ -682,22 +679,7 @@ export default function PompagesScreen() {
               />
             )}
 
-            <View style={styles.actionButtonsContainer}>
-              <ModernActionButtons
-                onCancel={cancelForm}
-                onValidate={handleSubmitPompage}
-                cancelText="Annuler"
-                validateText={editingPompage ? "Mettre à jour" : "Ajouter"}
-                isLoading={isSubmitting}
-                disabled={isSubmitting}
-                loadingText={
-                  editingPompage ? "Mise à jour..." : "Ajout en cours..."
-                }
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      </FormBottomSheet>
     </View>
   );
 }
