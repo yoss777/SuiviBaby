@@ -1,5 +1,9 @@
+import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
+import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterBiberon,
   ajouterTetee,
@@ -11,26 +15,32 @@ import {
   ecouterBiberonsHybrid as ecouterBiberons,
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
+import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
   Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Calendar, DateData } from "react-native-calendars";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useHeaderRight } from "../_layout";
 
 // ============================================
 // TYPES
 // ============================================
-
 type MealType = "tetee" | "biberon";
+type FilterType = "today" | "past";
 
 interface Meal {
   id: string;
@@ -54,6 +64,12 @@ interface MealGroup {
 
 export default function RepasScreen() {
   const { activeChild } = useBaby();
+  const { setHeaderRight } = useHeaderRight();
+  const colorScheme = useColorScheme() ?? "light";
+
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   // États des données
   const [meals, setMeals] = useState<Meal[]>([]);
@@ -79,6 +95,101 @@ export default function RepasScreen() {
 
   // Ref pour le BottomSheet
   const bottomSheetRef = useRef<BottomSheet>(null);
+
+  // ============================================
+  // EFFECTS - URL PARAMS
+  // ============================================
+
+  // Gérer le bouton calendrier
+  const handleCalendarPress = useCallback(() => {
+    setShowCalendar((prev) => {
+      const newValue = !prev;
+
+      // Si on ouvre le calendrier, sélectionner la date du jour par défaut et réinitialiser le filtre
+      if (newValue) {
+        const today = new Date();
+        const todayString = `${today.getFullYear()}-${String(
+          today.getMonth() + 1
+        ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        setSelectedDate(todayString);
+        setSelectedFilter(null);
+      }
+      // Ne plus réinitialiser la date sélectionnée lors de la fermeture du calendrier
+
+      return newValue;
+    });
+  }, []);
+
+  // Gérer l'ouverture du modal d'ajout
+  const openAddModal = useCallback((preferredType?: "seins" | "biberons") => {
+    setDateHeure(new Date());
+    setEditingMeal(null);
+    setIsSubmitting(false);
+
+    if (preferredType === "seins") {
+      setMealType("tetee");
+    } else if (preferredType === "biberons") {
+      setMealType("biberon");
+      setQuantite(100);
+    } else {
+      setMealType("tetee");
+    }
+
+    bottomSheetRef.current?.expand();
+  }, []);
+
+  // Définir les boutons du header (calendrier + ajouter)
+  useEffect(() => {
+    const headerButtons = (
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingRight: 16,
+          gap: 0,
+        }}
+      >
+        <VoiceCommandButton
+          size={18}
+          color={Colors[colorScheme].tint}
+          showTestToggle={false}
+        />
+
+        <Pressable
+          onPress={handleCalendarPress}
+          style={[
+            styles.headerButton,
+            { paddingLeft: 12 },
+            showCalendar && {
+              backgroundColor: Colors[colorScheme].tint + "20",
+            },
+          ]}
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={24}
+            color={Colors[colorScheme].tint}
+          />
+        </Pressable>
+        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+        </Pressable>
+      </View>
+    );
+
+    setHeaderRight(headerButtons);
+
+    // Cleanup: retirer les boutons quand on quitte cet écran
+    return () => {
+      setHeaderRight(null);
+    };
+  }, [
+    handleCalendarPress,
+    showCalendar,
+    colorScheme,
+    setHeaderRight,
+    openAddModal,
+  ]);
 
   // ============================================
   // EFFECTS - URL PARAMS
@@ -139,11 +250,41 @@ export default function RepasScreen() {
     };
   }, [activeChild]);
 
-  // Regroupement par jour
+  // Filtrage et regroupement par jour
   useEffect(() => {
-    const grouped = groupMealsByDay(meals);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    // Filtrer les repas en fonction du filtre sélectionné ou de la date du calendrier
+    const filtered = meals.filter((meal) => {
+      const mealDate = new Date(meal.date.seconds * 1000);
+      mealDate.setHours(0, 0, 0, 0);
+      const mealTime = mealDate.getTime();
+
+      // Si une date est sélectionnée dans le calendrier (peu importe si le calendrier est ouvert ou fermé)
+      if (selectedDate) {
+        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
+        const calDate = new Date(calYear, calMonth - 1, calDay);
+        calDate.setHours(0, 0, 0, 0);
+        return mealTime === calDate.getTime();
+      }
+
+      // Sinon, appliquer le filtre sélectionné
+      switch (selectedFilter) {
+        case "today":
+          return mealTime === todayTime;
+        case "past":
+          return mealTime < todayTime;
+        case null:
+        default:
+          return true; // Afficher tous les repas par défaut
+      }
+    });
+
+    const grouped = groupMealsByDay(filtered);
     setGroupedMeals(grouped);
-  }, [meals]);
+  }, [meals, selectedFilter, selectedDate, showCalendar]);
 
   // Nettoyage de l'intervalle lors du démontage
   useEffect(() => {
@@ -155,6 +296,66 @@ export default function RepasScreen() {
   }, []);
 
   // ============================================
+  // HELPERS - CALENDAR
+  // ============================================
+
+  // Préparer les dates marquées pour le calendrier
+  const markedDates = useMemo(() => {
+    const marked: Record<string, any> = {};
+
+    meals.forEach((meal) => {
+      // Convertir le timestamp en date
+      const date = new Date(meal.date.seconds * 1000);
+
+      // Créer la clé au format YYYY-MM-DD
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      const dateKey = `${year}-${month}-${day}`;
+
+      marked[dateKey] = {
+        marked: true,
+        dotColor: Colors[colorScheme].tint,
+      };
+    });
+
+    // Marquer la date sélectionnée
+    if (selectedDate) {
+      marked[selectedDate] = {
+        ...marked[selectedDate],
+        selected: true,
+        selectedColor: Colors[colorScheme].tint,
+      };
+    }
+
+    return marked;
+  }, [meals, selectedDate, colorScheme]);
+
+  const handleDateSelect = (day: DateData) => {
+    setSelectedDate(day.dateString);
+    // Déployer automatiquement la carte du jour sélectionné
+    setExpandedDays(new Set([day.dateString]));
+  };
+
+  const handleFilterPress = (filter: FilterType) => {
+    setSelectedFilter(filter);
+    setSelectedDate(null);
+    setShowCalendar(false);
+
+    // Si on clique sur "Aujourd'hui", déployer automatiquement la carte du jour
+    if (filter === "today") {
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(
+        today.getMonth() + 1
+      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      setExpandedDays(new Set([todayKey]));
+    } else {
+      // Réinitialiser l'expansion pour les autres filtres
+      setExpandedDays(new Set());
+    }
+  };
+
+  // ============================================
   // HELPERS - GROUPING
   // ============================================
 
@@ -163,7 +364,9 @@ export default function RepasScreen() {
 
     meals.forEach((meal) => {
       const date = new Date(meal.date?.seconds * 1000);
-      const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      const dateKey = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
       if (!groups[dateKey]) {
         groups[dateKey] = [];
@@ -259,23 +462,6 @@ export default function RepasScreen() {
   // HANDLERS - MODAL
   // ============================================
 
-  const openAddModal = (preferredType?: "seins" | "biberons") => {
-    setDateHeure(new Date());
-    setEditingMeal(null);
-    setIsSubmitting(false);
-
-    if (preferredType === "seins") {
-      setMealType("tetee");
-    } else if (preferredType === "biberons") {
-      setMealType("biberon");
-      setQuantite(100);
-    } else {
-      setMealType("tetee");
-    }
-
-    bottomSheetRef.current?.expand();
-  };
-
   const openEditModal = (meal: Meal) => {
     setDateHeure(new Date(meal.date.seconds * 1000));
     setEditingMeal(meal);
@@ -350,35 +536,31 @@ export default function RepasScreen() {
   const handleDelete = async () => {
     if (isSubmitting || !editingMeal || !activeChild) return;
 
-    Alert.alert(
-      "Suppression",
-      "Voulez-vous vraiment supprimer ce repas ?",
-      [
-        {
-          text: "Annuler",
-          style: "cancel",
+    Alert.alert("Suppression", "Voulez-vous vraiment supprimer ce repas ?", [
+      {
+        text: "Annuler",
+        style: "cancel",
+      },
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setIsSubmitting(true);
+            await supprimerTetee(activeChild.id, editingMeal.id);
+            closeModal();
+          } catch (error) {
+            console.error("Erreur lors de la suppression:", error);
+            Alert.alert(
+              "Erreur",
+              "Impossible de supprimer le repas. Veuillez réessayer."
+            );
+          } finally {
+            setIsSubmitting(false);
+          }
         },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setIsSubmitting(true);
-              await supprimerTetee(activeChild.id, editingMeal.id);
-              closeModal();
-            } catch (error) {
-              console.error("Erreur lors de la suppression:", error);
-              Alert.alert(
-                "Erreur",
-                "Impossible de supprimer le repas. Veuillez réessayer."
-              );
-            } finally {
-              setIsSubmitting(false);
-            }
-          },
-        },
-      ]
-    );
+      },
+    ]);
   };
 
   // ============================================
@@ -430,9 +612,15 @@ export default function RepasScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.mealContent}>
+          <View style={[styles.avatar, { backgroundColor: "#4A90E2" }]}>
+            <FontAwesome
+              name={getMealIcon(meal.type)}
+              size={20}
+              color="#ffffff"
+            />
+          </View>
           <View style={styles.mealInfo}>
             <View style={styles.infoRow}>
-              <FontAwesome name="clock" size={16} color="#666" />
               <Text style={styles.timeText}>
                 {new Date(meal.date?.seconds * 1000).toLocaleTimeString(
                   "fr-FR",
@@ -444,18 +632,12 @@ export default function RepasScreen() {
               </Text>
             </View>
             <View style={styles.infoRow}>
-              <FontAwesome
-                name={getMealIcon(meal.type)}
-                size={16}
-                color="#666"
-              />
-              <Text style={styles.mealTypeText}>{typeLabel}</Text>
+              <Text style={styles.mealTypeText}>
+                Quantité : {quantityDisplay}
+              </Text>
             </View>
           </View>
           <View style={styles.mealActions}>
-            <View style={styles.quantityBadge}>
-              <Text style={styles.quantityText}>{quantityDisplay}</Text>
-            </View>
             <FontAwesome
               name="edit"
               size={16}
@@ -522,247 +704,324 @@ export default function RepasScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header avec bouton d'ajout */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={() => openAddModal()}>
-          <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Ajouter un repas</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView
+        style={[
+          { flex: 1 },
+          { backgroundColor: Colors[colorScheme].background },
+        ]}
+        edges={["bottom"]}
+      >
+        <View>
+          {/* Filtres */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterContainer}
+            contentContainerStyle={styles.filterContent}
+          >
+            <Pressable
+              onPress={() => handleFilterPress("today")}
+              style={[
+                styles.filterButton,
+                selectedFilter === "today" && {
+                  backgroundColor: Colors[colorScheme].tint,
+                },
+              ]}
+            >
+              <ThemedText
+                style={[
+                  styles.filterText,
+                  selectedFilter === "today" && styles.filterTextActive,
+                ]}
+              >
+                Aujourd&apos;hui
+              </ThemedText>
+            </Pressable>
 
-      {/* Liste des repas groupés par jour */}
-      <FlatList
-        data={groupedMeals}
-        keyExtractor={(item) => item.date}
-        renderItem={renderDayGroup}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <FontAwesome name="baby" size={48} color="#ccc" />
-            <Text style={styles.emptyText}>Aucun repas enregistré</Text>
-            <Text style={styles.emptySubtext}>
-              Ajoutez votre premier repas
+            <Pressable
+              onPress={() => handleFilterPress("past")}
+              style={[
+                styles.filterButton,
+                selectedFilter === "past" && {
+                  backgroundColor: Colors[colorScheme].tint,
+                },
+              ]}
+            >
+              <ThemedText
+                style={[
+                  styles.filterText,
+                  selectedFilter === "past" && styles.filterTextActive,
+                ]}
+              >
+                Passés
+              </ThemedText>
+            </Pressable>
+          </ScrollView>
+
+          {/* Calendrier */}
+          {showCalendar && (
+            <View style={styles.calendarContainer}>
+              <Calendar
+                onDayPress={handleDateSelect}
+                markedDates={markedDates}
+                theme={{
+                  backgroundColor: Colors[colorScheme].background,
+                  calendarBackground: Colors[colorScheme].background,
+                  textSectionTitleColor: Colors[colorScheme].text,
+                  selectedDayBackgroundColor: Colors[colorScheme].tint,
+                  selectedDayTextColor: "#ffffff",
+                  todayTextColor: Colors[colorScheme].tint,
+                  dayTextColor: Colors[colorScheme].text,
+                  textDisabledColor: Colors[colorScheme].tabIconDefault,
+                  dotColor: Colors[colorScheme].tint,
+                  selectedDotColor: "#ffffff",
+                  arrowColor: Colors[colorScheme].tint,
+                  monthTextColor: Colors[colorScheme].text,
+                  indicatorColor: Colors[colorScheme].tint,
+                }}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* Liste des repas */}
+        {groupedMeals.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons
+              name="calendar-outline"
+              size={64}
+              color={Colors[colorScheme].tabIconDefault}
+            />
+            <ThemedText style={styles.emptyText}>
+              {meals.length === 0
+                ? "Aucun repas"
+                : "Aucun repas pour ce filtre"}
+            </ThemedText>
+          </View>
+        ) : (
+          <FlatList
+            data={groupedMeals}
+            keyExtractor={(item) => item.date}
+            renderItem={renderDayGroup}
+            showsVerticalScrollIndicator={false}
+            style={styles.flatlistContent}
+            contentContainerStyle={styles.listContent}
+          />
+        )}
+
+        {/* Bottom Sheet d'ajout/édition */}
+        <FormBottomSheet
+          ref={bottomSheetRef}
+          title={editingMeal ? "Modifier le repas" : "Nouveau repas"}
+          icon="baby"
+          accentColor="#4A90E2"
+          isEditing={!!editingMeal}
+          isSubmitting={isSubmitting}
+          onSubmit={handleSubmit}
+          onDelete={editingMeal ? handleDelete : undefined}
+          onCancel={cancelForm}
+          onClose={() => {
+            setIsSubmitting(false);
+            setEditingMeal(null);
+          }}
+        >
+          {/* Sélection du type de repas */}
+          <Text style={styles.modalCategoryLabel}>Type de repas</Text>
+          <View style={styles.typeRow}>
+            <TouchableOpacity
+              style={[
+                styles.typeButton,
+                mealType === "tetee" && styles.typeButtonActive,
+                isSubmitting && styles.typeButtonDisabled,
+              ]}
+              onPress={() => setMealType("tetee")}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="person-breastfeeding"
+                size={20}
+                color={mealType === "tetee" ? "white" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.typeText,
+                  mealType === "tetee" && styles.typeTextActive,
+                  isSubmitting && styles.typeTextDisabled,
+                ]}
+              >
+                Seins
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.typeButton,
+                mealType === "biberon" && styles.typeButtonActive,
+                isSubmitting && styles.typeButtonDisabled,
+              ]}
+              onPress={() => {
+                setMealType("biberon");
+                setQuantite(100);
+              }}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="jar-wheat"
+                size={20}
+                color={mealType === "biberon" ? "white" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.typeText,
+                  mealType === "biberon" && styles.typeTextActive,
+                  isSubmitting && styles.typeTextDisabled,
+                ]}
+              >
+                Biberon
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Quantité (si biberon) */}
+          {isQuantityVisible ? (
+            <>
+              <Text style={styles.modalCategoryLabel}>Quantité</Text>
+              <View style={styles.quantityRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.quantityButton,
+                    isSubmitting && styles.quantityButtonDisabled,
+                  ]}
+                  onPressIn={() =>
+                    handlePressIn(() => setQuantite((q) => Math.max(0, q - 5)))
+                  }
+                  onPressOut={handlePressOut}
+                  disabled={isSubmitting}
+                >
+                  <Text
+                    style={[
+                      styles.quantityButtonText,
+                      isSubmitting && styles.quantityButtonTextDisabled,
+                    ]}
+                  >
+                    -
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.quantityValue}>{quantite} ml</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.quantityButton,
+                    isSubmitting && styles.quantityButtonDisabled,
+                  ]}
+                  onPressIn={() =>
+                    handlePressIn(() => setQuantite((q) => q + 5))
+                  }
+                  onPressOut={handlePressOut}
+                  disabled={isSubmitting}
+                >
+                  <Text
+                    style={[
+                      styles.quantityButtonText,
+                      isSubmitting && styles.quantityButtonTextDisabled,
+                    ]}
+                  >
+                    +
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <View style={styles.quantityNA}>
+              <Text style={styles.quantityNAText}>Quantité : N/A</Text>
+            </View>
+          )}
+
+          {/* Date & Heure */}
+          <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+          <View style={styles.dateTimeContainer}>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                isSubmitting && styles.dateButtonDisabled,
+              ]}
+              onPress={() => setShowDate(true)}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="calendar-alt"
+                size={16}
+                color={isSubmitting ? "#ccc" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.dateButtonText,
+                  isSubmitting && styles.dateButtonTextDisabled,
+                ]}
+              >
+                Date
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                isSubmitting && styles.dateButtonDisabled,
+              ]}
+              onPress={() => setShowTime(true)}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="clock"
+                size={16}
+                color={isSubmitting ? "#ccc" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.dateButtonText,
+                  isSubmitting && styles.dateButtonTextDisabled,
+                ]}
+              >
+                Heure
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.selectedDateTime}>
+            <Text style={styles.selectedDate}>
+              {dateHeure.toLocaleDateString("fr-FR", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </Text>
+            <Text style={styles.selectedTime}>
+              {dateHeure.toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </Text>
           </View>
-        }
-      />
 
-      {/* Bottom Sheet d'ajout/édition */}
-      <FormBottomSheet
-        ref={bottomSheetRef}
-        title={editingMeal ? "Modifier le repas" : "Nouveau repas"}
-        icon="baby"
-        accentColor="#4A90E2"
-        isEditing={!!editingMeal}
-        isSubmitting={isSubmitting}
-        onSubmit={handleSubmit}
-        onDelete={editingMeal ? handleDelete : undefined}
-        onCancel={cancelForm}
-        onClose={() => {
-          setIsSubmitting(false);
-          setEditingMeal(null);
-        }}
-      >
-        {/* Sélection du type de repas */}
-            <Text style={styles.modalCategoryLabel}>Type de repas</Text>
-            <View style={styles.typeRow}>
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  mealType === "tetee" && styles.typeButtonActive,
-                  isSubmitting && styles.typeButtonDisabled,
-                ]}
-                onPress={() => setMealType("tetee")}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="person-breastfeeding"
-                  size={20}
-                  color={mealType === "tetee" ? "white" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.typeText,
-                    mealType === "tetee" && styles.typeTextActive,
-                    isSubmitting && styles.typeTextDisabled,
-                  ]}
-                >
-                  Seins
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  mealType === "biberon" && styles.typeButtonActive,
-                  isSubmitting && styles.typeButtonDisabled,
-                ]}
-                onPress={() => {
-                  setMealType("biberon");
-                  setQuantite(100);
-                }}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="jar-wheat"
-                  size={20}
-                  color={mealType === "biberon" ? "white" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.typeText,
-                    mealType === "biberon" && styles.typeTextActive,
-                    isSubmitting && styles.typeTextDisabled,
-                  ]}
-                >
-                  Biberon
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Quantité (si biberon) */}
-            {isQuantityVisible ? (
-              <>
-                <Text style={styles.modalCategoryLabel}>Quantité</Text>
-                <View style={styles.quantityRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.quantityButton,
-                      isSubmitting && styles.quantityButtonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() =>
-                        setQuantite((q) => Math.max(0, q - 5))
-                      )
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.quantityButtonText,
-                        isSubmitting && styles.quantityButtonTextDisabled,
-                      ]}
-                    >
-                      -
-                    </Text>
-                  </TouchableOpacity>
-                  <Text style={styles.quantityValue}>{quantite} ml</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.quantityButton,
-                      isSubmitting && styles.quantityButtonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() => setQuantite((q) => q + 5))
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.quantityButtonText,
-                        isSubmitting && styles.quantityButtonTextDisabled,
-                      ]}
-                    >
-                      +
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <View style={styles.quantityNA}>
-                <Text style={styles.quantityNAText}>Quantité : N/A</Text>
-              </View>
-            )}
-
-            {/* Date & Heure */}
-            <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-            <View style={styles.dateTimeContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  isSubmitting && styles.dateButtonDisabled,
-                ]}
-                onPress={() => setShowDate(true)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="calendar-alt"
-                  size={16}
-                  color={isSubmitting ? "#ccc" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.dateButtonText,
-                    isSubmitting && styles.dateButtonTextDisabled,
-                  ]}
-                >
-                  Date
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  isSubmitting && styles.dateButtonDisabled,
-                ]}
-                onPress={() => setShowTime(true)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="clock"
-                  size={16}
-                  color={isSubmitting ? "#ccc" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.dateButtonText,
-                    isSubmitting && styles.dateButtonTextDisabled,
-                  ]}
-                >
-                  Heure
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.selectedDateTime}>
-              <Text style={styles.selectedDate}>
-                {dateHeure.toLocaleDateString("fr-FR", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </Text>
-              <Text style={styles.selectedTime}>
-                {dateHeure.toLocaleTimeString("fr-FR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </Text>
-            </View>
-
-            {/* Date/Time Pickers */}
-            {showDate && (
-              <DateTimePicker
-                value={dateHeure}
-                mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onChangeDate}
-              />
-            )}
-            {showTime && (
-              <DateTimePicker
-                value={dateHeure}
-                mode="time"
-                is24Hour={true}
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onChangeTime}
-              />
-            )}
-
-      </FormBottomSheet>
+          {/* Date/Time Pickers */}
+          {showDate && (
+            <DateTimePicker
+              value={dateHeure}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onChangeDate}
+            />
+          )}
+          {showTime && (
+            <DateTimePicker
+              value={dateHeure}
+              mode="time"
+              is24Hour={true}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onChangeTime}
+            />
+          )}
+        </FormBottomSheet>
+      </SafeAreaView>
     </View>
   );
 }
@@ -776,9 +1035,56 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8f9fa",
   },
-  header: {
-    padding: 16,
-    paddingBottom: 8,
+  flatlistContent: {
+    paddingVertical: 16,
+    // paddingBottom: 8,
+  },
+  headerButton: {
+    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    // marginRight: 8,
+  },
+  headerButtonPressed: {
+    opacity: 0.6,
+  },
+  calendarContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  // Filter Bar
+  filterContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  filterContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  filterButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterButtonActive: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  filterText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  filterTextActive: {
+    color: "#fff",
   },
   addButton: {
     backgroundColor: "#4A90E2",
@@ -857,6 +1163,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
   },
   mealInfo: {
     flex: 1,
@@ -1058,5 +1365,25 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: "#004cdaff",
     fontWeight: "bold",
+  },
+  // autres...
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 100,
   },
 });
