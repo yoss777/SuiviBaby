@@ -382,16 +382,9 @@ export default function RepasScreen() {
     const startOfRange = new Date();
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-    const oldestTimestamp = meals.reduce<number | null>((min, meal) => {
-      const ts = meal.date?.seconds
-        ? meal.date.seconds * 1000
-        : new Date(meal.date as any).getTime();
-      return min === null ? ts : Math.min(min, ts);
-    }, null);
-    const beforeDate = new Date(
-      (oldestTimestamp ?? startOfRange.getTime()) - 1
-    );
+    const beforeDate = new Date(startOfRange.getTime() - 1);
 
+    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
     setHasMore(true);
     hasMoreEventsBeforeHybrid(activeChild.id, ["tetee", "biberon"], beforeDate)
       .then((result) => {
@@ -404,7 +397,7 @@ export default function RepasScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeChild?.id, daysWindow, meals]);
+  }, [activeChild?.id, daysWindow]);
 
   // Filtrage et regroupement par jour
   useEffect(() => {

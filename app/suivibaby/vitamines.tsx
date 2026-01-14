@@ -215,12 +215,17 @@ export default function VitaminesScreen({ vitamines }: Props) {
   );
 
   useEffect(() => {
+    if (!vitaminesLoaded) return;
+    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les rafraîchissements inutiles.
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (daysWindow - 1));
     const hasOlder = vitamines.some((vitamine) => {
       const vitamineDate = new Date(vitamine.date.seconds * 1000);
-      return vitamineDate < startOfRange;
+      return vitamineDate < start;
     });
     setHasMore(hasOlder);
-  }, [vitamines, startOfRange]);
+  }, [daysWindow, vitaminesLoaded]);
 
   const handleLoadMore = useCallback(() => {
     if (!hasMore) return;

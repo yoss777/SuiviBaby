@@ -370,11 +370,19 @@ export default function ImmunosScreen() {
   }, [loadMoreStep]);
 
   useEffect(() => {
+    if (selectedFilter === "today" || selectedDate) return;
     if (!autoLoadMore && !isImmunosLoading && groupedImmunos.length === 0 && hasMore) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
-  }, [autoLoadMore, isImmunosLoading, groupedImmunos.length, hasMore]);
+  }, [
+    autoLoadMore,
+    isImmunosLoading,
+    groupedImmunos.length,
+    hasMore,
+    selectedFilter,
+    selectedDate,
+  ]);
 
   useEffect(() => {
     if (!autoLoadMore) return;
@@ -406,20 +414,11 @@ export default function ImmunosScreen() {
     const startOfRange = new Date();
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-    const oldestTimestamp = immunos
-      .filter((immuno) => immuno.type === selectedType)
-      .reduce<number | null>((min, immuno) => {
-        const ts = immuno.date?.seconds
-          ? immuno.date.seconds * 1000
-          : new Date(immuno.date as any).getTime();
-        return min === null ? ts : Math.min(min, ts);
-      }, null);
-    const beforeDate = new Date(
-      (oldestTimestamp ?? startOfRange.getTime()) - 1
-    );
+    const beforeDate = new Date(startOfRange.getTime() - 1);
 
     const types = selectedType === "vitamine" ? "vitamine" : "vaccin";
 
+    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
     setHasMore(true);
     hasMoreEventsBeforeHybrid(activeChild.id, types, beforeDate)
       .then((result) => {
@@ -432,7 +431,7 @@ export default function ImmunosScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeChild?.id, daysWindow, selectedType, immunos]);
+  }, [activeChild?.id, daysWindow, selectedType]);
 
 
   // Filtrage et regroupement par jour

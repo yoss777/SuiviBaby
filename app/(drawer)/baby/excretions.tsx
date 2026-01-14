@@ -374,16 +374,9 @@ export default function ExcretionsScreen() {
     const startOfRange = new Date();
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-    const oldestTimestamp = excretions.reduce<number | null>((min, excretion) => {
-      const ts = excretion.date?.seconds
-        ? excretion.date.seconds * 1000
-        : new Date(excretion.date as any).getTime();
-      return min === null ? ts : Math.min(min, ts);
-    }, null);
-    const beforeDate = new Date(
-      (oldestTimestamp ?? startOfRange.getTime()) - 1
-    );
+    const beforeDate = new Date(startOfRange.getTime() - 1);
 
+    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
     setHasMore(true);
     hasMoreEventsBeforeHybrid(activeChild.id, ["miction", "selle"], beforeDate)
       .then((result) => {
@@ -396,7 +389,7 @@ export default function ExcretionsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeChild?.id, daysWindow, excretions]);
+  }, [activeChild?.id, daysWindow]);
 
   // Filtrage et regroupement par jour avec useMemo pour éviter les re-renders
   useEffect(() => {

@@ -224,12 +224,17 @@ export default function MictionsScreen({ mictions }: Props) {
   );
 
   useEffect(() => {
+    if (!mictionsLoaded) return;
+    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les rafraîchissements inutiles.
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (daysWindow - 1));
     const hasOlder = mictions.some((miction) => {
       const mictionDate = new Date(miction.date.seconds * 1000);
-      return mictionDate < startOfRange;
+      return mictionDate < start;
     });
     setHasMore(hasOlder);
-  }, [mictions, startOfRange]);
+  }, [daysWindow, mictionsLoaded]);
 
   const handleLoadMore = useCallback(() => {
     if (!hasMore) return;

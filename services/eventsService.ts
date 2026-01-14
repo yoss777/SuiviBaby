@@ -305,25 +305,60 @@ export function ecouterEvenements(
     q = query(q, limit(options.limite));
   }
 
-  return onSnapshot(q, { includeMetadataChanges: !!options?.waitForServer }, (snapshot) => {
-    if (!snapshot.metadata.fromCache) {
-      hasReceivedServerSnapshot = true;
-    }
+  const waitForServerTimeoutMs = 800;
+  let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  let fallbackTriggered = false;
+  let cachedEvents: Event[] | null = null;
 
-    if (
-      options?.waitForServer &&
-      !hasReceivedServerSnapshot &&
-      snapshot.metadata.fromCache &&
-      snapshot.empty
-    ) {
-      return;
+  const unsubscribe = onSnapshot(
+    q,
+    { includeMetadataChanges: !!options?.waitForServer },
+    (snapshot) => {
+      if (!snapshot.metadata.fromCache) {
+        hasReceivedServerSnapshot = true;
+        if (fallbackTimer) {
+          clearTimeout(fallbackTimer);
+          fallbackTimer = null;
+        }
+      }
+
+      const events = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Event[];
+
+      if (snapshot.metadata.fromCache) {
+        cachedEvents = events;
+      }
+
+      if (
+        options?.waitForServer &&
+        !hasReceivedServerSnapshot &&
+        snapshot.metadata.fromCache &&
+        snapshot.empty
+      ) {
+        if (!fallbackTimer && !fallbackTriggered) {
+          fallbackTimer = setTimeout(() => {
+            if (!hasReceivedServerSnapshot) {
+              fallbackTriggered = true;
+              callback(cachedEvents ?? []);
+            }
+          }, waitForServerTimeoutMs);
+        }
+        return;
+      }
+
+      callback(events);
     }
-    const events = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Event[];
-    callback(events);
-  });
+  );
+
+  return () => {
+    if (fallbackTimer) {
+      clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
+    unsubscribe();
+  };
 }
 
 /**

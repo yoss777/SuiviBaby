@@ -324,16 +324,9 @@ export default function PompagesScreen() {
     const startOfRange = new Date();
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-    const oldestTimestamp = pompages.reduce<number | null>((min, pompage) => {
-      const ts = pompage.date?.seconds
-        ? pompage.date.seconds * 1000
-        : new Date(pompage.date as any).getTime();
-      return min === null ? ts : Math.min(min, ts);
-    }, null);
-    const beforeDate = new Date(
-      (oldestTimestamp ?? startOfRange.getTime()) - 1
-    );
+    const beforeDate = new Date(startOfRange.getTime() - 1);
 
+    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
     setHasMore(true);
     hasMoreEventsBeforeHybrid(activeChild.id, "pompage", beforeDate)
       .then((result) => {
@@ -346,7 +339,7 @@ export default function PompagesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeChild?.id, daysWindow, pompages]);
+  }, [activeChild?.id, daysWindow]);
 
   // Filtrage et regroupement par jour
   useEffect(() => {

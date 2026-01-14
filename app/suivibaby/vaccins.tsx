@@ -248,12 +248,17 @@ export default function VaccinsScreen({ vaccins }: Props) {
   );
 
   useEffect(() => {
+    if (!vaccinsLoaded) return;
+    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les rafraîchissements inutiles.
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (daysWindow - 1));
     const hasOlder = vaccins.some((vaccin) => {
       const vaccinDate = new Date(vaccin.date.seconds * 1000);
-      return vaccinDate < startOfRange;
+      return vaccinDate < start;
     });
     setHasMore(hasOlder);
-  }, [vaccins, startOfRange]);
+  }, [daysWindow, vaccinsLoaded]);
 
   const handleLoadMore = useCallback(() => {
     if (!hasMore) return;

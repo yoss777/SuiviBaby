@@ -224,12 +224,17 @@ export default function SellesScreen({ selles }: Props) {
   );
 
   useEffect(() => {
+    if (!sellesLoaded) return;
+    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les rafraîchissements inutiles.
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (daysWindow - 1));
     const hasOlder = selles.some((selle) => {
       const selleDate = new Date(selle.date.seconds * 1000);
-      return selleDate < startOfRange;
+      return selleDate < start;
     });
     setHasMore(hasOlder);
-  }, [selles, startOfRange]);
+  }, [daysWindow, sellesLoaded]);
 
   const handleLoadMore = useCallback(() => {
     if (!hasMore) return;
