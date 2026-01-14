@@ -348,6 +348,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
       } else {
         await ajouterVitamine(activeChild.id, {
           date: dateHeure,
+          nomVitamine: 'Vitamine D'
         });
       }
 
@@ -440,16 +441,26 @@ export default function VitaminesScreen({ vitamines }: Props) {
     >
       <View style={styles.vitamineContent}>
         <FontAwesome
-          name="clock"
+          name="prescription-bottle"
           size={16}
           color={isLast ? "#FF9800" : "#666"}
         />
-        <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
-          {new Date(vitamine.date?.seconds * 1000).toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
+        <View style={styles.vitamineInfo}>
+          <Text
+            style={[styles.vitamineName, isLast && styles.lastVitamineName]}
+          >
+            {vitamine.nomVitamine || "Vitamine non spécifiée"}
+          </Text>
+          <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
+            {new Date(vitamine.date?.seconds * 1000).toLocaleTimeString(
+              "fr-FR",
+              {
+                hour: "2-digit",
+                minute: "2-digit",
+              }
+            )}
+          </Text>
+        </View>
         <View style={styles.vitamineActions}>
           {/* {isLast && (
             <View style={styles.recentBadge}>
@@ -848,25 +859,36 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
   },
+  vitamineInfo: {
+    flex: 1,
+  },
   lastVitamineItem: {
     backgroundColor: "#fff3e0",
     borderLeftWidth: 4,
     borderLeftColor: "#FF9800",
+  },
+  vitamineName: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#666",
+    marginBottom: 2,
+  },
+  lastVitamineName: {
+    color: "#333",
+    fontWeight: "600",
   },
   vitamineContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  timeText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#666",
-    flex: 1,
+timeText: {
+    fontSize: 14,
+    color: "#999",
   },
   lastTimeText: {
-    color: "#333",
-    fontWeight: "600",
+    color: "#666",
+    fontWeight: "500",
   },
   vitamineActions: {
     flexDirection: "row",

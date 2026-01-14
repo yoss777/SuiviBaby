@@ -1,5 +1,4 @@
-import MictionsScreen from "@/app/suivibaby/mictions";
-import SellesScreen from "@/app/suivibaby/selles";
+import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
@@ -16,7 +15,6 @@ import {
   ecouterMictionsHybrid as ecouterMictions,
   ecouterSellesHybrid as ecouterSelles,
 } from "@/migration/eventsHybridService";
-import { Miction, Selle } from "@/types/interfaces";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";
@@ -25,12 +23,14 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  FlatList,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -39,7 +39,24 @@ import { useHeaderRight } from "../_layout";
 // ============================================
 // TYPES
 // ============================================
+type ExcretionType = "miction" | "selle";
 type FilterType = "today" | "past";
+
+interface Excretion {
+  id: string;
+  type?: ExcretionType;
+  date: { seconds: number };
+  createdAt: { seconds: number };
+}
+
+interface ExcretionGroup {
+  date: string;
+  dateFormatted: string;
+  excretions: Excretion[];
+  mictionsCount: number;
+  sellesCount: number;
+  lastExcretion: Excretion;
+}
 
 // ============================================
 // COMPONENT
@@ -49,32 +66,32 @@ export default function ExcretionsScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
-  
-  const [mictions, setMictions] = useState<Miction[]>([]);
-  const [selles, setSelles] = useState<Selle[]>([]);
-  const [selectedTab, setSelectedTab] = useState<"mictions" | "selles">("mictions");
 
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  // États du modal unifié
+  // États des données
+  const [excretions, setExcretions] = useState<Excretion[]>([]);
+  const [groupedExcretions, setGroupedExcretions] = useState<ExcretionGroup[]>([]);
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+
+  // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [editingExcretion, setEditingExcretion] = useState<Excretion | null>(null);
   const [includeMiction, setIncludeMiction] = useState<boolean>(true);
   const [includeSelle, setIncludeSelle] = useState<boolean>(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
+
+  // États des pickers
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
 
-  // États pour l'édition
-  const [editingMiction, setEditingMiction] = useState<Miction | null>(null);
-  const [editingSelle, setEditingSelle] = useState<Selle | null>(null);
+  // Récupérer les paramètres de l'URL
+  const { tab, openModal } = useLocalSearchParams();
 
   // Ref pour le BottomSheet
   const bottomSheetRef = useRef<BottomSheet>(null);
-
-  // Récupérer les paramètres de l'URL
-  const { tab, openModal } = useLocalSearchParams();
 
   // ============================================
   // EFFECTS - HEADER
@@ -98,10 +115,10 @@ export default function ExcretionsScreen() {
   }, []);
 
   const openAddModal = useCallback((preferredType?: "mictions" | "selles") => {
-    const now = new Date();
-    setDateHeure(new Date(now.getTime()));
+    setDateHeure(new Date());
+    setEditingExcretion(null);
+    setIsSubmitting(false);
 
-    // Définir les toggles selon le type préféré
     if (preferredType === "selles") {
       setIncludeMiction(false);
       setIncludeSelle(true);
@@ -109,14 +126,10 @@ export default function ExcretionsScreen() {
       setIncludeMiction(true);
       setIncludeSelle(false);
     } else {
-      // Par défaut, miction est sélectionné
       setIncludeMiction(true);
       setIncludeSelle(false);
     }
 
-    setEditingMiction(null);
-    setEditingSelle(null);
-    setIsSubmitting(false);
     bottomSheetRef.current?.expand();
   }, []);
 
@@ -146,7 +159,7 @@ export default function ExcretionsScreen() {
             color={Colors[colorScheme].tint}
           />
         </Pressable>
-        <Pressable onPress={() => openAddModal(selectedTab)} style={styles.headerButton}>
+        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
           <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
         </Pressable>
       </View>
@@ -163,23 +176,22 @@ export default function ExcretionsScreen() {
     colorScheme,
     setHeaderRight,
     openAddModal,
-    selectedTab,
   ]);
 
   // ============================================
-  // EFFECTS - URL PARAMS & DATA
+  // EFFECTS - URL PARAMS
   // ============================================
 
-  // Définir l'onglet initial en fonction du paramètre
   useEffect(() => {
     if (tab === "selles") {
-      setSelectedTab("selles");
+      setIncludeMiction(false);
+      setIncludeSelle(true);
     } else if (tab === "mictions") {
-      setSelectedTab("mictions");
+      setIncludeMiction(true);
+      setIncludeSelle(false);
     }
   }, [tab]);
 
-  // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
     if (openModal === "true") {
       const timer = setTimeout(() => {
@@ -189,21 +201,73 @@ export default function ExcretionsScreen() {
 
       return () => clearTimeout(timer);
     }
-  }, [openModal, tab, openAddModal]);
+  }, [openModal, tab]);
 
-  // écoute en temps réel des mictions
+  // ============================================
+  // EFFECTS - DATA LISTENERS
+  // ============================================
+
   useEffect(() => {
     if (!activeChild?.id) return;
-    const unsubscribeMictions = ecouterMictions(activeChild.id, setMictions);
-    return () => unsubscribeMictions();
+
+    let mictionsData: Excretion[] = [];
+    let sellesData: Excretion[] = [];
+
+    const mergeAndSortExcretions = () => {
+      const merged = [...mictionsData, ...sellesData].sort(
+        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+      );
+      setExcretions(merged);
+    };
+
+    const unsubscribeMictions = ecouterMictions(activeChild.id, (mictions) => {
+      mictionsData = mictions.map(m => ({ ...m, type: "miction" as ExcretionType }));
+      mergeAndSortExcretions();
+    });
+
+    const unsubscribeSelles = ecouterSelles(activeChild.id, (selles) => {
+      sellesData = selles.map(s => ({ ...s, type: "selle" as ExcretionType }));
+      mergeAndSortExcretions();
+    });
+
+    return () => {
+      unsubscribeMictions();
+      unsubscribeSelles();
+    };
   }, [activeChild]);
 
-  // écoute en temps réel des selles
+  // Filtrage et regroupement par jour avec useMemo pour éviter les re-renders
   useEffect(() => {
-    if (!activeChild?.id) return;
-    const unsubscribeSelles = ecouterSelles(activeChild.id, setSelles);
-    return () => unsubscribeSelles();
-  }, [activeChild]);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    const filtered = excretions.filter((excretion) => {
+      const excretionDate = new Date(excretion.date.seconds * 1000);
+      excretionDate.setHours(0, 0, 0, 0);
+      const excretionTime = excretionDate.getTime();
+
+      if (selectedDate) {
+        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
+        const calDate = new Date(calYear, calMonth - 1, calDay);
+        calDate.setHours(0, 0, 0, 0);
+        return excretionTime === calDate.getTime();
+      }
+
+      switch (selectedFilter) {
+        case "today":
+          return excretionTime === todayTime;
+        case "past":
+          return excretionTime < todayTime;
+        case null:
+        default:
+          return true;
+      }
+    });
+
+    const grouped = groupExcretionsByDay(filtered);
+    setGroupedExcretions(grouped);
+  }, [excretions, selectedFilter, selectedDate]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -211,10 +275,9 @@ export default function ExcretionsScreen() {
 
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
-    const dataToMark = selectedTab === "mictions" ? mictions : selles;
 
-    dataToMark.forEach((item) => {
-      const date = new Date(item.date.seconds * 1000);
+    excretions.forEach((excretion) => {
+      const date = new Date(excretion.date.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
@@ -235,47 +298,132 @@ export default function ExcretionsScreen() {
     }
 
     return marked;
-  }, [selectedTab === "mictions" ? mictions : selles, selectedDate, colorScheme, selectedTab]);
+  }, [excretions, selectedDate, colorScheme]);
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
+    setExpandedDays(new Set([day.dateString]));
   };
 
   const handleFilterPress = (filter: FilterType) => {
     setSelectedFilter(filter);
     setSelectedDate(null);
     setShowCalendar(false);
+
+    if (filter === "today") {
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(
+        today.getMonth() + 1
+      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      setExpandedDays(new Set([todayKey]));
+    } else {
+      setExpandedDays(new Set());
+    }
+  };
+
+  // ============================================
+  // HELPERS - GROUPING
+  // ============================================
+
+  const groupExcretionsByDay = (excretions: Excretion[]): ExcretionGroup[] => {
+    const groups: { [key: string]: Excretion[] } = {};
+
+    excretions.forEach((excretion) => {
+      const date = new Date(excretion.date?.seconds * 1000);
+      const dateKey = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(excretion);
+    });
+
+    return Object.entries(groups)
+      .map(([dateKey, excretions]) => {
+        const date = new Date(dateKey);
+        const mictionsCount = excretions.filter(e => e.type === "miction").length;
+        const sellesCount = excretions.filter(e => e.type === "selle").length;
+        const lastExcretion = excretions.reduce((latest, current) =>
+          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            ? current
+            : latest
+        );
+
+        return {
+          date: dateKey,
+          dateFormatted: date.toLocaleDateString("fr-FR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          }),
+          excretions: excretions.sort(
+            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+          ),
+          mictionsCount,
+          sellesCount,
+          lastExcretion,
+        };
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  // ============================================
+  // HELPERS - UI
+  // ============================================
+
+  const toggleExpand = useCallback((dateKey: string) => {
+    setExpandedDays(prev => {
+      const newExpandedDays = new Set(prev);
+      if (newExpandedDays.has(dateKey)) {
+        newExpandedDays.delete(dateKey);
+      } else {
+        newExpandedDays.add(dateKey);
+      }
+      return newExpandedDays;
+    });
+  }, []);
+
+  const getExcretionTypeLabel = (type?: ExcretionType): string => {
+    if (!type) return "Inconnu";
+    return type === "miction" ? "Miction" : "Selle";
+  };
+
+  const getExcretionIcon = (type?: ExcretionType): string => {
+    if (type === "miction") return "water";
+    if (type === "selle") return "circle";
+    return "question";
+  };
+
+  const getExcretionColor = (type?: ExcretionType): string => {
+    if (type === "miction") return "#17a2b8";
+    if (type === "selle") return "#dc3545";
+    return "#666";
   };
 
   // ============================================
   // HANDLERS - MODAL
   // ============================================
 
-  const openEditModalFromMiction = useCallback((miction: Miction) => {
-    setDateHeure(new Date(miction.date.seconds * 1000));
-    setEditingMiction(miction);
-    setEditingSelle(null);
-    setIncludeMiction(true);
-    setIncludeSelle(false);
+  const openEditModal = (excretion: Excretion) => {
+    setDateHeure(new Date(excretion.date.seconds * 1000));
+    setEditingExcretion(excretion);
     setIsSubmitting(false);
-    bottomSheetRef.current?.expand();
-  }, []);
 
-  const openEditModalFromSelle = useCallback((selle: Selle) => {
-    setDateHeure(new Date(selle.date.seconds * 1000));
-    setEditingSelle(selle);
-    setEditingMiction(null);
-    setIncludeMiction(false);
-    setIncludeSelle(true);
-    setIsSubmitting(false);
+    // En mode édition, on ne sélectionne que le type de l'excrétion
+    const type = excretion.type || "miction";
+    setIncludeMiction(type === "miction");
+    setIncludeSelle(type === "selle");
+
     bottomSheetRef.current?.expand();
-  }, []);
+  };
 
   const closeModal = () => {
     bottomSheetRef.current?.close();
     setIsSubmitting(false);
-    setEditingMiction(null);
-    setEditingSelle(null);
+    setEditingExcretion(null);
   };
 
   const cancelForm = useCallback(() => {
@@ -287,7 +435,7 @@ export default function ExcretionsScreen() {
   // ============================================
 
   const handleSubmit = async () => {
-    if (isSubmitting) return;
+    if (isSubmitting || !activeChild) return;
 
     // Vérifier qu'au moins un type est sélectionné
     if (!includeMiction && !includeSelle) {
@@ -301,104 +449,73 @@ export default function ExcretionsScreen() {
     try {
       setIsSubmitting(true);
 
-      if (!activeChild) {
-        throw new Error("Aucun enfant sélectionné");
-      }
+      const dataToSave = {
+        date: dateHeure,
+      };
 
-      // Mode édition
-      if (editingMiction) {
-        await modifierMiction(activeChild.id, editingMiction.id, {
-          date: dateHeure,
-        });
-      } else if (editingSelle) {
-        await modifierSelle(activeChild.id, editingSelle.id, {
-          date: dateHeure,
-        });
-      }
-      // Mode ajout
-      else {
+      if (editingExcretion) {
+        // Mode édition : modifier l'excrétion existante
+        const isMiction = editingExcretion.type === "miction";
+        if (isMiction) {
+          await modifierMiction(activeChild.id, editingExcretion.id, dataToSave);
+        } else {
+          await modifierSelle(activeChild.id, editingExcretion.id, dataToSave);
+        }
+      } else {
+        // Mode ajout : ajouter une ou deux excrétions
         if (includeMiction) {
-          await ajouterMiction(activeChild.id, {
-            date: dateHeure,
-          });
+          await ajouterMiction(activeChild.id, dataToSave);
         }
         if (includeSelle) {
-          await ajouterSelle(activeChild.id, {
-            date: dateHeure,
-          });
+          await ajouterSelle(activeChild.id, dataToSave);
         }
       }
 
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde:", error);
-      Alert.alert("Erreur", "Impossible de sauvegarder. Veuillez réessayer.");
+      Alert.alert(
+        "Erreur",
+        "Impossible de sauvegarder. Veuillez réessayer."
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (isSubmitting) return;
+    if (isSubmitting || !editingExcretion || !activeChild) return;
 
-    try {
-      setIsSubmitting(true);
-
-      if (editingMiction) {
-        Alert.alert("Suppression", "Voulez-vous vraiment supprimer ?", [
-          {
-            text: "Annuler",
-            style: "cancel",
-            onPress: () => setIsSubmitting(false),
-          },
-          {
-            text: "Supprimer",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                if (!activeChild) return;
-                await supprimerMiction(activeChild.id, editingMiction.id);
-                closeModal();
-              } catch (error) {
-                Alert.alert(
-                  "Erreur",
-                  "Impossible de supprimer. Veuillez réessayer."
-                );
-                setIsSubmitting(false);
-              }
-            },
-          },
-        ]);
-      } else if (editingSelle) {
-        Alert.alert("Suppression", "Voulez-vous vraiment supprimer ?", [
-          {
-            text: "Annuler",
-            style: "cancel",
-            onPress: () => setIsSubmitting(false),
-          },
-          {
-            text: "Supprimer",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                if (!activeChild) return;
-                await supprimerSelle(activeChild.id, editingSelle.id);
-                closeModal();
-              } catch (error) {
-                Alert.alert(
-                  "Erreur",
-                  "Impossible de supprimer. Veuillez réessayer."
-                );
-                setIsSubmitting(false);
-              }
-            },
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error("Erreur lors de la suppression:", error);
-      setIsSubmitting(false);
-    }
+    Alert.alert("Suppression", "Voulez-vous vraiment supprimer ?", [
+      {
+        text: "Annuler",
+        style: "cancel",
+      },
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setIsSubmitting(true);
+            const isMiction = editingExcretion.type === "miction";
+            if (isMiction) {
+              await supprimerMiction(activeChild.id, editingExcretion.id);
+            } else {
+              await supprimerSelle(activeChild.id, editingExcretion.id);
+            }
+            closeModal();
+          } catch (error) {
+            console.error("Erreur lors de la suppression:", error);
+            Alert.alert(
+              "Erreur",
+              "Impossible de supprimer. Veuillez réessayer."
+            );
+          } finally {
+            setIsSubmitting(false);
+          }
+        },
+      },
+    ]);
   };
 
   // ============================================
@@ -431,14 +548,125 @@ export default function ExcretionsScreen() {
     }
   };
 
-  const isEditMode = editingMiction !== null || editingSelle !== null;
+  // ============================================
+  // RENDER - EXCRETION ITEM
+  // ============================================
+
+  const renderExcretionItem = useCallback((excretion: Excretion, isLast: boolean = false) => {
+    const typeLabel = getExcretionTypeLabel(excretion.type);
+    const color = getExcretionColor(excretion.type);
+
+    return (
+      <TouchableOpacity
+        key={excretion.id}
+        style={[styles.excretionItem, isLast && styles.lastExcretionItem]}
+        onPress={() => openEditModal(excretion)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.excretionContent}>
+          <View style={[styles.avatar, { backgroundColor: color }]}>
+            <FontAwesome
+              name={getExcretionIcon(excretion.type)}
+              size={20}
+              color="#ffffff"
+            />
+          </View>
+          <View style={styles.excretionInfo}>
+            <View style={styles.infoRow}>
+              <Text style={styles.excretionTypeText}>{typeLabel}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.timeText}>
+                {new Date(excretion.date?.seconds * 1000).toLocaleTimeString(
+                  "fr-FR",
+                  {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }
+                )}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.excretionActions}>
+            <FontAwesome
+              name="edit"
+              size={16}
+              color={color}
+              style={styles.editIcon}
+            />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }, []);
+
+  // ============================================
+  // RENDER - DAY GROUP
+  // ============================================
+
+  const renderDayGroup = useCallback(({ item }: { item: ExcretionGroup }) => {
+    const isExpanded = expandedDays.has(item.date);
+    const hasMultipleExcretions = item.excretions.length > 1;
+
+    return (
+      <View style={styles.dayCard}>
+        <View style={styles.dayHeader}>
+          <View style={styles.dayInfo}>
+            <Text style={styles.dayDate}>{item.dateFormatted}</Text>
+            <View style={styles.summaryInfo}>
+              <View style={styles.summaryRow}>
+                {item.mictionsCount > 0 && (
+                  <View style={styles.summaryBadge}>
+                    <FontAwesome name="water" size={12} color="#17a2b8" />
+                    <Text style={styles.summaryText}>
+                      {item.mictionsCount} miction{item.mictionsCount > 1 ? "s" : ""}
+                    </Text>
+                  </View>
+                )}
+                {item.sellesCount > 0 && (
+                  <View style={styles.summaryBadge}>
+                    <FontAwesome name="circle" size={12} color="#dc3545" />
+                    <Text style={styles.summaryText}>
+                      {item.sellesCount} selle{item.sellesCount > 1 ? "s" : ""}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+          {hasMultipleExcretions && (
+            <TouchableOpacity
+              style={styles.expandButton}
+              onPress={() => toggleExpand(item.date)}
+            >
+              <FontAwesome
+                name={isExpanded ? "chevron-up" : "chevron-down"}
+                size={16}
+                color="#666"
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+        {renderExcretionItem(item.lastExcretion, true)}
+        {hasMultipleExcretions && isExpanded && (
+          <View style={styles.expandedContent}>
+            <View style={styles.separator} />
+            <Text style={styles.historyLabel}>Historique du jour</Text>
+            {item.excretions
+              .filter((excretion) => excretion.id !== item.lastExcretion.id)
+              .map((excretion) => renderExcretionItem(excretion))}
+          </View>
+        )}
+      </View>
+    );
+  }, [expandedDays, renderExcretionItem, toggleExpand]);
 
   // ============================================
   // RENDER - MAIN
   // ============================================
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.container}>
       <SafeAreaView
         style={[
           { flex: 1 },
@@ -447,45 +675,8 @@ export default function ExcretionsScreen() {
         edges={["bottom"]}
       >
         <View>
-          {/* BOUTONS DE SÉLECTION */}
-          <View style={styles.tabContainer}>
-            <TouchableOpacity
-              style={[
-                styles.tabButton,
-                selectedTab === "mictions" && styles.tabButtonActive,
-              ]}
-              onPress={() => setSelectedTab("mictions")}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  selectedTab === "mictions" && styles.tabTextActive,
-                ]}
-              >
-                Mictions
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.tabButton,
-                selectedTab === "selles" && styles.tabButtonActive,
-              ]}
-              onPress={() => setSelectedTab("selles")}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  selectedTab === "selles" && styles.tabTextActive,
-                ]}
-              >
-                Selles
-              </Text>
-            </TouchableOpacity>
-          </View>
-
           {/* Filtres */}
-          {/* <ScrollView
+          <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.filterContainer}
@@ -528,7 +719,7 @@ export default function ExcretionsScreen() {
                 Passés
               </ThemedText>
             </Pressable>
-          </ScrollView> */}
+          </ScrollView>
 
           {/* Calendrier */}
           {showCalendar && (
@@ -556,210 +747,228 @@ export default function ExcretionsScreen() {
           )}
         </View>
 
-        {/* CONTENU */}
-        <View style={styles.container}>
-          {selectedTab === "mictions" ? (
-            <MictionsScreen
-              mictions={mictions}
-              selectedFilter={selectedFilter}
-              selectedDate={selectedDate}
-              onEditMiction={openEditModalFromMiction}
+        {/* Liste des excrétions */}
+        {groupedExcretions.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons
+              name="calendar-outline"
+              size={64}
+              color={Colors[colorScheme].tabIconDefault}
             />
-          ) : (
-            <SellesScreen
-              selles={selles}
-              selectedFilter={selectedFilter}
-              selectedDate={selectedDate}
-              onEditSelle={openEditModalFromSelle}
-            />
-          )}
-        </View>
-      </SafeAreaView>
-
-      {/* Bottom Sheet unifié */}
-      <FormBottomSheet
-        ref={bottomSheetRef}
-        title={isEditMode ? "Modifier" : "Ajouter une excrétion"}
-        icon={isEditMode ? "edit" : "plus-circle"}
-        accentColor={selectedTab === "mictions" ? "#17a2b8" : "#dc3545"}
-        isEditing={isEditMode}
-        isSubmitting={isSubmitting}
-        onSubmit={handleSubmit}
-        onDelete={isEditMode ? handleDelete : undefined}
-        onCancel={cancelForm}
-        onClose={() => {
-          setIsSubmitting(false);
-          setEditingMiction(null);
-          setEditingSelle(null);
-        }}
-      >
-        {/* Toggles de sélection (uniquement en mode ajout) */}
-        {!isEditMode && (
-          <>
-            <Text style={styles.toggleLabel}>
-              Sélectionnez au moins un type :
-            </Text>
-            <View style={styles.toggleContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.toggleButton,
-                  includeMiction && styles.toggleButtonActiveMiction,
-                ]}
-                onPress={() => setIncludeMiction(!includeMiction)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="water"
-                  size={16}
-                  color={includeMiction ? "white" : "#17a2b8"}
-                />
-                <Text
-                  style={[
-                    styles.toggleText,
-                    includeMiction && styles.toggleTextActive,
-                  ]}
-                >
-                  Miction
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.toggleButton,
-                  includeSelle && styles.toggleButtonActiveSelle,
-                ]}
-                onPress={() => setIncludeSelle(!includeSelle)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="circle"
-                  size={16}
-                  color={includeSelle ? "white" : "#dc3545"}
-                />
-                <Text
-                  style={[
-                    styles.toggleText,
-                    includeSelle && styles.toggleTextActive,
-                  ]}
-                >
-                  Selle
-                </Text>
-              </TouchableOpacity>
-            </View>
-            {!includeMiction && !includeSelle && (
-              <Text style={styles.warningText}>
-                ⚠️ Veuillez sélectionner au moins un type
-              </Text>
-            )}
-          </>
+            <ThemedText style={styles.emptyText}>
+              {excretions.length === 0
+                ? "Aucune excrétion"
+                : "Aucune excrétion pour ce filtre"}
+            </ThemedText>
+          </View>
+        ) : (
+          <FlatList
+            data={groupedExcretions}
+            keyExtractor={(item) => item.date}
+            renderItem={renderDayGroup}
+            showsVerticalScrollIndicator={false}
+            style={styles.flatlistContent}
+            contentContainerStyle={styles.listContent}
+          />
         )}
 
-        {/* Label pour le mode édition */}
-        {isEditMode && (
-          <View style={styles.editModeLabel}>
-            <FontAwesome
-              name={editingMiction ? "water" : "circle"}
-              size={16}
-              color={editingMiction ? "#17a2b8" : "#dc3545"}
-            />
-            <Text style={styles.editModeLabelText}>
-              Modification : {editingMiction ? "Miction" : "Selle"}
+        {/* Bottom Sheet d'ajout/édition */}
+        <FormBottomSheet
+          ref={bottomSheetRef}
+          title={editingExcretion ? "Modifier" : "Nouvelle excrétion"}
+          icon="tint"
+          accentColor={includeMiction && includeSelle ? "#6c757d" : includeMiction ? "#17a2b8" : "#dc3545"}
+          isEditing={!!editingExcretion}
+          isSubmitting={isSubmitting}
+          onSubmit={handleSubmit}
+          onDelete={editingExcretion ? handleDelete : undefined}
+          onCancel={cancelForm}
+          onClose={() => {
+            setIsSubmitting(false);
+            setEditingExcretion(null);
+          }}
+        >
+          {/* Sélection du type - Toggles en mode ajout */}
+          {!editingExcretion ? (
+            <>
+              <Text style={styles.modalCategoryLabel}>Type d'excrétion</Text>
+              <Text style={styles.toggleSubtitle}>
+                Vous pouvez sélectionner les deux si nécessaire
+              </Text>
+              <View style={styles.typeRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    includeMiction && styles.typeButtonActiveMiction,
+                    isSubmitting && styles.typeButtonDisabled,
+                  ]}
+                  onPress={() => setIncludeMiction(prev => !prev)}
+                  disabled={isSubmitting}
+                  activeOpacity={0.7}
+                >
+                  <FontAwesome
+                    name="water"
+                    size={20}
+                    color={includeMiction ? "white" : "#17a2b8"}
+                  />
+                  <Text
+                    style={[
+                      styles.typeText,
+                      includeMiction && styles.typeTextActive,
+                      isSubmitting && styles.typeTextDisabled,
+                    ]}
+                  >
+                    Miction
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    includeSelle && styles.typeButtonActiveSelle,
+                    isSubmitting && styles.typeButtonDisabled,
+                  ]}
+                  onPress={() => setIncludeSelle(prev => !prev)}
+                  disabled={isSubmitting}
+                  activeOpacity={0.7}
+                >
+                  <FontAwesome
+                    name="circle"
+                    size={20}
+                    color={includeSelle ? "white" : "#dc3545"}
+                  />
+                  <Text
+                    style={[
+                      styles.typeText,
+                      includeSelle && styles.typeTextActive,
+                      isSubmitting && styles.typeTextDisabled,
+                    ]}
+                  >
+                    Selle
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {!includeMiction && !includeSelle && (
+                <Text style={styles.warningText}>
+                  ⚠️ Veuillez sélectionner au moins un type
+                </Text>
+              )}
+            </>
+          ) : (
+            // Label en mode édition
+            <View style={styles.editModeLabel}>
+              <FontAwesome
+                name={editingExcretion.type === "miction" ? "water" : "circle"}
+                size={16}
+                color={editingExcretion.type === "miction" ? "#17a2b8" : "#dc3545"}
+              />
+              <Text style={styles.editModeLabelText}>
+                Modification : {editingExcretion.type === "miction" ? "Miction" : "Selle"}
+              </Text>
+            </View>
+          )}
+
+          {/* Date & Heure */}
+          <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+          <View style={styles.dateTimeContainer}>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                isSubmitting && styles.dateButtonDisabled,
+              ]}
+              onPress={() => setShowDate(true)}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="calendar-alt"
+                size={16}
+                color={isSubmitting ? "#ccc" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.dateButtonText,
+                  isSubmitting && styles.dateButtonTextDisabled,
+                ]}
+              >
+                Date
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                isSubmitting && styles.dateButtonDisabled,
+              ]}
+              onPress={() => setShowTime(true)}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="clock"
+                size={16}
+                color={isSubmitting ? "#ccc" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.dateButtonText,
+                  isSubmitting && styles.dateButtonTextDisabled,
+                ]}
+              >
+                Heure
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.selectedDateTime}>
+            <Text style={styles.selectedDate}>
+              {dateHeure.toLocaleDateString("fr-FR", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </Text>
+            <Text style={styles.selectedTime}>
+              {dateHeure.toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </Text>
           </View>
-        )}
 
-        {/* Date & Heure */}
-        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-        <View style={styles.dateTimeContainer}>
-          <TouchableOpacity
-            style={[
-              styles.dateButton,
-              isSubmitting && styles.dateButtonDisabled,
-            ]}
-            onPress={() => setShowDate(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="calendar"
-              size={16}
-              color={isSubmitting ? "#ccc" : "#666"}
+          {/* Date/Time Pickers */}
+          {showDate && (
+            <DateTimePicker
+              value={dateHeure}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onChangeDate}
             />
-            <Text
-              style={[
-                styles.dateButtonText,
-                isSubmitting && styles.dateButtonTextDisabled,
-              ]}
-            >
-              Date
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.dateButton,
-              isSubmitting && styles.dateButtonDisabled,
-            ]}
-            onPress={() => setShowTime(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="clock"
-              size={16}
-              color={isSubmitting ? "#ccc" : "#666"}
+          )}
+          {showTime && (
+            <DateTimePicker
+              value={dateHeure}
+              mode="time"
+              is24Hour={true}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onChangeTime}
             />
-            <Text
-              style={[
-                styles.dateButtonText,
-                isSubmitting && styles.dateButtonTextDisabled,
-              ]}
-            >
-              Heure
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.selectedDateTime}>
-          <Text style={styles.selectedDate}>
-            {dateHeure.toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
-          <Text style={styles.selectedTime}>
-            {dateHeure.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-
-        {showDate && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeDate}
-          />
-        )}
-        {showTime && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="time"
-            is24Hour={true}
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeTime}
-          />
-        )}
-      </FormBottomSheet>
+          )}
+        </FormBottomSheet>
+      </SafeAreaView>
     </View>
   );
 }
+
+// ============================================
+// STYLES
+// ============================================
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
+  },
+  flatlistContent: {
+    paddingVertical: 16,
   },
   headerButton: {
     paddingVertical: 8,
@@ -772,6 +981,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
+  // Filter Bar
   filterContainer: {
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
@@ -796,82 +1006,200 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: "#fff",
   },
-  tabContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    paddingTop: 10,
-    gap: 10,
-    backgroundColor: "#f8f9fa",
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
   },
-  tabButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: "#eee",
+
+  // Day Card
+  dayCard: {
+    backgroundColor: "white",
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  dayHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  dayInfo: {
+    flex: 1,
+  },
+  dayDate: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 4,
+  },
+  summaryInfo: {
+    flexDirection: "column",
+    gap: 4,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  summaryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#f8f9fa",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 12,
   },
-  tabButtonActive: {
-    backgroundColor: "#4A90E2",
+  summaryText: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "500",
   },
-  tabText: {
+  expandButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "#f0f0f0",
+  },
+
+  // Excretion Item
+  excretionItem: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  lastExcretionItem: {
+    backgroundColor: "#e8f4fd",
+    borderLeftWidth: 4,
+    borderLeftColor: "#4A90E2",
+  },
+  excretionContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  excretionInfo: {
+    flex: 1,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 2,
+  },
+  timeText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  excretionTypeText: {
     fontSize: 16,
+    fontWeight: "600",
     color: "#333",
-    fontWeight: "bold",
   },
-  tabTextActive: {
-    color: "white",
+  excretionActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
+  editIcon: {
+    opacity: 0.7,
+  },
+
+  // Expanded Content
+  expandedContent: {
+    marginTop: 8,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#eee",
+    marginBottom: 12,
+  },
+  historyLabel: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  // Empty State
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 100,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: "#666",
+    marginTop: 16,
+    fontWeight: "600",
+  },
+
+  // Modal Content
   modalCategoryLabel: {
     alignSelf: "center",
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  toggleLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#666",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  toggleContainer: {
+
+  // Type Selection
+  typeRow: {
     flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 16,
     gap: 12,
-    marginBottom: 12,
   },
-  toggleButton: {
+  typeButton: {
     flex: 1,
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "center",
-    justifyContent: "center",
     gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    padding: 16,
+    backgroundColor: "#f0f0f0",
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#e9ecef",
-    backgroundColor: "#f8f9fa",
   },
-  toggleButtonActiveMiction: {
+  typeButtonActiveMiction: {
     backgroundColor: "#17a2b8",
-    borderColor: "#17a2b8",
   },
-  toggleButtonActiveSelle: {
+  typeButtonActiveSelle: {
     backgroundColor: "#dc3545",
-    borderColor: "#dc3545",
   },
-  toggleText: {
+  typeButtonDisabled: {
+    backgroundColor: "#f8f8f8",
+    opacity: 0.5,
+  },
+  typeText: {
     fontSize: 16,
-    fontWeight: "600",
     color: "#666",
+    fontWeight: "500",
   },
-  toggleTextActive: {
+  typeTextActive: {
     color: "white",
+    fontWeight: "bold",
+  },
+  typeTextDisabled: {
+    color: "#ccc",
+  },
+  toggleSubtitle: {
+    fontSize: 13,
+    color: "#999",
+    textAlign: "center",
+    marginBottom: 12,
   },
   warningText: {
     fontSize: 13,
     color: "#dc3545",
     textAlign: "center",
+    marginTop: 8,
     marginBottom: 12,
     fontWeight: "500",
   },
@@ -891,22 +1219,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#666",
   },
+
+  // Date/Time
   dateTimeContainer: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 20,
+    justifyContent: "center",
+    gap: 10,
+    marginBottom: 10,
   },
   dateButton: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: "#f0f0f0",
+    padding: 12,
+    borderRadius: 8,
     alignItems: "center",
     flex: 1,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
   },
   dateButtonDisabled: {
     backgroundColor: "#f5f5f5",
@@ -915,19 +1241,14 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 16,
     color: "#666",
-    fontWeight: "500",
+    marginTop: 4,
   },
   dateButtonTextDisabled: {
     color: "#ccc",
   },
   selectedDateTime: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
     alignItems: "center",
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
+    marginBottom: 16,
   },
   selectedDate: {
     fontSize: 16,
@@ -937,7 +1258,14 @@ const styles = StyleSheet.create({
   },
   selectedTime: {
     fontSize: 20,
-    color: "#4A90E2",
+    color: "#004cdaff",
     fontWeight: "bold",
+  },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

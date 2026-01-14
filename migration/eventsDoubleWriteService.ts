@@ -2,14 +2,14 @@
 // Écrit dans les anciennes ET nouvelles collections simultanément
 
 import {
-  ajouterEvenement as ajouterEventNouveau,
   ajouterEvenementAvecId,
+  ajouterEvenement as ajouterEventNouveau,
   ecouterEvenements,
   modifierEvenement as modifierEventNouveau,
   obtenirEvenements,
   supprimerEvenement as supprimerEventNouveau,
   type EventType,
-} from "@/services//eventsService";
+} from "@/services/eventsService";
 
 // Import des anciens services
 import * as mictionsService from "@/services/mictionsService";
