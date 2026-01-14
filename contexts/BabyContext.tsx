@@ -1,8 +1,10 @@
 import { db } from '@/config/firebase';
 import { obtenirPreferences } from '@/services/userPreferencesService';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
-import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
+import { obtenirEvenementsDuJourHybrid } from '@/migration/eventsHybridService';
+import { buildTodayEventsData, getTodayEventsCache, setTodayEventsCache } from '@/services/todayEventsCache';
 
 export interface Child {
   id: string;
@@ -31,6 +33,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   const [loading, setLoading] = useState(true);
   const [hiddenChildrenIds, setHiddenChildrenIds] = useState<string[]>([]);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const preloadInFlight = useRef<Set<string>>(new Set());
 
   // Écouter les changements des préférences utilisateur en temps réel
   useEffect(() => {
@@ -141,6 +144,55 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
 
     return () => unsubscribe();
   }, [user, hiddenChildrenIds, preferencesLoaded, authLoading]);
+
+  useEffect(() => {
+    if (loading || !user?.uid) return;
+    if (children.length === 0) return;
+
+    let cancelled = false;
+    const todayKey = new Date().toDateString();
+
+    const preloadChild = async (childId: string) => {
+      const inFlightKey = `${childId}-${todayKey}`;
+      if (preloadInFlight.current.has(inFlightKey)) return;
+      if (getTodayEventsCache(childId)) return;
+
+      preloadInFlight.current.add(inFlightKey);
+      try {
+        const events = await obtenirEvenementsDuJourHybrid(childId);
+        if (cancelled) return;
+        setTodayEventsCache(childId, buildTodayEventsData(events));
+      } catch (error) {
+        console.warn('[BabyContext] Préchargement today échoué:', error);
+      } finally {
+        preloadInFlight.current.delete(inFlightKey);
+      }
+    };
+
+    const queue = children.map((child) => child.id);
+    const maxConcurrent = 2;
+
+    const runQueue = async () => {
+      const workers = Array.from(
+        { length: Math.min(maxConcurrent, queue.length) },
+        async () => {
+          while (queue.length > 0 && !cancelled) {
+            const childId = queue.shift();
+            if (!childId) return;
+            await preloadChild(childId);
+          }
+        }
+      );
+
+      await Promise.all(workers);
+    };
+
+    runQueue();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [children, loading, user]);
 
   const setActiveChild = (child: Child) => {
     setActiveChildState(child);

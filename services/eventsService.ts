@@ -274,9 +274,13 @@ export function ecouterEvenements(
   options?: {
     type?: EventType | EventType[];
     limite?: number;
+    depuis?: Date;
+    jusqu?: Date;
+    waitForServer?: boolean;
   }
 ): () => void {
   const userId = getUserId();
+  let hasReceivedServerSnapshot = false;
 
   let q = query(
     collection(db, COLLECTION_NAME),
@@ -289,12 +293,31 @@ export function ecouterEvenements(
     q = query(q, where("type", "in", types));
   }
 
+  if (options?.depuis) {
+    q = query(q, where("date", ">=", Timestamp.fromDate(options.depuis)));
+  }
+  if (options?.jusqu) {
+    q = query(q, where("date", "<=", Timestamp.fromDate(options.jusqu)));
+  }
+
   q = query(q, orderBy("date", "desc"));
   if (options?.limite) {
     q = query(q, limit(options.limite));
   }
 
-  return onSnapshot(q, (snapshot) => {
+  return onSnapshot(q, { includeMetadataChanges: !!options?.waitForServer }, (snapshot) => {
+    if (!snapshot.metadata.fromCache) {
+      hasReceivedServerSnapshot = true;
+    }
+
+    if (
+      options?.waitForServer &&
+      !hasReceivedServerSnapshot &&
+      snapshot.metadata.fromCache &&
+      snapshot.empty
+    ) {
+      return;
+    }
     const events = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),

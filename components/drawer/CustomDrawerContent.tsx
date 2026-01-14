@@ -1,7 +1,7 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { DrawerContentScrollView } from "@react-navigation/drawer";
 import { usePathname, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Dimensions, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { AddChildModal } from "@/components/suivibaby/AddChildModal";

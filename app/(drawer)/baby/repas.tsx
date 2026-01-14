@@ -1,6 +1,8 @@
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -13,6 +15,7 @@ import {
 } from "@/migration/eventsDoubleWriteService";
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
+  hasMoreEventsBeforeHybrid,
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -76,6 +79,16 @@ export default function RepasScreen() {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [groupedMeals, setGroupedMeals] = useState<MealGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [teteesLoaded, setTeteesLoaded] = useState(false);
+  const [biberonsLoaded, setBiberonsLoaded] = useState(false);
+  const [emptyDelayDone, setEmptyDelayDone] = useState(false);
+  const [daysWindow, setDaysWindow] = useState(14);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [autoLoadMore, setAutoLoadMore] = useState(false);
+  const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
+  const loadMoreVersionRef = useRef(0);
+  const pendingLoadMoreRef = useRef(0);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -225,6 +238,12 @@ export default function RepasScreen() {
   // Écoute en temps réel - Tétées ET Biberons
   useEffect(() => {
     if (!activeChild?.id) return;
+    const versionAtSubscribe = loadMoreVersionRef.current;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
     let teteesData: Meal[] = [];
     let biberonsData: Meal[] = [];
@@ -234,23 +253,142 @@ export default function RepasScreen() {
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
       );
       setMeals(merged);
+      if (
+        pendingLoadMoreRef.current > 0 &&
+        versionAtSubscribe === loadMoreVersionRef.current
+      ) {
+        pendingLoadMoreRef.current -= 1;
+        if (pendingLoadMoreRef.current <= 0) {
+          setIsLoadingMore(false);
+        }
+      }
     };
 
-    const unsubscribeTetees = ecouterTetees(activeChild.id, (tetees) => {
-      teteesData = tetees;
-      mergeAndSortMeals();
-    });
+    const unsubscribeTetees = ecouterTetees(
+      activeChild.id,
+      (tetees) => {
+        teteesData = tetees;
+        setTeteesLoaded(true);
+        mergeAndSortMeals();
+      },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+    );
 
-    const unsubscribeBiberons = ecouterBiberons(activeChild.id, (biberons) => {
-      biberonsData = biberons;
-      mergeAndSortMeals();
-    });
+    const unsubscribeBiberons = ecouterBiberons(
+      activeChild.id,
+      (biberons) => {
+        biberonsData = biberons;
+        setBiberonsLoaded(true);
+        mergeAndSortMeals();
+      },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+    );
 
     return () => {
       unsubscribeTetees();
       unsubscribeBiberons();
     };
-  }, [activeChild]);
+  }, [activeChild, daysWindow]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setMeals([]);
+    setGroupedMeals([]);
+    setTeteesLoaded(false);
+    setBiberonsLoaded(false);
+    setEmptyDelayDone(false);
+    setDaysWindow(14);
+    setIsLoadingMore(false);
+    setHasMore(true);
+    loadMoreVersionRef.current = 0;
+    pendingLoadMoreRef.current = 0;
+  }, [activeChild?.id]);
+
+  const isMealsLoading = !(teteesLoaded && biberonsLoaded);
+  const mealsLoaded = !isMealsLoading;
+
+  useEffect(() => {
+    if (!mealsLoaded) {
+      setEmptyDelayDone(false);
+      return;
+    }
+    if (groupedMeals.length > 0) {
+      setEmptyDelayDone(true);
+      return;
+    }
+    const timer = setTimeout(() => setEmptyDelayDone(true), 300);
+    return () => clearTimeout(timer);
+  }, [mealsLoaded, groupedMeals.length]);
+
+  const loadMoreStep = useCallback((auto = false) => {
+    if (!hasMore) return;
+    setIsLoadingMore(true);
+    pendingLoadMoreRef.current = 2;
+    loadMoreVersionRef.current += 1;
+    setDaysWindow((prev) => prev + 14);
+    if (!auto) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [hasMore]);
+
+  const handleLoadMore = useCallback(() => {
+    loadMoreStep(false);
+  }, [loadMoreStep]);
+
+  useEffect(() => {
+    if (!autoLoadMore) return;
+    if (isMealsLoading || isLoadingMore) return;
+    if (groupedMeals.length > 0 || !hasMore) {
+      setAutoLoadMore(false);
+      setAutoLoadMoreAttempts(0);
+      return;
+    }
+    if (autoLoadMoreAttempts >= 3) {
+      setAutoLoadMore(false);
+      return;
+    }
+    setAutoLoadMoreAttempts((prev) => prev + 1);
+    loadMoreStep(true);
+  }, [
+    autoLoadMore,
+    isMealsLoading,
+    isLoadingMore,
+    groupedMeals.length,
+    hasMore,
+    autoLoadMoreAttempts,
+    loadMoreStep,
+  ]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+    const oldestTimestamp = meals.reduce<number | null>((min, meal) => {
+      const ts = meal.date?.seconds
+        ? meal.date.seconds * 1000
+        : new Date(meal.date as any).getTime();
+      return min === null ? ts : Math.min(min, ts);
+    }, null);
+    const beforeDate = new Date(
+      (oldestTimestamp ?? startOfRange.getTime()) - 1
+    );
+
+    setHasMore(true);
+    hasMoreEventsBeforeHybrid(activeChild.id, ["tetee", "biberon"], beforeDate)
+      .then((result) => {
+        if (!cancelled) setHasMore(result);
+      })
+      .catch(() => {
+        if (!cancelled) setHasMore(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChild?.id, daysWindow, meals]);
 
   // Filtrage et regroupement par jour
   useEffect(() => {
@@ -821,7 +959,11 @@ export default function RepasScreen() {
         </View>
 
         {/* Liste des repas */}
-        {groupedMeals.length === 0 ? (
+        {isMealsLoading || !emptyDelayDone ? (
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
+        ) : groupedMeals.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons
               name="calendar-outline"
@@ -833,6 +975,15 @@ export default function RepasScreen() {
                 ? "Aucun repas"
                 : "Aucun repas pour ce filtre"}
             </ThemedText>
+            {!(selectedFilter === "today" || selectedDate) && (
+              <LoadMoreButton
+                hasMore={hasMore}
+                loading={isLoadingMore}
+                onPress={handleLoadMore}
+                text="Voir plus (14 jours)"
+                accentColor={Colors[colorScheme].tint}
+              />
+            )}
           </View>
         ) : (
           <FlatList
@@ -842,6 +993,17 @@ export default function RepasScreen() {
             showsVerticalScrollIndicator={false}
             style={styles.flatlistContent}
             contentContainerStyle={styles.listContent}
+            ListFooterComponent={
+              selectedFilter === "today" || selectedDate ? null : (
+                <LoadMoreButton
+                  hasMore={hasMore}
+                  loading={isLoadingMore}
+                  onPress={handleLoadMore}
+                  text="Voir plus (14 jours)"
+                  accentColor={Colors[colorScheme].tint}
+                />
+              )
+            }
           />
         )}
 

@@ -2,9 +2,12 @@
 // Garantit zéro perte de données pendant la migration
 
 import {
-    ecouterEvenements,
-    obtenirEvenements
+  ecouterEvenements,
+  obtenirEvenements,
+  EventType,
 } from "@/services/eventsService";
+
+import { getTodayTypes } from "@/services/todayEventsCache";
 
 import * as mictionsService from "@/services/mictionsService";
 import * as pompagesService from "@/services/pompagesService";
@@ -37,6 +40,59 @@ let config: HybridConfig = {
 export function setHybridConfig(newConfig: Partial<HybridConfig>) {
   config = { ...config, ...newConfig };
   console.log("🔧 Config hybride:", config);
+}
+
+function getTodayRange() {
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const endOfDayInclusive = new Date(endOfDay.getTime() - 1);
+  return { startOfDay, endOfDayInclusive };
+}
+
+export async function obtenirEvenementsDuJourHybrid(childId: string) {
+  const { startOfDay, endOfDayInclusive } = getTodayRange();
+  const types = getTodayTypes() as EventType[];
+
+  // En mode NEW_ONLY (actif), on s'appuie sur la collection unifiée.
+  // En HYBRID/OLD_ONLY, on retourne la version NEW pour le préchargement "today".
+  return obtenirEvenements(childId, {
+    type: types,
+    depuis: startOfDay,
+    jusqu: endOfDayInclusive,
+  });
+}
+
+export async function hasMoreEventsBeforeHybrid(
+  childId: string,
+  types: EventType | EventType[],
+  beforeDate: Date
+) {
+  // Mode NEW_ONLY: collection unifiée.
+  // En HYBRID/OLD_ONLY, on s'appuie sur la version NEW pour la pagination.
+  const events = await obtenirEvenements(childId, {
+    type: types,
+    jusqu: beforeDate,
+    limite: 1,
+  });
+  return events.length > 0;
+}
+
+export function ecouterEvenementsDuJourHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean }
+): () => void {
+  const { startOfDay, endOfDayInclusive } = getTodayRange();
+  const types = getTodayTypes() as EventType[];
+
+  // En mode NEW_ONLY, on écoute la collection unifiée.
+  return ecouterEvenements(childId, callback, {
+    type: types,
+    depuis: startOfDay,
+    jusqu: endOfDayInclusive,
+    waitForServer: options?.waitForServer,
+  });
 }
 
 // ============================================
@@ -154,10 +210,16 @@ export async function obtenirToutesLesTeteesHybrid(
  */
 export function ecouterTeteesHybrid(
   childId: string,
-  callback: (events: any[]) => void
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
 ): () => void {
   if (config.mode === "NEW_ONLY") {
-    return ecouterEvenements(childId, callback, { type: "tetee" });
+    return ecouterEvenements(childId, callback, {
+      type: "tetee",
+      waitForServer: options?.waitForServer,
+      depuis: options?.depuis,
+      jusqu: options?.jusqu,
+    });
   }
 
   if (config.mode === "OLD_ONLY") {
@@ -231,10 +293,16 @@ export async function obtenirToutesLesMictionsHybrid(
 
 export function ecouterMictionsHybrid(
   childId: string,
-  callback: (events: any[]) => void
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
 ): () => void {
   if (config.mode === "NEW_ONLY") {
-    return ecouterEvenements(childId, callback, { type: "miction" });
+    return ecouterEvenements(childId, callback, {
+      type: "miction",
+      waitForServer: options?.waitForServer,
+      depuis: options?.depuis,
+      jusqu: options?.jusqu,
+    });
   }
 
   if (config.mode === "OLD_ONLY") {
@@ -306,10 +374,16 @@ export async function obtenirToutesLesSellesHybrid(
 
 export function ecouterSellesHybrid(
   childId: string,
-  callback: (events: any[]) => void
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
 ): () => void {
   if (config.mode === "NEW_ONLY") {
-    return ecouterEvenements(childId, callback, { type: "selle" });
+    return ecouterEvenements(childId, callback, {
+      type: "selle",
+      waitForServer: options?.waitForServer,
+      depuis: options?.depuis,
+      jusqu: options?.jusqu,
+    });
   }
 
   if (config.mode === "OLD_ONLY") {
@@ -379,10 +453,16 @@ export async function obtenirTousLesPompagesHybrid(
 
 export function ecouterPompagesHybrid(
   childId: string,
-  callback: (events: any[]) => void
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
 ): () => void {
   if (config.mode === "NEW_ONLY") {
-    return ecouterEvenements(childId, callback, { type: "pompage" });
+    return ecouterEvenements(childId, callback, {
+      type: "pompage",
+      waitForServer: options?.waitForServer,
+      depuis: options?.depuis,
+      jusqu: options?.jusqu,
+    });
   }
 
   if (config.mode === "OLD_ONLY") {
@@ -454,10 +534,16 @@ export async function obtenirToutesLesVaccinsHybrid(
 
 export function ecouterVaccinsHybrid(
   childId: string,
-  callback: (events: any[]) => void
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
 ): () => void {
   if (config.mode === "NEW_ONLY") {
-    return ecouterEvenements(childId, callback, { type: "vaccin" });
+    return ecouterEvenements(childId, callback, {
+      type: "vaccin",
+      waitForServer: options?.waitForServer,
+      depuis: options?.depuis,
+      jusqu: options?.jusqu,
+    });
   }
 
   if (config.mode === "OLD_ONLY") {
@@ -529,10 +615,16 @@ export async function obtenirToutesLesVitaminesHybrid(
 
 export function ecouterVitaminesHybrid(
   childId: string,
-  callback: (events: any[]) => void
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
 ): () => void {
   if (config.mode === "NEW_ONLY") {
-    return ecouterEvenements(childId, callback, { type: "vitamine" });
+    return ecouterEvenements(childId, callback, {
+      type: "vitamine",
+      waitForServer: options?.waitForServer,
+      depuis: options?.depuis,
+      jusqu: options?.jusqu,
+    });
   }
 
   if (config.mode === "OLD_ONLY") {
@@ -615,10 +707,16 @@ export async function obtenirTousLesBiberonsHybrid(
  */
 export function ecouterBiberonsHybrid(
   childId: string,
-  callback: (events: any[]) => void
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
 ): () => void {
   if (config.mode === "NEW_ONLY") {
-    return ecouterEvenements(childId, callback, { type: "biberon" });
+    return ecouterEvenements(childId, callback, {
+      type: "biberon",
+      waitForServer: options?.waitForServer,
+      depuis: options?.depuis,
+      jusqu: options?.jusqu,
+    });
   }
 
   if (config.mode === "OLD_ONLY") {

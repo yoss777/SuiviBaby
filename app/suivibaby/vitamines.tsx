@@ -1,5 +1,7 @@
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -55,6 +57,12 @@ export default function VitaminesScreen({ vitamines }: Props) {
   // États des données
   const [groupedVitamines, setGroupedVitamines] = useState<VitamineGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [vitaminesLoaded, setVitaminesLoaded] = useState(false);
+  const [emptyDelayDone, setEmptyDelayDone] = useState(false);
+  const [daysWindow, setDaysWindow] = useState(14);
+  const [hasMore, setHasMore] = useState(true);
+  const [autoLoadMore, setAutoLoadMore] = useState(false);
+  const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -162,6 +170,86 @@ export default function VitaminesScreen({ vitamines }: Props) {
     }
   }, [openModal, openAddModal]);
 
+  useEffect(() => {
+    setVitaminesLoaded(false);
+    setEmptyDelayDone(false);
+    setDaysWindow(14);
+    setHasMore(true);
+    setAutoLoadMore(false);
+    setAutoLoadMoreAttempts(0);
+  }, [activeChild?.id]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setVitaminesLoaded(true);
+  }, [activeChild?.id, vitamines]);
+
+  useEffect(() => {
+    if (!vitaminesLoaded) {
+      setEmptyDelayDone(false);
+      return;
+    }
+    if (groupedVitamines.length > 0) {
+      setEmptyDelayDone(true);
+      return;
+    }
+    const timer = setTimeout(() => setEmptyDelayDone(true), 300);
+    return () => clearTimeout(timer);
+  }, [vitaminesLoaded, groupedVitamines.length]);
+
+  const startOfRange = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (daysWindow - 1));
+    return start;
+  }, [daysWindow]);
+
+  const visibleVitamines = useMemo(
+    () =>
+      vitamines.filter((vitamine) => {
+        const vitamineDate = new Date(vitamine.date.seconds * 1000);
+        return vitamineDate >= startOfRange;
+      }),
+    [vitamines, startOfRange]
+  );
+
+  useEffect(() => {
+    const hasOlder = vitamines.some((vitamine) => {
+      const vitamineDate = new Date(vitamine.date.seconds * 1000);
+      return vitamineDate < startOfRange;
+    });
+    setHasMore(hasOlder);
+  }, [vitamines, startOfRange]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!hasMore) return;
+    setAutoLoadMore(true);
+    setAutoLoadMoreAttempts(0);
+    setDaysWindow((prev) => prev + 14);
+  }, [hasMore]);
+
+  useEffect(() => {
+    if (!autoLoadMore) return;
+    if (!vitaminesLoaded) return;
+    if (groupedVitamines.length > 0 || !hasMore) {
+      setAutoLoadMore(false);
+      setAutoLoadMoreAttempts(0);
+      return;
+    }
+    if (autoLoadMoreAttempts >= 3) {
+      setAutoLoadMore(false);
+      return;
+    }
+    setAutoLoadMoreAttempts((prev) => prev + 1);
+    setDaysWindow((prev) => prev + 14);
+  }, [
+    autoLoadMore,
+    vitaminesLoaded,
+    groupedVitamines.length,
+    hasMore,
+    autoLoadMoreAttempts,
+  ]);
+
   // ============================================
   // EFFECTS - DATA LISTENERS
   // ============================================
@@ -172,7 +260,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
-    const filtered = vitamines.filter((vitamine) => {
+    const filtered = visibleVitamines.filter((vitamine) => {
       const vitamineDate = new Date(vitamine.date.seconds * 1000);
       vitamineDate.setHours(0, 0, 0, 0);
       const vitamineTime = vitamineDate.getTime();
@@ -197,7 +285,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
 
     const grouped = groupVitaminesByDay(filtered);
     setGroupedVitamines(grouped);
-  }, [vitamines, selectedFilter, selectedDate, showCalendar]);
+  }, [visibleVitamines, selectedFilter, selectedDate, showCalendar]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -206,7 +294,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
 
-    vitamines.forEach((vitamine) => {
+    visibleVitamines.forEach((vitamine) => {
       const date = new Date(vitamine.date.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -228,7 +316,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
     }
 
     return marked;
-  }, [vitamines, selectedDate, colorScheme]);
+  }, [visibleVitamines, selectedDate, colorScheme]);
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
@@ -615,7 +703,11 @@ export default function VitaminesScreen({ vitamines }: Props) {
         </View>
 
         {/* Liste des vitamines */}
-        {groupedVitamines.length === 0 ? (
+        {!vitaminesLoaded || !emptyDelayDone ? (
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
+        ) : groupedVitamines.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons
               name="calendar-outline"
@@ -627,6 +719,15 @@ export default function VitaminesScreen({ vitamines }: Props) {
                 ? "Aucune prise de vitamines enregistrée"
                 : "Aucune prise de vitamines pour ce filtre"}
             </ThemedText>
+            {!(selectedFilter === "today" || selectedDate) && (
+              <LoadMoreButton
+                hasMore={hasMore}
+                loading={false}
+                onPress={handleLoadMore}
+                text="Voir plus (14 jours)"
+                accentColor={Colors[colorScheme].tint}
+              />
+            )}
           </View>
         ) : (
           <FlatList
@@ -636,6 +737,17 @@ export default function VitaminesScreen({ vitamines }: Props) {
             showsVerticalScrollIndicator={false}
             style={styles.flatlistContent}
             contentContainerStyle={styles.listContent}
+            ListFooterComponent={
+              selectedFilter === "today" || selectedDate ? null : (
+                <LoadMoreButton
+                  hasMore={hasMore}
+                  loading={false}
+                  onPress={handleLoadMore}
+                  text="Voir plus (14 jours)"
+                  accentColor={Colors[colorScheme].tint}
+                />
+              )
+            }
           />
         )}
 

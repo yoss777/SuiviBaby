@@ -10,6 +10,11 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { obtenirEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
+import {
+  buildTodayEventsData,
+  setTodayEventsCache,
+} from "@/services/todayEventsCache";
 import { router } from "expo-router";
 
 export default function BootScreen() {
@@ -24,65 +29,93 @@ export default function BootScreen() {
   }, []);
 
   useEffect(() => {
-    console.log(
-      "[BOOT] authLoading:",
-      authLoading,
-      "babyLoading:",
-      babyLoading,
-      "user:",
-      !!user,
-      "children.length:",
-      children.length
-    );
+    let cancelled = false;
 
-    // Étape 1 : Attendre que l'auth soit chargée
-    if (authLoading) {
-      console.log("[BOOT] En attente de l'auth...");
-      return;
-    }
+    const prefetchToday = async (childId: string) => {
+      try {
+        const events = await obtenirEvenementsDuJourHybrid(childId);
+        if (cancelled) return;
+        setTodayEventsCache(childId, buildTodayEventsData(events));
+      } catch (error) {
+        console.warn("[BOOT] Préchargement today échoué:", error);
+      }
+    };
 
-    // Étape 2 : Si pas d'utilisateur, rediriger vers login
-    if (!user) {
-      console.log("[BOOT] Pas de user, redirection vers login");
-      router.replace("/(auth)/login");
-      return;
-    }
+    const run = async () => {
+      console.log(
+        "[BOOT] authLoading:",
+        authLoading,
+        "babyLoading:",
+        babyLoading,
+        "user:",
+        !!user,
+        "children.length:",
+        children.length
+      );
 
-    // Étape 3 : Attendre que les enfants soient chargés
-    // IMPORTANT : babyLoading doit être false ET on doit avoir vérifié les enfants
-    if (babyLoading) {
-      console.log("[BOOT] En attente du chargement des enfants...");
-      return;
-    }
+      // Étape 1 : Attendre que l'auth soit chargée
+      if (authLoading) {
+        console.log("[BOOT] En attente de l'auth...");
+        return;
+      }
 
-    if (!delayDone) {
-      console.log("[BOOT] Attente du délai minimum...");
-      return;
-    }
+      // Étape 2 : Si pas d'utilisateur, rediriger vers login
+      if (!user) {
+        console.log("[BOOT] Pas de user, redirection vers login");
+        router.replace("/(auth)/login");
+        return;
+      }
 
-    // Étape 4 : Décision de navigation basée sur le nombre d'enfants
-    console.log(
-      "[BOOT] Décision de navigation avec",
-      children.length,
-      "enfant(s)"
-    );
+      // Étape 3 : Attendre que les enfants soient chargés
+      // IMPORTANT : babyLoading doit être false ET on doit avoir vérifié les enfants
+      if (babyLoading) {
+        console.log("[BOOT] En attente du chargement des enfants...");
+        return;
+      }
 
-    if (children.length === 0) {
-      console.log("[BOOT] Aucun enfant, redirection vers explore");
+      if (!delayDone) {
+        console.log("[BOOT] Attente du délai minimum...");
+        return;
+      }
+
+      // Étape 4 : Décision de navigation basée sur le nombre d'enfants
+      console.log(
+        "[BOOT] Décision de navigation avec",
+        children.length,
+        "enfant(s)"
+      );
+
+      if (children.length === 0) {
+        console.log("[BOOT] Aucun enfant, redirection vers explore");
+        router.replace("/explore");
+        return;
+      }
+
+      if (children.length === 1) {
+        console.log("[BOOT] 1 enfant, redirection vers baby");
+        setActiveChild(children[0]);
+
+        const preloadTimeout = new Promise((resolve) =>
+          setTimeout(resolve, 2500)
+        );
+        await Promise.race([prefetchToday(children[0].id), preloadTimeout]);
+
+        if (!cancelled) {
+          router.replace("/(drawer)/baby");
+        }
+        return;
+      }
+
+      // Plusieurs enfants
+      console.log("[BOOT] Plusieurs enfants, redirection vers explore");
       router.replace("/explore");
-      return;
-    }
+    };
 
-    if (children.length === 1) {
-      console.log("[BOOT] 1 enfant, redirection vers baby");
-      setActiveChild(children[0]);
-      router.replace("/(drawer)/baby");
-      return;
-    }
+    run();
 
-    // Plusieurs enfants
-    console.log("[BOOT] Plusieurs enfants, redirection vers explore");
-    router.replace("/explore");
+    return () => {
+      cancelled = true;
+    };
   }, [authLoading, babyLoading, delayDone, user, children, setActiveChild]);
 
   return (

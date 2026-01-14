@@ -1,5 +1,7 @@
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -67,6 +69,12 @@ export default function MictionsScreen({ mictions }: Props) {
   // États des données
   const [groupedMictions, setGroupedMictions] = useState<MictionGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [mictionsLoaded, setMictionsLoaded] = useState(false);
+  const [emptyDelayDone, setEmptyDelayDone] = useState(false);
+  const [daysWindow, setDaysWindow] = useState(14);
+  const [hasMore, setHasMore] = useState(true);
+  const [autoLoadMore, setAutoLoadMore] = useState(false);
+  const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -171,6 +179,86 @@ export default function MictionsScreen({ mictions }: Props) {
     }
   }, [openModal, openAddModal]);
 
+  useEffect(() => {
+    setMictionsLoaded(false);
+    setEmptyDelayDone(false);
+    setDaysWindow(14);
+    setHasMore(true);
+    setAutoLoadMore(false);
+    setAutoLoadMoreAttempts(0);
+  }, [activeChild?.id]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setMictionsLoaded(true);
+  }, [activeChild?.id, mictions]);
+
+  useEffect(() => {
+    if (!mictionsLoaded) {
+      setEmptyDelayDone(false);
+      return;
+    }
+    if (groupedMictions.length > 0) {
+      setEmptyDelayDone(true);
+      return;
+    }
+    const timer = setTimeout(() => setEmptyDelayDone(true), 300);
+    return () => clearTimeout(timer);
+  }, [mictionsLoaded, groupedMictions.length]);
+
+  const startOfRange = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (daysWindow - 1));
+    return start;
+  }, [daysWindow]);
+
+  const visibleMictions = useMemo(
+    () =>
+      mictions.filter((miction) => {
+        const mictionDate = new Date(miction.date.seconds * 1000);
+        return mictionDate >= startOfRange;
+      }),
+    [mictions, startOfRange]
+  );
+
+  useEffect(() => {
+    const hasOlder = mictions.some((miction) => {
+      const mictionDate = new Date(miction.date.seconds * 1000);
+      return mictionDate < startOfRange;
+    });
+    setHasMore(hasOlder);
+  }, [mictions, startOfRange]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!hasMore) return;
+    setAutoLoadMore(true);
+    setAutoLoadMoreAttempts(0);
+    setDaysWindow((prev) => prev + 14);
+  }, [hasMore]);
+
+  useEffect(() => {
+    if (!autoLoadMore) return;
+    if (!mictionsLoaded) return;
+    if (groupedMictions.length > 0 || !hasMore) {
+      setAutoLoadMore(false);
+      setAutoLoadMoreAttempts(0);
+      return;
+    }
+    if (autoLoadMoreAttempts >= 3) {
+      setAutoLoadMore(false);
+      return;
+    }
+    setAutoLoadMoreAttempts((prev) => prev + 1);
+    setDaysWindow((prev) => prev + 14);
+  }, [
+    autoLoadMore,
+    mictionsLoaded,
+    groupedMictions.length,
+    hasMore,
+    autoLoadMoreAttempts,
+  ]);
+
   // ============================================
   // EFFECTS - DATA LISTENERS
   // ============================================
@@ -180,7 +268,7 @@ export default function MictionsScreen({ mictions }: Props) {
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
-    const filtered = mictions.filter((miction) => {
+    const filtered = visibleMictions.filter((miction) => {
       const mictionDate = new Date(miction.date.seconds * 1000);
       mictionDate.setHours(0, 0, 0, 0);
       const mictionTime = mictionDate.getTime();
@@ -205,7 +293,7 @@ export default function MictionsScreen({ mictions }: Props) {
 
     const grouped = groupMictionsByDay(filtered);
     setGroupedMictions(grouped);
-  }, [mictions, selectedFilter, selectedDate, showCalendar]);
+  }, [visibleMictions, selectedFilter, selectedDate, showCalendar]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -214,7 +302,7 @@ export default function MictionsScreen({ mictions }: Props) {
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
 
-    mictions.forEach((miction) => {
+    visibleMictions.forEach((miction) => {
       const date = new Date(miction.date.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -236,7 +324,7 @@ export default function MictionsScreen({ mictions }: Props) {
     }
 
     return marked;
-  }, [mictions, selectedDate, colorScheme]);
+  }, [visibleMictions, selectedDate, colorScheme]);
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
@@ -607,7 +695,11 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
         </View>
 
         {/* Liste des mictions */}
-        {groupedMictions.length === 0 ? (
+        {!mictionsLoaded || !emptyDelayDone ? (
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
+        ) : groupedMictions.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons
               name="calendar-outline"
@@ -619,6 +711,15 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
                 ? "Aucune miction enregistrée"
                 : "Aucune miction pour ce filtre"}
             </ThemedText>
+            {!(selectedFilter === "today" || selectedDate) && (
+              <LoadMoreButton
+                hasMore={hasMore}
+                loading={false}
+                onPress={handleLoadMore}
+                text="Voir plus (14 jours)"
+                accentColor={Colors[colorScheme].tint}
+              />
+            )}
           </View>
         ) : (
           <FlatList
@@ -628,6 +729,17 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
             showsVerticalScrollIndicator={false}
             style={styles.flatlistContent}
             contentContainerStyle={styles.listContent}
+            ListFooterComponent={
+              selectedFilter === "today" || selectedDate ? null : (
+                <LoadMoreButton
+                  hasMore={hasMore}
+                  loading={false}
+                  onPress={handleLoadMore}
+                  text="Voir plus (14 jours)"
+                  accentColor={Colors[colorScheme].tint}
+                />
+              )
+            }
           />
         )}
 

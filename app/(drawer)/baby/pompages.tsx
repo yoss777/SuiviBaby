@@ -1,5 +1,7 @@
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -8,7 +10,10 @@ import {
   modifierPompage,
   supprimerPompage,
 } from "@/migration/eventsDoubleWriteService";
-import { ecouterPompagesHybrid as ecouterPompages } from "@/migration/eventsHybridService";
+import {
+  ecouterPompagesHybrid as ecouterPompages,
+  hasMoreEventsBeforeHybrid,
+} from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";
@@ -71,6 +76,15 @@ export default function PompagesScreen() {
   const [pompages, setPompages] = useState<Pompage[]>([]);
   const [groupedPompages, setGroupedPompages] = useState<PompageGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [pompagesLoaded, setPompagesLoaded] = useState(false);
+  const [emptyDelayDone, setEmptyDelayDone] = useState(false);
+  const [daysWindow, setDaysWindow] = useState(14);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [autoLoadMore, setAutoLoadMore] = useState(false);
+  const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
+  const loadMoreVersionRef = useRef(0);
+  const pendingLoadMoreRef = useRef(0);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -195,9 +209,128 @@ export default function PompagesScreen() {
   // Écoute en temps réel
   useEffect(() => {
     if (!activeChild?.id) return;
-    const unsubscribe = ecouterPompages(activeChild.id, setPompages);
+    const versionAtSubscribe = loadMoreVersionRef.current;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+
+    const unsubscribe = ecouterPompages(
+      activeChild.id,
+      (data) => {
+        setPompages(data);
+        setPompagesLoaded(true);
+        if (
+          pendingLoadMoreRef.current > 0 &&
+          versionAtSubscribe === loadMoreVersionRef.current
+        ) {
+          pendingLoadMoreRef.current -= 1;
+          if (pendingLoadMoreRef.current <= 0) {
+            setIsLoadingMore(false);
+          }
+        }
+      },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+    );
     return () => unsubscribe();
-  }, [activeChild]);
+  }, [activeChild, daysWindow]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setPompages([]);
+    setGroupedPompages([]);
+    setPompagesLoaded(false);
+    setEmptyDelayDone(false);
+    setDaysWindow(14);
+    setIsLoadingMore(false);
+    setHasMore(true);
+    loadMoreVersionRef.current = 0;
+    pendingLoadMoreRef.current = 0;
+  }, [activeChild?.id]);
+
+  useEffect(() => {
+    if (!pompagesLoaded) {
+      setEmptyDelayDone(false);
+      return;
+    }
+    if (groupedPompages.length > 0) {
+      setEmptyDelayDone(true);
+      return;
+    }
+    const timer = setTimeout(() => setEmptyDelayDone(true), 300);
+    return () => clearTimeout(timer);
+  }, [pompagesLoaded, groupedPompages.length]);
+
+  const loadMoreStep = useCallback((auto = false) => {
+    if (!hasMore) return;
+    setIsLoadingMore(true);
+    pendingLoadMoreRef.current = 1;
+    loadMoreVersionRef.current += 1;
+    setDaysWindow((prev) => prev + 14);
+    if (!auto) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [hasMore]);
+
+  const handleLoadMore = useCallback(() => {
+    loadMoreStep(false);
+  }, [loadMoreStep]);
+
+  useEffect(() => {
+    if (!autoLoadMore) return;
+    if (!pompagesLoaded || isLoadingMore) return;
+    if (groupedPompages.length > 0 || !hasMore) {
+      setAutoLoadMore(false);
+      setAutoLoadMoreAttempts(0);
+      return;
+    }
+    if (autoLoadMoreAttempts >= 3) {
+      setAutoLoadMore(false);
+      return;
+    }
+    setAutoLoadMoreAttempts((prev) => prev + 1);
+    loadMoreStep(true);
+  }, [
+    autoLoadMore,
+    pompagesLoaded,
+    isLoadingMore,
+    groupedPompages.length,
+    hasMore,
+    autoLoadMoreAttempts,
+    loadMoreStep,
+  ]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+    const oldestTimestamp = pompages.reduce<number | null>((min, pompage) => {
+      const ts = pompage.date?.seconds
+        ? pompage.date.seconds * 1000
+        : new Date(pompage.date as any).getTime();
+      return min === null ? ts : Math.min(min, ts);
+    }, null);
+    const beforeDate = new Date(
+      (oldestTimestamp ?? startOfRange.getTime()) - 1
+    );
+
+    setHasMore(true);
+    hasMoreEventsBeforeHybrid(activeChild.id, "pompage", beforeDate)
+      .then((result) => {
+        if (!cancelled) setHasMore(result);
+      })
+      .catch(() => {
+        if (!cancelled) setHasMore(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChild?.id, daysWindow, pompages]);
 
   // Filtrage et regroupement par jour
   useEffect(() => {
@@ -736,28 +869,54 @@ const renderDayGroup = ({ item }: { item: PompageGroup }) => {
         </View>
 
         {/* Liste des pompages */}
-        {groupedPompages.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons
-              name="calendar-outline"
-              size={64}
-              color={Colors[colorScheme].tabIconDefault}
+        {pompagesLoaded && emptyDelayDone ? (
+          groupedPompages.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons
+                name="calendar-outline"
+                size={64}
+                color={Colors[colorScheme].tabIconDefault}
+              />
+              <ThemedText style={styles.emptyText}>
+                {pompages.length === 0
+                  ? "Aucune session enregistrée"
+                  : "Aucune session pour ce filtre"}
+              </ThemedText>
+              {!(selectedFilter === "today" || selectedDate) && (
+                <LoadMoreButton
+                  hasMore={hasMore}
+                  loading={isLoadingMore}
+                  onPress={handleLoadMore}
+                  text="Voir plus (14 jours)"
+                  accentColor={Colors[colorScheme].tint}
+                />
+              )}
+            </View>
+          ) : (
+            <FlatList
+              data={groupedPompages}
+              keyExtractor={(item) => item.date}
+              renderItem={renderDayGroup}
+              showsVerticalScrollIndicator={false}
+              style={styles.flatlistContent}
+              contentContainerStyle={styles.listContent}
+              ListFooterComponent={
+                selectedFilter === "today" || selectedDate ? null : (
+                  <LoadMoreButton
+                    hasMore={hasMore}
+                    loading={isLoadingMore}
+                    onPress={handleLoadMore}
+                    text="Voir plus (14 jours)"
+                    accentColor={Colors[colorScheme].tint}
+                  />
+                )
+              }
             />
-            <ThemedText style={styles.emptyText}>
-              {pompages.length === 0
-                ? "Aucune session enregistrée"
-                : "Aucune session pour ce filtre"}
-            </ThemedText>
-          </View>
+          )
         ) : (
-          <FlatList
-            data={groupedPompages}
-            keyExtractor={(item) => item.date}
-            renderItem={renderDayGroup}
-            showsVerticalScrollIndicator={false}
-            style={styles.flatlistContent}
-            contentContainerStyle={styles.listContent}
-          />
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
         )}
 
         {/* Bottom Sheet d'ajout/édition */}

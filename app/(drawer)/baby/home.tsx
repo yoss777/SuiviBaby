@@ -1,14 +1,10 @@
 import { MigrationBanner } from "@/components/migration";
 import { useBaby } from "@/contexts/BabyContext";
+import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import {
-  ecouterBiberonsHybrid as ecouterBiberons,
-  ecouterMictionsHybrid as ecouterMictions,
-  ecouterPompagesHybrid as ecouterPompages,
-  ecouterSellesHybrid as ecouterSelles,
-  ecouterTeteesHybrid as ecouterTetees,
-  ecouterVaccinsHybrid as ecouterVaccins,
-  ecouterVitaminesHybrid as ecouterVitamines,
-} from "@/migration/eventsHybridService";
+  buildTodayEventsData,
+  getTodayEventsCache,
+} from "@/services/todayEventsCache";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { router } from "expo-router";
@@ -169,52 +165,41 @@ export default function HomeDashboard() {
   useEffect(() => {
     if (!activeChild?.id) return;
 
-    const unsubscribeTetees = ecouterTetees(activeChild.id, (tetees) => {
-      setData((prev) => ({ ...prev, tetees }));
-      setLoading((prev) => ({ ...prev, tetees: false }));
-    });
+    const cached = getTodayEventsCache(activeChild.id);
+    if (cached) {
+      setData((prev) => ({ ...prev, ...cached }));
+      setLoading((prev) => ({
+        ...prev,
+        tetees: false,
+        biberons: false,
+        pompages: false,
+        mictions: false,
+        selles: false,
+        vitamines: false,
+        vaccins: false,
+      }));
+    }
 
-    const unsubscribeBiberons = ecouterBiberons(activeChild.id, (biberons) => {
-      setData((prev) => ({ ...prev, biberons }));
-      setLoading((prev) => ({ ...prev, biberons: false }));
-    });
-
-    const unsubscribePompages = ecouterPompages(activeChild.id, (pompages) => {
-      setData((prev) => ({ ...prev, pompages }));
-      setLoading((prev) => ({ ...prev, pompages: false }));
-    });
-
-    const unsubscribeMictions = ecouterMictions(activeChild.id, (mictions) => {
-      setData((prev) => ({ ...prev, mictions }));
-      setLoading((prev) => ({ ...prev, mictions: false }));
-    });
-
-    const unsubscribeSelles = ecouterSelles(activeChild.id, (selles) => {
-      setData((prev) => ({ ...prev, selles }));
-      setLoading((prev) => ({ ...prev, selles: false }));
-    });
-
-    const unsubscribeVitamines = ecouterVitamines(
+    const unsubscribe = ecouterEvenementsDuJourHybrid(
       activeChild.id,
-      (vitamines) => {
-        setData((prev) => ({ ...prev, vitamines }));
-        setLoading((prev) => ({ ...prev, vitamines: false }));
-      }
+      (events) => {
+        const todayData = buildTodayEventsData(events);
+        setData((prev) => ({ ...prev, ...todayData }));
+        setLoading({
+          tetees: false,
+          biberons: false,
+          pompages: false,
+          mictions: false,
+          selles: false,
+          vitamines: false,
+          vaccins: false,
+        });
+      },
+      { waitForServer: true }
     );
 
-    const unsubscribeVaccins = ecouterVaccins(activeChild.id, (vaccins) => {
-      setData((prev) => ({ ...prev, vaccins }));
-      setLoading((prev) => ({ ...prev, vaccins: false }));
-    });
-
     return () => {
-      unsubscribeTetees();
-      unsubscribeBiberons();
-      unsubscribePompages();
-      unsubscribeMictions();
-      unsubscribeSelles();
-      unsubscribeVitamines();
-      unsubscribeVaccins();
+      unsubscribe();
     };
   }, [activeChild]);
 

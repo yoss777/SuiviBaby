@@ -1,5 +1,7 @@
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -67,6 +69,12 @@ export default function SellesScreen({ selles }: Props) {
   // États des données
   const [groupedSelles, setGroupedSelles] = useState<SelleGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [sellesLoaded, setSellesLoaded] = useState(false);
+  const [emptyDelayDone, setEmptyDelayDone] = useState(false);
+  const [daysWindow, setDaysWindow] = useState(14);
+  const [hasMore, setHasMore] = useState(true);
+  const [autoLoadMore, setAutoLoadMore] = useState(false);
+  const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -171,6 +179,86 @@ export default function SellesScreen({ selles }: Props) {
     }
   }, [openModal, openAddModal]);
 
+  useEffect(() => {
+    setSellesLoaded(false);
+    setEmptyDelayDone(false);
+    setDaysWindow(14);
+    setHasMore(true);
+    setAutoLoadMore(false);
+    setAutoLoadMoreAttempts(0);
+  }, [activeChild?.id]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setSellesLoaded(true);
+  }, [activeChild?.id, selles]);
+
+  useEffect(() => {
+    if (!sellesLoaded) {
+      setEmptyDelayDone(false);
+      return;
+    }
+    if (groupedSelles.length > 0) {
+      setEmptyDelayDone(true);
+      return;
+    }
+    const timer = setTimeout(() => setEmptyDelayDone(true), 300);
+    return () => clearTimeout(timer);
+  }, [sellesLoaded, groupedSelles.length]);
+
+  const startOfRange = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (daysWindow - 1));
+    return start;
+  }, [daysWindow]);
+
+  const visibleSelles = useMemo(
+    () =>
+      selles.filter((selle) => {
+        const selleDate = new Date(selle.date.seconds * 1000);
+        return selleDate >= startOfRange;
+      }),
+    [selles, startOfRange]
+  );
+
+  useEffect(() => {
+    const hasOlder = selles.some((selle) => {
+      const selleDate = new Date(selle.date.seconds * 1000);
+      return selleDate < startOfRange;
+    });
+    setHasMore(hasOlder);
+  }, [selles, startOfRange]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!hasMore) return;
+    setAutoLoadMore(true);
+    setAutoLoadMoreAttempts(0);
+    setDaysWindow((prev) => prev + 14);
+  }, [hasMore]);
+
+  useEffect(() => {
+    if (!autoLoadMore) return;
+    if (!sellesLoaded) return;
+    if (groupedSelles.length > 0 || !hasMore) {
+      setAutoLoadMore(false);
+      setAutoLoadMoreAttempts(0);
+      return;
+    }
+    if (autoLoadMoreAttempts >= 3) {
+      setAutoLoadMore(false);
+      return;
+    }
+    setAutoLoadMoreAttempts((prev) => prev + 1);
+    setDaysWindow((prev) => prev + 14);
+  }, [
+    autoLoadMore,
+    sellesLoaded,
+    groupedSelles.length,
+    hasMore,
+    autoLoadMoreAttempts,
+  ]);
+
   // ============================================
   // EFFECTS - DATA LISTENERS
   // ============================================
@@ -180,7 +268,7 @@ export default function SellesScreen({ selles }: Props) {
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
-    const filtered = selles.filter((selle) => {
+    const filtered = visibleSelles.filter((selle) => {
       const selleDate = new Date(selle.date.seconds * 1000);
       selleDate.setHours(0, 0, 0, 0);
       const selleTime = selleDate.getTime();
@@ -205,7 +293,7 @@ export default function SellesScreen({ selles }: Props) {
 
     const grouped = groupSellesByDay(filtered);
     setGroupedSelles(grouped);
-  }, [selles, selectedFilter, selectedDate, showCalendar]);
+  }, [visibleSelles, selectedFilter, selectedDate, showCalendar]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -214,7 +302,7 @@ export default function SellesScreen({ selles }: Props) {
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
 
-    selles.forEach((selle) => {
+    visibleSelles.forEach((selle) => {
       const date = new Date(selle.date.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -236,7 +324,7 @@ export default function SellesScreen({ selles }: Props) {
     }
 
     return marked;
-  }, [selles, selectedDate, colorScheme]);
+  }, [visibleSelles, selectedDate, colorScheme]);
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
@@ -607,7 +695,11 @@ const renderDayGroup = ({ item }: { item: SelleGroup }) => {
         </View>
 
         {/* Liste des selles */}
-        {groupedSelles.length === 0 ? (
+        {!sellesLoaded || !emptyDelayDone ? (
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
+        ) : groupedSelles.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons
               name="calendar-outline"
@@ -619,6 +711,15 @@ const renderDayGroup = ({ item }: { item: SelleGroup }) => {
                 ? "Aucune selle enregistrée"
                 : "Aucune selle pour ce filtre"}
             </ThemedText>
+            {!(selectedFilter === "today" || selectedDate) && (
+              <LoadMoreButton
+                hasMore={hasMore}
+                loading={false}
+                onPress={handleLoadMore}
+                text="Voir plus (14 jours)"
+                accentColor={Colors[colorScheme].tint}
+              />
+            )}
           </View>
         ) : (
           <FlatList
@@ -628,6 +729,17 @@ const renderDayGroup = ({ item }: { item: SelleGroup }) => {
             showsVerticalScrollIndicator={false}
             style={styles.flatlistContent}
             contentContainerStyle={styles.listContent}
+            ListFooterComponent={
+              selectedFilter === "today" || selectedDate ? null : (
+                <LoadMoreButton
+                  hasMore={hasMore}
+                  loading={false}
+                  onPress={handleLoadMore}
+                  text="Voir plus (14 jours)"
+                  accentColor={Colors[colorScheme].tint}
+                />
+              )
+            }
           />
         )}
 

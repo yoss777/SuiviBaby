@@ -1,5 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -110,6 +111,9 @@ export default function ImmunosScreen() {
   const [immunos, setImmunos] = useState<Immuno[]>([]);
   const [groupedImmunos, setGroupedImmunos] = useState<ImmunoGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [vitaminesLoaded, setVitaminesLoaded] = useState(false);
+  const [vaccinsLoaded, setVaccinsLoaded] = useState(false);
+  const [emptyDelayDone, setEmptyDelayDone] = useState(false);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -267,23 +271,56 @@ export default function ImmunosScreen() {
           ...v,
           type: "vitamine" as ImmunoType,
         }));
+        setVitaminesLoaded(true);
         mergeAndSortImmunos();
-      }
+      },
+      { waitForServer: true }
     );
 
-    const unsubscribeVaccins = ecouterVaccins(activeChild.id, (vaccins) => {
-      vaccinsData = vaccins.map((v) => ({
-        ...v,
-        type: "vaccin" as ImmunoType,
-      }));
-      mergeAndSortImmunos();
-    });
+    const unsubscribeVaccins = ecouterVaccins(
+      activeChild.id,
+      (vaccins) => {
+        vaccinsData = vaccins.map((v) => ({
+          ...v,
+          type: "vaccin" as ImmunoType,
+        }));
+        setVaccinsLoaded(true);
+        mergeAndSortImmunos();
+      },
+      { waitForServer: true }
+    );
 
     return () => {
       unsubscribeVitamines();
       unsubscribeVaccins();
     };
   }, [activeChild]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setImmunos([]);
+    setGroupedImmunos([]);
+    setVitaminesLoaded(false);
+    setVaccinsLoaded(false);
+    setEmptyDelayDone(false);
+  }, [activeChild?.id]);
+
+  const isImmunosLoading =
+    selectedType === "vitamine" ? !vitaminesLoaded : !vaccinsLoaded;
+
+  useEffect(() => {
+    if (isImmunosLoading) {
+      setEmptyDelayDone(false);
+      return;
+    }
+    if (groupedImmunos.length > 0) {
+      setEmptyDelayDone(true);
+      return;
+    }
+    const timer = setTimeout(() => setEmptyDelayDone(true), 300);
+    return () => clearTimeout(timer);
+  }, [isImmunosLoading, groupedImmunos.length, selectedType]);
+
 
   // Filtrage et regroupement par jour
   useEffect(() => {
@@ -871,7 +908,11 @@ export default function ImmunosScreen() {
         </View>
 
         {/* Liste des immunisations */}
-        {groupedImmunos.length === 0 ? (
+        {isImmunosLoading || !emptyDelayDone ? (
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
+        ) : groupedImmunos.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons
               name="calendar-outline"

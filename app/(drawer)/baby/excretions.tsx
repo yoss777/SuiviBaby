@@ -1,5 +1,7 @@
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -14,6 +16,7 @@ import {
 import {
   ecouterMictionsHybrid as ecouterMictions,
   ecouterSellesHybrid as ecouterSelles,
+  hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
@@ -76,6 +79,16 @@ export default function ExcretionsScreen() {
   const [excretions, setExcretions] = useState<Excretion[]>([]);
   const [groupedExcretions, setGroupedExcretions] = useState<ExcretionGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [mictionsLoaded, setMictionsLoaded] = useState(false);
+  const [sellesLoaded, setSellesLoaded] = useState(false);
+  const [emptyDelayDone, setEmptyDelayDone] = useState(false);
+  const [daysWindow, setDaysWindow] = useState(14);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [autoLoadMore, setAutoLoadMore] = useState(false);
+  const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
+  const loadMoreVersionRef = useRef(0);
+  const pendingLoadMoreRef = useRef(0);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -212,6 +225,12 @@ export default function ExcretionsScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
+    const versionAtSubscribe = loadMoreVersionRef.current;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
     let mictionsData: Excretion[] = [];
     let sellesData: Excretion[] = [];
@@ -221,23 +240,147 @@ export default function ExcretionsScreen() {
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
       );
       setExcretions(merged);
+      if (
+        pendingLoadMoreRef.current > 0 &&
+        versionAtSubscribe === loadMoreVersionRef.current
+      ) {
+        pendingLoadMoreRef.current -= 1;
+        if (pendingLoadMoreRef.current <= 0) {
+          setIsLoadingMore(false);
+        }
+      }
     };
 
-    const unsubscribeMictions = ecouterMictions(activeChild.id, (mictions) => {
-      mictionsData = mictions.map(m => ({ ...m, type: "miction" as ExcretionType }));
-      mergeAndSortExcretions();
-    });
+    const unsubscribeMictions = ecouterMictions(
+      activeChild.id,
+      (mictions) => {
+        mictionsData = mictions.map((m) => ({
+          ...m,
+          type: "miction" as ExcretionType,
+        }));
+        setMictionsLoaded(true);
+        mergeAndSortExcretions();
+      },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+    );
 
-    const unsubscribeSelles = ecouterSelles(activeChild.id, (selles) => {
-      sellesData = selles.map(s => ({ ...s, type: "selle" as ExcretionType }));
-      mergeAndSortExcretions();
-    });
+    const unsubscribeSelles = ecouterSelles(
+      activeChild.id,
+      (selles) => {
+        sellesData = selles.map((s) => ({
+          ...s,
+          type: "selle" as ExcretionType,
+        }));
+        setSellesLoaded(true);
+        mergeAndSortExcretions();
+      },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+    );
 
     return () => {
       unsubscribeMictions();
       unsubscribeSelles();
     };
-  }, [activeChild]);
+  }, [activeChild, daysWindow]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setExcretions([]);
+    setGroupedExcretions([]);
+    setMictionsLoaded(false);
+    setSellesLoaded(false);
+    setEmptyDelayDone(false);
+    setDaysWindow(14);
+    setIsLoadingMore(false);
+    setHasMore(true);
+    loadMoreVersionRef.current = 0;
+    pendingLoadMoreRef.current = 0;
+  }, [activeChild?.id]);
+
+  const isExcretionsLoading = !(mictionsLoaded && sellesLoaded);
+
+  useEffect(() => {
+    if (isExcretionsLoading) {
+      setEmptyDelayDone(false);
+      return;
+    }
+    if (groupedExcretions.length > 0) {
+      setEmptyDelayDone(true);
+      return;
+    }
+    const timer = setTimeout(() => setEmptyDelayDone(true), 300);
+    return () => clearTimeout(timer);
+  }, [isExcretionsLoading, groupedExcretions.length]);
+
+  const loadMoreStep = useCallback((auto = false) => {
+    if (!hasMore) return;
+    setIsLoadingMore(true);
+    pendingLoadMoreRef.current = 2;
+    loadMoreVersionRef.current += 1;
+    setDaysWindow((prev) => prev + 14);
+    if (!auto) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [hasMore]);
+
+  const handleLoadMore = useCallback(() => {
+    loadMoreStep(false);
+  }, [loadMoreStep]);
+
+  useEffect(() => {
+    if (!autoLoadMore) return;
+    if (isExcretionsLoading || isLoadingMore) return;
+    if (groupedExcretions.length > 0 || !hasMore) {
+      setAutoLoadMore(false);
+      setAutoLoadMoreAttempts(0);
+      return;
+    }
+    if (autoLoadMoreAttempts >= 3) {
+      setAutoLoadMore(false);
+      return;
+    }
+    setAutoLoadMoreAttempts((prev) => prev + 1);
+    loadMoreStep(true);
+  }, [
+    autoLoadMore,
+    isExcretionsLoading,
+    isLoadingMore,
+    groupedExcretions.length,
+    hasMore,
+    autoLoadMoreAttempts,
+    loadMoreStep,
+  ]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+    const oldestTimestamp = excretions.reduce<number | null>((min, excretion) => {
+      const ts = excretion.date?.seconds
+        ? excretion.date.seconds * 1000
+        : new Date(excretion.date as any).getTime();
+      return min === null ? ts : Math.min(min, ts);
+    }, null);
+    const beforeDate = new Date(
+      (oldestTimestamp ?? startOfRange.getTime()) - 1
+    );
+
+    setHasMore(true);
+    hasMoreEventsBeforeHybrid(activeChild.id, ["miction", "selle"], beforeDate)
+      .then((result) => {
+        if (!cancelled) setHasMore(result);
+      })
+      .catch(() => {
+        if (!cancelled) setHasMore(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChild?.id, daysWindow, excretions]);
 
   // Filtrage et regroupement par jour avec useMemo pour éviter les re-renders
   useEffect(() => {
@@ -751,7 +894,11 @@ export default function ExcretionsScreen() {
         </View>
 
         {/* Liste des excrétions */}
-        {groupedExcretions.length === 0 ? (
+        {isExcretionsLoading || !emptyDelayDone ? (
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
+        ) : groupedExcretions.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons
               name="calendar-outline"
@@ -763,6 +910,15 @@ export default function ExcretionsScreen() {
                 ? "Aucune excrétion"
                 : "Aucune excrétion pour ce filtre"}
             </ThemedText>
+            {!(selectedFilter === "today" || selectedDate) && (
+              <LoadMoreButton
+                hasMore={hasMore}
+                loading={isLoadingMore}
+                onPress={handleLoadMore}
+                text="Voir plus (14 jours)"
+                accentColor={Colors[colorScheme].tint}
+              />
+            )}
           </View>
         ) : (
           <FlatList
@@ -772,6 +928,17 @@ export default function ExcretionsScreen() {
             showsVerticalScrollIndicator={false}
             style={styles.flatlistContent}
             contentContainerStyle={styles.listContent}
+            ListFooterComponent={
+              selectedFilter === "today" || selectedDate ? null : (
+                <LoadMoreButton
+                  hasMore={hasMore}
+                  loading={isLoadingMore}
+                  onPress={handleLoadMore}
+                  text="Voir plus (14 jours)"
+                  accentColor={Colors[colorScheme].tint}
+                />
+              )
+            }
           />
         )}
 

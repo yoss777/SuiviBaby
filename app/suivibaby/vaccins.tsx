@@ -1,5 +1,7 @@
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -85,6 +87,12 @@ export default function VaccinsScreen({ vaccins }: Props) {
   // États des données
   const [groupedVaccins, setGroupedVaccins] = useState<VaccinGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [vaccinsLoaded, setVaccinsLoaded] = useState(false);
+  const [emptyDelayDone, setEmptyDelayDone] = useState(false);
+  const [daysWindow, setDaysWindow] = useState(14);
+  const [hasMore, setHasMore] = useState(true);
+  const [autoLoadMore, setAutoLoadMore] = useState(false);
+  const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -195,6 +203,86 @@ export default function VaccinsScreen({ vaccins }: Props) {
     }
   }, [openModal, openAddModal]);
 
+  useEffect(() => {
+    setVaccinsLoaded(false);
+    setEmptyDelayDone(false);
+    setDaysWindow(14);
+    setHasMore(true);
+    setAutoLoadMore(false);
+    setAutoLoadMoreAttempts(0);
+  }, [activeChild?.id]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setVaccinsLoaded(true);
+  }, [activeChild?.id, vaccins]);
+
+  useEffect(() => {
+    if (!vaccinsLoaded) {
+      setEmptyDelayDone(false);
+      return;
+    }
+    if (groupedVaccins.length > 0) {
+      setEmptyDelayDone(true);
+      return;
+    }
+    const timer = setTimeout(() => setEmptyDelayDone(true), 300);
+    return () => clearTimeout(timer);
+  }, [vaccinsLoaded, groupedVaccins.length]);
+
+  const startOfRange = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (daysWindow - 1));
+    return start;
+  }, [daysWindow]);
+
+  const visibleVaccins = useMemo(
+    () =>
+      vaccins.filter((vaccin) => {
+        const vaccinDate = new Date(vaccin.date.seconds * 1000);
+        return vaccinDate >= startOfRange;
+      }),
+    [vaccins, startOfRange]
+  );
+
+  useEffect(() => {
+    const hasOlder = vaccins.some((vaccin) => {
+      const vaccinDate = new Date(vaccin.date.seconds * 1000);
+      return vaccinDate < startOfRange;
+    });
+    setHasMore(hasOlder);
+  }, [vaccins, startOfRange]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!hasMore) return;
+    setAutoLoadMore(true);
+    setAutoLoadMoreAttempts(0);
+    setDaysWindow((prev) => prev + 14);
+  }, [hasMore]);
+
+  useEffect(() => {
+    if (!autoLoadMore) return;
+    if (!vaccinsLoaded) return;
+    if (groupedVaccins.length > 0 || !hasMore) {
+      setAutoLoadMore(false);
+      setAutoLoadMoreAttempts(0);
+      return;
+    }
+    if (autoLoadMoreAttempts >= 3) {
+      setAutoLoadMore(false);
+      return;
+    }
+    setAutoLoadMoreAttempts((prev) => prev + 1);
+    setDaysWindow((prev) => prev + 14);
+  }, [
+    autoLoadMore,
+    vaccinsLoaded,
+    groupedVaccins.length,
+    hasMore,
+    autoLoadMoreAttempts,
+  ]);
+
   // ============================================
   // EFFECTS - DATA LISTENERS
   // ============================================
@@ -205,7 +293,7 @@ export default function VaccinsScreen({ vaccins }: Props) {
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
-    const filtered = vaccins.filter((vaccin) => {
+    const filtered = visibleVaccins.filter((vaccin) => {
       const vaccinDate = new Date(vaccin.date.seconds * 1000);
       vaccinDate.setHours(0, 0, 0, 0);
       const vaccinTime = vaccinDate.getTime();
@@ -230,7 +318,7 @@ export default function VaccinsScreen({ vaccins }: Props) {
 
     const grouped = groupVaccinsByDay(filtered);
     setGroupedVaccins(grouped);
-  }, [vaccins, selectedFilter, selectedDate, showCalendar]);
+  }, [visibleVaccins, selectedFilter, selectedDate, showCalendar]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -239,7 +327,7 @@ export default function VaccinsScreen({ vaccins }: Props) {
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
 
-    vaccins.forEach((vaccin) => {
+    visibleVaccins.forEach((vaccin) => {
       const date = new Date(vaccin.date.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -261,7 +349,7 @@ export default function VaccinsScreen({ vaccins }: Props) {
     }
 
     return marked;
-  }, [vaccins, selectedDate, colorScheme]);
+  }, [visibleVaccins, selectedDate, colorScheme]);
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
@@ -652,7 +740,11 @@ export default function VaccinsScreen({ vaccins }: Props) {
         </View>
 
         {/* Liste des vaccins */}
-        {groupedVaccins.length === 0 ? (
+        {!vaccinsLoaded || !emptyDelayDone ? (
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
+        ) : groupedVaccins.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons
               name="calendar-outline"
@@ -664,6 +756,15 @@ export default function VaccinsScreen({ vaccins }: Props) {
                 ? "Aucun vaccin enregistré"
                 : "Aucun vaccin pour ce filtre"}
             </ThemedText>
+            {!(selectedFilter === "today" || selectedDate) && (
+              <LoadMoreButton
+                hasMore={hasMore}
+                loading={false}
+                onPress={handleLoadMore}
+                text="Voir plus (14 jours)"
+                accentColor={Colors[colorScheme].tint}
+              />
+            )}
           </View>
         ) : (
           <FlatList
@@ -673,6 +774,17 @@ export default function VaccinsScreen({ vaccins }: Props) {
             showsVerticalScrollIndicator={false}
             style={styles.flatlistContent}
             contentContainerStyle={styles.listContent}
+            ListFooterComponent={
+              selectedFilter === "today" || selectedDate ? null : (
+                <LoadMoreButton
+                  hasMore={hasMore}
+                  loading={false}
+                  onPress={handleLoadMore}
+                  text="Voir plus (14 jours)"
+                  accentColor={Colors[colorScheme].tint}
+                />
+              )
+            }
           />
         )}
 

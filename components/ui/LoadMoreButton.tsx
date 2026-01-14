@@ -1,11 +1,9 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React from "react";
 import {
   ActivityIndicator,
   StyleSheet,
   Text,
-  TouchableOpacity,
-  View,
+  TouchableOpacity
 } from "react-native";
 
 // ============================================
@@ -34,11 +32,7 @@ export function LoadMoreButton({
   accentColor = "#4A90E2",
 }: LoadMoreButtonProps) {
   if (!hasMore) {
-    return (
-      <View style={styles.endContainer}>
-        <Text style={styles.endText}>{endText}</Text>
-      </View>
-    );
+    return null;
   }
 
   return (
@@ -76,8 +70,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     padding: 16,
-    marginVertical: 16,
-    marginHorizontal: 16,
+    marginTop: 8,
+    // marginHorizontal: 16,
     borderWidth: 1,
     borderRadius: 12,
     backgroundColor: "white",
