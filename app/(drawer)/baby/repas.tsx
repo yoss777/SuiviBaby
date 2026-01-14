@@ -1,3 +1,4 @@
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
@@ -337,6 +338,21 @@ export default function RepasScreen() {
   }, [loadMoreStep]);
 
   useEffect(() => {
+    if (selectedFilter === "today" || selectedDate) return;
+    if (!autoLoadMore && !isMealsLoading && groupedMeals.length === 0 && hasMore) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [
+    autoLoadMore,
+    isMealsLoading,
+    groupedMeals.length,
+    hasMore,
+    selectedFilter,
+    selectedDate,
+  ]);
+
+  useEffect(() => {
     if (!autoLoadMore) return;
     if (isMealsLoading || isLoadingMore) return;
     if (groupedMeals.length > 0 || !hasMore) {
@@ -344,7 +360,7 @@ export default function RepasScreen() {
       setAutoLoadMoreAttempts(0);
       return;
     }
-    if (autoLoadMoreAttempts >= 3) {
+    if (autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS) {
       setAutoLoadMore(false);
       return;
     }
@@ -477,23 +493,38 @@ export default function RepasScreen() {
     setExpandedDays(new Set([day.dateString]));
   };
 
+  const applyTodayFilter = useCallback(() => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    setSelectedFilter("today");
+    setSelectedDate(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set([todayKey]));
+  }, []);
+
   const handleFilterPress = (filter: FilterType) => {
+    // Si on clique sur "Aujourd'hui", déployer automatiquement la carte du jour
+    if (filter === "today") {
+      applyTodayFilter();
+      return;
+    }
+
     setSelectedFilter(filter);
     setSelectedDate(null);
     setShowCalendar(false);
-
-    // Si on clique sur "Aujourd'hui", déployer automatiquement la carte du jour
-    if (filter === "today") {
-      const today = new Date();
-      const todayKey = `${today.getFullYear()}-${String(
-        today.getMonth() + 1
-      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      setExpandedDays(new Set([todayKey]));
-    } else {
-      // Réinitialiser l'expansion pour les autres filtres
-      setExpandedDays(new Set());
-    }
+    // Réinitialiser l'expansion pour les autres filtres
+    setExpandedDays(new Set());
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedFilter && !selectedDate) {
+        applyTodayFilter();
+      }
+    }, [applyTodayFilter, selectedDate, selectedFilter])
+  );
 
   // ============================================
   // HELPERS - GROUPING

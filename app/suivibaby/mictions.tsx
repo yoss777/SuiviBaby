@@ -1,3 +1,4 @@
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
@@ -238,6 +239,21 @@ export default function MictionsScreen({ mictions }: Props) {
   }, [hasMore]);
 
   useEffect(() => {
+    if (selectedFilter === "today" || selectedDate) return;
+    if (!autoLoadMore && mictionsLoaded && groupedMictions.length === 0 && hasMore) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [
+    autoLoadMore,
+    mictionsLoaded,
+    groupedMictions.length,
+    hasMore,
+    selectedFilter,
+    selectedDate,
+  ]);
+
+  useEffect(() => {
     if (!autoLoadMore) return;
     if (!mictionsLoaded) return;
     if (groupedMictions.length > 0 || !hasMore) {
@@ -245,7 +261,7 @@ export default function MictionsScreen({ mictions }: Props) {
       setAutoLoadMoreAttempts(0);
       return;
     }
-    if (autoLoadMoreAttempts >= 3) {
+    if (autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS) {
       setAutoLoadMore(false);
       return;
     }

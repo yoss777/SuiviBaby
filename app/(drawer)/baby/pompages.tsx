@@ -1,3 +1,4 @@
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
@@ -279,6 +280,21 @@ export default function PompagesScreen() {
   }, [loadMoreStep]);
 
   useEffect(() => {
+    if (selectedFilter === "today" || selectedDate) return;
+    if (!autoLoadMore && pompagesLoaded && groupedPompages.length === 0 && hasMore) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [
+    autoLoadMore,
+    pompagesLoaded,
+    groupedPompages.length,
+    hasMore,
+    selectedFilter,
+    selectedDate,
+  ]);
+
+  useEffect(() => {
     if (!autoLoadMore) return;
     if (!pompagesLoaded || isLoadingMore) return;
     if (groupedPompages.length > 0 || !hasMore) {
@@ -286,7 +302,7 @@ export default function PompagesScreen() {
       setAutoLoadMoreAttempts(0);
       return;
     }
-    if (autoLoadMoreAttempts >= 3) {
+    if (autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS) {
       setAutoLoadMore(false);
       return;
     }
@@ -411,21 +427,36 @@ export default function PompagesScreen() {
     setExpandedDays(new Set([day.dateString]));
   };
 
+  const applyTodayFilter = useCallback(() => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    setSelectedFilter("today");
+    setSelectedDate(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set([todayKey]));
+  }, []);
+
   const handleFilterPress = (filter: FilterType) => {
+    if (filter === "today") {
+      applyTodayFilter();
+      return;
+    }
+
     setSelectedFilter(filter);
     setSelectedDate(null);
     setShowCalendar(false);
-
-    if (filter === "today") {
-      const today = new Date();
-      const todayKey = `${today.getFullYear()}-${String(
-        today.getMonth() + 1
-      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      setExpandedDays(new Set([todayKey]));
-    } else {
-      setExpandedDays(new Set());
-    }
+    setExpandedDays(new Set());
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedFilter && !selectedDate) {
+        applyTodayFilter();
+      }
+    }, [applyTodayFilter, selectedDate, selectedFilter])
+  );
 
   // ============================================
   // HELPERS - GROUPING

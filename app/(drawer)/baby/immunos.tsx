@@ -1,6 +1,8 @@
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -15,6 +17,7 @@ import {
 import {
   ecouterVaccinsHybrid as ecouterVaccins,
   ecouterVitaminesHybrid as ecouterVitamines,
+  hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
@@ -114,6 +117,13 @@ export default function ImmunosScreen() {
   const [vitaminesLoaded, setVitaminesLoaded] = useState(false);
   const [vaccinsLoaded, setVaccinsLoaded] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
+  const [daysWindow, setDaysWindow] = useState(14);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [autoLoadMore, setAutoLoadMore] = useState(false);
+  const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
+  const loadMoreVersionRef = useRef(0);
+  const pendingLoadMoreRef = useRef(0);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -253,6 +263,12 @@ export default function ImmunosScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
+    const versionAtSubscribe = loadMoreVersionRef.current;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
     let vitaminesData: Immuno[] = [];
     let vaccinsData: Immuno[] = [];
@@ -262,6 +278,15 @@ export default function ImmunosScreen() {
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
       );
       setImmunos(merged);
+      if (
+        pendingLoadMoreRef.current > 0 &&
+        versionAtSubscribe === loadMoreVersionRef.current
+      ) {
+        pendingLoadMoreRef.current -= 1;
+        if (pendingLoadMoreRef.current <= 0) {
+          setIsLoadingMore(false);
+        }
+      }
     };
 
     const unsubscribeVitamines = ecouterVitamines(
@@ -274,7 +299,7 @@ export default function ImmunosScreen() {
         setVitaminesLoaded(true);
         mergeAndSortImmunos();
       },
-      { waitForServer: true }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
     );
 
     const unsubscribeVaccins = ecouterVaccins(
@@ -287,14 +312,14 @@ export default function ImmunosScreen() {
         setVaccinsLoaded(true);
         mergeAndSortImmunos();
       },
-      { waitForServer: true }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
     );
 
     return () => {
       unsubscribeVitamines();
       unsubscribeVaccins();
     };
-  }, [activeChild]);
+  }, [activeChild, daysWindow]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -303,6 +328,13 @@ export default function ImmunosScreen() {
     setVitaminesLoaded(false);
     setVaccinsLoaded(false);
     setEmptyDelayDone(false);
+    setDaysWindow(14);
+    setIsLoadingMore(false);
+    setHasMore(true);
+    setAutoLoadMore(false);
+    setAutoLoadMoreAttempts(0);
+    loadMoreVersionRef.current = 0;
+    pendingLoadMoreRef.current = 0;
   }, [activeChild?.id]);
 
   const isImmunosLoading =
@@ -320,6 +352,87 @@ export default function ImmunosScreen() {
     const timer = setTimeout(() => setEmptyDelayDone(true), 300);
     return () => clearTimeout(timer);
   }, [isImmunosLoading, groupedImmunos.length, selectedType]);
+
+  const loadMoreStep = useCallback((auto = false) => {
+    if (!hasMore) return;
+    setIsLoadingMore(true);
+    pendingLoadMoreRef.current = 2;
+    loadMoreVersionRef.current += 1;
+    setDaysWindow((prev) => prev + 14);
+    if (!auto) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [hasMore]);
+
+  const handleLoadMore = useCallback(() => {
+    loadMoreStep(false);
+  }, [loadMoreStep]);
+
+  useEffect(() => {
+    if (!autoLoadMore && !isImmunosLoading && groupedImmunos.length === 0 && hasMore) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [autoLoadMore, isImmunosLoading, groupedImmunos.length, hasMore]);
+
+  useEffect(() => {
+    if (!autoLoadMore) return;
+    if (isImmunosLoading || isLoadingMore) return;
+    if (groupedImmunos.length > 0 || !hasMore) {
+      setAutoLoadMore(false);
+      setAutoLoadMoreAttempts(0);
+      return;
+    }
+    if (autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS) {
+      setAutoLoadMore(false);
+      return;
+    }
+    setAutoLoadMoreAttempts((prev) => prev + 1);
+    loadMoreStep(true);
+  }, [
+    autoLoadMore,
+    isImmunosLoading,
+    isLoadingMore,
+    groupedImmunos.length,
+    hasMore,
+    autoLoadMoreAttempts,
+    loadMoreStep,
+  ]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+    const oldestTimestamp = immunos
+      .filter((immuno) => immuno.type === selectedType)
+      .reduce<number | null>((min, immuno) => {
+        const ts = immuno.date?.seconds
+          ? immuno.date.seconds * 1000
+          : new Date(immuno.date as any).getTime();
+        return min === null ? ts : Math.min(min, ts);
+      }, null);
+    const beforeDate = new Date(
+      (oldestTimestamp ?? startOfRange.getTime()) - 1
+    );
+
+    const types = selectedType === "vitamine" ? "vitamine" : "vaccin";
+
+    setHasMore(true);
+    hasMoreEventsBeforeHybrid(activeChild.id, types, beforeDate)
+      .then((result) => {
+        if (!cancelled) setHasMore(result);
+      })
+      .catch(() => {
+        if (!cancelled) setHasMore(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChild?.id, daysWindow, selectedType, immunos]);
 
 
   // Filtrage et regroupement par jour
@@ -397,21 +510,36 @@ export default function ImmunosScreen() {
     setExpandedDays(new Set([day.dateString]));
   };
 
+  const applyTodayFilter = useCallback(() => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    setSelectedFilter("today");
+    setSelectedDate(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set([todayKey]));
+  }, []);
+
   const handleFilterPress = (filter: FilterType) => {
+    if (filter === "today") {
+      applyTodayFilter();
+      return;
+    }
+
     setSelectedFilter(filter);
     setSelectedDate(null);
     setShowCalendar(false);
-
-    if (filter === "today") {
-      const today = new Date();
-      const todayKey = `${today.getFullYear()}-${String(
-        today.getMonth() + 1
-      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      setExpandedDays(new Set([todayKey]));
-    } else {
-      setExpandedDays(new Set());
-    }
+    setExpandedDays(new Set());
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedFilter && !selectedDate) {
+        applyTodayFilter();
+      }
+    }, [applyTodayFilter, selectedDate, selectedFilter])
+  );
 
   // ============================================
   // HELPERS - GROUPING
@@ -926,6 +1054,15 @@ export default function ImmunosScreen() {
                 ? "Aucune vitamine pour ce filtre"
                 : "Aucun vaccin pour ce filtre"}
             </ThemedText>
+            {!(selectedFilter === "today" || selectedDate) && (
+              <LoadMoreButton
+                hasMore={hasMore}
+                loading={isLoadingMore}
+                onPress={handleLoadMore}
+                text="Voir plus (14 jours)"
+                accentColor={Colors[colorScheme].tint}
+              />
+            )}
           </View>
         ) : (
           <FlatList
@@ -935,6 +1072,17 @@ export default function ImmunosScreen() {
             showsVerticalScrollIndicator={false}
             style={styles.flatlistContent}
             contentContainerStyle={styles.listContent}
+            ListFooterComponent={
+              selectedFilter === "today" || selectedDate ? null : (
+                <LoadMoreButton
+                  hasMore={hasMore}
+                  loading={isLoadingMore}
+                  onPress={handleLoadMore}
+                  text="Voir plus (14 jours)"
+                  accentColor={Colors[colorScheme].tint}
+                />
+              )
+            }
           />
         )}
 

@@ -1,3 +1,4 @@
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
@@ -229,6 +230,21 @@ export default function VitaminesScreen({ vitamines }: Props) {
   }, [hasMore]);
 
   useEffect(() => {
+    if (selectedFilter === "today" || selectedDate) return;
+    if (!autoLoadMore && vitaminesLoaded && groupedVitamines.length === 0 && hasMore) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [
+    autoLoadMore,
+    vitaminesLoaded,
+    groupedVitamines.length,
+    hasMore,
+    selectedFilter,
+    selectedDate,
+  ]);
+
+  useEffect(() => {
     if (!autoLoadMore) return;
     if (!vitaminesLoaded) return;
     if (groupedVitamines.length > 0 || !hasMore) {
@@ -236,7 +252,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
       setAutoLoadMoreAttempts(0);
       return;
     }
-    if (autoLoadMoreAttempts >= 3) {
+    if (autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS) {
       setAutoLoadMore(false);
       return;
     }
