@@ -28,7 +28,6 @@ export default function ImmunosScreen() {
     } else if (tab === "vitamines") {
       setSelectedTab("vitamines");
     }
-    // Ne pas changer l'onglet si aucun paramètre 'tab' n'est fourni
   }, [tab]);
 
   // écoute en temps réel des vitamines
@@ -84,7 +83,7 @@ export default function ImmunosScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* SCROLLVIEW DES CHARTS */}
+      {/* CONTENU */}
       <View style={styles.container}>
         {selectedTab === "vitamines" ? (
           <VitaminesScreen vitamines={vitamines} />

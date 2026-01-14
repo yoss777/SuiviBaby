@@ -1,11 +1,15 @@
+import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterPompage,
   modifierPompage,
   supprimerPompage,
 } from "@/migration/eventsDoubleWriteService";
 import { ecouterPompagesHybrid as ecouterPompages } from "@/migration/eventsHybridService";
+import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -15,13 +19,22 @@ import {
   Alert,
   FlatList,
   Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Calendar, DateData } from "react-native-calendars";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useHeaderRight } from "../_layout";
 
-// Interface pour typer les données
+// ============================================
+// TYPES
+// ============================================
+type FilterType = "today" | "past";
+
 interface Pompage {
   id: string;
   quantiteGauche: number;
@@ -40,44 +53,141 @@ interface PompageGroup {
   lastPompage: Pompage;
 }
 
+// ============================================
+// COMPONENT
+// ============================================
+
 export default function PompagesScreen() {
   const { activeChild } = useBaby();
+  const { setHeaderRight } = useHeaderRight();
+  const colorScheme = useColorScheme() ?? "light";
+
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  // États des données
   const [pompages, setPompages] = useState<Pompage[]>([]);
   const [groupedPompages, setGroupedPompages] = useState<PompageGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingPompage, setEditingPompage] = useState<Pompage | null>(null);
 
   // États du formulaire
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [editingPompage, setEditingPompage] = useState<Pompage | null>(null);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
   const [quantiteGauche, setQuantiteGauche] = useState<number>(100);
   const [quantiteDroite, setQuantiteDroite] = useState<number>(100);
+
+  // États des pickers
+  const [showDate, setShowDate] = useState(false);
+  const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
   const { openModal } = useLocalSearchParams();
 
-  // interval ref pour la gestion du picker
+  // Ref pour la gestion du picker avec accélération
   const intervalRef = useRef<number | undefined>(undefined);
 
   // Ref pour le BottomSheet
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  // Snap points pour le BottomSheet
-  const snapPoints = useMemo(() => ["75%", "90%"], []);
+  // ============================================
+  // EFFECTS - HEADER
+  // ============================================
+
+  // Gérer le bouton calendrier
+  const handleCalendarPress = useCallback(() => {
+    setShowCalendar((prev) => {
+      const newValue = !prev;
+
+      if (newValue) {
+        const today = new Date();
+        const todayString = `${today.getFullYear()}-${String(
+          today.getMonth() + 1
+        ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        setSelectedDate(todayString);
+        setSelectedFilter(null);
+      }
+
+      return newValue;
+    });
+  }, []);
+
+  // Gérer l'ouverture du modal d'ajout
+  const openAddModal = useCallback(() => {
+    setDateHeure(new Date());
+    setEditingPompage(null);
+    setIsSubmitting(false);
+    setQuantiteGauche(100);
+    setQuantiteDroite(100);
+    bottomSheetRef.current?.expand();
+  }, []);
+
+  // Définir les boutons du header (calendrier + ajouter)
+  useEffect(() => {
+    const headerButtons = (
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingRight: 16,
+          gap: 0,
+        }}
+      >
+        <Pressable
+          onPress={handleCalendarPress}
+          style={[
+            styles.headerButton,
+            { paddingLeft: 12 },
+            showCalendar && {
+              backgroundColor: Colors[colorScheme].tint + "20",
+            },
+          ]}
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={24}
+            color={Colors[colorScheme].tint}
+          />
+        </Pressable>
+        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+        </Pressable>
+      </View>
+    );
+
+    setHeaderRight(headerButtons);
+
+    return () => {
+      setHeaderRight(null);
+    };
+  }, [
+    handleCalendarPress,
+    showCalendar,
+    colorScheme,
+    setHeaderRight,
+    openAddModal,
+  ]);
+
+  // ============================================
+  // EFFECTS - URL PARAMS
+  // ============================================
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useEffect(() => {
     if (openModal === "true") {
       const timer = setTimeout(() => {
-        openModalHandler();
+        openAddModal();
         router.replace("/(drawer)/baby/pompages");
       }, 100);
 
       return () => clearTimeout(timer);
     }
-  }, [openModal]);
+  }, [openModal, openAddModal]);
+
+  // ============================================
+  // EFFECTS - DATA LISTENERS
+  // ============================================
 
   // Écoute en temps réel
   useEffect(() => {
@@ -86,13 +196,40 @@ export default function PompagesScreen() {
     return () => unsubscribe();
   }, [activeChild]);
 
-  // Regroupement par jour
+  // Filtrage et regroupement par jour
   useEffect(() => {
-    const grouped = groupPompagesByDay(pompages);
-    setGroupedPompages(grouped);
-  }, [pompages]);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
 
-// Nettoyage de l'intervalle lors du démontage
+    const filtered = pompages.filter((pompage) => {
+      const pompageDate = new Date(pompage.date.seconds * 1000);
+      pompageDate.setHours(0, 0, 0, 0);
+      const pompageTime = pompageDate.getTime();
+
+      if (selectedDate) {
+        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
+        const calDate = new Date(calYear, calMonth - 1, calDay);
+        calDate.setHours(0, 0, 0, 0);
+        return pompageTime === calDate.getTime();
+      }
+
+      switch (selectedFilter) {
+        case "today":
+          return pompageTime === todayTime;
+        case "past":
+          return pompageTime < todayTime;
+        case null:
+        default:
+          return true;
+      }
+    });
+
+    const grouped = groupPompagesByDay(filtered);
+    setGroupedPompages(grouped);
+  }, [pompages, selectedFilter, selectedDate, showCalendar]);
+
+  // Nettoyage de l'intervalle lors du démontage
   useEffect(() => {
     return () => {
       if (intervalRef.current) {
@@ -101,40 +238,71 @@ export default function PompagesScreen() {
     };
   }, []);
 
-  const handlePressIn = (action: () => void) => {
-    action();
+  // ============================================
+  // HELPERS - CALENDAR
+  // ============================================
 
-    let speed = 200; // Démarre lentement
-
-    const accelerate = () => {
-      action();
-      if (speed > 50) {
-        speed -= 20; // Accélère progressivement
-        clearInterval(intervalRef.current);
-        intervalRef.current = setInterval(accelerate, speed);
-      }
-    };
-
-    intervalRef.current = setInterval(accelerate, speed);
-  };
-
-  const handlePressOut = () => {
-    // Arrête la répétition quand l'utilisateur relâche
-   if (intervalRef.current !== undefined) {
-    clearInterval(intervalRef.current);
-    intervalRef.current = undefined;
-  }
-  };
-
-    const groupPompagesByDay = (pompages: Pompage[]): PompageGroup[] => {
-    const groups: { [key: string]: Pompage[] } = {};
+  // Préparer les dates marquées pour le calendrier
+  const markedDates = useMemo(() => {
+    const marked: Record<string, any> = {};
 
     pompages.forEach((pompage) => {
-      const date = new Date(pompage.date?.seconds * 1000);
+      const date = new Date(pompage.date.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
       const dateKey = `${year}-${month}-${day}`;
+
+      marked[dateKey] = {
+        marked: true,
+        dotColor: Colors[colorScheme].tint,
+      };
+    });
+
+    if (selectedDate) {
+      marked[selectedDate] = {
+        ...marked[selectedDate],
+        selected: true,
+        selectedColor: Colors[colorScheme].tint,
+      };
+    }
+
+    return marked;
+  }, [pompages, selectedDate, colorScheme]);
+
+  const handleDateSelect = (day: DateData) => {
+    setSelectedDate(day.dateString);
+    setExpandedDays(new Set([day.dateString]));
+  };
+
+  const handleFilterPress = (filter: FilterType) => {
+    setSelectedFilter(filter);
+    setSelectedDate(null);
+    setShowCalendar(false);
+
+    if (filter === "today") {
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(
+        today.getMonth() + 1
+      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      setExpandedDays(new Set([todayKey]));
+    } else {
+      setExpandedDays(new Set());
+    }
+  };
+
+  // ============================================
+  // HELPERS - GROUPING
+  // ============================================
+
+  const groupPompagesByDay = (pompages: Pompage[]): PompageGroup[] => {
+    const groups: { [key: string]: Pompage[] } = {};
+
+    pompages.forEach((pompage) => {
+      const date = new Date(pompage.date?.seconds * 1000);
+      const dateKey = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
       if (!groups[dateKey]) {
         groups[dateKey] = [];
@@ -180,6 +348,37 @@ export default function PompagesScreen() {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
+  // ============================================
+  // HELPERS - QUANTITY PICKER
+  // ============================================
+
+  const handlePressIn = (action: () => void) => {
+    action();
+
+    let speed = 200;
+
+    const accelerate = () => {
+      action();
+      if (speed > 50) {
+        speed -= 20;
+        clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(accelerate, speed);
+      }
+    };
+
+    intervalRef.current = setInterval(accelerate, speed);
+  };
+
+  const handlePressOut = () => {
+    if (intervalRef.current !== undefined) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = undefined;
+    }
+  };
+
+  // ============================================
+  // HELPERS - UI
+  // ============================================
 
   const toggleExpand = (dateKey: string) => {
     const newExpandedDays = new Set(expandedDays);
@@ -191,15 +390,9 @@ export default function PompagesScreen() {
     setExpandedDays(newExpandedDays);
   };
 
-  const openModalHandler = () => {
-    const now = new Date();
-    setDateHeure(new Date(now.getTime()));
-    setQuantiteGauche(100);
-    setQuantiteDroite(100);
-    setIsSubmitting(false);
-    setEditingPompage(null);
-    bottomSheetRef.current?.expand();
-  };
+  // ============================================
+  // HANDLERS - MODAL
+  // ============================================
 
   const openEditModal = (pompage: Pompage) => {
     setDateHeure(new Date(pompage.date.seconds * 1000));
@@ -220,80 +413,73 @@ export default function PompagesScreen() {
     closeModal();
   }, []);
 
-  const handleSubmitPompage = async () => {
-    if (isSubmitting) {
-      return;
-    }
+  // ============================================
+  // HANDLERS - CRUD
+  // ============================================
+
+  const handleSubmit = async () => {
+    if (isSubmitting || !activeChild) return;
 
     try {
       setIsSubmitting(true);
 
-      if (!activeChild) {
-        throw new Error("Aucun enfant sélectionné");
-      }
+      const dataToSave = {
+        quantiteGauche,
+        quantiteDroite,
+        date: dateHeure,
+      };
 
       if (editingPompage) {
-        await modifierPompage(activeChild.id, editingPompage.id, {
-          quantiteGauche,
-          quantiteDroite,
-          date: dateHeure,
-        });
+        await modifierPompage(activeChild.id, editingPompage.id, dataToSave);
       } else {
-        await ajouterPompage(activeChild.id, {
-          quantiteGauche,
-          quantiteDroite,
-          date: dateHeure,
-        });
+        await ajouterPompage(activeChild.id, dataToSave);
       }
 
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde du pompage:", error);
+      Alert.alert(
+        "Erreur",
+        "Impossible de sauvegarder le pompage. Veuillez réessayer."
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDeletePompage = async () => {
-    if (isSubmitting) {
-      return;
-    }
+  const handleDelete = async () => {
+    if (isSubmitting || !editingPompage || !activeChild) return;
 
-    try {
-      setIsSubmitting(true);
-
-      if (editingPompage) {
-        Alert.alert("Suppression", "Voulez-vous vraiment vous supprimer ?", [
-          {
-            text: "Annuler",
-            style: "cancel",
-          },
-          {
-            text: "Supprimer",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                if (!activeChild) return;
-                await supprimerPompage(activeChild.id, editingPompage.id);
-                closeModal();
-              } catch (error) {
-                Alert.alert(
-                  "Erreur",
-                  "Impossible de se supprimer. Veuillez réessayer plus tard."
-                );
-              }
-            },
-          },
-        ]);
-      } else {
-        throw new Error("Aucune miction sélectionnée pour la suppression.");
-      }
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde de la miction:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    Alert.alert("Suppression", "Voulez-vous vraiment supprimer ce pompage ?", [
+      {
+        text: "Annuler",
+        style: "cancel",
+      },
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setIsSubmitting(true);
+            await supprimerPompage(activeChild.id, editingPompage.id);
+            closeModal();
+          } catch (error) {
+            console.error("Erreur lors de la suppression:", error);
+            Alert.alert(
+              "Erreur",
+              "Impossible de supprimer le pompage. Veuillez réessayer."
+            );
+          } finally {
+            setIsSubmitting(false);
+          }
+        },
+      },
+    ]);
   };
+
+  // ============================================
+  // HANDLERS - DATE/TIME PICKERS
+  // ============================================
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
@@ -315,12 +501,15 @@ export default function PompagesScreen() {
     if (selectedDate) {
       setDateHeure((prev) => {
         const newDate = new Date(prev);
-        newDate.setHours(selectedDate.getHours());
-        newDate.setMinutes(selectedDate.getMinutes());
+        newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
         return newDate;
       });
     }
   };
+
+  // ============================================
+  // RENDER - POMPAGE ITEM
+  // ============================================
 
   const renderPompageItem = (pompage: Pompage, isLast: boolean = false) => (
     <TouchableOpacity
@@ -347,11 +536,11 @@ export default function PompagesScreen() {
           </Text>
         </View>
         <View style={styles.headerActions}>
-          {isLast && (
+          {/* {isLast && (
             <View style={styles.recentBadge}>
               <Text style={styles.recentText}>Récent</Text>
             </View>
-          )}
+          )} */}
           <FontAwesome
             name="edit"
             size={16}
@@ -388,7 +577,11 @@ export default function PompagesScreen() {
     </TouchableOpacity>
   );
 
-  const renderDayGroup = ({ item }: { item: PompageGroup }) => {
+  // ============================================
+  // RENDER - DAY GROUP
+  // ============================================
+
+const renderDayGroup = ({ item }: { item: PompageGroup }) => {
     const isExpanded = expandedDays.has(item.date);
     const hasMultiplePompages = item.pompages.length > 1;
 
@@ -448,270 +641,390 @@ export default function PompagesScreen() {
     );
   };
 
+  // ============================================
+  // RENDER - MAIN
+  // ============================================
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
-          <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Ajourter un pompage</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView
+        style={[
+          { flex: 1 },
+          { backgroundColor: Colors[colorScheme].background },
+        ]}
+        edges={["bottom"]}
+      >
+        <View>
+          {/* Filtres */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterContainer}
+            contentContainerStyle={styles.filterContent}
+          >
+            <Pressable
+              onPress={() => handleFilterPress("today")}
+              style={[
+                styles.filterButton,
+                selectedFilter === "today" && {
+                  backgroundColor: Colors[colorScheme].tint,
+                },
+              ]}
+            >
+              <ThemedText
+                style={[
+                  styles.filterText,
+                  selectedFilter === "today" && styles.filterTextActive,
+                ]}
+              >
+                Aujourd&apos;hui
+              </ThemedText>
+            </Pressable>
 
-      <FlatList
-        data={groupedPompages}
-        keyExtractor={(item) => item.date}
-        renderItem={renderDayGroup}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <FontAwesome name="pump-medical" size={48} color="#ccc" />
-            <Text style={styles.emptyText}>Aucune session enregistrée</Text>
-            <Text style={styles.emptySubtext}>
-              Ajoutez votre première session tire-lait
+            <Pressable
+              onPress={() => handleFilterPress("past")}
+              style={[
+                styles.filterButton,
+                selectedFilter === "past" && {
+                  backgroundColor: Colors[colorScheme].tint,
+                },
+              ]}
+            >
+              <ThemedText
+                style={[
+                  styles.filterText,
+                  selectedFilter === "past" && styles.filterTextActive,
+                ]}
+              >
+                Passés
+              </ThemedText>
+            </Pressable>
+          </ScrollView>
+
+          {/* Calendrier */}
+          {showCalendar && (
+            <View style={styles.calendarContainer}>
+              <Calendar
+                onDayPress={handleDateSelect}
+                markedDates={markedDates}
+                theme={{
+                  backgroundColor: Colors[colorScheme].background,
+                  calendarBackground: Colors[colorScheme].background,
+                  textSectionTitleColor: Colors[colorScheme].text,
+                  selectedDayBackgroundColor: Colors[colorScheme].tint,
+                  selectedDayTextColor: "#ffffff",
+                  todayTextColor: Colors[colorScheme].tint,
+                  dayTextColor: Colors[colorScheme].text,
+                  textDisabledColor: Colors[colorScheme].tabIconDefault,
+                  dotColor: Colors[colorScheme].tint,
+                  selectedDotColor: "#ffffff",
+                  arrowColor: Colors[colorScheme].tint,
+                  monthTextColor: Colors[colorScheme].text,
+                  indicatorColor: Colors[colorScheme].tint,
+                }}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* Liste des pompages */}
+        {groupedPompages.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons
+              name="calendar-outline"
+              size={64}
+              color={Colors[colorScheme].tabIconDefault}
+            />
+            <ThemedText style={styles.emptyText}>
+              {pompages.length === 0
+                ? "Aucune session enregistrée"
+                : "Aucune session pour ce filtre"}
+            </ThemedText>
+          </View>
+        ) : (
+          <FlatList
+            data={groupedPompages}
+            keyExtractor={(item) => item.date}
+            renderItem={renderDayGroup}
+            showsVerticalScrollIndicator={false}
+            style={styles.flatlistContent}
+            contentContainerStyle={styles.listContent}
+          />
+        )}
+
+        {/* Bottom Sheet d'ajout/édition */}
+        <FormBottomSheet
+          ref={bottomSheetRef}
+          title={editingPompage ? "Modifier la session" : "Nouvelle session"}
+          icon={editingPompage ? "edit" : "pump-medical"}
+          accentColor="#28a745"
+          isEditing={!!editingPompage}
+          isSubmitting={isSubmitting}
+          onSubmit={handleSubmit}
+          onDelete={editingPompage ? handleDelete : undefined}
+          onCancel={cancelForm}
+          onClose={() => {
+            setIsSubmitting(false);
+            setEditingPompage(null);
+          }}
+        >
+          {/* Quantité Sein Gauche */}
+          <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
+          <View style={styles.quantityPickerRow}>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                isSubmitting && styles.quantityButtonDisabled,
+              ]}
+              onPressIn={() =>
+                handlePressIn(() =>
+                  setQuantiteGauche((q) => Math.max(0, q - 5))
+                )
+              }
+              onPressOut={handlePressOut}
+              disabled={isSubmitting}
+            >
+              <Text
+                style={[
+                  styles.quantityButtonText,
+                  isSubmitting && styles.quantityButtonTextDisabled,
+                ]}
+              >
+                -
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.quantityPickerValue}>{quantiteGauche} ml</Text>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                isSubmitting && styles.quantityButtonDisabled,
+              ]}
+              onPressIn={() =>
+                handlePressIn(() => setQuantiteGauche((q) => q + 5))
+              }
+              onPressOut={handlePressOut}
+              disabled={isSubmitting}
+            >
+              <Text
+                style={[
+                  styles.quantityButtonText,
+                  isSubmitting && styles.quantityButtonTextDisabled,
+                ]}
+              >
+                +
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Quantité Sein Droit */}
+          <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
+          <View style={styles.quantityPickerRow}>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                isSubmitting && styles.quantityButtonDisabled,
+              ]}
+              onPressIn={() =>
+                handlePressIn(() =>
+                  setQuantiteDroite((q) => Math.max(0, q - 5))
+                )
+              }
+              onPressOut={handlePressOut}
+              disabled={isSubmitting}
+            >
+              <Text
+                style={[
+                  styles.quantityButtonText,
+                  isSubmitting && styles.quantityButtonTextDisabled,
+                ]}
+              >
+                -
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.quantityPickerValue}>{quantiteDroite} ml</Text>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                isSubmitting && styles.quantityButtonDisabled,
+              ]}
+              onPressIn={() =>
+                handlePressIn(() => setQuantiteDroite((q) => q + 5))
+              }
+              onPressOut={handlePressOut}
+              disabled={isSubmitting}
+            >
+              <Text
+                style={[
+                  styles.quantityButtonText,
+                  isSubmitting && styles.quantityButtonTextDisabled,
+                ]}
+              >
+                +
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Date & Heure */}
+          <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+          <View style={styles.dateTimeContainer}>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                isSubmitting && styles.dateButtonDisabled,
+              ]}
+              onPress={() => setShowDate(true)}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="calendar-alt"
+                size={16}
+                color={isSubmitting ? "#ccc" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.dateButtonText,
+                  isSubmitting && styles.dateButtonTextDisabled,
+                ]}
+              >
+                Date
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                isSubmitting && styles.dateButtonDisabled,
+              ]}
+              onPress={() => setShowTime(true)}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="clock"
+                size={16}
+                color={isSubmitting ? "#ccc" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.dateButtonText,
+                  isSubmitting && styles.dateButtonTextDisabled,
+                ]}
+              >
+                Heure
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.selectedDateTime}>
+            <Text style={styles.selectedDate}>
+              {dateHeure.toLocaleDateString("fr-FR", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </Text>
+            <Text style={styles.selectedTime}>
+              {dateHeure.toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </Text>
           </View>
-        }
-      />
 
-      {/* Bottom Sheet d'ajout/édition */}
-      <FormBottomSheet
-        ref={bottomSheetRef}
-        title={editingPompage ? "Modifier la session" : "Nouvelle session"}
-        icon={editingPompage ? "edit" : "pump-medical"}
-        accentColor="#28a745"
-        isEditing={!!editingPompage}
-        isSubmitting={isSubmitting}
-        onSubmit={handleSubmitPompage}
-        onDelete={editingPompage ? handleDeletePompage : undefined}
-        onCancel={cancelForm}
-        onClose={() => {
-          setIsSubmitting(false);
-          setEditingPompage(null);
-        }}
-      >
-
-            {/* Quantité Sein Gauche */}
-            <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
-            <View style={styles.quantityRow}>
-              <TouchableOpacity
-                style={[
-                  styles.quantityButton,
-                  isSubmitting && styles.quantityButtonDisabled,
-                ]}
-                // onPress={() => setQuantiteGauche((q) => Math.max(0, q - 5))}
-                onPressIn={() =>
-                  handlePressIn(() =>
-                    setQuantiteGauche((q) => Math.max(0, q - 5))
-                  )
-                }
-                onPressOut={handlePressOut}
-                disabled={isSubmitting}
-              >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
-                    isSubmitting && styles.quantityButtonTextDisabled,
-                  ]}
-                >
-                  -
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.quantityValue}>{quantiteGauche} ml</Text>
-              <TouchableOpacity
-                style={[
-                  styles.quantityButton,
-                  isSubmitting && styles.quantityButtonDisabled,
-                ]}
-                // onPress={() => setQuantiteGauche((q) => q + 5)}
-                onPressIn={() =>
-                  handlePressIn(() =>
-                    setQuantiteGauche((q) => Math.max(0, q + 5))
-                  )
-                }
-                onPressOut={handlePressOut}
-                disabled={isSubmitting}
-              >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
-                    isSubmitting && styles.quantityButtonTextDisabled,
-                  ]}
-                >
-                  +
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Quantité Sein Droit */}
-            <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
-            <View style={styles.quantityRow}>
-              <TouchableOpacity
-                style={[
-                  styles.quantityButton,
-                  isSubmitting && styles.quantityButtonDisabled,
-                ]}
-                // onPress={() => setQuantiteDroite((q) => Math.max(0, q - 5))}
-                onPressIn={() =>
-                  handlePressIn(() =>
-                    setQuantiteDroite((q) => Math.max(0, q - 5))
-                  )
-                }
-                onPressOut={handlePressOut}
-                disabled={isSubmitting}
-              >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
-                    isSubmitting && styles.quantityButtonTextDisabled,
-                  ]}
-                >
-                  -
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.quantityValue}>{quantiteDroite} ml</Text>
-              <TouchableOpacity
-                style={[
-                  styles.quantityButton,
-                  isSubmitting && styles.quantityButtonDisabled,
-                ]}
-                // onPress={() => setQuantiteDroite((q) => q + 5)}
-                onPressIn={() =>
-                  handlePressIn(() =>
-                    setQuantiteDroite((q) => Math.max(0, q + 5))
-                  )
-                }
-                onPressOut={handlePressOut}
-                disabled={isSubmitting}
-              >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
-                    isSubmitting && styles.quantityButtonTextDisabled,
-                  ]}
-                >
-                  +
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Date & Heure */}
-            <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-            <View style={styles.dateTimeContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  isSubmitting && styles.dateButtonDisabled,
-                ]}
-                onPress={() => setShowDate(true)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="calendar-alt"
-                  size={16}
-                  color={isSubmitting ? "#ccc" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.dateButtonText,
-                    isSubmitting && styles.dateButtonTextDisabled,
-                  ]}
-                >
-                  Date
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  isSubmitting && styles.dateButtonDisabled,
-                ]}
-                onPress={() => setShowTime(true)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="clock"
-                  size={16}
-                  color={isSubmitting ? "#ccc" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.dateButtonText,
-                    isSubmitting && styles.dateButtonTextDisabled,
-                  ]}
-                >
-                  Heure
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.selectedDateTime}>
-              <Text style={styles.selectedDate}>
-                {dateHeure.toLocaleDateString("fr-FR", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </Text>
-              <Text style={styles.selectedTime}>
-                {dateHeure.toLocaleTimeString("fr-FR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </Text>
-            </View>
-
-            {showDate && (
-              <DateTimePicker
-                value={dateHeure}
-                mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onChangeDate}
-              />
-            )}
-            {showTime && (
-              <DateTimePicker
-                value={dateHeure}
-                mode="time"
-                is24Hour={true}
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onChangeTime}
-              />
-            )}
-
-      </FormBottomSheet>
+          {showDate && (
+            <DateTimePicker
+              value={dateHeure}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onChangeDate}
+            />
+          )}
+          {showTime && (
+            <DateTimePicker
+              value={dateHeure}
+              mode="time"
+              is24Hour={true}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onChangeTime}
+            />
+          )}
+        </FormBottomSheet>
+      </SafeAreaView>
     </View>
   );
 }
+
+// ============================================
+// STYLES
+// ============================================
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
   },
-  header: {
-    padding: 16,
-    paddingBottom: 8,
+  flatlistContent: {
+    paddingVertical: 16,
   },
-  addButton: {
-    backgroundColor: "#28a745",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+  headerButton: {
+    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+  },
+  calendarContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  // Filter Bar
+  filterContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  filterContent: {
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
     gap: 8,
   },
-  addButtonText: {
-    color: "white",
-    fontSize: 16,
+  filterButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterText: {
+    fontSize: 14,
     fontWeight: "600",
+  },
+  filterTextActive: {
+    color: "#fff",
   },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
+  // Section
+  section: {
+    marginBottom: 24,
+  },
+  dateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+  },
+  dateText: {
+    fontSize: 16,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  // Day Card
   dayCard: {
     backgroundColor: "white",
     marginBottom: 12,
@@ -727,16 +1040,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   dayInfo: {
     flex: 1,
-  },
-  dayDate: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 6,
   },
   summaryInfo: {
     flexDirection: "row",
@@ -771,6 +1078,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
+  // Pompage Item
   pompageItem: {
     backgroundColor: "#f8f9fa",
     borderRadius: 12,
@@ -867,6 +1175,7 @@ const styles = StyleSheet.create({
     color: "white",
     fontWeight: "bold",
   },
+  // Expanded Content
   expandedContent: {
     marginTop: 8,
   },
@@ -875,6 +1184,136 @@ const styles = StyleSheet.create({
     backgroundColor: "#eee",
     marginBottom: 12,
   },
+  // Empty State
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 100,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: "#666",
+    marginTop: 16,
+    fontWeight: "600",
+  },
+  // Modal Content
+  modalCategoryLabel: {
+    alignSelf: "center",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 10,
+  },
+  // Quantity Picker
+  quantityPickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  quantityButton: {
+    backgroundColor: "#f0f0f0",
+    padding: 12,
+    borderRadius: 8,
+    minWidth: 40,
+    alignItems: "center",
+  },
+  quantityButtonDisabled: {
+    backgroundColor: "#f8f8f8",
+    opacity: 0.5,
+  },
+  quantityButtonText: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#666",
+  },
+  quantityButtonTextDisabled: {
+    color: "#ccc",
+  },
+  quantityPickerValue: {
+    fontSize: 20,
+    marginHorizontal: 20,
+    fontWeight: "bold",
+    color: "#000000",
+  },
+  // Date/Time
+  dateTimeContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 20,
+  },
+  dateButton: {
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+  },
+  dateButtonDisabled: {
+    backgroundColor: "#f5f5f5",
+    opacity: 0.5,
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: "#666",
+    marginTop: 4,
+  },
+  dateButtonTextDisabled: {
+    color: "#ccc",
+  },
+  selectedDateTime: {
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+  },
+  selectedDate: {
+    fontSize: 16,
+    color: "#333",
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  selectedTime: {
+    fontSize: 20,
+    color: "#28a745",
+    fontWeight: "bold",
+  },
+  //////////////////
+  header: {
+    padding: 16,
+    paddingBottom: 8,
+  },
+  addButton: {
+    backgroundColor: "#28a745",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  addButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  dayDate: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 6,
+  },
+
   historyLabel: {
     fontSize: 12,
     color: "#999",
@@ -886,12 +1325,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 18,
-    color: "#666",
-    marginTop: 16,
-    fontWeight: "600",
   },
   emptySubtext: {
     fontSize: 14,
@@ -922,81 +1355,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     color: "#333",
-  },
-  modalCategoryLabel: {
-    alignSelf: "center",
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-  },
-  quantityButton: {
-    backgroundColor: "#f0f0f0",
-    padding: 12,
-    borderRadius: 8,
-    minWidth: 40,
-    alignItems: "center",
-  },
-  quantityButtonDisabled: {
-    backgroundColor: "#f8f8f8",
-    opacity: 0.5,
-  },
-  quantityButtonText: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#666",
-  },
-  quantityButtonTextDisabled: {
-    color: "#ccc",
-  },
-  dateTimeContainer: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 20,
-  },
-  dateButton: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-  },
-  dateButtonDisabled: {
-    backgroundColor: "#f5f5f5",
-    opacity: 0.5,
-  },
-  dateButtonText: {
-    fontSize: 16,
-    color: "#666",
-    fontWeight: "500",
-  },
-  dateButtonTextDisabled: {
-    color: "#ccc",
-  },
-  selectedDateTime: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-  },
-  selectedDate: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  selectedTime: {
-    fontSize: 20,
-    color: "#28a745",
-    fontWeight: "bold",
   },
   actionButtonsContainer: {
     paddingHorizontal: 20,

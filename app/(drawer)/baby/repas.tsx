@@ -621,6 +621,11 @@ export default function RepasScreen() {
           </View>
           <View style={styles.mealInfo}>
             <View style={styles.infoRow}>
+              <Text style={styles.mealTypeText}>
+                Quantité : {quantityDisplay}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
               <Text style={styles.timeText}>
                 {new Date(meal.date?.seconds * 1000).toLocaleTimeString(
                   "fr-FR",
@@ -629,11 +634,6 @@ export default function RepasScreen() {
                     minute: "2-digit",
                   }
                 )}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.mealTypeText}>
-                Quantité : {quantityDisplay}
               </Text>
             </View>
           </View>
@@ -664,9 +664,15 @@ export default function RepasScreen() {
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
-              <Text style={styles.summaryText}>
-                {item.meals.length} repas • {item.totalQuantity} ml total
-              </Text>
+              <View>
+                  <Text style={styles.summaryText}>
+                    {item.meals.length} repas</Text>
+                  <Text style={styles.summaryText}>
+                    {item.totalQuantity > 0
+                      ? `Biberon(s) : ${item.totalQuantity} ml`
+                      : "0 biberon"}
+                  </Text>
+                </View>
             </View>
           </View>
           {hasMultipleMeals && (
@@ -695,7 +701,6 @@ export default function RepasScreen() {
       </View>
     );
   };
-
   // ============================================
   // RENDER - MAIN
   // ============================================
@@ -1146,7 +1151,25 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
-
+  // Meal Section
+  section: {
+    marginBottom: 24,
+  },
+  dateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+  },
+  dateText: {
+    fontSize: 16,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
   // Meal Item
   mealItem: {
     backgroundColor: "#f8f9fa",
@@ -1171,17 +1194,16 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
-    gap: 8,
+    marginBottom: 2,
   },
   timeText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  mealTypeText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
-  },
-  mealTypeText: {
-    fontSize: 14,
-    color: "#666",
   },
   mealActions: {
     flexDirection: "row",

@@ -1,11 +1,15 @@
+import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterVitamine,
   modifierVitamine,
   supprimerVitamine,
 } from "@/migration/eventsDoubleWriteService";
 import { Vitamine, VitamineGroup } from "@/types/interfaces";
+import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -15,64 +19,250 @@ import {
   Alert,
   FlatList,
   Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Calendar, DateData } from "react-native-calendars";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useHeaderRight } from "../(drawer)/_layout";
+
+// ============================================
+// TYPES
+// ============================================
+type FilterType = "today" | "past";
 
 type Props = {
-  vitamines: any[];
+  vitamines: Vitamine[];
 };
+
+// ============================================
+// COMPONENT
+// ============================================
 
 export default function VitaminesScreen({ vitamines }: Props) {
   const { activeChild } = useBaby();
+  const { setHeaderRight } = useHeaderRight();
+  const colorScheme = useColorScheme() ?? "light";
+
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  // États des données
   const [groupedVitamines, setGroupedVitamines] = useState<VitamineGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingVitamine, setEditingVitamine] = useState<Vitamine | null>(null);
 
   // États du formulaire
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [editingVitamine, setEditingVitamine] = useState<Vitamine | null>(null);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
+
+  // États des pickers
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
-
-  // Ref pour le BottomSheet
-  const bottomSheetRef = useRef<BottomSheet>(null);
-
-  // Snap points pour le BottomSheet
-  const snapPoints = useMemo(() => ["75%", "90%"], []);
 
   // Récupérer les paramètres de l'URL
   const { openModal } = useLocalSearchParams();
 
-  // Ouvrir automatiquement le modal si le paramètre openModal est présent
+  // Ref pour le BottomSheet
+  const bottomSheetRef = useRef<BottomSheet>(null);
+
+  // ============================================
+  // EFFECTS - HEADER
+  // ============================================
+
+  // Gérer le bouton calendrier
+  const handleCalendarPress = useCallback(() => {
+    setShowCalendar((prev) => {
+      const newValue = !prev;
+
+      if (newValue) {
+        const today = new Date();
+        const todayString = `${today.getFullYear()}-${String(
+          today.getMonth() + 1
+        ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        setSelectedDate(todayString);
+        setSelectedFilter(null);
+      }
+
+      return newValue;
+    });
+  }, []);
+
+  // Gérer l'ouverture du modal d'ajout
+  const openAddModal = useCallback(() => {
+    setDateHeure(new Date());
+    setEditingVitamine(null);
+    setIsSubmitting(false);
+    bottomSheetRef.current?.expand();
+  }, []);
+
+  // Définir les boutons du header (calendrier + ajouter)
+  useEffect(() => {
+    const headerButtons = (
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingRight: 16,
+          gap: 0,
+        }}
+      >
+        <Pressable
+          onPress={handleCalendarPress}
+          style={[
+            styles.headerButton,
+            { paddingLeft: 12 },
+            showCalendar && {
+              backgroundColor: Colors[colorScheme].tint + "20",
+            },
+          ]}
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={24}
+            color={Colors[colorScheme].tint}
+          />
+        </Pressable>
+        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+        </Pressable>
+      </View>
+    );
+
+    setHeaderRight(headerButtons);
+
+    return () => {
+      setHeaderRight(null);
+    };
+  }, [
+    handleCalendarPress,
+    showCalendar,
+    colorScheme,
+    setHeaderRight,
+    openAddModal,
+  ]);
+
+  // ============================================
+  // EFFECTS - URL PARAMS
+  // ============================================
+
   useEffect(() => {
     if (openModal === "true") {
       const timer = setTimeout(() => {
-        openModalHandler();
+        openAddModal();
         router.replace("/(drawer)/baby/immunos");
       }, 100);
 
       return () => clearTimeout(timer);
     }
-  }, [openModal]);
+  }, [openModal, openAddModal]);
 
-  // Regroupement par jour
+  // ============================================
+  // EFFECTS - DATA LISTENERS
+  // ============================================
+
+  // Filtrage et regroupement par jour
   useEffect(() => {
-    const grouped = groupVitaminesByDay(vitamines);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    const filtered = vitamines.filter((vitamine) => {
+      const vitamineDate = new Date(vitamine.date.seconds * 1000);
+      vitamineDate.setHours(0, 0, 0, 0);
+      const vitamineTime = vitamineDate.getTime();
+
+      if (selectedDate) {
+        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
+        const calDate = new Date(calYear, calMonth - 1, calDay);
+        calDate.setHours(0, 0, 0, 0);
+        return vitamineTime === calDate.getTime();
+      }
+
+      switch (selectedFilter) {
+        case "today":
+          return vitamineTime === todayTime;
+        case "past":
+          return vitamineTime < todayTime;
+        case null:
+        default:
+          return true;
+      }
+    });
+
+    const grouped = groupVitaminesByDay(filtered);
     setGroupedVitamines(grouped);
-  }, [vitamines]);
+  }, [vitamines, selectedFilter, selectedDate, showCalendar]);
+
+  // ============================================
+  // HELPERS - CALENDAR
+  // ============================================
+
+  const markedDates = useMemo(() => {
+    const marked: Record<string, any> = {};
+
+    vitamines.forEach((vitamine) => {
+      const date = new Date(vitamine.date.seconds * 1000);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      const dateKey = `${year}-${month}-${day}`;
+
+      marked[dateKey] = {
+        marked: true,
+        dotColor: Colors[colorScheme].tint,
+      };
+    });
+
+    if (selectedDate) {
+      marked[selectedDate] = {
+        ...marked[selectedDate],
+        selected: true,
+        selectedColor: Colors[colorScheme].tint,
+      };
+    }
+
+    return marked;
+  }, [vitamines, selectedDate, colorScheme]);
+
+  const handleDateSelect = (day: DateData) => {
+    setSelectedDate(day.dateString);
+    setExpandedDays(new Set([day.dateString]));
+  };
+
+  const handleFilterPress = (filter: FilterType) => {
+    setSelectedFilter(filter);
+    setSelectedDate(null);
+    setShowCalendar(false);
+
+    if (filter === "today") {
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(
+        today.getMonth() + 1
+      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      setExpandedDays(new Set([todayKey]));
+    } else {
+      setExpandedDays(new Set());
+    }
+  };
+
+  // ============================================
+  // HELPERS - GROUPING
+  // ============================================
 
   const groupVitaminesByDay = (vitamines: Vitamine[]): VitamineGroup[] => {
     const groups: { [key: string]: Vitamine[] } = {};
 
     vitamines.forEach((vitamine) => {
       const date = new Date(vitamine.date?.seconds * 1000);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-      const dateKey = `${year}-${month}-${day}`;
+      const dateKey = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
       if (!groups[dateKey]) {
         groups[dateKey] = [];
@@ -106,6 +296,10 @@ export default function VitaminesScreen({ vitamines }: Props) {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
+  // ============================================
+  // HELPERS - UI
+  // ============================================
+
   const toggleExpand = (dateKey: string) => {
     const newExpandedDays = new Set(expandedDays);
     if (newExpandedDays.has(dateKey)) {
@@ -116,13 +310,9 @@ export default function VitaminesScreen({ vitamines }: Props) {
     setExpandedDays(newExpandedDays);
   };
 
-  const openModalHandler = () => {
-    const now = new Date();
-    setDateHeure(new Date(now.getTime()));
-    setEditingVitamine(null);
-    setIsSubmitting(false);
-    bottomSheetRef.current?.expand();
-  };
+  // ============================================
+  // HANDLERS - MODAL
+  // ============================================
 
   const openEditModal = (vitamine: Vitamine) => {
     setDateHeure(new Date(vitamine.date.seconds * 1000));
@@ -141,17 +331,15 @@ export default function VitaminesScreen({ vitamines }: Props) {
     closeModal();
   }, []);
 
-  const handleSubmitVitamine = async () => {
-    if (isSubmitting) {
-      return;
-    }
+  // ============================================
+  // HANDLERS - CRUD
+  // ============================================
+
+  const handleSubmit = async () => {
+    if (isSubmitting || !activeChild) return;
 
     try {
       setIsSubmitting(true);
-
-      if (!activeChild) {
-        throw new Error("Aucun enfant sélectionné");
-      }
 
       if (editingVitamine) {
         await modifierVitamine(activeChild.id, editingVitamine.id, {
@@ -165,53 +353,53 @@ export default function VitaminesScreen({ vitamines }: Props) {
 
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde de la prise de vitamines:", error);
+      console.error("Erreur lors de la sauvegarde de la vitamine:", error);
+      Alert.alert(
+        "Erreur",
+        "Impossible de sauvegarder la prise de vitamines. Veuillez réessayer."
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDeleteVitamine = async () => {
-    if (isSubmitting) {
-      return;
-    }
+  const handleDelete = async () => {
+    if (isSubmitting || !editingVitamine || !activeChild) return;
 
-    try {
-      setIsSubmitting(true);
-
-      if (editingVitamine) {
-        Alert.alert("Suppression", "Voulez-vous vraiment vous supprimer ?", [
-          {
-            text: "Annuler",
-            style: "cancel",
+    Alert.alert(
+      "Suppression",
+      "Voulez-vous vraiment supprimer cette prise de vitamines ?",
+      [
+        {
+          text: "Annuler",
+          style: "cancel",
+        },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setIsSubmitting(true);
+              await supprimerVitamine(activeChild.id, editingVitamine.id);
+              closeModal();
+            } catch (error) {
+              console.error("Erreur lors de la suppression:", error);
+              Alert.alert(
+                "Erreur",
+                "Impossible de supprimer la prise de vitamines. Veuillez réessayer."
+              );
+            } finally {
+              setIsSubmitting(false);
+            }
           },
-          {
-            text: "Supprimer",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                if (!activeChild) return;
-                await supprimerVitamine(activeChild.id, editingVitamine.id);
-                closeModal();
-              } catch (error) {
-                Alert.alert(
-                  "Erreur",
-                  "Impossible de se supprimer. Veuillez réessayer plus tard."
-                );
-              }
-            },
-          },
-        ]);
-      } else {
-        throw new Error("Aucune miction sélectionnée pour la suppression.");
-      }
-
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde de la miction:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
+        },
+      ]
+    );
   };
+
+  // ============================================
+  // HANDLERS - DATE/TIME PICKERS
+  // ============================================
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDate(false);
@@ -233,12 +421,15 @@ export default function VitaminesScreen({ vitamines }: Props) {
     if (selectedDate) {
       setDateHeure((prev) => {
         const newDate = new Date(prev);
-        newDate.setHours(selectedDate.getHours());
-        newDate.setMinutes(selectedDate.getMinutes());
+        newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
         return newDate;
       });
     }
   };
+
+  // ============================================
+  // RENDER - VITAMINE ITEM
+  // ============================================
 
   const renderVitamineItem = (vitamine: Vitamine, isLast: boolean = false) => (
     <TouchableOpacity
@@ -260,16 +451,25 @@ export default function VitaminesScreen({ vitamines }: Props) {
           })}
         </Text>
         <View style={styles.vitamineActions}>
-          {isLast && (
+          {/* {isLast && (
             <View style={styles.recentBadge}>
               <Text style={styles.recentText}>Récent</Text>
             </View>
-          )}
-          <FontAwesome name="edit" size={16} color="#FF9800" style={styles.editIcon} />
+          )} */}
+          <FontAwesome
+            name="edit"
+            size={16}
+            color="#FF9800"
+            style={styles.editIcon}
+          />
         </View>
       </View>
     </TouchableOpacity>
   );
+
+  // ============================================
+  // RENDER - DAY GROUP
+  // ============================================
 
   const renderDayGroup = ({ item }: { item: VitamineGroup }) => {
     const isExpanded = expandedDays.has(item.date);
@@ -317,132 +517,218 @@ export default function VitaminesScreen({ vitamines }: Props) {
     );
   };
 
+  // ============================================
+  // RENDER - MAIN
+  // ============================================
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.addButton} onPress={openModalHandler}>
-          <FontAwesome name="plus" size={16} color="white" />
-          <Text style={styles.addButtonText}>Ajouter une prise de vitamines</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView
+        style={[
+          { flex: 1 },
+          { backgroundColor: Colors[colorScheme].background },
+        ]}
+        edges={["bottom"]}
+      >
+        <View>
+          {/* Filtres */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterContainer}
+            contentContainerStyle={styles.filterContent}
+          >
+            <Pressable
+              onPress={() => handleFilterPress("today")}
+              style={[
+                styles.filterButton,
+                selectedFilter === "today" && {
+                  backgroundColor: Colors[colorScheme].tint,
+                },
+              ]}
+            >
+              <ThemedText
+                style={[
+                  styles.filterText,
+                  selectedFilter === "today" && styles.filterTextActive,
+                ]}
+              >
+                Aujourd&apos;hui
+              </ThemedText>
+            </Pressable>
 
-      <FlatList
-        data={groupedVitamines}
-        keyExtractor={(item) => item.date}
-        renderItem={renderDayGroup}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <FontAwesome name="pills" size={48} color="#ccc" />
-            <Text style={styles.emptyText}>Aucune prise de vitamines enregistrée</Text>
-            <Text style={styles.emptySubtext}>
-              Ajoutez votre première prise de vitamines
+            <Pressable
+              onPress={() => handleFilterPress("past")}
+              style={[
+                styles.filterButton,
+                selectedFilter === "past" && {
+                  backgroundColor: Colors[colorScheme].tint,
+                },
+              ]}
+            >
+              <ThemedText
+                style={[
+                  styles.filterText,
+                  selectedFilter === "past" && styles.filterTextActive,
+                ]}
+              >
+                Passés
+              </ThemedText>
+            </Pressable>
+          </ScrollView>
+
+          {/* Calendrier */}
+          {showCalendar && (
+            <View style={styles.calendarContainer}>
+              <Calendar
+                onDayPress={handleDateSelect}
+                markedDates={markedDates}
+                theme={{
+                  backgroundColor: Colors[colorScheme].background,
+                  calendarBackground: Colors[colorScheme].background,
+                  textSectionTitleColor: Colors[colorScheme].text,
+                  selectedDayBackgroundColor: Colors[colorScheme].tint,
+                  selectedDayTextColor: "#ffffff",
+                  todayTextColor: Colors[colorScheme].tint,
+                  dayTextColor: Colors[colorScheme].text,
+                  textDisabledColor: Colors[colorScheme].tabIconDefault,
+                  dotColor: Colors[colorScheme].tint,
+                  selectedDotColor: "#ffffff",
+                  arrowColor: Colors[colorScheme].tint,
+                  monthTextColor: Colors[colorScheme].text,
+                  indicatorColor: Colors[colorScheme].tint,
+                }}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* Liste des vitamines */}
+        {groupedVitamines.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons
+              name="calendar-outline"
+              size={64}
+              color={Colors[colorScheme].tabIconDefault}
+            />
+            <ThemedText style={styles.emptyText}>
+              {vitamines.length === 0
+                ? "Aucune prise de vitamines enregistrée"
+                : "Aucune prise de vitamines pour ce filtre"}
+            </ThemedText>
+          </View>
+        ) : (
+          <FlatList
+            data={groupedVitamines}
+            keyExtractor={(item) => item.date}
+            renderItem={renderDayGroup}
+            showsVerticalScrollIndicator={false}
+            style={styles.flatlistContent}
+            contentContainerStyle={styles.listContent}
+          />
+        )}
+
+        {/* Bottom Sheet d'ajout/édition */}
+        <FormBottomSheet
+          ref={bottomSheetRef}
+          title={editingVitamine ? "Modifier la prise" : "Nouvelle prise"}
+          icon={editingVitamine ? "edit" : "pills"}
+          accentColor="#FF9800"
+          isEditing={!!editingVitamine}
+          isSubmitting={isSubmitting}
+          onSubmit={handleSubmit}
+          onDelete={editingVitamine ? handleDelete : undefined}
+          onCancel={cancelForm}
+          onClose={() => {
+            setIsSubmitting(false);
+            setEditingVitamine(null);
+          }}
+        >
+          {/* Date & Heure */}
+          <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+          <View style={styles.dateTimeContainer}>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                isSubmitting && styles.dateButtonDisabled,
+              ]}
+              onPress={() => setShowDate(true)}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="calendar-alt"
+                size={16}
+                color={isSubmitting ? "#ccc" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.dateButtonText,
+                  isSubmitting && styles.dateButtonTextDisabled,
+                ]}
+              >
+                Date
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                isSubmitting && styles.dateButtonDisabled,
+              ]}
+              onPress={() => setShowTime(true)}
+              disabled={isSubmitting}
+            >
+              <FontAwesome
+                name="clock"
+                size={16}
+                color={isSubmitting ? "#ccc" : "#666"}
+              />
+              <Text
+                style={[
+                  styles.dateButtonText,
+                  isSubmitting && styles.dateButtonTextDisabled,
+                ]}
+              >
+                Heure
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.selectedDateTime}>
+            <Text style={styles.selectedDate}>
+              {dateHeure.toLocaleDateString("fr-FR", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </Text>
+            <Text style={styles.selectedTime}>
+              {dateHeure.toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </Text>
           </View>
-        }
-      />
 
-      {/* Bottom Sheet d'ajout/édition */}
-      <FormBottomSheet
-        ref={bottomSheetRef}
-        title={editingVitamine ? "Modifier la prise" : "Nouvelle prise"}
-        icon={editingVitamine ? "edit" : "pills"}
-        accentColor="#FF9800"
-        isEditing={!!editingVitamine}
-        isSubmitting={isSubmitting}
-        onSubmit={handleSubmitVitamine}
-        onDelete={editingVitamine ? handleDeleteVitamine : undefined}
-        onCancel={cancelForm}
-        onClose={() => {
-          setIsSubmitting(false);
-          setEditingVitamine(null);
-        }}
-      >
-        {/* Date & Heure */}
-        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-        <View style={styles.dateTimeContainer}>
-          <TouchableOpacity
-            style={[
-              styles.dateButton,
-              isSubmitting && styles.dateButtonDisabled,
-            ]}
-            onPress={() => setShowDate(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="calendar-alt"
-              size={16}
-              color={isSubmitting ? "#ccc" : "#666"}
+          {showDate && (
+            <DateTimePicker
+              value={dateHeure}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onChangeDate}
             />
-            <Text
-              style={[
-                styles.dateButtonText,
-                isSubmitting && styles.dateButtonTextDisabled,
-              ]}
-            >
-              Date
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.dateButton,
-              isSubmitting && styles.dateButtonDisabled,
-            ]}
-            onPress={() => setShowTime(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="clock"
-              size={16}
-              color={isSubmitting ? "#ccc" : "#666"}
+          )}
+          {showTime && (
+            <DateTimePicker
+              value={dateHeure}
+              mode="time"
+              is24Hour={true}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onChangeTime}
             />
-            <Text
-              style={[
-                styles.dateButtonText,
-                isSubmitting && styles.dateButtonTextDisabled,
-              ]}
-            >
-              Heure
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.selectedDateTime}>
-          <Text style={styles.selectedDate}>
-            {dateHeure.toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
-          <Text style={styles.selectedTime}>
-            {dateHeure.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-
-        {showDate && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeDate}
-          />
-        )}
-        {showTime && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="time"
-            is24Hour={true}
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeTime}
-          />
-        )}
-      </FormBottomSheet>
+          )}
+        </FormBottomSheet>
+      </SafeAreaView>
     </View>
   );
 }
@@ -452,29 +738,69 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8f9fa",
   },
-  header: {
-    padding: 16,
-    paddingBottom: 8,
+  flatlistContent: {
+    paddingVertical: 16,
   },
-  addButton: {
-    backgroundColor: "#FF9800",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+  headerButton: {
+    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+  },
+  calendarContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  // Filter Bar
+  filterContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  filterContent: {
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
     gap: 8,
   },
-  addButtonText: {
-    color: "white",
-    fontSize: 16,
+  filterButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterText: {
+    fontSize: 14,
     fontWeight: "600",
+  },
+  filterTextActive: {
+    color: "#fff",
   },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
+  // Section
+  section: {
+    marginBottom: 24,
+  },
+  dateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+  },
+  dateText: {
+    fontSize: 16,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  // Day Card
   dayCard: {
     backgroundColor: "white",
     marginBottom: 12,
@@ -515,6 +841,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
+  // Vitamine Item
   vitamineItem: {
     backgroundColor: "#f8f9fa",
     borderRadius: 8,
@@ -547,7 +874,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   recentBadge: {
-    backgroundColor: "#FF9800",
+    backgroundColor: "#dc3545",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -560,6 +887,7 @@ const styles = StyleSheet.create({
   editIcon: {
     opacity: 0.7,
   },
+  // Expanded Content
   expandedContent: {
     marginTop: 8,
   },
@@ -568,17 +896,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#eee",
     marginBottom: 12,
   },
-  historyLabel: {
-    fontSize: 12,
-    color: "#999",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  emptyState: {
+  // Empty State
+  emptyContainer: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 60,
+    paddingBottom: 100,
   },
   emptyText: {
     fontSize: 18,
@@ -586,36 +909,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontWeight: "600",
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#999",
-    marginTop: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    width: "90%",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    backgroundColor: "white",
-    borderRadius: 12,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-  },
+  // Modal Content
   modalCategoryLabel: {
     alignSelf: "center",
     fontSize: 16,
@@ -623,6 +917,7 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 12,
   },
+  // Date/Time
   dateTimeContainer: {
     flexDirection: "row",
     gap: 12,
@@ -669,8 +964,69 @@ const styles = StyleSheet.create({
   },
   selectedTime: {
     fontSize: 20,
-    color: "#FF9800",
+    color: "#dc3545",
     fontWeight: "bold",
+  },
+  header: {
+    padding: 16,
+    paddingBottom: 8,
+  },
+  addButton: {
+    backgroundColor: "#dc3545",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  addButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  historyLabel: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalContent: {
+    width: "90%",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    backgroundColor: "white",
+    borderRadius: 12,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
   },
   actionButtonsContainer: {
     paddingHorizontal: 20,
