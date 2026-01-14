@@ -1,12 +1,13 @@
+import { Colors } from '@/constants/theme';
+import { useSheet } from "@/contexts/SheetContext";
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import FontAwesome from '@expo/vector-icons/FontAwesome5';
 import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
 
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import FontAwesome from '@expo/vector-icons/FontAwesome5';
-
 export default function BabyTabLayout() {
   const colorScheme = useColorScheme() ?? 'light';
+  const { isOpen } = useSheet();
 
   return (
     <Tabs
@@ -20,6 +21,7 @@ export default function BabyTabLayout() {
           },
           default: {},
         }),
+        
       }}>
       <Tabs.Screen
         name="home"

@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -124,50 +125,52 @@ export default function PompagesScreen() {
   }, []);
 
   // Définir les boutons du header (calendrier + ajouter)
-  useEffect(() => {
-    const headerButtons = (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingRight: 16,
-          gap: 0,
-        }}
-      >
-        <Pressable
-          onPress={handleCalendarPress}
-          style={[
-            styles.headerButton,
-            { paddingLeft: 12 },
-            showCalendar && {
-              backgroundColor: Colors[colorScheme].tint + "20",
-            },
-          ]}
+  useFocusEffect(
+    useCallback(() => {
+      const headerButtons = (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingRight: 16,
+            gap: 0,
+          }}
         >
-          <Ionicons
-            name="calendar-outline"
-            size={24}
-            color={Colors[colorScheme].tint}
-          />
-        </Pressable>
-        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
-          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-        </Pressable>
-      </View>
-    );
+          <Pressable
+            onPress={handleCalendarPress}
+            style={[
+              styles.headerButton,
+              { paddingLeft: 12 },
+              showCalendar && {
+                backgroundColor: Colors[colorScheme].tint + "20",
+              },
+            ]}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={24}
+              color={Colors[colorScheme].tint}
+            />
+          </Pressable>
+          <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+          </Pressable>
+        </View>
+      );
 
-    setHeaderRight(headerButtons);
+      setHeaderRight(headerButtons);
 
-    return () => {
-      setHeaderRight(null);
-    };
-  }, [
-    handleCalendarPress,
-    showCalendar,
-    colorScheme,
-    setHeaderRight,
-    openAddModal,
-  ]);
+      return () => {
+        setHeaderRight(null);
+      };
+    }, [
+      handleCalendarPress,
+      showCalendar,
+      colorScheme,
+      setHeaderRight,
+      openAddModal,
+    ])
+  );
 
   // ============================================
   // EFFECTS - URL PARAMS
@@ -591,11 +594,16 @@ const renderDayGroup = ({ item }: { item: PompageGroup }) => {
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
-              <FontAwesome name="pump-medical" size={14} color="#666" />
-              <Text style={styles.summaryText}>
-                {item.pompages.length} session
-                {item.pompages.length > 1 ? "s" : ""} • {item.totalQuantity} ml
-              </Text>
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryBadge}>
+                  <FontAwesome name="pump-medical" size={14} color="#28a745" />
+                  <Text style={styles.summaryText}>
+                    {item.pompages.length} session
+                    {item.pompages.length > 1 ? "s" : ""} •{" "}
+                    {item.totalQuantity} ml
+                  </Text>
+                </View>
+              </View>
             </View>
             <View style={styles.dailySummary}>
               <View style={styles.dailyQuantityItem}>
@@ -1046,10 +1054,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryInfo: {
+    flexDirection: "column",
+    gap: 4,
+    marginBottom: 8,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  summaryBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
+    gap: 4,
+    backgroundColor: "#f8f9fa",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   summaryText: {
     fontSize: 14,

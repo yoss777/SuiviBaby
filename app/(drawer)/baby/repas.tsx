@@ -15,10 +15,11 @@ import {
   ecouterBiberonsHybrid as ecouterBiberons,
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -139,57 +140,58 @@ export default function RepasScreen() {
   }, []);
 
   // Définir les boutons du header (calendrier + ajouter)
-  useEffect(() => {
-    const headerButtons = (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingRight: 16,
-          gap: 0,
-        }}
-      >
-        <VoiceCommandButton
-          size={18}
-          color={Colors[colorScheme].tint}
-          showTestToggle={false}
-        />
-
-        <Pressable
-          onPress={handleCalendarPress}
-          style={[
-            styles.headerButton,
-            { paddingLeft: 12 },
-            showCalendar && {
-              backgroundColor: Colors[colorScheme].tint + "20",
-            },
-          ]}
+  useFocusEffect(
+    useCallback(() => {
+      const headerButtons = (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingRight: 16,
+            gap: 0,
+          }}
         >
-          <Ionicons
-            name="calendar-outline"
-            size={24}
+          <VoiceCommandButton
+            size={18}
             color={Colors[colorScheme].tint}
+            showTestToggle={false}
           />
-        </Pressable>
-        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
-          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-        </Pressable>
-      </View>
-    );
 
-    setHeaderRight(headerButtons);
+          <Pressable
+            onPress={handleCalendarPress}
+            style={[
+              styles.headerButton,
+              { paddingLeft: 12 },
+              showCalendar && {
+                backgroundColor: Colors[colorScheme].tint + "20",
+              },
+            ]}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={24}
+              color={Colors[colorScheme].tint}
+            />
+          </Pressable>
+          <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+          </Pressable>
+        </View>
+      );
 
-    // Cleanup: retirer les boutons quand on quitte cet écran
-    return () => {
-      setHeaderRight(null);
-    };
-  }, [
-    handleCalendarPress,
-    showCalendar,
-    colorScheme,
-    setHeaderRight,
-    openAddModal,
-  ]);
+      setHeaderRight(headerButtons);
+
+      return () => {
+        setHeaderRight(null);
+      };
+    }, [
+      handleCalendarPress,
+      showCalendar,
+      colorScheme,
+      setHeaderRight,
+      openAddModal,
+    ])
+  );
 
   // ============================================
   // EFFECTS - URL PARAMS
@@ -452,10 +454,24 @@ export default function RepasScreen() {
     return type === "tetee" ? "Sein" : "Biberon";
   };
 
-  const getMealIcon = (type?: MealType): string => {
-    if (type === "tetee") return "person-breastfeeding";
-    if (type === "biberon") return "jar-wheat";
-    return "utensils";
+  const getMealIcon = (type?: MealType) => {
+    switch (type) {
+      case "tetee":
+        return {
+          lib: "FontAwesome",
+          name: "person-breastfeeding",
+        };
+      case "biberon":
+        return {
+          lib: "MaterialCommunityIcons",
+          name: "baby-bottle",
+        };
+      default:
+        return {
+          lib: "FontAwesome",
+          name: "utensils",
+        };
+    }
   };
 
   // ============================================
@@ -599,6 +615,8 @@ export default function RepasScreen() {
 
   const renderMealItem = (meal: Meal, isLast: boolean = false) => {
     const typeLabel = getMealTypeLabel(meal.type);
+    const icon = getMealIcon(meal.type);
+
     const quantityDisplay =
       meal.quantite !== null && meal.quantite !== undefined
         ? `${meal.quantite} ml`
@@ -613,11 +631,11 @@ export default function RepasScreen() {
       >
         <View style={styles.mealContent}>
           <View style={[styles.avatar, { backgroundColor: "#4A90E2" }]}>
-            <FontAwesome
-              name={getMealIcon(meal.type)}
-              size={20}
-              color="#ffffff"
-            />
+            {icon.lib === "FontAwesome" ? (
+              <FontAwesome name={icon.name} size={20} color="#fff" />
+            ) : (
+              <MaterialCommunityIcons name={icon.name} size={20} color="#fff" />
+            )}
           </View>
           <View style={styles.mealInfo}>
             <View style={styles.infoRow}>
@@ -664,15 +682,28 @@ export default function RepasScreen() {
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
-              <View>
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryBadge}>
+                  <FontAwesome name="baby" size={14} color="#4A90E2" />
                   <Text style={styles.summaryText}>
-                    {item.meals.length} repas</Text>
-                  <Text style={styles.summaryText}>
-                    {item.totalQuantity > 0
-                      ? `Biberon(s) : ${item.totalQuantity} ml`
-                      : "0 biberon"}
+                    {item.meals.length} repas
                   </Text>
                 </View>
+              </View>
+            </View>
+            <View style={styles.dailySummary}>
+              <View style={styles.dailyQuantityItem}>
+                {item.totalQuantity > 0 ? (
+                  <Text style={styles.dailyQuantityLabel}>
+                    Biberon(s) :{" "}
+                    <Text style={styles.dailyQuantityValue}>
+                      {item.totalQuantity} ml
+                    </Text>
+                  </Text>
+                ) : (
+                  <Text style={styles.dailyQuantityLabel}>0 biberon</Text>
+                )}
+              </View>
             </View>
           </View>
           {hasMultipleMeals && (
@@ -1139,12 +1170,45 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   summaryInfo: {
+    flexDirection: "column",
+    gap: 4,
+    marginBottom: 8,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  summaryBadge: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 4,
+    backgroundColor: "#f8f9fa",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   summaryText: {
     fontSize: 14,
     color: "#666",
+  },
+  dailySummary: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  dailyQuantityItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  dailyQuantityLabel: {
+    fontSize: 12,
+    color: "#666",
+  },
+  dailyQuantityValue: {
+    fontSize: 12,
+    color: "#4A90E2",
+    fontWeight: "600",
   },
   expandButton: {
     padding: 8,

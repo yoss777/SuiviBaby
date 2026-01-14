@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BabyProvider } from "@/contexts/BabyContext";
+import { SheetProvider } from "@/contexts/SheetContext";
 import { MigrationProvider } from "@/migration/MigrationProvider";
 import { DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
@@ -30,20 +31,37 @@ export default function RootLayout() {
         <AuthProvider>
           <BabyProvider>
             <MigrationProvider>
-              <ThemeProvider value={CustomTheme}>
-                <Stack initialRouteName="boot">
-                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                  <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
-                  <Stack.Screen name="boot" options={{ headerShown: false }} />
-                  <Stack.Screen name="explore" options={{ headerShown: false }} />
-                  <Stack.Screen name="index" options={{ headerShown: false }} />
-                  <Stack.Screen
-                    name="modal"
-                    options={{ presentation: "modal", title: "Modal" }}
-                  />
-                </Stack>
-                <StatusBar style="dark" />
-              </ThemeProvider>
+              <SheetProvider>
+                <ThemeProvider value={CustomTheme}>
+                  <Stack initialRouteName="boot">
+                    <Stack.Screen
+                      name="(auth)"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="(drawer)"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="boot"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="explore"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="index"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="modal"
+                      options={{ presentation: "modal", title: "Modal" }}
+                    />
+                  </Stack>
+                  <StatusBar style="dark" />
+                </ThemeProvider>
+              </SheetProvider>
             </MigrationProvider>
           </BabyProvider>
         </AuthProvider>

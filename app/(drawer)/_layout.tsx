@@ -92,6 +92,8 @@ export default function DrawerLayout() {
   return (
     <HeaderRightContext.Provider value={{ setHeaderRight }}>
       <Drawer
+        initialRouteName="baby"
+        backBehavior="initialRoute"
         drawerContent={(props) => <CustomDrawerContent {...props} />}
         screenOptions={{
           drawerActiveTintColor: Colors[colorScheme].tint,

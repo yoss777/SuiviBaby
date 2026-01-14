@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -172,50 +173,52 @@ export default function ImmunosScreen() {
     [selectedType]
   );
 
-  useEffect(() => {
-    const headerButtons = (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingRight: 16,
-          gap: 0,
-        }}
-      >
-        <Pressable
-          onPress={handleCalendarPress}
-          style={[
-            styles.headerButton,
-            { paddingLeft: 12 },
-            showCalendar && {
-              backgroundColor: Colors[colorScheme].tint + "20",
-            },
-          ]}
+  useFocusEffect(
+    useCallback(() => {
+      const headerButtons = (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingRight: 16,
+            gap: 0,
+          }}
         >
-          <Ionicons
-            name="calendar-outline"
-            size={24}
-            color={Colors[colorScheme].tint}
-          />
-        </Pressable>
-        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
-          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-        </Pressable>
-      </View>
-    );
+          <Pressable
+            onPress={handleCalendarPress}
+            style={[
+              styles.headerButton,
+              { paddingLeft: 12 },
+              showCalendar && {
+                backgroundColor: Colors[colorScheme].tint + "20",
+              },
+            ]}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={24}
+              color={Colors[colorScheme].tint}
+            />
+          </Pressable>
+          <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+          </Pressable>
+        </View>
+      );
 
-    setHeaderRight(headerButtons);
+      setHeaderRight(headerButtons);
 
-    return () => {
-      setHeaderRight(null);
-    };
-  }, [
-    handleCalendarPress,
-    showCalendar,
-    colorScheme,
-    setHeaderRight,
-    openAddModal,
-  ]);
+      return () => {
+        setHeaderRight(null);
+      };
+    }, [
+      handleCalendarPress,
+      showCalendar,
+      colorScheme,
+      setHeaderRight,
+      openAddModal,
+    ])
+  );
 
   // ============================================
   // EFFECTS - URL PARAMS
@@ -699,16 +702,20 @@ export default function ImmunosScreen() {
             <View style={styles.dayInfo}>
               <Text style={styles.dayDate}>{item.dateFormatted}</Text>
               <View style={styles.summaryInfo}>
-                <FontAwesome
-                  name={selectedType === "vitamine" ? "pills" : "syringe"}
-                  size={14}
-                  color="#666"
-                />
-                <Text style={styles.summaryText}>
-                  {item.immunos.length}{" "}
-                  {selectedType === "vitamine" ? "vitamine" : "vaccin"}
-                  {item.immunos.length > 1 ? "s" : ""}
-                </Text>
+                <View style={styles.summaryRow}>
+                  <View style={styles.summaryBadge}>
+                    <FontAwesome
+                      name={selectedType === "vitamine" ? "pills" : "syringe"}
+                      size={14}
+                      color={getImmunoColor(selectedType)}
+                    />
+                    <Text style={styles.summaryText}>
+                      {item.immunos.length}{" "}
+                      {selectedType === "vitamine" ? "vitamine" : "vaccin"}
+                      {item.immunos.length > 1 ? "s" : ""}
+                    </Text>
+                  </View>
+                </View>
               </View>
             </View>
             {hasMultipleImmunos && (
@@ -761,45 +768,45 @@ export default function ImmunosScreen() {
             style={styles.filterContainer}
             contentContainerStyle={styles.filterContent}
           >
-            <View style={{flexDirection:'row', gap:8}}>
-            <Pressable
-              onPress={() => handleFilterPress("today")}
-              style={[
-                styles.filterButton,
-                selectedFilter === "today" && {
-                  backgroundColor: Colors[colorScheme].tint,
-                },
-              ]}
-            >
-              <ThemedText
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable
+                onPress={() => handleFilterPress("today")}
                 style={[
-                  styles.filterText,
-                  selectedFilter === "today" && styles.filterTextActive,
+                  styles.filterButton,
+                  selectedFilter === "today" && {
+                    backgroundColor: Colors[colorScheme].tint,
+                  },
                 ]}
               >
-                Aujourd&apos;hui
-              </ThemedText>
-            </Pressable>
+                <ThemedText
+                  style={[
+                    styles.filterText,
+                    selectedFilter === "today" && styles.filterTextActive,
+                  ]}
+                >
+                  Aujourd&apos;hui
+                </ThemedText>
+              </Pressable>
 
-            <Pressable
-              onPress={() => handleFilterPress("past")}
-              style={[
-                styles.filterButton,
-                selectedFilter === "past" && {
-                  backgroundColor: Colors[colorScheme].tint,
-                },
-              ]}
-            >
-              <ThemedText
+              <Pressable
+                onPress={() => handleFilterPress("past")}
                 style={[
-                  styles.filterText,
-                  selectedFilter === "past" && styles.filterTextActive,
+                  styles.filterButton,
+                  selectedFilter === "past" && {
+                    backgroundColor: Colors[colorScheme].tint,
+                  },
                 ]}
               >
-                Passés
-              </ThemedText>
-            </Pressable>
-</View>
+                <ThemedText
+                  style={[
+                    styles.filterText,
+                    selectedFilter === "past" && styles.filterTextActive,
+                  ]}
+                >
+                  Passés
+                </ThemedText>
+              </Pressable>
+            </View>
             {/* Switch Vitamines/Vaccins */}
             <View style={styles.typeSwitchContainer}>
               <TouchableOpacity
@@ -893,7 +900,15 @@ export default function ImmunosScreen() {
         {/* Bottom Sheet d'ajout/édition */}
         <FormBottomSheet
           ref={bottomSheetRef}
-          title={editingImmuno ? "Modifier" : "Nouvelle immunisation"}
+          title={
+            editingImmuno
+              ? `Modifier ${immunoType === "vitamine" ? "vitamine" : "vaccin"}`
+              : `${
+                  immunoType === "vitamine"
+                    ? "Nouvelle vitamine"
+                    : "Nouveau vaccin"
+                }`
+          }
           icon={immunoType === "vitamine" ? "pills" : "syringe"}
           accentColor={immunoType === "vitamine" ? "#FF9800" : "#9C27B0"}
           isEditing={!!editingImmuno}
@@ -906,36 +921,6 @@ export default function ImmunosScreen() {
             setEditingImmuno(null);
           }}
         >
-          {/* Sélection du type */}
-          <Text style={styles.modalCategoryLabel}>Type d'immunisation</Text>
-          <View style={styles.typeRow}>
-            <TouchableOpacity
-              style={[
-                styles.typeButton,
-                immunoType === "vaccin" && styles.typeButtonActiveVaccin,
-                isSubmitting && styles.typeButtonDisabled,
-              ]}
-              onPress={() => setImmunoType("vaccin")}
-              disabled={isSubmitting}
-              activeOpacity={0.7}
-            >
-              <FontAwesome
-                name="syringe"
-                size={20}
-                color={immunoType === "vaccin" ? "white" : "#9C27B0"}
-              />
-              <Text
-                style={[
-                  styles.typeText,
-                  immunoType === "vaccin" && styles.typeTextActive,
-                  isSubmitting && styles.typeTextDisabled,
-                ]}
-              >
-                Vaccin
-              </Text>
-            </TouchableOpacity>
-          </View>
-
           {/* Sélecteur de vaccin (si type vaccin) */}
           {immunoType === "vaccin" && (
             <TouchableOpacity
@@ -1178,8 +1163,8 @@ const styles = StyleSheet.create({
   filterContent: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    justifyContent:'space-between',
-    width:"100%",
+    justifyContent: "space-between",
+    width: "100%",
   },
   filterButton: {
     paddingHorizontal: 20,
@@ -1515,6 +1500,7 @@ const styles = StyleSheet.create({
   typeSwitchContainer: {
     flexDirection: "row",
     backgroundColor: "#f0f0f0",
+    // borderWidth: 1,
     borderRadius: 20,
     padding: 2,
     marginLeft: 8,
@@ -1528,12 +1514,12 @@ const styles = StyleSheet.create({
     minWidth: 44,
   },
   typeSwitchButtonLeft: {
-    borderTopRightRadius: 0,
-    borderBottomRightRadius: 0,
+    // borderTopRightRadius: 0,
+    // borderBottomRightRadius: 0,
   },
   typeSwitchButtonRight: {
-    borderTopLeftRadius: 0,
-    borderBottomLeftRadius: 0,
+    // borderTopLeftRadius: 0,
+    // borderBottomLeftRadius: 0,
   },
   typeSwitchButtonActiveVitamine: {
     backgroundColor: "#FF9800",

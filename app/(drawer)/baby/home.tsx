@@ -9,6 +9,7 @@ import {
   ecouterVaccinsHybrid as ecouterVaccins,
   ecouterVitaminesHybrid as ecouterVitamines,
 } from "@/migration/eventsHybridService";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -450,6 +451,26 @@ export default function HomeDashboard() {
     return `il y a ${diffMinutes}min`;
   };
 
+  const getMealIcon = (type?: MealType) => {
+    switch (type) {
+      case "tetee":
+        return {
+          lib: "FontAwesome",
+          name: "person-breastfeeding",
+        };
+      case "biberon":
+        return {
+          lib: "MaterialCommunityIcons",
+          name: "baby-bottle",
+        };
+      default:
+        return {
+          lib: "FontAwesome",
+          name: "utensils",
+        };
+    }
+  };
+
   // ============================================
   // COMPONENTS - CARDS
   // ============================================
@@ -474,7 +495,15 @@ export default function HomeDashboard() {
         style={styles.statsCard}
       >
         <View style={styles.statsHeader}>
-          <FontAwesome name={icon} size={20} color={color} />
+          {title === "Biberons" ? (
+            <MaterialCommunityIcons
+              name="baby-bottle"
+              size={20}
+              color={color}
+            />
+          ) : (
+            <FontAwesome name={icon} size={20} color={color} />
+          )}
           <Text style={styles.statsTitle}>{title}</Text>
         </View>
         <Text style={[styles.statsValue, { color }]}>
@@ -585,7 +614,9 @@ export default function HomeDashboard() {
               color="#28a745"
               lastActivity={todayStats.pompages.lastTime}
               lastTimestamp={todayStats.pompages.lastTimestamp}
-              onPress={() => router.push("/baby/pompages?openModal=true" as any)}
+              onPress={() =>
+                router.push("/baby/pompages?openModal=true" as any)
+              }
             />
           )}
         </View>

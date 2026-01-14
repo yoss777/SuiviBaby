@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -133,50 +134,52 @@ export default function ExcretionsScreen() {
     bottomSheetRef.current?.expand();
   }, []);
 
-  useEffect(() => {
-    const headerButtons = (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingRight: 16,
-          gap: 0,
-        }}
-      >
-        <Pressable
-          onPress={handleCalendarPress}
-          style={[
-            styles.headerButton,
-            { paddingLeft: 12 },
-            showCalendar && {
-              backgroundColor: Colors[colorScheme].tint + "20",
-            },
-          ]}
+  useFocusEffect(
+    useCallback(() => {
+      const headerButtons = (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingRight: 16,
+            gap: 0,
+          }}
         >
-          <Ionicons
-            name="calendar-outline"
-            size={24}
-            color={Colors[colorScheme].tint}
-          />
-        </Pressable>
-        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
-          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-        </Pressable>
-      </View>
-    );
+          <Pressable
+            onPress={handleCalendarPress}
+            style={[
+              styles.headerButton,
+              { paddingLeft: 12 },
+              showCalendar && {
+                backgroundColor: Colors[colorScheme].tint + "20",
+              },
+            ]}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={24}
+              color={Colors[colorScheme].tint}
+            />
+          </Pressable>
+          <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+          </Pressable>
+        </View>
+      );
 
-    setHeaderRight(headerButtons);
+      setHeaderRight(headerButtons);
 
-    return () => {
-      setHeaderRight(null);
-    };
-  }, [
-    handleCalendarPress,
-    showCalendar,
-    colorScheme,
-    setHeaderRight,
-    openAddModal,
-  ]);
+      return () => {
+        setHeaderRight(null);
+      };
+    }, [
+      handleCalendarPress,
+      showCalendar,
+      colorScheme,
+      setHeaderRight,
+      openAddModal,
+    ])
+  );
 
   // ============================================
   // EFFECTS - URL PARAMS
@@ -393,7 +396,7 @@ export default function ExcretionsScreen() {
 
   const getExcretionIcon = (type?: ExcretionType): string => {
     if (type === "miction") return "water";
-    if (type === "selle") return "circle";
+    if (type === "selle") return "poop";
     return "question";
   };
 
@@ -625,7 +628,7 @@ export default function ExcretionsScreen() {
                 )}
                 {item.sellesCount > 0 && (
                   <View style={styles.summaryBadge}>
-                    <FontAwesome name="circle" size={12} color="#dc3545" />
+                    <FontAwesome name="poop" size={12} color="#dc3545" />
                     <Text style={styles.summaryText}>
                       {item.sellesCount} selle{item.sellesCount > 1 ? "s" : ""}
                     </Text>
