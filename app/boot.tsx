@@ -1,20 +1,27 @@
-import { router } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Image, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import BackgroundImage from "@/components/ui/BackgroundImage";
 import { DotsLoader } from "@/components/ui/DotsLoader";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { router } from "expo-router";
 
 export default function BootScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const { user, loading: authLoading } = useAuth();
   const { children, loading: babyLoading, setActiveChild } = useBaby();
+  const [delayDone, setDelayDone] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDelayDone(true), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     console.log(
@@ -48,6 +55,11 @@ export default function BootScreen() {
       return;
     }
 
+    if (!delayDone) {
+      console.log("[BOOT] Attente du délai minimum...");
+      return;
+    }
+
     // Étape 4 : Décision de navigation basée sur le nombre d'enfants
     console.log(
       "[BOOT] Décision de navigation avec",
@@ -71,7 +83,7 @@ export default function BootScreen() {
     // Plusieurs enfants
     console.log("[BOOT] Plusieurs enfants, redirection vers explore");
     router.replace("/explore");
-  }, [authLoading, babyLoading, user, children, setActiveChild]);
+  }, [authLoading, babyLoading, delayDone, user, children, setActiveChild]);
 
   return (
     <SafeAreaView
@@ -83,17 +95,19 @@ export default function BootScreen() {
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
-          padding: 24,
+          paddingBottom: 24,
+          paddingHorizontal: 24,
           gap: 24,
         }}
       >
         <Image
           source={require("@/assets/images/icon.png")}
-          style={{ width: 192, height: 192, marginBottom: 16, borderRadius:24 }}
+          style={{ width: 192, height: 192, marginBottom: 24, borderRadius:24 }}
           resizeMode="contain"
         />
         <DotsLoader />
-        <ThemedText style={{ marginTop: 12, opacity: 0.7, color:"#ffffff" }}>
+        <IconPulseDots />
+        <ThemedText style={{ marginTop: 12, color:"#ffffff" }}>
           Préparation de votre espace...
         </ThemedText>
       </View>

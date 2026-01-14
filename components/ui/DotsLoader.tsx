@@ -4,7 +4,8 @@ import { Animated, Easing, StyleSheet, View } from "react-native";
 export function DotsLoader({
   size = 6,
   gap = 6,
-  color = "#111827",
+  // color = "#111827",
+  color = "#ffffff",
 }: {
   size?: number;
   gap?: number;
