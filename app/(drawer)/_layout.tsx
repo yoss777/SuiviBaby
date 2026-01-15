@@ -1,12 +1,15 @@
+import { useNetInfo } from "@react-native-community/netinfo";
 import { useRouter } from "expo-router";
 import { Drawer } from "expo-router/drawer";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
+import { ToastProvider } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 // Importer la configuration AssemblyAI
@@ -51,6 +54,8 @@ export default function DrawerLayout() {
   const { user, firebaseUser, loading } = useAuth();
   const router = useRouter();
   const [headerRightComponent, setHeaderRightComponent] = useState<React.ReactElement | null>(null);
+  const netInfo = useNetInfo();
+  const insets = useSafeAreaInsets();
 
   const patientId = firebaseUser?.uid || user?.uid;
 
@@ -89,62 +94,93 @@ export default function DrawerLayout() {
     return null;
   }
 
+  const isOffline =
+    netInfo.isInternetReachable === false || netInfo.isConnected === false;
+
   return (
     <HeaderRightContext.Provider value={{ setHeaderRight }}>
-      <Drawer
-        initialRouteName="baby"
-        backBehavior="initialRoute"
-        drawerContent={(props) => <CustomDrawerContent {...props} />}
-        screenOptions={{
-          drawerActiveTintColor: Colors[colorScheme].tint,
-          headerTintColor: Colors[colorScheme].text,
-          headerStyle: {
-            backgroundColor: Colors[colorScheme].background,
-          },
-          sceneContainerStyle: {
-            backgroundColor: Colors[colorScheme].background,
-          },
-        }}
-      >
-        <Drawer.Screen
-          name="settings"
-          options={{
-            title: "Paramètres",
-            drawerItemStyle: { display: "none" },
-          }}
-        />
+      <ToastProvider>
+        <View style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
+          {isOffline && (
+            <View style={[styles.offlineBanner, { paddingTop: insets.top }]}>
+              <Text style={styles.offlineText}>Hors ligne</Text>
+            </View>
+          )}
+          <Drawer
+            initialRouteName="baby"
+            backBehavior="initialRoute"
+            drawerContent={(props) => <CustomDrawerContent {...props} />}
+            screenOptions={{
+              drawerActiveTintColor: Colors[colorScheme].tint,
+              headerTintColor: Colors[colorScheme].text,
+              headerStyle: {
+                backgroundColor: Colors[colorScheme].background,
+              },
+              sceneContainerStyle: {
+                backgroundColor: Colors[colorScheme].background,
+              },
+            }}
+          >
+            <Drawer.Screen
+              name="settings"
+              options={{
+                title: "Paramètres",
+                drawerItemStyle: { display: "none" },
+              }}
+            />
 
-        {/* Section: Suivi Bébé */}
-        <Drawer.Screen
-          name="baby"
-          options={{
-            headerTitle: () => <BabyHeaderTitle />,
-            drawerItemStyle: { display: "none" },
-            headerRight: headerRightComponent ? () => headerRightComponent : undefined,
-          }}
-        />
-        <Drawer.Screen
-          name="add-baby"
-          options={{
-            title: "Ajouter un enfant",
-            drawerItemStyle: { display: "none" },
-          }}
-        />
-        <Drawer.Screen
-          name="join-child"
-          options={{
-            title: "Ajouter avec un code",
-            drawerItemStyle: { display: "none" },
-          }}
-        />
-        <Drawer.Screen
-          name="share-child"
-          options={{
-            title: "Partage",
-            drawerItemStyle: { display: "none" },
-          }}
-        />
-      </Drawer>
+            {/* Section: Suivi Bébé */}
+            <Drawer.Screen
+              name="baby"
+              options={{
+                headerTitle: () => <BabyHeaderTitle />,
+                drawerItemStyle: { display: "none" },
+                headerRight: headerRightComponent ? () => headerRightComponent : undefined,
+              }}
+            />
+            <Drawer.Screen
+              name="add-baby"
+              options={{
+                title: "Ajouter un enfant",
+                drawerItemStyle: { display: "none" },
+              }}
+            />
+            <Drawer.Screen
+              name="join-child"
+              options={{
+                title: "Ajouter avec un code",
+                drawerItemStyle: { display: "none" },
+              }}
+            />
+            <Drawer.Screen
+              name="share-child"
+              options={{
+                title: "Partage",
+                drawerItemStyle: { display: "none" },
+              }}
+            />
+          </Drawer>
+        </View>
+      </ToastProvider>
     </HeaderRightContext.Provider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  offlineBanner: {
+    backgroundColor: "#fdecec",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 6,
+  },
+  offlineText: {
+    color: "#b42318",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+});

@@ -1,12 +1,13 @@
-import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { ThemedText } from "@/components/themed-text";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterBiberon,
@@ -17,13 +18,14 @@ import {
 } from "@/migration/eventsDoubleWriteService";
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
-  hasMoreEventsBeforeHybrid,
   ecouterTeteesHybrid as ecouterTetees,
+  hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -72,6 +74,10 @@ export default function RepasScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
+  const { showToast } = useToast();
+  const netInfo = useNetInfo();
+  const isOffline =
+    netInfo.isInternetReachable === false || netInfo.isConnected === false;
 
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
@@ -701,6 +707,13 @@ export default function RepasScreen() {
         }
       }
 
+      if (isOffline) {
+        showToast(
+          editingMeal
+            ? "Modification en attente de synchronisation"
+            : "Ajout en attente de synchronisation"
+        );
+      }
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde du repas:", error);
@@ -724,6 +737,9 @@ export default function RepasScreen() {
     try {
       setIsSubmitting(true);
       await supprimerTetee(activeChild.id, editingMeal.id);
+      if (isOffline) {
+        showToast("Suppression en attente de synchronisation");
+      }
       setShowDeleteModal(false);
       closeModal();
     } catch (error) {

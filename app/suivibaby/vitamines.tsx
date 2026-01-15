@@ -1,11 +1,12 @@
-import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { ThemedText } from "@/components/themed-text";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterVitamine,
@@ -17,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useNetInfo } from "@react-native-community/netinfo";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -51,6 +53,10 @@ export default function VitaminesScreen({ vitamines }: Props) {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
+  const { showToast } = useToast();
+  const netInfo = useNetInfo();
+  const isOffline =
+    netInfo.isInternetReachable === false || netInfo.isConnected === false;
 
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
@@ -463,6 +469,13 @@ export default function VitaminesScreen({ vitamines }: Props) {
         });
       }
 
+      if (isOffline) {
+        showToast(
+          editingVitamine
+            ? "Modification en attente de synchronisation"
+            : "Ajout en attente de synchronisation"
+        );
+      }
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde de la vitamine:", error);
@@ -486,6 +499,9 @@ export default function VitaminesScreen({ vitamines }: Props) {
     try {
       setIsSubmitting(true);
       await supprimerVitamine(activeChild.id, editingVitamine.id);
+      if (isOffline) {
+        showToast("Suppression en attente de synchronisation");
+      }
       setShowDeleteModal(false);
       closeModal();
     } catch (error) {
