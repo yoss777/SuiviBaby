@@ -709,7 +709,7 @@ export default function ImmunosScreen() {
       const isVitamine = immunoType === "vitamine";
       const dataToSave = {
         date: dateHeure,
-        ...(immunoType === "vitamine" && { nomVitamine: "Vitamine K" }),
+        ...(immunoType === "vitamine" && { nomVitamine: "Vitamine D" }),
         ...(immunoType === "vaccin" && { nomVaccin: selectedVaccin }),
       };
 
