@@ -4,6 +4,7 @@ import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -94,6 +95,7 @@ export default function RepasScreen() {
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [mealType, setMealType] = useState<MealType>("tetee");
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [quantite, setQuantite] = useState<number>(100);
@@ -711,34 +713,25 @@ export default function RepasScreen() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
+    if (isSubmitting || !editingMeal || !activeChild) return;
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
     if (isSubmitting || !editingMeal || !activeChild) return;
 
-    Alert.alert("Suppression", "Voulez-vous vraiment supprimer ce repas ?", [
-      {
-        text: "Annuler",
-        style: "cancel",
-      },
-      {
-        text: "Supprimer",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setIsSubmitting(true);
-            await supprimerTetee(activeChild.id, editingMeal.id);
-            closeModal();
-          } catch (error) {
-            console.error("Erreur lors de la suppression:", error);
-            Alert.alert(
-              "Erreur",
-              "Impossible de supprimer le repas. Veuillez réessayer."
-            );
-          } finally {
-            setIsSubmitting(false);
-          }
-        },
-      },
-    ]);
+    try {
+      setIsSubmitting(true);
+      await supprimerTetee(activeChild.id, editingMeal.id);
+      setShowDeleteModal(false);
+      closeModal();
+    } catch (error) {
+      console.error("Erreur lors de la suppression:", error);
+      Alert.alert("Erreur", "Impossible de supprimer le repas. Veuillez réessayer.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ============================================
@@ -1243,6 +1236,18 @@ export default function RepasScreen() {
             />
           )}
         </FormBottomSheet>
+
+        <ConfirmModal
+          visible={showDeleteModal}
+          title="Suppression"
+          message="Voulez-vous vraiment supprimer ce repas ?"
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          backgroundColor={Colors[colorScheme].background}
+          textColor={Colors[colorScheme].text}
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirm={confirmDelete}
+        />
       </SafeAreaView>
     </View>
   );

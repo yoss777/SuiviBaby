@@ -6,6 +6,8 @@ import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { normalizeQuery } from "@/utils/text";
 import {
   ajouterVaccin,
   ajouterVitamine,
@@ -29,7 +31,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -48,6 +49,7 @@ import { useHeaderRight } from "../_layout";
 // ============================================
 type ImmunoType = "vitamine" | "vaccin";
 type FilterType = "today" | "past";
+type SheetStep = "form" | "vaccinPicker";
 
 interface Immuno {
   id: string;
@@ -131,8 +133,9 @@ export default function ImmunosScreen() {
   const [immunoType, setImmunoType] = useState<ImmunoType>("vitamine");
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [selectedVaccin, setSelectedVaccin] = useState<string>("");
-  const [showVaccinList, setShowVaccinList] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [sheetStep, setSheetStep] = useState<SheetStep>("form");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // États des pickers
   const [showDate, setShowDate] = useState(false);
@@ -171,6 +174,8 @@ export default function ImmunosScreen() {
       setEditingImmuno(null);
       setIsSubmitting(false);
       setSelectedVaccin("");
+      setSearchQuery("");
+      setSheetStep("form");
 
       // Si un type préféré est spécifié, l'utiliser
       // Sinon, utiliser le filtre actif
@@ -631,17 +636,18 @@ export default function ImmunosScreen() {
     return immuno.nomVitamine || "Vitamine";
   };
 
+  const deleteTargetLabel = editingImmuno
+    ? `${getImmunoTypeLabel(editingImmuno.type)} "${getImmunoName(editingImmuno)}"`
+    : "element";
+
   const selectVaccin = (vaccin: string) => {
     setSelectedVaccin(vaccin);
-    setShowVaccinList(false);
     setSearchQuery("");
-    setTimeout(() => {
-      bottomSheetRef.current?.expand();
-    }, 300);
+    setSheetStep("form");
   };
 
   const filteredVaccins = VACCINS_LIST.filter((vaccin) =>
-    vaccin.toLowerCase().includes(searchQuery.toLowerCase())
+    normalizeQuery(vaccin).includes(normalizeQuery(searchQuery))
   );
 
   // ============================================
@@ -652,6 +658,8 @@ export default function ImmunosScreen() {
     setDateHeure(new Date(immuno.date.seconds * 1000));
     setEditingImmuno(immuno);
     setIsSubmitting(false);
+    setSearchQuery("");
+    setSheetStep("form");
 
     const type = immuno.type || "vitamine";
     setImmunoType(type);
@@ -668,8 +676,8 @@ export default function ImmunosScreen() {
     setIsSubmitting(false);
     setEditingImmuno(null);
     setSelectedVaccin("");
-    setShowVaccinList(false);
     setSearchQuery("");
+    setSheetStep("form");
   };
 
   const cancelForm = useCallback(() => {
@@ -724,39 +732,30 @@ export default function ImmunosScreen() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
+    if (isSubmitting || !editingImmuno || !activeChild) return;
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
     if (isSubmitting || !editingImmuno || !activeChild) return;
 
-    Alert.alert("Suppression", "Voulez-vous vraiment supprimer ?", [
-      {
-        text: "Annuler",
-        style: "cancel",
-      },
-      {
-        text: "Supprimer",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setIsSubmitting(true);
-            const isVitamine = editingImmuno.type === "vitamine";
-            if (isVitamine) {
-              await supprimerVitamine(activeChild.id, editingImmuno.id);
-            } else {
-              await supprimerVaccin(activeChild.id, editingImmuno.id);
-            }
-            closeModal();
-          } catch (error) {
-            console.error("Erreur lors de la suppression:", error);
-            Alert.alert(
-              "Erreur",
-              "Impossible de supprimer. Veuillez réessayer."
-            );
-          } finally {
-            setIsSubmitting(false);
-          }
-        },
-      },
-    ]);
+    try {
+      setIsSubmitting(true);
+      const isVitamine = editingImmuno.type === "vitamine";
+      if (isVitamine) {
+        await supprimerVitamine(activeChild.id, editingImmuno.id);
+      } else {
+        await supprimerVaccin(activeChild.id, editingImmuno.id);
+      }
+      setShowDeleteModal(false);
+      closeModal();
+    } catch (error) {
+      console.error("Erreur lors de la suppression:", error);
+      Alert.alert("Erreur", "Impossible de supprimer. Veuillez réessayer.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ============================================
@@ -1101,221 +1100,230 @@ export default function ImmunosScreen() {
           accentColor={immunoType === "vitamine" ? "#FF9800" : "#9C27B0"}
           isEditing={!!editingImmuno}
           isSubmitting={isSubmitting}
+          showActions={sheetStep === "form"}
           onSubmit={handleSubmit}
           onDelete={editingImmuno ? handleDelete : undefined}
           onCancel={cancelForm}
           onClose={() => {
             setIsSubmitting(false);
             setEditingImmuno(null);
+            setSearchQuery("");
+            setSheetStep("form");
           }}
         >
-          {/* Sélecteur de vaccin (si type vaccin) */}
-          {immunoType === "vaccin" && (
-            <TouchableOpacity
-              style={[
-                styles.vaccinSelector,
-                isSubmitting && styles.vaccinSelectorDisabled,
-              ]}
-              onPress={() => {
-                if (!isSubmitting) {
-                  setShowVaccinList(true);
-                  bottomSheetRef.current?.close();
-                }
-              }}
-              disabled={isSubmitting}
-            >
-              <FontAwesome name="list" size={20} color="#666" />
-              <Text
-                style={[
-                  styles.vaccinSelectorText,
-                  selectedVaccin && styles.vaccinSelectorTextSelected,
-                  isSubmitting && styles.vaccinSelectorTextDisabled,
-                ]}
-              >
-                {selectedVaccin || "Sélectionner un vaccin"}
-              </Text>
-              <FontAwesome name="chevron-right" size={16} color="#999" />
-            </TouchableOpacity>
-          )}
-
-          {/* Date & Heure */}
-          <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-          <View style={styles.dateTimeContainer}>
-            <TouchableOpacity
-              style={[
-                styles.dateButton,
-                isSubmitting && styles.dateButtonDisabled,
-              ]}
-              onPress={() => setShowDate(true)}
-              disabled={isSubmitting}
-            >
-              <FontAwesome
-                name="calendar-alt"
-                size={16}
-                color={isSubmitting ? "#ccc" : "#666"}
-              />
-              <Text
-                style={[
-                  styles.dateButtonText,
-                  isSubmitting && styles.dateButtonTextDisabled,
-                ]}
-              >
-                Date
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.dateButton,
-                isSubmitting && styles.dateButtonDisabled,
-              ]}
-              onPress={() => setShowTime(true)}
-              disabled={isSubmitting}
-            >
-              <FontAwesome
-                name="clock"
-                size={16}
-                color={isSubmitting ? "#ccc" : "#666"}
-              />
-              <Text
-                style={[
-                  styles.dateButtonText,
-                  isSubmitting && styles.dateButtonTextDisabled,
-                ]}
-              >
-                Heure
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.selectedDateTime}>
-            <Text style={styles.selectedDate}>
-              {dateHeure.toLocaleDateString("fr-FR", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </Text>
-            <Text style={styles.selectedTime}>
-              {dateHeure.toLocaleTimeString("fr-FR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </View>
-
-          {/* Date/Time Pickers */}
-          {showDate && (
-            <DateTimePicker
-              value={dateHeure}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={onChangeDate}
-            />
-          )}
-          {showTime && (
-            <DateTimePicker
-              value={dateHeure}
-              mode="time"
-              is24Hour={true}
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={onChangeTime}
-            />
-          )}
-        </FormBottomSheet>
-      </SafeAreaView>
-
-      {/* Modal de sélection de vaccin */}
-      <Modal
-        visible={showVaccinList}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowVaccinList(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.vaccinListModal}>
-            <View style={styles.vaccinListHeader}>
-              <Text style={styles.vaccinListTitle}>Sélectionner un vaccin</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => {
-                  setShowVaccinList(false);
-                  bottomSheetRef.current?.expand();
-                }}
-              >
-                <FontAwesome name="times" size={20} color="#666" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.searchContainer}>
-              <FontAwesome
-                name="search"
-                size={16}
-                color="#999"
-                style={styles.searchIcon}
-              />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Rechercher un vaccin..."
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoFocus={true}
-              />
-              {searchQuery && (
-                <TouchableOpacity
-                  style={styles.clearButton}
-                  onPress={() => setSearchQuery("")}
+          {sheetStep === "vaccinPicker" ? (
+            <>
+              <View style={styles.sheetBreadcrumb}>
+                <Pressable
+                  style={styles.sheetBackButton}
+                  onPress={() => setSheetStep("form")}
                 >
-                  <FontAwesome
-                    name="times-circle"
-                    size={16}
-                    color="#999"
-                    style={styles.clearIcon}
-                  />
-                </TouchableOpacity>
-              )}
-            </View>
-            <ScrollView
-              style={styles.vaccinList}
-              showsVerticalScrollIndicator={false}
-            >
-              {filteredVaccins.length > 0 ? (
-                filteredVaccins.map((vaccin, index) => (
+                  <FontAwesome name="chevron-left" size={14} color="#666" />
+                  <Text style={styles.sheetBackText}>Retour</Text>
+                </Pressable>
+                <Text style={styles.sheetBreadcrumbText}>
+                  Immunos / Vaccins / Choisir
+                </Text>
+              </View>
+              <View style={styles.searchContainer}>
+                <FontAwesome
+                  name="search"
+                  size={16}
+                  color="#999"
+                  style={styles.searchIcon}
+                />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Rechercher un vaccin..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoFocus={true}
+                />
+                {searchQuery && (
                   <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.vaccinListItem,
-                      selectedVaccin === vaccin &&
-                        styles.vaccinListItemSelected,
-                    ]}
-                    onPress={() => selectVaccin(vaccin)}
-                    activeOpacity={0.7}
+                    style={styles.clearButton}
+                    onPress={() => setSearchQuery("")}
                   >
                     <FontAwesome
-                      name="syringe"
+                      name="times-circle"
                       size={16}
-                      color={selectedVaccin === vaccin ? "#9C27B0" : "#666"}
+                      color="#999"
+                      style={styles.clearIcon}
                     />
-                    <Text
-                      style={[
-                        styles.vaccinListItemText,
-                        selectedVaccin === vaccin &&
-                          styles.vaccinListItemTextSelected,
-                      ]}
-                    >
-                      {vaccin}
-                    </Text>
-                    {selectedVaccin === vaccin && (
-                      <FontAwesome name="check" size={16} color="#9C27B0" />
-                    )}
                   </TouchableOpacity>
-                ))
-              ) : (
-                <Text style={styles.noResultsText}>Aucun vaccin trouvé</Text>
+                )}
+              </View>
+              <ScrollView
+                style={styles.vaccinList}
+                showsVerticalScrollIndicator={false}
+              >
+                {filteredVaccins.length > 0 ? (
+                  filteredVaccins.map((vaccin, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.vaccinListItem,
+                        selectedVaccin === vaccin &&
+                          styles.vaccinListItemSelected,
+                      ]}
+                      onPress={() => selectVaccin(vaccin)}
+                      activeOpacity={0.7}
+                    >
+                      <FontAwesome
+                        name="syringe"
+                        size={16}
+                        color={selectedVaccin === vaccin ? "#9C27B0" : "#666"}
+                      />
+                      <Text
+                        style={[
+                          styles.vaccinListItemText,
+                          selectedVaccin === vaccin &&
+                            styles.vaccinListItemTextSelected,
+                        ]}
+                      >
+                        {vaccin}
+                      </Text>
+                      {selectedVaccin === vaccin && (
+                        <FontAwesome name="check" size={16} color="#9C27B0" />
+                      )}
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <Text style={styles.noResultsText}>Aucun vaccin trouvé</Text>
+                )}
+              </ScrollView>
+            </>
+          ) : (
+            <>
+              {/* Sélecteur de vaccin (si type vaccin) */}
+              {immunoType === "vaccin" && (
+                <TouchableOpacity
+                  style={[
+                    styles.vaccinSelector,
+                    isSubmitting && styles.vaccinSelectorDisabled,
+                  ]}
+                  onPress={() => {
+                    if (!isSubmitting) {
+                      setSearchQuery("");
+                      setSheetStep("vaccinPicker");
+                    }
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <FontAwesome name="list" size={20} color="#666" />
+                  <Text
+                    style={[
+                      styles.vaccinSelectorText,
+                      selectedVaccin && styles.vaccinSelectorTextSelected,
+                      isSubmitting && styles.vaccinSelectorTextDisabled,
+                    ]}
+                  >
+                    {selectedVaccin || "Sélectionner un vaccin"}
+                  </Text>
+                  <FontAwesome name="chevron-right" size={16} color="#999" />
+                </TouchableOpacity>
               )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+
+              {/* Date & Heure */}
+              <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+              <View style={styles.dateTimeContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.dateButton,
+                    isSubmitting && styles.dateButtonDisabled,
+                  ]}
+                  onPress={() => setShowDate(true)}
+                  disabled={isSubmitting}
+                >
+                  <FontAwesome
+                    name="calendar-alt"
+                    size={16}
+                    color={isSubmitting ? "#ccc" : "#666"}
+                  />
+                  <Text
+                    style={[
+                      styles.dateButtonText,
+                      isSubmitting && styles.dateButtonTextDisabled,
+                    ]}
+                  >
+                    Date
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.dateButton,
+                    isSubmitting && styles.dateButtonDisabled,
+                  ]}
+                  onPress={() => setShowTime(true)}
+                  disabled={isSubmitting}
+                >
+                  <FontAwesome
+                    name="clock"
+                    size={16}
+                    color={isSubmitting ? "#ccc" : "#666"}
+                  />
+                  <Text
+                    style={[
+                      styles.dateButtonText,
+                      isSubmitting && styles.dateButtonTextDisabled,
+                    ]}
+                  >
+                    Heure
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.selectedDateTime}>
+                <Text style={styles.selectedDate}>
+                  {dateHeure.toLocaleDateString("fr-FR", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </Text>
+                <Text style={styles.selectedTime}>
+                  {dateHeure.toLocaleTimeString("fr-FR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              </View>
+
+              {/* Date/Time Pickers */}
+              {showDate && (
+                <DateTimePicker
+                  value={dateHeure}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  onChange={onChangeDate}
+                />
+              )}
+              {showTime && (
+                <DateTimePicker
+                  value={dateHeure}
+                  mode="time"
+                  is24Hour={true}
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  onChange={onChangeTime}
+                />
+              )}
+            </>
+          )}
+        </FormBottomSheet>
+
+        <ConfirmModal
+          visible={showDeleteModal}
+          title="Suppression"
+          message={`Voulez-vous vraiment supprimer ${deleteTargetLabel} ?`}
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          backgroundColor={Colors[colorScheme].background}
+          textColor={Colors[colorScheme].text}
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirm={confirmDelete}
+        />
+      </SafeAreaView>
     </View>
   );
 }
@@ -1511,7 +1519,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Modal Content
+  // Form Content
   modalCategoryLabel: {
     alignSelf: "center",
     fontSize: 16,
@@ -1598,35 +1606,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // Modal Vaccin List
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  vaccinListModal: {
-    width: "90%",
-    maxHeight: "80%",
-    backgroundColor: "white",
-    borderRadius: 12,
-    paddingBottom: 20,
-  },
-  vaccinListHeader: {
+  // Vaccin Picker Header
+  sheetBreadcrumb: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    marginBottom: 12,
   },
-  vaccinListTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
+  sheetBackButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
   },
-  closeButton: {
-    padding: 8,
+  sheetBackText: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "600",
+  },
+  sheetBreadcrumbText: {
+    fontSize: 12,
+    color: "#999",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   vaccinList: {
     maxHeight: 400,
@@ -1657,7 +1660,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f9fa",
     borderRadius: 12,
     paddingHorizontal: 12,
-    marginHorizontal: 20,
     marginVertical: 12,
     borderWidth: 1,
     borderColor: "#e9ecef",

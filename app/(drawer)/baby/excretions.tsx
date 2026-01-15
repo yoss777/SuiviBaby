@@ -1,8 +1,9 @@
-import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -94,6 +95,7 @@ export default function ExcretionsScreen() {
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingExcretion, setEditingExcretion] = useState<Excretion | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [includeMiction, setIncludeMiction] = useState<boolean>(true);
   const [includeSelle, setIncludeSelle] = useState<boolean>(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
@@ -653,39 +655,30 @@ export default function ExcretionsScreen() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
+    if (isSubmitting || !editingExcretion || !activeChild) return;
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
     if (isSubmitting || !editingExcretion || !activeChild) return;
 
-    Alert.alert("Suppression", "Voulez-vous vraiment supprimer ?", [
-      {
-        text: "Annuler",
-        style: "cancel",
-      },
-      {
-        text: "Supprimer",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setIsSubmitting(true);
-            const isMiction = editingExcretion.type === "miction";
-            if (isMiction) {
-              await supprimerMiction(activeChild.id, editingExcretion.id);
-            } else {
-              await supprimerSelle(activeChild.id, editingExcretion.id);
-            }
-            closeModal();
-          } catch (error) {
-            console.error("Erreur lors de la suppression:", error);
-            Alert.alert(
-              "Erreur",
-              "Impossible de supprimer. Veuillez réessayer."
-            );
-          } finally {
-            setIsSubmitting(false);
-          }
-        },
-      },
-    ]);
+    try {
+      setIsSubmitting(true);
+      const isMiction = editingExcretion.type === "miction";
+      if (isMiction) {
+        await supprimerMiction(activeChild.id, editingExcretion.id);
+      } else {
+        await supprimerSelle(activeChild.id, editingExcretion.id);
+      }
+      setShowDeleteModal(false);
+      closeModal();
+    } catch (error) {
+      console.error("Erreur lors de la suppression:", error);
+      Alert.alert("Erreur", "Impossible de supprimer. Veuillez réessayer.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ============================================
@@ -969,9 +962,9 @@ export default function ExcretionsScreen() {
         {/* Bottom Sheet d'ajout/édition */}
         <FormBottomSheet
           ref={bottomSheetRef}
-          title={editingExcretion ? "Modifier" : "Nouvelle excrétion"}
-          icon="tint"
-          accentColor={includeMiction && includeSelle ? "#6c757d" : includeMiction ? "#17a2b8" : "#dc3545"}
+          title={editingExcretion ? `Modifier ${editingExcretion.type === "miction" ? "miction" : "selle"}`: "Nouvelle excrétion"}
+          icon="toilet"
+          accentColor={includeMiction && includeSelle ? "#6c757d" : includeMiction ? "#17a2b8" : includeSelle ?"#dc3545" : "#6c757d"}
           isEditing={!!editingExcretion}
           isSubmitting={isSubmitting}
           onSubmit={handleSubmit}
@@ -983,9 +976,9 @@ export default function ExcretionsScreen() {
           }}
         >
           {/* Sélection du type - Toggles en mode ajout */}
-          {!editingExcretion ? (
+          {!editingExcretion && (
             <>
-              <Text style={styles.modalCategoryLabel}>Type d'excrétion</Text>
+              <Text style={styles.modalCategoryLabel}>Type d&apos;excrétion</Text>
               <Text style={styles.toggleSubtitle}>
                 Vous pouvez sélectionner les deux si nécessaire
               </Text>
@@ -1027,7 +1020,7 @@ export default function ExcretionsScreen() {
                   activeOpacity={0.7}
                 >
                   <FontAwesome
-                    name="circle"
+                    name="poop"
                     size={20}
                     color={includeSelle ? "white" : "#dc3545"}
                   />
@@ -1048,18 +1041,6 @@ export default function ExcretionsScreen() {
                 </Text>
               )}
             </>
-          ) : (
-            // Label en mode édition
-            <View style={styles.editModeLabel}>
-              <FontAwesome
-                name={editingExcretion.type === "miction" ? "water" : "circle"}
-                size={16}
-                color={editingExcretion.type === "miction" ? "#17a2b8" : "#dc3545"}
-              />
-              <Text style={styles.editModeLabelText}>
-                Modification : {editingExcretion.type === "miction" ? "Miction" : "Selle"}
-              </Text>
-            </View>
           )}
 
           {/* Date & Heure */}
@@ -1147,6 +1128,18 @@ export default function ExcretionsScreen() {
             />
           )}
         </FormBottomSheet>
+
+        <ConfirmModal
+          visible={showDeleteModal}
+          title="Suppression"
+          message="Voulez-vous vraiment supprimer ?"
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          backgroundColor={Colors[colorScheme].background}
+          textColor={Colors[colorScheme].text}
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirm={confirmDelete}
+        />
       </SafeAreaView>
     </View>
   );

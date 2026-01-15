@@ -23,6 +23,7 @@ export interface FormBottomSheetProps {
   accentColor?: string;
   isEditing?: boolean;
   isSubmitting?: boolean;
+  showActions?: boolean;
   children: React.ReactNode;
   onSubmit: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
@@ -43,6 +44,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
       accentColor = "#4A90E2",
       isEditing = false,
       isSubmitting = false,
+      showActions = true,
       children,
       onSubmit,
       onDelete,
@@ -86,51 +88,54 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
           <View style={styles.content}>{children}</View>
 
           {/* Boutons d'action */}
-          <View style={styles.buttonsContainer}>
-            {/* Bouton Supprimer (uniquement en mode édition) */}
-            {isEditing && onDelete && (
-              <TouchableOpacity
-                style={[
-                  styles.deleteButton,
-                  isSubmitting && styles.buttonDisabled,
-                ]}
-                onPress={onDelete}
-                disabled={isSubmitting}
-              >
-                <FontAwesome name="trash" size={20} color="white" />
-              </TouchableOpacity>
-            )}
+          {showActions && (
+            <View style={styles.buttonsContainer}>
+              <View style={styles.primaryRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.cancelButton,
+                    isSubmitting && styles.buttonDisabled,
+                  ]}
+                  onPress={onCancel}
+                  disabled={isSubmitting}
+                >
+                  <Text style={styles.cancelText}>Annuler</Text>
+                </TouchableOpacity>
 
-            {/* Bouton Annuler */}
-            <TouchableOpacity
-              style={[
-                styles.cancelButton,
-                isSubmitting && styles.buttonDisabled,
-              ]}
-              onPress={onCancel}
-              disabled={isSubmitting}
-            >
-              <FontAwesome name="xmark" size={20} color="white" />
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.validateButton,
+                    { backgroundColor: "#4A90E2" },
+                    isSubmitting && styles.buttonDisabled,
+                  ]}
+                  onPress={onSubmit}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.validateText}>
+                      {isEditing ? "Enregistrer" : "Ajouter"}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
 
-            {/* Bouton Valider */}
-            <TouchableOpacity
-              style={[
-                styles.validateButton,
-                { backgroundColor: isEditing ? "#28a745" : "#4A90E2" },
-                isSubmitting && styles.buttonDisabled,
-              ]}
-              onPress={onSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <FontAwesome name="check" size={20} color="white" />
+              {isEditing && onDelete && (
+                <TouchableOpacity
+                  style={[
+                    styles.deleteOutlineButton,
+                    isSubmitting && styles.buttonDisabled,
+                  ]}
+                  onPress={onDelete}
+                  disabled={isSubmitting}
+                >
+                  <FontAwesome name="trash" size={14} color="#dc3545" />
+                  <Text style={styles.deleteOutlineText}>Supprimer</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-
-          </View>
+            </View>
+          )}
         </BottomSheetScrollView>
       </BottomSheet>
     );
@@ -167,36 +172,60 @@ const styles = StyleSheet.create({
 
   // Boutons d'action
   buttonsContainer: {
-    flexDirection: "row",
-    gap: 16,
+    gap: 12,
     paddingBottom: Platform.OS === "ios" ? 20 : 16,
     paddingTop: 10,
   },
-  deleteButton: {
-    flex: 1,
-    backgroundColor: "#dc3545",
-    paddingVertical: 18,
-    borderRadius: 14,
+  primaryRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  deleteOutlineButton: {
+    alignSelf: "stretch",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 56,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#f1b1b1",
+    backgroundColor: "#fff5f5",
+    gap: 8,
+  },
+  deleteOutlineText: {
+    fontSize: 14,
+    color: "#dc3545",
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#333333",
-    paddingVertical: 18,
+    backgroundColor: "#f5f6f8",
+    borderWidth: 1,
+    borderColor: "#d7dbe0",
+    paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 56,
+    minHeight: 52,
+  },
+  cancelText: {
+    fontSize: 16,
+    color: "#4a4f55",
+    fontWeight: "600",
   },
   validateButton: {
     flex: 1,
-    paddingVertical: 18,
+    paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 56,
+    minHeight: 52,
+  },
+  validateText: {
+    fontSize: 16,
+    color: "#fff",
+    fontWeight: "700",
   },
   buttonDisabled: {
     opacity: 0.5,

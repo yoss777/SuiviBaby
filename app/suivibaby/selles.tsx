@@ -3,6 +3,7 @@ import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -80,6 +81,7 @@ export default function SellesScreen({ selles }: Props) {
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingSelle, setEditingSelle] = useState<Selle | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
 
   // États des pickers
@@ -480,34 +482,25 @@ export default function SellesScreen({ selles }: Props) {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
+    if (isSubmitting || !editingSelle || !activeChild) return;
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
     if (isSubmitting || !editingSelle || !activeChild) return;
 
-    Alert.alert("Suppression", "Voulez-vous vraiment supprimer cette selle ?", [
-      {
-        text: "Annuler",
-        style: "cancel",
-      },
-      {
-        text: "Supprimer",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setIsSubmitting(true);
-            await supprimerSelle(activeChild.id, editingSelle.id);
-            closeModal();
-          } catch (error) {
-            console.error("Erreur lors de la suppression:", error);
-            Alert.alert(
-              "Erreur",
-              "Impossible de supprimer la selle. Veuillez réessayer."
-            );
-          } finally {
-            setIsSubmitting(false);
-          }
-        },
-      },
-    ]);
+    try {
+      setIsSubmitting(true);
+      await supprimerSelle(activeChild.id, editingSelle.id);
+      setShowDeleteModal(false);
+      closeModal();
+    } catch (error) {
+      console.error("Erreur lors de la suppression:", error);
+      Alert.alert("Erreur", "Impossible de supprimer la selle. Veuillez réessayer.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ============================================
@@ -863,6 +856,18 @@ const renderDayGroup = ({ item }: { item: SelleGroup }) => {
             />
           )}
         </FormBottomSheet>
+
+        <ConfirmModal
+          visible={showDeleteModal}
+          title="Suppression"
+          message="Voulez-vous vraiment supprimer cette selle ?"
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          backgroundColor={Colors[colorScheme].background}
+          textColor={Colors[colorScheme].text}
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirm={confirmDelete}
+        />
       </SafeAreaView>
     </View>
   );

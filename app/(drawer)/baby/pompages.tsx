@@ -1,8 +1,9 @@
-import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -90,6 +91,7 @@ export default function PompagesScreen() {
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingPompage, setEditingPompage] = useState<Pompage | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [quantiteGauche, setQuantiteGauche] = useState<number>(100);
   const [quantiteDroite, setQuantiteDroite] = useState<number>(100);
@@ -607,34 +609,25 @@ export default function PompagesScreen() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
+    if (isSubmitting || !editingPompage || !activeChild) return;
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
     if (isSubmitting || !editingPompage || !activeChild) return;
 
-    Alert.alert("Suppression", "Voulez-vous vraiment supprimer ce pompage ?", [
-      {
-        text: "Annuler",
-        style: "cancel",
-      },
-      {
-        text: "Supprimer",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setIsSubmitting(true);
-            await supprimerPompage(activeChild.id, editingPompage.id);
-            closeModal();
-          } catch (error) {
-            console.error("Erreur lors de la suppression:", error);
-            Alert.alert(
-              "Erreur",
-              "Impossible de supprimer le pompage. Veuillez réessayer."
-            );
-          } finally {
-            setIsSubmitting(false);
-          }
-        },
-      },
-    ]);
+    try {
+      setIsSubmitting(true);
+      await supprimerPompage(activeChild.id, editingPompage.id);
+      setShowDeleteModal(false);
+      closeModal();
+    } catch (error) {
+      console.error("Erreur lors de la suppression:", error);
+      Alert.alert("Erreur", "Impossible de supprimer le pompage. Veuillez réessayer.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ============================================
@@ -947,7 +940,7 @@ const renderDayGroup = ({ item }: { item: PompageGroup }) => {
         <FormBottomSheet
           ref={bottomSheetRef}
           title={editingPompage ? "Modifier la session" : "Nouvelle session"}
-          icon={editingPompage ? "edit" : "pump-medical"}
+          icon="pump-medical"
           accentColor="#28a745"
           isEditing={!!editingPompage}
           isSubmitting={isSubmitting}
@@ -1139,6 +1132,18 @@ const renderDayGroup = ({ item }: { item: PompageGroup }) => {
             />
           )}
         </FormBottomSheet>
+
+        <ConfirmModal
+          visible={showDeleteModal}
+          title="Suppression"
+          message="Voulez-vous vraiment supprimer ce pompage ?"
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          backgroundColor={Colors[colorScheme].background}
+          textColor={Colors[colorScheme].text}
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirm={confirmDelete}
+        />
       </SafeAreaView>
     </View>
   );

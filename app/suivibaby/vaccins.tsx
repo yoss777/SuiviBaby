@@ -3,9 +3,11 @@ import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { normalizeQuery } from "@/utils/text";
 import {
   ajouterVaccin,
   modifierVaccin,
@@ -98,6 +100,7 @@ export default function VaccinsScreen({ vaccins }: Props) {
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingVaccin, setEditingVaccin] = useState<Vaccin | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [selectedVaccin, setSelectedVaccin] = useState<string>("");
   const [showVaccinList, setShowVaccinList] = useState<boolean>(false);
@@ -462,7 +465,7 @@ export default function VaccinsScreen({ vaccins }: Props) {
   };
 
   const filteredVaccins = VACCINS_LIST.filter((vaccin) =>
-    vaccin.toLowerCase().includes(searchQuery.toLowerCase())
+    normalizeQuery(vaccin).includes(normalizeQuery(searchQuery))
   );
 
   // ============================================
@@ -527,34 +530,25 @@ export default function VaccinsScreen({ vaccins }: Props) {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
+    if (isSubmitting || !editingVaccin || !activeChild) return;
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
     if (isSubmitting || !editingVaccin || !activeChild) return;
 
-    Alert.alert("Suppression", "Voulez-vous vraiment supprimer ce vaccin ?", [
-      {
-        text: "Annuler",
-        style: "cancel",
-      },
-      {
-        text: "Supprimer",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setIsSubmitting(true);
-            await supprimerVaccin(activeChild.id, editingVaccin.id);
-            closeModal();
-          } catch (error) {
-            console.error("Erreur lors de la suppression:", error);
-            Alert.alert(
-              "Erreur",
-              "Impossible de supprimer le vaccin. Veuillez réessayer."
-            );
-          } finally {
-            setIsSubmitting(false);
-          }
-        },
-      },
-    ]);
+    try {
+      setIsSubmitting(true);
+      await supprimerVaccin(activeChild.id, editingVaccin.id);
+      setShowDeleteModal(false);
+      closeModal();
+    } catch (error) {
+      console.error("Erreur lors de la suppression:", error);
+      Alert.alert("Erreur", "Impossible de supprimer le vaccin. Veuillez réessayer.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ============================================
@@ -927,6 +921,18 @@ export default function VaccinsScreen({ vaccins }: Props) {
             />
           )}
         </FormBottomSheet>
+
+        <ConfirmModal
+          visible={showDeleteModal}
+          title="Suppression"
+          message="Voulez-vous vraiment supprimer ce vaccin ?"
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          backgroundColor={Colors[colorScheme].background}
+          textColor={Colors[colorScheme].text}
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirm={confirmDelete}
+        />
       </SafeAreaView>
 
       {/* Modal de sélection de vaccin */}

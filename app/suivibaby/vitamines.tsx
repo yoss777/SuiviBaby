@@ -3,6 +3,7 @@ import { ThemedText } from "@/components/themed-text";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -68,6 +69,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingVitamine, setEditingVitamine] = useState<Vitamine | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
 
   // États des pickers
@@ -473,38 +475,28 @@ export default function VitaminesScreen({ vitamines }: Props) {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
+    if (isSubmitting || !editingVitamine || !activeChild) return;
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
     if (isSubmitting || !editingVitamine || !activeChild) return;
 
-    Alert.alert(
-      "Suppression",
-      "Voulez-vous vraiment supprimer cette prise de vitamines ?",
-      [
-        {
-          text: "Annuler",
-          style: "cancel",
-        },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setIsSubmitting(true);
-              await supprimerVitamine(activeChild.id, editingVitamine.id);
-              closeModal();
-            } catch (error) {
-              console.error("Erreur lors de la suppression:", error);
-              Alert.alert(
-                "Erreur",
-                "Impossible de supprimer la prise de vitamines. Veuillez réessayer."
-              );
-            } finally {
-              setIsSubmitting(false);
-            }
-          },
-        },
-      ]
-    );
+    try {
+      setIsSubmitting(true);
+      await supprimerVitamine(activeChild.id, editingVitamine.id);
+      setShowDeleteModal(false);
+      closeModal();
+    } catch (error) {
+      console.error("Erreur lors de la suppression:", error);
+      Alert.alert(
+        "Erreur",
+        "Impossible de supprimer la prise de vitamines. Veuillez réessayer."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ============================================
@@ -872,6 +864,18 @@ export default function VitaminesScreen({ vitamines }: Props) {
             />
           )}
         </FormBottomSheet>
+
+        <ConfirmModal
+          visible={showDeleteModal}
+          title="Suppression"
+          message="Voulez-vous vraiment supprimer cette prise de vitamines ?"
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          backgroundColor={Colors[colorScheme].background}
+          textColor={Colors[colorScheme].text}
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirm={confirmDelete}
+        />
       </SafeAreaView>
     </View>
   );
