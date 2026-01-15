@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,109 +13,104 @@ export default function PrivacyScreen() {
 
   const sections = [
     {
-      title: '1. Collecte des données',
+      title: '1. Responsable du traitement',
       content:
-        'Mediscope collecte uniquement les données nécessaires au fonctionnement de l\'application et à la fourniture de nos services médicaux. Ces données incluent vos informations personnelles, vos données médicales, et les données de suivi de votre bébé.',
+        'SuiviBaby, [Adresse complete], [Pays]. Contact : privacy@suivibaby.com. DPO : [Nom/Email si applicable, sinon "non designe"].',
     },
     {
-      title: '2. Utilisation des données',
+      title: '2. Donnees collectees',
       content:
-        'Vos données sont utilisées exclusivement pour vous fournir les services de Mediscope, améliorer notre application, et vous envoyer des rappels médicaux importants. Nous ne vendons jamais vos données à des tiers.',
+        'Compte : email, pseudo, identifiant utilisateur. Enfants : prenom/nom, date de naissance, sexe, photo (si fournie). Suivi : evenements de suivi (biberons, tetees, changes, sommeil, etc.). Donnees techniques : version de l\'app, plateforme, logs techniques en cas d\'erreur.',
     },
     {
-      title: '3. Protection des données',
+      title: '3. Finalites et base legale',
       content:
-        'Toutes vos données sont cryptées lors de leur transmission et stockage. Nous utilisons des technologies de sécurité de pointe pour protéger vos informations médicales sensibles contre tout accès non autorisé.',
+        'Fournir le service et synchroniser vos donnees (execution du contrat). Securiser l\'acces et prevenir la fraude (interet legitime). Ameliorer l\'app et corriger les bugs (interet legitime). Notifications importantes liees au service (interet legitime / consentement si requis).',
     },
     {
-      title: '4. Partage des données',
+      title: '4. Hebergement et sous-traitants',
       content:
-        'Vos données médicales ne sont partagées qu\'avec votre consentement explicite. Vous pouvez à tout moment contrôler qui a accès à vos informations via les paramètres de partage de l\'application.',
+        'Les donnees sont hebergees par Google Firebase (Google LLC). [Preciser la region d\'hebergement : Europe/France]. Si un transfert hors UE a lieu, il est encadre par les clauses contractuelles types de la Commission europeenne.',
     },
     {
-      title: '5. Vos droits',
+      title: '5. Durees de conservation',
       content:
-        'Conformément au RGPD, vous avez le droit d\'accéder, de modifier, de supprimer ou de transférer vos données personnelles. Vous pouvez exercer ces droits à tout moment depuis les paramètres de l\'application.',
+        'Donnees de compte : tant que votre compte est actif. Donnees de suivi : tant que le compte est actif. En cas de suppression, vos donnees sont supprimees sous 30 jours, sauf obligation legale ou sauvegardes techniques.',
     },
     {
-      title: '6. Cookies et traceurs',
+      title: '6. Partage des donnees',
       content:
-        'Nous utilisons des cookies strictement nécessaires au fonctionnement de l\'application. Aucun cookie publicitaire ou de tracking n\'est utilisé sans votre consentement explicite.',
+        'Vos donnees ne sont jamais vendues. Elles peuvent etre partagees uniquement avec nos sous-traitants techniques (Firebase) pour le fonctionnement du service et avec les personnes que vous autorisez explicitement via les fonctions de partage.',
     },
     {
-      title: '7. Conservation des données',
+      title: '7. Vos droits',
       content:
-        'Vos données médicales sont conservées tant que votre compte est actif. En cas de suppression de compte, toutes vos données sont définitivement supprimées dans un délai de 30 jours.',
+        'Conformement au RGPD, vous disposez des droits d\'acces, rectification, suppression, limitation, opposition et portabilite. Vous pouvez exercer ces droits en nous contactant a privacy@SuiviBaby.com. Vous avez aussi le droit d\'introduire une reclamation aupres de la CNIL.',
     },
     {
-      title: '8. Données des mineurs',
+      title: '8. Securite',
       content:
-        'Les données des enfants sont traitées avec une attention particulière et ne sont accessibles que par les parents ou tuteurs légaux autorisés.',
+        'Les donnees sont chiffrees en transit (HTTPS/TLS). L\'acces est strictement limite aux personnes autorisees. [Optionnel : chiffrement au repos via Firebase si confirme].',
     },
     {
-      title: '9. Modifications de la politique',
+      title: '9. Modifications',
       content:
-        'Nous pouvons mettre à jour cette politique de confidentialité. Vous serez informé de tout changement important via l\'application ou par email.',
-    },
-    {
-      title: '10. Contact',
-      content:
-        'Pour toute question concernant la confidentialité de vos données, contactez-nous à privacy@mediscope.com ou via le formulaire de contact dans l\'application.',
+        'Toute modification importante de cette politique sera notifiee dans l\'application ou par email.',
     },
   ];
 
   return (
     <ThemedView style={styles.screen}>
-    <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['bottom']}>
-      <Stack.Screen
-        options={{
-          title: 'Confidentialité',
-          headerBackTitle: 'Retour',
-        }}
-      />
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <ThemedView style={styles.header}>
-          <View style={[styles.headerIcon, { backgroundColor: Colors[colorScheme].tint + '20' }]}>
-            <Ionicons name="shield-checkmark" size={32} color={Colors[colorScheme].tint} />
-          </View>
-          <ThemedText style={styles.headerTitle}>
-            Politique de confidentialité
-          </ThemedText>
-          <Text style={[styles.headerDate, { color: Colors[colorScheme].tabIconDefault }]}>
-            Dernière mise à jour : 1er janvier 2025
-          </Text>
-        </ThemedView>
-
-        <ThemedView style={styles.content}>
-          <ThemedText style={styles.intro}>
-            Chez Mediscope, la protection de vos données personnelles et médicales est notre
-            priorité absolue. Cette politique de confidentialité explique comment nous collectons,
-            utilisons et protégeons vos informations.
-          </ThemedText>
-
-          {sections.map((section, index) => (
-            <View key={index} style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>
-                {section.title}
-              </ThemedText>
-              <Text style={[styles.sectionContent, { color: Colors[colorScheme].tabIconDefault }]}>
-                {section.content}
-              </Text>
+      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['bottom']}>
+        <Stack.Screen
+          options={{
+            title: 'Confidentialité',
+            headerBackTitle: 'Retour',
+          }}
+        />
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <ThemedView style={styles.header}>
+            <View style={[styles.headerIcon, { backgroundColor: Colors[colorScheme].tint + '20' }]}>
+              <Ionicons name="shield-checkmark" size={32} color={Colors[colorScheme].tint} />
             </View>
-          ))}
-        </ThemedView>
+            <ThemedText style={styles.headerTitle}>
+              Politique de confidentialité
+            </ThemedText>
+            <Text style={[styles.headerDate, { color: Colors[colorScheme].tabIconDefault }]}>
+              Dernière mise à jour : 1er janvier 2026
+            </Text>
+          </ThemedView>
 
-        <ThemedView style={styles.footer}>
-          <Ionicons name="mail-outline" size={20} color={Colors[colorScheme].tint} />
-          <ThemedText style={styles.footerText}>
-            Pour toute question : privacy@mediscope.com
-          </ThemedText>
-        </ThemedView>
-      </ScrollView>
-    </SafeAreaView>
+          <ThemedView style={styles.content}>
+            <ThemedText style={styles.intro}>
+              Chez SuiviBaby, la protection de vos donnees personnelles est notre
+              priorite absolue. Cette politique explique comment nous collectons, utilisons et
+              protegeons vos informations.
+            </ThemedText>
+
+            {sections.map((section, index) => (
+              <View key={index} style={styles.section}>
+                <ThemedText style={styles.sectionTitle}>
+                  {section.title}
+                </ThemedText>
+                <Text style={[styles.sectionContent, { color: Colors[colorScheme].tabIconDefault }]}>
+                  {section.content}
+                </Text>
+              </View>
+            ))}
+          </ThemedView>
+
+          <ThemedView style={styles.footer}>
+            <Ionicons name="mail-outline" size={20} color={Colors[colorScheme].tint} />
+            <ThemedText style={styles.footerText}>
+              Pour toute question : privacy@suivibaby.com
+            </ThemedText>
+          </ThemedView>
+        </ScrollView>
+      </SafeAreaView>
     </ThemedView>
   );
 }

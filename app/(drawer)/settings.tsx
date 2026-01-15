@@ -1,14 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { doc, onSnapshot } from 'firebase/firestore';
-import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedView } from '@/components/themed-view';
+import { InfoModal } from '@/components/ui/InfoModal';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useThemePreference } from '@/contexts/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface SettingItem {
@@ -16,20 +18,32 @@ interface SettingItem {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   description?: string;
+  value?: string;
+  tag?: string;
   onPress: () => void;
   color?: string;
   disabled?: boolean;
+  showChevron?: boolean;
 }
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const { user, userName, email } = useAuth();  
+  const { user } = useAuth();  
+  const { preference: themePreference } = useThemePreference();
   const router = useRouter();
   const [hasHiddenChildren, setHasHiddenChildren] = useState(false);
+  const [hiddenChildrenCount, setHiddenChildrenCount] = useState(0);
+  const [languagePreference, setLanguagePreference] = useState('fr');
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: '',
+    message: '',
+  });
 
   useEffect(() => {
     if (!user) {
       setHasHiddenChildren(false);
+      setHiddenChildrenCount(0);
       return;
     }
 
@@ -40,12 +54,18 @@ export default function SettingsScreen() {
         const data = snapshot.data();
         const hiddenIds = data.hiddenChildrenIds || [];
         setHasHiddenChildren(hiddenIds.length > 0);
+        setHiddenChildrenCount(hiddenIds.length);
+        setLanguagePreference(data.language || 'fr');
       } else {
         setHasHiddenChildren(false);
+        setHiddenChildrenCount(0);
+        setLanguagePreference('fr');
       }
     }, (error) => {
       console.error('Erreur lors de l\'écoute des enfants masqués:', error);
       setHasHiddenChildren(false);
+      setHiddenChildrenCount(0);
+      setLanguagePreference('fr');
     });
 
     return () => unsubscribe();
@@ -59,16 +79,6 @@ export default function SettingsScreen() {
       description: 'Modifier vos informations personnelles',
       onPress: () => {
         router.push('/settings/profile');
-      },
-    },
-    {
-      id: 'email',
-      icon: 'mail-outline',
-      label: 'Email',
-      description: email || user?.email || '',
-      // description: user?.email || '',
-      onPress: () => {
-        Alert.alert('Email', 'Fonctionnalité à venir');
       },
     },
     {
@@ -87,6 +97,7 @@ export default function SettingsScreen() {
       id: 'hidden-children',
       icon: 'eye-off-outline',
       label: 'Enfants masqués',
+      value: `${hiddenChildrenCount}`,
       description: hasHiddenChildren ? 'Gérer les enfants masqués' : 'Aucun enfant masqué',
       disabled: !hasHiddenChildren,
       onPress: () => {
@@ -108,51 +119,65 @@ export default function SettingsScreen() {
       id: 'theme',
       icon: 'moon-outline',
       label: 'Thème',
-      description: 'Clair / Sombre',
+      value:
+        themePreference === 'auto'
+          ? 'Automatique'
+          : themePreference === 'dark'
+          ? 'Sombre'
+          : 'Clair',
       onPress: () => {
         router.push('/settings/theme');
       },
     },
-    {
-      id: 'language',
-      icon: 'language-outline',
-      label: 'Langue',
-      description: 'Français',
-      onPress: () => {
-        router.push('/settings/language');
-      },
-    },
+    // {
+    //   id: 'language',
+    //   icon: 'language-outline',
+    //   label: 'Langue',
+    //   value:
+    //     {
+    //       fr: 'Français',
+    //       en: 'English',
+    //       es: 'Español',
+    //       de: 'Deutsch',
+    //       it: 'Italiano',
+    //       pt: 'Português',
+    //       ar: 'العربية',
+    //     }[languagePreference] || languagePreference.toUpperCase(),
+    //   onPress: () => {
+    //     router.push('/settings/language');
+    //   },
+    // },
   ];
 
   const dataSettings: SettingItem[] = [
-    {
-      id: 'migration',
-      icon: 'rocket-outline',
-      label: 'Migration des données',
-      description: 'Gérer la migration vers la nouvelle structure',
-      color: Colors.light.primary,
-      onPress: () => {
-        router.push('/settings/migration');
-      },
-    },
+    // {
+    //   id: 'migration',
+    //   icon: 'rocket-outline',
+    //   label: 'Migration des données',
+    //   description: 'Gérer la migration vers la nouvelle structure',
+    //   color: Colors.light.primary,
+    //   onPress: () => {
+    //     router.push('/settings/migration');
+    //   },
+    // },
     {
       id: 'export',
       icon: 'cloud-download-outline',
-      label: 'Exporter les données',
-      description: 'Télécharger vos données médicales',
+      label: 'Export',
+      description: 'Télécharger vos données',
       onPress: () => {
         router.push('/settings/export');
       },
     },
-    {
-      id: 'backup',
-      icon: 'cloud-upload-outline',
-      label: 'Sauvegarde',
-      description: 'Sauvegarder vos données',
-      onPress: () => {
-        router.push('/settings/backup');
-      },
-    },
+    // {
+    //   id: 'backup',
+    //   icon: 'cloud-upload-outline',
+    //   label: 'Sauvegarde',
+    //   description: 'Sauvegarder vos données',
+    //   onPress: () => {
+    //     router.push('/settings/backup');
+    //   },
+    // },
   ];
 
   const otherSettings: SettingItem[] = [
@@ -177,9 +202,13 @@ export default function SettingsScreen() {
       id: 'about',
       icon: 'information-circle-outline',
       label: 'À propos',
-      description: 'Version 1.0.0',
+      value: 'Version 1.0.0',
       onPress: () => {
-        Alert.alert('SMILE', 'Version 1.0.0\n\nSystème d\'Information Médicale');
+        setModalConfig({
+          visible: true,
+          title: 'SuiviBaby',
+          message: 'Version 1.0.0\n\nSystème de suivi d\'événements bébé pour les parents.',
+        });
       },
     },
     {
@@ -198,78 +227,94 @@ export default function SettingsScreen() {
       icon: 'trash-outline',
       label: 'Supprimer le compte',
       description: 'Cette action est irréversible',
-      onPress: () => {
-        Alert.alert(
-          'Supprimer le compte',
-          'Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.',
-          [
-            { text: 'Annuler', style: 'cancel' },
-            {
-              text: 'Supprimer',
-              style: 'destructive',
-              onPress: () => {
-                Alert.alert('Suppression', 'Fonctionnalité à venir');
-              },
-            },
-          ]
-        );
-      },
+      tag: 'Bientot',
+      onPress: () => {},
+      disabled: true,
+      showChevron: false,
       color: '#dc3545',
     },
   ];
 
-  const renderSettingItem = (item: SettingItem) => (
-    <TouchableOpacity
-      key={item.id}
-      style={[
-        styles.settingItem,
-        { borderBottomColor: Colors[colorScheme].tabIconDefault + '20' },
-      ]}
-      onPress={item.onPress}
-      activeOpacity={item.disabled ? 1 : 0.7}
-      disabled={item.disabled}
-    >
-      <View style={styles.settingItemLeft}>
-        <View
-          style={[
-            styles.iconContainer,
-            { backgroundColor: (item.color || Colors[colorScheme].tint) + '15' },
-            item.disabled && { opacity: 0.5 },
-          ]}
-        >
-          <Ionicons
-            name={item.icon}
-            size={22}
-            color={item.color || Colors[colorScheme].tint}
-          />
-        </View>
-        <View style={styles.settingTextContainer}>
-          <Text style={[
-            styles.settingLabel,
-            { color: item.color || Colors[colorScheme].text },
-            item.disabled && { opacity: 0.5 },
-          ]}>
-            {item.label}
-          </Text>
-          {item.description && (
+  const renderSettingItem = (item: SettingItem) => {
+    const isDisabled = !!item.disabled;
+    const showChevron = item.showChevron ?? (!isDisabled);
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[
+          styles.settingItem,
+          { borderBottomColor: Colors[colorScheme].tabIconDefault + '20' },
+        ]}
+        onPress={item.onPress}
+        activeOpacity={isDisabled ? 1 : 0.7}
+        disabled={isDisabled}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: isDisabled }}
+      >
+        <View style={styles.settingItemLeft}>
+          <View
+            style={[
+              styles.iconContainer,
+              { backgroundColor: (item.color || Colors[colorScheme].tint) + '15' },
+              isDisabled && { opacity: 0.35 },
+            ]}
+          >
+            <Ionicons
+              name={item.icon}
+              size={22}
+              color={item.color || Colors[colorScheme].tint}
+            />
+          </View>
+          <View style={styles.settingTextContainer}>
             <Text style={[
-              styles.settingDescription,
-              { color: Colors[colorScheme].tabIconDefault },
-              item.disabled && { opacity: 0.5 },
+              styles.settingLabel,
+              { color: item.color || Colors[colorScheme].text },
+              isDisabled && { opacity: 0.35 },
             ]}>
-              {item.description}
+              {item.label}
             </Text>
-          )}
+            {item.description && (
+              <Text style={[
+                styles.settingDescription,
+                { color: Colors[colorScheme].tabIconDefault },
+                isDisabled && { opacity: 0.35 },
+              ]}>
+                {item.description}
+              </Text>
+            )}
+          </View>
         </View>
-      </View>
-      <Ionicons
-        name="chevron-forward"
-        size={20}
-        color={Colors[colorScheme].tabIconDefault}
-        style={item.disabled && { opacity: 0.5 }}
-      />
-    </TouchableOpacity>
-  );
+        <View style={styles.settingItemRight}>
+          {item.value ? (
+            <Text
+              style={[
+                styles.settingValue,
+                { color: Colors[colorScheme].tabIconDefault },
+                isDisabled && { opacity: 0.35 },
+              ]}
+              numberOfLines={1}
+            >
+              {item.value}
+            </Text>
+          ) : null}
+          {item.tag ? (
+            <View style={[styles.tag, isDisabled && { opacity: 0.35 }]}>
+              <Text style={styles.tagText}>{item.tag}</Text>
+            </View>
+          ) : null}
+          {showChevron ? (
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={Colors[colorScheme].tabIconDefault}
+              style={isDisabled && { opacity: 0.35 }}
+            />
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const renderSection = (title: string, items: SettingItem[]) => (
     <View style={styles.section}>
@@ -283,23 +328,31 @@ export default function SettingsScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['top', 'bottom']}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {renderSection('COMPTE', accountSettings)}
-        {renderSection('APPLICATION', appSettings)}
-        {renderSection('DONNÉES', dataSettings)}
-        {renderSection('AUTRES', otherSettings)}
-        {renderSection('ZONE DANGEREUSE', dangerSettings)}
+        {renderSection('Compte', accountSettings)}
+        {renderSection('Application', appSettings)}
+        {renderSection('Donnees', dataSettings)}
+        {renderSection('Autres', otherSettings)}
+        {renderSection('Zone dangereuse', dangerSettings)}
 
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: Colors[colorScheme].tabIconDefault }]}>
-            Mediscope © 2025
+            SuiviBaby © 2026
           </Text>
         </View>
       </ScrollView>
+      <InfoModal
+        visible={modalConfig.visible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onClose={() => setModalConfig((prev) => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
   );
 }
@@ -315,10 +368,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontSize: 13,
+    fontWeight: '600',
     paddingHorizontal: 20,
     marginBottom: 8,
   },
@@ -358,6 +409,27 @@ const styles = StyleSheet.create({
   settingDescription: {
     fontSize: 13,
     marginTop: 2,
+  },
+  settingItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    maxWidth: 160,
+  },
+  settingValue: {
+    fontSize: 14,
+  },
+  tag: {
+    backgroundColor: '#f2f2f2',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  tagText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#555',
+    textTransform: 'uppercase',
   },
   footer: {
     alignItems: 'center',

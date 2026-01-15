@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { InfoModal } from '@/components/ui/InfoModal';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -20,30 +21,35 @@ export default function HelpScreen() {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: '',
+    message: '',
+  });
 
   const faqs: FAQItem[] = [
     {
-      question: 'Comment ajouter un nouveau rendez-vous ?',
+      question: 'Comment enregistrer un événement pour mon bébé ?',
       answer:
-        'Allez dans la section "Agenda" et appuyez sur le bouton "+". Remplissez les informations du rendez-vous et sauvegardez.',
-      icon: 'calendar',
+        'Ouvrez le bébé concerné puis choisissez le type d\'événement (biberon, tétée, sommeil, etc.) et validez.',
+      icon: 'add-circle',
     },
     {
-      question: 'Comment partager mes données médicales ?',
+      question: 'Comment partager un bébé avec un autre parent ?',
       answer:
-        'Allez dans Paramètres > Exporter les données. Sélectionnez les catégories à partager et choisissez le format d\'export.',
+        'Allez dans la section de partage et envoyez une invitation ou un code à l\'autre parent.',
       icon: 'share-social',
     },
     {
-      question: 'Comment sauvegarder mes données ?',
+      question: 'Comment exporter mes données ?',
       answer:
-        'Allez dans Paramètres > Sauvegarde. Activez la sauvegarde automatique ou cliquez sur "Sauvegarder maintenant".',
-      icon: 'cloud-upload',
+        'Allez dans Paramètres > Exporter les données. Sélectionnez les enfants et les types d\'événements à inclure.',
+      icon: 'cloud-download',
     },
     {
       question: 'Comment ajouter un bébé au suivi ?',
       answer:
-        'Allez dans la section "Suivi Bébé" et cliquez sur "Ajouter un bébé". Remplissez les informations et validez.',
+        'Allez dans le menu principal et sélectionnez "Ajouter un bébé". Remplissez les informations et validez.',
       icon: 'baby',
     },
     {
@@ -55,7 +61,7 @@ export default function HelpScreen() {
     {
       question: 'Mes données sont-elles sécurisées ?',
       answer:
-        'Oui, toutes vos données sont cryptées et stockées de manière sécurisée. Consultez notre politique de confidentialité pour plus de détails.',
+        'Oui, vos données sont sécurisées et stockées dans le cloud. Consultez notre politique de confidentialité pour plus de détails.',
       icon: 'shield-checkmark',
     },
   ];
@@ -65,32 +71,30 @@ export default function HelpScreen() {
       id: 'email',
       icon: 'mail' as keyof typeof Ionicons.glyphMap,
       title: 'Email',
-      description: 'support@mediscope.com',
-      action: () => Alert.alert('Email', 'support@mediscope.com'),
-    },
-    {
-      id: 'phone',
-      icon: 'call' as keyof typeof Ionicons.glyphMap,
-      title: 'Téléphone',
-      description: '+33 1 23 45 67 89',
-      action: () => Alert.alert('Téléphone', '+33 1 23 45 67 89'),
-    },
-    {
-      id: 'chat',
-      icon: 'chatbubbles' as keyof typeof Ionicons.glyphMap,
-      title: 'Chat en direct',
-      description: 'Disponible 9h-18h',
-      action: () => Alert.alert('Chat', 'Fonctionnalité à venir'),
+      description: 'support@suivibaby.com',
+      action: () => setModalConfig({
+        visible: true,
+        title: 'Email',
+        message: 'support@suivibaby.com',
+      }),
     },
   ];
 
   const handleSendMessage = () => {
     if (!subject || !message) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      setModalConfig({
+        visible: true,
+        title: 'Erreur',
+        message: 'Veuillez remplir tous les champs',
+      });
       return;
     }
 
-    Alert.alert('Message envoyé', 'Nous vous répondrons dans les plus brefs délais');
+    setModalConfig({
+      visible: true,
+      title: 'Message envoye',
+      message: 'Nous vous repondrons dans les plus brefs delais.',
+    });
     setSubject('');
     setMessage('');
   };
@@ -142,8 +146,9 @@ export default function HelpScreen() {
         styles.supportOption,
         { borderColor: Colors[colorScheme].tabIconDefault + '20' },
       ]}
-      onPress={option.action}
-      activeOpacity={0.7}
+      // onPress={option.action}
+      // activeOpacity={0.7}
+      activeOpacity={1}
     >
       <View
         style={[
@@ -161,11 +166,11 @@ export default function HelpScreen() {
           {option.description}
         </Text>
       </View>
-      <Ionicons
+      {/* <Ionicons
         name="chevron-forward"
         size={20}
         color={Colors[colorScheme].tabIconDefault}
-      />
+      /> */}
     </TouchableOpacity>
   );
 
@@ -183,7 +188,7 @@ export default function HelpScreen() {
         showsVerticalScrollIndicator={false}
       >
         <ThemedView style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tabIconDefault }]}>
+          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}>
             QUESTIONS FRÉQUENTES
           </ThemedText>
           <View style={styles.faqContainer}>
@@ -192,7 +197,7 @@ export default function HelpScreen() {
         </ThemedView>
 
         <ThemedView style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tabIconDefault }]}>
+          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}>
             NOUS CONTACTER
           </ThemedText>
           <View style={styles.supportContainer}>
@@ -201,7 +206,7 @@ export default function HelpScreen() {
         </ThemedView>
 
         <ThemedView style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tabIconDefault }]}>
+          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}>
             ENVOYER UN MESSAGE
           </ThemedText>
           <View style={styles.contactForm}>
@@ -258,11 +263,18 @@ export default function HelpScreen() {
         <ThemedView style={styles.infoBox}>
           <Ionicons name="time-outline" size={24} color={Colors[colorScheme].tint} />
           <ThemedText style={styles.infoText}>
-            Notre équipe de support est disponible du lundi au vendredi de 9h à 18h.
-            Nous répondons généralement sous 24 heures.
+            Notre equipe de support repond generalement sous 24 heures les jours ouvres.
           </ThemedText>
         </ThemedView>
       </ScrollView>
+      <InfoModal
+        visible={modalConfig.visible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onClose={() => setModalConfig((prev) => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
     </ThemedView>
   );
@@ -284,10 +296,8 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontSize: 13,
+    fontWeight: '600',
     marginBottom: 16,
   },
   faqContainer: {
@@ -329,7 +339,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderRadius: 12,
-    borderWidth: 1,
+    // borderWidth: 1,
   },
   supportIcon: {
     width: 48,

@@ -1,4 +1,15 @@
-// Force le thème clair pour toute l'application
+import { useContext } from 'react';
+import { useColorScheme as useSystemColorScheme } from 'react-native';
+
+import { ThemeContext } from '@/contexts/ThemeContext';
+
 export function useColorScheme() {
-  return 'light' as const;
+  const systemScheme = useSystemColorScheme() ?? 'light';
+  const context = useContext(ThemeContext);
+
+  if (!context) {
+    return systemScheme;
+  }
+
+  return context.resolvedColorScheme;
 }

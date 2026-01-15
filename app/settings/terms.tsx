@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,118 +13,113 @@ export default function TermsScreen() {
 
   const sections = [
     {
-      title: '1. Acceptation des conditions',
+      title: '1. Qui fournit le service',
       content:
-        'En utilisant Mediscope, vous acceptez les présentes conditions d\'utilisation. Si vous n\'acceptez pas ces conditions, veuillez ne pas utiliser l\'application.',
+        'Le service est propose par SuiviBaby, [adresse complete], [pays]. Contact : support@suivibaby.com.',
     },
     {
       title: '2. Description du service',
       content:
-        'Mediscope est une application de gestion d\'informations médicales personnelles. Elle permet de stocker, organiser et suivre vos données de santé et celles de votre famille.',
+        'SuiviBaby est une application de suivi et d\'organisation des donnees liees a la sante de votre enfant (alimentation, sommeil, change, etc.). L\'application ne remplace pas un avis medical et ne constitue pas un dispositif medical. En cas de doute, consultez un professionnel de sante.',
     },
     {
-      title: '3. Utilisation appropriée',
+      title: '3. Compte et acces',
       content:
-        'Vous vous engagez à utiliser l\'application de manière responsable et conforme aux lois en vigueur. Toute utilisation frauduleuse ou abusive peut entraîner la suspension de votre compte.',
+        'Vous etes responsable de la securite de votre compte. Si vous utilisez l\'app pour un enfant, vous declarez etre parent ou tuteur legal et agir dans l\'interet de l\'enfant.',
     },
     {
-      title: '4. Propriété intellectuelle',
+      title: '4. Utilisation appropriee',
       content:
-        'Tous les contenus, designs, logos et marques de l\'application sont la propriété de Mediscope et sont protégés par les lois sur la propriété intellectuelle.',
+        'Vous vous engagez a utiliser l\'application conformement aux lois en vigueur, ne pas detourner le service a des fins frauduleuses et fournir des informations exactes.',
     },
     {
-      title: '5. Responsabilité médicale',
+      title: '5. Donnees et sauvegarde',
       content:
-        'Mediscope est un outil d\'organisation et ne remplace pas un avis médical professionnel. Consultez toujours un professionnel de santé pour vos besoins médicaux.',
+        'Vos donnees sont enregistrees dans le cloud pour assurer leur synchronisation. Des fonctionnalites d\'export peuvent etre proposees, mais vous restez responsable de vos sauvegardes personnelles.',
     },
     {
-      title: '6. Exactitude des données',
+      title: '6. Propriete intellectuelle',
       content:
-        'Vous êtes responsable de l\'exactitude des informations que vous saisissez dans l\'application. Mediscope ne peut être tenu responsable d\'erreurs dans les données entrées par l\'utilisateur.',
+        'Le contenu, les marques, le design et le code de l\'application sont la propriete de SuiviBaby ou de ses partenaires.',
     },
     {
-      title: '7. Disponibilité du service',
+      title: '7. Disponibilite du service',
       content:
-        'Nous nous efforçons de maintenir l\'application accessible 24/7, mais ne garantissons pas une disponibilité ininterrompue. Des maintenances peuvent être effectuées.',
+        'Nous nous efforcons de maintenir le service disponible, mais ne garantissons pas une disponibilite continue (maintenance, incidents, dependances techniques).',
     },
     {
-      title: '8. Modifications du service',
+      title: '8. Resiliation / suppression',
       content:
-        'Nous nous réservons le droit de modifier, suspendre ou arrêter tout ou partie du service à tout moment, avec ou sans préavis.',
+        'Vous pouvez supprimer votre compte a tout moment. En cas de suppression, vos donnees seront supprimees selon les delais indiques dans la politique de confidentialite.',
     },
     {
-      title: '9. Limitation de responsabilité',
+      title: '9. Limitation de responsabilite',
       content:
-        'Dans la mesure permise par la loi, Mediscope ne sera pas responsable des dommages indirects, spéciaux ou consécutifs résultant de l\'utilisation de l\'application.',
+        'Dans la mesure permise par la loi, SuiviBaby ne peut etre tenue responsable des dommages indirects, pertes de donnees ou consequences liees a une utilisation inadaptee de l\'application.',
     },
     {
-      title: '10. Résiliation',
+      title: '10. Modifications',
       content:
-        'Vous pouvez résilier votre compte à tout moment depuis les paramètres. Nous nous réservons le droit de suspendre ou résilier votre accès en cas de violation des conditions.',
+        'Nous pouvons modifier ces conditions. En cas de changement important, vous serez informe via l\'application ou par email.',
     },
     {
       title: '11. Droit applicable',
       content:
-        'Ces conditions sont régies par le droit français. Tout litige sera soumis à la compétence exclusive des tribunaux français.',
-    },
-    {
-      title: '12. Modifications des conditions',
-      content:
-        'Nous pouvons modifier ces conditions à tout moment. Les modifications importantes vous seront notifiées via l\'application ou par email.',
+        'Ces conditions sont regies par le droit francais. Tout litige releve de la competence des tribunaux de Paris.',
     },
   ];
 
   return (
     <ThemedView style={styles.screen}>
-    <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['bottom']}>
-      <Stack.Screen
-        options={{
-          title: 'Conditions d\'utilisation',
-          headerBackTitle: 'Retour',
-        }}
-      />
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <ThemedView style={styles.header}>
-          <View style={[styles.headerIcon, { backgroundColor: Colors[colorScheme].tint + '20' }]}>
-            <Ionicons name="document-text" size={32} color={Colors[colorScheme].tint} />
-          </View>
-          <ThemedText style={styles.headerTitle}>
-            Conditions d'utilisation
-          </ThemedText>
-          <Text style={[styles.headerDate, { color: Colors[colorScheme].tabIconDefault }]}>
-            Dernière mise à jour : 1er janvier 2025
-          </Text>
-        </ThemedView>
-
-        <ThemedView style={styles.content}>
-          <ThemedText style={styles.intro}>
-            Bienvenue sur Mediscope. Ces conditions d'utilisation régissent votre accès et
-            utilisation de notre application. Veuillez les lire attentivement.
-          </ThemedText>
-
-          {sections.map((section, index) => (
-            <View key={index} style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>
-                {section.title}
-              </ThemedText>
-              <Text style={[styles.sectionContent, { color: Colors[colorScheme].tabIconDefault }]}>
-                {section.content}
-              </Text>
+      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['bottom']}>
+        <Stack.Screen
+          options={{
+            title: 'Conditions d\'utilisation',
+            headerBackTitle: 'Retour',
+          }}
+        />
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <ThemedView style={styles.header}>
+            <View style={[styles.headerIcon, { backgroundColor: Colors[colorScheme].tint + '20' }]}>
+              <Ionicons name="document-text" size={32} color={Colors[colorScheme].tint} />
             </View>
-          ))}
-        </ThemedView>
+            <ThemedText style={styles.headerTitle}>
+              Conditions d'utilisation
+            </ThemedText>
+            <Text style={[styles.headerDate, { color: Colors[colorScheme].tabIconDefault }]}>
+              Dernière mise à jour : 1er janvier 2026
+            </Text>
+          </ThemedView>
 
-        <ThemedView style={styles.footer}>
-          <Ionicons name="information-circle" size={20} color={Colors[colorScheme].tint} />
-          <ThemedText style={styles.footerText}>
-            Pour toute question : support@mediscope.com
-          </ThemedText>
-        </ThemedView>
-      </ScrollView>
-    </SafeAreaView>
+          <ThemedView style={styles.content}>
+            <ThemedText style={styles.intro}>
+              Bienvenue sur SuiviBaby. Ces conditions d'utilisation regissent votre accès et
+              utilisation de notre application. Veuillez les lire attentivement.
+            </ThemedText>
+
+            {sections.map((section, index) => (
+              <View key={index} style={styles.section}>
+                <ThemedText style={styles.sectionTitle}>
+                  {section.title}
+                </ThemedText>
+                <Text style={[styles.sectionContent, { color: Colors[colorScheme].tabIconDefault }]}>
+                  {section.content}
+                </Text>
+              </View>
+            ))}
+          </ThemedView>
+
+          <ThemedView style={styles.footer}>
+            <Ionicons name="information-circle" size={20} color={Colors[colorScheme].tint} />
+            <ThemedText style={styles.footerText}>
+              Pour toute question : support@suivibaby.com
+            </ThemedText>
+          </ThemedView>
+        </ScrollView>
+      </SafeAreaView>
     </ThemedView>
   );
 }

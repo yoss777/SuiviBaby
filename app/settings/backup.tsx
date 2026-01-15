@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -141,7 +141,7 @@ export default function BackupScreen() {
         </ThemedView>
 
         <ThemedView style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tabIconDefault }]}>
+          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}>
             PARAMÈTRES DE SAUVEGARDE
           </ThemedText>
           {renderSettingItem(
@@ -213,7 +213,7 @@ export default function BackupScreen() {
         </ThemedView>
 
         <ThemedView style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tabIconDefault }]}>
+          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}>
             HISTORIQUE DES SAUVEGARDES
           </ThemedText>
           <View style={styles.historyItem}>
@@ -326,6 +326,9 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   sectionTitle: {
+    // fontSize: 13,
+    // fontWeight: "600",
+    // marginBottom: 16,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
