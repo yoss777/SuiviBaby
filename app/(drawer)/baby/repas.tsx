@@ -75,6 +75,7 @@ export default function RepasScreen() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const { showToast } = useToast();
+  const headerOwnerId = useRef(`repas-${Math.random().toString(36).slice(2)}`);
   const netInfo = useNetInfo();
   const isOffline =
     netInfo.isInternetReachable === false || netInfo.isConnected === false;
@@ -165,46 +166,46 @@ export default function RepasScreen() {
   useFocusEffect(
     useCallback(() => {
       const headerButtons = (
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            paddingRight: 16,
-            gap: 0,
-          }}
-        >
-          <VoiceCommandButton
-            size={18}
-            color={Colors[colorScheme].tint}
-            showTestToggle={false}
-          />
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingRight: 16,
+          gap: 0,
+        }}
+      >
+        <VoiceCommandButton
+          size={18}
+          color={Colors[colorScheme].tint}
+          showTestToggle={false}
+        />
 
-          <Pressable
-            onPress={handleCalendarPress}
-            style={[
-              styles.headerButton,
-              { paddingLeft: 12 },
-              showCalendar && {
-                backgroundColor: Colors[colorScheme].tint + "20",
-              },
-            ]}
-          >
-            <Ionicons
-              name="calendar-outline"
-              size={24}
-              color={Colors[colorScheme].tint}
-            />
-          </Pressable>
-          <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
-            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={handleCalendarPress}
+          style={[
+            styles.headerButton,
+            { paddingLeft: 12 },
+            showCalendar && {
+              backgroundColor: Colors[colorScheme].tint + "20",
+            },
+          ]}
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={24}
+            color={Colors[colorScheme].tint}
+          />
+        </Pressable>
+        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+        </Pressable>
+      </View>
       );
 
-      setHeaderRight(headerButtons);
+      setHeaderRight(headerButtons, headerOwnerId.current);
 
       return () => {
-        setHeaderRight(null);
+        setHeaderRight(null, headerOwnerId.current);
       };
     }, [
       handleCalendarPress,

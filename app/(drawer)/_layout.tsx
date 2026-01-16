@@ -17,7 +17,7 @@ import '@/config/assemblyai.config';
 
 // Contexte pour gérer le headerRight dynamiquement
 const HeaderRightContext = createContext<{
-  setHeaderRight: (component: React.ReactElement | null) => void;
+  setHeaderRight: (component: React.ReactElement | null, ownerId?: string) => void;
 }>({ setHeaderRight: () => {} });
 
 export const useHeaderRight = () => useContext(HeaderRightContext);
@@ -53,14 +53,29 @@ export default function DrawerLayout() {
   const colorScheme = useColorScheme() ?? "light";
   const { user, firebaseUser, loading } = useAuth();
   const router = useRouter();
-  const [headerRightComponent, setHeaderRightComponent] = useState<React.ReactElement | null>(null);
+  const [headerRightState, setHeaderRightState] = useState<{
+    component: React.ReactElement | null;
+    ownerId?: string;
+  }>({ component: null, ownerId: undefined });
   const netInfo = useNetInfo();
   const insets = useSafeAreaInsets();
 
   const patientId = firebaseUser?.uid || user?.uid;
 
-  const setHeaderRight = useCallback((component: React.ReactElement | null) => {
-    setHeaderRightComponent(component);
+  const setHeaderRight = useCallback((component: React.ReactElement | null, ownerId?: string) => {
+    setHeaderRightState((prev) => {
+      if (component === null) {
+        if (!ownerId) {
+          return { component: null, ownerId: undefined };
+        }
+        if (prev.ownerId && prev.ownerId !== ownerId) {
+          return prev;
+        }
+        return { component: null, ownerId: undefined };
+      }
+
+      return { component, ownerId };
+    });
   }, []);
 
   // Redirect to login if not authenticated
@@ -135,7 +150,7 @@ export default function DrawerLayout() {
               options={{
                 headerTitle: () => <BabyHeaderTitle />,
                 drawerItemStyle: { display: "none" },
-                headerRight: headerRightComponent ? () => headerRightComponent : undefined,
+                headerRight: headerRightState.component ? () => headerRightState.component : undefined,
               }}
             />
             <Drawer.Screen

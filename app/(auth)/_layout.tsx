@@ -10,6 +10,22 @@ export default function AuthLayout() {
       }}
     >
       <Stack.Screen name="login" />
+      <Stack.Screen
+        name="privacy"
+        options={{
+          headerShown: true,
+          title: 'Confidentialité',
+          headerBackTitle: 'Retour',
+        }}
+      />
+      <Stack.Screen
+        name="terms"
+        options={{
+          headerShown: true,
+          title: "Conditions d'utilisation",
+          headerBackTitle: 'Retour',
+        }}
+      />
     </Stack>
   );
 }

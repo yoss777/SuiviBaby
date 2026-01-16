@@ -66,6 +66,7 @@ export default function MictionsScreen({ mictions }: Props) {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const { showToast } = useToast();
+  const headerOwnerId = useRef(`mictions-${Math.random().toString(36).slice(2)}`);
   const netInfo = useNetInfo();
   const isOffline =
     netInfo.isInternetReachable === false || netInfo.isConnected === false;
@@ -160,10 +161,10 @@ export default function MictionsScreen({ mictions }: Props) {
       </View>
     );
 
-    setHeaderRight(headerButtons);
+    setHeaderRight(headerButtons, headerOwnerId.current);
 
     return () => {
-      setHeaderRight(null);
+      setHeaderRight(null, headerOwnerId.current);
     };
   }, [
     handleCalendarPress,

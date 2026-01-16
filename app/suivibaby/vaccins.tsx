@@ -85,6 +85,7 @@ export default function VaccinsScreen({ vaccins }: Props) {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const { showToast } = useToast();
+  const headerOwnerId = useRef(`vaccins-${Math.random().toString(36).slice(2)}`);
   const netInfo = useNetInfo();
   const isOffline =
     netInfo.isInternetReachable === false || netInfo.isConnected === false;
@@ -186,10 +187,10 @@ export default function VaccinsScreen({ vaccins }: Props) {
       </View>
     );
 
-    setHeaderRight(headerButtons);
+    setHeaderRight(headerButtons, headerOwnerId.current);
 
     return () => {
-      setHeaderRight(null);
+      setHeaderRight(null, headerOwnerId.current);
     };
   }, [
     handleCalendarPress,

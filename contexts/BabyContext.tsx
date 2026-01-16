@@ -18,6 +18,7 @@ interface BabyContextType {
   children: Child[];
   activeChild: Child | null;
   loading: boolean;
+  childrenLoaded: boolean;
   setActiveChild: (child: Child) => void;
   addChild: (child: Child) => void;
   updateChild: (id: string, child: Partial<Child>) => void;
@@ -31,6 +32,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   const [children, setChildren] = useState<Child[]>([]);
   const [activeChild, setActiveChildState] = useState<Child | null>(null);
   const [loading, setLoading] = useState(true);
+  const [childrenLoaded, setChildrenLoaded] = useState(false);
   const [hiddenChildrenIds, setHiddenChildrenIds] = useState<string[]>([]);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const preloadInFlight = useRef<Set<string>>(new Set());
@@ -75,6 +77,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     if (authLoading) {
       console.log('[BabyContext] Auth en cours de chargement...');
       setLoading(true);
+      setChildrenLoaded(false);
       return;
     }
 
@@ -83,6 +86,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       setChildren([]);
       setActiveChildState(null);
       setLoading(false);
+      setChildrenLoaded(false);
       return;
     }
 
@@ -90,11 +94,13 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     if (!preferencesLoaded) {
       console.log('[BabyContext] En attente du chargement des préférences...');
       setLoading(true); // IMPORTANT : rester en loading tant que les préférences ne sont pas chargées
+      setChildrenLoaded(false);
       return;
     }
 
     console.log('[BabyContext] Chargement des enfants pour user.uid:', user.uid);
     setLoading(true);
+    setChildrenLoaded(false);
 
     const q = query(
       collection(db, 'children'),
@@ -140,6 +146,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       });
 
       setLoading(false);
+      setChildrenLoaded(true);
     });
 
     return () => unsubscribe();
@@ -225,6 +232,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
         children,
         activeChild,
         loading,
+        childrenLoaded,
         setActiveChild,
         addChild,
         updateChild,

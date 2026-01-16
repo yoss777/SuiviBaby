@@ -1,11 +1,14 @@
 // app/(auth)/login.tsx
+import { InfoModal } from "@/components/ui/InfoModal";
+import { useAuth } from "@/contexts/AuthContext";
+import { useBaby } from "@/contexts/BabyContext";
+import { createPatientUser } from "@/services/userService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,41 +19,97 @@ import {
   View,
 } from "react-native";
 import { auth } from "../../config/firebase";
-import { useAuth } from "@/contexts/AuthContext";
-import { createPatientUser } from "@/services/userService";
 
 export default function LoginScreen() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { children, loading: babyLoading, childrenLoaded, setActiveChild } = useBaby();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [babyName, setBabyName] = useState(""); // ✅ État pour le nom du bébé
+  const [userName, setUserName] = useState("");
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const navigationLocked = useRef(false);
+  const [infoModal, setInfoModal] = useState({
+    visible: false,
+    title: "",
+    message: "",
+  });
+
+  const passwordRules = [
+    { id: "length", label: "8+ caracteres", test: (value: string) => value.length >= 8 },
+    { id: "number", label: "1 chiffre", test: (value: string) => /\d/.test(value) },
+    { id: "special", label: "1 caractere special", test: (value: string) => /[^A-Za-z0-9]/.test(value) },
+  ];
+  const unmetRules = passwordRules.filter((rule) => !rule.test(password));
+  const strengthScore = passwordRules.length - unmetRules.length;
+  const strengthPercent = Math.round((strengthScore / passwordRules.length) * 100);
+  const strengthLabel =
+    strengthScore === 3 ? "Fort" : strengthScore === 2 ? "Moyen" : "Faible";
+
+  const resetPasswordFields = () => {
+    setPassword("");
+    setConfirmPassword("");
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+  };
+
+  const resetAllFields = () => {
+    setEmail("");
+    setUserName("");
+    resetPasswordFields();
+  };
+
+  const showModal = (title: string, message: string) => {
+    setInfoModal({ visible: true, title, message });
+  };
 
   // Rediriger automatiquement si l'utilisateur est déjà authentifié
   useEffect(() => {
-    if (!authLoading && user) {
-      router.replace("/explore");
+    if (authLoading || !user || babyLoading || !childrenLoaded || navigationLocked.current) {
+      return;
     }
-  }, [authLoading, user, router]);
+
+    if (children.length === 1) {
+      navigationLocked.current = true;
+      setActiveChild(children[0]);
+      router.replace("/(drawer)/baby");
+      return;
+    }
+
+    if (navigationLocked.current) return;
+    navigationLocked.current = true;
+    router.replace("/explore");
+  }, [authLoading, babyLoading, children, user, childrenLoaded, setActiveChild, router]);
 
   const handleAuth = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert("Erreur", "Veuillez remplir tous les champs");
+      showModal("Erreur", "Veuillez remplir tous les champs");
       return;
     }
 
-    // ✅ Validation pour le nom du bébé en mode inscription
-    if (!isLogin && !babyName.trim()) {
-      Alert.alert("Erreur", "Veuillez entrer le nom du bébé");
+    // ✅ Validation pour le pseudo en mode inscription
+    if (!isLogin && !userName.trim()) {
+      showModal("Erreur", "Veuillez entrer votre pseudo");
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert("Erreur", "Le mot de passe doit contenir au moins 6 caractères");
-      return;
+    if (!isLogin) {
+      if (unmetRules.length > 0) {
+        showModal(
+          "Erreur",
+          "Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special."
+        );
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        showModal("Erreur", "Les mots de passe ne correspondent pas");
+        return;
+      }
     }
 
     setLoading(true);
@@ -67,11 +126,11 @@ export default function LoginScreen() {
         await createPatientUser(
           userCredential.user.uid,
           email.trim(),
-          defaultUserName,
-          babyName.trim()
+          userName.trim() || defaultUserName
         );
 
-        Alert.alert("Succès", "Compte créé avec succès !");
+        resetAllFields();
+        showModal("Succès", "Compte créé avec succès !");
       }
       // Une fois connecté, l'effet d'auth redirige vers l'écran principal
     } catch (error: any) {
@@ -103,7 +162,7 @@ export default function LoginScreen() {
           errorMessage = error.message;
       }
       
-      Alert.alert("Erreur", errorMessage);
+      showModal("Erreur", errorMessage);
       console.log("Erreur", errorMessage);
     } finally {
       setLoading(false);
@@ -115,6 +174,12 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
+      <InfoModal
+        visible={infoModal.visible}
+        title={infoModal.title}
+        message={infoModal.message}
+        onConfirm={() => setInfoModal({ visible: false, title: "", message: "" })}
+      />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -123,7 +188,7 @@ export default function LoginScreen() {
         {/* Header avec icône */}
         <View style={styles.header}>
           <View style={styles.iconContainer}>
-            <FontAwesome name="baby-carriage" size={48} color="#4A90E2" />
+            <FontAwesome name="baby-carriage" size={40} color="#4A90E2" />
           </View>
           <Text style={styles.title}>
             {isLogin ? "Bienvenue" : "Créer un compte"}
@@ -155,18 +220,18 @@ export default function LoginScreen() {
             />
           </View>
 
-          {/* ✅ Champ Nom du bébé (seulement en mode inscription) */}
+          {/* ✅ Champ Pseudo (seulement en mode inscription) */}
           {!isLogin && (
             <View style={styles.inputContainer}>
               <View style={styles.inputIconContainer}>
-                <FontAwesome name="baby" size={20} color="#6c757d" />
+                <FontAwesome name="user" size={20} color="#6c757d" />
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="Nom du bébé"
+                placeholder="Pseudo"
                 placeholderTextColor="#adb5bd"
-                value={babyName}
-                onChangeText={setBabyName}
+                value={userName}
+                onChangeText={setUserName}
                 autoCapitalize="words"
                 editable={!loading}
               />
@@ -202,6 +267,52 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
+          {!isLogin && password.length > 0 && (
+            <>
+              <View style={styles.strengthRow}>
+                <View style={styles.strengthBarTrack}>
+                  <View
+                    style={[
+                      styles.strengthBarFill,
+                      { width: `${strengthPercent}%` },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.strengthLabel}>Force: {strengthLabel}</Text>
+              </View>
+            </>
+          )}
+
+          {!isLogin && (
+            <View style={styles.inputContainer}>
+              <View style={styles.inputIconContainer}>
+                <FontAwesome name="lock" size={20} color="#6c757d" />
+              </View>
+              <TextInput
+                style={styles.input}
+                placeholder="Confirmer le mot de passe"
+                placeholderTextColor="#adb5bd"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+                autoCapitalize="none"
+                autoComplete="password"
+                editable={!loading}
+              />
+              <TouchableOpacity
+                style={styles.eyeIcon}
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                disabled={loading}
+              >
+                <FontAwesome
+                  name={showConfirmPassword ? "eye" : "eye-slash"}
+                  size={20}
+                  color="#6c757d"
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Bouton principal */}
           <TouchableOpacity
             style={[styles.mainButton, loading && styles.mainButtonDisabled]}
@@ -220,13 +331,34 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
+          <View style={styles.legalContainer}>
+            <Text style={styles.legalText}>En continuant, vous acceptez </Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/terms")}
+              disabled={loading}
+            >
+              <Text style={styles.legalLink}>les conditions</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalText}> et </Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/privacy")}
+              disabled={loading}
+            >
+              <Text style={styles.legalLink}>la politique de confidentialite</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalText}>.</Text>
+          </View>
+
           {/* Lien pour basculer entre connexion et inscription */}
           <View style={styles.switchContainer}>
             <Text style={styles.switchText}>
               {isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}
             </Text>
             <TouchableOpacity
-              onPress={() => setIsLogin(!isLogin)}
+              onPress={() => {
+                setIsLogin(!isLogin);
+                resetAllFields();
+              }}
               disabled={loading}
             >
               <Text style={styles.switchLink}>
@@ -271,10 +403,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 24,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
   title: {
     fontSize: 32,
@@ -314,6 +446,23 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     padding: 8,
+  },
+  strengthRow: {
+    gap: 6,
+  },
+  strengthBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#e9ecef",
+    overflow: "hidden",
+  },
+  strengthBarFill: {
+    height: "100%",
+    backgroundColor: "#4A90E2",
+  },
+  strengthLabel: {
+    fontSize: 12,
+    color: "#6c757d",
   },
   mainButton: {
     flexDirection: "row",
@@ -364,5 +513,21 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 13,
     color: "#6c757d",
+  },
+  legalContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    marginTop: 16,
+    paddingHorizontal: 12,
+  },
+  legalText: {
+    fontSize: 12,
+    color: "#6c757d",
+  },
+  legalLink: {
+    fontSize: 12,
+    color: "#4A90E2",
+    fontWeight: "600",
   },
 });
