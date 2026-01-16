@@ -8,6 +8,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddChildModal } from '@/components/suivibaby/AddChildModal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { InfoModal } from '@/components/ui/InfoModal';
 import { db } from '@/config/firebase';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,6 +39,8 @@ export default function Explore() {
   const [toggledIds, setToggledIds] = useState<Set<string>>(new Set());
   const [loadingHidden, setLoadingHidden] = useState(false);
   const [showAddChildModal, setShowAddChildModal] = useState(false);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [errorModal, setErrorModal] = useState({ visible: false, message: '' });
 
   const categories: MedicalCategory[] = useMemo(() => {
     const childTiles = children.map((child) => ({
@@ -189,25 +193,7 @@ export default function Explore() {
   };
 
   const handleSignOut = async () => {
-    Alert.alert(
-      'Déconnexion',
-      'Êtes-vous sûr de vouloir vous déconnecter ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Déconnexion',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              router.replace('/(auth)/login');
-            } catch (error) {
-              Alert.alert('Erreur', 'Impossible de se déconnecter');
-            }
-          },
-        },
-      ]
-    );
+    setShowSignOutModal(true);
   };
 
   const renderCategory = (category: MedicalCategory, index: number) => {
@@ -395,6 +381,34 @@ export default function Explore() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ConfirmModal
+        visible={showSignOutModal}
+        title="Déconnexion"
+        message="Êtes-vous sûr de vouloir vous déconnecter ?"
+        confirmText="Déconnexion"
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onCancel={() => setShowSignOutModal(false)}
+        onConfirm={async () => {
+          setShowSignOutModal(false);
+          try {
+            await signOut();
+            router.replace('/(auth)/login');
+          } catch (error) {
+            setErrorModal({ visible: true, message: 'Impossible de se déconnecter' });
+          }
+        }}
+      />
+      <InfoModal
+        visible={errorModal.visible}
+        title="Erreur"
+        message={errorModal.message}
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onClose={() => setErrorModal({ visible: false, message: '' })}
+      />
 
       {/* Modal de choix pour ajouter un enfant */}
       <AddChildModal 

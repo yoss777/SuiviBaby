@@ -22,11 +22,22 @@ export default function BootScreen() {
   const { user, loading: authLoading } = useAuth();
   const { children, loading: babyLoading, setActiveChild } = useBaby();
   const [delayDone, setDelayDone] = useState(false);
+  const [unauthDelayDone, setUnauthDelayDone] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDelayDone(true), 5000);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (authLoading || user) {
+      setUnauthDelayDone(false);
+      return;
+    }
+
+    const timer = setTimeout(() => setUnauthDelayDone(true), 2200);
+    return () => clearTimeout(timer);
+  }, [authLoading, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +73,9 @@ export default function BootScreen() {
       // Étape 2 : Si pas d'utilisateur, rediriger vers login
       if (!user) {
         console.log("[BOOT] Pas de user, redirection vers login");
+        if (!unauthDelayDone) {
+          return;
+        }
         router.replace("/(auth)/login");
         return;
       }
@@ -116,34 +130,34 @@ export default function BootScreen() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, babyLoading, delayDone, user, children, setActiveChild]);
+  }, [authLoading, babyLoading, delayDone, unauthDelayDone, user, children, setActiveChild]);
 
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: Colors[colorScheme].background }}
-    >
+    <View style={{ flex: 1, backgroundColor: Colors[colorScheme].background }}>
       <BackgroundImage />
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          paddingBottom: 24,
-          paddingHorizontal: 24,
-          gap: 24,
-        }}
-      >
-        <Image
-          source={require("@/assets/images/icon.png")}
-          style={{ width: 192, height: 192, marginBottom: 24, borderRadius:24 }}
-          resizeMode="contain"
-        />
-        <DotsLoader />
-        <IconPulseDots />
-        <ThemedText style={{ marginTop: 12, color:"#ffffff" }}>
-          Préparation de votre espace...
-        </ThemedText>
-      </View>
-    </SafeAreaView>
+      <SafeAreaView style={{ flex: 1, backgroundColor: "transparent" }} edges={["top", "bottom"]}>
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingBottom: 24,
+            paddingHorizontal: 24,
+            gap: 24,
+          }}
+        >
+          <Image
+            source={require("@/assets/images/icon.png")}
+            style={{ width: 192, height: 192, marginBottom: 24, borderRadius:24 }}
+            resizeMode="contain"
+          />
+          <DotsLoader />
+          <IconPulseDots />
+          <ThemedText style={{ marginTop: 12, color:"#ffffff" }}>
+            Préparation de votre espace...
+          </ThemedText>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }

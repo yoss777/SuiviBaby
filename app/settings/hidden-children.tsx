@@ -74,9 +74,13 @@ export default function HiddenChildrenScreen() {
     const [day, month, year] = birthDate.split('/').map(Number);
     const birth = new Date(year, month - 1, day);
     const today = new Date();
-    const totalMonths =
+    let totalMonths =
       (today.getFullYear() - birth.getFullYear()) * 12 +
       (today.getMonth() - birth.getMonth());
+    if (today.getDate() < birth.getDate()) {
+      totalMonths -= 1;
+    }
+    if (totalMonths < 0) totalMonths = 0;
 
     const years = Math.floor(totalMonths / 12);
     const months = totalMonths % 12;

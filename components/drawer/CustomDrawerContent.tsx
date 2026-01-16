@@ -2,9 +2,11 @@ import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { DrawerContentScrollView } from "@react-navigation/drawer";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Dimensions, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Dimensions, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { AddChildModal } from "@/components/suivibaby/AddChildModal";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { InfoModal } from "@/components/ui/InfoModal";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -24,6 +26,8 @@ export function CustomDrawerContent(props: any) {
   const [showHideModal, setShowHideModal] = useState(false);
   const [childToHide, setChildToHide] = useState<{ id: string; name: string } | null>(null);
   const [showAddChildModal, setShowAddChildModal] = useState(false);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
   const inputRef = useRef<TextInput>(null);
 
   const isActive = (routeName: string) => pathname.includes(routeName);
@@ -47,9 +51,13 @@ export function CustomDrawerContent(props: any) {
     const [day, month, year] = birthDate.split("/").map(Number);
     const birth = new Date(year, month - 1, day);
     const today = new Date();
-    const totalMonths =
+    let totalMonths =
       (today.getFullYear() - birth.getFullYear()) * 12 +
       (today.getMonth() - birth.getMonth());
+    if (today.getDate() < birth.getDate()) {
+      totalMonths -= 1;
+    }
+    if (totalMonths < 0) totalMonths = 0;
 
     const years = Math.floor(totalMonths / 12);
     const months = totalMonths % 12;
@@ -65,21 +73,7 @@ export function CustomDrawerContent(props: any) {
   };
 
   const handleSignOut = async () => {
-    Alert.alert("Déconnexion", "Êtes-vous sûr de vouloir vous déconnecter ?", [
-      { text: "Annuler", style: "cancel" },
-      {
-        text: "Déconnexion",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await signOut();
-            router.replace("/(auth)/login");
-          } catch (error) {
-            Alert.alert("Erreur", "Impossible de se déconnecter");
-          }
-        },
-      },
-    ]);
+    setShowSignOutModal(true);
   };
 
   const handleHideChild = (childId: string, childName: string) => {
@@ -97,7 +91,7 @@ export function CustomDrawerContent(props: any) {
       
       // Si c'était le dernier enfant visible, la redirection se fera via useEffect
     } catch (error) {
-      Alert.alert('Erreur', 'Impossible de masquer l\'enfant.');
+      setErrorModal({ visible: true, message: "Impossible de masquer l'enfant." });
     }
   };
 
@@ -285,8 +279,36 @@ export function CustomDrawerContent(props: any) {
         </Pressable>
       </Modal>
 
+      <ConfirmModal
+        visible={showSignOutModal}
+        title="Déconnexion"
+        message="Êtes-vous sûr de vouloir vous déconnecter ?"
+        confirmText="Déconnexion"
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onCancel={() => setShowSignOutModal(false)}
+        onConfirm={async () => {
+          setShowSignOutModal(false);
+          try {
+            await signOut();
+            router.replace("/(auth)/login");
+          } catch (error) {
+            setErrorModal({ visible: true, message: "Impossible de se déconnecter." });
+          }
+        }}
+      />
+      <InfoModal
+        visible={errorModal.visible}
+        title="Erreur"
+        message={errorModal.message}
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onClose={() => setErrorModal({ visible: false, message: "" })}
+      />
+
       {/* Modal de choix pour ajouter un enfant */}
-      <AddChildModal 
+      <AddChildModal
         visible={showAddChildModal}
         onClose={() => setShowAddChildModal(false)}
       />
