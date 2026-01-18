@@ -111,8 +111,9 @@ export default function PumpingScreen() {
   const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
-  const { openModal, editId } = useLocalSearchParams();
+  const { openModal, editId, returnTo } = useLocalSearchParams();
   const editIdRef = useRef<string | null>(null);
+  const returnToRef = useRef<string | null>(null);
 
   // Ref pour la gestion du picker avec accélération
   const intervalRef = useRef<number | undefined>(undefined);
@@ -220,12 +221,13 @@ export default function PumpingScreen() {
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const task = InteractionManager.runAfterInteractions(() => {
+      stashReturnTo();
       openAddModal();
       router.replace("/(drawer)/baby/pumping");
       setPendingOpen(false);
     });
     return () => task.cancel?.();
-  }, [pendingOpen, layoutReady, openAddModal, router]);
+  }, [pendingOpen, layoutReady, openAddModal, router, returnTo]);
 
   useEffect(() => {
     if (!editId || !layoutReady) return;
@@ -233,10 +235,11 @@ export default function PumpingScreen() {
     if (!normalizedId || editIdRef.current === normalizedId) return;
     const target = pompages.find((pompage) => pompage.id === normalizedId);
     if (!target) return;
+    stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(target);
     router.replace("/(drawer)/baby/pumping");
-  }, [editId, layoutReady, pompages, router]);
+  }, [editId, layoutReady, pompages, router, returnTo]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -598,10 +601,30 @@ export default function PumpingScreen() {
     bottomSheetRef.current?.expand();
   };
 
+  const normalizeParam = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+
+  const stashReturnTo = () => {
+    const target = normalizeParam(returnTo);
+    if (target === "home" || target === "chrono") {
+      returnToRef.current = target;
+    } else {
+      returnToRef.current = null;
+    }
+  };
+
+  const maybeReturnTo = () => {
+    const target = returnToRef.current;
+    returnToRef.current = null;
+    if (target === "home") {
+      router.replace("/(drawer)/baby/home");
+    } else if (target === "chrono") {
+      router.replace("/(drawer)/baby/chrono");
+    }
+  };
+
   const closeModal = () => {
     bottomSheetRef.current?.close();
-    setIsSubmitting(false);
-    setEditingPompage(null);
   };
 
   const cancelForm = useCallback(() => {
@@ -994,6 +1017,7 @@ const renderDayGroup = ({ item }: { item: PompageGroup }) => {
           onClose={() => {
             setIsSubmitting(false);
             setEditingPompage(null);
+            maybeReturnTo();
           }}
         >
           {/* Quantité Sein Gauche */}

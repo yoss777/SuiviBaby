@@ -1,7 +1,6 @@
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterEvenements,
@@ -127,6 +126,7 @@ function formatTime(date: Date) {
   });
 }
 
+
 function formatDayLabel(date: Date) {
   const today = startOfDay(new Date()).getTime();
   const target = startOfDay(date).getTime();
@@ -139,6 +139,7 @@ function formatDayLabel(date: Date) {
     month: "long",
   });
 }
+
 
 function buildSections(events: Event[]): TimelineSection[] {
   const grouped = new Map<string, { date: Date; items: Event[] }>();
@@ -224,19 +225,19 @@ function getEditRoute(event: Event): string | null {
   const id = encodeURIComponent(event.id);
   switch (event.type) {
     case "tetee":
-      return `/baby/meals?tab=seins&editId=${id}`;
+      return `/baby/meals?tab=seins&editId=${id}&returnTo=chrono`;
     case "biberon":
-      return `/baby/meals?tab=biberons&editId=${id}`;
+      return `/baby/meals?tab=biberons&editId=${id}&returnTo=chrono`;
     case "pompage":
-      return `/baby/pumping?editId=${id}`;
+      return `/baby/pumping?editId=${id}&returnTo=chrono`;
     case "miction":
-      return `/baby/diapers?tab=mictions&editId=${id}`;
+      return `/baby/diapers?tab=mictions&editId=${id}&returnTo=chrono`;
     case "selle":
-      return `/baby/diapers?tab=selles&editId=${id}`;
+      return `/baby/diapers?tab=selles&editId=${id}&returnTo=chrono`;
     case "vaccin":
-      return `/baby/immunizations?tab=vaccins&editId=${id}`;
+      return `/baby/immunizations?tab=vaccins&editId=${id}&returnTo=chrono`;
     case "vitamine":
-      return `/baby/immunizations?tab=vitamines&editId=${id}`;
+      return `/baby/immunizations?tab=vitamines&editId=${id}&returnTo=chrono`;
     default:
       return null;
   }
@@ -245,7 +246,6 @@ function getEditRoute(event: Event): string | null {
 export default function ChronoScreen() {
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
-  const { showToast } = useToast();
   const [range, setRange] = useState<RangeOption>(14);
   const [selectedTypes, setSelectedTypes] = useState<FilterType[]>(ALL_TYPES);
   const [events, setEvents] = useState<Event[]>([]);
@@ -497,6 +497,13 @@ export default function ChronoScreen() {
             keyExtractor={(item) => item.id || `${item.type}-${item.date}`}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
+            // --- Optimisations de la virtualisation ---
+            windowSize={11}
+            initialNumToRender={15}
+            maxToRenderPerBatch={10}
+            removeClippedSubviews={true}
+            updateCellsBatchingPeriod={50}
+            // -----------------------------------------
             renderSectionHeader={({ section }) => {
               const counts = buildCounts(section.data);
               const ordered = orderCounts(counts);

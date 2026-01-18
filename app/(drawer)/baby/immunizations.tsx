@@ -152,8 +152,9 @@ export default function ImmunizationsScreen() {
   const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
-  const { tab, openModal, editId } = useLocalSearchParams();
+  const { tab, openModal, editId, returnTo } = useLocalSearchParams();
   const editIdRef = useRef<string | null>(null);
+  const returnToRef = useRef<string | null>(null);
 
   // Ref pour le BottomSheet
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -277,12 +278,13 @@ export default function ImmunizationsScreen() {
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const task = InteractionManager.runAfterInteractions(() => {
+      stashReturnTo();
       openAddModal(tab as "vitamines" | "vaccins" | undefined);
       router.replace("/(drawer)/baby/immunizations");
       setPendingOpen(false);
     });
     return () => task.cancel?.();
-  }, [pendingOpen, layoutReady, tab, openAddModal, router]);
+  }, [pendingOpen, layoutReady, tab, openAddModal, router, returnTo]);
 
   useEffect(() => {
     if (!editId || !layoutReady) return;
@@ -290,10 +292,11 @@ export default function ImmunizationsScreen() {
     if (!normalizedId || editIdRef.current === normalizedId) return;
     const target = immunos.find((immuno) => immuno.id === normalizedId);
     if (!target) return;
+    stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(target);
     router.replace("/(drawer)/baby/immunizations");
-  }, [editId, layoutReady, immunos, router]);
+  }, [editId, layoutReady, immunos, router, returnTo]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -704,13 +707,30 @@ export default function ImmunizationsScreen() {
     bottomSheetRef.current?.expand();
   };
 
+  const normalizeParam = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+
+  const stashReturnTo = () => {
+    const target = normalizeParam(returnTo);
+    if (target === "home" || target === "chrono") {
+      returnToRef.current = target;
+    } else {
+      returnToRef.current = null;
+    }
+  };
+
+  const maybeReturnTo = () => {
+    const target = returnToRef.current;
+    returnToRef.current = null;
+    if (target === "home") {
+      router.replace("/(drawer)/baby/home");
+    } else if (target === "chrono") {
+      router.replace("/(drawer)/baby/chrono");
+    }
+  };
+
   const closeModal = () => {
     bottomSheetRef.current?.close();
-    setIsSubmitting(false);
-    setEditingImmuno(null);
-    setSelectedVaccin("");
-    setSearchQuery("");
-    setSheetStep("form");
   };
 
   const cancelForm = useCallback(() => {
@@ -1151,8 +1171,10 @@ export default function ImmunizationsScreen() {
           onClose={() => {
             setIsSubmitting(false);
             setEditingImmuno(null);
+            setSelectedVaccin("");
             setSearchQuery("");
             setSheetStep("form");
+            maybeReturnTo();
           }}
         >
           {sheetStep === "vaccinPicker" ? (

@@ -114,8 +114,9 @@ export default function MealsScreen() {
   const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
-  const { tab, openModal, editId } = useLocalSearchParams();
+  const { tab, openModal, editId, returnTo } = useLocalSearchParams();
   const editIdRef = useRef<string | null>(null);
+  const returnToRef = useRef<string | null>(null);
 
   // Ref pour la gestion du picker avec accélération
   const intervalRef = useRef<number | undefined>(undefined);
@@ -248,12 +249,13 @@ export default function MealsScreen() {
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const task = InteractionManager.runAfterInteractions(() => {
+      stashReturnTo();
       openAddModal(tab as "seins" | "biberons" | undefined);
       router.replace("/(drawer)/baby/meals");
       setPendingOpen(false);
     });
     return () => task.cancel?.();
-  }, [pendingOpen, layoutReady, tab, openAddModal, router]);
+  }, [pendingOpen, layoutReady, tab, openAddModal, router, returnTo]);
 
   useEffect(() => {
     if (!editId || !layoutReady) return;
@@ -261,10 +263,11 @@ export default function MealsScreen() {
     if (!normalizedId || editIdRef.current === normalizedId) return;
     const target = meals.find((meal) => meal.id === normalizedId);
     if (!target) return;
+    stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(target);
     router.replace("/(drawer)/baby/meals");
-  }, [editId, layoutReady, meals, router]);
+  }, [editId, layoutReady, meals, router, returnTo]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -690,10 +693,30 @@ export default function MealsScreen() {
     bottomSheetRef.current?.expand();
   };
 
+  const normalizeParam = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+
+  const stashReturnTo = () => {
+    const target = normalizeParam(returnTo);
+    if (target === "home" || target === "chrono") {
+      returnToRef.current = target;
+    } else {
+      returnToRef.current = null;
+    }
+  };
+
+  const maybeReturnTo = () => {
+    const target = returnToRef.current;
+    returnToRef.current = null;
+    if (target === "home") {
+      router.replace("/(drawer)/baby/home");
+    } else if (target === "chrono") {
+      router.replace("/(drawer)/baby/chrono");
+    }
+  };
+
   const closeModal = () => {
     bottomSheetRef.current?.close();
-    setIsSubmitting(false);
-    setEditingMeal(null);
   };
 
   const cancelForm = useCallback(() => {
@@ -1081,6 +1104,7 @@ export default function MealsScreen() {
           onClose={() => {
             setIsSubmitting(false);
             setEditingMeal(null);
+            maybeReturnTo();
           }}
         >
           {/* Sélection du type de repas */}

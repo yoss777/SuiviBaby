@@ -115,8 +115,9 @@ export default function DiapersScreen() {
   const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
-  const { tab, openModal, editId } = useLocalSearchParams();
+  const { tab, openModal, editId, returnTo } = useLocalSearchParams();
   const editIdRef = useRef<string | null>(null);
+  const returnToRef = useRef<string | null>(null);
 
   // Ref pour le BottomSheet
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -237,12 +238,13 @@ export default function DiapersScreen() {
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const task = InteractionManager.runAfterInteractions(() => {
+      stashReturnTo();
       openAddModal(tab as "mictions" | "selles" | undefined);
       router.replace("/(drawer)/baby/diapers");
       setPendingOpen(false);
     });
     return () => task.cancel?.();
-  }, [pendingOpen, layoutReady, tab, openAddModal, router]);
+  }, [pendingOpen, layoutReady, tab, openAddModal, router, returnTo]);
 
   useEffect(() => {
     if (!editId || !layoutReady) return;
@@ -250,10 +252,11 @@ export default function DiapersScreen() {
     if (!normalizedId || editIdRef.current === normalizedId) return;
     const target = excretions.find((excretion) => excretion.id === normalizedId);
     if (!target) return;
+    stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(target);
     router.replace("/(drawer)/baby/diapers");
-  }, [editId, layoutReady, excretions, router]);
+  }, [editId, layoutReady, excretions, router, returnTo]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -625,10 +628,30 @@ export default function DiapersScreen() {
     bottomSheetRef.current?.expand();
   };
 
+  const normalizeParam = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+
+  const stashReturnTo = () => {
+    const target = normalizeParam(returnTo);
+    if (target === "home" || target === "chrono") {
+      returnToRef.current = target;
+    } else {
+      returnToRef.current = null;
+    }
+  };
+
+  const maybeReturnTo = () => {
+    const target = returnToRef.current;
+    returnToRef.current = null;
+    if (target === "home") {
+      router.replace("/(drawer)/baby/home");
+    } else if (target === "chrono") {
+      router.replace("/(drawer)/baby/chrono");
+    }
+  };
+
   const closeModal = () => {
     bottomSheetRef.current?.close();
-    setIsSubmitting(false);
-    setEditingExcretion(null);
   };
 
   const cancelForm = useCallback(() => {
@@ -1017,6 +1040,7 @@ export default function DiapersScreen() {
           onClose={() => {
             setIsSubmitting(false);
             setEditingExcretion(null);
+            maybeReturnTo();
           }}
         >
           {/* Sélection du type - Toggles en mode ajout */}
