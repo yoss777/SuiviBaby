@@ -61,7 +61,7 @@ export default function BootScreen() {
         "user:",
         !!user,
         "children.length:",
-        children.length
+        children.length,
       );
 
       // Étape 1 : Attendre que l'auth soit chargée
@@ -96,7 +96,7 @@ export default function BootScreen() {
       console.log(
         "[BOOT] Décision de navigation avec",
         children.length,
-        "enfant(s)"
+        "enfant(s)",
       );
 
       if (children.length === 0) {
@@ -110,7 +110,7 @@ export default function BootScreen() {
         setActiveChild(children[0]);
 
         const preloadTimeout = new Promise((resolve) =>
-          setTimeout(resolve, 2500)
+          setTimeout(resolve, 2500),
         );
         await Promise.race([prefetchToday(children[0].id), preloadTimeout]);
 
@@ -130,12 +130,23 @@ export default function BootScreen() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, babyLoading, delayDone, unauthDelayDone, user, children, setActiveChild]);
+  }, [
+    authLoading,
+    babyLoading,
+    delayDone,
+    unauthDelayDone,
+    user,
+    children,
+    setActiveChild,
+  ]);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors[colorScheme].background }}>
       <BackgroundImage />
-      <SafeAreaView style={{ flex: 1, backgroundColor: "transparent" }} edges={["top", "bottom"]}>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: "transparent" }}
+        edges={["top", "bottom"]}
+      >
         <View
           style={{
             flex: 1,
@@ -148,12 +159,17 @@ export default function BootScreen() {
         >
           <Image
             source={require("@/assets/images/icon.png")}
-            style={{ width: 192, height: 192, marginBottom: 24, borderRadius:24 }}
+            style={{
+              width: 192,
+              height: 192,
+              marginBottom: 24,
+              borderRadius: 24,
+            }}
             resizeMode="contain"
           />
           <DotsLoader />
           <IconPulseDots />
-          <ThemedText style={{ marginTop: 12, color:"#ffffff" }}>
+          <ThemedText style={{ marginTop: 12, color: "#ffffff" }}>
             Préparation de votre espace...
           </ThemedText>
         </View>

@@ -376,7 +376,6 @@ export default function LoginScreen() {
             // ]}
             // onPress={handleAuth}
             // disabled={loading || (!isLogin && !hasConsented)}
-
             style={[
               styles.mainButton,
               loading && styles.mainButtonDisabled,

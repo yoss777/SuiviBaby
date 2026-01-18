@@ -10,19 +10,29 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterMiction,
+  ajouterSelle,
   modifierMiction,
+  modifierSelle,
   supprimerMiction,
+  supprimerSelle,
 } from "@/migration/eventsDoubleWriteService";
+import {
+  ecouterMictionsHybrid as ecouterMictions,
+  ecouterSellesHybrid as ecouterSelles,
+  hasMoreEventsBeforeHybrid,
+} from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNetInfo } from "@react-native-community/netinfo";
+import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  InteractionManager,
   Platform,
   Pressable,
   ScrollView,
@@ -33,40 +43,40 @@ import {
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useHeaderRight } from "../(drawer)/_layout";
+import { useHeaderRight } from "../_layout";
 
 // ============================================
 // TYPES
 // ============================================
+type ExcretionType = "miction" | "selle";
 type FilterType = "today" | "past";
 
-interface Miction {
+interface Excretion {
   id: string;
+  type?: ExcretionType;
   date: { seconds: number };
   createdAt: { seconds: number };
 }
 
-interface MictionGroup {
+interface ExcretionGroup {
   date: string;
   dateFormatted: string;
-  mictions: Miction[];
-  lastMiction: Miction;
+  excretions: Excretion[];
+  mictionsCount: number;
+  sellesCount: number;
+  lastExcretion: Excretion;
 }
-
-type Props = {
-  mictions: Miction[];
-};
 
 // ============================================
 // COMPONENT
 // ============================================
 
-export default function MictionsScreen({ mictions }: Props) {
+export default function DiapersScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
+  const headerOwnerId = useRef(`diapers-${Math.random().toString(36).slice(2)}`);
   const { showToast } = useToast();
-  const headerOwnerId = useRef(`mictions-${Math.random().toString(36).slice(2)}`);
   const netInfo = useNetInfo();
   const isOffline =
     netInfo.isInternetReachable === false || netInfo.isConnected === false;
@@ -74,21 +84,30 @@ export default function MictionsScreen({ mictions }: Props) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
 
   // États des données
-  const [groupedMictions, setGroupedMictions] = useState<MictionGroup[]>([]);
+  const [excretions, setExcretions] = useState<Excretion[]>([]);
+  const [groupedExcretions, setGroupedExcretions] = useState<ExcretionGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [mictionsLoaded, setMictionsLoaded] = useState(false);
+  const [sellesLoaded, setSellesLoaded] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [autoLoadMore, setAutoLoadMore] = useState(false);
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
+  const loadMoreVersionRef = useRef(0);
+  const pendingLoadMoreRef = useRef(0);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingMiction, setEditingMiction] = useState<Miction | null>(null);
+  const [editingExcretion, setEditingExcretion] = useState<Excretion | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [includeMiction, setIncludeMiction] = useState<boolean>(true);
+  const [includeSelle, setIncludeSelle] = useState<boolean>(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
 
   // États des pickers
@@ -96,7 +115,8 @@ export default function MictionsScreen({ mictions }: Props) {
   const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
-  const { openModal } = useLocalSearchParams();
+  const { tab, openModal, editId } = useLocalSearchParams();
+  const editIdRef = useRef<string | null>(null);
 
   // Ref pour le BottomSheet
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -122,15 +142,33 @@ export default function MictionsScreen({ mictions }: Props) {
     });
   }, []);
 
-  const openAddModal = useCallback(() => {
-    setDateHeure(new Date());
-    setEditingMiction(null);
-    setIsSubmitting(false);
+  const expandBottomSheet = useCallback(() => {
     bottomSheetRef.current?.expand();
+    setTimeout(() => bottomSheetRef.current?.expand(), 250);
   }, []);
 
-  useEffect(() => {
-    const headerButtons = (
+  const openAddModal = useCallback((preferredType?: "mictions" | "selles") => {
+    setDateHeure(new Date());
+    setEditingExcretion(null);
+    setIsSubmitting(false);
+
+    if (preferredType === "selles") {
+      setIncludeMiction(false);
+      setIncludeSelle(true);
+    } else if (preferredType === "mictions") {
+      setIncludeMiction(true);
+      setIncludeSelle(false);
+    } else {
+      setIncludeMiction(true);
+      setIncludeSelle(false);
+    }
+
+    expandBottomSheet();
+  }, [expandBottomSheet]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const headerButtons = (
       <View
         style={{
           flexDirection: "row",
@@ -159,109 +197,183 @@ export default function MictionsScreen({ mictions }: Props) {
           <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
         </Pressable>
       </View>
-    );
+      );
 
-    setHeaderRight(headerButtons, headerOwnerId.current);
+      setHeaderRight(headerButtons, headerOwnerId.current);
 
-    return () => {
-      setHeaderRight(null, headerOwnerId.current);
-    };
-  }, [
-    handleCalendarPress,
-    showCalendar,
-    colorScheme,
-    setHeaderRight,
-    openAddModal,
-  ]);
+      return () => {
+        setHeaderRight(null, headerOwnerId.current);
+      };
+    }, [
+      handleCalendarPress,
+      showCalendar,
+      colorScheme,
+      setHeaderRight,
+      openAddModal,
+    ])
+  );
 
   // ============================================
   // EFFECTS - URL PARAMS
   // ============================================
 
   useEffect(() => {
-    if (openModal === "true") {
-      const timer = setTimeout(() => {
-        openAddModal();
-        router.replace("/(drawer)/baby/excretions");
-      }, 100);
-
-      return () => clearTimeout(timer);
+    if (tab === "selles") {
+      setIncludeMiction(false);
+      setIncludeSelle(true);
+    } else if (tab === "mictions") {
+      setIncludeMiction(true);
+      setIncludeSelle(false);
     }
-  }, [openModal, openAddModal]);
+  }, [tab]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (openModal !== "true") return;
+      setPendingOpen(true);
+    }, [openModal])
+  );
 
   useEffect(() => {
-    setMictionsLoaded(false);
-    setEmptyDelayDone(false);
-    setDaysWindow(14);
-    setHasMore(true);
-    setAutoLoadMore(false);
-    setAutoLoadMoreAttempts(0);
-  }, [activeChild?.id]);
+    if (!pendingOpen || !layoutReady) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      openAddModal(tab as "mictions" | "selles" | undefined);
+      router.replace("/(drawer)/baby/diapers");
+      setPendingOpen(false);
+    });
+    return () => task.cancel?.();
+  }, [pendingOpen, layoutReady, tab, openAddModal, router]);
+
+  useEffect(() => {
+    if (!editId || !layoutReady) return;
+    const normalizedId = Array.isArray(editId) ? editId[0] : editId;
+    if (!normalizedId || editIdRef.current === normalizedId) return;
+    const target = excretions.find((excretion) => excretion.id === normalizedId);
+    if (!target) return;
+    editIdRef.current = normalizedId;
+    openEditModal(target);
+    router.replace("/(drawer)/baby/diapers");
+  }, [editId, layoutReady, excretions, router]);
+
+  // ============================================
+  // EFFECTS - DATA LISTENERS
+  // ============================================
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setMictionsLoaded(true);
-  }, [activeChild?.id, mictions]);
+    const versionAtSubscribe = loadMoreVersionRef.current;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+
+    let mictionsData: Excretion[] = [];
+    let sellesData: Excretion[] = [];
+
+    const mergeAndSortExcretions = () => {
+      const merged = [...mictionsData, ...sellesData].sort(
+        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+      );
+      setExcretions(merged);
+      if (
+        pendingLoadMoreRef.current > 0 &&
+        versionAtSubscribe === loadMoreVersionRef.current
+      ) {
+        pendingLoadMoreRef.current -= 1;
+        if (pendingLoadMoreRef.current <= 0) {
+          setIsLoadingMore(false);
+        }
+      }
+    };
+
+    const unsubscribeMictions = ecouterMictions(
+      activeChild.id,
+      (mictions) => {
+        mictionsData = mictions.map((m) => ({
+          ...m,
+          type: "miction" as ExcretionType,
+        }));
+        setMictionsLoaded(true);
+        mergeAndSortExcretions();
+      },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+    );
+
+    const unsubscribeSelles = ecouterSelles(
+      activeChild.id,
+      (selles) => {
+        sellesData = selles.map((s) => ({
+          ...s,
+          type: "selle" as ExcretionType,
+        }));
+        setSellesLoaded(true);
+        mergeAndSortExcretions();
+      },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+    );
+
+    return () => {
+      unsubscribeMictions();
+      unsubscribeSelles();
+    };
+  }, [activeChild, daysWindow]);
 
   useEffect(() => {
-    if (!mictionsLoaded) {
+    if (!activeChild?.id) return;
+    setExcretions([]);
+    setGroupedExcretions([]);
+    setMictionsLoaded(false);
+    setSellesLoaded(false);
+    setEmptyDelayDone(false);
+    setDaysWindow(14);
+    setIsLoadingMore(false);
+    setHasMore(true);
+    loadMoreVersionRef.current = 0;
+    pendingLoadMoreRef.current = 0;
+  }, [activeChild?.id]);
+
+  const isExcretionsLoading = !(mictionsLoaded && sellesLoaded);
+
+  useEffect(() => {
+    if (isExcretionsLoading) {
       setEmptyDelayDone(false);
       return;
     }
-    if (groupedMictions.length > 0) {
+    if (groupedExcretions.length > 0) {
       setEmptyDelayDone(true);
       return;
     }
     const timer = setTimeout(() => setEmptyDelayDone(true), 300);
     return () => clearTimeout(timer);
-  }, [mictionsLoaded, groupedMictions.length]);
+  }, [isExcretionsLoading, groupedExcretions.length]);
 
-  const startOfRange = useMemo(() => {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - (daysWindow - 1));
-    return start;
-  }, [daysWindow]);
-
-  const visibleMictions = useMemo(
-    () =>
-      mictions.filter((miction) => {
-        const mictionDate = new Date(miction.date.seconds * 1000);
-        return mictionDate >= startOfRange;
-      }),
-    [mictions, startOfRange]
-  );
-
-  useEffect(() => {
-    if (!mictionsLoaded) return;
-    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les rafraîchissements inutiles.
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - (daysWindow - 1));
-    const hasOlder = mictions.some((miction) => {
-      const mictionDate = new Date(miction.date.seconds * 1000);
-      return mictionDate < start;
-    });
-    setHasMore(hasOlder);
-  }, [daysWindow, mictionsLoaded]);
+  const loadMoreStep = useCallback((auto = false) => {
+    if (!hasMore) return;
+    setIsLoadingMore(true);
+    pendingLoadMoreRef.current = 2;
+    loadMoreVersionRef.current += 1;
+    setDaysWindow((prev) => prev + 14);
+    if (!auto) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [hasMore]);
 
   const handleLoadMore = useCallback(() => {
-    if (!hasMore) return;
-    setAutoLoadMore(true);
-    setAutoLoadMoreAttempts(0);
-    setDaysWindow((prev) => prev + 14);
-  }, [hasMore]);
+    loadMoreStep(false);
+  }, [loadMoreStep]);
 
   useEffect(() => {
     if (selectedFilter === "today" || selectedDate) return;
-    if (!autoLoadMore && mictionsLoaded && groupedMictions.length === 0 && hasMore) {
+    if (!autoLoadMore && !isExcretionsLoading && groupedExcretions.length === 0 && hasMore) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
   }, [
     autoLoadMore,
-    mictionsLoaded,
-    groupedMictions.length,
+    isExcretionsLoading,
+    groupedExcretions.length,
     hasMore,
     selectedFilter,
     selectedDate,
@@ -269,8 +381,8 @@ export default function MictionsScreen({ mictions }: Props) {
 
   useEffect(() => {
     if (!autoLoadMore) return;
-    if (!mictionsLoaded) return;
-    if (groupedMictions.length > 0 || !hasMore) {
+    if (isExcretionsLoading || isLoadingMore) return;
+    if (groupedExcretions.length > 0 || !hasMore) {
       setAutoLoadMore(false);
       setAutoLoadMoreAttempts(0);
       return;
@@ -280,50 +392,72 @@ export default function MictionsScreen({ mictions }: Props) {
       return;
     }
     setAutoLoadMoreAttempts((prev) => prev + 1);
-    setDaysWindow((prev) => prev + 14);
+    loadMoreStep(true);
   }, [
     autoLoadMore,
-    mictionsLoaded,
-    groupedMictions.length,
+    isExcretionsLoading,
+    isLoadingMore,
+    groupedExcretions.length,
     hasMore,
     autoLoadMoreAttempts,
+    loadMoreStep,
   ]);
 
-  // ============================================
-  // EFFECTS - DATA LISTENERS
-  // ============================================
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+    const beforeDate = new Date(startOfRange.getTime() - 1);
 
+    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
+    setHasMore(true);
+    hasMoreEventsBeforeHybrid(activeChild.id, ["miction", "selle"], beforeDate)
+      .then((result) => {
+        if (!cancelled) setHasMore(result);
+      })
+      .catch(() => {
+        if (!cancelled) setHasMore(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChild?.id, daysWindow]);
+
+  // Filtrage et regroupement par jour avec useMemo pour éviter les re-renders
   useEffect(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
-    const filtered = visibleMictions.filter((miction) => {
-      const mictionDate = new Date(miction.date.seconds * 1000);
-      mictionDate.setHours(0, 0, 0, 0);
-      const mictionTime = mictionDate.getTime();
+    const filtered = excretions.filter((excretion) => {
+      const excretionDate = new Date(excretion.date.seconds * 1000);
+      excretionDate.setHours(0, 0, 0, 0);
+      const excretionTime = excretionDate.getTime();
 
       if (selectedDate) {
         const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
         const calDate = new Date(calYear, calMonth - 1, calDay);
         calDate.setHours(0, 0, 0, 0);
-        return mictionTime === calDate.getTime();
+        return excretionTime === calDate.getTime();
       }
 
       switch (selectedFilter) {
         case "today":
-          return mictionTime === todayTime;
+          return excretionTime === todayTime;
         case "past":
-          return mictionTime < todayTime;
+          return excretionTime < todayTime;
         case null:
         default:
           return true;
       }
     });
 
-    const grouped = groupMictionsByDay(filtered);
-    setGroupedMictions(grouped);
-  }, [visibleMictions, selectedFilter, selectedDate, showCalendar]);
+    const grouped = groupExcretionsByDay(filtered);
+    setGroupedExcretions(grouped);
+  }, [excretions, selectedFilter, selectedDate]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -332,8 +466,8 @@ export default function MictionsScreen({ mictions }: Props) {
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
 
-    visibleMictions.forEach((miction) => {
-      const date = new Date(miction.date.seconds * 1000);
+    excretions.forEach((excretion) => {
+      const date = new Date(excretion.date.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
@@ -354,38 +488,53 @@ export default function MictionsScreen({ mictions }: Props) {
     }
 
     return marked;
-  }, [visibleMictions, selectedDate, colorScheme]);
+  }, [excretions, selectedDate, colorScheme]);
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
     setExpandedDays(new Set([day.dateString]));
   };
 
+  const applyTodayFilter = useCallback(() => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    setSelectedFilter("today");
+    setSelectedDate(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set([todayKey]));
+  }, []);
+
   const handleFilterPress = (filter: FilterType) => {
+    if (filter === "today") {
+      applyTodayFilter();
+      return;
+    }
+
     setSelectedFilter(filter);
     setSelectedDate(null);
     setShowCalendar(false);
-
-    if (filter === "today") {
-      const today = new Date();
-      const todayKey = `${today.getFullYear()}-${String(
-        today.getMonth() + 1
-      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      setExpandedDays(new Set([todayKey]));
-    } else {
-      setExpandedDays(new Set());
-    }
+    setExpandedDays(new Set());
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedFilter && !selectedDate) {
+        applyTodayFilter();
+      }
+    }, [applyTodayFilter, selectedDate, selectedFilter])
+  );
 
   // ============================================
   // HELPERS - GROUPING
   // ============================================
 
-  const groupMictionsByDay = (mictions: Miction[]): MictionGroup[] => {
-    const groups: { [key: string]: Miction[] } = {};
+  const groupExcretionsByDay = (excretions: Excretion[]): ExcretionGroup[] => {
+    const groups: { [key: string]: Excretion[] } = {};
 
-    mictions.forEach((miction) => {
-      const date = new Date(miction.date?.seconds * 1000);
+    excretions.forEach((excretion) => {
+      const date = new Date(excretion.date?.seconds * 1000);
       const dateKey = `${date.getFullYear()}-${String(
         date.getMonth() + 1
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -393,13 +542,15 @@ export default function MictionsScreen({ mictions }: Props) {
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
-      groups[dateKey].push(miction);
+      groups[dateKey].push(excretion);
     });
 
     return Object.entries(groups)
-      .map(([dateKey, mictions]) => {
+      .map(([dateKey, excretions]) => {
         const date = new Date(dateKey);
-        const lastMiction = mictions.reduce((latest, current) =>
+        const mictionsCount = excretions.filter(e => e.type === "miction").length;
+        const sellesCount = excretions.filter(e => e.type === "selle").length;
+        const lastExcretion = excretions.reduce((latest, current) =>
           (current.date?.seconds || 0) > (latest.date?.seconds || 0)
             ? current
             : latest
@@ -413,10 +564,12 @@ export default function MictionsScreen({ mictions }: Props) {
             month: "long",
             year: "numeric",
           }),
-          mictions: mictions.sort(
+          excretions: excretions.sort(
             (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
           ),
-          lastMiction,
+          mictionsCount,
+          sellesCount,
+          lastExcretion,
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -426,31 +579,56 @@ export default function MictionsScreen({ mictions }: Props) {
   // HELPERS - UI
   // ============================================
 
-  const toggleExpand = (dateKey: string) => {
-    const newExpandedDays = new Set(expandedDays);
-    if (newExpandedDays.has(dateKey)) {
-      newExpandedDays.delete(dateKey);
-    } else {
-      newExpandedDays.add(dateKey);
-    }
-    setExpandedDays(newExpandedDays);
+  const toggleExpand = useCallback((dateKey: string) => {
+    setExpandedDays(prev => {
+      const newExpandedDays = new Set(prev);
+      if (newExpandedDays.has(dateKey)) {
+        newExpandedDays.delete(dateKey);
+      } else {
+        newExpandedDays.add(dateKey);
+      }
+      return newExpandedDays;
+    });
+  }, []);
+
+  const getExcretionTypeLabel = (type?: ExcretionType): string => {
+    if (!type) return "Inconnu";
+    return type === "miction" ? "Miction" : "Selle";
+  };
+
+  const getExcretionIcon = (type?: ExcretionType): string => {
+    if (type === "miction") return "water";
+    if (type === "selle") return "poop";
+    return "question";
+  };
+
+  const getExcretionColor = (type?: ExcretionType): string => {
+    if (type === "miction") return "#17a2b8";
+    if (type === "selle") return "#dc3545";
+    return "#666";
   };
 
   // ============================================
   // HANDLERS - MODAL
   // ============================================
 
-  const openEditModal = (miction: Miction) => {
-    setDateHeure(new Date(miction.date.seconds * 1000));
-    setEditingMiction(miction);
+  const openEditModal = (excretion: Excretion) => {
+    setDateHeure(new Date(excretion.date.seconds * 1000));
+    setEditingExcretion(excretion);
     setIsSubmitting(false);
+
+    // En mode édition, on ne sélectionne que le type de l'excrétion
+    const type = excretion.type || "miction";
+    setIncludeMiction(type === "miction");
+    setIncludeSelle(type === "selle");
+
     bottomSheetRef.current?.expand();
   };
 
   const closeModal = () => {
     bottomSheetRef.current?.close();
     setIsSubmitting(false);
-    setEditingMiction(null);
+    setEditingExcretion(null);
   };
 
   const cancelForm = useCallback(() => {
@@ -464,32 +642,53 @@ export default function MictionsScreen({ mictions }: Props) {
   const handleSubmit = async () => {
     if (isSubmitting || !activeChild) return;
 
+    // Vérifier qu'au moins un type est sélectionné
+    if (!includeMiction && !includeSelle) {
+      Alert.alert(
+        "Attention",
+        "Veuillez sélectionner au moins un type (miction ou selle)"
+      );
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
-      if (editingMiction) {
-        await modifierMiction(activeChild.id, editingMiction.id, {
-          date: dateHeure,
-        });
+      const dataToSave = {
+        date: dateHeure,
+      };
+
+      if (editingExcretion) {
+        // Mode édition : modifier l'excrétion existante
+        const isMiction = editingExcretion.type === "miction";
+        if (isMiction) {
+          await modifierMiction(activeChild.id, editingExcretion.id, dataToSave);
+        } else {
+          await modifierSelle(activeChild.id, editingExcretion.id, dataToSave);
+        }
       } else {
-        await ajouterMiction(activeChild.id, {
-          date: dateHeure,
-        });
+        // Mode ajout : ajouter une ou deux excrétions
+        if (includeMiction) {
+          await ajouterMiction(activeChild.id, dataToSave);
+        }
+        if (includeSelle) {
+          await ajouterSelle(activeChild.id, dataToSave);
+        }
       }
 
       if (isOffline) {
         showToast(
-          editingMiction
+          editingExcretion
             ? "Modification en attente de synchronisation"
             : "Ajout en attente de synchronisation"
         );
       }
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde de la miction:", error);
+      console.error("Erreur lors de la sauvegarde:", error);
       Alert.alert(
         "Erreur",
-        "Impossible de sauvegarder la miction. Veuillez réessayer."
+        "Impossible de sauvegarder. Veuillez réessayer."
       );
     } finally {
       setIsSubmitting(false);
@@ -497,16 +696,21 @@ export default function MictionsScreen({ mictions }: Props) {
   };
 
   const handleDelete = () => {
-    if (isSubmitting || !editingMiction || !activeChild) return;
+    if (isSubmitting || !editingExcretion || !activeChild) return;
     setShowDeleteModal(true);
   };
 
   const confirmDelete = async () => {
-    if (isSubmitting || !editingMiction || !activeChild) return;
+    if (isSubmitting || !editingExcretion || !activeChild) return;
 
     try {
       setIsSubmitting(true);
-      await supprimerMiction(activeChild.id, editingMiction.id);
+      const isMiction = editingExcretion.type === "miction";
+      if (isMiction) {
+        await supprimerMiction(activeChild.id, editingExcretion.id);
+      } else {
+        await supprimerSelle(activeChild.id, editingExcretion.id);
+      }
       if (isOffline) {
         showToast("Suppression en attente de synchronisation");
       }
@@ -514,7 +718,7 @@ export default function MictionsScreen({ mictions }: Props) {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la suppression:", error);
-      Alert.alert("Erreur", "Impossible de supprimer la miction. Veuillez réessayer.");
+      Alert.alert("Erreur", "Impossible de supprimer. Veuillez réessayer.");
     } finally {
       setIsSubmitting(false);
     }
@@ -551,52 +755,64 @@ export default function MictionsScreen({ mictions }: Props) {
   };
 
   // ============================================
-  // RENDER - MICTION ITEM
+  // RENDER - EXCRETION ITEM
   // ============================================
 
-  const renderMictionItem = (miction: Miction, isLast: boolean = false) => (
-    <TouchableOpacity
-      key={miction.id}
-      style={[styles.mictionItem, isLast && styles.lastMictionItem]}
-      onPress={() => openEditModal(miction)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.mictionContent}>
-        <FontAwesome
-          name="clock"
-          size={16}
-          color={isLast ? "#17a2b8" : "#666"}
-        />
-        <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
-          {new Date(miction.date?.seconds * 1000).toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-        <View style={styles.mictionActions}>
-          {/* {isLast && (
-            <View style={styles.recentBadge}>
-              <Text style={styles.recentText}>Récent</Text>
+  const renderExcretionItem = useCallback((excretion: Excretion, isLast: boolean = false) => {
+    const typeLabel = getExcretionTypeLabel(excretion.type);
+    const color = getExcretionColor(excretion.type);
+
+    return (
+      <TouchableOpacity
+        key={excretion.id}
+        style={[styles.excretionItem, isLast && styles.lastExcretionItem]}
+        onPress={() => openEditModal(excretion)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.excretionContent}>
+          <View style={[styles.avatar, { backgroundColor: color }]}>
+            <FontAwesome
+              name={getExcretionIcon(excretion.type)}
+              size={20}
+              color="#ffffff"
+            />
+          </View>
+          <View style={styles.excretionInfo}>
+            <View style={styles.infoRow}>
+              <Text style={styles.excretionTypeText}>{typeLabel}</Text>
             </View>
-          )} */}
-          <FontAwesome
-            name="edit"
-            size={16}
-            color="#17a2b8"
-            style={styles.editIcon}
-          />
+            <View style={styles.infoRow}>
+              <Text style={styles.timeText}>
+                {new Date(excretion.date?.seconds * 1000).toLocaleTimeString(
+                  "fr-FR",
+                  {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }
+                )}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.excretionActions}>
+            <FontAwesome
+              name="edit"
+              size={16}
+              color={color}
+              style={styles.editIcon}
+            />
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  }, []);
 
   // ============================================
   // RENDER - DAY GROUP
   // ============================================
 
-const renderDayGroup = ({ item }: { item: MictionGroup }) => {
+  const renderDayGroup = useCallback(({ item }: { item: ExcretionGroup }) => {
     const isExpanded = expandedDays.has(item.date);
-    const hasMultipleMictions = item.mictions.length > 1;
+    const hasMultipleExcretions = item.excretions.length > 1;
 
     return (
       <View style={styles.dayCard}>
@@ -604,13 +820,27 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
-              <FontAwesome name="water" size={14} color="#666" />
-              <Text style={styles.summaryText}>
-                {item.mictions.length} miction{item.mictions.length > 1 ? "s" : ""}
-              </Text>
+              <View style={styles.summaryRow}>
+                {item.mictionsCount > 0 && (
+                  <View style={styles.summaryBadge}>
+                    <FontAwesome name="water" size={12} color="#17a2b8" />
+                    <Text style={styles.summaryText}>
+                      {item.mictionsCount} miction{item.mictionsCount > 1 ? "s" : ""}
+                    </Text>
+                  </View>
+                )}
+                {item.sellesCount > 0 && (
+                  <View style={styles.summaryBadge}>
+                    <FontAwesome name="poop" size={12} color="#dc3545" />
+                    <Text style={styles.summaryText}>
+                      {item.sellesCount} selle{item.sellesCount > 1 ? "s" : ""}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
           </View>
-          {hasMultipleMictions && (
+          {hasMultipleExcretions && (
             <TouchableOpacity
               style={styles.expandButton}
               onPress={() => toggleExpand(item.date)}
@@ -623,21 +853,19 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
             </TouchableOpacity>
           )}
         </View>
-
-        {renderMictionItem(item.lastMiction, true)}
-
-        {hasMultipleMictions && isExpanded && (
+        {renderExcretionItem(item.lastExcretion, true)}
+        {hasMultipleExcretions && isExpanded && (
           <View style={styles.expandedContent}>
             <View style={styles.separator} />
             <Text style={styles.historyLabel}>Historique du jour</Text>
-            {item.mictions
-              .filter((miction) => miction.id !== item.lastMiction.id)
-              .map((miction) => renderMictionItem(miction))}
+            {item.excretions
+              .filter((excretion) => excretion.id !== item.lastExcretion.id)
+              .map((excretion) => renderExcretionItem(excretion))}
           </View>
         )}
       </View>
     );
-  };
+  }, [expandedDays, renderExcretionItem, toggleExpand]);
 
   // ============================================
   // RENDER - MAIN
@@ -651,6 +879,7 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
           { backgroundColor: Colors[colorScheme].background },
         ]}
         edges={["bottom"]}
+        onLayout={() => setLayoutReady(true)}
       >
         <View>
           {/* Filtres */}
@@ -725,12 +954,12 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
           )}
         </View>
 
-        {/* Liste des mictions */}
-        {!mictionsLoaded || !emptyDelayDone ? (
+        {/* Liste des excrétions */}
+        {isExcretionsLoading || !emptyDelayDone ? (
           <View style={styles.emptyContainer}>
             <IconPulseDots color={Colors[colorScheme].tint} />
           </View>
-        ) : groupedMictions.length === 0 ? (
+        ) : groupedExcretions.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons
               name="calendar-outline"
@@ -738,14 +967,14 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
               color={Colors[colorScheme].tabIconDefault}
             />
             <ThemedText style={styles.emptyText}>
-              {mictions.length === 0
-                ? "Aucune miction enregistrée"
-                : "Aucune miction pour ce filtre"}
+              {excretions.length === 0
+                ? "Aucune excrétion"
+                : "Aucune excrétion pour ce filtre"}
             </ThemedText>
             {!(selectedFilter === "today" || selectedDate) && (
               <LoadMoreButton
                 hasMore={hasMore}
-                loading={false}
+                loading={isLoadingMore}
                 onPress={handleLoadMore}
                 text="Voir plus (14 jours)"
                 accentColor={Colors[colorScheme].tint}
@@ -754,7 +983,7 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
           </View>
         ) : (
           <FlatList
-            data={groupedMictions}
+            data={groupedExcretions}
             keyExtractor={(item) => item.date}
             renderItem={renderDayGroup}
             showsVerticalScrollIndicator={false}
@@ -764,7 +993,7 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
               selectedFilter === "today" || selectedDate ? null : (
                 <LoadMoreButton
                   hasMore={hasMore}
-                  loading={false}
+                  loading={isLoadingMore}
                   onPress={handleLoadMore}
                   text="Voir plus (14 jours)"
                   accentColor={Colors[colorScheme].tint}
@@ -774,22 +1003,91 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
           />
         )}
 
-        {/* Bottom Sheet */}
+        {/* Bottom Sheet d'ajout/édition */}
         <FormBottomSheet
           ref={bottomSheetRef}
-          title={editingMiction ? "Modifier la miction" : "Nouvelle miction"}
-          icon={editingMiction ? "edit" : "tint"}
-          accentColor="#17a2b8"
-          isEditing={!!editingMiction}
+          title={editingExcretion ? `Modifier ${editingExcretion.type === "miction" ? "miction" : "selle"}`: "Nouvelle excrétion"}
+          icon="toilet"
+          accentColor={includeMiction && includeSelle ? "#6c757d" : includeMiction ? "#17a2b8" : includeSelle ?"#dc3545" : "#6c757d"}
+          isEditing={!!editingExcretion}
           isSubmitting={isSubmitting}
           onSubmit={handleSubmit}
-          onDelete={editingMiction ? handleDelete : undefined}
+          onDelete={editingExcretion ? handleDelete : undefined}
           onCancel={cancelForm}
           onClose={() => {
             setIsSubmitting(false);
-            setEditingMiction(null);
+            setEditingExcretion(null);
           }}
         >
+          {/* Sélection du type - Toggles en mode ajout */}
+          {!editingExcretion && (
+            <>
+              <Text style={styles.modalCategoryLabel}>Type d&apos;excrétion</Text>
+              <Text style={styles.toggleSubtitle}>
+                Vous pouvez sélectionner les deux si nécessaire
+              </Text>
+              <View style={styles.typeRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    includeMiction && styles.typeButtonActiveMiction,
+                    isSubmitting && styles.typeButtonDisabled,
+                  ]}
+                  onPress={() => setIncludeMiction(prev => !prev)}
+                  disabled={isSubmitting}
+                  activeOpacity={0.7}
+                >
+                  <FontAwesome
+                    name="water"
+                    size={20}
+                    color={includeMiction ? "white" : "#17a2b8"}
+                  />
+                  <Text
+                    style={[
+                      styles.typeText,
+                      includeMiction && styles.typeTextActive,
+                      isSubmitting && styles.typeTextDisabled,
+                    ]}
+                  >
+                    Miction
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    includeSelle && styles.typeButtonActiveSelle,
+                    isSubmitting && styles.typeButtonDisabled,
+                  ]}
+                  onPress={() => setIncludeSelle(prev => !prev)}
+                  disabled={isSubmitting}
+                  activeOpacity={0.7}
+                >
+                  <FontAwesome
+                    name="poop"
+                    size={20}
+                    color={includeSelle ? "white" : "#dc3545"}
+                  />
+                  <Text
+                    style={[
+                      styles.typeText,
+                      includeSelle && styles.typeTextActive,
+                      isSubmitting && styles.typeTextDisabled,
+                    ]}
+                  >
+                    Selle
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {!includeMiction && !includeSelle && (
+                <Text style={styles.warningText}>
+                  ⚠️ Veuillez sélectionner au moins un type
+                </Text>
+              )}
+            </>
+          )}
+
+          {/* Date & Heure */}
           <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
           <View style={styles.dateTimeContainer}>
             <TouchableOpacity
@@ -855,6 +1153,7 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
             </Text>
           </View>
 
+          {/* Date/Time Pickers */}
           {showDate && (
             <DateTimePicker
               value={dateHeure}
@@ -877,7 +1176,7 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
         <ConfirmModal
           visible={showDeleteModal}
           title="Suppression"
-          message="Voulez-vous vraiment supprimer cette miction ?"
+          message="Voulez-vous vraiment supprimer ?"
           confirmText="Supprimer"
           cancelText="Annuler"
           backgroundColor={Colors[colorScheme].background}
@@ -895,7 +1194,7 @@ const renderDayGroup = ({ item }: { item: MictionGroup }) => {
 // ============================================
 
 const styles = StyleSheet.create({
-    container: {
+  container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
   },
@@ -942,25 +1241,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
-  // Section
-  section: {
-    marginBottom: 24,
-  },
-  dateHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-  },
-  dateText: {
-    fontSize: 16,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
+
   // Day Card
   dayCard: {
     backgroundColor: "white",
@@ -989,65 +1270,78 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   summaryInfo: {
+    flexDirection: "column",
+    gap: 4,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  summaryBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
+    backgroundColor: "#f8f9fa",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   summaryText: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#666",
+    fontWeight: "500",
   },
   expandButton: {
     padding: 8,
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
-  // Miction Item
-  mictionItem: {
+
+  // Excretion Item
+  excretionItem: {
     backgroundColor: "#f8f9fa",
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
   },
-  lastMictionItem: {
-    backgroundColor: "#e3f2fd",
+  lastExcretionItem: {
+    backgroundColor: "#e8f4fd",
     borderLeftWidth: 4,
-    borderLeftColor: "#17a2b8",
+    borderLeftColor: "#4A90E2",
   },
-  mictionContent: {
+  excretionContent: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
   },
-  timeText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#666",
+  excretionInfo: {
     flex: 1,
   },
-  lastTimeText: {
-    color: "#333",
-    fontWeight: "600",
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 2,
   },
-  mictionActions: {
+  timeText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  excretionTypeText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  excretionActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  recentBadge: {
-    backgroundColor: "#dc3545",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  recentText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "600",
-  },
   editIcon: {
     opacity: 0.7,
   },
+
   // Expanded Content
   expandedContent: {
     marginTop: 8,
@@ -1057,12 +1351,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#eee",
     marginBottom: 12,
   },
+  historyLabel: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
   // Empty State
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 100,
   },
   emptyText: {
     fontSize: 18,
@@ -1070,31 +1371,98 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontWeight: "600",
   },
+
   // Modal Content
   modalCategoryLabel: {
     alignSelf: "center",
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
+    marginBottom: 10,
+  },
+
+  // Type Selection
+  typeRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 16,
+    gap: 12,
+  },
+  typeButton: {
+    flex: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 8,
+    padding: 16,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 12,
+  },
+  typeButtonActiveMiction: {
+    backgroundColor: "#17a2b8",
+  },
+  typeButtonActiveSelle: {
+    backgroundColor: "#dc3545",
+  },
+  typeButtonDisabled: {
+    backgroundColor: "#f8f8f8",
+    opacity: 0.5,
+  },
+  typeText: {
+    fontSize: 16,
+    color: "#666",
+    fontWeight: "500",
+  },
+  typeTextActive: {
+    color: "white",
+    fontWeight: "bold",
+  },
+  typeTextDisabled: {
+    color: "#ccc",
+  },
+  toggleSubtitle: {
+    fontSize: 13,
+    color: "#999",
+    textAlign: "center",
     marginBottom: 12,
   },
+  warningText: {
+    fontSize: 13,
+    color: "#dc3545",
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 12,
+    fontWeight: "500",
+  },
+  editModeLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  editModeLabelText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+
   // Date/Time
   dateTimeContainer: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 20,
+    justifyContent: "center",
+    gap: 10,
+    marginBottom: 10,
   },
   dateButton: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: "#f0f0f0",
+    padding: 12,
+    borderRadius: 8,
     alignItems: "center",
     flex: 1,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
   },
   dateButtonDisabled: {
     backgroundColor: "#f5f5f5",
@@ -1103,19 +1471,14 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 16,
     color: "#666",
-    fontWeight: "500",
+    marginTop: 4,
   },
   dateButtonTextDisabled: {
     color: "#ccc",
   },
   selectedDateTime: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
     alignItems: "center",
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
+    marginBottom: 16,
   },
   selectedDate: {
     fontSize: 16,
@@ -1125,72 +1488,14 @@ const styles = StyleSheet.create({
   },
   selectedTime: {
     fontSize: 20,
-    color: "#dc3545",
+    color: "#004cdaff",
     fontWeight: "bold",
   },
-  header: {
-    padding: 16,
-    paddingBottom: 8,
-  },
-  addButton: {
-    backgroundColor: "#dc3545",
-    flexDirection: "row",
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
-  },
-  addButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  historyLabel: {
-    fontSize: 12,
-    color: "#999",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#999",
-    marginTop: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    width: "90%",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    backgroundColor: "white",
-    borderRadius: 12,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  actionButtonsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
 });

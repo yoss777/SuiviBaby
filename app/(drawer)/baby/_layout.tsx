@@ -31,28 +31,35 @@ export default function BabyTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="repas"
+        name="chrono"
+        options={{
+          title: 'Chrono',
+          tabBarIcon: ({ color }) => <FontAwesome size={28} name="clock" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="meals"
         options={{
           title: 'Repas',
           tabBarIcon: ({ color }) => <FontAwesome size={28} name="baby" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="pompages"
+        name="pumping"
         options={{
           title: 'Tire-lait',
           tabBarIcon: ({ color }) => <FontAwesome size={28} name="pump-medical" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="immunos"
+        name="immunizations"
         options={{
           title: 'Immunos',
           tabBarIcon: ({ color }) => <FontAwesome size={28} name="prescription-bottle" color={color} />,
         }}
       />
-        <Tabs.Screen
-          name="excretions"
+      <Tabs.Screen
+          name="diapers"
           options={{
             title: 'Pipi popo',
             tabBarIcon: ({ color }) => <FontAwesome size={28} name="toilet" color={color} />,

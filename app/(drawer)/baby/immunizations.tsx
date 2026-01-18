@@ -105,11 +105,11 @@ const VACCINS_LIST = [
 // COMPONENT
 // ============================================
 
-export default function ImmunosScreen() {
+export default function ImmunizationsScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
-  const headerOwnerId = useRef(`immunos-${Math.random().toString(36).slice(2)}`);
+  const headerOwnerId = useRef(`immunizations-${Math.random().toString(36).slice(2)}`);
   const { showToast } = useToast();
   const netInfo = useNetInfo();
   const isOffline =
@@ -152,7 +152,8 @@ export default function ImmunosScreen() {
   const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
-  const { tab, openModal } = useLocalSearchParams();
+  const { tab, openModal, editId } = useLocalSearchParams();
+  const editIdRef = useRef<string | null>(null);
 
   // Ref pour le BottomSheet
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -277,11 +278,22 @@ export default function ImmunosScreen() {
     if (!pendingOpen || !layoutReady) return;
     const task = InteractionManager.runAfterInteractions(() => {
       openAddModal(tab as "vitamines" | "vaccins" | undefined);
-      router.replace("/(drawer)/baby/immunos");
+      router.replace("/(drawer)/baby/immunizations");
       setPendingOpen(false);
     });
     return () => task.cancel?.();
   }, [pendingOpen, layoutReady, tab, openAddModal, router]);
+
+  useEffect(() => {
+    if (!editId || !layoutReady) return;
+    const normalizedId = Array.isArray(editId) ? editId[0] : editId;
+    if (!normalizedId || editIdRef.current === normalizedId) return;
+    const target = immunos.find((immuno) => immuno.id === normalizedId);
+    if (!target) return;
+    editIdRef.current = normalizedId;
+    openEditModal(target);
+    router.replace("/(drawer)/baby/immunizations");
+  }, [editId, layoutReady, immunos, router]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS

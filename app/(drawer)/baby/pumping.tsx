@@ -9,21 +9,26 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterVitamine,
-  modifierVitamine,
-  supprimerVitamine,
+  ajouterPompage,
+  modifierPompage,
+  supprimerPompage,
 } from "@/migration/eventsDoubleWriteService";
-import { Vitamine, VitamineGroup } from "@/migration/interfaces";
+import {
+  ecouterPompagesHybrid as ecouterPompages,
+  hasMoreEventsBeforeHybrid,
+} from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNetInfo } from "@react-native-community/netinfo";
+import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  InteractionManager,
   Platform,
   Pressable,
   ScrollView,
@@ -34,27 +39,41 @@ import {
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useHeaderRight } from "../(drawer)/_layout";
+import { useHeaderRight } from "../_layout";
 
 // ============================================
 // TYPES
 // ============================================
 type FilterType = "today" | "past";
 
-type Props = {
-  vitamines: Vitamine[];
-};
+interface Pompage {
+  id: string;
+  quantiteGauche: number;
+  quantiteDroite: number;
+  date: { seconds: number };
+  createdAt: { seconds: number };
+}
+
+interface PompageGroup {
+  date: string;
+  dateFormatted: string;
+  pompages: Pompage[];
+  totalQuantityLeft: number;
+  totalQuantityRight: number;
+  totalQuantity: number;
+  lastPompage: Pompage;
+}
 
 // ============================================
 // COMPONENT
 // ============================================
 
-export default function VitaminesScreen({ vitamines }: Props) {
+export default function PumpingScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
+  const headerOwnerId = useRef(`pumping-${Math.random().toString(36).slice(2)}`);
   const { showToast } = useToast();
-  const headerOwnerId = useRef(`vitamines-${Math.random().toString(36).slice(2)}`);
   const netInfo = useNetInfo();
   const isOffline =
     netInfo.isInternetReachable === false || netInfo.isConnected === false;
@@ -62,29 +81,41 @@ export default function VitaminesScreen({ vitamines }: Props) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
 
   // États des données
-  const [groupedVitamines, setGroupedVitamines] = useState<VitamineGroup[]>([]);
+  const [pompages, setPompages] = useState<Pompage[]>([]);
+  const [groupedPompages, setGroupedPompages] = useState<PompageGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [vitaminesLoaded, setVitaminesLoaded] = useState(false);
+  const [pompagesLoaded, setPompagesLoaded] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [autoLoadMore, setAutoLoadMore] = useState(false);
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
+  const loadMoreVersionRef = useRef(0);
+  const pendingLoadMoreRef = useRef(0);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingVitamine, setEditingVitamine] = useState<Vitamine | null>(null);
+  const [editingPompage, setEditingPompage] = useState<Pompage | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
+  const [quantiteGauche, setQuantiteGauche] = useState<number>(100);
+  const [quantiteDroite, setQuantiteDroite] = useState<number>(100);
 
   // États des pickers
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
-  const { openModal } = useLocalSearchParams();
+  const { openModal, editId } = useLocalSearchParams();
+  const editIdRef = useRef<string | null>(null);
+
+  // Ref pour la gestion du picker avec accélération
+  const intervalRef = useRef<number | undefined>(undefined);
 
   // Ref pour le BottomSheet
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -112,16 +143,24 @@ export default function VitaminesScreen({ vitamines }: Props) {
   }, []);
 
   // Gérer l'ouverture du modal d'ajout
-  const openAddModal = useCallback(() => {
-    setDateHeure(new Date());
-    setEditingVitamine(null);
-    setIsSubmitting(false);
+  const expandBottomSheet = useCallback(() => {
     bottomSheetRef.current?.expand();
+    setTimeout(() => bottomSheetRef.current?.expand(), 250);
   }, []);
 
+  const openAddModal = useCallback(() => {
+    setDateHeure(new Date());
+    setEditingPompage(null);
+    setIsSubmitting(false);
+    setQuantiteGauche(100);
+    setQuantiteDroite(100);
+    expandBottomSheet();
+  }, [expandBottomSheet]);
+
   // Définir les boutons du header (calendrier + ajouter)
-  useEffect(() => {
-    const headerButtons = (
+  useFocusEffect(
+    useCallback(() => {
+      const headerButtons = (
       <View
         style={{
           flexDirection: "row",
@@ -150,109 +189,141 @@ export default function VitaminesScreen({ vitamines }: Props) {
           <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
         </Pressable>
       </View>
-    );
+      );
 
-    setHeaderRight(headerButtons, headerOwnerId.current);
+      setHeaderRight(headerButtons, headerOwnerId.current);
 
-    return () => {
-      setHeaderRight(null, headerOwnerId.current);
-    };
-  }, [
-    handleCalendarPress,
-    showCalendar,
-    colorScheme,
-    setHeaderRight,
-    openAddModal,
-  ]);
+      return () => {
+        setHeaderRight(null, headerOwnerId.current);
+      };
+    }, [
+      handleCalendarPress,
+      showCalendar,
+      colorScheme,
+      setHeaderRight,
+      openAddModal,
+    ])
+  );
 
   // ============================================
   // EFFECTS - URL PARAMS
   // ============================================
 
-  useEffect(() => {
-    if (openModal === "true") {
-      const timer = setTimeout(() => {
-        openAddModal();
-        router.replace("/(drawer)/baby/immunos");
-      }, 100);
-
-      return () => clearTimeout(timer);
-    }
-  }, [openModal, openAddModal]);
+  // Ouvrir automatiquement le modal si le paramètre openModal est présent
+  useFocusEffect(
+    useCallback(() => {
+      if (openModal !== "true") return;
+      setPendingOpen(true);
+    }, [openModal])
+  );
 
   useEffect(() => {
-    setVitaminesLoaded(false);
-    setEmptyDelayDone(false);
-    setDaysWindow(14);
-    setHasMore(true);
-    setAutoLoadMore(false);
-    setAutoLoadMoreAttempts(0);
-  }, [activeChild?.id]);
+    if (!pendingOpen || !layoutReady) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      openAddModal();
+      router.replace("/(drawer)/baby/pumping");
+      setPendingOpen(false);
+    });
+    return () => task.cancel?.();
+  }, [pendingOpen, layoutReady, openAddModal, router]);
+
+  useEffect(() => {
+    if (!editId || !layoutReady) return;
+    const normalizedId = Array.isArray(editId) ? editId[0] : editId;
+    if (!normalizedId || editIdRef.current === normalizedId) return;
+    const target = pompages.find((pompage) => pompage.id === normalizedId);
+    if (!target) return;
+    editIdRef.current = normalizedId;
+    openEditModal(target);
+    router.replace("/(drawer)/baby/pumping");
+  }, [editId, layoutReady, pompages, router]);
+
+  // ============================================
+  // EFFECTS - DATA LISTENERS
+  // ============================================
+
+  // Écoute en temps réel
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    const versionAtSubscribe = loadMoreVersionRef.current;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+
+    const unsubscribe = ecouterPompages(
+      activeChild.id,
+      (data) => {
+        setPompages(data);
+        setPompagesLoaded(true);
+        if (
+          pendingLoadMoreRef.current > 0 &&
+          versionAtSubscribe === loadMoreVersionRef.current
+        ) {
+          pendingLoadMoreRef.current -= 1;
+          if (pendingLoadMoreRef.current <= 0) {
+            setIsLoadingMore(false);
+          }
+        }
+      },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+    );
+    return () => unsubscribe();
+  }, [activeChild, daysWindow]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setVitaminesLoaded(true);
-  }, [activeChild?.id, vitamines]);
+    setPompages([]);
+    setGroupedPompages([]);
+    setPompagesLoaded(false);
+    setEmptyDelayDone(false);
+    setDaysWindow(14);
+    setIsLoadingMore(false);
+    setHasMore(true);
+    loadMoreVersionRef.current = 0;
+    pendingLoadMoreRef.current = 0;
+  }, [activeChild?.id]);
 
   useEffect(() => {
-    if (!vitaminesLoaded) {
+    if (!pompagesLoaded) {
       setEmptyDelayDone(false);
       return;
     }
-    if (groupedVitamines.length > 0) {
+    if (groupedPompages.length > 0) {
       setEmptyDelayDone(true);
       return;
     }
     const timer = setTimeout(() => setEmptyDelayDone(true), 300);
     return () => clearTimeout(timer);
-  }, [vitaminesLoaded, groupedVitamines.length]);
+  }, [pompagesLoaded, groupedPompages.length]);
 
-  const startOfRange = useMemo(() => {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - (daysWindow - 1));
-    return start;
-  }, [daysWindow]);
-
-  const visibleVitamines = useMemo(
-    () =>
-      vitamines.filter((vitamine) => {
-        const vitamineDate = new Date(vitamine.date.seconds * 1000);
-        return vitamineDate >= startOfRange;
-      }),
-    [vitamines, startOfRange]
-  );
-
-  useEffect(() => {
-    if (!vitaminesLoaded) return;
-    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les rafraîchissements inutiles.
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - (daysWindow - 1));
-    const hasOlder = vitamines.some((vitamine) => {
-      const vitamineDate = new Date(vitamine.date.seconds * 1000);
-      return vitamineDate < start;
-    });
-    setHasMore(hasOlder);
-  }, [daysWindow, vitaminesLoaded]);
+  const loadMoreStep = useCallback((auto = false) => {
+    if (!hasMore) return;
+    setIsLoadingMore(true);
+    pendingLoadMoreRef.current = 1;
+    loadMoreVersionRef.current += 1;
+    setDaysWindow((prev) => prev + 14);
+    if (!auto) {
+      setAutoLoadMore(true);
+      setAutoLoadMoreAttempts(0);
+    }
+  }, [hasMore]);
 
   const handleLoadMore = useCallback(() => {
-    if (!hasMore) return;
-    setAutoLoadMore(true);
-    setAutoLoadMoreAttempts(0);
-    setDaysWindow((prev) => prev + 14);
-  }, [hasMore]);
+    loadMoreStep(false);
+  }, [loadMoreStep]);
 
   useEffect(() => {
     if (selectedFilter === "today" || selectedDate) return;
-    if (!autoLoadMore && vitaminesLoaded && groupedVitamines.length === 0 && hasMore) {
+    if (!autoLoadMore && pompagesLoaded && groupedPompages.length === 0 && hasMore) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
   }, [
     autoLoadMore,
-    vitaminesLoaded,
-    groupedVitamines.length,
+    pompagesLoaded,
+    groupedPompages.length,
     hasMore,
     selectedFilter,
     selectedDate,
@@ -260,8 +331,8 @@ export default function VitaminesScreen({ vitamines }: Props) {
 
   useEffect(() => {
     if (!autoLoadMore) return;
-    if (!vitaminesLoaded) return;
-    if (groupedVitamines.length > 0 || !hasMore) {
+    if (!pompagesLoaded || isLoadingMore) return;
+    if (groupedPompages.length > 0 || !hasMore) {
       setAutoLoadMore(false);
       setAutoLoadMoreAttempts(0);
       return;
@@ -271,18 +342,39 @@ export default function VitaminesScreen({ vitamines }: Props) {
       return;
     }
     setAutoLoadMoreAttempts((prev) => prev + 1);
-    setDaysWindow((prev) => prev + 14);
+    loadMoreStep(true);
   }, [
     autoLoadMore,
-    vitaminesLoaded,
-    groupedVitamines.length,
+    pompagesLoaded,
+    isLoadingMore,
+    groupedPompages.length,
     hasMore,
     autoLoadMoreAttempts,
+    loadMoreStep,
   ]);
 
-  // ============================================
-  // EFFECTS - DATA LISTENERS
-  // ============================================
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const startOfRange = new Date();
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+    const beforeDate = new Date(startOfRange.getTime() - 1);
+
+    // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
+    setHasMore(true);
+    hasMoreEventsBeforeHybrid(activeChild.id, "pompage", beforeDate)
+      .then((result) => {
+        if (!cancelled) setHasMore(result);
+      })
+      .catch(() => {
+        if (!cancelled) setHasMore(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChild?.id, daysWindow]);
 
   // Filtrage et regroupement par jour
   useEffect(() => {
@@ -290,42 +382,52 @@ export default function VitaminesScreen({ vitamines }: Props) {
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
-    const filtered = visibleVitamines.filter((vitamine) => {
-      const vitamineDate = new Date(vitamine.date.seconds * 1000);
-      vitamineDate.setHours(0, 0, 0, 0);
-      const vitamineTime = vitamineDate.getTime();
+    const filtered = pompages.filter((pompage) => {
+      const pompageDate = new Date(pompage.date.seconds * 1000);
+      pompageDate.setHours(0, 0, 0, 0);
+      const pompageTime = pompageDate.getTime();
 
       if (selectedDate) {
         const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
         const calDate = new Date(calYear, calMonth - 1, calDay);
         calDate.setHours(0, 0, 0, 0);
-        return vitamineTime === calDate.getTime();
+        return pompageTime === calDate.getTime();
       }
 
       switch (selectedFilter) {
         case "today":
-          return vitamineTime === todayTime;
+          return pompageTime === todayTime;
         case "past":
-          return vitamineTime < todayTime;
+          return pompageTime < todayTime;
         case null:
         default:
           return true;
       }
     });
 
-    const grouped = groupVitaminesByDay(filtered);
-    setGroupedVitamines(grouped);
-  }, [visibleVitamines, selectedFilter, selectedDate, showCalendar]);
+    const grouped = groupPompagesByDay(filtered);
+    setGroupedPompages(grouped);
+  }, [pompages, selectedFilter, selectedDate, showCalendar]);
+
+  // Nettoyage de l'intervalle lors du démontage
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
 
   // ============================================
   // HELPERS - CALENDAR
   // ============================================
 
+  // Préparer les dates marquées pour le calendrier
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
 
-    visibleVitamines.forEach((vitamine) => {
-      const date = new Date(vitamine.date.seconds * 1000);
+    pompages.forEach((pompage) => {
+      const date = new Date(pompage.date.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
@@ -346,38 +448,53 @@ export default function VitaminesScreen({ vitamines }: Props) {
     }
 
     return marked;
-  }, [visibleVitamines, selectedDate, colorScheme]);
+  }, [pompages, selectedDate, colorScheme]);
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
     setExpandedDays(new Set([day.dateString]));
   };
 
+  const applyTodayFilter = useCallback(() => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    setSelectedFilter("today");
+    setSelectedDate(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set([todayKey]));
+  }, []);
+
   const handleFilterPress = (filter: FilterType) => {
+    if (filter === "today") {
+      applyTodayFilter();
+      return;
+    }
+
     setSelectedFilter(filter);
     setSelectedDate(null);
     setShowCalendar(false);
-
-    if (filter === "today") {
-      const today = new Date();
-      const todayKey = `${today.getFullYear()}-${String(
-        today.getMonth() + 1
-      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      setExpandedDays(new Set([todayKey]));
-    } else {
-      setExpandedDays(new Set());
-    }
+    setExpandedDays(new Set());
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedFilter && !selectedDate) {
+        applyTodayFilter();
+      }
+    }, [applyTodayFilter, selectedDate, selectedFilter])
+  );
 
   // ============================================
   // HELPERS - GROUPING
   // ============================================
 
-  const groupVitaminesByDay = (vitamines: Vitamine[]): VitamineGroup[] => {
-    const groups: { [key: string]: Vitamine[] } = {};
+  const groupPompagesByDay = (pompages: Pompage[]): PompageGroup[] => {
+    const groups: { [key: string]: Pompage[] } = {};
 
-    vitamines.forEach((vitamine) => {
-      const date = new Date(vitamine.date?.seconds * 1000);
+    pompages.forEach((pompage) => {
+      const date = new Date(pompage.date?.seconds * 1000);
       const dateKey = `${date.getFullYear()}-${String(
         date.getMonth() + 1
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -385,13 +502,22 @@ export default function VitaminesScreen({ vitamines }: Props) {
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
-      groups[dateKey].push(vitamine);
+      groups[dateKey].push(pompage);
     });
 
     return Object.entries(groups)
-      .map(([dateKey, vitamines]) => {
+      .map(([dateKey, pompages]) => {
         const date = new Date(dateKey);
-        const lastVitamine = vitamines.reduce((latest, current) =>
+        const totalQuantityLeft = pompages.reduce(
+          (sum, pompage) => sum + (pompage.quantiteGauche || 0),
+          0
+        );
+        const totalQuantityRight = pompages.reduce(
+          (sum, pompage) => sum + (pompage.quantiteDroite || 0),
+          0
+        );
+        const totalQuantity = totalQuantityLeft + totalQuantityRight;
+        const lastPompage = pompages.reduce((latest, current) =>
           (current.date?.seconds || 0) > (latest.date?.seconds || 0)
             ? current
             : latest
@@ -405,13 +531,44 @@ export default function VitaminesScreen({ vitamines }: Props) {
             month: "long",
             year: "numeric",
           }),
-          vitamines: vitamines.sort(
+          pompages: pompages.sort(
             (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
           ),
-          lastVitamine,
+          totalQuantityLeft,
+          totalQuantityRight,
+          totalQuantity,
+          lastPompage,
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  // ============================================
+  // HELPERS - QUANTITY PICKER
+  // ============================================
+
+  const handlePressIn = (action: () => void) => {
+    action();
+
+    let speed = 200;
+
+    const accelerate = () => {
+      action();
+      if (speed > 50) {
+        speed -= 20;
+        clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(accelerate, speed);
+      }
+    };
+
+    intervalRef.current = setInterval(accelerate, speed);
+  };
+
+  const handlePressOut = () => {
+    if (intervalRef.current !== undefined) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = undefined;
+    }
   };
 
   // ============================================
@@ -432,9 +589,11 @@ export default function VitaminesScreen({ vitamines }: Props) {
   // HANDLERS - MODAL
   // ============================================
 
-  const openEditModal = (vitamine: Vitamine) => {
-    setDateHeure(new Date(vitamine.date.seconds * 1000));
-    setEditingVitamine(vitamine);
+  const openEditModal = (pompage: Pompage) => {
+    setDateHeure(new Date(pompage.date.seconds * 1000));
+    setQuantiteGauche(pompage.quantiteGauche);
+    setQuantiteDroite(pompage.quantiteDroite);
+    setEditingPompage(pompage);
     setIsSubmitting(false);
     bottomSheetRef.current?.expand();
   };
@@ -442,7 +601,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
   const closeModal = () => {
     bottomSheetRef.current?.close();
     setIsSubmitting(false);
-    setEditingVitamine(null);
+    setEditingPompage(null);
   };
 
   const cancelForm = useCallback(() => {
@@ -459,30 +618,31 @@ export default function VitaminesScreen({ vitamines }: Props) {
     try {
       setIsSubmitting(true);
 
-      if (editingVitamine) {
-        await modifierVitamine(activeChild.id, editingVitamine.id, {
-          date: dateHeure,
-        });
+      const dataToSave = {
+        quantiteGauche,
+        quantiteDroite,
+        date: dateHeure,
+      };
+
+      if (editingPompage) {
+        await modifierPompage(activeChild.id, editingPompage.id, dataToSave);
       } else {
-        await ajouterVitamine(activeChild.id, {
-          date: dateHeure,
-          nomVitamine: 'Vitamine D'
-        });
+        await ajouterPompage(activeChild.id, dataToSave);
       }
 
       if (isOffline) {
         showToast(
-          editingVitamine
+          editingPompage
             ? "Modification en attente de synchronisation"
             : "Ajout en attente de synchronisation"
         );
       }
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde de la vitamine:", error);
+      console.error("Erreur lors de la sauvegarde du pompage:", error);
       Alert.alert(
         "Erreur",
-        "Impossible de sauvegarder la prise de vitamines. Veuillez réessayer."
+        "Impossible de sauvegarder le pompage. Veuillez réessayer."
       );
     } finally {
       setIsSubmitting(false);
@@ -490,16 +650,16 @@ export default function VitaminesScreen({ vitamines }: Props) {
   };
 
   const handleDelete = () => {
-    if (isSubmitting || !editingVitamine || !activeChild) return;
+    if (isSubmitting || !editingPompage || !activeChild) return;
     setShowDeleteModal(true);
   };
 
   const confirmDelete = async () => {
-    if (isSubmitting || !editingVitamine || !activeChild) return;
+    if (isSubmitting || !editingPompage || !activeChild) return;
 
     try {
       setIsSubmitting(true);
-      await supprimerVitamine(activeChild.id, editingVitamine.id);
+      await supprimerPompage(activeChild.id, editingPompage.id);
       if (isOffline) {
         showToast("Suppression en attente de synchronisation");
       }
@@ -507,10 +667,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la suppression:", error);
-      Alert.alert(
-        "Erreur",
-        "Impossible de supprimer la prise de vitamines. Veuillez réessayer."
-      );
+      Alert.alert("Erreur", "Impossible de supprimer le pompage. Veuillez réessayer.");
     } finally {
       setIsSubmitting(false);
     }
@@ -547,30 +704,25 @@ export default function VitaminesScreen({ vitamines }: Props) {
   };
 
   // ============================================
-  // RENDER - VITAMINE ITEM
+  // RENDER - POMPAGE ITEM
   // ============================================
 
-  const renderVitamineItem = (vitamine: Vitamine, isLast: boolean = false) => (
+  const renderPompageItem = (pompage: Pompage, isLast: boolean = false) => (
     <TouchableOpacity
-      key={vitamine.id}
-      style={[styles.vitamineItem, isLast && styles.lastVitamineItem]}
-      onPress={() => openEditModal(vitamine)}
+      key={pompage.id}
+      style={[styles.pompageItem, isLast && styles.lastPompageItem]}
+      onPress={() => openEditModal(pompage)}
       activeOpacity={0.7}
     >
-      <View style={styles.vitamineContent}>
-        <FontAwesome
-          name="prescription-bottle"
-          size={16}
-          color={isLast ? "#FF9800" : "#666"}
-        />
-        <View style={styles.vitamineInfo}>
-          <Text
-            style={[styles.vitamineName, isLast && styles.lastVitamineName]}
-          >
-            {vitamine.nomVitamine || "Vitamine non spécifiée"}
-          </Text>
+      <View style={styles.pompageHeader}>
+        <View style={styles.timeContainer}>
+          <FontAwesome
+            name="clock"
+            size={16}
+            color={isLast ? "#28a745" : "#666"}
+          />
           <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
-            {new Date(vitamine.date?.seconds * 1000).toLocaleTimeString(
+            {new Date(pompage.date?.seconds * 1000).toLocaleTimeString(
               "fr-FR",
               {
                 hour: "2-digit",
@@ -579,7 +731,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
             )}
           </Text>
         </View>
-        <View style={styles.vitamineActions}>
+        <View style={styles.headerActions}>
           {/* {isLast && (
             <View style={styles.recentBadge}>
               <Text style={styles.recentText}>Récent</Text>
@@ -588,9 +740,34 @@ export default function VitaminesScreen({ vitamines }: Props) {
           <FontAwesome
             name="edit"
             size={16}
-            color="#FF9800"
+            color="#28a745"
             style={styles.editIcon}
           />
+        </View>
+      </View>
+
+      <View style={styles.quantitiesContainer}>
+        <View style={styles.quantityRow}>
+          <View style={styles.quantityInfo}>
+            <FontAwesome name="chevron-left" size={12} color="#666" />
+            <Text style={styles.quantityLabel}>Gauche</Text>
+          </View>
+          <Text style={styles.quantityValue}>{pompage.quantiteGauche} ml</Text>
+        </View>
+
+        <View style={styles.quantityRow}>
+          <View style={styles.quantityInfo}>
+            <FontAwesome name="chevron-right" size={12} color="#666" />
+            <Text style={styles.quantityLabel}>Droite</Text>
+          </View>
+          <Text style={styles.quantityValue}>{pompage.quantiteDroite} ml</Text>
+        </View>
+
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.totalValue}>
+            {(pompage.quantiteGauche || 0) + (pompage.quantiteDroite || 0)} ml
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -600,9 +777,9 @@ export default function VitaminesScreen({ vitamines }: Props) {
   // RENDER - DAY GROUP
   // ============================================
 
-  const renderDayGroup = ({ item }: { item: VitamineGroup }) => {
+const renderDayGroup = ({ item }: { item: PompageGroup }) => {
     const isExpanded = expandedDays.has(item.date);
-    const hasMultipleVitamines = item.vitamines.length > 1;
+    const hasMultiplePompages = item.pompages.length > 1;
 
     return (
       <View style={styles.dayCard}>
@@ -610,14 +787,33 @@ export default function VitaminesScreen({ vitamines }: Props) {
           <View style={styles.dayInfo}>
             <Text style={styles.dayDate}>{item.dateFormatted}</Text>
             <View style={styles.summaryInfo}>
-              <FontAwesome name="pills" size={14} color="#666" />
-              <Text style={styles.summaryText}>
-                {item.vitamines.length} prise
-                {item.vitamines.length > 1 ? "s" : ""} de vitamines
-              </Text>
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryBadge}>
+                  <FontAwesome name="pump-medical" size={14} color="#28a745" />
+                  <Text style={styles.summaryText}>
+                    {item.pompages.length} session
+                    {item.pompages.length > 1 ? "s" : ""} •{" "}
+                    {item.totalQuantity} ml
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.dailySummary}>
+              <View style={styles.dailyQuantityItem}>
+                <Text style={styles.dailyQuantityLabel}>Gauche:</Text>
+                <Text style={styles.dailyQuantityValue}>
+                  {item.totalQuantityLeft} ml
+                </Text>
+              </View>
+              <View style={styles.dailyQuantityItem}>
+                <Text style={styles.dailyQuantityLabel}>Droite:</Text>
+                <Text style={styles.dailyQuantityValue}>
+                  {item.totalQuantityRight} ml
+                </Text>
+              </View>
             </View>
           </View>
-          {hasMultipleVitamines && (
+          {hasMultiplePompages && (
             <TouchableOpacity
               style={styles.expandButton}
               onPress={() => toggleExpand(item.date)}
@@ -631,15 +827,15 @@ export default function VitaminesScreen({ vitamines }: Props) {
           )}
         </View>
 
-        {renderVitamineItem(item.lastVitamine, true)}
+        {renderPompageItem(item.lastPompage, true)}
 
-        {hasMultipleVitamines && isExpanded && (
+        {hasMultiplePompages && isExpanded && (
           <View style={styles.expandedContent}>
             <View style={styles.separator} />
             <Text style={styles.historyLabel}>Historique du jour</Text>
-            {item.vitamines
-              .filter((vitamine) => vitamine.id !== item.lastVitamine.id)
-              .map((vitamine) => renderVitamineItem(vitamine))}
+            {item.pompages
+              .filter((pompage) => pompage.id !== item.lastPompage.id)
+              .map((pompage) => renderPompageItem(pompage))}
           </View>
         )}
       </View>
@@ -658,6 +854,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
           { backgroundColor: Colors[colorScheme].background },
         ]}
         edges={["bottom"]}
+        onLayout={() => setLayoutReady(true)}
       >
         <View>
           {/* Filtres */}
@@ -732,71 +929,169 @@ export default function VitaminesScreen({ vitamines }: Props) {
           )}
         </View>
 
-        {/* Liste des vitamines */}
-        {!vitaminesLoaded || !emptyDelayDone ? (
-          <View style={styles.emptyContainer}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
-          </View>
-        ) : groupedVitamines.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons
-              name="calendar-outline"
-              size={64}
-              color={Colors[colorScheme].tabIconDefault}
-            />
-            <ThemedText style={styles.emptyText}>
-              {vitamines.length === 0
-                ? "Aucune prise de vitamines enregistrée"
-                : "Aucune prise de vitamines pour ce filtre"}
-            </ThemedText>
-            {!(selectedFilter === "today" || selectedDate) && (
-              <LoadMoreButton
-                hasMore={hasMore}
-                loading={false}
-                onPress={handleLoadMore}
-                text="Voir plus (14 jours)"
-                accentColor={Colors[colorScheme].tint}
+        {/* Liste des pompages */}
+        {pompagesLoaded && emptyDelayDone ? (
+          groupedPompages.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons
+                name="calendar-outline"
+                size={64}
+                color={Colors[colorScheme].tabIconDefault}
               />
-            )}
-          </View>
-        ) : (
-          <FlatList
-            data={groupedVitamines}
-            keyExtractor={(item) => item.date}
-            renderItem={renderDayGroup}
-            showsVerticalScrollIndicator={false}
-            style={styles.flatlistContent}
-            contentContainerStyle={styles.listContent}
-            ListFooterComponent={
-              selectedFilter === "today" || selectedDate ? null : (
+              <ThemedText style={styles.emptyText}>
+                {pompages.length === 0
+                  ? "Aucune session enregistrée"
+                  : "Aucune session pour ce filtre"}
+              </ThemedText>
+              {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   hasMore={hasMore}
-                  loading={false}
+                  loading={isLoadingMore}
                   onPress={handleLoadMore}
                   text="Voir plus (14 jours)"
                   accentColor={Colors[colorScheme].tint}
                 />
-              )
-            }
-          />
+              )}
+            </View>
+          ) : (
+            <FlatList
+              data={groupedPompages}
+              keyExtractor={(item) => item.date}
+              renderItem={renderDayGroup}
+              showsVerticalScrollIndicator={false}
+              style={styles.flatlistContent}
+              contentContainerStyle={styles.listContent}
+              ListFooterComponent={
+                selectedFilter === "today" || selectedDate ? null : (
+                  <LoadMoreButton
+                    hasMore={hasMore}
+                    loading={isLoadingMore}
+                    onPress={handleLoadMore}
+                    text="Voir plus (14 jours)"
+                    accentColor={Colors[colorScheme].tint}
+                  />
+                )
+              }
+            />
+          )
+        ) : (
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
         )}
 
         {/* Bottom Sheet d'ajout/édition */}
         <FormBottomSheet
           ref={bottomSheetRef}
-          title={editingVitamine ? "Modifier la prise" : "Nouvelle prise"}
-          icon={editingVitamine ? "edit" : "pills"}
-          accentColor="#FF9800"
-          isEditing={!!editingVitamine}
+          title={editingPompage ? "Modifier la session" : "Nouvelle session"}
+          icon="pump-medical"
+          accentColor="#28a745"
+          isEditing={!!editingPompage}
           isSubmitting={isSubmitting}
           onSubmit={handleSubmit}
-          onDelete={editingVitamine ? handleDelete : undefined}
+          onDelete={editingPompage ? handleDelete : undefined}
           onCancel={cancelForm}
           onClose={() => {
             setIsSubmitting(false);
-            setEditingVitamine(null);
+            setEditingPompage(null);
           }}
         >
+          {/* Quantité Sein Gauche */}
+          <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
+          <View style={styles.quantityPickerRow}>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                isSubmitting && styles.quantityButtonDisabled,
+              ]}
+              onPressIn={() =>
+                handlePressIn(() =>
+                  setQuantiteGauche((q) => Math.max(0, q - 5))
+                )
+              }
+              onPressOut={handlePressOut}
+              disabled={isSubmitting}
+            >
+              <Text
+                style={[
+                  styles.quantityButtonText,
+                  isSubmitting && styles.quantityButtonTextDisabled,
+                ]}
+              >
+                -
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.quantityPickerValue}>{quantiteGauche} ml</Text>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                isSubmitting && styles.quantityButtonDisabled,
+              ]}
+              onPressIn={() =>
+                handlePressIn(() => setQuantiteGauche((q) => q + 5))
+              }
+              onPressOut={handlePressOut}
+              disabled={isSubmitting}
+            >
+              <Text
+                style={[
+                  styles.quantityButtonText,
+                  isSubmitting && styles.quantityButtonTextDisabled,
+                ]}
+              >
+                +
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Quantité Sein Droit */}
+          <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
+          <View style={styles.quantityPickerRow}>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                isSubmitting && styles.quantityButtonDisabled,
+              ]}
+              onPressIn={() =>
+                handlePressIn(() =>
+                  setQuantiteDroite((q) => Math.max(0, q - 5))
+                )
+              }
+              onPressOut={handlePressOut}
+              disabled={isSubmitting}
+            >
+              <Text
+                style={[
+                  styles.quantityButtonText,
+                  isSubmitting && styles.quantityButtonTextDisabled,
+                ]}
+              >
+                -
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.quantityPickerValue}>{quantiteDroite} ml</Text>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                isSubmitting && styles.quantityButtonDisabled,
+              ]}
+              onPressIn={() =>
+                handlePressIn(() => setQuantiteDroite((q) => q + 5))
+              }
+              onPressOut={handlePressOut}
+              disabled={isSubmitting}
+            >
+              <Text
+                style={[
+                  styles.quantityButtonText,
+                  isSubmitting && styles.quantityButtonTextDisabled,
+                ]}
+              >
+                +
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Date & Heure */}
           <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
           <View style={styles.dateTimeContainer}>
@@ -885,7 +1180,7 @@ export default function VitaminesScreen({ vitamines }: Props) {
         <ConfirmModal
           visible={showDeleteModal}
           title="Suppression"
-          message="Voulez-vous vraiment supprimer cette prise de vitamines ?"
+          message="Voulez-vous vraiment supprimer ce pompage ?"
           confirmText="Supprimer"
           cancelText="Annuler"
           backgroundColor={Colors[colorScheme].background}
@@ -897,6 +1192,10 @@ export default function VitaminesScreen({ vitamines }: Props) {
     </View>
   );
 }
+
+// ============================================
+// STYLES
+// ============================================
 
 const styles = StyleSheet.create({
   container: {
@@ -986,71 +1285,91 @@ const styles = StyleSheet.create({
   dayInfo: {
     flex: 1,
   },
-  dayDate: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
   summaryInfo: {
+    flexDirection: "column",
+    gap: 4,
+    marginBottom: 8,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  summaryBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
+    backgroundColor: "#f8f9fa",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   summaryText: {
     fontSize: 14,
     color: "#666",
+  },
+  dailySummary: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  dailyQuantityItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  dailyQuantityLabel: {
+    fontSize: 12,
+    color: "#666",
+  },
+  dailyQuantityValue: {
+    fontSize: 12,
+    color: "#28a745",
+    fontWeight: "600",
   },
   expandButton: {
     padding: 8,
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
-  // Vitamine Item
-  vitamineItem: {
+  // Pompage Item
+  pompageItem: {
     backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 14,
     marginBottom: 8,
   },
-  vitamineInfo: {
-    flex: 1,
-  },
-  lastVitamineItem: {
-    backgroundColor: "#fff3e0",
+  lastPompageItem: {
+    backgroundColor: "#f0f8f4",
     borderLeftWidth: 4,
-    borderLeftColor: "#FF9800",
+    borderLeftColor: "#28a745",
   },
-  vitamineName: {
+  pompageHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  timeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  timeText: {
     fontSize: 16,
     fontWeight: "500",
     color: "#666",
-    marginBottom: 2,
   },
-  lastVitamineName: {
+  lastTimeText: {
     color: "#333",
     fontWeight: "600",
   },
-  vitamineContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-timeText: {
-    fontSize: 14,
-    color: "#999",
-  },
-  lastTimeText: {
-    color: "#666",
-    fontWeight: "500",
-  },
-  vitamineActions: {
+  headerActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
   recentBadge: {
-    backgroundColor: "#dc3545",
+    backgroundColor: "#28a745",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -1062,6 +1381,52 @@ timeText: {
   },
   editIcon: {
     opacity: 0.7,
+  },
+  quantitiesContainer: {
+    gap: 8,
+  },
+  quantityRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "white",
+    borderRadius: 8,
+  },
+  quantityInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  quantityLabel: {
+    fontSize: 14,
+    color: "#666",
+  },
+  quantityValue: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "600",
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#28a745",
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  totalLabel: {
+    fontSize: 14,
+    color: "white",
+    fontWeight: "600",
+  },
+  totalValue: {
+    fontSize: 16,
+    color: "white",
+    fontWeight: "bold",
   },
   // Expanded Content
   expandedContent: {
@@ -1077,7 +1442,6 @@ timeText: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 100,
   },
   emptyText: {
     fontSize: 18,
@@ -1091,7 +1455,39 @@ timeText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+  // Quantity Picker
+  quantityPickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  quantityButton: {
+    backgroundColor: "#f0f0f0",
+    padding: 12,
+    borderRadius: 8,
+    minWidth: 40,
+    alignItems: "center",
+  },
+  quantityButtonDisabled: {
+    backgroundColor: "#f8f8f8",
+    opacity: 0.5,
+  },
+  quantityButtonText: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#666",
+  },
+  quantityButtonTextDisabled: {
+    color: "#ccc",
+  },
+  quantityPickerValue: {
+    fontSize: 20,
+    marginHorizontal: 20,
+    fontWeight: "bold",
+    color: "#000000",
   },
   // Date/Time
   dateTimeContainer: {
@@ -1118,7 +1514,7 @@ timeText: {
   dateButtonText: {
     fontSize: 16,
     color: "#666",
-    fontWeight: "500",
+    marginTop: 4,
   },
   dateButtonTextDisabled: {
     color: "#ccc",
@@ -1140,15 +1536,16 @@ timeText: {
   },
   selectedTime: {
     fontSize: 20,
-    color: "#dc3545",
+    color: "#28a745",
     fontWeight: "bold",
   },
+  //////////////////
   header: {
     padding: 16,
     paddingBottom: 8,
   },
   addButton: {
-    backgroundColor: "#dc3545",
+    backgroundColor: "#28a745",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1162,6 +1559,13 @@ timeText: {
     fontSize: 16,
     fontWeight: "600",
   },
+  dayDate: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 6,
+  },
+
   historyLabel: {
     fontSize: 12,
     color: "#999",
