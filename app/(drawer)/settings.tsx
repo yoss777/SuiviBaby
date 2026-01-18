@@ -1,17 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedView } from '@/components/themed-view';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { InfoModal } from '@/components/ui/InfoModal';
+import { PromptModal } from '@/components/ui/PromptModal';
+import { IconPulseDots } from '@/components/ui/IconPulseDtos';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useThemePreference } from '@/contexts/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { deleteAccountAndData } from '@/services/accountDeletionService';
 
 interface SettingItem {
   id: string;
@@ -28,9 +32,10 @@ interface SettingItem {
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const { user } = useAuth();  
+  const { user, signOut } = useAuth();
   const { preference: themePreference } = useThemePreference();
   const router = useRouter();
+  const { delete: deleteParam } = useLocalSearchParams();
   const [hasHiddenChildren, setHasHiddenChildren] = useState(false);
   const [hiddenChildrenCount, setHiddenChildrenCount] = useState(0);
   const [languagePreference, setLanguagePreference] = useState('fr');
@@ -39,6 +44,11 @@ export default function SettingsScreen() {
     title: '',
     message: '',
   });
+  const [showDeleteExportModal, setShowDeleteExportModal] = useState(false);
+  const [showDeletePasswordModal, setShowDeletePasswordModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const deleteParamHandledRef = useRef(false);
 
   useEffect(() => {
     if (!user) {
@@ -70,6 +80,14 @@ export default function SettingsScreen() {
 
     return () => unsubscribe();
   }, [user]);
+
+  useEffect(() => {
+    if (deleteParam === '1' && !deleteParamHandledRef.current) {
+      deleteParamHandledRef.current = true;
+      setShowDeletePasswordModal(true);
+      router.setParams({ delete: undefined });
+    }
+  }, [deleteParam, router]);
 
   const accountSettings: SettingItem[] = [
     {
@@ -227,10 +245,7 @@ export default function SettingsScreen() {
       icon: 'trash-outline',
       label: 'Supprimer le compte',
       description: 'Cette action est irréversible',
-      tag: 'Bientot',
-      onPress: () => {},
-      disabled: true,
-      showChevron: false,
+      onPress: () => setShowDeleteExportModal(true),
       color: '#dc3545',
     },
   ];
@@ -353,6 +368,95 @@ export default function SettingsScreen() {
         textColor={Colors[colorScheme].text}
         onClose={() => setModalConfig((prev) => ({ ...prev, visible: false }))}
       />
+      <ConfirmModal
+        visible={showDeleteExportModal}
+        title="Exporter vos donnees ?"
+        message="Pour garder une copie, exportez vos donnees avant la suppression."
+        confirmText="Exporter"
+        cancelText="Supprimer"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        confirmButtonColor={Colors[colorScheme].tint}
+        onConfirm={() => {
+          setShowDeleteExportModal(false);
+          router.push('/settings/export?afterDelete=1');
+        }}
+        onCancel={() => {
+          setShowDeleteExportModal(false);
+          setShowDeletePasswordModal(true);
+        }}
+      />
+      <PromptModal
+        visible={showDeletePasswordModal}
+        title="Confirmer la suppression"
+        message={
+          isDeleting ? (
+            <View style={styles.deleteLoader}>
+              <IconPulseDots />
+              <Text style={[styles.deleteLoaderText, { color: Colors[colorScheme].text }]}>
+                Suppression en cours...
+              </Text>
+            </View>
+          ) : (
+            "Votre compte et vos donnees seront supprimes immediatement."
+          )
+        }
+        value={deletePassword}
+        placeholder="Mot de passe"
+        secureTextEntry
+        multiline={false}
+        autoCapitalize="none"
+        confirmText={isDeleting ? "Suppression..." : "Supprimer"}
+        confirmButtonColor="#dc3545"
+        confirmDisabled={isDeleting}
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onChangeText={(value) => {
+          if (isDeleting) return;
+          setDeletePassword(value);
+        }}
+        onConfirm={async () => {
+          if (isDeleting) return;
+          if (!deletePassword.trim()) {
+            setModalConfig({
+              visible: true,
+              title: 'Erreur',
+              message: 'Veuillez saisir votre mot de passe.',
+            });
+            return;
+          }
+
+          try {
+            setIsDeleting(true);
+            await deleteAccountAndData(deletePassword);
+            setShowDeletePasswordModal(false);
+            setDeletePassword('');
+            await signOut();
+            router.replace('/(auth)/login');
+          } catch (error: any) {
+            const code = error?.code || '';
+            const message =
+              code === 'auth/wrong-password'
+                ? 'Mot de passe incorrect.'
+                : code === 'auth/requires-recent-login'
+                  ? 'Veuillez vous reconnecter puis réessayer.'
+                  : 'Impossible de supprimer le compte.';
+            setModalConfig({
+              visible: true,
+              title: 'Erreur',
+              message,
+            });
+          } finally {
+            setIsDeleting(false);
+          }
+        }}
+        onCancel={() => {
+          if (isDeleting) return;
+          setShowDeletePasswordModal(false);
+          setDeletePassword('');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -418,6 +522,15 @@ const styles = StyleSheet.create({
   },
   settingValue: {
     fontSize: 14,
+  },
+  deleteLoader: {
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 4,
+  },
+  deleteLoaderText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   tag: {
     backgroundColor: '#f2f2f2',

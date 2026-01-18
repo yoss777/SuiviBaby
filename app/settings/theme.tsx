@@ -157,7 +157,7 @@ export default function ThemeScreen() {
           styles.container,
           { backgroundColor: Colors[colorScheme].background },
         ]}
-        edges={["bottom"]}
+        edges={["top", "bottom"]}
       >
         <Stack.Screen
           options={{

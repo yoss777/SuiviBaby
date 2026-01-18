@@ -33,6 +33,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  InteractionManager,
   Platform,
   Pressable,
   ScrollView,
@@ -118,6 +119,8 @@ export default function ImmunosScreen() {
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<ImmunoType>("vitamine");
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
 
   // États des données
   const [immunos, setImmunos] = useState<Immuno[]>([]);
@@ -175,6 +178,11 @@ export default function ImmunosScreen() {
     });
   }, []);
 
+  const expandBottomSheet = useCallback(() => {
+    bottomSheetRef.current?.expand();
+    setTimeout(() => bottomSheetRef.current?.expand(), 250);
+  }, []);
+
   const openAddModal = useCallback(
     (preferredType?: "vitamines" | "vaccins") => {
       setDateHeure(new Date());
@@ -194,9 +202,9 @@ export default function ImmunosScreen() {
           : selectedType;
 
       setImmunoType(typeToUse);
-      bottomSheetRef.current?.expand();
+      expandBottomSheet();
     },
-    [selectedType]
+    [selectedType, expandBottomSheet]
   );
 
   useFocusEffect(
@@ -258,16 +266,22 @@ export default function ImmunosScreen() {
     }
   }, [tab]);
 
-  useEffect(() => {
-    if (openModal === "true") {
-      const timer = setTimeout(() => {
-        openAddModal(tab as "vitamines" | "vaccins" | undefined);
-        router.replace("/(drawer)/baby/immunos");
-      }, 100);
+  useFocusEffect(
+    useCallback(() => {
+      if (openModal !== "true") return;
+      setPendingOpen(true);
+    }, [openModal])
+  );
 
-      return () => clearTimeout(timer);
-    }
-  }, [openModal, tab, openAddModal]);
+  useEffect(() => {
+    if (!pendingOpen || !layoutReady) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      openAddModal(tab as "vitamines" | "vaccins" | undefined);
+      router.replace("/(drawer)/baby/immunos");
+      setPendingOpen(false);
+    });
+    return () => task.cancel?.();
+  }, [pendingOpen, layoutReady, tab, openAddModal, router]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -939,6 +953,7 @@ export default function ImmunosScreen() {
           { backgroundColor: Colors[colorScheme].background },
         ]}
         edges={["bottom"]}
+        onLayout={() => setLayoutReady(true)}
       >
         <View>
           {/* Filtres */}
@@ -1527,7 +1542,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 100,
   },
   emptyText: {
     fontSize: 18,

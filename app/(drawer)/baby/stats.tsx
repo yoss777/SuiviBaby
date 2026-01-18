@@ -231,9 +231,14 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     // paddingBottom: 20,
+    flexGrow: 1,
+    justifyContent: "center",
     alignItems: "center",
   },
   loaderContainer: {
-    paddingTop: 32,
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

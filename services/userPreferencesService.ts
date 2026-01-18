@@ -18,12 +18,20 @@ interface UserPreferences {
 export type ThemePreference = 'light' | 'dark' | 'auto';
 export type LanguagePreference = 'fr' | 'en' | 'es' | 'de' | 'it' | 'pt' | 'ar';
 
+export type ReminderKey = 'repas' | 'pompages' | 'mictions' | 'selles' | 'vitamines';
+
+interface ReminderPreferences {
+  enabled: boolean;
+  thresholds: Record<ReminderKey, number>;
+}
+
 interface NotificationPreferences {
   push: boolean;
   email: boolean;
   updates: boolean;
   tips: boolean;
   marketing: boolean;
+  reminders?: ReminderPreferences;
 }
 
 const defaultNotificationPreferences: NotificationPreferences = {
@@ -32,6 +40,16 @@ const defaultNotificationPreferences: NotificationPreferences = {
   updates: true,
   tips: true,
   marketing: false,
+  reminders: {
+    enabled: false,
+    thresholds: {
+      repas: 0,
+      pompages: 0,
+      mictions: 0,
+      selles: 0,
+      vitamines: 0,
+    },
+  },
 };
 const defaultThemePreference: ThemePreference = 'auto';
 const defaultLanguagePreference: LanguagePreference = 'fr';
@@ -52,6 +70,14 @@ export async function obtenirPreferences(): Promise<UserPreferences> {
         notifications: {
           ...defaultNotificationPreferences,
           ...(data.notifications || {}),
+          reminders: {
+            ...defaultNotificationPreferences.reminders,
+            ...(data.notifications?.reminders || {}),
+            thresholds: {
+              ...defaultNotificationPreferences.reminders?.thresholds,
+              ...(data.notifications?.reminders?.thresholds || {}),
+            },
+          },
         },
         theme: data.theme ?? defaultThemePreference,
         language: data.language ?? defaultLanguagePreference,
@@ -92,10 +118,24 @@ export async function mettreAJourPreferencesNotifications(
     const docRef = doc(db, "user_preferences", userId);
     const preferences = await obtenirPreferences();
 
+    const currentReminders =
+      preferences.notifications?.reminders || defaultNotificationPreferences.reminders;
+    const mergedReminders = updates.reminders
+      ? {
+          ...currentReminders,
+          ...updates.reminders,
+          thresholds: {
+            ...currentReminders?.thresholds,
+            ...(updates.reminders?.thresholds || {}),
+          },
+        }
+      : currentReminders;
+
     const mergedNotifications = {
       ...defaultNotificationPreferences,
       ...(preferences.notifications || {}),
       ...updates,
+      reminders: mergedReminders,
     };
 
     await updateDoc(docRef, {

@@ -1,11 +1,16 @@
 // app/(auth)/login.tsx
 import { InfoModal } from "@/components/ui/InfoModal";
+import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { createPatientUser } from "@/services/userService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useRouter } from "expo-router";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,9 +26,15 @@ import {
 import { auth } from "../../config/firebase";
 
 export default function LoginScreen() {
+  const colorScheme = useColorScheme() ?? "light";
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const { children, loading: babyLoading, childrenLoaded, setActiveChild } = useBaby();
+  const {
+    children,
+    loading: babyLoading,
+    childrenLoaded,
+    setActiveChild,
+  } = useBaby();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [userName, setUserName] = useState("");
@@ -32,6 +43,8 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [hasConsented, setHasConsented] = useState(false);
+  const [showConsentError, setShowConsentError] = useState(false);
   const navigationLocked = useRef(false);
   const [infoModal, setInfoModal] = useState({
     visible: false,
@@ -40,13 +53,27 @@ export default function LoginScreen() {
   });
 
   const passwordRules = [
-    { id: "length", label: "8+ caracteres", test: (value: string) => value.length >= 8 },
-    { id: "number", label: "1 chiffre", test: (value: string) => /\d/.test(value) },
-    { id: "special", label: "1 caractere special", test: (value: string) => /[^A-Za-z0-9]/.test(value) },
+    {
+      id: "length",
+      label: "8+ caracteres",
+      test: (value: string) => value.length >= 8,
+    },
+    {
+      id: "number",
+      label: "1 chiffre",
+      test: (value: string) => /\d/.test(value),
+    },
+    {
+      id: "special",
+      label: "1 caractere special",
+      test: (value: string) => /[^A-Za-z0-9]/.test(value),
+    },
   ];
   const unmetRules = passwordRules.filter((rule) => !rule.test(password));
   const strengthScore = passwordRules.length - unmetRules.length;
-  const strengthPercent = Math.round((strengthScore / passwordRules.length) * 100);
+  const strengthPercent = Math.round(
+    (strengthScore / passwordRules.length) * 100
+  );
   const strengthLabel =
     strengthScore === 3 ? "Fort" : strengthScore === 2 ? "Moyen" : "Faible";
 
@@ -69,7 +96,13 @@ export default function LoginScreen() {
 
   // Rediriger automatiquement si l'utilisateur est déjà authentifié
   useEffect(() => {
-    if (authLoading || !user || babyLoading || !childrenLoaded || navigationLocked.current) {
+    if (
+      authLoading ||
+      !user ||
+      babyLoading ||
+      !childrenLoaded ||
+      navigationLocked.current
+    ) {
       return;
     }
 
@@ -83,9 +116,24 @@ export default function LoginScreen() {
     if (navigationLocked.current) return;
     navigationLocked.current = true;
     router.replace("/explore");
-  }, [authLoading, babyLoading, children, user, childrenLoaded, setActiveChild, router]);
+  }, [
+    authLoading,
+    babyLoading,
+    children,
+    user,
+    childrenLoaded,
+    setActiveChild,
+    router,
+  ]);
 
   const handleAuth = async () => {
+    if (!isLogin && !hasConsented) {
+      setShowConsentError(true);
+      // On réinitialise l'erreur après 2 secondes
+      setTimeout(() => setShowConsentError(false), 2000);
+      return;
+    }
+
     if (!email.trim() || !password.trim()) {
       showModal("Erreur", "Veuillez remplir tous les champs");
       return;
@@ -119,7 +167,11 @@ export default function LoginScreen() {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       } else {
         // ✅ Création du compte
-        const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          email.trim(),
+          password
+        );
 
         // ✅ Sauvegarde du profil patient complet dans Firestore
         const defaultUserName = email.trim().split("@")[0];
@@ -135,7 +187,7 @@ export default function LoginScreen() {
       // Une fois connecté, l'effet d'auth redirige vers l'écran principal
     } catch (error: any) {
       let errorMessage = "Une erreur est survenue";
-      
+
       switch (error.code) {
         case "auth/invalid-email":
           errorMessage = "Adresse email invalide";
@@ -161,7 +213,7 @@ export default function LoginScreen() {
         default:
           errorMessage = error.message;
       }
-      
+
       showModal("Erreur", errorMessage);
       console.log("Erreur", errorMessage);
     } finally {
@@ -178,7 +230,9 @@ export default function LoginScreen() {
         visible={infoModal.visible}
         title={infoModal.title}
         message={infoModal.message}
-        onConfirm={() => setInfoModal({ visible: false, title: "", message: "" })}
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onClose={() => setInfoModal({ visible: false, title: "", message: "" })}
       />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -315,7 +369,21 @@ export default function LoginScreen() {
 
           {/* Bouton principal */}
           <TouchableOpacity
-            style={[styles.mainButton, loading && styles.mainButtonDisabled]}
+            // style={[
+            //   styles.mainButton,
+            //   (loading || (!isLogin && !hasConsented)) &&
+            //     styles.mainButtonDisabled,
+            // ]}
+            // onPress={handleAuth}
+            // disabled={loading || (!isLogin && !hasConsented)}
+
+            style={[
+              styles.mainButton,
+              loading && styles.mainButtonDisabled,
+              !isLogin &&
+                !hasConsented &&
+                showConsentError && { backgroundColor: "#d32f2f" }, // Rouge en cas d'oubli
+            ]}
             onPress={handleAuth}
             disabled={loading}
           >
@@ -331,23 +399,82 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          <View style={styles.legalContainer}>
-            <Text style={styles.legalText}>En continuant, vous acceptez </Text>
-            <TouchableOpacity
-              onPress={() => router.push("/(auth)/terms")}
-              disabled={loading}
+          {/* ✅ Consentement aux conditions et politique de confidentialité */}
+          {!isLogin && (
+            <View
+              style={[
+                {
+                  alignItems: "center",
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                },
+                styles.legalContainer,
+                showConsentError && styles.legalErrorBorder, // Ajout d'une bordure ou d'un fond léger
+              ]}
             >
-              <Text style={styles.legalLink}>les conditions</Text>
-            </TouchableOpacity>
-            <Text style={styles.legalText}> et </Text>
-            <TouchableOpacity
-              onPress={() => router.push("/(auth)/privacy")}
-              disabled={loading}
-            >
-              <Text style={styles.legalLink}>la politique de confidentialite</Text>
-            </TouchableOpacity>
-            <Text style={styles.legalText}>.</Text>
-          </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setHasConsented(!hasConsented);
+                  setShowConsentError(false);
+                }}
+                style={{ marginRight: 8 }}
+              >
+                <FontAwesome
+                  name={hasConsented ? "check-square" : "square"}
+                  size={20}
+                  color={showConsentError ? "#d32f2f" : "#4A90E2"}
+                />
+              </TouchableOpacity>
+              <Text
+                style={[
+                  styles.legalText,
+                  showConsentError && { color: "#d32f2f", fontWeight: "bold" },
+                ]}
+              >
+                J'accepte{" "}
+              </Text>
+              <TouchableOpacity onPress={() => router.push("/(auth)/terms")}>
+                <Text
+                  style={[
+                    styles.legalLink,
+                    showConsentError && {
+                      color: "#d32f2f",
+                      fontWeight: "bold",
+                    },
+                  ]}
+                >
+                  les conditions
+                </Text>
+              </TouchableOpacity>
+              <Text
+                style={[
+                  styles.legalText,
+                  showConsentError && { color: "#d32f2f", fontWeight: "bold" },
+                ]}
+              >
+                {" "}
+                et{" "}
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push("/(auth)/privacy")}
+                disabled={loading}
+              >
+                <Text
+                  style={[
+                    styles.legalLink,
+                    showConsentError && {
+                      color: "#d32f2f",
+                      fontWeight: "bold",
+                    },
+                  ]}
+                >
+                  la politique de confidentialite
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.legalText}>.</Text>
+            </View>
+          )}
 
           {/* Lien pour basculer entre connexion et inscription */}
           <View style={styles.switchContainer}>
@@ -529,5 +656,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#4A90E2",
     fontWeight: "600",
+  },
+  legalErrorBorder: {
+    backgroundColor: "#ffebee", // Fond rouge très léger
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d32f2f",
   },
 });

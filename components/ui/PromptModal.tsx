@@ -4,41 +4,58 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 
-interface ConfirmModalProps {
+interface PromptModalProps {
   visible: boolean;
   title: string;
-  message: React.ReactNode;
+  message?: string;
+  value: string;
+  subtitle?: string;
+  placeholder?: string;
+  secureTextEntry?: boolean;
+  multiline?: boolean;
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
   confirmText?: string;
   cancelText?: string;
-  backgroundColor: string;
-  textColor: string;
   confirmButtonColor?: string;
   confirmTextColor?: string;
+  confirmDisabled?: boolean;
+  backgroundColor: string;
+  textColor: string;
+  onChangeText: (text: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export function ConfirmModal({
+export function PromptModal({
   visible,
   title,
   message,
-  confirmText = "Supprimer",
+  value,
+  subtitle,
+  placeholder,
+  secureTextEntry = false,
+  multiline = true,
+  autoCapitalize = "sentences",
+  confirmText = "Valider",
   cancelText = "Annuler",
+  confirmButtonColor = "#28a745",
+  confirmTextColor = "#fff",
+  confirmDisabled = false,
   backgroundColor,
   textColor,
-  confirmButtonColor = "#dc3545",
-  confirmTextColor = "#fff",
+  onChangeText,
   onConfirm,
   onCancel,
-}: ConfirmModalProps) {
+}: PromptModalProps) {
   return (
     <Modal
       visible={visible}
-      transparent={true}
+      transparent
       animationType="fade"
       onRequestClose={() => {}}
     >
@@ -48,14 +65,25 @@ export function ConfirmModal({
           onPress={(event) => event.stopPropagation()}
         >
           <Text style={[styles.modalTitle, { color: textColor }]}>{title}</Text>
-          {typeof message === "string" ? (
-            <Text style={[styles.modalSubtitle, { color: textColor }]}>
+          {subtitle ? (
+            <Text style={[styles.modalSubtitle, { color: textColor }]}>{subtitle}</Text>
+          ) : null}
+          {message ? (
+            <Text style={[styles.modalMessage, { color: textColor }]}>
               {message}
             </Text>
-          ) : (
-            <View style={styles.modalMessageContainer}>{message}</View>
-          )}
-
+          ) : null}
+          <TextInput
+            style={[styles.input, { color: textColor, borderColor: textColor + "20" }]}
+            placeholder={placeholder}
+            placeholderTextColor={textColor + "80"}
+            value={value}
+            onChangeText={onChangeText}
+            autoCorrect={false}
+            autoCapitalize={autoCapitalize}
+            multiline={multiline}
+            secureTextEntry={secureTextEntry}
+          />
           <View style={styles.modalButtons}>
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
@@ -69,9 +97,11 @@ export function ConfirmModal({
                 styles.modalButton,
                 styles.confirmButton,
                 { backgroundColor: confirmButtonColor },
+                confirmDisabled && styles.confirmButtonDisabled,
               ]}
               onPress={onConfirm}
               activeOpacity={0.7}
+              disabled={confirmDisabled}
             >
               <Text style={[styles.confirmButtonText, { color: confirmTextColor }]}>
                 {confirmText}
@@ -87,9 +117,9 @@ export function ConfirmModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
     padding: 20,
   },
   modalContent: {
@@ -107,10 +137,23 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: 8,
+    textAlign: "center",
   },
-  modalMessageContainer: {
+  modalMessage: {
+    fontSize: 14,
+    lineHeight: 20,
     marginBottom: 16,
+    textAlign: "center",
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    marginBottom: 16,
+    minHeight: 44,
   },
   modalButtons: {
     flexDirection: "row",
@@ -129,8 +172,13 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "600",
   },
-  confirmButton: {},
+  confirmButton: {
+  },
   confirmButtonText: {
+    color: "#fff",
     fontWeight: "700",
+  },
+  confirmButtonDisabled: {
+    opacity: 0.6,
   },
 });

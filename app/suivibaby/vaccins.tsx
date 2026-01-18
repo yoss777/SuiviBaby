@@ -13,7 +13,7 @@ import {
   modifierVaccin,
   supprimerVaccin,
 } from "@/migration/eventsDoubleWriteService";
-import { Vaccin, VaccinGroup } from "@/types/interfaces";
+import { Vaccin, VaccinGroup } from "@/migration/interfaces";
 import { normalizeQuery } from "@/utils/text";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";

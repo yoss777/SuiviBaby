@@ -13,7 +13,7 @@ import {
   modifierVitamine,
   supprimerVitamine,
 } from "@/migration/eventsDoubleWriteService";
-import { Vitamine, VitamineGroup } from "@/types/interfaces";
+import { Vitamine, VitamineGroup } from "@/migration/interfaces";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import BottomSheet from "@gorhom/bottom-sheet";

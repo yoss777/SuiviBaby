@@ -3,7 +3,11 @@ import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type ToastContextValue = {
-  showToast: (message: string, durationMs?: number) => void;
+  showToast: (
+    message: string,
+    durationMs?: number,
+    position?: "top" | "bottom"
+  ) => void;
 };
 
 const ToastContext = createContext<ToastContextValue>({
@@ -17,10 +21,13 @@ export function useToast() {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   const [message, setMessage] = useState<string | null>(null);
+  const [position, setPosition] = useState<"top" | "bottom">("bottom");
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = useCallback((text: string, durationMs = 2600) => {
+  const showToast = useCallback(
+    (text: string, durationMs = 2600, toastPosition: "top" | "bottom" = "bottom") => {
     setMessage(text);
+    setPosition(toastPosition);
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -37,7 +44,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {message && (
           <View
             pointerEvents="none"
-            style={[styles.toast, { bottom: insets.bottom + 24 }]}
+            style={[
+              styles.toast,
+              position === "top"
+                ? { top: insets.top + 16 }
+                : { bottom: insets.bottom + 24 },
+            ]}
           >
             <Text style={styles.toastText}>{message}</Text>
           </View>

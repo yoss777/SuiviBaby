@@ -1,14 +1,20 @@
 import { MigrationBanner } from "@/components/migration";
+import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useToast } from "@/contexts/ToastContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import {
   buildTodayEventsData,
   getTodayEventsCache,
 } from "@/services/todayEventsCache";
+import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -18,6 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useHeaderRight } from "../_layout";
 
 // ============================================
 // TYPES
@@ -73,6 +80,21 @@ interface TodayStats {
 
 export default function HomeDashboard() {
   const { activeChild } = useBaby();
+  const { setHeaderRight } = useHeaderRight();
+  const colorScheme = useColorScheme() ?? "light";
+  const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
+  const { showToast } = useToast();
+  const warningStateRef = useRef<
+    Record<string, { miction?: number; selle?: number }>
+  >({});
+  const [remindersEnabled, setRemindersEnabled] = useState(true);
+  const [reminderThresholds, setReminderThresholds] = useState({
+    repas: 0,
+    pompages: 0,
+    mictions: 0,
+    selles: 0,
+    vitamines: 0,
+  });
 
   // États des données
   const [data, setData] = useState<DashboardData>({
@@ -156,6 +178,140 @@ export default function HomeDashboard() {
       subscription?.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const childKey = activeChild.id;
+    if (!warningStateRef.current[childKey]) {
+      warningStateRef.current[childKey] = {};
+    }
+    const warningState = warningStateRef.current[childKey];
+    const now = currentTime.getTime();
+    const mictionThresholdHours = reminderThresholds.mictions || 0;
+    const selleThresholdHours = reminderThresholds.selles || 0;
+    const mictionThresholdMs =
+      mictionThresholdHours > 0 ? mictionThresholdHours * 60 * 60 * 1000 : null;
+    const selleThresholdMs =
+      selleThresholdHours > 0 ? selleThresholdHours * 60 * 60 * 1000 : null;
+
+    const mictionTs = todayStats.mictions.lastTimestamp;
+    const selleTs = todayStats.selles.lastTimestamp;
+    const mictionExceeded =
+      remindersEnabled &&
+      mictionThresholdMs !== null &&
+      !!mictionTs &&
+      now - mictionTs > mictionThresholdMs;
+    const selleExceeded =
+      remindersEnabled &&
+      selleThresholdMs !== null &&
+      !!selleTs &&
+      now - selleTs > selleThresholdMs;
+    const mictionNotified = mictionTs && warningState.miction === mictionTs;
+    const selleNotified = selleTs && warningState.selle === selleTs;
+    const mictionHoursLabel = `${mictionThresholdHours}h`;
+    const selleHoursLabel = `${selleThresholdHours}h`;
+
+    if (
+      mictionExceeded &&
+      !mictionNotified &&
+      selleExceeded &&
+      !selleNotified
+    ) {
+      showToast(
+        `⚠️ Attention: plus de ${mictionHoursLabel} depuis le dernier pipi, ${selleHoursLabel} depuis le dernier popo.`,
+        3200,
+        "top"
+      );
+      warningState.miction = mictionTs;
+      warningState.selle = selleTs;
+      return;
+    }
+
+    if (mictionExceeded && !mictionNotified) {
+      showToast(
+        `⚠️ Attention: plus de ${mictionHoursLabel} depuis le dernier pipi.`,
+        3200,
+        "top"
+      );
+      warningState.miction = mictionTs;
+    }
+
+    if (selleExceeded && !selleNotified) {
+      showToast(
+        `⚠️ Attention: plus de ${selleHoursLabel} depuis le dernier popo.`,
+        3200,
+        "top"
+      );
+      warningState.selle = selleTs;
+    }
+  }, [
+    activeChild?.id,
+    currentTime,
+    remindersEnabled,
+    reminderThresholds.mictions,
+    reminderThresholds.selles,
+    todayStats.mictions.lastTimestamp,
+    todayStats.selles.lastTimestamp,
+    showToast,
+  ]);
+
+  // HeaderRight: micro uniquement
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     const headerButtons = (
+  //       <View
+  //         style={{
+  //           flexDirection: "row",
+  //           alignItems: "center",
+  //           paddingRight: 16,
+  //         }}
+  //       >
+  //         <VoiceCommandButton
+  //           size={18}
+  //           color={Colors[colorScheme].tint}
+  //           showTestToggle={true}
+  //         />
+  //       </View>
+  //     );
+
+  //     setHeaderRight(headerButtons, headerOwnerId.current);
+
+  //     return () => {
+  //       setHeaderRight(null, headerOwnerId.current);
+  //     };
+  //   }, [colorScheme, setHeaderRight])
+  // );
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const loadReminders = async () => {
+        try {
+          const prefs = await obtenirPreferencesNotifications();
+          if (!isActive) return;
+          setRemindersEnabled(prefs.reminders?.enabled ?? true);
+          setReminderThresholds({
+            repas: prefs.reminders?.thresholds?.repas ?? 0,
+            pompages: prefs.reminders?.thresholds?.pompages ?? 0,
+            mictions: prefs.reminders?.thresholds?.mictions ?? 0,
+            selles: prefs.reminders?.thresholds?.selles ?? 0,
+            vitamines: prefs.reminders?.thresholds?.vitamines ?? 0,
+          });
+        } catch (error) {
+          if (!isActive) return;
+          setRemindersEnabled(true);
+        }
+      };
+
+      loadReminders();
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -470,8 +626,21 @@ export default function HomeDashboard() {
     lastTimestamp,
     onPress,
   }: any) => {
-    const fourHours = 4 * 60 * 60 * 1000; // 4 heures en millisecondes
     const lastSessionDate = currentTime.getTime() - (lastTimestamp || 0);
+    const thresholdHours =
+      title === "Repas total"
+        ? reminderThresholds.repas
+        : title === "Pompages"
+        ? reminderThresholds.pompages
+        : title === "Mictions"
+        ? reminderThresholds.mictions
+        : title === "Selles"
+        ? reminderThresholds.selles
+        : null;
+    const warnThreshold =
+      remindersEnabled && thresholdHours && thresholdHours > 0
+        ? thresholdHours * 60 * 60 * 1000
+        : null;
 
     return (
       <TouchableOpacity
@@ -499,8 +668,11 @@ export default function HomeDashboard() {
             Dernière fois: {lastActivity}
           </Text>
         )}
-        {title === "Pompages" && lastSessionDate > fourHours ? (
+        {lastTimestamp &&
+        warnThreshold !== null &&
+        lastSessionDate > warnThreshold ? (
           <Text style={[styles.statsTimeSince, { color: "#dc3545" }]}>
+            {/* {"⚠️ "}{getTimeSinceLastActivity(lastTimestamp)} */}
             {getTimeSinceLastActivity(lastTimestamp)}
           </Text>
         ) : (
@@ -556,15 +728,32 @@ export default function HomeDashboard() {
       {activeChild?.id && <MigrationBanner childId={activeChild.id} />}
 
       {/* En-tête avec salutation */}
-      <View style={styles.header}>
-        <Text style={styles.greeting}>{getGreeting()}</Text>
-        <Text style={styles.date}>
-          {new Date().toLocaleDateString("fr-FR", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-          })}
-        </Text>
+      <View
+        style={{
+          marginBottom: 8,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginRight: 50,
+        }}
+      >
+        <View style={styles.header}>
+          <Text style={styles.greeting}>{getGreeting()}</Text>
+          <Text style={styles.date}>
+            {new Date().toLocaleDateString("fr-FR", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}
+          </Text>
+        </View>
+        <View style={{ position: "absolute", right: -10, top: 35 }}>
+          <VoiceCommandButton
+            size={40}
+            color={Colors[colorScheme].tint}
+            showTestToggle={false}
+          />
+        </View>
       </View>
 
       {/* Résumé du jour */}

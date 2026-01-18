@@ -1,4 +1,3 @@
-import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
@@ -32,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  InteractionManager,
   Platform,
   Pressable,
   ScrollView,
@@ -104,6 +104,8 @@ export default function RepasScreen() {
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [mealType, setMealType] = useState<MealType>("tetee");
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [quantite, setQuantite] = useState<number>(100);
 
@@ -145,6 +147,11 @@ export default function RepasScreen() {
   }, []);
 
   // Gérer l'ouverture du modal d'ajout
+  const expandBottomSheet = useCallback(() => {
+    bottomSheetRef.current?.expand();
+    setTimeout(() => bottomSheetRef.current?.expand(), 250);
+  }, []);
+
   const openAddModal = useCallback((preferredType?: "seins" | "biberons") => {
     setDateHeure(new Date());
     setEditingMeal(null);
@@ -159,8 +166,8 @@ export default function RepasScreen() {
       setMealType("tetee");
     }
 
-    bottomSheetRef.current?.expand();
-  }, []);
+    expandBottomSheet();
+  }, [expandBottomSheet]);
 
   // Définir les boutons du header (calendrier + ajouter)
   useFocusEffect(
@@ -174,11 +181,11 @@ export default function RepasScreen() {
           gap: 0,
         }}
       >
-        <VoiceCommandButton
+        {/* <VoiceCommandButton
           size={18}
           color={Colors[colorScheme].tint}
           showTestToggle={false}
-        />
+        /> */}
 
         <Pressable
           onPress={handleCalendarPress}
@@ -230,16 +237,22 @@ export default function RepasScreen() {
   }, [tab]);
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
-  useEffect(() => {
-    if (openModal === "true") {
-      const timer = setTimeout(() => {
-        openAddModal(tab as "seins" | "biberons" | undefined);
-        router.replace("/(drawer)/baby/repas");
-      }, 100);
+  useFocusEffect(
+    useCallback(() => {
+      if (openModal !== "true") return;
+      setPendingOpen(true);
+    }, [openModal])
+  );
 
-      return () => clearTimeout(timer);
-    }
-  }, [openModal, tab]);
+  useEffect(() => {
+    if (!pendingOpen || !layoutReady) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      openAddModal(tab as "seins" | "biberons" | undefined);
+      router.replace("/(drawer)/baby/repas");
+      setPendingOpen(false);
+    });
+    return () => task.cancel?.();
+  }, [pendingOpen, layoutReady, tab, openAddModal, router]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -918,6 +931,7 @@ export default function RepasScreen() {
           { backgroundColor: Colors[colorScheme].background },
         ]}
         edges={["bottom"]}
+        onLayout={() => setLayoutReady(true)}
       >
         <View>
           {/* Filtres */}
@@ -1678,6 +1692,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 100,
   },
 });

@@ -79,7 +79,11 @@ function AppNavigation() {
           options={{ presentation: "modal", title: "Modal" }}
         />
       </Stack>
-      <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+      <StatusBar
+        style={colorScheme === "dark" ? "light" : "dark"}
+        translucent={false}
+        backgroundColor={Colors[colorScheme].background}
+      />
     </NavigationThemeProvider>
   );
 }

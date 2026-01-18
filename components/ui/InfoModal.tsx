@@ -40,9 +40,9 @@ export function InfoModal({
       visible={visible}
       transparent={true}
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={() => {}}
     >
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
+      <Pressable style={styles.modalOverlay}>
         <Pressable
           style={[styles.modalContent, { backgroundColor }]}
           onPress={(event) => event.stopPropagation()}

@@ -163,7 +163,7 @@ export default function LanguageScreen() {
           styles.container,
           { backgroundColor: Colors[colorScheme].background },
         ]}
-        edges={["bottom"]}
+        edges={["top", "bottom"]}
       >
         <Stack.Screen
           options={{

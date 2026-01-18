@@ -25,7 +25,7 @@ export default function BootScreen() {
   const [unauthDelayDone, setUnauthDelayDone] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDelayDone(true), 2200);
+    const timer = setTimeout(() => setDelayDone(true), 1500);
     return () => clearTimeout(timer);
   }, []);
 
@@ -35,7 +35,7 @@ export default function BootScreen() {
       return;
     }
 
-    const timer = setTimeout(() => setUnauthDelayDone(true), 2000);
+    const timer = setTimeout(() => setUnauthDelayDone(true), 1500);
     return () => clearTimeout(timer);
   }, [authLoading, user]);
 

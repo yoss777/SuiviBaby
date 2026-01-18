@@ -32,6 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  InteractionManager,
   Platform,
   Pressable,
   ScrollView,
@@ -83,6 +84,8 @@ export default function ExcretionsScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
 
   // États des données
   const [excretions, setExcretions] = useState<Excretion[]>([]);
@@ -138,6 +141,11 @@ export default function ExcretionsScreen() {
     });
   }, []);
 
+  const expandBottomSheet = useCallback(() => {
+    bottomSheetRef.current?.expand();
+    setTimeout(() => bottomSheetRef.current?.expand(), 250);
+  }, []);
+
   const openAddModal = useCallback((preferredType?: "mictions" | "selles") => {
     setDateHeure(new Date());
     setEditingExcretion(null);
@@ -154,8 +162,8 @@ export default function ExcretionsScreen() {
       setIncludeSelle(false);
     }
 
-    bottomSheetRef.current?.expand();
-  }, []);
+    expandBottomSheet();
+  }, [expandBottomSheet]);
 
   useFocusEffect(
     useCallback(() => {
@@ -218,16 +226,22 @@ export default function ExcretionsScreen() {
     }
   }, [tab]);
 
-  useEffect(() => {
-    if (openModal === "true") {
-      const timer = setTimeout(() => {
-        openAddModal(tab as "mictions" | "selles" | undefined);
-        router.replace("/(drawer)/baby/excretions");
-      }, 100);
+  useFocusEffect(
+    useCallback(() => {
+      if (openModal !== "true") return;
+      setPendingOpen(true);
+    }, [openModal])
+  );
 
-      return () => clearTimeout(timer);
-    }
-  }, [openModal, tab]);
+  useEffect(() => {
+    if (!pendingOpen || !layoutReady) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      openAddModal(tab as "mictions" | "selles" | undefined);
+      router.replace("/(drawer)/baby/excretions");
+      setPendingOpen(false);
+    });
+    return () => task.cancel?.();
+  }, [pendingOpen, layoutReady, tab, openAddModal, router]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -853,6 +867,7 @@ export default function ExcretionsScreen() {
           { backgroundColor: Colors[colorScheme].background },
         ]}
         edges={["bottom"]}
+        onLayout={() => setLayoutReady(true)}
       >
         <View>
           {/* Filtres */}
@@ -1337,7 +1352,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 100,
   },
   emptyText: {
     fontSize: 18,

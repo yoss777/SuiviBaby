@@ -17,15 +17,15 @@ export default function TermsScreen() {
       content:
         'Le service est propose par SuiviBaby, [adresse complete], [pays]. Contact : support@suivibaby.com.',
     },
-    {
-      title: '2. Description du service',
+{
+      title: '2. Avertissement médical important',
       content:
-        'SuiviBaby est une application de suivi et d\'organisation des donnees liees a la sante de votre enfant (alimentation, sommeil, change, etc.). L\'application ne remplace pas un avis medical et ne constitue pas un dispositif medical. En cas de doute, consultez un professionnel de sante.',
+        'SuiviBaby est un outil d\'organisation personnelle. Il ne constitue pas un dispositif médical, ne fournit aucun diagnostic et ne remplace jamais l\'avis, l\'examen ou la prescription d\'un pédiatre ou d\'un professionnel de santé qualifié.',
     },
     {
-      title: '3. Compte et acces',
+      title: '3. Responsabilité de l\'utilisateur',
       content:
-        'Vous etes responsable de la securite de votre compte. Si vous utilisez l\'app pour un enfant, vous declarez etre parent ou tuteur legal et agir dans l\'interet de l\'enfant.',
+        'Vous certifiez être le tuteur légal de l\'enfant pour lequel vous créez un profil. Vous êtes responsable de l\'exactitude des données saisies et de la confidentialité de vos identifiants d\'accès.',
     },
     {
       title: '4. Utilisation appropriee',
@@ -47,15 +47,15 @@ export default function TermsScreen() {
       content:
         'Nous nous efforcons de maintenir le service disponible, mais ne garantissons pas une disponibilite continue (maintenance, incidents, dependances techniques).',
     },
-    {
-      title: '8. Resiliation / suppression',
+{
+      title: '8. Suppression du compte',
       content:
-        'Vous pouvez supprimer votre compte a tout moment. En cas de suppression, vos donnees seront supprimees selon les delais indiques dans la politique de confidentialite.',
+        'L\'utilisateur peut supprimer son compte via les paramètres de l\'application. Cette action est irréversible et entraîne la suppression immédiate de toutes les données de suivi associées.',
     },
     {
-      title: '9. Limitation de responsabilite',
+      title: '9. Limitation de responsabilité',
       content:
-        'Dans la mesure permise par la loi, SuiviBaby ne peut etre tenue responsable des dommages indirects, pertes de donnees ou consequences liees a une utilisation inadaptee de l\'application.',
+        'SuiviBaby décline toute responsabilité en cas de perte de données ou d\'interprétation erronée des graphiques de suivi par l\'utilisateur. Le service est fourni "en l\'état".',
     },
     {
       title: '10. Modifications',
@@ -71,7 +71,7 @@ export default function TermsScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['top','bottom']}>
         <Stack.Screen
           options={{
             title: 'Conditions d\'utilisation',

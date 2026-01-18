@@ -1,71 +1,67 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Stack } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from "@expo/vector-icons";
+import { Stack } from "expo-router";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function PrivacyScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  const colorScheme = useColorScheme() ?? "light";
 
-  const sections = [
+const sections = [
     {
-      title: '1. Responsable du traitement',
+      title: "1. Responsable du traitement",
       content:
-        'SuiviBaby, [Adresse complete], [Pays]. Contact : privacy@suivibaby.com. DPO : [Nom/Email si applicable, sinon "non designe"].',
+        "Le service SuiviBaby est opéré par [Votre Nom ou Nom de l'entreprise], situé à [Votre Adresse complète]. Pour toute question relative à la protection de vos données, vous pouvez nous contacter à l'adresse : privacy@suivibaby.com.",
     },
     {
-      title: '2. Donnees collectees',
+      title: "2. Nature des données collectées",
       content:
-        'Compte : email, pseudo, identifiant utilisateur. Enfants : prenom/nom, date de naissance, sexe, photo (si fournie). Suivi : evenements de suivi (biberons, tetees, changes, sommeil, etc.). Donnees techniques : version de l\'app, plateforme, logs techniques en cas d\'erreur.',
+        "Compte : Adresse email, pseudonyme. Données de l'enfant (catégories particulières de données) : Prénom, date de naissance, sexe, et journal de bord de l'enfant (alimentation, sommeil, hygiène, santé, mesures de croissance). Ces données sont traitées uniquement pour vous fournir les fonctionnalités de suivi de l'application.",
     },
     {
-      title: '3. Finalites et base legale',
+      title: "3. Base légale et Consentement aux données de santé",
       content:
-        'Fournir le service et synchroniser vos donnees (execution du contrat). Securiser l\'acces et prevenir la fraude (interet legitime). Ameliorer l\'app et corriger les bugs (interet legitime). Notifications importantes liees au service (interet legitime / consentement si requis).',
+        "Le traitement des données de suivi de l'enfant (données de santé) repose sur votre consentement explicite, conformément à l'Article 9.2.a du RGPD. En saisissant ces informations dans l'application, vous consentez activement à leur traitement par SuiviBaby. Vous pouvez retirer ce consentement à tout moment en supprimant les données concernées ou en clôturant votre compte.",
     },
     {
-      title: '4. Hebergement et sous-traitants',
+      title: "4. Hébergement et Transferts de données",
       content:
-        'Les donnees sont hebergees par Google Firebase (Google LLC). [Preciser la region d\'hebergement : Europe/France]. Si un transfert hors UE a lieu, il est encadre par les clauses contractuelles types de la Commission europeenne.',
+        "Vos données sont hébergées par Google Firebase sur des serveurs sécurisés situés au sein de l'Union Européenne (Belgique ou Allemagne). Tout transfert éventuel vers une entité hors UE est strictement encadré par les Clauses Contractuelles Types (CCT) de la Commission Européenne pour garantir un niveau de protection équivalent.",
     },
     {
-      title: '5. Durees de conservation',
+      title: "5. Conservation et Suppression des données",
       content:
-        'Donnees de compte : tant que votre compte est actif. Donnees de suivi : tant que le compte est actif. En cas de suppression, vos donnees sont supprimees sous 30 jours, sauf obligation legale ou sauvegardes techniques.',
+        "Les données sont conservées tant que votre compte est actif. En cas de demande de suppression par l'utilisateur, les données sont immédiatement effacées de nos bases de production. Pour des raisons de sécurité et de continuité de service, leur effacement définitif de nos copies de sauvegarde (backups) peut toutefois prendre jusqu'à 60 jours. Après 2 ans d'inactivité totale, votre compte et ses données associées seront automatiquement supprimés.",
     },
     {
-      title: '6. Partage des donnees',
+      title: "6. Sécurité et Destinataires",
       content:
-        'Vos donnees ne sont jamais vendues. Elles peuvent etre partagees uniquement avec nos sous-traitants techniques (Firebase) pour le fonctionnement du service et avec les personnes que vous autorisez explicitement via les fonctions de partage.',
+        "Nous ne vendons, n'échangeons ni ne louons vos données personnelles. Elles sont chiffrées en transit (protocole TLS) et au repos (chiffrement AES-256). Seuls les services techniques de notre sous-traitant Google Firebase et les personnes que vous autorisez explicitement via les fonctions de partage de l'application ont accès aux données.",
     },
     {
-      title: '7. Vos droits',
+      title: "7. Vos droits (RGPD)",
       content:
-        'Conformement au RGPD, vous disposez des droits d\'acces, rectification, suppression, limitation, opposition et portabilite. Vous pouvez exercer ces droits en nous contactant a privacy@SuiviBaby.com. Vous avez aussi le droit d\'introduire une reclamation aupres de la CNIL.',
-    },
-    {
-      title: '8. Securite',
-      content:
-        'Les donnees sont chiffrees en transit (HTTPS/TLS). L\'acces est strictement limite aux personnes autorisees. [Optionnel : chiffrement au repos via Firebase si confirme].',
-    },
-    {
-      title: '9. Modifications',
-      content:
-        'Toute modification importante de cette politique sera notifiee dans l\'application ou par email.',
+        "Conformément à la réglementation, vous disposez des droits d'accès, de rectification, de suppression, de portabilité et de limitation du traitement de vos données. Pour exercer ces droits, contactez-nous à privacy@suivibaby.com. Vous avez également le droit d'introduire une réclamation auprès de la CNIL (www.cnil.fr).",
     },
   ];
 
   return (
     <ThemedView style={styles.screen}>
-      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['bottom']}>
+      <SafeAreaView
+        style={[
+          styles.container,
+          { backgroundColor: Colors[colorScheme].background },
+        ]}
+        edges={["top", "bottom"]}
+      >
         <Stack.Screen
           options={{
-            title: 'Confidentialité',
-            headerBackTitle: 'Retour',
+            title: "Confidentialité",
+            headerBackTitle: "Retour",
           }}
         />
         <ScrollView
@@ -73,22 +69,36 @@ export default function PrivacyScreen() {
           showsVerticalScrollIndicator={false}
         >
           <ThemedView style={styles.header}>
-            <View style={[styles.headerIcon, { backgroundColor: Colors[colorScheme].tint + '20' }]}>
-              <Ionicons name="shield-checkmark" size={32} color={Colors[colorScheme].tint} />
+            <View
+              style={[
+                styles.headerIcon,
+                { backgroundColor: Colors[colorScheme].tint + "20" },
+              ]}
+            >
+              <Ionicons
+                name="shield-checkmark"
+                size={32}
+                color={Colors[colorScheme].tint}
+              />
             </View>
             <ThemedText style={styles.headerTitle}>
               Politique de confidentialité
             </ThemedText>
-            <Text style={[styles.headerDate, { color: Colors[colorScheme].tabIconDefault }]}>
+            <Text
+              style={[
+                styles.headerDate,
+                { color: Colors[colorScheme].tabIconDefault },
+              ]}
+            >
               Dernière mise à jour : 1er janvier 2026
             </Text>
           </ThemedView>
 
           <ThemedView style={styles.content}>
             <ThemedText style={styles.intro}>
-              Chez SuiviBaby, la protection de vos donnees personnelles est notre
-              priorite absolue. Cette politique explique comment nous collectons, utilisons et
-              protegeons vos informations.
+              Chez SuiviBaby, la protection de vos donnees personnelles est
+              notre priorite absolue. Cette politique explique comment nous
+              collectons, utilisons et protegeons vos informations.
             </ThemedText>
 
             {sections.map((section, index) => (
@@ -96,7 +106,12 @@ export default function PrivacyScreen() {
                 <ThemedText style={styles.sectionTitle}>
                   {section.title}
                 </ThemedText>
-                <Text style={[styles.sectionContent, { color: Colors[colorScheme].tabIconDefault }]}>
+                <Text
+                  style={[
+                    styles.sectionContent,
+                    { color: Colors[colorScheme].tabIconDefault },
+                  ]}
+                >
                   {section.content}
                 </Text>
               </View>
@@ -104,7 +119,11 @@ export default function PrivacyScreen() {
           </ThemedView>
 
           <ThemedView style={styles.footer}>
-            <Ionicons name="mail-outline" size={20} color={Colors[colorScheme].tint} />
+            <Ionicons
+              name="mail-outline"
+              size={20}
+              color={Colors[colorScheme].tint}
+            />
             <ThemedText style={styles.footerText}>
               Pour toute question : privacy@suivibaby.com
             </ThemedText>
@@ -126,7 +145,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     padding: 24,
     borderRadius: 12,
     marginBottom: 16,
@@ -135,15 +154,15 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 16,
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: "700",
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   headerDate: {
     fontSize: 14,
@@ -163,7 +182,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 8,
   },
   sectionContent: {
@@ -171,8 +190,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 16,
     borderRadius: 12,
     marginBottom: 24,

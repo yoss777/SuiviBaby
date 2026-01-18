@@ -7,6 +7,9 @@ export type CommandType =
   | "biberon"
   | "tetee"
   | "couche"
+  | "miction"
+  | "selle"
+  | "vitamine"
   | "sommeil"
   | "pompage"
   | "autre";
@@ -45,11 +48,27 @@ interface CoucheCommand extends BaseCommand {
   popo: boolean;
 }
 
+interface MictionCommand extends BaseCommand {
+  type: "miction";
+}
+
+interface SelleCommand extends BaseCommand {
+  type: "selle";
+}
+
+interface VitamineCommand extends BaseCommand {
+  type: "vitamine";
+  nomVitamine: string;
+}
+
 export type ParsedCommand =
   | BiberonCommand
   | TeteeCommand
   | PompageCommand
   | CoucheCommand
+  | MictionCommand
+  | SelleCommand
+  | VitamineCommand
   | BaseCommand; // pour sommeil et autre
 
 class VoiceCommandService {
@@ -62,11 +81,19 @@ class VoiceCommandService {
     }
   }
 
+  private isAudioAvailable(): boolean {
+    return !!Audio?.requestPermissionsAsync && !!Audio?.Recording?.createAsync;
+  }
+
   /**
    * Demande les permissions audio
    */
   async requestPermissions(): Promise<boolean> {
     try {
+      if (!this.isAudioAvailable()) {
+        console.error("Module audio indisponible. Vérifiez expo-av.");
+        return false;
+      }
       const { status } = await Audio.requestPermissionsAsync();
       return status === "granted";
     } catch (error) {
@@ -80,6 +107,13 @@ class VoiceCommandService {
    */
   async startRecording(): Promise<void> {
     try {
+      if (this.recording) {
+        console.warn("Enregistrement déjà en cours, démarrage ignoré.");
+        return;
+      }
+      if (!this.isAudioAvailable()) {
+        throw new Error("Module audio indisponible. Vérifiez expo-av.");
+      }
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -103,7 +137,8 @@ class VoiceCommandService {
   async stopRecording(): Promise<string | null> {
     try {
       if (!this.recording) {
-        throw new Error("Aucun enregistrement en cours");
+        console.warn("Aucun enregistrement en cours, arrêt ignoré.");
+        return null;
       }
 
       await this.recording.stopAndUnloadAsync();
@@ -257,6 +292,7 @@ class VoiceCommandService {
     let pipi = false;
     let popo = false;
     let timeOffset = 0;
+    let nomVitamine: string | undefined;
 
     // Fonction helper pour normaliser les mots "gauche/droit"
     const estGauche = (mot: string) => /gauche|gauche|left|sein\s*g/i.test(mot);
@@ -374,23 +410,60 @@ class VoiceCommandService {
       lowerText.includes("couche") ||
       lowerText.includes("pipi") ||
       lowerText.includes("miction") ||
+      lowerText.includes("selle") ||
       lowerText.includes("selles") ||
       lowerText.includes("popo") ||
       lowerText.includes("caca")
     ) {
-      type = "couche";
-
+      const hasCoucheWord = lowerText.includes("couche");
       if (lowerText.includes("pipi") || lowerText.includes("miction"))
         pipi = true;
       if (
         lowerText.includes("popo") ||
         lowerText.includes("caca") ||
+        lowerText.includes("selle") ||
         lowerText.includes("selles")
       )
         popo = true;
 
-      // Si rien de spécifié, considérer pipi par défaut
-      if (!pipi && !popo) pipi = true;
+      if (hasCoucheWord) {
+        type = "couche";
+      } else if (pipi && popo) {
+        type = "couche";
+      } else if (pipi) {
+        type = "miction";
+      } else if (popo) {
+        type = "selle";
+      }
+    }
+
+    // Détection vitamine
+    else if (
+      lowerText.includes("vitamine") ||
+      /\bvit\b/i.test(lowerText) ||
+      /\bvite\b/i.test(lowerText)
+    ) {
+      type = "vitamine";
+      if (
+        /\bvitamine\s*k\b/i.test(lowerText) ||
+        /\bvit\s*k\b/i.test(lowerText) ||
+        /\bkappa\b/i.test(lowerText) ||
+        /\bvite\s*k\b/i.test(lowerText)
+      ) {
+        nomVitamine = "Vitamine K";
+      } else if (
+        /\bvitamine\s*d\b/i.test(lowerText) ||
+        /\bvit\s*d\b/i.test(lowerText) ||
+        /\bd\s*vit\b/i.test(lowerText) ||
+        /\bvit\s*d\b/i.test(lowerText) ||
+        /\bvit\s*(dé|de|d)\b/i.test(lowerText) ||
+        /\bvite\s*d\b/i.test(lowerText) ||
+        /\bvite\s*(dé|de|d)\b/i.test(lowerText)
+      ) {
+        nomVitamine = "Vitamine D";
+      } else {
+        nomVitamine = "Vitamine D";
+      }
     }
 
     // Détection sommeil
@@ -434,6 +507,7 @@ class VoiceCommandService {
       coteDroit,
       pipi,
       popo,
+      nomVitamine,
       timeOffset,
       timestamp,
       rawText: text,
@@ -486,6 +560,25 @@ class VoiceCommandService {
           type: "couche",
           pipi: command.pipi || false,
           popo: command.popo || false,
+        };
+
+      case "miction":
+        return {
+          ...baseData,
+          type: "miction",
+        };
+
+      case "selle":
+        return {
+          ...baseData,
+          type: "selle",
+        };
+
+      case "vitamine":
+        return {
+          ...baseData,
+          type: "vitamine",
+          nomVitamine: command.nomVitamine || "Vitamine D",
         };
 
       case "sommeil":

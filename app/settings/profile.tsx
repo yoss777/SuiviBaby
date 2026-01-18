@@ -73,7 +73,7 @@ export default function ProfileScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['top','bottom']}>
         <Stack.Screen
           options={{
             title: 'Profil',

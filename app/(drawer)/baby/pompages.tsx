@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  InteractionManager,
   Platform,
   Pressable,
   ScrollView,
@@ -80,6 +81,8 @@ export default function PompagesScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
 
   // États des données
   const [pompages, setPompages] = useState<Pompage[]>([]);
@@ -139,14 +142,19 @@ export default function PompagesScreen() {
   }, []);
 
   // Gérer l'ouverture du modal d'ajout
+  const expandBottomSheet = useCallback(() => {
+    bottomSheetRef.current?.expand();
+    setTimeout(() => bottomSheetRef.current?.expand(), 250);
+  }, []);
+
   const openAddModal = useCallback(() => {
     setDateHeure(new Date());
     setEditingPompage(null);
     setIsSubmitting(false);
     setQuantiteGauche(100);
     setQuantiteDroite(100);
-    bottomSheetRef.current?.expand();
-  }, []);
+    expandBottomSheet();
+  }, [expandBottomSheet]);
 
   // Définir les boutons du header (calendrier + ajouter)
   useFocusEffect(
@@ -201,16 +209,22 @@ export default function PompagesScreen() {
   // ============================================
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
-  useEffect(() => {
-    if (openModal === "true") {
-      const timer = setTimeout(() => {
-        openAddModal();
-        router.replace("/(drawer)/baby/pompages");
-      }, 100);
+  useFocusEffect(
+    useCallback(() => {
+      if (openModal !== "true") return;
+      setPendingOpen(true);
+    }, [openModal])
+  );
 
-      return () => clearTimeout(timer);
-    }
-  }, [openModal, openAddModal]);
+  useEffect(() => {
+    if (!pendingOpen || !layoutReady) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      openAddModal();
+      router.replace("/(drawer)/baby/pompages");
+      setPendingOpen(false);
+    });
+    return () => task.cancel?.();
+  }, [pendingOpen, layoutReady, openAddModal, router]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -828,6 +842,7 @@ const renderDayGroup = ({ item }: { item: PompageGroup }) => {
           { backgroundColor: Colors[colorScheme].background },
         ]}
         edges={["bottom"]}
+        onLayout={() => setLayoutReady(true)}
       >
         <View>
           {/* Filtres */}
@@ -1415,7 +1430,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 100,
   },
   emptyText: {
     fontSize: 18,

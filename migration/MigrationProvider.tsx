@@ -117,16 +117,26 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
       const lastCheck = lastCheckStr ? new Date(lastCheckStr) : null;
 
       if (phase && userId && childId) {
+        const storedPhase = phase as MigrationPhase;
+        const effectivePhase =
+          storedPhase === "COMPLETE" ? storedPhase : "COMPLETE";
+
+        if (effectivePhase !== storedPhase) {
+          await AsyncStorage.setItem(STORAGE_KEYS.PHASE, effectivePhase);
+        }
+
         setState(prev => ({
           ...prev,
-          phase: phase as MigrationPhase,
+          phase: effectivePhase,
           userId,
           childId,
           lastCheck,
         }));
 
         // Configurer les services selon la phase
-        configureServicesForPhase(phase as MigrationPhase);
+        configureServicesForPhase(effectivePhase);
+      } else {
+        configureServicesForPhase(state.phase);
       }
     } catch (error) {
       console.error('Erreur chargement état migration:', error);

@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as FileSystem from "expo-file-system";
-import { Stack } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -25,6 +25,7 @@ import type { Child } from "@/contexts/BabyContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Event, EventType, obtenirEvenements } from "@/services/eventsService";
+import { obtenirPreferences } from "@/services/userPreferencesService";
 
 interface ExportFormat {
   id: string;
@@ -71,6 +72,9 @@ const EVENT_TYPES: {
 export default function ExportScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const { userName, email } = useAuth();
+  const { afterDelete } = useLocalSearchParams();
+  const router = useRouter();
+  const isAutoDeleteFlow = afterDelete === "1";
   const { children: visibleChildren, loading: childrenLoading } = useBaby();
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -83,6 +87,8 @@ export default function ExportScreen() {
     title: string;
     message: string;
     mode: "text" | "summary";
+    confirmText?: string;
+    onConfirm?: () => void;
   }>({
     visible: false,
     title: "",
@@ -92,6 +98,12 @@ export default function ExportScreen() {
   const [exportSummary, setExportSummary] = useState<ExportSummary[]>([]);
   const [summaryIndex, setSummaryIndex] = useState(0);
   const summaryScrollRef = useRef<ScrollView | null>(null);
+  const autoExportTriggered = useRef(false);
+  const [preferences, setPreferences] = useState<{
+    notifications?: any;
+    theme?: string;
+    language?: string;
+  }>({});
 
   const exportFormats: ExportFormat[] = [
     {
@@ -111,23 +123,38 @@ export default function ExportScreen() {
         return;
       }
       try {
-        const childrenWithEvents = await Promise.all(
-          visibleChildren.map(async (child) => {
-            const events = await obtenirEvenements(child.id);
-            return { child, events, selected: true };
-          })
-        );
+        const [prefs, childrenWithEvents] = await Promise.all([
+          obtenirPreferences().catch(() => null),
+          Promise.all(
+            visibleChildren.map(async (child) => {
+              const events = await obtenirEvenements(child.id);
+              return { child, events, selected: true };
+            })
+          ),
+        ]);
+
+        if (prefs) {
+          setPreferences({
+            notifications: prefs.notifications,
+            theme: prefs.theme,
+            language: prefs.language,
+          });
+        }
 
         if (isMounted) {
           setChildren((prev) => {
-            const SélectionMap = new Map(
+            const selectionMap = new Map(
               prev.map((item) => [item.child.id, item.selected])
             );
             return childrenWithEvents.map((item) => ({
               ...item,
-              selected: SélectionMap.get(item.child.id) ?? true,
+              selected: isAutoDeleteFlow ? true : selectionMap.get(item.child.id) ?? true,
             }));
           });
+
+          if (isAutoDeleteFlow) {
+            setSelectedTypes(new Set(EVENT_TYPES.map((item) => item.id)));
+          }
         }
       } catch (error) {
         if (isMounted) {
@@ -147,7 +174,7 @@ export default function ExportScreen() {
     return () => {
       isMounted = false;
     };
-  }, [childrenLoading, visibleChildren]);
+  }, [childrenLoading, visibleChildren, isAutoDeleteFlow]);
 
   const closeModal = () => {
     setModalConfig((prev) => ({
@@ -155,6 +182,8 @@ export default function ExportScreen() {
       visible: false,
       mode: "text",
       message: "",
+      confirmText: undefined,
+      onConfirm: undefined,
     }));
   };
 
@@ -184,6 +213,14 @@ export default function ExportScreen() {
     () => Array.from(selectedTypes),
     [selectedTypes]
   );
+
+  useEffect(() => {
+    if (!isAutoDeleteFlow) return;
+    if (autoExportTriggered.current) return;
+    if (childrenLoading || isLoading || isExporting) return;
+    autoExportTriggered.current = true;
+    handleExport(true);
+  }, [isAutoDeleteFlow, childrenLoading, isLoading, isExporting]);
 
   const toggleChild = (childId: string) => {
     setChildren((prev) =>
@@ -392,7 +429,7 @@ export default function ExportScreen() {
   const isExportDisabled =
     isExporting || isLoading || !hasSelectedChildren || !hasSelectedTypes;
 
-  const handleExport = async () => {
+  const handleExport = async (force = false) => {
     if (Platform.OS === "web") {
       setModalConfig({
         visible: true,
@@ -403,7 +440,7 @@ export default function ExportScreen() {
       return;
     }
 
-    if (selectedChildren.length === 0) {
+    if (!force && selectedChildren.length === 0) {
       setModalConfig({
         visible: true,
         title: "Sélection requise",
@@ -413,7 +450,7 @@ export default function ExportScreen() {
       return;
     }
 
-    if (selectedTypesArray.length === 0) {
+    if (!force && selectedTypesArray.length === 0) {
       setModalConfig({
         visible: true,
         title: "Sélection requise",
@@ -425,6 +462,10 @@ export default function ExportScreen() {
 
     try {
       setIsExporting(true);
+      const effectiveTypes = force
+        ? EVENT_TYPES.map((item) => item.id)
+        : selectedTypesArray;
+      const effectiveChildren = force ? children : selectedChildren;
 
       const exportData = {
         exportDate: new Date().toISOString(),
@@ -434,15 +475,23 @@ export default function ExportScreen() {
         },
         format: "json",
         filters: {
-          eventTypes: selectedTypesArray,
+          eventTypes: effectiveTypes,
         },
         data: {
-          children: selectedChildren.map((item) => {
+          account: {
+            email: email ?? user.email ?? null,
+            pseudo: userName ?? null,
+          },
+          preferences,
+          children: effectiveChildren.map((item) => {
             const filteredEvents = item.events.filter((event) =>
-              selectedTypes.has(event.type)
+              effectiveTypes.includes(event.type)
             );
             return {
               childName: item.child.name,
+              birthDate: item.child.birthDate ?? null,
+              gender: item.child.gender ?? null,
+              photoUri: item.child.photoUri ?? null,
               events: filteredEvents.map(serializeValue),
             };
           }),
@@ -474,11 +523,18 @@ export default function ExportScreen() {
       setSummaryIndex(0);
       setExportSummary(summary);
 
+      const shouldReturnToDelete = isAutoDeleteFlow;
       setModalConfig({
         visible: true,
         title: "Export terminé",
         message: "",
         mode: "summary",
+        confirmText: shouldReturnToDelete ? "Continuer la suppression de votre compte" : undefined,
+        onConfirm: shouldReturnToDelete
+          ? () => {
+              router.replace("/(drawer)/settings?delete=1");
+            }
+          : undefined,
       });
     } catch (error) {
       setModalConfig({
@@ -704,7 +760,7 @@ export default function ExportScreen() {
           styles.container,
           { backgroundColor: Colors[colorScheme].background },
         ]}
-        edges={["bottom"]}
+        edges={["top", "bottom"]}
       >
         <Stack.Screen
           options={{
@@ -712,10 +768,25 @@ export default function ExportScreen() {
             headerBackTitle: "Retour",
           }}
         />
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+        {isAutoDeleteFlow ? (
+          <View style={styles.autoExportLoader}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+            <Text style={[styles.autoExportText, { color: Colors[colorScheme].text }]}>
+              {isExporting || isLoading ? "Preparation de l'export..." : "Export termine."}
+            </Text>
+            {(isExporting || isLoading) && (
+              <View style={[styles.autoDeleteButton, { backgroundColor: "#dc3545" }]}>
+                <Text style={styles.autoDeleteButtonText}>
+                  Export en cours...
+                </Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
           <ThemedView style={styles.section}>
             <ThemedText
               style={[
@@ -848,7 +919,8 @@ export default function ExportScreen() {
               {isExporting ? "Export en cours..." : "Exporter les donnees"}
             </Text>
           </TouchableOpacity>
-        </ScrollView>
+          </ScrollView>
+        )}
         <InfoModal
           visible={modalConfig.visible}
           title={modalConfig.title}
@@ -857,9 +929,11 @@ export default function ExportScreen() {
               ? renderSummarySlider(exportSummary)
               : modalConfig.message
           }
+          confirmText={modalConfig.confirmText}
           backgroundColor={Colors[colorScheme].background}
           textColor={Colors[colorScheme].text}
           onClose={closeModal}
+          onConfirm={modalConfig.onConfirm}
         />
       </SafeAreaView>
     </ThemedView>
@@ -1075,5 +1149,28 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  autoExportLoader: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 24,
+  },
+  autoExportText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  autoDeleteButton: {
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    opacity: 0.6,
+  },
+  autoDeleteButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

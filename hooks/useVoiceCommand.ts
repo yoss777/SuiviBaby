@@ -1,54 +1,77 @@
 // hooks/useVoiceCommand.ts
-import { ajouterMiction } from "@/services/mictionsService";
-import { ajouterPompage } from "@/services/pompagesService";
-import { ajouterSelle } from "@/services/sellesService";
-import { ajouterTetee } from "@/services/teteesService";
+import {
+  ajouterBiberon,
+  ajouterMiction,
+  ajouterPompage,
+  ajouterSelle,
+  ajouterTetee,
+  ajouterVitamine,
+} from "@/migration/eventsDoubleWriteService";
 import VoiceCommandService, {
   CommandType,
   ParsedCommand,
 } from "@/services/voiceCommandService";
-import { useState } from "react";
-import { Alert, Platform } from "react-native";
+import { useRef, useState } from "react";
 // Décommentez quand vous aurez créé ces services :
 // import { ajouterBiberon } from '@/services/biberonsService';
 // import { ajouterCouche } from '@/services/couchesService';
 // import { ajouterSommeil } from '@/services/sommeilsService';
 
-export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
+export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcription, setTranscription] = useState<string>("");
   const [testMode, setTestMode] = useState(useTestMode);
+  const [testPromptVisible, setTestPromptVisible] = useState(false);
+  const [testPromptText, setTestPromptText] = useState("");
+  const [pendingCommand, setPendingCommand] = useState<ParsedCommand | null>(null);
+  const [diaperChoice, setDiaperChoiceState] = useState(true);
+  const diaperChoiceRef = useRef(true);
+  const [excretionSelection, setExcretionSelectionState] = useState({
+    pipi: false,
+    popo: false,
+  });
+  const excretionSelectionRef = useRef({ pipi: false, popo: false });
+  const [infoModal, setInfoModal] = useState({
+    visible: false,
+    title: "",
+    message: "",
+  });
+  const [confirmModal, setConfirmModal] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    onConfirm: null as null | (() => void),
+  });
+  const [permissionModal, setPermissionModal] = useState(false);
+  const [transcriptionErrorModal, setTranscriptionErrorModal] = useState(false);
 
   /**
    * Démarre l'enregistrement vocal
    */
   const startVoiceCommand = async () => {
     try {
+      if (isRecording || isProcessing) return;
       if (!childId) {
-        Alert.alert("Erreur", "Aucun enfant sélectionné");
+        setInfoModal({
+          visible: true,
+          title: "Erreur",
+          message: "Aucun enfant sélectionné",
+        });
+        return;
+      }
+
+      if (testMode) {
+        setIsProcessing(true);
+        setTestPromptText("");
+        setTestPromptVisible(true);
         return;
       }
 
       // Vérifier les permissions
       const hasPermission = await VoiceCommandService.requestPermissions();
       if (!hasPermission) {
-        Alert.alert(
-          "Permission requise",
-          "L'accès au microphone est nécessaire pour utiliser les commandes vocales.",
-          [
-            { text: "Annuler", style: "cancel" },
-            {
-              text: "Paramètres",
-              onPress: () => {
-                // Ouvrir les paramètres de l'application
-                if (Platform.OS === "ios") {
-                  // Linking.openURL('app-settings:');
-                }
-              },
-            },
-          ]
-        );
+        setPermissionModal(true);
         return;
       }
 
@@ -59,7 +82,11 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
       console.log("🎤 Enregistrement démarré - Parlez maintenant");
     } catch (error) {
       console.error("Erreur démarrage commande vocale:", error);
-      Alert.alert("Erreur", "Impossible de démarrer l'enregistrement");
+      setInfoModal({
+        visible: true,
+        title: "Erreur",
+        message: "Impossible de démarrer l'enregistrement",
+      });
       setIsRecording(false);
     }
   };
@@ -69,6 +96,16 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
    */
   const stopVoiceCommand = async () => {
     try {
+      if (!isRecording) {
+        setIsProcessing(false);
+        return;
+      }
+      if (testMode) {
+        setTestPromptText("");
+        setTestPromptVisible(true);
+        return;
+      }
+
       setIsRecording(false);
       setIsProcessing(true);
 
@@ -84,20 +121,8 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
       // MODE TEST: Simulation pour développement
       // ===================================
       if (testMode) {
-        Alert.prompt(
-          "Commande vocale (MODE TEST)",
-          "Entrez votre commande pour tester:\n\nExemples:\n• Ajoute un biberon de 150ml\n• Ajoute une tétée gauche il y a 10min\n• Ajoute un pipi popo",
-          async (text) => {
-            if (text && text.trim()) {
-              await processVoiceCommand(text.trim());
-            } else {
-              setIsProcessing(false);
-            }
-          },
-          "plain-text",
-          "",
-          "default"
-        );
+        setTestPromptText("");
+        setTestPromptVisible(true);
         return;
       }
 
@@ -107,14 +132,16 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
       try {
         // Vérifier si l'API key est configurée
         if (!VoiceCommandService.hasApiKey()) {
-          Alert.alert(
-            "Configuration requise",
-            "L'API AssemblyAI n'est pas configurée.\n\nPassez en mode test ou configurez votre clé API.",
-            [
-              { text: "Mode Test", onPress: () => setTestMode(true) },
-              { text: "Annuler", style: "cancel" },
-            ]
-          );
+          setConfirmModal({
+            visible: true,
+            title: "Configuration requise",
+            message:
+              "L'API AssemblyAI n'est pas configurée.\n\nLe mode test va être activé.",
+            onConfirm: () => {
+              setTestMode(true);
+              startVoiceCommand();
+            },
+          });
           setIsProcessing(false);
           return;
         }
@@ -128,33 +155,24 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
         if (transcribedText && transcribedText.trim()) {
           await processVoiceCommand(transcribedText.trim());
         } else {
-          Alert.alert("Erreur", "Aucun texte détecté dans l'audio");
+          setInfoModal({
+            visible: true,
+            title: "Erreur",
+            message: "Aucun texte détecté dans l'audio",
+          });
           setIsProcessing(false);
         }
       } catch (error) {
         console.error("Erreur transcription:", error);
-        Alert.alert(
-          "Erreur de transcription",
-          "Impossible de transcrire l'audio. Voulez-vous réessayer en mode test ?",
-          [
-            {
-              text: "Mode Test",
-              onPress: () => {
-                setTestMode(true);
-                stopVoiceCommand(); // Réessayer
-              },
-            },
-            {
-              text: "Annuler",
-              style: "cancel",
-              onPress: () => setIsProcessing(false),
-            },
-          ]
-        );
+        setTranscriptionErrorModal(true);
       }
     } catch (error) {
       console.error("Erreur traitement commande vocale:", error);
-      Alert.alert("Erreur", "Impossible de traiter la commande vocale");
+      setInfoModal({
+        visible: true,
+        title: "Erreur",
+        message: "Impossible de traiter la commande vocale",
+      });
       setIsProcessing(false);
     }
   };
@@ -171,9 +189,11 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
       const command = VoiceCommandService.parseCommand(text);
 
       if (!command) {
-        Alert.alert(
-          "Commande non reconnue",
-          `Je n'ai pas compris: "${text}"\n\n` +
+        setInfoModal({
+          visible: true,
+          title: "Commande non reconnue",
+          message:
+            `Je n'ai pas compris: "${text}"\n\n` +
             `Exemples de commandes:\n\n` +
             `🍼 "Ajoute un biberon de 150ml"\n` +
             `🤱 "Ajoute une tétée gauche"\n` +
@@ -181,35 +201,58 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
             `🚼 "Ajoute un pipi popo"\n` +
             `😴 "Ajoute un sommeil"\n` +
             `⏰ "...il y a 15 minutes" (optionnel)`,
-          [{ text: "OK" }]
-        );
+        });
         setIsProcessing(false);
         return;
       }
 
-      console.log("✅ Commande analysée:", command);
+      const commandWithChildId = { ...command, childId };
+      console.log("✅ Commande analysée:", commandWithChildId);
 
       // Confirmation avant ajout
-      const confirmMessage = formatConfirmationMessage(command);
+      const confirmMessage = formatConfirmationMessage(commandWithChildId);
 
-      Alert.alert("Confirmer l'ajout", confirmMessage, [
-        {
-          text: "Annuler",
-          style: "cancel",
-          onPress: () => setIsProcessing(false),
+      setPendingCommand(commandWithChildId);
+      if (
+        commandWithChildId.type === "couche" ||
+        commandWithChildId.type === "miction" ||
+        commandWithChildId.type === "selle"
+      ) {
+        setDiaperChoiceState(true);
+        diaperChoiceRef.current = true;
+      }
+      if (commandWithChildId.type === "couche") {
+        const hasPipi = !!("pipi" in commandWithChildId && commandWithChildId.pipi);
+        const hasPopo = !!("popo" in commandWithChildId && commandWithChildId.popo);
+        const nextSelection = {
+          pipi: hasPipi || (!hasPipi && !hasPopo),
+          popo: hasPopo,
+        };
+        setExcretionSelectionState(nextSelection);
+        excretionSelectionRef.current = nextSelection;
+      }
+
+      setConfirmModal({
+        visible: true,
+        title: "Confirmer l'ajout",
+        message: confirmMessage,
+        onConfirm: async () => {
+          await executeCommand(
+            commandWithChildId,
+            childId,
+            diaperChoiceRef.current,
+            excretionSelectionRef.current
+          );
+          setIsProcessing(false);
         },
-        {
-          text: "Confirmer",
-          style: "default",
-          onPress: async () => {
-            await executeCommand(command, childId);
-            setIsProcessing(false);
-          },
-        },
-      ]);
+      });
     } catch (error) {
       console.error("Erreur processing:", error);
-      Alert.alert("Erreur", "Impossible de traiter la commande");
+      setInfoModal({
+        visible: true,
+        title: "Erreur",
+        message: "Impossible de traiter la commande",
+      });
       setIsProcessing(false);
     }
   };
@@ -222,6 +265,9 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
       biberon: "🍼",
       tetee: "🤱",
       couche: "🚼",
+      miction: "💧",
+      selle: "💩",
+      vitamine: "💊",
       sommeil: "😴",
       pompage: "🤱‍🍼",
       autre: "📝",
@@ -229,7 +275,9 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
 
     const emoji = emojis[command.type] || "📝";
     const typeDisplay =
-      command.type.charAt(0).toUpperCase() + command.type.slice(1);
+      command.type === "couche"
+        ? "Change de couche"
+        : command.type.charAt(0).toUpperCase() + command.type.slice(1);
 
     let message = `${emoji} ${typeDisplay}\n\n`;
 
@@ -284,7 +332,21 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
         const types = [];
         if (command.pipi) types.push("Pipi");
         if (command.popo) types.push("Popo");
-        message += `💧 Type: ${types.join(" + ")}`;
+        message += `💧 Type: ${
+          types.length > 0 ? types.join(" + ") : "Pipi/Popo (à sélectionner)"
+        }`;
+        break;
+
+      case "miction":
+        message += `💧 Type: Pipi`;
+        break;
+
+      case "selle":
+        message += `💧 Type: Popo`;
+        break;
+
+      case "vitamine":
+        message += `💊 ${command.nomVitamine || "Vitamine D"}`;
         break;
 
       case "sommeil":
@@ -304,7 +366,12 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
   /**
    * Execute la commande dans Firebase
    */
-  const executeCommand = async (command: ParsedCommand, childId: string) => {
+  const executeCommand = async (
+    command: ParsedCommand,
+    childId: string,
+    avecCouche?: boolean,
+    excretionSelection?: { pipi: boolean; popo: boolean }
+  ) => {
     try {
       const data = VoiceCommandService.formatDataForFirebase(command);
 
@@ -312,14 +379,24 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
 
       switch (command.type) {
         case "tetee":
+          const splitDuration =
+            command.coteGauche && command.coteDroit
+              ? command.quantite
+                ? command.quantite / 2
+                : undefined
+              : command.quantite;
           const dataTetee = {
             ...data, // quantité, durée, sein, notes, etc.
             type: "seins" as const,
+            dureeGauche: command.coteGauche ? splitDuration : undefined,
+            dureeDroite: command.coteDroit ? splitDuration : undefined,
           };
           await ajouterTetee(childId, dataTetee);
-          Alert.alert("✅ Succès", "Tétée ajoutée avec succès", [
-            { text: "OK" },
-          ]);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Tétée ajoutée avec succès",
+          });
           break;
 
         case "biberon":
@@ -327,10 +404,12 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
             ...data,
             type: "biberons" as const,
           };
-          await ajouterTetee(childId, dataBiberon);
-          Alert.alert("✅ Succès", "Biberon ajouté avec succès", [
-            { text: "OK" },
-          ]);
+          await ajouterBiberon(childId, dataBiberon);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Biberon ajouté avec succès",
+          });
           break;
 
         case "pompage":
@@ -339,26 +418,33 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
             type: "pompage" as const,
           };
           await ajouterPompage(childId, dataPompage);
-          Alert.alert("✅ Succès", "Pompage ajouté avec succès", [
-            { text: "OK" },
-          ]);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Pompage ajouté avec succès",
+          });
           break;
 
         case "couche":
+          const { type: _unusedType, ...dataCoucheBase } = data as {
+            type?: string;
+          };
           const dataCouche = {
-            ...data,
-            type: "excretion" as const,
+            ...dataCoucheBase,
+            avecCouche: true,
           };
 
           const promesses = [];
+          const shouldAddPipi = excretionSelection?.pipi ?? false;
+          const shouldAddPopo = excretionSelection?.popo ?? false;
 
           // Si pipi → on ajoute une miction
-          if (command.pipi) {
+          if (shouldAddPipi) {
             promesses.push(ajouterMiction(childId, dataCouche));
           }
 
           // Si popo → on ajoute une selle
-          if (command.popo) {
+          if (shouldAddPopo) {
             promesses.push(ajouterSelle(childId, dataCouche));
           }
 
@@ -367,43 +453,92 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
             await Promise.all(promesses);
 
             // Un seul alert, peu importe si c'était pipi, popo ou les deux
-            Alert.alert(
-              "✅ Succès",
-              "Excrétion ajoutée avec succès", // ou "Couche ajoutée avec succès" si tu préfères
-              [{ text: "OK" }]
-            );
+            setInfoModal({
+              visible: true,
+              title: "Succès",
+              message: "Excrétion ajoutée avec succès",
+            });
           } else {
             // Optionnel : cas improbable où ni pipi ni popo (peut arriver si commande mal formée)
-            Alert.alert("ℹ️ Info", "Aucune excrétion à ajouter.", [
-              { text: "OK" },
-            ]);
+            setInfoModal({
+              visible: true,
+              title: "Info",
+              message: "Aucune excrétion à ajouter.",
+            });
           }
+          break;
+
+        case "miction":
+          const { type: _unusedMictionType, ...dataMictionBase } = data as {
+            type?: string;
+          };
+          const dataMiction = {
+            ...dataMictionBase,
+            avecCouche: !!avecCouche,
+          };
+          await ajouterMiction(childId, dataMiction);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Miction ajoutée avec succès",
+          });
+          break;
+
+        case "selle":
+          const { type: _unusedSelleType, ...dataSelleBase } = data as {
+            type?: string;
+          };
+          const dataSelle = {
+            ...dataSelleBase,
+            avecCouche: !!avecCouche,
+          };
+          await ajouterSelle(childId, dataSelle);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Selle ajoutée avec succès",
+          });
+          break;
+
+        case "vitamine":
+          const dataVitamine = {
+            ...data,
+            nomVitamine: command.nomVitamine || "Vitamine D",
+          };
+          await ajouterVitamine(childId, dataVitamine);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Vitamine ajoutée avec succès",
+          });
           break;
 
         case "sommeil":
           // await ajouterSommeil(childId, data);
-          Alert.alert(
-            "⚠️ En développement",
-            "Le service sommeil n'est pas encore activé.\nDécommentez l'import dans useVoiceCommand.ts",
-            [{ text: "OK" }]
-          );
+          setInfoModal({
+            visible: true,
+            title: "En développement",
+            message:
+              "Le service sommeil n'est pas encore activé.\nDécommentez l'import dans useVoiceCommand.ts",
+          });
           break;
 
         default:
-          Alert.alert(
-            "⚠️ Info",
-            `Le type "${command.type}" n'est pas encore implémenté`
-          );
+          setInfoModal({
+            visible: true,
+            title: "Info",
+            message: `Le type "${command.type}" n'est pas encore implémenté`,
+          });
       }
     } catch (error) {
       console.error("❌ Erreur exécution commande:", error);
-      Alert.alert(
-        "Erreur",
-        `Impossible d'ajouter l'élément:\n${
+      setInfoModal({
+        visible: true,
+        title: "Erreur",
+        message: `Impossible d'ajouter l'élément:\n${
           error instanceof Error ? error.message : "Erreur inconnue"
         }`,
-        [{ text: "OK" }]
-      );
+      });
     }
   };
 
@@ -429,15 +564,77 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = true) {
     setTestMode(!testMode);
   };
 
+  const setDiaperChoice = (value: boolean) => {
+    setDiaperChoiceState(value);
+    diaperChoiceRef.current = value;
+  };
+
+  const setExcretionSelection = (next: {
+    pipi: boolean;
+    popo: boolean;
+  }) => {
+    setExcretionSelectionState(next);
+    excretionSelectionRef.current = next;
+  };
+
+  const clearPendingCommand = () => {
+    setPendingCommand(null);
+    setDiaperChoiceState(true);
+    diaperChoiceRef.current = true;
+    setExcretionSelectionState({ pipi: false, popo: false });
+    excretionSelectionRef.current = { pipi: false, popo: false };
+    setIsProcessing(false);
+  };
+
+  const cancelTestPrompt = () => {
+    setTestPromptVisible(false);
+    setTestPromptText("");
+    setIsProcessing(false);
+  };
+
+  const submitTestPrompt = async () => {
+    const text = testPromptText.trim();
+    if (!text) {
+      cancelTestPrompt();
+      return;
+    }
+
+    try {
+      setTestPromptVisible(false);
+      await processVoiceCommand(text);
+    } catch {
+      setIsProcessing(false);
+    }
+  };
+
   return {
     isRecording,
     isProcessing,
     transcription,
     testMode,
+    testPromptVisible,
+    testPromptText,
+    pendingCommand,
+    diaperChoice,
+    excretionSelection,
+    infoModal,
+    confirmModal,
+    permissionModal,
+    transcriptionErrorModal,
     startVoiceCommand,
     stopVoiceCommand,
     cancelRecording,
     toggleTestMode,
+    setTestPromptText,
+    cancelTestPrompt,
+    submitTestPrompt,
+    setDiaperChoice,
+    setExcretionSelection,
+    clearPendingCommand,
+    setInfoModal,
+    setConfirmModal,
+    setPermissionModal,
+    setTranscriptionErrorModal,
     processVoiceCommand, // Pour tester manuellement
   };
 }
