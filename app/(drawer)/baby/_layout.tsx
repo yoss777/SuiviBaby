@@ -29,9 +29,9 @@ export default function BabyTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="chrono"
+        name="journal"
         options={{
-          title: 'Chrono',
+          title: 'Journal',
           tabBarIcon: ({ color }) => <FontAwesome size={28} name="clock" color={color} />,
         }}
       />

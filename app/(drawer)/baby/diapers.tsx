@@ -648,7 +648,7 @@ export default function DiapersScreen() {
   const stashReturnTo = () => {
     const target = normalizeParam(returnTo);
     if (!target) return;
-    if (target === "home" || target === "chrono") {
+    if (target === "home" || target === "chrono" || target === "journal") {
       returnToRef.current = target;
       return;
     }
@@ -662,6 +662,8 @@ export default function DiapersScreen() {
       router.replace("/(drawer)/baby/home");
     } else if (target === "chrono") {
       router.replace("/(drawer)/baby/chrono");
+    } else if (target === "journal") {
+      router.replace("/(drawer)/baby/journal");
     }
   };
 
