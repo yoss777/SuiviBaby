@@ -11,6 +11,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { GlobalSheetManager } from "@/components/ui/GlobalSheetManager";
 
 export const unstable_settings = {
   anchor: "(drawer)",
@@ -26,6 +27,7 @@ export default function RootLayout() {
               <MigrationProvider>
                 <SheetProvider>
                   <AppNavigation />
+                  <GlobalSheetManager />
                 </SheetProvider>
               </MigrationProvider>
             </BabyProvider>

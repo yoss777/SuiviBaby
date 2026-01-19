@@ -1,5 +1,4 @@
 import { Colors } from '@/constants/theme';
-import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import FontAwesome from '@expo/vector-icons/FontAwesome5';
 import { Tabs } from 'expo-router';
@@ -7,7 +6,6 @@ import { Platform } from 'react-native';
 
 export default function BabyTabLayout() {
   const colorScheme = useColorScheme() ?? 'light';
-  const { isOpen } = useSheet();
 
   return (
     <Tabs

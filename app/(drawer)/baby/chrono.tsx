@@ -1,4 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
+import { InfoModal } from "@/components/ui/InfoModal";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -7,10 +8,11 @@ import {
   type Event,
   type EventType,
 } from "@/services/eventsService";
-import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,8 +24,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { InfoModal } from "@/components/ui/InfoModal";
 
 type RangeOption = 7 | 14 | 30;
 
@@ -53,7 +53,6 @@ const FILTER_ICON_COLORS: Record<FilterType, string> = {
   immunos: "#9C27B0",
   diapers: "#17a2b8",
 };
-
 
 const EVENT_LABELS: Record<EventType, string> = {
   biberon: "Biberon",
@@ -126,7 +125,6 @@ function formatTime(date: Date) {
   });
 }
 
-
 function formatDayLabel(date: Date) {
   const today = startOfDay(new Date()).getTime();
   const target = startOfDay(date).getTime();
@@ -139,7 +137,6 @@ function formatDayLabel(date: Date) {
     month: "long",
   });
 }
-
 
 function buildSections(events: Event[]): TimelineSection[] {
   const grouped = new Map<string, { date: Date; items: Event[] }>();
@@ -211,11 +208,17 @@ function orderCounts(counts: Map<EventType, number>) {
 function renderEventIcon(
   type: EventType,
   color: string,
-  size: number
+  size: number,
 ): JSX.Element {
   const icon = EVENT_ICONS[type];
   if (icon.lib === "mci") {
-    return <MaterialCommunityIcons name={icon.name as any} size={size} color={color} />;
+    return (
+      <MaterialCommunityIcons
+        name={icon.name as any}
+        size={size}
+        color={color}
+      />
+    );
   }
   return <FontAwesome name={icon.name as any} size={size} color={color} />;
 }
@@ -285,7 +288,9 @@ export default function ChronoScreen() {
 
     const loadPrefs = async () => {
       try {
-        const raw = await AsyncStorage.getItem(`${STORAGE_KEY}:${activeChild.id}`);
+        const raw = await AsyncStorage.getItem(
+          `${STORAGE_KEY}:${activeChild.id}`,
+        );
         if (!raw || cancelled) {
           hasLoadedPrefs.current = true;
           return;
@@ -316,7 +321,9 @@ export default function ChronoScreen() {
   useEffect(() => {
     if (!activeChild?.id || !hasLoadedPrefs.current) return;
     const payload = JSON.stringify({ range, selectedTypes });
-    AsyncStorage.setItem(`${STORAGE_KEY}:${activeChild.id}`, payload).catch(() => {});
+    AsyncStorage.setItem(`${STORAGE_KEY}:${activeChild.id}`, payload).catch(
+      () => {},
+    );
   }, [activeChild?.id, range, selectedTypes]);
 
   const filteredEvents = useMemo(() => {
@@ -412,6 +419,7 @@ export default function ChronoScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
           contentContainerStyle={styles.filterRow}
         >
           {ALL_TYPES.map((type) => {
@@ -456,195 +464,195 @@ export default function ChronoScreen() {
           })}
         </ScrollView>
 
-        {loading ? (
-          <View style={styles.loading}>
-            <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-            <Text
-              style={[
-                styles.loadingText,
-                { color: Colors[colorScheme].tabIconDefault },
-              ]}
-            >
-              Chargement de la timeline...
-            </Text>
-          </View>
-        ) : sections.length === 0 ? (
-          <View style={styles.emptyState}>
-            <FontAwesome
-              name="calendar-xmark"
-              size={48}
-              color={Colors[colorScheme].tabIconDefault}
-            />
-            <Text
-              style={[styles.emptyTitle, { color: Colors[colorScheme].text }]}
-            >
-              Aucun événement
-            </Text>
-            <Text
-              style={[
-                styles.emptyText,
-                { color: Colors[colorScheme].tabIconDefault },
-              ]}
-            >
-              {selectedTypes.length === 0
-                ? "Selectionnez au moins un type pour afficher la timeline."
-                : "Aucun evenement pour ces filtres."}
-            </Text>
-          </View>
-        ) : (
-          <SectionList
-            sections={sections}
-            keyExtractor={(item) => item.id || `${item.type}-${item.date}`}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContent}
-            // --- Optimisations de la virtualisation ---
-            windowSize={11}
-            initialNumToRender={15}
-            maxToRenderPerBatch={10}
-            removeClippedSubviews={true}
-            updateCellsBatchingPeriod={50}
-            // -----------------------------------------
-            renderSectionHeader={({ section }) => {
-              const counts = buildCounts(section.data);
-              const ordered = orderCounts(counts);
-              const topTypes = ordered.slice(0, 4);
-              const remaining = ordered.slice(4);
-              const remainingTotal = remaining.reduce(
-                (sum, [, count]) => sum + count,
-                0,
-              );
-              return (
-                <View style={styles.sectionHeader}>
-                  <View style={styles.sectionTitleRow}>
-                    <Text
-                      style={[
-                        styles.sectionTitle,
-                        { color: Colors[colorScheme].text },
-                      ]}
-                    >
-                      {section.title}
-                    </Text>
-                    <View style={[styles.countBadge, { borderColor }]}>
+        <View style={styles.content}>
+          {loading ? (
+            <View style={styles.loading}>
+              <ActivityIndicator
+                size="large"
+                color={Colors[colorScheme].tint}
+              />
+              <Text
+                style={[
+                  styles.loadingText,
+                  { color: Colors[colorScheme].tabIconDefault },
+                ]}
+              >
+                Chargement de la timeline...
+              </Text>
+            </View>
+          ) : sections.length === 0 ? (
+            <View style={styles.emptyState}>
+              <FontAwesome
+                name="calendar-xmark"
+                size={48}
+                color={Colors[colorScheme].tabIconDefault}
+              />
+              <Text
+                style={[styles.emptyTitle, { color: Colors[colorScheme].text }]}
+              >
+                Aucun événement
+              </Text>
+              <Text
+                style={[
+                  styles.emptyText,
+                  { color: Colors[colorScheme].tabIconDefault },
+                ]}
+              >
+                {selectedTypes.length === 0
+                  ? "Selectionnez au moins un type pour afficher la timeline."
+                  : "Aucun evenement pour ces filtres."}
+              </Text>
+            </View>
+          ) : (
+            <SectionList
+              sections={sections}
+              keyExtractor={(item) => item.id || `${item.type}-${item.date}`}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+              // --- Optimisations de la virtualisation ---
+              windowSize={11}
+              initialNumToRender={15}
+              maxToRenderPerBatch={10}
+              removeClippedSubviews={true}
+              updateCellsBatchingPeriod={50}
+              // -----------------------------------------
+              renderSectionHeader={({ section }) => {
+                const counts = buildCounts(section.data);
+                const ordered = orderCounts(counts);
+                const topTypes = ordered.slice(0, 4);
+                const remaining = ordered.slice(4);
+                const remainingTotal = remaining.reduce(
+                  (sum, [, count]) => sum + count,
+                  0,
+                );
+                return (
+                  <View style={styles.sectionHeader}>
+                    <View style={styles.sectionTitleRow}>
                       <Text
                         style={[
-                          styles.countText,
+                          styles.sectionTitle,
                           { color: Colors[colorScheme].text },
                         ]}
                       >
-                        {section.data.length}
+                        {section.title}
                       </Text>
+                      <View style={[styles.countBadge, { borderColor }]}>
+                        <Text
+                          style={[
+                            styles.countText,
+                            { color: Colors[colorScheme].text },
+                          ]}
+                        >
+                          {section.data.length}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      {topTypes.map(([type, count]) => (
+                        <View
+                          key={type}
+                          style={[styles.summaryPill, { borderColor }]}
+                        >
+                          {renderEventIcon(type, EVENT_COLORS[type], 11)}
+                          <Text
+                            style={[
+                              styles.summaryText,
+                              { color: Colors[colorScheme].text },
+                            ]}
+                          >
+                            {TYPE_SHORT[type]} {count}
+                          </Text>
+                        </View>
+                      ))}
+                      {remainingTotal > 0 ? (
+                        <View style={[styles.summaryPill, { borderColor }]}>
+                          <Text
+                            style={[
+                              styles.summaryText,
+                              { color: Colors[colorScheme].text },
+                            ]}
+                          >
+                            +{remainingTotal}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
-                  <View style={styles.summaryRow}>
-                    {topTypes.map(([type, count]) => (
+                );
+              }}
+              renderItem={({ item }) => {
+                const date = toDate(item.date);
+                const details = buildDetails(item);
+                const label = EVENT_LABELS[item.type];
+                const accent = EVENT_COLORS[item.type];
+                return (
+                  <View style={styles.itemRow}>
+                    <View style={styles.timelineColumn}>
+                      <View style={[styles.dot, { backgroundColor: accent }]} />
                       <View
-                        key={type}
-                        style={[styles.summaryPill, { borderColor }]}
-                      >
-                        {renderEventIcon(type, EVENT_COLORS[type], 11)}
-                        <Text
-                          style={[
-                            styles.summaryText,
-                            { color: Colors[colorScheme].text },
-                          ]}
-                        >
-                          {TYPE_SHORT[type]} {count}
-                        </Text>
-                      </View>
-                    ))}
-                    {remainingTotal > 0 ? (
-                      <View style={[styles.summaryPill, { borderColor }]}>
-                        <Text
-                          style={[
-                            styles.summaryText,
-                            { color: Colors[colorScheme].text },
-                          ]}
-                        >
-                          +{remainingTotal}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
-              );
-            }}
-            renderItem={({ item }) => {
-              const date = toDate(item.date);
-              const details = buildDetails(item);
-              const label = EVENT_LABELS[item.type];
-              const accent = EVENT_COLORS[item.type];
-              return (
-                <View style={styles.itemRow}>
-                  <View style={styles.timelineColumn}>
-                    <View
-                      style={[
-                        styles.dot,
-                        { backgroundColor: accent },
-                      ]}
-                    />
-                    <View
-                      style={[styles.line, { backgroundColor: borderColor }]}
-                    />
-                  </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.card,
-                      {
-                        backgroundColor: Colors[colorScheme].background,
-                        borderColor,
-                      },
-                    ]}
-                    activeOpacity={0.9}
-                    delayLongPress={250}
-                    onLongPress={() => handleEventLongPress(item)}
-                  >
-                    <View style={styles.cardHeader}>
-                      <View style={styles.cardTitleRow}>
-                        {renderEventIcon(item.type, accent, 14)}
-                        <Text
-                          style={[
-                            styles.cardTitle,
-                            { color: Colors[colorScheme].text },
-                          ]}
-                        >
-                          {label}
-                        </Text>
-                      </View>
-                      <Text
-                        style={[
-                          styles.cardTime,
-                          { color: Colors[colorScheme].tabIconDefault },
-                        ]}
-                      >
-                        {formatTime(date)}
-                      </Text>
+                        style={[styles.line, { backgroundColor: borderColor }]}
+                      />
                     </View>
-                    {details ? (
-                      <Text
-                        style={[
-                          styles.cardDetails,
-                          { color: Colors[colorScheme].tabIconDefault },
-                        ]}
-                      >
-                        {details}
-                      </Text>
-                    ) : null}
-                    {item.note ? (
-                      <Text
-                        style={[
-                          styles.cardNote,
-                          { color: Colors[colorScheme].text },
-                        ]}
-                      >
-                        {item.note}
-                      </Text>
-                    ) : null}
-                  </TouchableOpacity>
-                </View>
-              );
-            }}
-          />
-        )}
+                    <TouchableOpacity
+                      style={[
+                        styles.card,
+                        {
+                          backgroundColor: Colors[colorScheme].background,
+                          borderColor,
+                        },
+                      ]}
+                      activeOpacity={0.9}
+                      delayLongPress={250}
+                      onLongPress={() => handleEventLongPress(item)}
+                    >
+                      <View style={styles.cardHeader}>
+                        <View style={styles.cardTitleRow}>
+                          {renderEventIcon(item.type, accent, 14)}
+                          <Text
+                            style={[
+                              styles.cardTitle,
+                              { color: Colors[colorScheme].text },
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.cardTime,
+                            { color: Colors[colorScheme].tabIconDefault },
+                          ]}
+                        >
+                          {formatTime(date)}
+                        </Text>
+                      </View>
+                      {details ? (
+                        <Text
+                          style={[
+                            styles.cardDetails,
+                            { color: Colors[colorScheme].tabIconDefault },
+                          ]}
+                        >
+                          {details}
+                        </Text>
+                      ) : null}
+                      {item.note ? (
+                        <Text
+                          style={[
+                            styles.cardNote,
+                            { color: Colors[colorScheme].text },
+                          ]}
+                        >
+                          {item.note}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
       </SafeAreaView>
       <InfoModal
         visible={!!infoModalMessage}
@@ -684,6 +692,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingBottom: 8,
   },
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   filterRow: {
     paddingHorizontal: 20,
     paddingBottom: 8,
@@ -691,6 +703,9 @@ const styles = StyleSheet.create({
     height: 60,
     alignItems: "center",
     justifyContent: "center",
+  },
+  content: {
+    flex: 1,
   },
   rangePill: {
     paddingHorizontal: 14,

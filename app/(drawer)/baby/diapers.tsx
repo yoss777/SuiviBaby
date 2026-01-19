@@ -1,11 +1,11 @@
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -23,7 +23,6 @@ import {
 } from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
@@ -75,6 +74,7 @@ export default function DiapersScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
+  const { openSheet, closeSheet, viewProps } = useSheet();
   const headerOwnerId = useRef(`diapers-${Math.random().toString(36).slice(2)}`);
   const { showToast } = useToast();
   const netInfo = useNetInfo();
@@ -86,6 +86,9 @@ export default function DiapersScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
+  const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
+  const sheetOwnerId = "diapers";
+  const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
   // États des données
   const [excretions, setExcretions] = useState<Excretion[]>([]);
@@ -119,8 +122,6 @@ export default function DiapersScreen() {
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
 
-  // Ref pour le BottomSheet
-  const bottomSheetRef = useRef<BottomSheet>(null);
 
   // ============================================
   // EFFECTS - HEADER
@@ -143,12 +144,7 @@ export default function DiapersScreen() {
     });
   }, []);
 
-  const expandBottomSheet = useCallback(() => {
-    bottomSheetRef.current?.expand();
-    setTimeout(() => bottomSheetRef.current?.expand(), 250);
-  }, []);
-
-  const openAddModal = useCallback((preferredType?: "mictions" | "selles") => {
+  const prepareAddModal = useCallback((preferredType?: "mictions" | "selles") => {
     setDateHeure(new Date());
     setEditingExcretion(null);
     setIsSubmitting(false);
@@ -163,9 +159,13 @@ export default function DiapersScreen() {
       setIncludeMiction(true);
       setIncludeSelle(false);
     }
+  }, []);
 
-    expandBottomSheet();
-  }, [expandBottomSheet]);
+  const openAddModal = useCallback((preferredType?: "mictions" | "selles") => {
+    prepareAddModal(preferredType);
+    setPendingMode("add");
+    setPendingOpen(true);
+  }, [prepareAddModal]);
 
   useFocusEffect(
     useCallback(() => {
@@ -231,6 +231,7 @@ export default function DiapersScreen() {
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
+      setPendingMode("add");
       setPendingOpen(true);
     }, [openModal])
   );
@@ -239,12 +240,25 @@ export default function DiapersScreen() {
     if (!pendingOpen || !layoutReady) return;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
-      openAddModal(tab as "mictions" | "selles" | undefined);
+      if (pendingMode !== "edit") {
+        prepareAddModal(tab as "mictions" | "selles" | undefined);
+      }
+      openSheet(buildSheetProps());
       router.replace("/(drawer)/baby/diapers");
       setPendingOpen(false);
+      setPendingMode(null);
     });
     return () => task.cancel?.();
-  }, [pendingOpen, layoutReady, tab, openAddModal, router, returnTo]);
+  }, [
+    pendingOpen,
+    layoutReady,
+    pendingMode,
+    tab,
+    router,
+    returnTo,
+    prepareAddModal,
+    openSheet,
+  ]);
 
   useEffect(() => {
     if (!editId || !layoutReady) return;
@@ -624,8 +638,8 @@ export default function DiapersScreen() {
     const type = excretion.type || "miction";
     setIncludeMiction(type === "miction");
     setIncludeSelle(type === "selle");
-
-    bottomSheetRef.current?.expand();
+    setPendingMode("edit");
+    setPendingOpen(true);
   };
 
   const normalizeParam = (value: string | string[] | undefined) =>
@@ -633,15 +647,16 @@ export default function DiapersScreen() {
 
   const stashReturnTo = () => {
     const target = normalizeParam(returnTo);
+    if (!target) return;
     if (target === "home" || target === "chrono") {
       returnToRef.current = target;
-    } else {
-      returnToRef.current = null;
+      return;
     }
+    returnToRef.current = null;
   };
 
-  const maybeReturnTo = () => {
-    const target = returnToRef.current;
+  const maybeReturnTo = (targetOverride?: string | null) => {
+    const target = targetOverride ?? returnToRef.current;
     returnToRef.current = null;
     if (target === "home") {
       router.replace("/(drawer)/baby/home");
@@ -651,12 +666,8 @@ export default function DiapersScreen() {
   };
 
   const closeModal = () => {
-    bottomSheetRef.current?.close();
+    closeSheet();
   };
-
-  const cancelForm = useCallback(() => {
-    closeModal();
-  }, []);
 
   // ============================================
   // HANDLERS - CRUD
@@ -746,6 +757,196 @@ export default function DiapersScreen() {
       setIsSubmitting(false);
     }
   };
+
+  function renderSheetContent() {
+    return (
+      <>
+      {!editingExcretion && (
+        <>
+          <Text style={styles.modalCategoryLabel}>Type d'excrétion</Text>
+          <Text style={styles.toggleSubtitle}>
+            Vous pouvez sélectionner les deux si nécessaire
+          </Text>
+          <View style={styles.typeRow}>
+            <TouchableOpacity
+              style={[
+                styles.typeButton,
+                includeMiction && styles.typeButtonActiveMiction,
+                isSubmitting && styles.typeButtonDisabled,
+              ]}
+              onPress={() => setIncludeMiction((prev) => !prev)}
+              disabled={isSubmitting}
+              activeOpacity={0.7}
+            >
+              <FontAwesome
+                name="tint"
+                size={18}
+                color={includeMiction ? "white" : "#17a2b8"}
+              />
+              <Text
+                style={[
+                  styles.typeText,
+                  includeMiction && styles.typeTextActive,
+                  isSubmitting && styles.typeTextDisabled,
+                ]}
+              >
+                Miction
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.typeButton,
+                includeSelle && styles.typeButtonActiveSelle,
+                isSubmitting && styles.typeButtonDisabled,
+              ]}
+              onPress={() => setIncludeSelle((prev) => !prev)}
+              disabled={isSubmitting}
+              activeOpacity={0.7}
+            >
+              <FontAwesome
+                name="poo"
+                size={18}
+                color={includeSelle ? "white" : "#dc3545"}
+              />
+              <Text
+                style={[
+                  styles.typeText,
+                  includeSelle && styles.typeTextActive,
+                  isSubmitting && styles.typeTextDisabled,
+                ]}
+              >
+                Selle
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+      <View style={styles.dateTimeContainer}>
+        <TouchableOpacity
+          style={[styles.dateButton, isSubmitting && styles.dateButtonDisabled]}
+          onPress={() => setShowDate(true)}
+          disabled={isSubmitting}
+        >
+          <FontAwesome
+            name="calendar-alt"
+            size={16}
+            color={isSubmitting ? "#ccc" : "#666"}
+          />
+          <Text
+            style={[
+              styles.dateButtonText,
+              isSubmitting && styles.dateButtonTextDisabled,
+            ]}
+          >
+            Date
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.dateButton, isSubmitting && styles.dateButtonDisabled]}
+          onPress={() => setShowTime(true)}
+          disabled={isSubmitting}
+        >
+          <FontAwesome
+            name="clock"
+            size={16}
+            color={isSubmitting ? "#ccc" : "#666"}
+          />
+          <Text
+            style={[
+              styles.dateButtonText,
+              isSubmitting && styles.dateButtonTextDisabled,
+            ]}
+          >
+            Heure
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.selectedDateTime}>
+        <Text style={styles.selectedDate}>
+          {dateHeure.toLocaleDateString("fr-FR", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
+        </Text>
+        <Text style={styles.selectedTime}>
+          {dateHeure.toLocaleTimeString("fr-FR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Text>
+      </View>
+
+      {showDate && (
+        <DateTimePicker
+          value={dateHeure}
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={onChangeDate}
+        />
+      )}
+      {showTime && (
+        <DateTimePicker
+          value={dateHeure}
+          mode="time"
+          is24Hour={true}
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={onChangeTime}
+        />
+      )}
+      </>
+    );
+  }
+
+  function buildSheetProps() {
+    const returnTarget = returnToRef.current;
+    return {
+      ownerId: sheetOwnerId,
+      title: editingExcretion
+        ? `Modifier ${editingExcretion.type === "miction" ? "miction" : "selle"}`
+        : "Nouvelle excrétion",
+      icon: "toilet",
+      accentColor:
+        includeMiction && includeSelle
+          ? "#6c757d"
+          : includeMiction
+          ? "#17a2b8"
+          : includeSelle
+          ? "#dc3545"
+          : "#6c757d",
+      isEditing: !!editingExcretion,
+      isSubmitting,
+      onSubmit: handleSubmit,
+      onDelete: editingExcretion ? handleDelete : undefined,
+      children: renderSheetContent(),
+      onDismiss: () => {
+        setIsSubmitting(false);
+        setEditingExcretion(null);
+        editIdRef.current = null;
+        maybeReturnTo(returnTarget);
+      },
+    };
+  }
+
+  useEffect(() => {
+    if (!isSheetActive) return;
+    openSheet(buildSheetProps());
+  }, [
+    isSheetActive,
+    openSheet,
+    editingExcretion,
+    isSubmitting,
+    includeMiction,
+    includeSelle,
+    dateHeure,
+    showDate,
+    showTime,
+  ]);
 
   // ============================================
   // HANDLERS - DATE/TIME PICKERS
@@ -1025,178 +1226,6 @@ export default function DiapersScreen() {
             }
           />
         )}
-
-        {/* Bottom Sheet d'ajout/édition */}
-        <FormBottomSheet
-          ref={bottomSheetRef}
-          title={editingExcretion ? `Modifier ${editingExcretion.type === "miction" ? "miction" : "selle"}`: "Nouvelle excrétion"}
-          icon="toilet"
-          accentColor={includeMiction && includeSelle ? "#6c757d" : includeMiction ? "#17a2b8" : includeSelle ?"#dc3545" : "#6c757d"}
-          isEditing={!!editingExcretion}
-          isSubmitting={isSubmitting}
-          onSubmit={handleSubmit}
-          onDelete={editingExcretion ? handleDelete : undefined}
-          onCancel={cancelForm}
-          onClose={() => {
-            setIsSubmitting(false);
-            setEditingExcretion(null);
-            maybeReturnTo();
-          }}
-        >
-          {/* Sélection du type - Toggles en mode ajout */}
-          {!editingExcretion && (
-            <>
-              <Text style={styles.modalCategoryLabel}>Type d&apos;excrétion</Text>
-              <Text style={styles.toggleSubtitle}>
-                Vous pouvez sélectionner les deux si nécessaire
-              </Text>
-              <View style={styles.typeRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.typeButton,
-                    includeMiction && styles.typeButtonActiveMiction,
-                    isSubmitting && styles.typeButtonDisabled,
-                  ]}
-                  onPress={() => setIncludeMiction(prev => !prev)}
-                  disabled={isSubmitting}
-                  activeOpacity={0.7}
-                >
-                  <FontAwesome
-                    name="water"
-                    size={20}
-                    color={includeMiction ? "white" : "#17a2b8"}
-                  />
-                  <Text
-                    style={[
-                      styles.typeText,
-                      includeMiction && styles.typeTextActive,
-                      isSubmitting && styles.typeTextDisabled,
-                    ]}
-                  >
-                    Miction
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.typeButton,
-                    includeSelle && styles.typeButtonActiveSelle,
-                    isSubmitting && styles.typeButtonDisabled,
-                  ]}
-                  onPress={() => setIncludeSelle(prev => !prev)}
-                  disabled={isSubmitting}
-                  activeOpacity={0.7}
-                >
-                  <FontAwesome
-                    name="poop"
-                    size={20}
-                    color={includeSelle ? "white" : "#dc3545"}
-                  />
-                  <Text
-                    style={[
-                      styles.typeText,
-                      includeSelle && styles.typeTextActive,
-                      isSubmitting && styles.typeTextDisabled,
-                    ]}
-                  >
-                    Selle
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              {!includeMiction && !includeSelle && (
-                <Text style={styles.warningText}>
-                  ⚠️ Veuillez sélectionner au moins un type
-                </Text>
-              )}
-            </>
-          )}
-
-          {/* Date & Heure */}
-          <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-          <View style={styles.dateTimeContainer}>
-            <TouchableOpacity
-              style={[
-                styles.dateButton,
-                isSubmitting && styles.dateButtonDisabled,
-              ]}
-              onPress={() => setShowDate(true)}
-              disabled={isSubmitting}
-            >
-              <FontAwesome
-                name="calendar-alt"
-                size={16}
-                color={isSubmitting ? "#ccc" : "#666"}
-              />
-              <Text
-                style={[
-                  styles.dateButtonText,
-                  isSubmitting && styles.dateButtonTextDisabled,
-                ]}
-              >
-                Date
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.dateButton,
-                isSubmitting && styles.dateButtonDisabled,
-              ]}
-              onPress={() => setShowTime(true)}
-              disabled={isSubmitting}
-            >
-              <FontAwesome
-                name="clock"
-                size={16}
-                color={isSubmitting ? "#ccc" : "#666"}
-              />
-              <Text
-                style={[
-                  styles.dateButtonText,
-                  isSubmitting && styles.dateButtonTextDisabled,
-                ]}
-              >
-                Heure
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.selectedDateTime}>
-            <Text style={styles.selectedDate}>
-              {dateHeure.toLocaleDateString("fr-FR", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </Text>
-            <Text style={styles.selectedTime}>
-              {dateHeure.toLocaleTimeString("fr-FR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </View>
-
-          {/* Date/Time Pickers */}
-          {showDate && (
-            <DateTimePicker
-              value={dateHeure}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={onChangeDate}
-            />
-          )}
-          {showTime && (
-            <DateTimePicker
-              value={dateHeure}
-              mode="time"
-              is24Hour={true}
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={onChangeTime}
-            />
-          )}
-        </FormBottomSheet>
-
         <ConfirmModal
           visible={showDeleteModal}
           title="Suppression"

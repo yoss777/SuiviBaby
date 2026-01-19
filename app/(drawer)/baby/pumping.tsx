@@ -1,11 +1,11 @@
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { FormBottomSheet } from "@/components/ui/FormBottomSheet";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -19,7 +19,6 @@ import {
 } from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import BottomSheet from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
@@ -72,6 +71,7 @@ export default function PumpingScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
+  const { openSheet, closeSheet, viewProps } = useSheet();
   const headerOwnerId = useRef(`pumping-${Math.random().toString(36).slice(2)}`);
   const { showToast } = useToast();
   const netInfo = useNetInfo();
@@ -83,6 +83,9 @@ export default function PumpingScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
+  const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
+  const sheetOwnerId = "pumping";
+  const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
   // États des données
   const [pompages, setPompages] = useState<Pompage[]>([]);
@@ -118,8 +121,6 @@ export default function PumpingScreen() {
   // Ref pour la gestion du picker avec accélération
   const intervalRef = useRef<number | undefined>(undefined);
 
-  // Ref pour le BottomSheet
-  const bottomSheetRef = useRef<BottomSheet>(null);
 
   // ============================================
   // EFFECTS - HEADER
@@ -143,20 +144,19 @@ export default function PumpingScreen() {
     });
   }, []);
 
-  // Gérer l'ouverture du modal d'ajout
-  const expandBottomSheet = useCallback(() => {
-    bottomSheetRef.current?.expand();
-    setTimeout(() => bottomSheetRef.current?.expand(), 250);
-  }, []);
-
-  const openAddModal = useCallback(() => {
+  const prepareAddModal = useCallback(() => {
     setDateHeure(new Date());
     setEditingPompage(null);
     setIsSubmitting(false);
     setQuantiteGauche(100);
     setQuantiteDroite(100);
-    expandBottomSheet();
-  }, [expandBottomSheet]);
+  }, []);
+
+  const openAddModal = useCallback(() => {
+    prepareAddModal();
+    setPendingMode("add");
+    setPendingOpen(true);
+  }, [prepareAddModal]);
 
   // Définir les boutons du header (calendrier + ajouter)
   useFocusEffect(
@@ -214,6 +214,7 @@ export default function PumpingScreen() {
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
+      setPendingMode("add");
       setPendingOpen(true);
     }, [openModal])
   );
@@ -222,12 +223,24 @@ export default function PumpingScreen() {
     if (!pendingOpen || !layoutReady) return;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
-      openAddModal();
+      if (pendingMode !== "edit") {
+        prepareAddModal();
+      }
+      openSheet(buildSheetProps());
       router.replace("/(drawer)/baby/pumping");
       setPendingOpen(false);
+      setPendingMode(null);
     });
     return () => task.cancel?.();
-  }, [pendingOpen, layoutReady, openAddModal, router, returnTo]);
+  }, [
+    pendingOpen,
+    layoutReady,
+    pendingMode,
+    router,
+    returnTo,
+    prepareAddModal,
+    openSheet,
+  ]);
 
   useEffect(() => {
     if (!editId || !layoutReady) return;
@@ -598,7 +611,8 @@ export default function PumpingScreen() {
     setQuantiteDroite(pompage.quantiteDroite);
     setEditingPompage(pompage);
     setIsSubmitting(false);
-    bottomSheetRef.current?.expand();
+    setPendingMode("edit");
+    setPendingOpen(true);
   };
 
   const normalizeParam = (value: string | string[] | undefined) =>
@@ -606,15 +620,16 @@ export default function PumpingScreen() {
 
   const stashReturnTo = () => {
     const target = normalizeParam(returnTo);
+    if (!target) return;
     if (target === "home" || target === "chrono") {
       returnToRef.current = target;
-    } else {
-      returnToRef.current = null;
+      return;
     }
+    returnToRef.current = null;
   };
 
-  const maybeReturnTo = () => {
-    const target = returnToRef.current;
+  const maybeReturnTo = (targetOverride?: string | null) => {
+    const target = targetOverride ?? returnToRef.current;
     returnToRef.current = null;
     if (target === "home") {
       router.replace("/(drawer)/baby/home");
@@ -624,12 +639,8 @@ export default function PumpingScreen() {
   };
 
   const closeModal = () => {
-    bottomSheetRef.current?.close();
+    closeSheet();
   };
-
-  const cancelForm = useCallback(() => {
-    closeModal();
-  }, []);
 
   // ============================================
   // HANDLERS - CRUD
@@ -695,6 +706,217 @@ export default function PumpingScreen() {
       setIsSubmitting(false);
     }
   };
+
+  function renderSheetContent() {
+    return (
+      <>
+      <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
+      <View style={styles.quantityPickerRow}>
+        <TouchableOpacity
+          style={[
+            styles.quantityButton,
+            isSubmitting && styles.quantityButtonDisabled,
+          ]}
+          onPressIn={() =>
+            handlePressIn(() => setQuantiteGauche((q) => Math.max(0, q - 5)))
+          }
+          onPressOut={handlePressOut}
+          disabled={isSubmitting}
+        >
+          <Text
+            style={[
+              styles.quantityButtonText,
+              isSubmitting && styles.quantityButtonTextDisabled,
+            ]}
+          >
+            -
+          </Text>
+        </TouchableOpacity>
+        <Text style={styles.quantityPickerValue}>{quantiteGauche} ml</Text>
+        <TouchableOpacity
+          style={[
+            styles.quantityButton,
+            isSubmitting && styles.quantityButtonDisabled,
+          ]}
+          onPressIn={() => handlePressIn(() => setQuantiteGauche((q) => q + 5))}
+          onPressOut={handlePressOut}
+          disabled={isSubmitting}
+        >
+          <Text
+            style={[
+              styles.quantityButtonText,
+              isSubmitting && styles.quantityButtonTextDisabled,
+            ]}
+          >
+            +
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
+      <View style={styles.quantityPickerRow}>
+        <TouchableOpacity
+          style={[
+            styles.quantityButton,
+            isSubmitting && styles.quantityButtonDisabled,
+          ]}
+          onPressIn={() =>
+            handlePressIn(() => setQuantiteDroite((q) => Math.max(0, q - 5)))
+          }
+          onPressOut={handlePressOut}
+          disabled={isSubmitting}
+        >
+          <Text
+            style={[
+              styles.quantityButtonText,
+              isSubmitting && styles.quantityButtonTextDisabled,
+            ]}
+          >
+            -
+          </Text>
+        </TouchableOpacity>
+        <Text style={styles.quantityPickerValue}>{quantiteDroite} ml</Text>
+        <TouchableOpacity
+          style={[
+            styles.quantityButton,
+            isSubmitting && styles.quantityButtonDisabled,
+          ]}
+          onPressIn={() => handlePressIn(() => setQuantiteDroite((q) => q + 5))}
+          onPressOut={handlePressOut}
+          disabled={isSubmitting}
+        >
+          <Text
+            style={[
+              styles.quantityButtonText,
+              isSubmitting && styles.quantityButtonTextDisabled,
+            ]}
+          >
+            +
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+      <View style={styles.dateTimeContainer}>
+        <TouchableOpacity
+          style={[
+            styles.dateButton,
+            isSubmitting && styles.dateButtonDisabled,
+          ]}
+          onPress={() => setShowDate(true)}
+          disabled={isSubmitting}
+        >
+          <FontAwesome
+            name="calendar"
+            size={16}
+            color={isSubmitting ? "#ccc" : "#666"}
+          />
+          <Text
+            style={[
+              styles.dateButtonText,
+              isSubmitting && styles.dateButtonTextDisabled,
+            ]}
+          >
+            Date
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.dateButton,
+            isSubmitting && styles.dateButtonDisabled,
+          ]}
+          onPress={() => setShowTime(true)}
+          disabled={isSubmitting}
+        >
+          <FontAwesome
+            name="clock"
+            size={16}
+            color={isSubmitting ? "#ccc" : "#666"}
+          />
+          <Text
+            style={[
+              styles.dateButtonText,
+              isSubmitting && styles.dateButtonTextDisabled,
+            ]}
+          >
+            Heure
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.selectedDateTime}>
+        <Text style={styles.selectedDate}>
+          {dateHeure.toLocaleDateString("fr-FR", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
+        </Text>
+        <Text style={styles.selectedTime}>
+          {dateHeure.toLocaleTimeString("fr-FR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Text>
+      </View>
+
+      {showDate && (
+        <DateTimePicker
+          value={dateHeure}
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={onChangeDate}
+        />
+      )}
+      {showTime && (
+        <DateTimePicker
+          value={dateHeure}
+          mode="time"
+          is24Hour={true}
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={onChangeTime}
+        />
+      )}
+      </>
+    );
+  }
+
+  function buildSheetProps() {
+    const returnTarget = returnToRef.current;
+    return {
+      ownerId: sheetOwnerId,
+      title: editingPompage ? "Modifier la session" : "Nouvelle session",
+      icon: "pump-medical",
+      accentColor: "#28a745",
+      isEditing: !!editingPompage,
+      isSubmitting,
+      onSubmit: handleSubmit,
+      onDelete: editingPompage ? handleDelete : undefined,
+      children: renderSheetContent(),
+      onDismiss: () => {
+        setIsSubmitting(false);
+        setEditingPompage(null);
+        editIdRef.current = null;
+        maybeReturnTo(returnTarget);
+      },
+    };
+  }
+
+  useEffect(() => {
+    if (!isSheetActive) return;
+    openSheet(buildSheetProps());
+  }, [
+    isSheetActive,
+    openSheet,
+    editingPompage,
+    isSubmitting,
+    quantiteGauche,
+    quantiteDroite,
+    dateHeure,
+    showDate,
+    showTime,
+  ]);
 
   // ============================================
   // HANDLERS - DATE/TIME PICKERS
@@ -1002,205 +1224,6 @@ const renderDayGroup = ({ item }: { item: PompageGroup }) => {
             <IconPulseDots color={Colors[colorScheme].tint} />
           </View>
         )}
-
-        {/* Bottom Sheet d'ajout/édition */}
-        <FormBottomSheet
-          ref={bottomSheetRef}
-          title={editingPompage ? "Modifier la session" : "Nouvelle session"}
-          icon="pump-medical"
-          accentColor="#28a745"
-          isEditing={!!editingPompage}
-          isSubmitting={isSubmitting}
-          onSubmit={handleSubmit}
-          onDelete={editingPompage ? handleDelete : undefined}
-          onCancel={cancelForm}
-          onClose={() => {
-            setIsSubmitting(false);
-            setEditingPompage(null);
-            maybeReturnTo();
-          }}
-        >
-          {/* Quantité Sein Gauche */}
-          <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
-          <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPressIn={() =>
-                handlePressIn(() =>
-                  setQuantiteGauche((q) => Math.max(0, q - 5))
-                )
-              }
-              onPressOut={handlePressOut}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                -
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.quantityPickerValue}>{quantiteGauche} ml</Text>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPressIn={() =>
-                handlePressIn(() => setQuantiteGauche((q) => q + 5))
-              }
-              onPressOut={handlePressOut}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                +
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Quantité Sein Droit */}
-          <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
-          <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPressIn={() =>
-                handlePressIn(() =>
-                  setQuantiteDroite((q) => Math.max(0, q - 5))
-                )
-              }
-              onPressOut={handlePressOut}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                -
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.quantityPickerValue}>{quantiteDroite} ml</Text>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPressIn={() =>
-                handlePressIn(() => setQuantiteDroite((q) => q + 5))
-              }
-              onPressOut={handlePressOut}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                +
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Date & Heure */}
-          <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-          <View style={styles.dateTimeContainer}>
-            <TouchableOpacity
-              style={[
-                styles.dateButton,
-                isSubmitting && styles.dateButtonDisabled,
-              ]}
-              onPress={() => setShowDate(true)}
-              disabled={isSubmitting}
-            >
-              <FontAwesome
-                name="calendar-alt"
-                size={16}
-                color={isSubmitting ? "#ccc" : "#666"}
-              />
-              <Text
-                style={[
-                  styles.dateButtonText,
-                  isSubmitting && styles.dateButtonTextDisabled,
-                ]}
-              >
-                Date
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.dateButton,
-                isSubmitting && styles.dateButtonDisabled,
-              ]}
-              onPress={() => setShowTime(true)}
-              disabled={isSubmitting}
-            >
-              <FontAwesome
-                name="clock"
-                size={16}
-                color={isSubmitting ? "#ccc" : "#666"}
-              />
-              <Text
-                style={[
-                  styles.dateButtonText,
-                  isSubmitting && styles.dateButtonTextDisabled,
-                ]}
-              >
-                Heure
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.selectedDateTime}>
-            <Text style={styles.selectedDate}>
-              {dateHeure.toLocaleDateString("fr-FR", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </Text>
-            <Text style={styles.selectedTime}>
-              {dateHeure.toLocaleTimeString("fr-FR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </View>
-
-          {showDate && (
-            <DateTimePicker
-              value={dateHeure}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={onChangeDate}
-            />
-          )}
-          {showTime && (
-            <DateTimePicker
-              value={dateHeure}
-              mode="time"
-              is24Hour={true}
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={onChangeTime}
-            />
-          )}
-        </FormBottomSheet>
-
         <ConfirmModal
           visible={showDeleteModal}
           title="Suppression"
