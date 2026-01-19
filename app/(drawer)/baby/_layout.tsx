@@ -1,11 +1,11 @@
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import FontAwesome from '@expo/vector-icons/FontAwesome5';
-import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import { Tabs } from "expo-router";
+import { Platform } from "react-native";
 
 export default function BabyTabLayout() {
-  const colorScheme = useColorScheme() ?? 'light';
+  const colorScheme = useColorScheme() ?? "light";
 
   return (
     <Tabs
@@ -15,59 +15,75 @@ export default function BabyTabLayout() {
         headerShown: false,
         tabBarStyle: Platform.select({
           ios: {
-            position: 'absolute',
+            position: "absolute",
           },
           default: {},
         }),
-        
-      }}>
+      }}
+    >
+      {/* Tab principal : Journal (hub avec widgets + timeline récente + FAB) */}
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Accueil',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="home" color={color} />,
+          title: "Accueil",
+          tabBarIcon: ({ color }) => (
+            <FontAwesome size={28} name="home" color={color} />
+          ),
         }}
       />
+
+      {/* Tab Chrono : timeline complète */}
+      <Tabs.Screen
+        name="chrono"
+        options={{
+          title: "Chrono",
+          tabBarIcon: ({ color }) => (
+            <FontAwesome size={28} name="clock" color={color} />
+          ),
+        }}
+      />
+
+      {/* Tab Stats */}
+      <Tabs.Screen
+        name="stats"
+        options={{
+          title: "Stats",
+          tabBarIcon: ({ color }) => (
+            <FontAwesome size={28} name="chart-bar" color={color} />
+          ),
+        }}
+      />
+
+      {/* Écrans masqués (accessibles via navigation depuis Home) */}
       <Tabs.Screen
         name="journal"
         options={{
-          title: 'Journal',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="clock" color={color} />,
+          href: null, // Masqué de la tab bar
+          // title: "Journal",
         }}
       />
       <Tabs.Screen
         name="meals"
         options={{
-          title: 'Repas',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="baby" color={color} />,
+          href: null, // Masqué de la tab bar
         }}
       />
       <Tabs.Screen
         name="pumping"
         options={{
-          title: 'Tire-lait',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="pump-medical" color={color} />,
+          href: null, // Masqué de la tab bar
         }}
       />
       <Tabs.Screen
         name="immunizations"
         options={{
-          title: 'Immunos',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="prescription-bottle" color={color} />,
+          href: null, // Masqué de la tab bar
         }}
       />
       <Tabs.Screen
-          name="diapers"
-          options={{
-            title: 'Pipi popo',
-            tabBarIcon: ({ color }) => <FontAwesome size={28} name="toilet" color={color} />,
-          }}
-        />
-      <Tabs.Screen
-        name="stats"
+        name="diapers"
         options={{
-          title: 'Stats',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="chart-bar" color={color} />,
+          href: null, // Masqué de la tab bar
         }}
       />
     </Tabs>

@@ -14,7 +14,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -131,6 +131,139 @@ export default function HomeDashboard() {
     vaccins: true,
   });
 
+  const toDate = useCallback((value: any) => {
+    if (value?.seconds) return new Date(value.seconds * 1000);
+    if (value?.toDate) return value.toDate();
+    if (value instanceof Date) return value;
+    return new Date(value);
+  }, []);
+
+  const formatTime = useCallback((date: Date) => {
+    return date.toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, []);
+
+  const buildDetails = useCallback((event: any) => {
+    switch (event.type) {
+      case "biberon":
+        return event.quantite ? `${event.quantite} ml` : undefined;
+      case "tetee": {
+        const left = event.dureeGauche ? `G ${event.dureeGauche}m` : null;
+        const right = event.dureeDroite ? `D ${event.dureeDroite}m` : null;
+        const parts = [left, right].filter(Boolean);
+        return parts.length > 0 ? parts.join(" • ") : undefined;
+      }
+      case "pompage": {
+        const left = event.quantiteGauche
+          ? `G ${event.quantiteGauche} ml`
+          : null;
+        const right = event.quantiteDroite
+          ? `D ${event.quantiteDroite} ml`
+          : null;
+        const parts = [left, right].filter(Boolean);
+        return parts.length > 0 ? parts.join(" • ") : undefined;
+      }
+      case "miction":
+        return event.volume ? `${event.volume} ml` : event.couleur;
+      case "selle":
+        return event.consistance || event.couleur;
+      case "vitamine":
+        return event.nomVitamine || "Vitamine";
+      case "vaccin":
+        return event.nomVaccin || "Vaccin";
+      default:
+        return undefined;
+    }
+  }, []);
+
+  const EVENT_CONFIG: Record<
+    string,
+    { label: string; icon: { lib: "fa6" | "mci"; name: string }; color: string }
+  > = {
+    tetee: {
+      label: "Tétée",
+      icon: { lib: "fa6", name: "person-breastfeeding" },
+      color: "#E91E63",
+    },
+    biberon: {
+      label: "Biberon",
+      icon: { lib: "mci", name: "baby-bottle" },
+      color: "#FF5722",
+    },
+    pompage: {
+      label: "Pompage",
+      icon: { lib: "fa6", name: "pump-medical" },
+      color: "#28a745",
+    },
+    miction: {
+      label: "Miction",
+      icon: { lib: "fa6", name: "water" },
+      color: "#17a2b8",
+    },
+    selle: {
+      label: "Selle",
+      icon: { lib: "fa6", name: "poop" },
+      color: "#dc3545",
+    },
+    vitamine: {
+      label: "Vitamine",
+      icon: { lib: "fa6", name: "pills" },
+      color: "#FF9800",
+    },
+    vaccin: {
+      label: "Vaccin",
+      icon: { lib: "fa6", name: "syringe" },
+      color: "#9C27B0",
+    },
+  };
+
+  const renderEventIcon = useCallback(
+    (config: { lib: "fa6" | "mci"; name: string }, color: string) => {
+      if (config.lib === "mci") {
+        return (
+          <MaterialCommunityIcons
+            name={config.name as any}
+            size={14}
+            color={color}
+          />
+        );
+      }
+      return <FontAwesome name={config.name as any} size={14} color={color} />;
+    },
+    [],
+  );
+
+  const recentEvents = useMemo(() => {
+    const merged = [
+      ...data.tetees,
+      ...data.biberons,
+      ...data.pompages,
+      ...data.mictions,
+      ...data.selles,
+      ...data.vitamines,
+      ...data.vaccins,
+    ].map((event) => ({
+      ...event,
+      type: event.type,
+      date: event.date,
+    }));
+
+    return merged
+      .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime())
+      .slice(0, 4);
+  }, [
+    data.biberons,
+    data.mictions,
+    data.pompages,
+    data.selles,
+    data.tetees,
+    data.vaccins,
+    data.vitamines,
+    toDate,
+  ]);
+
   // ============================================
   // EFFECTS - TIMER
   // ============================================
@@ -166,7 +299,7 @@ export default function HomeDashboard() {
 
     const subscription = AppState.addEventListener(
       "change",
-      handleAppStateChange
+      handleAppStateChange,
     );
 
     updateTime();
@@ -221,7 +354,7 @@ export default function HomeDashboard() {
       showToast(
         `⚠️ Attention: plus de ${mictionHoursLabel} depuis le dernier pipi, ${selleHoursLabel} depuis le dernier popo.`,
         3200,
-        "top"
+        "top",
       );
       warningState.miction = mictionTs;
       warningState.selle = selleTs;
@@ -232,7 +365,7 @@ export default function HomeDashboard() {
       showToast(
         `⚠️ Attention: plus de ${mictionHoursLabel} depuis le dernier pipi.`,
         3200,
-        "top"
+        "top",
       );
       warningState.miction = mictionTs;
     }
@@ -241,7 +374,7 @@ export default function HomeDashboard() {
       showToast(
         `⚠️ Attention: plus de ${selleHoursLabel} depuis le dernier popo.`,
         3200,
-        "top"
+        "top",
       );
       warningState.selle = selleTs;
     }
@@ -310,7 +443,7 @@ export default function HomeDashboard() {
       return () => {
         isActive = false;
       };
-    }, [])
+    }, []),
   );
 
   // ============================================
@@ -351,7 +484,7 @@ export default function HomeDashboard() {
           vaccins: false,
         });
       },
-      { waitForServer: true }
+      { waitForServer: true },
     );
 
     return () => {
@@ -369,12 +502,12 @@ export default function HomeDashboard() {
     const startOfToday = new Date(
       today.getFullYear(),
       today.getMonth(),
-      today.getDate()
+      today.getDate(),
     );
     const endOfToday = new Date(
       today.getFullYear(),
       today.getMonth(),
-      today.getDate() + 1
+      today.getDate() + 1,
     );
 
     // Filtrer les entrées pour ne garder que celles d'aujourd'hui
@@ -396,7 +529,7 @@ export default function HomeDashboard() {
 
     // Repas - Seins (OLD: type="seins" ou pas de type, NEW: type="tetee")
     const seinsToday = todayTetees.filter(
-      (t) => !t.type || t.type === "seins" || t.type === "tetee"
+      (t) => !t.type || t.type === "seins" || t.type === "tetee",
     );
 
     // Repas - Biberons
@@ -408,21 +541,21 @@ export default function HomeDashboard() {
         ? seinsToday.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
-              : latest
+              : latest,
           )
         : null;
 
     // Calculer les statistiques pour les repas biberons
     const biberonsQuantity = biberonsToday.reduce(
       (sum, b) => sum + (b.quantite || 0),
-      0
+      0,
     );
     const lastBiberons =
       biberonsToday.length > 0
         ? biberonsToday.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
-              : latest
+              : latest,
           )
         : null;
 
@@ -434,21 +567,21 @@ export default function HomeDashboard() {
         ? allMeals.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
-              : latest
+              : latest,
           )
         : null;
 
     // Calculer les statistiques pour les pompages
     const pompagesQuantity = todayPompages.reduce(
       (sum, p) => sum + ((p.quantiteDroite || 0) + (p.quantiteGauche || 0)),
-      0
+      0,
     );
     const lastPompage =
       todayPompages.length > 0
         ? todayPompages.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
-              : latest
+              : latest,
           )
         : null;
 
@@ -458,7 +591,7 @@ export default function HomeDashboard() {
         ? todayMictions.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
-              : latest
+              : latest,
           )
         : null;
 
@@ -467,7 +600,7 @@ export default function HomeDashboard() {
         ? todaySelles.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
-              : latest
+              : latest,
           )
         : null;
 
@@ -476,7 +609,7 @@ export default function HomeDashboard() {
         ? todayVitamines.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
-              : latest
+              : latest,
           )
         : null;
 
@@ -485,7 +618,7 @@ export default function HomeDashboard() {
         ? todayVaccins.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
-              : latest
+              : latest,
           )
         : null;
 
@@ -592,26 +725,6 @@ export default function HomeDashboard() {
     return `il y a ${diffMinutes}min`;
   };
 
-  const getMealIcon = (type?: MealType) => {
-    switch (type) {
-      case "tetee":
-        return {
-          lib: "FontAwesome",
-          name: "person-breastfeeding",
-        };
-      case "biberon":
-        return {
-          lib: "MaterialCommunityIcons",
-          name: "baby-bottle",
-        };
-      default:
-        return {
-          lib: "FontAwesome",
-          name: "utensils",
-        };
-    }
-  };
-
   // ============================================
   // COMPONENTS - CARDS
   // ============================================
@@ -631,12 +744,12 @@ export default function HomeDashboard() {
       title === "Repas total"
         ? reminderThresholds.repas
         : title === "Pompages"
-        ? reminderThresholds.pompages
-        : title === "Mictions"
-        ? reminderThresholds.mictions
-        : title === "Selles"
-        ? reminderThresholds.selles
-        : null;
+          ? reminderThresholds.pompages
+          : title === "Mictions"
+            ? reminderThresholds.mictions
+            : title === "Selles"
+              ? reminderThresholds.selles
+              : null;
     const warnThreshold =
       remindersEnabled && thresholdHours && thresholdHours > 0
         ? thresholdHours * 60 * 60 * 1000
@@ -747,7 +860,7 @@ export default function HomeDashboard() {
             })}
           </Text>
         </View>
-        <View style={{ position: "absolute", right: -10, top: 35 }}>
+        <View style={{ paddingTop: 10 }}>
           <VoiceCommandButton
             size={40}
             color={Colors[colorScheme].tint}
@@ -813,7 +926,9 @@ export default function HomeDashboard() {
                 lastActivity={todayStats.meals.seins.lastTime}
                 lastTimestamp={todayStats.meals.seins.lastTimestamp}
                 onPress={() =>
-                  router.push("/baby/meals?tab=seins&openModal=true&returnTo=home" as any)
+                  router.push(
+                    "/baby/meals?tab=seins&openModal=true&returnTo=home" as any,
+                  )
                 }
               />
               <StatsCard
@@ -825,7 +940,9 @@ export default function HomeDashboard() {
                 lastActivity={todayStats.meals.biberons.lastTime}
                 lastTimestamp={todayStats.meals.biberons.lastTimestamp}
                 onPress={() =>
-                  router.push("/baby/meals?tab=biberons&openModal=true&returnTo=home" as any)
+                  router.push(
+                    "/baby/meals?tab=biberons&openModal=true&returnTo=home" as any,
+                  )
                 }
               />
             </>
@@ -846,7 +963,9 @@ export default function HomeDashboard() {
               lastActivity={todayStats.vitamines.lastTime}
               lastTimestamp={todayStats.vitamines.lastTimestamp}
               onPress={() =>
-                router.push("/baby/immunizations?tab=vitamines&openModal=true&returnTo=home" as any)
+                router.push(
+                  "/baby/immunizations?tab=vitamines&openModal=true&returnTo=home" as any,
+                )
               }
             />
           )}
@@ -862,7 +981,9 @@ export default function HomeDashboard() {
               lastActivity={todayStats.vaccins.lastTime}
               lastTimestamp={todayStats.vaccins.lastTimestamp}
               onPress={() =>
-                router.push("/baby/immunizations?tab=vaccins&openModal=true&returnTo=home" as any)
+                router.push(
+                  "/baby/immunizations?tab=vaccins&openModal=true&returnTo=home" as any,
+                )
               }
             />
           )}
@@ -886,7 +1007,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.mictions.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/diapers?tab=mictions&openModal=true&returnTo=home" as any
+                  "/baby/diapers?tab=mictions&openModal=true&returnTo=home" as any,
                 )
               }
             />
@@ -903,11 +1024,120 @@ export default function HomeDashboard() {
               lastActivity={todayStats.selles.lastTime}
               lastTimestamp={todayStats.selles.lastTimestamp}
               onPress={() =>
-                router.push("/baby/diapers?tab=selles&openModal=true&returnTo=home" as any)
+                router.push(
+                  "/baby/diapers?tab=selles&openModal=true&returnTo=home" as any,
+                )
               }
             />
           )}
         </View>
+      </View>
+
+      {/* Chronologie récente */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionTitle, styles.sectionTitleInline]}>
+            Chronologie récente
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.push("/baby/chrono" as any)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.sectionLink}>Voir tout</Text>
+          </TouchableOpacity>
+        </View>
+
+        {loading.tetees &&
+        loading.biberons &&
+        loading.pompages &&
+        loading.mictions &&
+        loading.selles &&
+        loading.vitamines &&
+        loading.vaccins ? (
+          <View style={styles.recentLoading}>
+            <ActivityIndicator size="small" color={Colors[colorScheme].tint} />
+            <Text style={styles.recentLoadingText}>Chargement...</Text>
+          </View>
+        ) : recentEvents.length === 0 ? (
+          <Text style={styles.recentEmpty}>
+            Aucun événement aujourd&apos;hui.
+          </Text>
+        ) : (
+          recentEvents.map((event, index) => {
+            const config = EVENT_CONFIG[event.type] || {
+              label: event.type,
+              icon: { lib: "fa6", name: "circle" },
+              color: Colors[colorScheme].tint,
+            };
+            const date = toDate(event.date);
+            const details = buildDetails(event);
+            const borderColor = `${Colors[colorScheme].tabIconDefault}30`;
+            return (
+              <View
+                key={event.id ?? `${event.type}-${event.date}`}
+                style={styles.recentRow}
+              >
+                <View style={styles.recentTimelineColumn}>
+                  <View
+                    style={[
+                      styles.recentDot,
+                      { backgroundColor: config.color },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.recentLine,
+                      { backgroundColor: borderColor },
+                      index === recentEvents.length - 1 &&
+                        styles.recentLineLast,
+                    ]}
+                  />
+                </View>
+                <View
+                  style={[
+                    styles.recentCard,
+                    {
+                      borderColor,
+                      backgroundColor: Colors[colorScheme].background,
+                    },
+                  ]}
+                >
+                  <View style={styles.recentHeader}>
+                    <View style={styles.recentTitleRow}>
+                      {renderEventIcon(config.icon, config.color)}
+                      <Text
+                        style={[
+                          styles.recentTitle,
+                          { color: Colors[colorScheme].text },
+                        ]}
+                      >
+                        {config.label}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.recentTime,
+                        { color: Colors[colorScheme].tabIconDefault },
+                      ]}
+                    >
+                      {formatTime(date)}
+                    </Text>
+                  </View>
+                  {details ? (
+                    <Text
+                      style={[
+                        styles.recentDetails,
+                        { color: Colors[colorScheme].tabIconDefault },
+                      ]}
+                    >
+                      {details}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            );
+          })
+        )}
       </View>
     </ScrollView>
   );
@@ -947,11 +1177,99 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 16,
   },
+  sectionTitleInline: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
+  sectionLink: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0a7ea4",
+  },
   statsGrid: {
     flexDirection: "row",
     paddingHorizontal: 20,
     gap: 12,
     marginBottom: 12,
+  },
+  recentLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 20,
+  },
+  recentLoadingText: {
+    fontSize: 13,
+    color: "#6c757d",
+  },
+  recentEmpty: {
+    fontSize: 13,
+    color: "#6c757d",
+    marginHorizontal: 20,
+  },
+  recentRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 14,
+    marginHorizontal: 20,
+  },
+  recentTimelineColumn: {
+    width: 20,
+    alignItems: "center",
+  },
+  recentDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    marginTop: 6,
+  },
+  recentLine: {
+    width: 2,
+    flex: 1,
+    marginTop: 4,
+  },
+  recentLineLast: {
+    backgroundColor: "transparent",
+  },
+  recentCard: {
+    flex: 1,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  recentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  recentTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  recentTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  recentTime: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  recentDetails: {
+    marginTop: 6,
+    fontSize: 12,
   },
   statsCard: {
     flex: 1,

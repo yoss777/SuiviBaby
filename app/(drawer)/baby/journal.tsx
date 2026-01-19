@@ -162,7 +162,7 @@ function sumNumber(values: (number | null | undefined)[]) {
   return values.reduce((sum, value) => sum + (value ?? 0), 0);
 }
 
-export default function NewsScreen() {
+export default function JournalScreen() {
   const { activeChild } = useBaby();
   const { openSheet, closeSheet } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
