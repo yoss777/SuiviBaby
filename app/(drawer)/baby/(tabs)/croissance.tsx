@@ -473,7 +473,8 @@ export default function CroissanceScreen() {
   };
 
   const screenWidth = Dimensions.get("window").width;
-  const chartWidth = screenWidth - 64;
+  const CHART_PADDING = 24;
+  const [chartWidth, setChartWidth] = useState(screenWidth - 64);
   const metricConfig: Record<
     MetricKey,
     { label: string; color: string; rgb: string; unit: string }
@@ -562,7 +563,7 @@ export default function CroissanceScreen() {
                   },
                 ]}
                 onLayout={(event) => {
-                  const width = event.nativeEvent.layout.width - 24;
+                  const width = event.nativeEvent.layout.width - CHART_PADDING;
                   if (width > 0 && Math.abs(width - chartWidth) > 1) {
                     setChartWidth(width);
                   }
