@@ -77,6 +77,8 @@ export default function CroissanceScreen() {
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(
     null,
   );
+  const [chartScrollX, setChartScrollX] = useState(0);
+  const chartScrollRef = useRef<ScrollView | null>(null);
 
   const sheetOwnerId = "croissance";
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
@@ -463,7 +465,7 @@ export default function CroissanceScreen() {
   };
 
   const screenWidth = Dimensions.get("window").width;
-  const chartWidth = screenWidth - 40;
+  const chartWidth = screenWidth - 64;
   const metricConfig: Record<
     MetricKey,
     { label: string; color: string; rgb: string; unit: string }
@@ -542,7 +544,7 @@ export default function CroissanceScreen() {
               </Text> */}
             </View>
           ) : (
-            <View>
+            <View style={styles.body}>
               <View
                 style={[
                   styles.chartCard,
@@ -551,6 +553,12 @@ export default function CroissanceScreen() {
                     borderColor: `${colors.tabIconDefault}30`,
                   },
                 ]}
+                onLayout={(event) => {
+                  const width = event.nativeEvent.layout.width - 24;
+                  if (width > 0 && Math.abs(width - chartWidth) > 1) {
+                    setChartWidth(width);
+                  }
+                }}
               >
                 <View style={styles.metricTabs}>
                   {(["poids", "taille", "tete"] as MetricKey[]).map((key) => (
@@ -586,7 +594,21 @@ export default function CroissanceScreen() {
                     </Text>
                   </View>
                 ) : (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <ScrollView
+                    ref={chartScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    onScroll={(event) => {
+                      const offsetX = event.nativeEvent.contentOffset.x;
+                      setChartScrollX((prev) =>
+                        Math.abs(prev - offsetX) > 1 ? offsetX : prev,
+                      );
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {(() => {
+                      const plotWidth = Math.max(chartWidth, labels.length * 40);
+                      return (
                     <LineChart
                       data={{
                         labels:
@@ -597,7 +619,7 @@ export default function CroissanceScreen() {
                             : labels,
                         datasets: [{ data: values }],
                       }}
-                      width={Math.max(chartWidth, labels.length * 40)}
+                      width={plotWidth}
                       height={220}
                       fromZero
                       yAxisSuffix={` ${metricStyle.unit}`}
@@ -622,15 +644,28 @@ export default function CroissanceScreen() {
                         setSelectedPointIndex((prev) =>
                           prev === data.index ? null : data.index,
                         );
+                        if (plotWidth > chartWidth) {
+                          const target = Math.min(
+                            Math.max(data.x - chartWidth / 2, 0),
+                            plotWidth - chartWidth,
+                          );
+                          chartScrollRef.current?.scrollTo({
+                            x: target,
+                            animated: true,
+                          });
+                        }
                       }}
                       renderDotContent={({ x, y, index }) => {
                         if (index !== selectedPointIndex) return null;
                         const label = labelsFull[index] ?? "";
                         const value = values[index];
                         const tooltipWidth = 140;
+                        const leftLimit = chartScrollX + 6;
+                        const rightLimit =
+                          chartScrollX + chartWidth - tooltipWidth - 6;
                         const tooltipLeft = Math.min(
-                          Math.max(x - tooltipWidth / 2, 6),
-                          chartWidth - tooltipWidth - 6,
+                          Math.max(x - tooltipWidth / 2, leftLimit),
+                          rightLimit,
                         );
                         const tooltipTop =
                           y < 24
@@ -662,6 +697,8 @@ export default function CroissanceScreen() {
                         );
                       }}
                     />
+                      );
+                    })()}
                   </ScrollView>
                 )}
               </View>
@@ -697,6 +734,8 @@ export default function CroissanceScreen() {
         message="Cette mesure de croissance sera supprimée définitivement."
         confirmText="Supprimer"
         cancelText="Annuler"
+        backgroundColor={colors.background}
+        textColor={colors.text}
         onConfirm={confirmDelete}
         onCancel={() => setShowDeleteModal(false)}
         destructive
@@ -732,7 +771,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   listWindow: {
-    // maxHeight: 300,
+    flex: 1,
+    minHeight: 0,
+  },
+  body: {
+    flex: 1,
+    minHeight: 0,
   },
   loading: {
     alignItems: "center",

@@ -121,6 +121,20 @@ export default function MealsScreen() {
   // Récupérer les paramètres de l'URL
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
   const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
+
+  const getRootNavigation = useCallback(() => {
+    let parent = navigation.getParent?.();
+    let lastParent = parent;
+    while (parent?.getParent?.()) {
+      const next = parent.getParent();
+      if (!next) {
+        break;
+      }
+      lastParent = next;
+      parent = next;
+    }
+    return lastParent ?? navigation;
+  }, [navigation]);
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
 
@@ -242,8 +256,8 @@ export default function MealsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const parent = navigation.getParent();
-      parent?.setOptions({
+      const root = getRootNavigation();
+      root?.setOptions({
         headerLeft: () => (
           <HeaderBackButton
             onPress={() => {
@@ -268,9 +282,9 @@ export default function MealsScreen() {
       });
 
       return () => {
-        parent?.setOptions({ headerLeft: undefined });
+        root?.setOptions({ headerLeft: undefined });
       };
-    }, [colorScheme, navigation, returnTarget])
+    }, [colorScheme, getRootNavigation, returnTarget])
   );
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent

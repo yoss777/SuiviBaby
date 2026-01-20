@@ -40,6 +40,20 @@ export default function StatsScreen() {
   const { tab, returnTo } = useLocalSearchParams();
   const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
 
+  const getRootNavigation = useCallback(() => {
+    let parent = navigation.getParent?.();
+    let lastParent = parent;
+    while (parent?.getParent?.()) {
+      const next = parent.getParent();
+      if (!next) {
+        break;
+      }
+      lastParent = next;
+      parent = next;
+    }
+    return lastParent ?? navigation;
+  }, [navigation]);
+
   // Définir l'onglet initial en fonction du paramètre
   useEffect(() => {
     if (tab === "pompages") {
@@ -51,8 +65,8 @@ export default function StatsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const parent = navigation.getParent();
-      parent?.setOptions({
+      const root = getRootNavigation();
+      root?.setOptions({
         headerLeft: () => (
           <HeaderBackButton
             onPress={() => {
@@ -77,9 +91,9 @@ export default function StatsScreen() {
       });
 
       return () => {
-        parent?.setOptions({ headerLeft: undefined });
+        root?.setOptions({ headerLeft: undefined });
       };
-    }, [colorScheme, navigation, returnTarget])
+    }, [colorScheme, getRootNavigation, returnTarget])
   );
 
   // écoute en temps réel des tetees ET biberons
