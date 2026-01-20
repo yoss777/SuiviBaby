@@ -55,6 +55,7 @@ export default function BabyTabLayout() {
         name="plus"
         options={{
           title: "Plus",
+          unmountOnBlur: false,
           tabBarIcon: ({ color }) => (
             <FontAwesome size={28} name="ellipsis-h" color={color} />
           ),

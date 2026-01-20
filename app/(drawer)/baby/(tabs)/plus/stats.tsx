@@ -20,11 +20,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useHeaderLeft } from "../../../_layout";
 
 export default function StatsScreen() {
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
   const navigation = useNavigation();
+  const { setHeaderLeft } = useHeaderLeft();
   const [tetees, setTetees] = useState<any[]>([]);
   const [pompages, setPompages] = useState<any[]>([]);
   const [teteesLoaded, setTeteesLoaded] = useState(false);
@@ -40,19 +42,6 @@ export default function StatsScreen() {
   const { tab, returnTo } = useLocalSearchParams();
   const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
 
-  const getRootNavigation = useCallback(() => {
-    let parent = navigation.getParent?.();
-    let lastParent = parent;
-    while (parent?.getParent?.()) {
-      const next = parent.getParent();
-      if (!next) {
-        break;
-      }
-      lastParent = next;
-      parent = next;
-    }
-    return lastParent ?? navigation;
-  }, [navigation]);
 
   // Définir l'onglet initial en fonction du paramètre
   useEffect(() => {
@@ -65,35 +54,33 @@ export default function StatsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const root = getRootNavigation();
-      root?.setOptions({
-        headerLeft: () => (
-          <HeaderBackButton
-            onPress={() => {
-              if (returnTarget === "home") {
-                router.replace("/baby/home");
-                return;
-              }
-              if (returnTarget === "chrono") {
-                router.replace("/baby/chrono");
-                return;
-              }
-              if (returnTarget === "journal") {
-                router.replace("/baby/chrono");
-                return;
-              }
-              router.back();
-            }}
-            tintColor={Colors[colorScheme].text}
-            labelVisible={false}
-          />
-        ),
-      });
+      const backButton = (
+        <HeaderBackButton
+          onPress={() => {
+            if (returnTarget === "home") {
+              router.replace("/baby/home");
+              return;
+            }
+            if (returnTarget === "chrono") {
+              router.replace("/baby/chrono");
+              return;
+            }
+            if (returnTarget === "journal") {
+              router.replace("/baby/chrono");
+              return;
+            }
+            router.back();
+          }}
+          tintColor={Colors[colorScheme].text}
+          labelVisible={false}
+        />
+      );
+      setHeaderLeft(backButton, "stats");
 
       return () => {
-        root?.setOptions({ headerLeft: undefined });
+        setHeaderLeft(null, "stats");
       };
-    }, [colorScheme, getRootNavigation, returnTarget])
+    }, [colorScheme, returnTarget, setHeaderLeft])
   );
 
   // écoute en temps réel des tetees ET biberons

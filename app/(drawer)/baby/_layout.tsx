@@ -7,3 +7,5 @@ export default function BabyStackLayout() {
     </Stack>
   );
 }
+
+export { useHeaderLeft, useHeaderRight } from "../_layout";

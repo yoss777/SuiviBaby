@@ -39,7 +39,7 @@ import {
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useHeaderRight } from "../../../_layout";
+import { useHeaderLeft, useHeaderRight } from "../../../_layout";
 
 // ============================================
 // TYPES
@@ -75,6 +75,7 @@ export default function PumpingScreen() {
   const { openSheet, closeSheet, viewProps } = useSheet();
   const headerOwnerId = useRef(`pumping-${Math.random().toString(36).slice(2)}`);
   const navigation = useNavigation();
+  const { setHeaderLeft } = useHeaderLeft();
   const { showToast } = useToast();
   const netInfo = useNetInfo();
   const isOffline =
@@ -119,19 +120,6 @@ export default function PumpingScreen() {
   const { openModal, editId, returnTo } = useLocalSearchParams();
   const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
 
-  const getRootNavigation = useCallback(() => {
-    let parent = navigation.getParent?.();
-    let lastParent = parent;
-    while (parent?.getParent?.()) {
-      const next = parent.getParent();
-      if (!next) {
-        break;
-      }
-      lastParent = next;
-      parent = next;
-    }
-    return lastParent ?? navigation;
-  }, [navigation]);
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
 
@@ -225,35 +213,33 @@ export default function PumpingScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const root = getRootNavigation();
-      root?.setOptions({
-        headerLeft: () => (
-          <HeaderBackButton
-            onPress={() => {
-              if (returnTarget === "home") {
-                router.replace("/baby/home");
-                return;
-              }
-              if (returnTarget === "chrono") {
-                router.replace("/baby/chrono");
-                return;
-              }
-              if (returnTarget === "journal") {
-                router.replace("/baby/chrono");
-                return;
-              }
-              router.back();
-            }}
-            tintColor={Colors[colorScheme].text}
-            labelVisible={false}
-          />
-        ),
-      });
+      const backButton = (
+        <HeaderBackButton
+          onPress={() => {
+            if (returnTarget === "home") {
+              router.replace("/baby/home");
+              return;
+            }
+            if (returnTarget === "chrono") {
+              router.replace("/baby/chrono");
+              return;
+            }
+            if (returnTarget === "journal") {
+              router.replace("/baby/chrono");
+              return;
+            }
+            router.back();
+          }}
+          tintColor={Colors[colorScheme].text}
+          labelVisible={false}
+        />
+      );
+      setHeaderLeft(backButton, headerOwnerId.current);
 
       return () => {
-        root?.setOptions({ headerLeft: undefined });
+        setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, getRootNavigation, returnTarget])
+    }, [colorScheme, returnTarget, setHeaderLeft])
   );
 
   // ============================================

@@ -20,7 +20,13 @@ const HeaderRightContext = createContext<{
   setHeaderRight: (component: React.ReactElement | null, ownerId?: string) => void;
 }>({ setHeaderRight: () => {} });
 
+// Contexte pour gérer le headerLeft dynamiquement
+const HeaderLeftContext = createContext<{
+  setHeaderLeft: (component: React.ReactElement | null, ownerId?: string) => void;
+}>({ setHeaderLeft: () => {} });
+
 export const useHeaderRight = () => useContext(HeaderRightContext);
+export const useHeaderLeft = () => useContext(HeaderLeftContext);
 
 function BabyHeaderTitle() {
   const { activeChild } = useBaby();
@@ -57,6 +63,10 @@ export default function DrawerLayout() {
     component: React.ReactElement | null;
     ownerId?: string;
   }>({ component: null, ownerId: undefined });
+  const [headerLeftState, setHeaderLeftState] = useState<{
+    component: React.ReactElement | null;
+    ownerId?: string;
+  }>({ component: null, ownerId: undefined });
   const netInfo = useNetInfo();
   const insets = useSafeAreaInsets();
 
@@ -64,6 +74,22 @@ export default function DrawerLayout() {
 
   const setHeaderRight = useCallback((component: React.ReactElement | null, ownerId?: string) => {
     setHeaderRightState((prev) => {
+      if (component === null) {
+        if (!ownerId) {
+          return { component: null, ownerId: undefined };
+        }
+        if (prev.ownerId && prev.ownerId !== ownerId) {
+          return prev;
+        }
+        return { component: null, ownerId: undefined };
+      }
+
+      return { component, ownerId };
+    });
+  }, []);
+
+  const setHeaderLeft = useCallback((component: React.ReactElement | null, ownerId?: string) => {
+    setHeaderLeftState((prev) => {
       if (component === null) {
         if (!ownerId) {
           return { component: null, ownerId: undefined };
@@ -114,28 +140,29 @@ export default function DrawerLayout() {
 
   return (
     <HeaderRightContext.Provider value={{ setHeaderRight }}>
-      <ToastProvider>
-        <View style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
-          {isOffline && (
-            <View style={[styles.offlineBanner, { paddingTop: insets.top }]}>
-              <Text style={styles.offlineText}>Hors ligne</Text>
-            </View>
-          )}
-          <Drawer
-            initialRouteName="baby"
-            backBehavior="initialRoute"
-            drawerContent={(props) => <CustomDrawerContent {...props} />}
-            screenOptions={{
-              drawerActiveTintColor: Colors[colorScheme].tint,
-              headerTintColor: Colors[colorScheme].text,
-              headerStyle: {
-                backgroundColor: Colors[colorScheme].background,
-              },
-              sceneContainerStyle: {
-                backgroundColor: Colors[colorScheme].background,
-              },
-            }}
-          >
+      <HeaderLeftContext.Provider value={{ setHeaderLeft }}>
+        <ToastProvider>
+          <View style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
+            {isOffline && (
+              <View style={[styles.offlineBanner, { paddingTop: insets.top }]}>
+                <Text style={styles.offlineText}>Hors ligne</Text>
+              </View>
+            )}
+            <Drawer
+              initialRouteName="baby"
+              backBehavior="initialRoute"
+              drawerContent={(props) => <CustomDrawerContent {...props} />}
+              screenOptions={{
+                drawerActiveTintColor: Colors[colorScheme].tint,
+                headerTintColor: Colors[colorScheme].text,
+                headerStyle: {
+                  backgroundColor: Colors[colorScheme].background,
+                },
+                sceneContainerStyle: {
+                  backgroundColor: Colors[colorScheme].background,
+                },
+              }}
+            >
             <Drawer.Screen
               name="settings"
               options={{
@@ -151,6 +178,7 @@ export default function DrawerLayout() {
                 headerTitle: () => <BabyHeaderTitle />,
                 drawerItemStyle: { display: "none" },
                 headerRight: headerRightState.component ? () => headerRightState.component : undefined,
+                headerLeft: headerLeftState.component ? () => headerLeftState.component : undefined,
               }}
             />
             <Drawer.Screen
@@ -174,9 +202,10 @@ export default function DrawerLayout() {
                 drawerItemStyle: { display: "none" },
               }}
             />
-          </Drawer>
-        </View>
-      </ToastProvider>
+            </Drawer>
+          </View>
+        </ToastProvider>
+      </HeaderLeftContext.Provider>
     </HeaderRightContext.Provider>
   );
 }
