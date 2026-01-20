@@ -45,7 +45,7 @@ import {
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useHeaderLeft, useHeaderRight } from "../../../_layout";
+import { useHeaderLeft, useHeaderRight } from "../../_layout";
 
 // ============================================
 // TYPES
@@ -294,7 +294,7 @@ export default function ImmunizationsScreen() {
               router.replace("/baby/chrono");
               return;
             }
-            router.back();
+            router.replace("/baby/plus");
           }}
           tintColor={Colors[colorScheme].text}
           labelVisible={false}

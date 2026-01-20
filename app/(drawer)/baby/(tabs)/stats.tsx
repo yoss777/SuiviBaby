@@ -20,7 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useHeaderLeft } from "../../../_layout";
+import { useHeaderLeft } from "../../_layout";
 
 export default function StatsScreen() {
   const { activeChild } = useBaby();
@@ -69,7 +69,7 @@ export default function StatsScreen() {
               router.replace("/baby/chrono");
               return;
             }
-            router.back();
+            router.replace("/baby/plus");
           }}
           tintColor={Colors[colorScheme].text}
           labelVisible={false}

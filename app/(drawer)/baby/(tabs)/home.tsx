@@ -886,7 +886,7 @@ export default function HomeDashboard() {
               color="#4A90E2"
               lastActivity={todayStats.meals.total.lastTime}
               lastTimestamp={todayStats.meals.total.lastTimestamp}
-              onPress={() => router.push("/baby/plus/meals" as any)}
+              onPress={() => router.push("/baby/meals" as any)}
             />
           )}
 
@@ -903,7 +903,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.pompages.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/plus/pumping?openModal=true&returnTo=home" as any
+                  "/baby/pumping?openModal=true&returnTo=home" as any
                 )
               }
             />
@@ -929,7 +929,7 @@ export default function HomeDashboard() {
                 lastTimestamp={todayStats.meals.seins.lastTimestamp}
                 onPress={() =>
                   router.push(
-                    "/baby/plus/meals?tab=seins&openModal=true&returnTo=home" as any,
+                    "/baby/meals?tab=seins&openModal=true&returnTo=home" as any,
                   )
                 }
               />
@@ -943,7 +943,7 @@ export default function HomeDashboard() {
                 lastTimestamp={todayStats.meals.biberons.lastTimestamp}
                 onPress={() =>
                   router.push(
-                    "/baby/plus/meals?tab=biberons&openModal=true&returnTo=home" as any,
+                    "/baby/meals?tab=biberons&openModal=true&returnTo=home" as any,
                   )
                 }
               />
@@ -966,7 +966,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.vitamines.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/plus/immunizations?tab=vitamines&openModal=true&returnTo=home" as any,
+                  "/baby/immunizations?tab=vitamines&openModal=true&returnTo=home" as any,
                 )
               }
             />
@@ -984,7 +984,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.vaccins.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/plus/immunizations?tab=vaccins&openModal=true&returnTo=home" as any,
+                  "/baby/immunizations?tab=vaccins&openModal=true&returnTo=home" as any,
                 )
               }
             />
@@ -1009,7 +1009,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.mictions.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/plus/diapers?tab=mictions&openModal=true&returnTo=home" as any,
+                  "/baby/diapers?tab=mictions&openModal=true&returnTo=home" as any,
                 )
               }
             />
@@ -1027,7 +1027,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.selles.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/plus/diapers?tab=selles&openModal=true&returnTo=home" as any,
+                  "/baby/diapers?tab=selles&openModal=true&returnTo=home" as any,
                 )
               }
             />

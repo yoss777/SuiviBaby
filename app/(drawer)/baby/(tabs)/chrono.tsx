@@ -260,19 +260,19 @@ function getEditRoute(event: Event): string | null {
   const id = encodeURIComponent(event.id);
   switch (event.type) {
     case "tetee":
-      return `/baby/plus/meals?tab=seins&editId=${id}&returnTo=chrono`;
+      return `/baby/meals?tab=seins&editId=${id}&returnTo=chrono`;
     case "biberon":
-      return `/baby/plus/meals?tab=biberons&editId=${id}&returnTo=chrono`;
+      return `/baby/meals?tab=biberons&editId=${id}&returnTo=chrono`;
     case "pompage":
-      return `/baby/plus/pumping?editId=${id}&returnTo=chrono`;
+      return `/baby/pumping?editId=${id}&returnTo=chrono`;
     case "miction":
-      return `/baby/plus/diapers?tab=mictions&editId=${id}&returnTo=chrono`;
+      return `/baby/diapers?tab=mictions&editId=${id}&returnTo=chrono`;
     case "selle":
-      return `/baby/plus/diapers?tab=selles&editId=${id}&returnTo=chrono`;
+      return `/baby/diapers?tab=selles&editId=${id}&returnTo=chrono`;
     case "vaccin":
-      return `/baby/plus/immunizations?tab=vaccins&editId=${id}&returnTo=chrono`;
+      return `/baby/immunizations?tab=vaccins&editId=${id}&returnTo=chrono`;
     case "vitamine":
-      return `/baby/plus/immunizations?tab=vitamines&editId=${id}&returnTo=chrono`;
+      return `/baby/immunizations?tab=vitamines&editId=${id}&returnTo=chrono`;
     default:
       return null;
   }
