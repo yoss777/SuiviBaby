@@ -14,6 +14,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
+  BackHandler,
   ScrollView,
   StyleSheet,
   Text,
@@ -81,6 +82,33 @@ export default function StatsScreen() {
         setHeaderLeft(null, "stats");
       };
     }, [colorScheme, returnTarget, setHeaderLeft])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (returnTarget === "home") {
+          router.replace("/baby/home");
+          return true;
+        }
+        if (returnTarget === "chrono") {
+          router.replace("/baby/chrono");
+          return true;
+        }
+        if (returnTarget === "journal") {
+          router.replace("/baby/chrono");
+          return true;
+        }
+        router.replace("/baby/plus");
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress,
+      );
+      return () => subscription.remove();
+    }, [returnTarget, router])
   );
 
   // écoute en temps réel des tetees ET biberons

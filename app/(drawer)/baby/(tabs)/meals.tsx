@@ -20,6 +20,7 @@ import {
   ecouterBiberonsHybrid as ecouterBiberons,
   ecouterTeteesHybrid as ecouterTetees,
   hasMoreEventsBeforeHybrid,
+  getNextEventDateBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -30,6 +31,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  BackHandler,
   FlatList,
   InteractionManager,
   Platform,
@@ -74,7 +76,7 @@ export default function MealsScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
-  const { openSheet, closeSheet, viewProps } = useSheet();
+  const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
   const { showAlert } = useModal();
   const { showToast } = useToast();
   const headerOwnerId = useRef(`meals-${Math.random().toString(36).slice(2)}`);
@@ -96,6 +98,7 @@ export default function MealsScreen() {
   const [biberonsLoaded, setBiberonsLoaded] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
+  const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [autoLoadMore, setAutoLoadMore] = useState(false);
@@ -274,6 +277,37 @@ export default function MealsScreen() {
     }, [colorScheme, returnTarget, setHeaderLeft])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (isOpen) {
+          closeSheet();
+          return true;
+        }
+        if (returnTarget === "home") {
+          router.replace("/baby/home");
+          return true;
+        }
+        if (returnTarget === "chrono") {
+          router.replace("/baby/chrono");
+          return true;
+        }
+        if (returnTarget === "journal") {
+          router.replace("/baby/chrono");
+          return true;
+        }
+        router.replace("/baby/plus");
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress,
+      );
+      return () => subscription.remove();
+    }, [closeSheet, isOpen, returnTarget, router])
+  );
+
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useFocusEffect(
     useCallback(() => {
@@ -327,9 +361,9 @@ export default function MealsScreen() {
   useEffect(() => {
     if (!activeChild?.id) return;
     const versionAtSubscribe = loadMoreVersionRef.current;
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-    const startOfRange = new Date();
+    const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+    endOfRange.setHours(23, 59, 59, 999);
+    const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
@@ -359,7 +393,7 @@ export default function MealsScreen() {
         setTeteesLoaded(true);
         mergeAndSortMeals();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
     );
 
     const unsubscribeBiberons = ecouterBiberons(
@@ -369,14 +403,14 @@ export default function MealsScreen() {
         setBiberonsLoaded(true);
         mergeAndSortMeals();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
     );
 
     return () => {
       unsubscribeTetees();
       unsubscribeBiberons();
     };
-  }, [activeChild, daysWindow]);
+  }, [activeChild, daysWindow, rangeEndDate]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -386,6 +420,7 @@ export default function MealsScreen() {
     setBiberonsLoaded(false);
     setEmptyDelayDone(false);
     setDaysWindow(14);
+    setRangeEndDate(null);
     setIsLoadingMore(false);
     setHasMore(true);
     loadMoreVersionRef.current = 0;
@@ -408,17 +443,53 @@ export default function MealsScreen() {
     return () => clearTimeout(timer);
   }, [mealsLoaded, groupedMeals.length]);
 
-  const loadMoreStep = useCallback((auto = false) => {
-    if (!hasMore) return;
-    setIsLoadingMore(true);
-    pendingLoadMoreRef.current = 2;
-    loadMoreVersionRef.current += 1;
-    setDaysWindow((prev) => prev + 14);
-    if (!auto) {
-      setAutoLoadMore(true);
-      setAutoLoadMoreAttempts(0);
-    }
-  }, [hasMore]);
+  const loadMoreStep = useCallback(
+    async (auto = false) => {
+      if (!hasMore || !activeChild?.id) return;
+      setIsLoadingMore(true);
+      pendingLoadMoreRef.current = 2;
+      loadMoreVersionRef.current += 1;
+
+      if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
+        const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+        endOfRange.setHours(23, 59, 59, 999);
+        const startOfRange = new Date(endOfRange);
+        startOfRange.setHours(0, 0, 0, 0);
+        startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+        const beforeDate = new Date(startOfRange.getTime() - 1);
+
+        const nextEventDate = await getNextEventDateBeforeHybrid(
+          activeChild.id,
+          ["tetee", "biberon"],
+          beforeDate,
+        );
+
+        if (nextEventDate) {
+          setDaysWindow(14);
+          setRangeEndDate(nextEventDate);
+        } else {
+          setHasMore(false);
+          pendingLoadMoreRef.current = 0;
+          setIsLoadingMore(false);
+          setAutoLoadMore(false);
+        }
+      } else {
+        setDaysWindow((prev) => prev + 14);
+      }
+
+      if (!auto) {
+        setAutoLoadMore(true);
+        setAutoLoadMoreAttempts(0);
+      }
+    },
+    [
+      hasMore,
+      activeChild?.id,
+      autoLoadMoreAttempts,
+      daysWindow,
+      rangeEndDate,
+    ],
+  );
 
   const handleLoadMore = useCallback(() => {
     loadMoreStep(false);
@@ -466,7 +537,9 @@ export default function MealsScreen() {
   useEffect(() => {
     if (!activeChild?.id) return;
     let cancelled = false;
-    const startOfRange = new Date();
+    const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+    endOfRange.setHours(23, 59, 59, 999);
+    const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
     const beforeDate = new Date(startOfRange.getTime() - 1);
@@ -484,7 +557,7 @@ export default function MealsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeChild?.id, daysWindow]);
+  }, [activeChild?.id, daysWindow, rangeEndDate]);
 
   // Filtrage et regroupement par jour
   useEffect(() => {
@@ -1348,7 +1421,7 @@ export default function MealsScreen() {
                 hasMore={hasMore}
                 loading={isLoadingMore}
                 onPress={handleLoadMore}
-                text="Voir plus (14 jours)"
+                text="Voir plus"
                 accentColor={Colors[colorScheme].tint}
               />
             )}
@@ -1367,7 +1440,7 @@ export default function MealsScreen() {
                   hasMore={hasMore}
                   loading={isLoadingMore}
                   onPress={handleLoadMore}
-                  text="Voir plus (14 jours)"
+                  text="Voir plus"
                   accentColor={Colors[colorScheme].tint}
                 />
               )

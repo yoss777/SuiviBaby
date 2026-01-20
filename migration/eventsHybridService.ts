@@ -79,6 +79,34 @@ export async function hasMoreEventsBeforeHybrid(
   return events.length > 0;
 }
 
+/**
+ * Récupère la date du prochain événement disponible avant une date donnée.
+ * Utile pour la pagination "intelligente" : au lieu de +14j fixes,
+ * on peut sauter directement au prochain événement trouvé.
+ *
+ * @returns La date du prochain événement, ou null si aucun
+ */
+export async function getNextEventDateBeforeHybrid(
+  childId: string,
+  types: EventType | EventType[],
+  beforeDate: Date
+): Promise<Date | null> {
+  const events = await obtenirEvenements(childId, {
+    type: types,
+    jusqu: beforeDate,
+    limite: 1,
+  });
+
+  if (events.length === 0) return null;
+
+  const eventDate = events[0].date;
+  // Convertir Timestamp Firebase en Date si nécessaire
+  if (eventDate && typeof (eventDate as any).toDate === 'function') {
+    return (eventDate as any).toDate();
+  }
+  return eventDate instanceof Date ? eventDate : new Date(eventDate as any);
+}
+
 export function ecouterEvenementsDuJourHybrid(
   childId: string,
   callback: (events: any[]) => void,

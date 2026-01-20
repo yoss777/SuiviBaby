@@ -17,6 +17,7 @@ import {
 import {
   ecouterPompagesHybrid as ecouterPompages,
   hasMoreEventsBeforeHybrid,
+  getNextEventDateBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
@@ -27,6 +28,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  BackHandler,
   FlatList,
   InteractionManager,
   Platform,
@@ -72,7 +74,7 @@ export default function PumpingScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
-  const { openSheet, closeSheet, viewProps } = useSheet();
+  const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
   const { showAlert } = useModal();
   const headerOwnerId = useRef(
     `pumping-${Math.random().toString(36).slice(2)}`,
@@ -100,6 +102,7 @@ export default function PumpingScreen() {
   const [pompagesLoaded, setPompagesLoaded] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
+  const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [autoLoadMore, setAutoLoadMore] = useState(false);
@@ -252,6 +255,37 @@ export default function PumpingScreen() {
     }, [colorScheme, returnTarget, setHeaderLeft]),
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (isOpen) {
+          closeSheet();
+          return true;
+        }
+        if (returnTarget === "home") {
+          router.replace("/baby/home");
+          return true;
+        }
+        if (returnTarget === "chrono") {
+          router.replace("/baby/chrono");
+          return true;
+        }
+        if (returnTarget === "journal") {
+          router.replace("/baby/chrono");
+          return true;
+        }
+        router.replace("/baby/plus");
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress,
+      );
+      return () => subscription.remove();
+    }, [closeSheet, isOpen, returnTarget, router]),
+  );
+
   // ============================================
   // EFFECTS - URL PARAMS
   // ============================================
@@ -308,9 +342,9 @@ export default function PumpingScreen() {
   useEffect(() => {
     if (!activeChild?.id) return;
     const versionAtSubscribe = loadMoreVersionRef.current;
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-    const startOfRange = new Date();
+    const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+    endOfRange.setHours(23, 59, 59, 999);
+    const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
@@ -329,10 +363,10 @@ export default function PumpingScreen() {
           }
         }
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
     return () => unsubscribe();
-  }, [activeChild, daysWindow]);
+  }, [activeChild, daysWindow, rangeEndDate]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -341,6 +375,7 @@ export default function PumpingScreen() {
     setPompagesLoaded(false);
     setEmptyDelayDone(false);
     setDaysWindow(14);
+    setRangeEndDate(null);
     setIsLoadingMore(false);
     setHasMore(true);
     loadMoreVersionRef.current = 0;
@@ -361,18 +396,52 @@ export default function PumpingScreen() {
   }, [pompagesLoaded, groupedPompages.length]);
 
   const loadMoreStep = useCallback(
-    (auto = false) => {
-      if (!hasMore) return;
+    async (auto = false) => {
+      if (!hasMore || !activeChild?.id) return;
       setIsLoadingMore(true);
       pendingLoadMoreRef.current = 1;
       loadMoreVersionRef.current += 1;
-      setDaysWindow((prev) => prev + 14);
+
+      // Si on a déjà essayé plusieurs fois sans succès, on saute directement au prochain événement
+      if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
+        const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+        endOfRange.setHours(23, 59, 59, 999);
+        const startOfRange = new Date(endOfRange);
+        startOfRange.setHours(0, 0, 0, 0);
+        startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+        const beforeDate = new Date(startOfRange.getTime() - 1);
+
+        const nextEventDate = await getNextEventDateBeforeHybrid(
+          activeChild.id,
+          "pompage",
+          beforeDate,
+        );
+
+        if (nextEventDate) {
+          setDaysWindow(14);
+          setRangeEndDate(nextEventDate);
+        } else {
+          setHasMore(false);
+          pendingLoadMoreRef.current = 0;
+          setIsLoadingMore(false);
+          setAutoLoadMore(false);
+        }
+      } else {
+        setDaysWindow((prev) => prev + 14);
+      }
+
       if (!auto) {
         setAutoLoadMore(true);
         setAutoLoadMoreAttempts(0);
       }
     },
-    [hasMore],
+    [
+      hasMore,
+      activeChild?.id,
+      autoLoadMoreAttempts,
+      daysWindow,
+      rangeEndDate,
+    ],
   );
 
   const handleLoadMore = useCallback(() => {
@@ -426,7 +495,9 @@ export default function PumpingScreen() {
   useEffect(() => {
     if (!activeChild?.id) return;
     let cancelled = false;
-    const startOfRange = new Date();
+    const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+    endOfRange.setHours(23, 59, 59, 999);
+    const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
     const beforeDate = new Date(startOfRange.getTime() - 1);
@@ -444,7 +515,7 @@ export default function PumpingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeChild?.id, daysWindow]);
+  }, [activeChild?.id, daysWindow, rangeEndDate]);
 
   // Filtrage et regroupement par jour
   useEffect(() => {
@@ -1366,7 +1437,7 @@ export default function PumpingScreen() {
                   hasMore={hasMore}
                   loading={isLoadingMore}
                   onPress={handleLoadMore}
-                  text="Voir plus (14 jours)"
+                  text="Voir plus"
                   accentColor={Colors[colorScheme].tint}
                 />
               )}
@@ -1385,7 +1456,7 @@ export default function PumpingScreen() {
                     hasMore={hasMore}
                     loading={isLoadingMore}
                     onPress={handleLoadMore}
-                    text="Voir plus (14 jours)"
+                    text="Voir plus"
                     accentColor={Colors[colorScheme].tint}
                   />
                 )

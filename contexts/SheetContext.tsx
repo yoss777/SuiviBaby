@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useRef,
 } from 'react';
+import { BackHandler } from 'react-native';
 import type { FormBottomSheetProps } from '@/components/ui/FormBottomSheet';
 
 // These are the props that a screen needs to provide to open a form sheet.
@@ -28,6 +29,7 @@ const SheetContext = createContext<SheetContextType | undefined>(undefined);
 export const SheetProvider = ({ children }: { children: React.ReactNode }) => {
   const [viewProps, setViewProps] = useState<SheetViewProps | null>(null);
   const pendingDismissRef = useRef<(() => void) | null>(null);
+  const isOpenRef = useRef(false);
 
   const openSheet = useCallback((props: SheetViewProps) => {
     setViewProps((prev) => {
@@ -51,6 +53,22 @@ export const SheetProvider = ({ children }: { children: React.ReactNode }) => {
     pendingDismissRef.current = null;
     dismiss();
   }, [viewProps]);
+
+  useEffect(() => {
+    isOpenRef.current = viewProps !== null;
+  }, [viewProps]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        if (!isOpenRef.current) return false;
+        closeSheet();
+        return true;
+      },
+    );
+    return () => subscription.remove();
+  }, [closeSheet]);
 
   const value = {
     isOpen: viewProps !== null,

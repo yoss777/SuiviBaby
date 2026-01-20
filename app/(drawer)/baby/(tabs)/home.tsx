@@ -12,11 +12,13 @@ import {
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   AppState,
   ScrollView,
   StyleSheet,
@@ -95,6 +97,13 @@ export default function HomeDashboard() {
     selles: 0,
     vitamines: 0,
   });
+  const [showRecentHint, setShowRecentHint] = useState(false);
+  const headerMicOpacity = useRef(new Animated.Value(0)).current;
+  const inlineMicOpacity = useRef(new Animated.Value(1)).current;
+  const [headerMicVisible, setHeaderMicVisible] = useState(false);
+  const headerMicVisibleRef = useRef(false);
+  const headerRowLayoutRef = useRef<{ y: number; height: number } | null>(null);
+  const scrollYRef = useRef(0);
 
   // États des données
   const [data, setData] = useState<DashboardData>({
@@ -220,6 +229,29 @@ export default function HomeDashboard() {
       color: "#9C27B0",
     },
   };
+
+  function getEditRoute(event: any): string | null {
+    if (!event.id) return null;
+    const id = encodeURIComponent(event.id);
+    switch (event.type) {
+      case "tetee":
+        return `/baby/meals?tab=seins&editId=${id}&returnTo=home`;
+      case "biberon":
+        return `/baby/meals?tab=biberons&editId=${id}&returnTo=home`;
+      case "pompage":
+        return `/baby/pumping?editId=${id}&returnTo=home`;
+      case "miction":
+        return `/baby/diapers?tab=mictions&editId=${id}&returnTo=home`;
+      case "selle":
+        return `/baby/diapers?tab=selles&editId=${id}&returnTo=home`;
+      case "vaccin":
+        return `/baby/immunizations?tab=vaccins&editId=${id}&returnTo=home`;
+      case "vitamine":
+        return `/baby/immunizations?tab=vitamines&editId=${id}&returnTo=home`;
+      default:
+        return null;
+    }
+  }
 
   const renderEventIcon = useCallback(
     (config: { lib: "fa6" | "mci"; name: string }, color: string) => {
@@ -391,32 +423,97 @@ export default function HomeDashboard() {
     showToast,
   ]);
 
-  // HeaderRight: micro uniquement
-  // useFocusEffect(
-  //   useCallback(() => {
-  //     const headerButtons = (
-  //       <View
-  //         style={{
-  //           flexDirection: "row",
-  //           alignItems: "center",
-  //           paddingRight: 16,
-  //         }}
-  //       >
-  //         <VoiceCommandButton
-  //           size={18}
-  //           color={Colors[colorScheme].tint}
-  //           showTestToggle={true}
-  //         />
-  //       </View>
-  //     );
+  const updateHeaderMicVisibility = useCallback(
+    (scrollY: number, layout: { y: number; height: number }) => {
+      const threshold = layout.y + layout.height - 8;
+      const fadeRange = 70;
+      const fadeStart = threshold - fadeRange;
+      const progress = Math.max(
+        0,
+        Math.min(1, (scrollY - fadeStart) / fadeRange),
+      );
+      const nextHeaderOpacity = progress;
+      const nextInlineOpacity = 1 - progress;
+      headerMicOpacity.setValue(nextHeaderOpacity);
+      inlineMicOpacity.setValue(nextInlineOpacity);
 
-  //     setHeaderRight(headerButtons, headerOwnerId.current);
+      const shouldShow = nextHeaderOpacity > 0.05;
+      if (shouldShow !== headerMicVisibleRef.current) {
+        headerMicVisibleRef.current = shouldShow;
+        setHeaderMicVisible(shouldShow);
+      }
+    },
+    [headerMicOpacity, inlineMicOpacity],
+  );
 
-  //     return () => {
-  //       setHeaderRight(null, headerOwnerId.current);
-  //     };
-  //   }, [colorScheme, setHeaderRight])
-  // );
+  const handleScroll = useCallback(
+    (event: any) => {
+      const scrollY = event.nativeEvent.contentOffset.y || 0;
+      scrollYRef.current = scrollY;
+      const layout = headerRowLayoutRef.current;
+      if (!layout) return;
+      updateHeaderMicVisibility(scrollY, layout);
+    },
+    [updateHeaderMicVisibility],
+  );
+
+  useEffect(() => {
+    const layout = headerRowLayoutRef.current;
+    if (!layout) return;
+    updateHeaderMicVisibility(scrollYRef.current, layout);
+  }, [updateHeaderMicVisibility]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const headerButtons = (
+        <Animated.View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingRight: 16,
+            opacity: headerMicOpacity,
+          }}
+          pointerEvents={headerMicVisible ? "auto" : "none"}
+        >
+          <VoiceCommandButton
+            size={18}
+            color={Colors[colorScheme].tint}
+            showTestToggle={false}
+          />
+        </Animated.View>
+      );
+
+      setHeaderRight(headerButtons, headerOwnerId.current);
+
+      return () => {
+        setHeaderRight(null, headerOwnerId.current);
+      };
+    }, [colorScheme, headerMicOpacity, headerMicVisible, setHeaderRight]),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const HINT_STORAGE_KEY = "home:recentHintCount";
+    const MAX_HINT_SHOWS = 3;
+
+    const loadHintState = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(HINT_STORAGE_KEY);
+        if (cancelled) return;
+        const current = raw ? Number.parseInt(raw, 10) : 0;
+        if (Number.isNaN(current) || current >= MAX_HINT_SHOWS) return;
+        setShowRecentHint(true);
+        await AsyncStorage.setItem(HINT_STORAGE_KEY, String(current + 1));
+      } catch {
+        if (!cancelled) setShowRecentHint(true);
+      }
+    };
+
+    loadHintState();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -740,6 +837,7 @@ export default function HomeDashboard() {
     lastActivity,
     lastTimestamp,
     onPress,
+    addEvent,
   }: any) => {
     const lastSessionDate = currentTime.getTime() - (lastTimestamp || 0);
     const thresholdHours =
@@ -774,6 +872,14 @@ export default function HomeDashboard() {
             <FontAwesome name={icon} size={20} color={color} />
           )}
           <Text style={styles.statsTitle}>{title}</Text>
+          {/* {addEvent && (
+            <FontAwesome
+              name="plus"
+              size={18}
+              color={Colors[colorScheme].tabIconDefault}
+              style={{ marginLeft: "auto" }}
+            />
+          )} */}
         </View>
         <Text style={[styles.statsValue, { color }]}>
           {value} {unit}
@@ -838,7 +944,12 @@ export default function HomeDashboard() {
   // ============================================
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
+    >
       {/* Bannière de migration */}
       {activeChild?.id && <MigrationBanner childId={activeChild.id} />}
 
@@ -851,6 +962,11 @@ export default function HomeDashboard() {
           alignItems: "center",
           marginRight: 50,
         }}
+        onLayout={(event) => {
+          const { y, height } = event.nativeEvent.layout;
+          headerRowLayoutRef.current = { y, height };
+          updateHeaderMicVisibility(scrollYRef.current, { y, height });
+        }}
       >
         <View style={styles.header}>
           <Text style={styles.greeting}>{getGreeting()}</Text>
@@ -862,13 +978,13 @@ export default function HomeDashboard() {
             })}
           </Text>
         </View>
-        <View style={{ paddingTop: 10 }}>
+        <Animated.View style={{ paddingTop: 10, opacity: inlineMicOpacity }}>
           <VoiceCommandButton
             size={40}
             color={Colors[colorScheme].tint}
             showTestToggle={false}
           />
-        </View>
+        </Animated.View>
       </View>
 
       {/* Résumé du jour */}
@@ -904,10 +1020,9 @@ export default function HomeDashboard() {
               lastActivity={todayStats.pompages.lastTime}
               lastTimestamp={todayStats.pompages.lastTimestamp}
               onPress={() =>
-                router.push(
-                  "/baby/pumping?openModal=true&returnTo=home" as any
-                )
+                router.push("/baby/pumping?openModal=true&returnTo=home" as any)
               }
+              addEvent={true}
             />
           )}
         </View>
@@ -934,6 +1049,7 @@ export default function HomeDashboard() {
                     "/baby/meals?tab=seins&openModal=true&returnTo=home" as any,
                   )
                 }
+                addEvent={true}
               />
               <StatsCard
                 title="Biberons"
@@ -948,6 +1064,7 @@ export default function HomeDashboard() {
                     "/baby/meals?tab=biberons&openModal=true&returnTo=home" as any,
                   )
                 }
+                addEvent={true}
               />
             </>
           )}
@@ -971,6 +1088,7 @@ export default function HomeDashboard() {
                   "/baby/immunizations?tab=vitamines&openModal=true&returnTo=home" as any,
                 )
               }
+              addEvent={true}
             />
           )}
           {loading.vaccins ? (
@@ -989,6 +1107,7 @@ export default function HomeDashboard() {
                   "/baby/immunizations?tab=vaccins&openModal=true&returnTo=home" as any,
                 )
               }
+              addEvent={true}
             />
           )}
         </View>
@@ -1014,6 +1133,7 @@ export default function HomeDashboard() {
                   "/baby/diapers?tab=mictions&openModal=true&returnTo=home" as any,
                 )
               }
+              addEvent={true}
             />
           )}
           {loading.selles ? (
@@ -1032,6 +1152,7 @@ export default function HomeDashboard() {
                   "/baby/diapers?tab=selles&openModal=true&returnTo=home" as any,
                 )
               }
+              addEvent={true}
             />
           )}
         </View>
@@ -1050,6 +1171,11 @@ export default function HomeDashboard() {
             <Text style={styles.sectionLink}>Voir tout</Text>
           </TouchableOpacity>
         </View>
+        {showRecentHint && recentEvents.length > 0 && (
+          <Text style={styles.recentHint}>
+            Maintenir un événement pour le modifier
+          </Text>
+        )}
 
         {loading.tetees &&
         loading.biberons &&
@@ -1077,9 +1203,14 @@ export default function HomeDashboard() {
             const details = buildDetails(event);
             const borderColor = `${Colors[colorScheme].tabIconDefault}30`;
             return (
-              <View
+              <TouchableOpacity
                 key={event.id ?? `${event.type}-${event.date}`}
                 style={styles.recentRow}
+                activeOpacity={0.85}
+                onLongPress={() => {
+                  const route = getEditRoute(event);
+                  if (route) router.push(route as any);
+                }}
               >
                 <View style={styles.recentTimelineColumn}>
                   <View
@@ -1124,6 +1255,12 @@ export default function HomeDashboard() {
                     >
                       {config.label}
                     </Text>
+                    {/* <FontAwesome
+                      name="pen-to-square"
+                      size={14}
+                      color={Colors[colorScheme].tabIconDefault}
+                      style={{ marginLeft: "auto" }}
+                    /> */}
                   </View>
                   {details ? (
                     <Text
@@ -1136,7 +1273,7 @@ export default function HomeDashboard() {
                     </Text>
                   ) : null}
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
@@ -1256,9 +1393,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  recentHint: {
+    marginTop: -2,
+    marginBottom: 8,
+    marginHorizontal: 20,
+    fontSize: 12,
+    color: "#9aa0a6",
+    fontWeight: "500",
+  },
   recentTitleRow: {
     flexDirection: "row",
     alignItems: "center",
+    // justifyContent: "space-between",
     gap: 8,
   },
   recentTitle: {

@@ -20,6 +20,7 @@ import {
 import {
   ecouterVaccinsHybrid as ecouterVaccins,
   ecouterVitaminesHybrid as ecouterVitamines,
+  getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { normalizeQuery } from "@/utils/text";
@@ -32,6 +33,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  BackHandler,
   FlatList,
   InteractionManager,
   Platform,
@@ -112,7 +114,7 @@ export default function ImmunizationsScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
-  const { openSheet, closeSheet, viewProps } = useSheet();
+  const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
   const headerOwnerId = useRef(
     `immunizations-${Math.random().toString(36).slice(2)}`,
   );
@@ -142,6 +144,7 @@ export default function ImmunizationsScreen() {
   const [vaccinsLoaded, setVaccinsLoaded] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
+  const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [autoLoadMore, setAutoLoadMore] = useState(false);
@@ -320,6 +323,37 @@ export default function ImmunizationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const onBackPress = () => {
+        if (isOpen) {
+          closeSheet();
+          return true;
+        }
+        if (returnTarget === "home") {
+          router.replace("/baby/home");
+          return true;
+        }
+        if (returnTarget === "chrono") {
+          router.replace("/baby/chrono");
+          return true;
+        }
+        if (returnTarget === "journal") {
+          router.replace("/baby/chrono");
+          return true;
+        }
+        router.replace("/baby/plus");
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress,
+      );
+      return () => subscription.remove();
+    }, [closeSheet, isOpen, returnTarget, router]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
       if (openModal !== "true") return;
       setPendingMode("add");
       setPendingOpen(true);
@@ -369,9 +403,9 @@ export default function ImmunizationsScreen() {
   useEffect(() => {
     if (!activeChild?.id) return;
     const versionAtSubscribe = loadMoreVersionRef.current;
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-    const startOfRange = new Date();
+    const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+    endOfRange.setHours(23, 59, 59, 999);
+    const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
@@ -404,7 +438,7 @@ export default function ImmunizationsScreen() {
         setVitaminesLoaded(true);
         mergeAndSortImmunos();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
     const unsubscribeVaccins = ecouterVaccins(
@@ -417,14 +451,14 @@ export default function ImmunizationsScreen() {
         setVaccinsLoaded(true);
         mergeAndSortImmunos();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
     return () => {
       unsubscribeVitamines();
       unsubscribeVaccins();
     };
-  }, [activeChild, daysWindow]);
+  }, [activeChild, daysWindow, rangeEndDate]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -434,6 +468,7 @@ export default function ImmunizationsScreen() {
     setVaccinsLoaded(false);
     setEmptyDelayDone(false);
     setDaysWindow(14);
+    setRangeEndDate(null);
     setIsLoadingMore(false);
     setHasMore(true);
     setAutoLoadMore(false);
@@ -444,6 +479,30 @@ export default function ImmunizationsScreen() {
 
   const isImmunosLoading =
     selectedType === "vitamine" ? !vitaminesLoaded : !vaccinsLoaded;
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const types = selectedType === "vitamine" ? "vitamine" : "vaccin";
+
+    getNextEventDateBeforeHybrid(activeChild.id, types, endOfToday)
+      .then((nextDate) => {
+        if (cancelled) return;
+        setDaysWindow(14);
+        setRangeEndDate(nextDate ?? endOfToday);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDaysWindow(14);
+        setRangeEndDate(endOfToday);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChild?.id, selectedType]);
 
   useEffect(() => {
     if (isImmunosLoading) {
@@ -459,18 +518,49 @@ export default function ImmunizationsScreen() {
   }, [isImmunosLoading, groupedImmunos.length, selectedType]);
 
   const loadMoreStep = useCallback(
-    (auto = false) => {
-      if (!hasMore) return;
+    async (auto = false) => {
+      if (!hasMore || !activeChild?.id) return;
       setIsLoadingMore(true);
       pendingLoadMoreRef.current = 2;
       loadMoreVersionRef.current += 1;
-      setDaysWindow((prev) => prev + 14);
+
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      const beforeDate = new Date(startOfRange.getTime() - 1);
+
+      const types = selectedType === "vitamine" ? "vitamine" : "vaccin";
+      const nextEventDate = await getNextEventDateBeforeHybrid(
+        activeChild.id,
+        types,
+        beforeDate,
+      );
+
+      if (nextEventDate) {
+        setDaysWindow(14);
+        setRangeEndDate(nextEventDate);
+      } else {
+        setHasMore(false);
+        pendingLoadMoreRef.current = 0;
+        setIsLoadingMore(false);
+        setAutoLoadMore(false);
+      }
+
       if (!auto) {
         setAutoLoadMore(true);
         setAutoLoadMoreAttempts(0);
       }
     },
-    [hasMore],
+    [
+      hasMore,
+      activeChild?.id,
+      daysWindow,
+      rangeEndDate,
+      selectedType,
+      setHasMore,
+    ],
   );
 
   const handleLoadMore = useCallback(() => {
@@ -524,7 +614,9 @@ export default function ImmunizationsScreen() {
   useEffect(() => {
     if (!activeChild?.id) return;
     let cancelled = false;
-    const startOfRange = new Date();
+    const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+    endOfRange.setHours(23, 59, 59, 999);
+    const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
     const beforeDate = new Date(startOfRange.getTime() - 1);
@@ -544,7 +636,7 @@ export default function ImmunizationsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeChild?.id, daysWindow, selectedType]);
+  }, [activeChild?.id, daysWindow, selectedType, rangeEndDate]);
 
   // Filtrage et regroupement par jour
   useEffect(() => {
@@ -985,7 +1077,7 @@ export default function ImmunizationsScreen() {
                     style={[
                       styles.vaccinListItemText,
                       selectedVaccin === vaccin && {
-                        color: Colors[colorScheme].tint,
+                        color: "#000000",
                       },
                       selectedVaccin === vaccin &&
                         styles.vaccinListItemTextSelected,
@@ -1078,7 +1170,7 @@ export default function ImmunizationsScreen() {
                     style={[
                       styles.vaccinListItemText,
                       selectedVitamine === vitamine && {
-                        color: Colors[colorScheme].tint,
+                        color: "#000",
                       },
                       selectedVitamine === vitamine &&
                         styles.vaccinListItemTextSelected,
@@ -1641,7 +1733,7 @@ export default function ImmunizationsScreen() {
                 hasMore={hasMore}
                 loading={isLoadingMore}
                 onPress={handleLoadMore}
-                text="Voir plus (14 jours)"
+                text="Voir plus"
                 accentColor={Colors[colorScheme].tint}
               />
             )}
@@ -1660,7 +1752,7 @@ export default function ImmunizationsScreen() {
                   hasMore={hasMore}
                   loading={isLoadingMore}
                   onPress={handleLoadMore}
-                  text="Voir plus (14 jours)"
+                  text="Voir plus"
                   accentColor={Colors[colorScheme].tint}
                 />
               )
