@@ -9,22 +9,20 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterBiberon,
-  ajouterTetee,
-  modifierBiberon,
-  modifierTetee,
-  supprimerTetee,
+  ajouterPompage,
+  modifierPompage,
+  supprimerPompage,
 } from "@/migration/eventsDoubleWriteService";
 import {
-  ecouterBiberonsHybrid as ecouterBiberons,
-  ecouterTeteesHybrid as ecouterTetees,
+  ecouterPompagesHybrid as ecouterPompages,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import { Ionicons } from "@expo/vector-icons";
+import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { HeaderBackButton } from "@react-navigation/elements";
 import { useNetInfo } from "@react-native-community/netinfo";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -41,41 +39,43 @@ import {
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useHeaderRight } from "../_layout";
+import { useHeaderRight } from "../../../_layout";
 
 // ============================================
 // TYPES
 // ============================================
-type MealType = "tetee" | "biberon";
 type FilterType = "today" | "past";
 
-interface Meal {
+interface Pompage {
   id: string;
-  type?: MealType;
-  quantite?: number | null;
+  quantiteGauche: number;
+  quantiteDroite: number;
   date: { seconds: number };
   createdAt: { seconds: number };
 }
 
-interface MealGroup {
+interface PompageGroup {
   date: string;
   dateFormatted: string;
-  meals: Meal[];
+  pompages: Pompage[];
+  totalQuantityLeft: number;
+  totalQuantityRight: number;
   totalQuantity: number;
-  lastMeal: Meal;
+  lastPompage: Pompage;
 }
 
 // ============================================
 // COMPONENT
 // ============================================
 
-export default function MealsScreen() {
+export default function PumpingScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const { openSheet, closeSheet, viewProps } = useSheet();
+  const headerOwnerId = useRef(`pumping-${Math.random().toString(36).slice(2)}`);
+  const navigation = useNavigation();
   const { showToast } = useToast();
-  const headerOwnerId = useRef(`meals-${Math.random().toString(36).slice(2)}`);
   const netInfo = useNetInfo();
   const isOffline =
     netInfo.isInternetReachable === false || netInfo.isConnected === false;
@@ -83,13 +83,17 @@ export default function MealsScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
+  const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
+  const sheetOwnerId = "pumping";
+  const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
   // États des données
-  const [meals, setMeals] = useState<Meal[]>([]);
-  const [groupedMeals, setGroupedMeals] = useState<MealGroup[]>([]);
+  const [pompages, setPompages] = useState<Pompage[]>([]);
+  const [groupedPompages, setGroupedPompages] = useState<PompageGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [teteesLoaded, setTeteesLoaded] = useState(false);
-  const [biberonsLoaded, setBiberonsLoaded] = useState(false);
+  const [pompagesLoaded, setPompagesLoaded] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -98,26 +102,22 @@ export default function MealsScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
-  const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
+  const [editingPompage, setEditingPompage] = useState<Pompage | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [mealType, setMealType] = useState<MealType>("tetee");
-  const [layoutReady, setLayoutReady] = useState(false);
-  const [pendingOpen, setPendingOpen] = useState(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [quantite, setQuantite] = useState<number>(100);
-  const sheetOwnerId = "meals";
-  const isSheetActive = viewProps?.ownerId === sheetOwnerId;
+  const [quantiteGauche, setQuantiteGauche] = useState<number>(100);
+  const [quantiteDroite, setQuantiteDroite] = useState<number>(100);
 
   // États des pickers
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
-  const { tab, openModal, editId, returnTo } = useLocalSearchParams();
+  const { openModal, editId, returnTo } = useLocalSearchParams();
+  const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
 
@@ -126,7 +126,7 @@ export default function MealsScreen() {
 
 
   // ============================================
-  // EFFECTS - URL PARAMS
+  // EFFECTS - HEADER
   // ============================================
 
   // Gérer le bouton calendrier
@@ -134,7 +134,6 @@ export default function MealsScreen() {
     setShowCalendar((prev) => {
       const newValue = !prev;
 
-      // Si on ouvre le calendrier, sélectionner la date du jour par défaut et réinitialiser le filtre
       if (newValue) {
         const today = new Date();
         const todayString = `${today.getFullYear()}-${String(
@@ -143,29 +142,21 @@ export default function MealsScreen() {
         setSelectedDate(todayString);
         setSelectedFilter(null);
       }
-      // Ne plus réinitialiser la date sélectionnée lors de la fermeture du calendrier
 
       return newValue;
     });
   }, []);
 
-  const prepareAddModal = useCallback((preferredType?: "seins" | "biberons") => {
+  const prepareAddModal = useCallback(() => {
     setDateHeure(new Date());
-    setEditingMeal(null);
+    setEditingPompage(null);
     setIsSubmitting(false);
-
-    if (preferredType === "seins") {
-      setMealType("tetee");
-    } else if (preferredType === "biberons") {
-      setMealType("biberon");
-      setQuantite(100);
-    } else {
-      setMealType("tetee");
-    }
+    setQuantiteGauche(100);
+    setQuantiteDroite(100);
   }, []);
 
-  const openAddModal = useCallback((preferredType?: "seins" | "biberons") => {
-    prepareAddModal(preferredType);
+  const openAddModal = useCallback(() => {
+    prepareAddModal();
     setPendingMode("add");
     setPendingOpen(true);
   }, [prepareAddModal]);
@@ -182,12 +173,6 @@ export default function MealsScreen() {
           gap: 0,
         }}
       >
-        {/* <VoiceCommandButton
-          size={18}
-          color={Colors[colorScheme].tint}
-          showTestToggle={false}
-        /> */}
-
         <Pressable
           onPress={handleCalendarPress}
           style={[
@@ -224,18 +209,42 @@ export default function MealsScreen() {
     ])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      const parent = navigation.getParent();
+      parent?.setOptions({
+        headerLeft: () => (
+          <HeaderBackButton
+            onPress={() => {
+              if (returnTarget === "home") {
+                router.replace("/baby/home");
+                return;
+              }
+              if (returnTarget === "chrono") {
+                router.replace("/baby/chrono");
+                return;
+              }
+              if (returnTarget === "journal") {
+                router.replace("/baby/chrono");
+                return;
+              }
+              router.back();
+            }}
+            tintColor={Colors[colorScheme].text}
+            labelVisible={false}
+          />
+        ),
+      });
+
+      return () => {
+        parent?.setOptions({ headerLeft: undefined });
+      };
+    }, [colorScheme, navigation, returnTarget])
+  );
+
   // ============================================
   // EFFECTS - URL PARAMS
   // ============================================
-
-  // Définir l'onglet initial en fonction du paramètre
-  useEffect(() => {
-    if (tab === "seins") {
-      setMealType("tetee");
-    } else if (tab === "biberons") {
-      setMealType("biberon");
-    }
-  }, [tab]);
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
   useFocusEffect(
@@ -251,10 +260,10 @@ export default function MealsScreen() {
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
       if (pendingMode !== "edit") {
-        prepareAddModal(tab as "seins" | "biberons" | undefined);
+        prepareAddModal();
       }
       openSheet(buildSheetProps());
-      router.replace("/(drawer)/baby/meals");
+      navigation.setParams({ openModal: undefined, editId: undefined });
       setPendingOpen(false);
       setPendingMode(null);
     });
@@ -263,30 +272,29 @@ export default function MealsScreen() {
     pendingOpen,
     layoutReady,
     pendingMode,
-    tab,
     router,
     returnTo,
-    openSheet,
     prepareAddModal,
+    openSheet,
   ]);
 
   useEffect(() => {
     if (!editId || !layoutReady) return;
     const normalizedId = Array.isArray(editId) ? editId[0] : editId;
     if (!normalizedId || editIdRef.current === normalizedId) return;
-    const target = meals.find((meal) => meal.id === normalizedId);
+    const target = pompages.find((pompage) => pompage.id === normalizedId);
     if (!target) return;
     stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(target);
-    router.replace("/(drawer)/baby/meals");
-  }, [editId, layoutReady, meals, router, returnTo]);
+    navigation.setParams({ openModal: undefined, editId: undefined });
+  }, [editId, layoutReady, pompages, router, returnTo]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
   // ============================================
 
-  // Écoute en temps réel - Tétées ET Biberons
+  // Écoute en temps réel
   useEffect(() => {
     if (!activeChild?.id) return;
     const versionAtSubscribe = loadMoreVersionRef.current;
@@ -296,57 +304,31 @@ export default function MealsScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
-    let teteesData: Meal[] = [];
-    let biberonsData: Meal[] = [];
-
-    const mergeAndSortMeals = () => {
-      const merged = [...teteesData, ...biberonsData].sort(
-        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
-      );
-      setMeals(merged);
-      if (
-        pendingLoadMoreRef.current > 0 &&
-        versionAtSubscribe === loadMoreVersionRef.current
-      ) {
-        pendingLoadMoreRef.current -= 1;
-        if (pendingLoadMoreRef.current <= 0) {
-          setIsLoadingMore(false);
+    const unsubscribe = ecouterPompages(
+      activeChild.id,
+      (data) => {
+        setPompages(data);
+        setPompagesLoaded(true);
+        if (
+          pendingLoadMoreRef.current > 0 &&
+          versionAtSubscribe === loadMoreVersionRef.current
+        ) {
+          pendingLoadMoreRef.current -= 1;
+          if (pendingLoadMoreRef.current <= 0) {
+            setIsLoadingMore(false);
+          }
         }
-      }
-    };
-
-    const unsubscribeTetees = ecouterTetees(
-      activeChild.id,
-      (tetees) => {
-        teteesData = tetees;
-        setTeteesLoaded(true);
-        mergeAndSortMeals();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
     );
-
-    const unsubscribeBiberons = ecouterBiberons(
-      activeChild.id,
-      (biberons) => {
-        biberonsData = biberons;
-        setBiberonsLoaded(true);
-        mergeAndSortMeals();
-      },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
-    );
-
-    return () => {
-      unsubscribeTetees();
-      unsubscribeBiberons();
-    };
+    return () => unsubscribe();
   }, [activeChild, daysWindow]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setMeals([]);
-    setGroupedMeals([]);
-    setTeteesLoaded(false);
-    setBiberonsLoaded(false);
+    setPompages([]);
+    setGroupedPompages([]);
+    setPompagesLoaded(false);
     setEmptyDelayDone(false);
     setDaysWindow(14);
     setIsLoadingMore(false);
@@ -355,26 +337,23 @@ export default function MealsScreen() {
     pendingLoadMoreRef.current = 0;
   }, [activeChild?.id]);
 
-  const isMealsLoading = !(teteesLoaded && biberonsLoaded);
-  const mealsLoaded = !isMealsLoading;
-
   useEffect(() => {
-    if (!mealsLoaded) {
+    if (!pompagesLoaded) {
       setEmptyDelayDone(false);
       return;
     }
-    if (groupedMeals.length > 0) {
+    if (groupedPompages.length > 0) {
       setEmptyDelayDone(true);
       return;
     }
     const timer = setTimeout(() => setEmptyDelayDone(true), 300);
     return () => clearTimeout(timer);
-  }, [mealsLoaded, groupedMeals.length]);
+  }, [pompagesLoaded, groupedPompages.length]);
 
   const loadMoreStep = useCallback((auto = false) => {
     if (!hasMore) return;
     setIsLoadingMore(true);
-    pendingLoadMoreRef.current = 2;
+    pendingLoadMoreRef.current = 1;
     loadMoreVersionRef.current += 1;
     setDaysWindow((prev) => prev + 14);
     if (!auto) {
@@ -389,14 +368,14 @@ export default function MealsScreen() {
 
   useEffect(() => {
     if (selectedFilter === "today" || selectedDate) return;
-    if (!autoLoadMore && !isMealsLoading && groupedMeals.length === 0 && hasMore) {
+    if (!autoLoadMore && pompagesLoaded && groupedPompages.length === 0 && hasMore) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
   }, [
     autoLoadMore,
-    isMealsLoading,
-    groupedMeals.length,
+    pompagesLoaded,
+    groupedPompages.length,
     hasMore,
     selectedFilter,
     selectedDate,
@@ -404,8 +383,8 @@ export default function MealsScreen() {
 
   useEffect(() => {
     if (!autoLoadMore) return;
-    if (isMealsLoading || isLoadingMore) return;
-    if (groupedMeals.length > 0 || !hasMore) {
+    if (!pompagesLoaded || isLoadingMore) return;
+    if (groupedPompages.length > 0 || !hasMore) {
       setAutoLoadMore(false);
       setAutoLoadMoreAttempts(0);
       return;
@@ -418,9 +397,9 @@ export default function MealsScreen() {
     loadMoreStep(true);
   }, [
     autoLoadMore,
-    isMealsLoading,
+    pompagesLoaded,
     isLoadingMore,
-    groupedMeals.length,
+    groupedPompages.length,
     hasMore,
     autoLoadMoreAttempts,
     loadMoreStep,
@@ -436,7 +415,7 @@ export default function MealsScreen() {
 
     // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, ["tetee", "biberon"], beforeDate)
+    hasMoreEventsBeforeHybrid(activeChild.id, "pompage", beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -455,35 +434,32 @@ export default function MealsScreen() {
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
-    // Filtrer les repas en fonction du filtre sélectionné ou de la date du calendrier
-    const filtered = meals.filter((meal) => {
-      const mealDate = new Date(meal.date.seconds * 1000);
-      mealDate.setHours(0, 0, 0, 0);
-      const mealTime = mealDate.getTime();
+    const filtered = pompages.filter((pompage) => {
+      const pompageDate = new Date(pompage.date.seconds * 1000);
+      pompageDate.setHours(0, 0, 0, 0);
+      const pompageTime = pompageDate.getTime();
 
-      // Si une date est sélectionnée dans le calendrier (peu importe si le calendrier est ouvert ou fermé)
       if (selectedDate) {
         const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
         const calDate = new Date(calYear, calMonth - 1, calDay);
         calDate.setHours(0, 0, 0, 0);
-        return mealTime === calDate.getTime();
+        return pompageTime === calDate.getTime();
       }
 
-      // Sinon, appliquer le filtre sélectionné
       switch (selectedFilter) {
         case "today":
-          return mealTime === todayTime;
+          return pompageTime === todayTime;
         case "past":
-          return mealTime < todayTime;
+          return pompageTime < todayTime;
         case null:
         default:
-          return true; // Afficher tous les repas par défaut
+          return true;
       }
     });
 
-    const grouped = groupMealsByDay(filtered);
-    setGroupedMeals(grouped);
-  }, [meals, selectedFilter, selectedDate, showCalendar]);
+    const grouped = groupPompagesByDay(filtered);
+    setGroupedPompages(grouped);
+  }, [pompages, selectedFilter, selectedDate, showCalendar]);
 
   // Nettoyage de l'intervalle lors du démontage
   useEffect(() => {
@@ -502,11 +478,8 @@ export default function MealsScreen() {
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
 
-    meals.forEach((meal) => {
-      // Convertir le timestamp en date
-      const date = new Date(meal.date.seconds * 1000);
-
-      // Créer la clé au format YYYY-MM-DD
+    pompages.forEach((pompage) => {
+      const date = new Date(pompage.date.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
@@ -518,7 +491,6 @@ export default function MealsScreen() {
       };
     });
 
-    // Marquer la date sélectionnée
     if (selectedDate) {
       marked[selectedDate] = {
         ...marked[selectedDate],
@@ -528,11 +500,10 @@ export default function MealsScreen() {
     }
 
     return marked;
-  }, [meals, selectedDate, colorScheme]);
+  }, [pompages, selectedDate, colorScheme]);
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
-    // Déployer automatiquement la carte du jour sélectionné
     setExpandedDays(new Set([day.dateString]));
   };
 
@@ -548,7 +519,6 @@ export default function MealsScreen() {
   }, []);
 
   const handleFilterPress = (filter: FilterType) => {
-    // Si on clique sur "Aujourd'hui", déployer automatiquement la carte du jour
     if (filter === "today") {
       applyTodayFilter();
       return;
@@ -557,7 +527,6 @@ export default function MealsScreen() {
     setSelectedFilter(filter);
     setSelectedDate(null);
     setShowCalendar(false);
-    // Réinitialiser l'expansion pour les autres filtres
     setExpandedDays(new Set());
   };
 
@@ -573,11 +542,11 @@ export default function MealsScreen() {
   // HELPERS - GROUPING
   // ============================================
 
-  const groupMealsByDay = (meals: Meal[]): MealGroup[] => {
-    const groups: { [key: string]: Meal[] } = {};
+  const groupPompagesByDay = (pompages: Pompage[]): PompageGroup[] => {
+    const groups: { [key: string]: Pompage[] } = {};
 
-    meals.forEach((meal) => {
-      const date = new Date(meal.date?.seconds * 1000);
+    pompages.forEach((pompage) => {
+      const date = new Date(pompage.date?.seconds * 1000);
       const dateKey = `${date.getFullYear()}-${String(
         date.getMonth() + 1
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -585,17 +554,22 @@ export default function MealsScreen() {
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
-      groups[dateKey].push(meal);
+      groups[dateKey].push(pompage);
     });
 
     return Object.entries(groups)
-      .map(([dateKey, meals]) => {
+      .map(([dateKey, pompages]) => {
         const date = new Date(dateKey);
-        const totalQuantity = meals.reduce((sum, meal) => {
-          const q = meal.quantite;
-          return sum + (typeof q === "number" ? q : 0);
-        }, 0);
-        const lastMeal = meals.reduce((latest, current) =>
+        const totalQuantityLeft = pompages.reduce(
+          (sum, pompage) => sum + (pompage.quantiteGauche || 0),
+          0
+        );
+        const totalQuantityRight = pompages.reduce(
+          (sum, pompage) => sum + (pompage.quantiteDroite || 0),
+          0
+        );
+        const totalQuantity = totalQuantityLeft + totalQuantityRight;
+        const lastPompage = pompages.reduce((latest, current) =>
           (current.date?.seconds || 0) > (latest.date?.seconds || 0)
             ? current
             : latest
@@ -609,11 +583,13 @@ export default function MealsScreen() {
             month: "long",
             year: "numeric",
           }),
-          meals: meals.sort(
+          pompages: pompages.sort(
             (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
           ),
+          totalQuantityLeft,
+          totalQuantityRight,
           totalQuantity,
-          lastMeal,
+          lastPompage,
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -626,12 +602,12 @@ export default function MealsScreen() {
   const handlePressIn = (action: () => void) => {
     action();
 
-    let speed = 200; // Démarre lentement
+    let speed = 200;
 
     const accelerate = () => {
       action();
       if (speed > 50) {
-        speed -= 20; // Accélère progressivement
+        speed -= 20;
         clearInterval(intervalRef.current);
         intervalRef.current = setInterval(accelerate, speed);
       }
@@ -661,48 +637,17 @@ export default function MealsScreen() {
     setExpandedDays(newExpandedDays);
   };
 
-  const getMealTypeLabel = (type?: MealType): string => {
-    if (!type) return "Inconnu";
-    return type === "tetee" ? "Sein" : "Biberon";
-  };
-
-  const getMealIcon = (type?: MealType) => {
-    switch (type) {
-      case "tetee":
-        return {
-          lib: "FontAwesome",
-          name: "person-breastfeeding",
-        };
-      case "biberon":
-        return {
-          lib: "MaterialCommunityIcons",
-          name: "baby-bottle",
-        };
-      default:
-        return {
-          lib: "FontAwesome",
-          name: "utensils",
-        };
-    }
-  };
-
   // ============================================
   // HANDLERS - MODAL
   // ============================================
 
-  const openEditModal = (meal: Meal) => {
-    setDateHeure(new Date(meal.date.seconds * 1000));
-    setEditingMeal(meal);
+  const openEditModal = (pompage: Pompage) => {
+    setDateHeure(new Date(pompage.date.seconds * 1000));
+    setQuantiteGauche(pompage.quantiteGauche);
+    setQuantiteDroite(pompage.quantiteDroite);
+    setEditingPompage(pompage);
     setIsSubmitting(false);
     setPendingMode("edit");
-
-    // Déterminer le type (avec fallback pour anciennes données)
-    const type = meal.type || "tetee";
-    setMealType(type);
-
-    // Quantité (avec fallback)
-    const quantity = meal.quantite ?? 100;
-    setQuantite(quantity);
     setPendingOpen(true);
   };
 
@@ -719,15 +664,19 @@ export default function MealsScreen() {
     returnToRef.current = null;
   };
 
+  useEffect(() => {
+    stashReturnTo();
+  }, [returnTo]);
+
   const maybeReturnTo = (targetOverride?: string | null) => {
     const target = targetOverride ?? returnToRef.current;
     returnToRef.current = null;
     if (target === "home") {
-      router.replace("/(drawer)/baby/home");
+      router.replace("/baby/home");
     } else if (target === "chrono") {
-      router.replace("/(drawer)/baby/chrono");
+      router.replace("/baby/chrono");
     } else if (target === "journal") {
-      router.replace("/(drawer)/baby/journal");
+      router.replace("/baby/chrono");
     }
   };
 
@@ -745,42 +694,31 @@ export default function MealsScreen() {
     try {
       setIsSubmitting(true);
 
-      const isTetee = mealType === "tetee";
       const dataToSave = {
-        type: mealType,
-        quantite: isTetee ? null : quantite,
+        quantiteGauche,
+        quantiteDroite,
         date: dateHeure,
       };
 
-      if (editingMeal) {
-        // Modification
-        if (isTetee) {
-          await modifierTetee(activeChild.id, editingMeal.id, dataToSave);
-        } else {
-          await modifierBiberon(activeChild.id, editingMeal.id, dataToSave);
-        }
+      if (editingPompage) {
+        await modifierPompage(activeChild.id, editingPompage.id, dataToSave);
       } else {
-        // Ajout
-        if (isTetee) {
-          await ajouterTetee(activeChild.id, dataToSave);
-        } else {
-          await ajouterBiberon(activeChild.id, dataToSave);
-        }
+        await ajouterPompage(activeChild.id, dataToSave);
       }
 
       if (isOffline) {
         showToast(
-          editingMeal
+          editingPompage
             ? "Modification en attente de synchronisation"
             : "Ajout en attente de synchronisation"
         );
       }
       closeModal();
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde du repas:", error);
+      console.error("Erreur lors de la sauvegarde du pompage:", error);
       Alert.alert(
         "Erreur",
-        "Impossible de sauvegarder le repas. Veuillez réessayer."
+        "Impossible de sauvegarder le pompage. Veuillez réessayer."
       );
     } finally {
       setIsSubmitting(false);
@@ -788,16 +726,16 @@ export default function MealsScreen() {
   };
 
   const handleDelete = () => {
-    if (isSubmitting || !editingMeal || !activeChild) return;
+    if (isSubmitting || !editingPompage || !activeChild) return;
     setShowDeleteModal(true);
   };
 
   const confirmDelete = async () => {
-    if (isSubmitting || !editingMeal || !activeChild) return;
+    if (isSubmitting || !editingPompage || !activeChild) return;
 
     try {
       setIsSubmitting(true);
-      await supprimerTetee(activeChild.id, editingMeal.id);
+      await supprimerPompage(activeChild.id, editingPompage.id);
       if (isOffline) {
         showToast("Suppression en attente de synchronisation");
       }
@@ -805,7 +743,7 @@ export default function MealsScreen() {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la suppression:", error);
-      Alert.alert("Erreur", "Impossible de supprimer le repas. Veuillez réessayer.");
+      Alert.alert("Erreur", "Impossible de supprimer le pompage. Veuillez réessayer.");
     } finally {
       setIsSubmitting(false);
     }
@@ -814,112 +752,91 @@ export default function MealsScreen() {
   function renderSheetContent() {
     return (
       <>
-      <Text style={styles.modalCategoryLabel}>Type de repas</Text>
-      <View style={styles.typeRow}>
+      <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
+      <View style={styles.quantityPickerRow}>
         <TouchableOpacity
           style={[
-            styles.typeButton,
-            mealType === "tetee" && styles.typeButtonActive,
-            isSubmitting && styles.typeButtonDisabled,
+            styles.quantityButton,
+            isSubmitting && styles.quantityButtonDisabled,
           ]}
-          onPress={() => setMealType("tetee")}
+          onPressIn={() =>
+            handlePressIn(() => setQuantiteGauche((q) => Math.max(0, q - 5)))
+          }
+          onPressOut={handlePressOut}
           disabled={isSubmitting}
         >
-          <FontAwesome
-            name="person-breastfeeding"
-            size={20}
-            color={mealType === "tetee" ? "white" : "#666"}
-          />
           <Text
             style={[
-              styles.typeText,
-              mealType === "tetee" && styles.typeTextActive,
-              isSubmitting && styles.typeTextDisabled,
+              styles.quantityButtonText,
+              isSubmitting && styles.quantityButtonTextDisabled,
             ]}
           >
-            Seins
+            -
           </Text>
         </TouchableOpacity>
-
+        <Text style={styles.quantityPickerValue}>{quantiteGauche} ml</Text>
         <TouchableOpacity
           style={[
-            styles.typeButton,
-            mealType === "biberon" && styles.typeButtonActive,
-            isSubmitting && styles.typeButtonDisabled,
+            styles.quantityButton,
+            isSubmitting && styles.quantityButtonDisabled,
           ]}
-          onPress={() => {
-            setMealType("biberon");
-            setQuantite(100);
-          }}
+          onPressIn={() => handlePressIn(() => setQuantiteGauche((q) => q + 5))}
+          onPressOut={handlePressOut}
           disabled={isSubmitting}
         >
-          <FontAwesome
-            name="jar-wheat"
-            size={20}
-            color={mealType === "biberon" ? "white" : "#666"}
-          />
           <Text
             style={[
-              styles.typeText,
-              mealType === "biberon" && styles.typeTextActive,
-              isSubmitting && styles.typeTextDisabled,
+              styles.quantityButtonText,
+              isSubmitting && styles.quantityButtonTextDisabled,
             ]}
           >
-            Biberon
+            +
           </Text>
         </TouchableOpacity>
       </View>
 
-      {isQuantityVisible ? (
-        <>
-          <Text style={styles.modalCategoryLabel}>Quantité</Text>
-          <View style={styles.quantityRow}>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPressIn={() =>
-                handlePressIn(() => setQuantite((q) => Math.max(0, q - 5)))
-              }
-              onPressOut={handlePressOut}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                -
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.quantityValue}>{quantite} ml</Text>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPressIn={() => handlePressIn(() => setQuantite((q) => q + 5))}
-              onPressOut={handlePressOut}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                +
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : (
-        <View style={styles.quantityNA}>
-          <Text style={styles.quantityNAText}>Quantité : N/A</Text>
-        </View>
-      )}
+      <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
+      <View style={styles.quantityPickerRow}>
+        <TouchableOpacity
+          style={[
+            styles.quantityButton,
+            isSubmitting && styles.quantityButtonDisabled,
+          ]}
+          onPressIn={() =>
+            handlePressIn(() => setQuantiteDroite((q) => Math.max(0, q - 5)))
+          }
+          onPressOut={handlePressOut}
+          disabled={isSubmitting}
+        >
+          <Text
+            style={[
+              styles.quantityButtonText,
+              isSubmitting && styles.quantityButtonTextDisabled,
+            ]}
+          >
+            -
+          </Text>
+        </TouchableOpacity>
+        <Text style={styles.quantityPickerValue}>{quantiteDroite} ml</Text>
+        <TouchableOpacity
+          style={[
+            styles.quantityButton,
+            isSubmitting && styles.quantityButtonDisabled,
+          ]}
+          onPressIn={() => handlePressIn(() => setQuantiteDroite((q) => q + 5))}
+          onPressOut={handlePressOut}
+          disabled={isSubmitting}
+        >
+          <Text
+            style={[
+              styles.quantityButtonText,
+              isSubmitting && styles.quantityButtonTextDisabled,
+            ]}
+          >
+            +
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
       <View style={styles.dateTimeContainer}>
@@ -932,7 +849,7 @@ export default function MealsScreen() {
           disabled={isSubmitting}
         >
           <FontAwesome
-            name="calendar-alt"
+            name="calendar"
             size={16}
             color={isSubmitting ? "#ccc" : "#666"}
           />
@@ -1008,20 +925,20 @@ export default function MealsScreen() {
   }
 
   function buildSheetProps() {
-    const returnTarget = returnToRef.current;
+    const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
     return {
       ownerId: sheetOwnerId,
-      title: editingMeal ? "Modifier le repas" : "Nouveau repas",
-      icon: "baby",
-      accentColor: "#4A90E2",
-      isEditing: !!editingMeal,
+      title: editingPompage ? "Modifier la session" : "Nouvelle session",
+      icon: "pump-medical",
+      accentColor: "#28a745",
+      isEditing: !!editingPompage,
       isSubmitting,
       onSubmit: handleSubmit,
-      onDelete: editingMeal ? handleDelete : undefined,
+      onDelete: editingPompage ? handleDelete : undefined,
       children: renderSheetContent(),
       onDismiss: () => {
         setIsSubmitting(false);
-        setEditingMeal(null);
+        setEditingPompage(null);
         editIdRef.current = null;
         maybeReturnTo(returnTarget);
       },
@@ -1034,10 +951,10 @@ export default function MealsScreen() {
   }, [
     isSheetActive,
     openSheet,
-    editingMeal,
+    editingPompage,
     isSubmitting,
-    mealType,
-    quantite,
+    quantiteGauche,
+    quantiteDroite,
     dateHeure,
     showDate,
     showTime,
@@ -1074,71 +991,82 @@ export default function MealsScreen() {
   };
 
   // ============================================
-  // RENDER - MEAL ITEM
+  // RENDER - POMPAGE ITEM
   // ============================================
 
-  const renderMealItem = (meal: Meal, isLast: boolean = false) => {
-    const typeLabel = getMealTypeLabel(meal.type);
-    const icon = getMealIcon(meal.type);
-
-    const quantityDisplay =
-      meal.quantite !== null && meal.quantite !== undefined
-        ? `${meal.quantite} ml`
-        : "N/A";
-
-    return (
-      <TouchableOpacity
-        key={meal.id}
-        style={[styles.mealItem, isLast && styles.lastMealItem]}
-        onPress={() => openEditModal(meal)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.mealContent}>
-          <View style={[styles.avatar, { backgroundColor: "#4A90E2" }]}>
-            {icon.lib === "FontAwesome" ? (
-              <FontAwesome name={icon.name} size={20} color="#fff" />
-            ) : (
-              <MaterialCommunityIcons name={icon.name} size={20} color="#fff" />
+  const renderPompageItem = (pompage: Pompage, isLast: boolean = false) => (
+    <TouchableOpacity
+      key={pompage.id}
+      style={[styles.pompageItem, isLast && styles.lastPompageItem]}
+      onPress={() => openEditModal(pompage)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.pompageHeader}>
+        <View style={styles.timeContainer}>
+          <FontAwesome
+            name="clock"
+            size={16}
+            color={isLast ? "#28a745" : "#666"}
+          />
+          <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
+            {new Date(pompage.date?.seconds * 1000).toLocaleTimeString(
+              "fr-FR",
+              {
+                hour: "2-digit",
+                minute: "2-digit",
+              }
             )}
-          </View>
-          <View style={styles.mealInfo}>
-            <View style={styles.infoRow}>
-              <Text style={styles.mealTypeText}>
-                Quantité : {quantityDisplay}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.timeText}>
-                {new Date(meal.date?.seconds * 1000).toLocaleTimeString(
-                  "fr-FR",
-                  {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }
-                )}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.mealActions}>
-            <FontAwesome
-              name="edit"
-              size={16}
-              color="#4A90E2"
-              style={styles.editIcon}
-            />
-          </View>
+          </Text>
         </View>
-      </TouchableOpacity>
-    );
-  };
+        <View style={styles.headerActions}>
+          {/* {isLast && (
+            <View style={styles.recentBadge}>
+              <Text style={styles.recentText}>Récent</Text>
+            </View>
+          )} */}
+          <FontAwesome
+            name="edit"
+            size={16}
+            color="#28a745"
+            style={styles.editIcon}
+          />
+        </View>
+      </View>
+
+      <View style={styles.quantitiesContainer}>
+        <View style={styles.quantityRow}>
+          <View style={styles.quantityInfo}>
+            <FontAwesome name="chevron-left" size={12} color="#666" />
+            <Text style={styles.quantityLabel}>Gauche</Text>
+          </View>
+          <Text style={styles.quantityValue}>{pompage.quantiteGauche} ml</Text>
+        </View>
+
+        <View style={styles.quantityRow}>
+          <View style={styles.quantityInfo}>
+            <FontAwesome name="chevron-right" size={12} color="#666" />
+            <Text style={styles.quantityLabel}>Droite</Text>
+          </View>
+          <Text style={styles.quantityValue}>{pompage.quantiteDroite} ml</Text>
+        </View>
+
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.totalValue}>
+            {(pompage.quantiteGauche || 0) + (pompage.quantiteDroite || 0)} ml
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 
   // ============================================
   // RENDER - DAY GROUP
   // ============================================
 
-  const renderDayGroup = ({ item }: { item: MealGroup }) => {
+const renderDayGroup = ({ item }: { item: PompageGroup }) => {
     const isExpanded = expandedDays.has(item.date);
-    const hasMultipleMeals = item.meals.length > 1;
+    const hasMultiplePompages = item.pompages.length > 1;
 
     return (
       <View style={styles.dayCard}>
@@ -1148,29 +1076,31 @@ export default function MealsScreen() {
             <View style={styles.summaryInfo}>
               <View style={styles.summaryRow}>
                 <View style={styles.summaryBadge}>
-                  <FontAwesome name="baby" size={14} color="#4A90E2" />
+                  <FontAwesome name="pump-medical" size={14} color="#28a745" />
                   <Text style={styles.summaryText}>
-                    {item.meals.length} repas
+                    {item.pompages.length} session
+                    {item.pompages.length > 1 ? "s" : ""} •{" "}
+                    {item.totalQuantity} ml
                   </Text>
                 </View>
               </View>
             </View>
             <View style={styles.dailySummary}>
               <View style={styles.dailyQuantityItem}>
-                {item.totalQuantity > 0 ? (
-                  <Text style={styles.dailyQuantityLabel}>
-                    Biberon(s) :{" "}
-                    <Text style={styles.dailyQuantityValue}>
-                      {item.totalQuantity} ml
-                    </Text>
-                  </Text>
-                ) : (
-                  <Text style={styles.dailyQuantityLabel}>0 biberon</Text>
-                )}
+                <Text style={styles.dailyQuantityLabel}>Gauche:</Text>
+                <Text style={styles.dailyQuantityValue}>
+                  {item.totalQuantityLeft} ml
+                </Text>
+              </View>
+              <View style={styles.dailyQuantityItem}>
+                <Text style={styles.dailyQuantityLabel}>Droite:</Text>
+                <Text style={styles.dailyQuantityValue}>
+                  {item.totalQuantityRight} ml
+                </Text>
               </View>
             </View>
           </View>
-          {hasMultipleMeals && (
+          {hasMultiplePompages && (
             <TouchableOpacity
               style={styles.expandButton}
               onPress={() => toggleExpand(item.date)}
@@ -1183,24 +1113,25 @@ export default function MealsScreen() {
             </TouchableOpacity>
           )}
         </View>
-        {renderMealItem(item.lastMeal, true)}
-        {hasMultipleMeals && isExpanded && (
+
+        {renderPompageItem(item.lastPompage, true)}
+
+        {hasMultiplePompages && isExpanded && (
           <View style={styles.expandedContent}>
             <View style={styles.separator} />
             <Text style={styles.historyLabel}>Historique du jour</Text>
-            {item.meals
-              .filter((meal) => meal.id !== item.lastMeal.id)
-              .map((meal) => renderMealItem(meal))}
+            {item.pompages
+              .filter((pompage) => pompage.id !== item.lastPompage.id)
+              .map((pompage) => renderPompageItem(pompage))}
           </View>
         )}
       </View>
     );
   };
+
   // ============================================
   // RENDER - MAIN
   // ============================================
-
-  const isQuantityVisible = mealType === "biberon";
 
   return (
     <View style={styles.container}>
@@ -1285,43 +1216,21 @@ export default function MealsScreen() {
           )}
         </View>
 
-        {/* Liste des repas */}
-        {isMealsLoading || !emptyDelayDone ? (
-          <View style={styles.emptyContainer}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
-          </View>
-        ) : groupedMeals.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons
-              name="calendar-outline"
-              size={64}
-              color={Colors[colorScheme].tabIconDefault}
-            />
-            <ThemedText style={styles.emptyText}>
-              {meals.length === 0
-                ? "Aucun repas"
-                : "Aucun repas pour ce filtre"}
-            </ThemedText>
-            {!(selectedFilter === "today" || selectedDate) && (
-              <LoadMoreButton
-                hasMore={hasMore}
-                loading={isLoadingMore}
-                onPress={handleLoadMore}
-                text="Voir plus (14 jours)"
-                accentColor={Colors[colorScheme].tint}
+        {/* Liste des pompages */}
+        {pompagesLoaded && emptyDelayDone ? (
+          groupedPompages.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons
+                name="calendar-outline"
+                size={64}
+                color={Colors[colorScheme].tabIconDefault}
               />
-            )}
-          </View>
-        ) : (
-          <FlatList
-            data={groupedMeals}
-            keyExtractor={(item) => item.date}
-            renderItem={renderDayGroup}
-            showsVerticalScrollIndicator={false}
-            style={styles.flatlistContent}
-            contentContainerStyle={styles.listContent}
-            ListFooterComponent={
-              selectedFilter === "today" || selectedDate ? null : (
+              <ThemedText style={styles.emptyText}>
+                {pompages.length === 0
+                  ? "Aucune session enregistrée"
+                  : "Aucune session pour ce filtre"}
+              </ThemedText>
+              {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   hasMore={hasMore}
                   loading={isLoadingMore}
@@ -1329,15 +1238,38 @@ export default function MealsScreen() {
                   text="Voir plus (14 jours)"
                   accentColor={Colors[colorScheme].tint}
                 />
-              )
-            }
-          />
+              )}
+            </View>
+          ) : (
+            <FlatList
+              data={groupedPompages}
+              keyExtractor={(item) => item.date}
+              renderItem={renderDayGroup}
+              showsVerticalScrollIndicator={false}
+              style={styles.flatlistContent}
+              contentContainerStyle={styles.listContent}
+              ListFooterComponent={
+                selectedFilter === "today" || selectedDate ? null : (
+                  <LoadMoreButton
+                    hasMore={hasMore}
+                    loading={isLoadingMore}
+                    onPress={handleLoadMore}
+                    text="Voir plus (14 jours)"
+                    accentColor={Colors[colorScheme].tint}
+                  />
+                )
+              }
+            />
+          )
+        ) : (
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
         )}
-
         <ConfirmModal
           visible={showDeleteModal}
           title="Suppression"
-          message="Voulez-vous vraiment supprimer ce repas ?"
+          message="Voulez-vous vraiment supprimer ce pompage ?"
           confirmText="Supprimer"
           cancelText="Annuler"
           backgroundColor={Colors[colorScheme].background}
@@ -1361,16 +1293,11 @@ const styles = StyleSheet.create({
   },
   flatlistContent: {
     paddingVertical: 16,
-    // paddingBottom: 8,
   },
   headerButton: {
     paddingVertical: 8,
     borderRadius: 8,
     paddingHorizontal: 8,
-    // marginRight: 8,
-  },
-  headerButtonPressed: {
-    opacity: 0.6,
   },
   calendarContainer: {
     paddingHorizontal: 16,
@@ -1396,13 +1323,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  filterButtonActive: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
   filterText: {
     fontSize: 14,
     fontWeight: "600",
@@ -1410,26 +1330,29 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: "#fff",
   },
-  addButton: {
-    backgroundColor: "#4A90E2",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
-  },
-  addButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
-
+  // Section
+  section: {
+    marginBottom: 24,
+  },
+  dateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+  },
+  dateText: {
+    fontSize: 16,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
   // Day Card
   dayCard: {
     backgroundColor: "white",
@@ -1450,12 +1373,6 @@ const styles = StyleSheet.create({
   },
   dayInfo: {
     flex: 1,
-  },
-  dayDate: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
   },
   summaryInfo: {
     flexDirection: "column",
@@ -1495,7 +1412,7 @@ const styles = StyleSheet.create({
   },
   dailyQuantityValue: {
     fontSize: 12,
-    color: "#4A90E2",
+    color: "#28a745",
     fontWeight: "600",
   },
   expandButton: {
@@ -1503,80 +1420,103 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
-  // Meal Section
-  section: {
-    marginBottom: 24,
-  },
-  dateHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-  },
-  dateText: {
-    fontSize: 16,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  // Meal Item
-  mealItem: {
+  // Pompage Item
+  pompageItem: {
     backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 14,
     marginBottom: 8,
   },
-  lastMealItem: {
-    backgroundColor: "#e8f4fd",
+  lastPompageItem: {
+    backgroundColor: "#f0f8f4",
     borderLeftWidth: 4,
-    borderLeftColor: "#4A90E2",
+    borderLeftColor: "#28a745",
   },
-  mealContent: {
+  pompageHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 12,
+    marginBottom: 12,
   },
-  mealInfo: {
-    flex: 1,
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 2,
-  },
-  timeText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  mealTypeText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  mealActions: {
+  timeContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  quantityBadge: {
-    backgroundColor: "#4A90E2",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+  timeText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#666",
   },
-  quantityText: {
+  lastTimeText: {
+    color: "#333",
+    fontWeight: "600",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  recentBadge: {
+    backgroundColor: "#28a745",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  recentText: {
     color: "white",
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
   },
   editIcon: {
     opacity: 0.7,
   },
-
+  quantitiesContainer: {
+    gap: 8,
+  },
+  quantityRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "white",
+    borderRadius: 8,
+  },
+  quantityInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  quantityLabel: {
+    fontSize: 14,
+    color: "#666",
+  },
+  quantityValue: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "600",
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#28a745",
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  totalLabel: {
+    fontSize: 14,
+    color: "white",
+    fontWeight: "600",
+  },
+  totalValue: {
+    fontSize: 16,
+    color: "white",
+    fontWeight: "bold",
+  },
   // Expanded Content
   expandedContent: {
     marginTop: 8,
@@ -1586,19 +1526,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#eee",
     marginBottom: 12,
   },
-  historyLabel: {
-    fontSize: 12,
-    color: "#999",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-
   // Empty State
-  emptyState: {
+  emptyContainer: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 60,
   },
   emptyText: {
     fontSize: 18,
@@ -1606,12 +1538,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontWeight: "600",
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#999",
-    marginTop: 4,
-  },
-
   // Modal Content
   modalCategoryLabel: {
     alignSelf: "center",
@@ -1620,54 +1546,8 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 10,
   },
-
-  // Type Selection
-  typeRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 16,
-    gap: 12,
-  },
-  typeButton: {
-    flex: 1,
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 8,
-    padding: 16,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 12,
-  },
-  typeButtonActive: {
-    backgroundColor: "#4A90E2",
-  },
-  typeButtonDisabled: {
-    backgroundColor: "#f8f8f8",
-    opacity: 0.5,
-  },
-  typeText: {
-    fontSize: 16,
-    color: "#666",
-    fontWeight: "500",
-  },
-  typeTextActive: {
-    color: "white",
-    fontWeight: "bold",
-  },
-  typeTextDisabled: {
-    color: "#ccc",
-  },
-
-  // Quantity
-  quantityNA: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  quantityNAText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#999",
-  },
-  quantityRow: {
+  // Quantity Picker
+  quantityPickerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1692,26 +1572,29 @@ const styles = StyleSheet.create({
   quantityButtonTextDisabled: {
     color: "#ccc",
   },
-  quantityValue: {
+  quantityPickerValue: {
     fontSize: 20,
     marginHorizontal: 20,
     fontWeight: "bold",
     color: "#000000",
   },
-
   // Date/Time
   dateTimeContainer: {
     flexDirection: "row",
-    justifyContent: "center",
-    gap: 10,
-    marginBottom: 10,
+    gap: 12,
+    marginBottom: 20,
   },
   dateButton: {
-    backgroundColor: "#f0f0f0",
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
     flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
   },
   dateButtonDisabled: {
     backgroundColor: "#f5f5f5",
@@ -1726,8 +1609,13 @@ const styles = StyleSheet.create({
     color: "#ccc",
   },
   selectedDateTime: {
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
   },
   selectedDate: {
     fontSize: 16,
@@ -1737,26 +1625,80 @@ const styles = StyleSheet.create({
   },
   selectedTime: {
     fontSize: 20,
-    color: "#004cdaff",
+    color: "#28a745",
     fontWeight: "bold",
   },
-  // autres...
-  metaRow: {
+  //////////////////
+  header: {
+    padding: 16,
+    paddingBottom: 8,
+  },
+  addButton: {
+    backgroundColor: "#28a745",
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    flexWrap: "wrap",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
   },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 28,
+  addButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  dayDate: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 6,
+  },
+
+  historyLabel: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  emptyState: {
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 60,
   },
-  emptyContainer: {
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 4,
+  },
+  modalOverlay: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalContent: {
+    width: "90%",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    backgroundColor: "white",
+    borderRadius: 12,
+  },
+  modalHeader: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  actionButtonsContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
 });

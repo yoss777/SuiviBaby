@@ -15,6 +15,7 @@ import * as sellesService from "@/services/sellesService";
 import * as teteesService from "@/services/teteesService";
 import * as vaccinsService from "@/services/vaccinsService";
 import * as vitaminesService from "@/services/vitaminesService";
+import * as croissanceService from "@/services/croissanceService";
 
 // ============================================
 // CONFIGURATION
@@ -498,6 +499,89 @@ export function ecouterPompagesHybrid(
   );
 
   // Retourner une fonction qui désinscrit les 2
+  return () => {
+    unsubscribeOld();
+    unsubscribeNew();
+  };
+}
+
+// ============================================
+// LECTURE HYBRIDE - CROISSANCES
+// ============================================
+
+export async function obtenirToutesLesCroissancesHybrid(
+  childId: string
+): Promise<any[]> {
+  if (config.mode === "NEW_ONLY") {
+    return obtenirEvenements(childId, { type: "croissance" });
+  }
+
+  if (config.mode === "OLD_ONLY") {
+    return croissanceService.obtenirToutesLesCroissances(childId);
+  }
+
+  const [oldCroissances, newCroissances] = await Promise.all([
+    croissanceService.obtenirToutesLesCroissances(childId).catch(() => []),
+    obtenirEvenements(childId, { type: "croissance" }).catch(() => []),
+  ]);
+
+  console.log(
+    `📊 Croissances OLD: ${oldCroissances.length}, NEW: ${newCroissances.length}`
+  );
+
+  return deduplicateEvents(
+    oldCroissances,
+    newCroissances,
+    config.preferSource,
+    config.deduplicationWindow
+  );
+}
+
+export function ecouterCroissancesHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
+): () => void {
+  if (config.mode === "NEW_ONLY") {
+    return ecouterEvenements(childId, callback, {
+      type: "croissance",
+      waitForServer: options?.waitForServer,
+      depuis: options?.depuis,
+      jusqu: options?.jusqu,
+    });
+  }
+
+  if (config.mode === "OLD_ONLY") {
+    return croissanceService.ecouterCroissances(childId, callback);
+  }
+
+  let oldEvents: any[] = [];
+  let newEvents: any[] = [];
+
+  const merge = () => {
+    const merged = deduplicateEvents(
+      oldEvents,
+      newEvents,
+      config.preferSource,
+      config.deduplicationWindow
+    );
+    callback(merged);
+  };
+
+  const unsubscribeOld = croissanceService.ecouterCroissances(childId, (events) => {
+    oldEvents = events;
+    merge();
+  });
+
+  const unsubscribeNew = ecouterEvenements(
+    childId,
+    (events) => {
+      newEvents = events;
+      merge();
+    },
+    { type: "croissance" }
+  );
+
   return () => {
     unsubscribeOld();
     unsubscribeNew();

@@ -18,6 +18,7 @@ import * as sellesService from "@/services/sellesService";
 import * as teteesService from "@/services/teteesService";
 import * as vaccinsService from "@/services/vaccinsService";
 import * as vitaminesService from "@/services/vitaminesService";
+import * as croissanceService from "@/services/croissanceService";
 
 // ============================================
 // HELPER - Remove undefined
@@ -202,6 +203,143 @@ export async function supprimerTetee(childId: string, id: string) {
     try {
       await teteesService.supprimerTetee(childId, id);
       console.log("✅ Tétée supprimée dans OLD");
+    } catch (error) {
+      console.error("❌ Erreur suppression OLD:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (errors.length > 0 && config.failOnError) {
+    throw new Error("Erreurs lors de la suppression");
+  }
+}
+
+// ============================================
+// DOUBLE ÉCRITURE - CROISSANCE
+// ============================================
+
+export async function ajouterCroissance(childId: string, data: any) {
+  const errors: Error[] = [];
+
+  const newEventData = removeUndefined({
+    type: "croissance" as EventType,
+    tailleCm: data.tailleCm,
+    poidsKg: data.poidsKg,
+    teteCm: data.teteCm,
+    date: data.date || new Date(),
+    note: data.note,
+  });
+
+  let sharedId: string | null = null;
+  let oldRef: any = null;
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
+    try {
+      oldRef = await croissanceService.ajouterCroissance(childId, data);
+      sharedId = oldRef.id;
+      console.log("✅ Croissance ajoutée dans OLD:", sharedId);
+    } catch (error) {
+      console.error("❌ Erreur OLD:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
+    try {
+      if (sharedId) {
+        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
+        console.log("✅ Croissance ajoutée dans NEW avec ID:", sharedId);
+      } else {
+        sharedId = await ajouterEventNouveau(childId, newEventData as any);
+        console.log("✅ Croissance ajoutée dans NEW:", sharedId);
+      }
+    } catch (error) {
+      console.error("❌ Erreur NEW:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (errors.length > 0 && config.failOnError) {
+    throw new Error(
+      `Erreurs lors de la double écriture: ${errors.map((e) => e.message).join(", ")}`
+    );
+  }
+
+  return sharedId;
+}
+
+export async function obtenirToutesLesCroissances(childId: string) {
+  if (config.readFrom === "NEW") {
+    return obtenirEvenements(childId, { type: "croissance" });
+  }
+  return croissanceService.obtenirToutesLesCroissances(childId);
+}
+
+export function ecouterCroissances(
+  childId: string,
+  callback: (docs: any[]) => void
+) {
+  if (config.readFrom === "NEW") {
+    return ecouterEvenements(childId, callback, { type: "croissance" });
+  }
+  return croissanceService.ecouterCroissances(childId, callback);
+}
+
+export async function modifierCroissance(
+  childId: string,
+  id: string,
+  data: any
+) {
+  const errors: Error[] = [];
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
+    try {
+      await modifierEventNouveau(childId, id, data);
+      console.log("✅ Croissance modifiée dans NEW");
+    } catch (error) {
+      console.error("❌ Erreur modification NEW:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
+    try {
+      await croissanceService.modifierCroissance(childId, id, data);
+      console.log("✅ Croissance modifiée dans OLD");
+    } catch (error) {
+      console.error("❌ Erreur modification OLD:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (errors.length > 0 && config.failOnError) {
+    throw new Error("Erreurs lors de la modification");
+  }
+}
+
+export async function supprimerCroissance(childId: string, id: string) {
+  const errors: Error[] = [];
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
+    try {
+      await supprimerEventNouveau(childId, id);
+      console.log("✅ Croissance supprimée dans NEW");
+    } catch (error) {
+      console.error("❌ Erreur suppression NEW:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
+    try {
+      await croissanceService.supprimerCroissance(childId, id);
+      console.log("✅ Croissance supprimée dans OLD");
     } catch (error) {
       console.error("❌ Erreur suppression OLD:", error);
       errors.push(error as Error);

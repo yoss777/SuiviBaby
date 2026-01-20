@@ -9,24 +9,24 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterVaccin,
-  ajouterVitamine,
-  modifierVaccin,
-  modifierVitamine,
-  supprimerVaccin,
-  supprimerVitamine,
+  ajouterMiction,
+  ajouterSelle,
+  modifierMiction,
+  modifierSelle,
+  supprimerMiction,
+  supprimerSelle,
 } from "@/migration/eventsDoubleWriteService";
 import {
-  ecouterVaccinsHybrid as ecouterVaccins,
-  ecouterVitaminesHybrid as ecouterVitamines,
+  ecouterMictionsHybrid as ecouterMictions,
+  ecouterSellesHybrid as ecouterSelles,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
-import { normalizeQuery } from "@/utils/text";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { HeaderBackButton } from "@react-navigation/elements";
 import { useNetInfo } from "@react-native-community/netinfo";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -38,78 +38,46 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useHeaderRight } from "../_layout";
+import { useHeaderRight } from "../../../_layout";
 
 // ============================================
 // TYPES
 // ============================================
-type ImmunoType = "vitamine" | "vaccin";
+type ExcretionType = "miction" | "selle";
 type FilterType = "today" | "past";
-type SheetStep = "form" | "vaccinPicker";
 
-interface Immuno {
+interface Excretion {
   id: string;
-  type?: ImmunoType;
+  type?: ExcretionType;
   date: { seconds: number };
   createdAt: { seconds: number };
-  nomVaccin?: string;
-  nomVitamine?: string;
-  lib?: string;
 }
 
-interface ImmunoGroup {
+interface ExcretionGroup {
   date: string;
   dateFormatted: string;
-  immunos: Immuno[];
-  vitaminesCount: number;
-  vaccinsCount: number;
-  lastImmuno: Immuno;
+  excretions: Excretion[];
+  mictionsCount: number;
+  sellesCount: number;
+  lastExcretion: Excretion;
 }
-
-// Liste des vaccins pour enfants de 0 à 3 ans
-const VACCINS_LIST = [
-  "Bronchiolite",
-  "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
-  "Pneumocoque (PCV13)",
-  "Rotavirus",
-  "DTCaP-Hib (2ème injection)",
-  "Pneumocoque (2ème injection)",
-  "Rotavirus (2ème dose)",
-  "DTCaP-Hib (3ème injection)",
-  "Pneumocoque (3ème injection)",
-  "Rotavirus (3ème dose)",
-  "ROR (Rougeole, Oreillons, Rubéole)",
-  "ROR (2ème injection)",
-  "Méningocoque A,C,W,Y",
-  "Méningocoque A,C,W,Y (rappel)",
-  "Méningocoque B",
-  "Méningocoque B (rappel)",
-  "DTCaP-Hib (rappel)",
-  "Pneumocoque (rappel)",
-  "DTCaP (rappel)",
-  "Hépatite B",
-  "BCG (Tuberculose)",
-  "Varicelle",
-  "Grippe saisonnière",
-  "Autre vaccin",
-];
 
 // ============================================
 // COMPONENT
 // ============================================
 
-export default function ImmunizationsScreen() {
+export default function DiapersScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const { openSheet, closeSheet, viewProps } = useSheet();
-  const headerOwnerId = useRef(`immunizations-${Math.random().toString(36).slice(2)}`);
+  const headerOwnerId = useRef(`diapers-${Math.random().toString(36).slice(2)}`);
+  const navigation = useNavigation();
   const { showToast } = useToast();
   const netInfo = useNetInfo();
   const isOffline =
@@ -118,19 +86,18 @@ export default function ImmunizationsScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState<ImmunoType>("vitamine");
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
   const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
-  const sheetOwnerId = "immunizations";
+  const sheetOwnerId = "diapers";
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
   // États des données
-  const [immunos, setImmunos] = useState<Immuno[]>([]);
-  const [groupedImmunos, setGroupedImmunos] = useState<ImmunoGroup[]>([]);
+  const [excretions, setExcretions] = useState<Excretion[]>([]);
+  const [groupedExcretions, setGroupedExcretions] = useState<ExcretionGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [vitaminesLoaded, setVitaminesLoaded] = useState(false);
-  const [vaccinsLoaded, setVaccinsLoaded] = useState(false);
+  const [mictionsLoaded, setMictionsLoaded] = useState(false);
+  const [sellesLoaded, setSellesLoaded] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -142,13 +109,11 @@ export default function ImmunizationsScreen() {
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingImmuno, setEditingImmuno] = useState<Immuno | null>(null);
-  const [immunoType, setImmunoType] = useState<ImmunoType>("vitamine");
-  const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [selectedVaccin, setSelectedVaccin] = useState<string>("");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [sheetStep, setSheetStep] = useState<SheetStep>("form");
+  const [editingExcretion, setEditingExcretion] = useState<Excretion | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [includeMiction, setIncludeMiction] = useState<boolean>(true);
+  const [includeSelle, setIncludeSelle] = useState<boolean>(false);
+  const [dateHeure, setDateHeure] = useState<Date>(new Date());
 
   // États des pickers
   const [showDate, setShowDate] = useState(false);
@@ -156,6 +121,7 @@ export default function ImmunizationsScreen() {
 
   // Récupérer les paramètres de l'URL
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
+  const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
 
@@ -181,37 +147,28 @@ export default function ImmunizationsScreen() {
     });
   }, []);
 
-  const prepareAddModal = useCallback(
-    (preferredType?: "vitamines" | "vaccins") => {
-      setDateHeure(new Date());
-      setEditingImmuno(null);
-      setIsSubmitting(false);
-      setSelectedVaccin("");
-      setSearchQuery("");
-      setSheetStep("form");
+  const prepareAddModal = useCallback((preferredType?: "mictions" | "selles") => {
+    setDateHeure(new Date());
+    setEditingExcretion(null);
+    setIsSubmitting(false);
 
-      // Si un type préféré est spécifié, l'utiliser
-      // Sinon, utiliser le filtre actif
-      const typeToUse =
-        preferredType === "vaccins"
-          ? "vaccin"
-          : preferredType === "vitamines"
-          ? "vitamine"
-          : selectedType;
+    if (preferredType === "selles") {
+      setIncludeMiction(false);
+      setIncludeSelle(true);
+    } else if (preferredType === "mictions") {
+      setIncludeMiction(true);
+      setIncludeSelle(false);
+    } else {
+      setIncludeMiction(true);
+      setIncludeSelle(false);
+    }
+  }, []);
 
-      setImmunoType(typeToUse);
-    },
-    [selectedType]
-  );
-
-  const openAddModal = useCallback(
-    (preferredType?: "vitamines" | "vaccins") => {
-      prepareAddModal(preferredType);
-      setPendingMode("add");
-      setPendingOpen(true);
-    },
-    [prepareAddModal]
-  );
+  const openAddModal = useCallback((preferredType?: "mictions" | "selles") => {
+    prepareAddModal(preferredType);
+    setPendingMode("add");
+    setPendingOpen(true);
+  }, [prepareAddModal]);
 
   useFocusEffect(
     useCallback(() => {
@@ -265,12 +222,47 @@ export default function ImmunizationsScreen() {
   // ============================================
 
   useEffect(() => {
-    if (tab === "vaccins") {
-      setImmunoType("vaccin");
-    } else if (tab === "vitamines") {
-      setImmunoType("vitamine");
+    if (tab === "selles") {
+      setIncludeMiction(false);
+      setIncludeSelle(true);
+    } else if (tab === "mictions") {
+      setIncludeMiction(true);
+      setIncludeSelle(false);
     }
   }, [tab]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const parent = navigation.getParent();
+      parent?.setOptions({
+        headerLeft: () => (
+          <HeaderBackButton
+            onPress={() => {
+              if (returnTarget === "home") {
+                router.replace("/baby/home");
+                return;
+              }
+              if (returnTarget === "chrono") {
+                router.replace("/baby/chrono");
+                return;
+              }
+              if (returnTarget === "journal") {
+                router.replace("/baby/chrono");
+                return;
+              }
+              router.back();
+            }}
+            tintColor={Colors[colorScheme].text}
+            labelVisible={false}
+          />
+        ),
+      });
+
+      return () => {
+        parent?.setOptions({ headerLeft: undefined });
+      };
+    }, [colorScheme, navigation, returnTarget])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -285,10 +277,10 @@ export default function ImmunizationsScreen() {
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
       if (pendingMode !== "edit") {
-        prepareAddModal(tab as "vitamines" | "vaccins" | undefined);
+        prepareAddModal(tab as "mictions" | "selles" | undefined);
       }
       openSheet(buildSheetProps());
-      router.replace("/(drawer)/baby/immunizations");
+      navigation.setParams({ openModal: undefined, editId: undefined });
       setPendingOpen(false);
       setPendingMode(null);
     });
@@ -308,13 +300,13 @@ export default function ImmunizationsScreen() {
     if (!editId || !layoutReady) return;
     const normalizedId = Array.isArray(editId) ? editId[0] : editId;
     if (!normalizedId || editIdRef.current === normalizedId) return;
-    const target = immunos.find((immuno) => immuno.id === normalizedId);
+    const target = excretions.find((excretion) => excretion.id === normalizedId);
     if (!target) return;
     stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(target);
-    router.replace("/(drawer)/baby/immunizations");
-  }, [editId, layoutReady, immunos, router, returnTo]);
+    navigation.setParams({ openModal: undefined, editId: undefined });
+  }, [editId, layoutReady, excretions, router, returnTo]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -329,14 +321,14 @@ export default function ImmunizationsScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
-    let vitaminesData: Immuno[] = [];
-    let vaccinsData: Immuno[] = [];
+    let mictionsData: Excretion[] = [];
+    let sellesData: Excretion[] = [];
 
-    const mergeAndSortImmunos = () => {
-      const merged = [...vitaminesData, ...vaccinsData].sort(
+    const mergeAndSortExcretions = () => {
+      const merged = [...mictionsData, ...sellesData].sort(
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
       );
-      setImmunos(merged);
+      setExcretions(merged);
       if (
         pendingLoadMoreRef.current > 0 &&
         versionAtSubscribe === loadMoreVersionRef.current
@@ -348,69 +340,66 @@ export default function ImmunizationsScreen() {
       }
     };
 
-    const unsubscribeVitamines = ecouterVitamines(
+    const unsubscribeMictions = ecouterMictions(
       activeChild.id,
-      (vitamines) => {
-        vitaminesData = vitamines.map((v) => ({
-          ...v,
-          type: "vitamine" as ImmunoType,
+      (mictions) => {
+        mictionsData = mictions.map((m) => ({
+          ...m,
+          type: "miction" as ExcretionType,
         }));
-        setVitaminesLoaded(true);
-        mergeAndSortImmunos();
+        setMictionsLoaded(true);
+        mergeAndSortExcretions();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
     );
 
-    const unsubscribeVaccins = ecouterVaccins(
+    const unsubscribeSelles = ecouterSelles(
       activeChild.id,
-      (vaccins) => {
-        vaccinsData = vaccins.map((v) => ({
-          ...v,
-          type: "vaccin" as ImmunoType,
+      (selles) => {
+        sellesData = selles.map((s) => ({
+          ...s,
+          type: "selle" as ExcretionType,
         }));
-        setVaccinsLoaded(true);
-        mergeAndSortImmunos();
+        setSellesLoaded(true);
+        mergeAndSortExcretions();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
     );
 
     return () => {
-      unsubscribeVitamines();
-      unsubscribeVaccins();
+      unsubscribeMictions();
+      unsubscribeSelles();
     };
   }, [activeChild, daysWindow]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setImmunos([]);
-    setGroupedImmunos([]);
-    setVitaminesLoaded(false);
-    setVaccinsLoaded(false);
+    setExcretions([]);
+    setGroupedExcretions([]);
+    setMictionsLoaded(false);
+    setSellesLoaded(false);
     setEmptyDelayDone(false);
     setDaysWindow(14);
     setIsLoadingMore(false);
     setHasMore(true);
-    setAutoLoadMore(false);
-    setAutoLoadMoreAttempts(0);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
   }, [activeChild?.id]);
 
-  const isImmunosLoading =
-    selectedType === "vitamine" ? !vitaminesLoaded : !vaccinsLoaded;
+  const isExcretionsLoading = !(mictionsLoaded && sellesLoaded);
 
   useEffect(() => {
-    if (isImmunosLoading) {
+    if (isExcretionsLoading) {
       setEmptyDelayDone(false);
       return;
     }
-    if (groupedImmunos.length > 0) {
+    if (groupedExcretions.length > 0) {
       setEmptyDelayDone(true);
       return;
     }
     const timer = setTimeout(() => setEmptyDelayDone(true), 300);
     return () => clearTimeout(timer);
-  }, [isImmunosLoading, groupedImmunos.length, selectedType]);
+  }, [isExcretionsLoading, groupedExcretions.length]);
 
   const loadMoreStep = useCallback((auto = false) => {
     if (!hasMore) return;
@@ -430,14 +419,14 @@ export default function ImmunizationsScreen() {
 
   useEffect(() => {
     if (selectedFilter === "today" || selectedDate) return;
-    if (!autoLoadMore && !isImmunosLoading && groupedImmunos.length === 0 && hasMore) {
+    if (!autoLoadMore && !isExcretionsLoading && groupedExcretions.length === 0 && hasMore) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
   }, [
     autoLoadMore,
-    isImmunosLoading,
-    groupedImmunos.length,
+    isExcretionsLoading,
+    groupedExcretions.length,
     hasMore,
     selectedFilter,
     selectedDate,
@@ -445,8 +434,8 @@ export default function ImmunizationsScreen() {
 
   useEffect(() => {
     if (!autoLoadMore) return;
-    if (isImmunosLoading || isLoadingMore) return;
-    if (groupedImmunos.length > 0 || !hasMore) {
+    if (isExcretionsLoading || isLoadingMore) return;
+    if (groupedExcretions.length > 0 || !hasMore) {
       setAutoLoadMore(false);
       setAutoLoadMoreAttempts(0);
       return;
@@ -459,9 +448,9 @@ export default function ImmunizationsScreen() {
     loadMoreStep(true);
   }, [
     autoLoadMore,
-    isImmunosLoading,
+    isExcretionsLoading,
     isLoadingMore,
-    groupedImmunos.length,
+    groupedExcretions.length,
     hasMore,
     autoLoadMoreAttempts,
     loadMoreStep,
@@ -475,11 +464,9 @@ export default function ImmunizationsScreen() {
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
     const beforeDate = new Date(startOfRange.getTime() - 1);
 
-    const types = selectedType === "vitamine" ? "vitamine" : "vaccin";
-
     // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, types, beforeDate)
+    hasMoreEventsBeforeHybrid(activeChild.id, ["miction", "selle"], beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -490,47 +477,40 @@ export default function ImmunizationsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeChild?.id, daysWindow, selectedType]);
+  }, [activeChild?.id, daysWindow]);
 
-
-  // Filtrage et regroupement par jour
+  // Filtrage et regroupement par jour avec useMemo pour éviter les re-renders
   useEffect(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
-    // Filtrer par type sélectionné
-    const filteredByType = immunos.filter(
-      (immuno) => immuno.type === selectedType
-    );
-
-    // Filtrer par date
-    const filtered = filteredByType.filter((immuno) => {
-      const immunoDate = new Date(immuno.date.seconds * 1000);
-      immunoDate.setHours(0, 0, 0, 0);
-      const immunoTime = immunoDate.getTime();
+    const filtered = excretions.filter((excretion) => {
+      const excretionDate = new Date(excretion.date.seconds * 1000);
+      excretionDate.setHours(0, 0, 0, 0);
+      const excretionTime = excretionDate.getTime();
 
       if (selectedDate) {
         const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
         const calDate = new Date(calYear, calMonth - 1, calDay);
         calDate.setHours(0, 0, 0, 0);
-        return immunoTime === calDate.getTime();
+        return excretionTime === calDate.getTime();
       }
 
       switch (selectedFilter) {
         case "today":
-          return immunoTime === todayTime;
+          return excretionTime === todayTime;
         case "past":
-          return immunoTime < todayTime;
+          return excretionTime < todayTime;
         case null:
         default:
           return true;
       }
     });
 
-    const grouped = groupImmunosByDay(filtered);
-    setGroupedImmunos(grouped);
-  }, [immunos, selectedFilter, selectedDate, selectedType]);
+    const grouped = groupExcretionsByDay(filtered);
+    setGroupedExcretions(grouped);
+  }, [excretions, selectedFilter, selectedDate]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -539,8 +519,8 @@ export default function ImmunizationsScreen() {
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
 
-    immunos.forEach((immuno) => {
-      const date = new Date(immuno.date.seconds * 1000);
+    excretions.forEach((excretion) => {
+      const date = new Date(excretion.date.seconds * 1000);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
@@ -561,7 +541,7 @@ export default function ImmunizationsScreen() {
     }
 
     return marked;
-  }, [immunos, selectedDate, colorScheme]);
+  }, [excretions, selectedDate, colorScheme]);
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
@@ -603,11 +583,11 @@ export default function ImmunizationsScreen() {
   // HELPERS - GROUPING
   // ============================================
 
-  const groupImmunosByDay = (immunos: Immuno[]): ImmunoGroup[] => {
-    const groups: { [key: string]: Immuno[] } = {};
+  const groupExcretionsByDay = (excretions: Excretion[]): ExcretionGroup[] => {
+    const groups: { [key: string]: Excretion[] } = {};
 
-    immunos.forEach((immuno) => {
-      const date = new Date(immuno.date?.seconds * 1000);
+    excretions.forEach((excretion) => {
+      const date = new Date(excretion.date?.seconds * 1000);
       const dateKey = `${date.getFullYear()}-${String(
         date.getMonth() + 1
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -615,17 +595,15 @@ export default function ImmunizationsScreen() {
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
-      groups[dateKey].push(immuno);
+      groups[dateKey].push(excretion);
     });
 
     return Object.entries(groups)
-      .map(([dateKey, immunos]) => {
+      .map(([dateKey, excretions]) => {
         const date = new Date(dateKey);
-        const vitaminesCount = immunos.filter(
-          (i) => i.type === "vitamine"
-        ).length;
-        const vaccinsCount = immunos.filter((i) => i.type === "vaccin").length;
-        const lastImmuno = immunos.reduce((latest, current) =>
+        const mictionsCount = excretions.filter(e => e.type === "miction").length;
+        const sellesCount = excretions.filter(e => e.type === "selle").length;
+        const lastExcretion = excretions.reduce((latest, current) =>
           (current.date?.seconds || 0) > (latest.date?.seconds || 0)
             ? current
             : latest
@@ -639,12 +617,12 @@ export default function ImmunizationsScreen() {
             month: "long",
             year: "numeric",
           }),
-          immunos: immunos.sort(
+          excretions: excretions.sort(
             (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
           ),
-          vitaminesCount,
-          vaccinsCount,
-          lastImmuno,
+          mictionsCount,
+          sellesCount,
+          lastExcretion,
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -655,7 +633,7 @@ export default function ImmunizationsScreen() {
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
-    setExpandedDays((prev) => {
+    setExpandedDays(prev => {
       const newExpandedDays = new Set(prev);
       if (newExpandedDays.has(dateKey)) {
         newExpandedDays.delete(dateKey);
@@ -666,61 +644,36 @@ export default function ImmunizationsScreen() {
     });
   }, []);
 
-  const getImmunoTypeLabel = (type?: ImmunoType): string => {
+  const getExcretionTypeLabel = (type?: ExcretionType): string => {
     if (!type) return "Inconnu";
-    return type === "vitamine" ? "Vitamine" : "Vaccin";
+    return type === "miction" ? "Miction" : "Selle";
   };
 
-  const getImmunoIcon = (type?: ImmunoType): string => {
-    if (type === "vitamine") return "pills";
-    if (type === "vaccin") return "syringe";
+  const getExcretionIcon = (type?: ExcretionType): string => {
+    if (type === "miction") return "water";
+    if (type === "selle") return "poop";
     return "question";
   };
 
-  const getImmunoColor = (type?: ImmunoType): string => {
-    if (type === "vitamine") return "#FF9800";
-    if (type === "vaccin") return "#9C27B0";
+  const getExcretionColor = (type?: ExcretionType): string => {
+    if (type === "miction") return "#17a2b8";
+    if (type === "selle") return "#dc3545";
     return "#666";
   };
-
-  const getImmunoName = (immuno: Immuno): string => {
-    if (immuno.type === "vaccin") {
-      return immuno.nomVaccin || immuno.lib || "Vaccin non spécifié";
-    }
-    return immuno.nomVitamine || "Vitamine";
-  };
-
-  const deleteTargetLabel = editingImmuno
-    ? `${getImmunoTypeLabel(editingImmuno.type)} "${getImmunoName(editingImmuno)}"`
-    : "element";
-
-  const selectVaccin = (vaccin: string) => {
-    setSelectedVaccin(vaccin);
-    setSearchQuery("");
-    setSheetStep("form");
-  };
-
-  const filteredVaccins = VACCINS_LIST.filter((vaccin) =>
-    normalizeQuery(vaccin).includes(normalizeQuery(searchQuery))
-  );
 
   // ============================================
   // HANDLERS - MODAL
   // ============================================
 
-  const openEditModal = (immuno: Immuno) => {
-    setDateHeure(new Date(immuno.date.seconds * 1000));
-    setEditingImmuno(immuno);
+  const openEditModal = (excretion: Excretion) => {
+    setDateHeure(new Date(excretion.date.seconds * 1000));
+    setEditingExcretion(excretion);
     setIsSubmitting(false);
-    setSearchQuery("");
-    setSheetStep("form");
 
-    const type = immuno.type || "vitamine";
-    setImmunoType(type);
-
-    if (type === "vaccin") {
-      setSelectedVaccin(immuno.nomVaccin || immuno.lib || "");
-    }
+    // En mode édition, on ne sélectionne que le type de l'excrétion
+    const type = excretion.type || "miction";
+    setIncludeMiction(type === "miction");
+    setIncludeSelle(type === "selle");
     setPendingMode("edit");
     setPendingOpen(true);
   };
@@ -738,15 +691,19 @@ export default function ImmunizationsScreen() {
     returnToRef.current = null;
   };
 
+  useEffect(() => {
+    stashReturnTo();
+  }, [returnTo]);
+
   const maybeReturnTo = (targetOverride?: string | null) => {
     const target = targetOverride ?? returnToRef.current;
     returnToRef.current = null;
     if (target === "home") {
-      router.replace("/(drawer)/baby/home");
+      router.replace("/baby/home");
     } else if (target === "chrono") {
-      router.replace("/(drawer)/baby/chrono");
+      router.replace("/baby/chrono");
     } else if (target === "journal") {
-      router.replace("/(drawer)/baby/journal");
+      router.replace("/baby/chrono");
     }
   };
 
@@ -761,41 +718,43 @@ export default function ImmunizationsScreen() {
   const handleSubmit = async () => {
     if (isSubmitting || !activeChild) return;
 
-    // Validation pour les vaccins
-    if (immunoType === "vaccin" && !selectedVaccin.trim()) {
-      Alert.alert("Attention", "Veuillez sélectionner un vaccin");
+    // Vérifier qu'au moins un type est sélectionné
+    if (!includeMiction && !includeSelle) {
+      Alert.alert(
+        "Attention",
+        "Veuillez sélectionner au moins un type (miction ou selle)"
+      );
       return;
     }
 
     try {
       setIsSubmitting(true);
 
-      const isVitamine = immunoType === "vitamine";
       const dataToSave = {
         date: dateHeure,
-        ...(immunoType === "vitamine" && { nomVitamine: "Vitamine D" }),
-        ...(immunoType === "vaccin" && { nomVaccin: selectedVaccin }),
       };
 
-      if (editingImmuno) {
-        // Modification
-        if (isVitamine) {
-          await modifierVitamine(activeChild.id, editingImmuno.id, dataToSave);
+      if (editingExcretion) {
+        // Mode édition : modifier l'excrétion existante
+        const isMiction = editingExcretion.type === "miction";
+        if (isMiction) {
+          await modifierMiction(activeChild.id, editingExcretion.id, dataToSave);
         } else {
-          await modifierVaccin(activeChild.id, editingImmuno.id, dataToSave);
+          await modifierSelle(activeChild.id, editingExcretion.id, dataToSave);
         }
       } else {
-        // Ajout
-        if (isVitamine) {
-          await ajouterVitamine(activeChild.id, dataToSave);
-        } else {
-          await ajouterVaccin(activeChild.id, dataToSave);
+        // Mode ajout : ajouter une ou deux excrétions
+        if (includeMiction) {
+          await ajouterMiction(activeChild.id, dataToSave);
+        }
+        if (includeSelle) {
+          await ajouterSelle(activeChild.id, dataToSave);
         }
       }
 
       if (isOffline) {
         showToast(
-          editingImmuno
+          editingExcretion
             ? "Modification en attente de synchronisation"
             : "Ajout en attente de synchronisation"
         );
@@ -803,27 +762,30 @@ export default function ImmunizationsScreen() {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde:", error);
-      Alert.alert("Erreur", "Impossible de sauvegarder. Veuillez réessayer.");
+      Alert.alert(
+        "Erreur",
+        "Impossible de sauvegarder. Veuillez réessayer."
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = () => {
-    if (isSubmitting || !editingImmuno || !activeChild) return;
+    if (isSubmitting || !editingExcretion || !activeChild) return;
     setShowDeleteModal(true);
   };
 
   const confirmDelete = async () => {
-    if (isSubmitting || !editingImmuno || !activeChild) return;
+    if (isSubmitting || !editingExcretion || !activeChild) return;
 
     try {
       setIsSubmitting(true);
-      const isVitamine = editingImmuno.type === "vitamine";
-      if (isVitamine) {
-        await supprimerVitamine(activeChild.id, editingImmuno.id);
+      const isMiction = editingExcretion.type === "miction";
+      if (isMiction) {
+        await supprimerMiction(activeChild.id, editingExcretion.id);
       } else {
-        await supprimerVaccin(activeChild.id, editingImmuno.id);
+        await supprimerSelle(activeChild.id, editingExcretion.id);
       }
       if (isOffline) {
         showToast("Suppression en attente de synchronisation");
@@ -839,214 +801,174 @@ export default function ImmunizationsScreen() {
   };
 
   function renderSheetContent() {
-    if (sheetStep === "vaccinPicker") {
-      return (
-        <>
-        <View style={styles.sheetBreadcrumb}>
-          <Pressable
-            style={styles.sheetBackButton}
-            onPress={() => setSheetStep("form")}
-          >
-            <FontAwesome name="chevron-left" size={14} color="#666" />
-            <Text style={styles.sheetBackText}>Retour</Text>
-          </Pressable>
-          <Text style={styles.sheetBreadcrumbText}>
-            Immunos / Vaccins / Choisir
-          </Text>
-        </View>
-        <View style={styles.searchContainer}>
-          <FontAwesome
-            name="search"
-            size={16}
-            color="#999"
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Rechercher un vaccin..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoFocus={true}
-          />
-          {searchQuery && (
-            <TouchableOpacity
-              style={styles.clearButton}
-              onPress={() => setSearchQuery("")}
-            >
-              <FontAwesome name="times-circle" size={16} color="#999" />
-            </TouchableOpacity>
-          )}
-        </View>
-        <ScrollView style={styles.vaccinList} showsVerticalScrollIndicator={false}>
-          {filteredVaccins.length > 0 ? (
-            filteredVaccins.map((vaccin, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.vaccinListItem,
-                  selectedVaccin === vaccin && styles.vaccinListItemSelected,
-                ]}
-                onPress={() => selectVaccin(vaccin)}
-                activeOpacity={0.7}
-              >
-                <FontAwesome
-                  name="syringe"
-                  size={16}
-                  color={selectedVaccin === vaccin ? "#9C27B0" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.vaccinListItemText,
-                    selectedVaccin === vaccin && styles.vaccinListItemTextSelected,
-                  ]}
-                >
-                  {vaccin}
-                </Text>
-                {selectedVaccin === vaccin && (
-                  <FontAwesome name="check" size={16} color="#9C27B0" />
-                )}
-              </TouchableOpacity>
-            ))
-          ) : (
-            <Text style={styles.noResultsText}>Aucun vaccin trouvé</Text>
-          )}
-        </ScrollView>
-        </>
-      );
-    }
     return (
       <>
-        {immunoType === "vaccin" && (
-          <TouchableOpacity
+      {!editingExcretion && (
+        <>
+          <Text style={styles.modalCategoryLabel}>Type d'excrétion</Text>
+          <Text style={styles.toggleSubtitle}>
+            Vous pouvez sélectionner les deux si nécessaire
+          </Text>
+          <View style={styles.typeRow}>
+            <TouchableOpacity
+              style={[
+                styles.typeButton,
+                includeMiction && styles.typeButtonActiveMiction,
+                isSubmitting && styles.typeButtonDisabled,
+              ]}
+              onPress={() => setIncludeMiction((prev) => !prev)}
+              disabled={isSubmitting}
+              activeOpacity={0.7}
+            >
+              <FontAwesome
+                name="water"
+                size={18}
+                color={includeMiction ? "white" : "#17a2b8"}
+              />
+              <Text
+                style={[
+                  styles.typeText,
+                  includeMiction && styles.typeTextActive,
+                  isSubmitting && styles.typeTextDisabled,
+                ]}
+              >
+                Miction
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.typeButton,
+                includeSelle && styles.typeButtonActiveSelle,
+                isSubmitting && styles.typeButtonDisabled,
+              ]}
+              onPress={() => setIncludeSelle((prev) => !prev)}
+              disabled={isSubmitting}
+              activeOpacity={0.7}
+            >
+              <FontAwesome
+                name="poop"
+                size={18}
+                color={includeSelle ? "white" : "#dc3545"}
+              />
+              <Text
+                style={[
+                  styles.typeText,
+                  includeSelle && styles.typeTextActive,
+                  isSubmitting && styles.typeTextDisabled,
+                ]}
+              >
+                Selle
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+      <View style={styles.dateTimeContainer}>
+        <TouchableOpacity
+          style={[styles.dateButton, isSubmitting && styles.dateButtonDisabled]}
+          onPress={() => setShowDate(true)}
+          disabled={isSubmitting}
+        >
+          <FontAwesome
+            name="calendar-alt"
+            size={16}
+            color={isSubmitting ? "#ccc" : "#666"}
+          />
+          <Text
             style={[
-              styles.vaccinSelector,
-              isSubmitting && styles.vaccinSelectorDisabled,
+              styles.dateButtonText,
+              isSubmitting && styles.dateButtonTextDisabled,
             ]}
-            onPress={() => {
-              if (!isSubmitting) {
-                setSearchQuery("");
-                setSheetStep("vaccinPicker");
-              }
-            }}
-            disabled={isSubmitting}
           >
-            <FontAwesome name="list" size={20} color="#666" />
-            <Text
-              style={[
-                styles.vaccinSelectorText,
-                selectedVaccin && styles.vaccinSelectorTextSelected,
-                isSubmitting && styles.vaccinSelectorTextDisabled,
-              ]}
-            >
-              {selectedVaccin || "Sélectionner un vaccin"}
-            </Text>
-            <FontAwesome name="chevron-right" size={16} color="#999" />
-          </TouchableOpacity>
-        )}
-
-        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-        <View style={styles.dateTimeContainer}>
-          <TouchableOpacity
-            style={[styles.dateButton, isSubmitting && styles.dateButtonDisabled]}
-            onPress={() => setShowDate(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="calendar-alt"
-              size={16}
-              color={isSubmitting ? "#ccc" : "#666"}
-            />
-            <Text
-              style={[
-                styles.dateButtonText,
-                isSubmitting && styles.dateButtonTextDisabled,
-              ]}
-            >
-              Date
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.dateButton, isSubmitting && styles.dateButtonDisabled]}
-            onPress={() => setShowTime(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="clock"
-              size={16}
-              color={isSubmitting ? "#ccc" : "#666"}
-            />
-            <Text
-              style={[
-                styles.dateButtonText,
-                isSubmitting && styles.dateButtonTextDisabled,
-              ]}
-            >
-              Heure
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.selectedDateTime}>
-          <Text style={styles.selectedDate}>
-            {dateHeure.toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
+            Date
           </Text>
-          <Text style={styles.selectedTime}>
-            {dateHeure.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.dateButton, isSubmitting && styles.dateButtonDisabled]}
+          onPress={() => setShowTime(true)}
+          disabled={isSubmitting}
+        >
+          <FontAwesome
+            name="clock"
+            size={16}
+            color={isSubmitting ? "#ccc" : "#666"}
+          />
+          <Text
+            style={[
+              styles.dateButtonText,
+              isSubmitting && styles.dateButtonTextDisabled,
+            ]}
+          >
+            Heure
           </Text>
-        </View>
+        </TouchableOpacity>
+      </View>
 
-        {showDate && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeDate}
-          />
-        )}
-        {showTime && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="time"
-            is24Hour={true}
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeTime}
-          />
-        )}
+      <View style={styles.selectedDateTime}>
+        <Text style={styles.selectedDate}>
+          {dateHeure.toLocaleDateString("fr-FR", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
+        </Text>
+        <Text style={styles.selectedTime}>
+          {dateHeure.toLocaleTimeString("fr-FR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Text>
+      </View>
+
+      {showDate && (
+        <DateTimePicker
+          value={dateHeure}
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={onChangeDate}
+        />
+      )}
+      {showTime && (
+        <DateTimePicker
+          value={dateHeure}
+          mode="time"
+          is24Hour={true}
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={onChangeTime}
+        />
+      )}
       </>
     );
   }
 
   function buildSheetProps() {
-    const returnTarget = returnToRef.current;
+    const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
     return {
       ownerId: sheetOwnerId,
-      title: editingImmuno
-        ? `Modifier ${immunoType === "vitamine" ? "vitamine" : "vaccin"}`
-        : immunoType === "vitamine"
-        ? "Nouvelle vitamine"
-        : "Nouveau vaccin",
-      icon: immunoType === "vitamine" ? "pills" : "syringe",
-      accentColor: immunoType === "vitamine" ? "#FF9800" : "#9C27B0",
-      isEditing: !!editingImmuno,
+      title: editingExcretion
+        ? `Modifier ${editingExcretion.type === "miction" ? "miction" : "selle"}`
+        : "Nouvelle excrétion",
+      icon: "toilet",
+      accentColor:
+        includeMiction && includeSelle
+          ? "#6c757d"
+          : includeMiction
+          ? "#17a2b8"
+          : includeSelle
+          ? "#dc3545"
+          : "#6c757d",
+      isEditing: !!editingExcretion,
       isSubmitting,
-      showActions: sheetStep === "form",
       onSubmit: handleSubmit,
-      onDelete: editingImmuno ? handleDelete : undefined,
+      onDelete: editingExcretion ? handleDelete : undefined,
       children: renderSheetContent(),
       onDismiss: () => {
         setIsSubmitting(false);
-        setEditingImmuno(null);
-        setSelectedVaccin("");
-        setSearchQuery("");
-        setSheetStep("form");
+        setEditingExcretion(null);
         editIdRef.current = null;
         maybeReturnTo(returnTarget);
       },
@@ -1059,12 +981,10 @@ export default function ImmunizationsScreen() {
   }, [
     isSheetActive,
     openSheet,
-    editingImmuno,
-    immunoType,
+    editingExcretion,
     isSubmitting,
-    selectedVaccin,
-    searchQuery,
-    sheetStep,
+    includeMiction,
+    includeSelle,
     dateHeure,
     showDate,
     showTime,
@@ -1101,126 +1021,117 @@ export default function ImmunizationsScreen() {
   };
 
   // ============================================
-  // RENDER - IMMUNO ITEM
+  // RENDER - EXCRETION ITEM
   // ============================================
 
-  const renderImmunoItem = useCallback(
-    (immuno: Immuno, isLast: boolean = false) => {
-      const typeLabel = getImmunoTypeLabel(immuno.type);
-      const color = getImmunoColor(immuno.type);
-      const name = getImmunoName(immuno);
+  const renderExcretionItem = useCallback((excretion: Excretion, isLast: boolean = false) => {
+    const typeLabel = getExcretionTypeLabel(excretion.type);
+    const color = getExcretionColor(excretion.type);
 
-      return (
-        <TouchableOpacity
-          key={immuno.id}
-          style={[
-            styles.immunoItem,
-            isLast &&
-              immuno.type === "vitamine" &&
-              styles.lastImmunoItemVitamine,
-            isLast && immuno.type === "vaccin" && styles.lastImmunoItemVaccin,
-          ]}
-          onPress={() => openEditModal(immuno)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.immunoContent}>
-            <View style={[styles.avatar, { backgroundColor: color }]}>
-              <FontAwesome
-                name={getImmunoIcon(immuno.type)}
-                size={20}
-                color="#ffffff"
-              />
+    return (
+      <TouchableOpacity
+        key={excretion.id}
+        style={[styles.excretionItem, isLast && styles.lastExcretionItem]}
+        onPress={() => openEditModal(excretion)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.excretionContent}>
+          <View style={[styles.avatar, { backgroundColor: color }]}>
+            <FontAwesome
+              name={getExcretionIcon(excretion.type)}
+              size={20}
+              color="#ffffff"
+            />
+          </View>
+          <View style={styles.excretionInfo}>
+            <View style={styles.infoRow}>
+              <Text style={styles.excretionTypeText}>{typeLabel}</Text>
             </View>
-            <View style={styles.immunoInfo}>
-              <View style={styles.infoRow}>
-                <Text style={styles.immunoTypeText}>{name}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.timeText}>
-                  {new Date(immuno.date?.seconds * 1000).toLocaleTimeString(
-                    "fr-FR",
-                    {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    }
-                  )}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.immunoActions}>
-              <FontAwesome
-                name="edit"
-                size={16}
-                color={color}
-                style={styles.editIcon}
-              />
+            <View style={styles.infoRow}>
+              <Text style={styles.timeText}>
+                {new Date(excretion.date?.seconds * 1000).toLocaleTimeString(
+                  "fr-FR",
+                  {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }
+                )}
+              </Text>
             </View>
           </View>
-        </TouchableOpacity>
-      );
-    },
-    []
-  );
+          <View style={styles.excretionActions}>
+            <FontAwesome
+              name="edit"
+              size={16}
+              color={color}
+              style={styles.editIcon}
+            />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }, []);
 
   // ============================================
   // RENDER - DAY GROUP
   // ============================================
 
-  const renderDayGroup = useCallback(
-    ({ item }: { item: ImmunoGroup }) => {
-      const isExpanded = expandedDays.has(item.date);
-      const hasMultipleImmunos = item.immunos.length > 1;
+  const renderDayGroup = useCallback(({ item }: { item: ExcretionGroup }) => {
+    const isExpanded = expandedDays.has(item.date);
+    const hasMultipleExcretions = item.excretions.length > 1;
 
-      return (
-        <View style={styles.dayCard}>
-          <View style={styles.dayHeader}>
-            <View style={styles.dayInfo}>
-              <Text style={styles.dayDate}>{item.dateFormatted}</Text>
-              <View style={styles.summaryInfo}>
-                <View style={styles.summaryRow}>
+    return (
+      <View style={styles.dayCard}>
+        <View style={styles.dayHeader}>
+          <View style={styles.dayInfo}>
+            <Text style={styles.dayDate}>{item.dateFormatted}</Text>
+            <View style={styles.summaryInfo}>
+              <View style={styles.summaryRow}>
+                {item.mictionsCount > 0 && (
                   <View style={styles.summaryBadge}>
-                    <FontAwesome
-                      name={selectedType === "vitamine" ? "pills" : "syringe"}
-                      size={14}
-                      color={getImmunoColor(selectedType)}
-                    />
+                    <FontAwesome name="water" size={12} color="#17a2b8" />
                     <Text style={styles.summaryText}>
-                      {item.immunos.length}{" "}
-                      {selectedType === "vitamine" ? "vitamine" : "vaccin"}
-                      {item.immunos.length > 1 ? "s" : ""}
+                      {item.mictionsCount} miction{item.mictionsCount > 1 ? "s" : ""}
                     </Text>
                   </View>
-                </View>
+                )}
+                {item.sellesCount > 0 && (
+                  <View style={styles.summaryBadge}>
+                    <FontAwesome name="poop" size={12} color="#dc3545" />
+                    <Text style={styles.summaryText}>
+                      {item.sellesCount} selle{item.sellesCount > 1 ? "s" : ""}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
-            {hasMultipleImmunos && (
-              <TouchableOpacity
-                style={styles.expandButton}
-                onPress={() => toggleExpand(item.date)}
-              >
-                <FontAwesome
-                  name={isExpanded ? "chevron-up" : "chevron-down"}
-                  size={16}
-                  color="#666"
-                />
-              </TouchableOpacity>
-            )}
           </View>
-          {renderImmunoItem(item.lastImmuno, true)}
-          {hasMultipleImmunos && isExpanded && (
-            <View style={styles.expandedContent}>
-              <View style={styles.separator} />
-              <Text style={styles.historyLabel}>Historique du jour</Text>
-              {item.immunos
-                .filter((immuno) => immuno.id !== item.lastImmuno.id)
-                .map((immuno) => renderImmunoItem(immuno))}
-            </View>
+          {hasMultipleExcretions && (
+            <TouchableOpacity
+              style={styles.expandButton}
+              onPress={() => toggleExpand(item.date)}
+            >
+              <FontAwesome
+                name={isExpanded ? "chevron-up" : "chevron-down"}
+                size={16}
+                color="#666"
+              />
+            </TouchableOpacity>
           )}
         </View>
-      );
-    },
-    [expandedDays, renderImmunoItem, toggleExpand, selectedType]
-  );
+        {renderExcretionItem(item.lastExcretion, true)}
+        {hasMultipleExcretions && isExpanded && (
+          <View style={styles.expandedContent}>
+            <View style={styles.separator} />
+            <Text style={styles.historyLabel}>Historique du jour</Text>
+            {item.excretions
+              .filter((excretion) => excretion.id !== item.lastExcretion.id)
+              .map((excretion) => renderExcretionItem(excretion))}
+          </View>
+        )}
+      </View>
+    );
+  }, [expandedDays, renderExcretionItem, toggleExpand]);
 
   // ============================================
   // RENDER - MAIN
@@ -1244,80 +1155,43 @@ export default function ImmunizationsScreen() {
             style={styles.filterContainer}
             contentContainerStyle={styles.filterContent}
           >
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <Pressable
-                onPress={() => handleFilterPress("today")}
+            <Pressable
+              onPress={() => handleFilterPress("today")}
+              style={[
+                styles.filterButton,
+                selectedFilter === "today" && {
+                  backgroundColor: Colors[colorScheme].tint,
+                },
+              ]}
+            >
+              <ThemedText
                 style={[
-                  styles.filterButton,
-                  selectedFilter === "today" && {
-                    backgroundColor: Colors[colorScheme].tint,
-                  },
+                  styles.filterText,
+                  selectedFilter === "today" && styles.filterTextActive,
                 ]}
               >
-                <ThemedText
-                  style={[
-                    styles.filterText,
-                    selectedFilter === "today" && styles.filterTextActive,
-                  ]}
-                >
-                  Aujourd&apos;hui
-                </ThemedText>
-              </Pressable>
+                Aujourd&apos;hui
+              </ThemedText>
+            </Pressable>
 
-              <Pressable
-                onPress={() => handleFilterPress("past")}
+            <Pressable
+              onPress={() => handleFilterPress("past")}
+              style={[
+                styles.filterButton,
+                selectedFilter === "past" && {
+                  backgroundColor: Colors[colorScheme].tint,
+                },
+              ]}
+            >
+              <ThemedText
                 style={[
-                  styles.filterButton,
-                  selectedFilter === "past" && {
-                    backgroundColor: Colors[colorScheme].tint,
-                  },
+                  styles.filterText,
+                  selectedFilter === "past" && styles.filterTextActive,
                 ]}
               >
-                <ThemedText
-                  style={[
-                    styles.filterText,
-                    selectedFilter === "past" && styles.filterTextActive,
-                  ]}
-                >
-                  Passés
-                </ThemedText>
-              </Pressable>
-            </View>
-            {/* Switch Vitamines/Vaccins */}
-            <View style={styles.typeSwitchContainer}>
-              <TouchableOpacity
-                onPress={() => setSelectedType("vitamine")}
-                style={[
-                  styles.typeSwitchButton,
-                  styles.typeSwitchButtonLeft,
-                  selectedType === "vitamine" &&
-                    styles.typeSwitchButtonActiveVitamine,
-                ]}
-                activeOpacity={0.7}
-              >
-                <FontAwesome
-                  name="pills"
-                  size={16}
-                  color={selectedType === "vitamine" ? "white" : "#FF9800"}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setSelectedType("vaccin")}
-                style={[
-                  styles.typeSwitchButton,
-                  styles.typeSwitchButtonRight,
-                  selectedType === "vaccin" &&
-                    styles.typeSwitchButtonActiveVaccin,
-                ]}
-                activeOpacity={0.7}
-              >
-                <FontAwesome
-                  name="syringe"
-                  size={16}
-                  color={selectedType === "vaccin" ? "white" : "#9C27B0"}
-                />
-              </TouchableOpacity>
-            </View>
+                Passés
+              </ThemedText>
+            </Pressable>
           </ScrollView>
 
           {/* Calendrier */}
@@ -1346,12 +1220,12 @@ export default function ImmunizationsScreen() {
           )}
         </View>
 
-        {/* Liste des immunisations */}
-        {isImmunosLoading || !emptyDelayDone ? (
+        {/* Liste des excrétions */}
+        {isExcretionsLoading || !emptyDelayDone ? (
           <View style={styles.emptyContainer}>
             <IconPulseDots color={Colors[colorScheme].tint} />
           </View>
-        ) : groupedImmunos.length === 0 ? (
+        ) : groupedExcretions.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons
               name="calendar-outline"
@@ -1359,11 +1233,9 @@ export default function ImmunizationsScreen() {
               color={Colors[colorScheme].tabIconDefault}
             />
             <ThemedText style={styles.emptyText}>
-              {immunos.length === 0
-                ? "Aucune immunisation"
-                : selectedType === "vitamine"
-                ? "Aucune vitamine pour ce filtre"
-                : "Aucun vaccin pour ce filtre"}
+              {excretions.length === 0
+                ? "Aucune excrétion"
+                : "Aucune excrétion pour ce filtre"}
             </ThemedText>
             {!(selectedFilter === "today" || selectedDate) && (
               <LoadMoreButton
@@ -1377,7 +1249,7 @@ export default function ImmunizationsScreen() {
           </View>
         ) : (
           <FlatList
-            data={groupedImmunos}
+            data={groupedExcretions}
             keyExtractor={(item) => item.date}
             renderItem={renderDayGroup}
             showsVerticalScrollIndicator={false}
@@ -1399,7 +1271,7 @@ export default function ImmunizationsScreen() {
         <ConfirmModal
           visible={showDeleteModal}
           title="Suppression"
-          message={`Voulez-vous vraiment supprimer ${deleteTargetLabel} ?`}
+          message="Voulez-vous vraiment supprimer ?"
           confirmText="Supprimer"
           cancelText="Annuler"
           backgroundColor={Colors[colorScheme].background}
@@ -1443,8 +1315,7 @@ const styles = StyleSheet.create({
   filterContent: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    justifyContent: "space-between",
-    width: "100%",
+    gap: 8,
   },
   filterButton: {
     paddingHorizontal: 20,
@@ -1494,9 +1365,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   summaryInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+    flexDirection: "column",
+    gap: 4,
   },
   summaryRow: {
     flexDirection: "row",
@@ -1523,30 +1393,25 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
   },
 
-  // Immuno Item
-  immunoItem: {
+  // Excretion Item
+  excretionItem: {
     backgroundColor: "#f8f9fa",
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
   },
-  lastImmunoItemVitamine: {
-    backgroundColor: "#fff3e0",
+  lastExcretionItem: {
+    backgroundColor: "#e8f4fd",
     borderLeftWidth: 4,
-    borderLeftColor: "#FF9800",
+    borderLeftColor: "#4A90E2",
   },
-  lastImmunoItemVaccin: {
-    backgroundColor: "#f3e5f5",
-    borderLeftWidth: 4,
-    borderLeftColor: "#9C27B0",
-  },
-  immunoContent: {
+  excretionContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
   },
-  immunoInfo: {
+  excretionInfo: {
     flex: 1,
   },
   infoRow: {
@@ -1558,12 +1423,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
   },
-  immunoTypeText: {
+  excretionTypeText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
   },
-  immunoActions: {
+  excretionActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -1602,7 +1467,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Form Content
+  // Modal Content
   modalCategoryLabel: {
     alignSelf: "center",
     fontSize: 16,
@@ -1611,33 +1476,73 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // Vaccin Selector
-  vaccinSelector: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
+  // Type Selection
+  typeRow: {
     flexDirection: "row",
-    alignItems: "center",
+    justifyContent: "space-around",
+    marginBottom: 16,
     gap: 12,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-    marginBottom: 20,
   },
-  vaccinSelectorDisabled: {
-    backgroundColor: "#f5f5f5",
+  typeButton: {
+    flex: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 8,
+    padding: 16,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 12,
+  },
+  typeButtonActiveMiction: {
+    backgroundColor: "#17a2b8",
+  },
+  typeButtonActiveSelle: {
+    backgroundColor: "#dc3545",
+  },
+  typeButtonDisabled: {
+    backgroundColor: "#f8f8f8",
     opacity: 0.5,
   },
-  vaccinSelectorText: {
-    flex: 1,
+  typeText: {
     fontSize: 16,
-    color: "#999",
-  },
-  vaccinSelectorTextSelected: {
-    color: "#333",
+    color: "#666",
     fontWeight: "500",
   },
-  vaccinSelectorTextDisabled: {
+  typeTextActive: {
+    color: "white",
+    fontWeight: "bold",
+  },
+  typeTextDisabled: {
     color: "#ccc",
+  },
+  toggleSubtitle: {
+    fontSize: 13,
+    color: "#999",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  warningText: {
+    fontSize: 13,
+    color: "#dc3545",
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 12,
+    fontWeight: "500",
+  },
+  editModeLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  editModeLabelText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
   },
 
   // Date/Time
@@ -1687,117 +1592,5 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-  },
-
-  // Vaccin Picker Header
-  sheetBreadcrumb: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  sheetBackButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-  },
-  sheetBackText: {
-    fontSize: 14,
-    color: "#666",
-    fontWeight: "600",
-  },
-  sheetBreadcrumbText: {
-    fontSize: 12,
-    color: "#999",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  vaccinList: {
-    maxHeight: 400,
-  },
-  vaccinListItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  vaccinListItemSelected: {
-    backgroundColor: "#f3e5f5",
-  },
-  vaccinListItemText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#333",
-  },
-  vaccinListItemTextSelected: {
-    color: "#9C27B0",
-    fontWeight: "500",
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginVertical: 12,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: "#333",
-    paddingVertical: 10,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  clearButton: {
-    padding: 8,
-  },
-  clearIcon: {
-    marginLeft: 8,
-  },
-  noResultsText: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    padding: 20,
-  },
-
-  // Type Switch
-  typeSwitchContainer: {
-    flexDirection: "row",
-    backgroundColor: "#f0f0f0",
-    // borderWidth: 1,
-    borderRadius: 20,
-    padding: 2,
-    marginLeft: 8,
-  },
-  typeSwitchButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 44,
-  },
-  typeSwitchButtonLeft: {
-    // borderTopRightRadius: 0,
-    // borderBottomRightRadius: 0,
-  },
-  typeSwitchButtonRight: {
-    // borderTopLeftRadius: 0,
-    // borderBottomLeftRadius: 0,
-  },
-  typeSwitchButtonActiveVitamine: {
-    backgroundColor: "#FF9800",
-  },
-  typeSwitchButtonActiveVaccin: {
-    backgroundColor: "#9C27B0",
   },
 });

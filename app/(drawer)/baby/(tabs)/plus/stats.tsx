@@ -9,8 +9,10 @@ import {
   ecouterPompagesHybrid as ecouterPompages,
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
-import { useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { HeaderBackButton } from "@react-navigation/elements";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { router, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -22,6 +24,7 @@ import {
 export default function StatsScreen() {
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
+  const navigation = useNavigation();
   const [tetees, setTetees] = useState<any[]>([]);
   const [pompages, setPompages] = useState<any[]>([]);
   const [teteesLoaded, setTeteesLoaded] = useState(false);
@@ -34,7 +37,8 @@ export default function StatsScreen() {
   );
 
   // Récupérer les paramètres de l'URL
-  const { tab } = useLocalSearchParams();
+  const { tab, returnTo } = useLocalSearchParams();
+  const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
 
   // Définir l'onglet initial en fonction du paramètre
   useEffect(() => {
@@ -44,6 +48,39 @@ export default function StatsScreen() {
       setSelectedTab("tetees"); // Par défaut, ou si tab === 'tetees'
     }
   }, [tab]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const parent = navigation.getParent();
+      parent?.setOptions({
+        headerLeft: () => (
+          <HeaderBackButton
+            onPress={() => {
+              if (returnTarget === "home") {
+                router.replace("/baby/home");
+                return;
+              }
+              if (returnTarget === "chrono") {
+                router.replace("/baby/chrono");
+                return;
+              }
+              if (returnTarget === "journal") {
+                router.replace("/baby/chrono");
+                return;
+              }
+              router.back();
+            }}
+            tintColor={Colors[colorScheme].text}
+            labelVisible={false}
+          />
+        ),
+      });
+
+      return () => {
+        parent?.setOptions({ headerLeft: undefined });
+      };
+    }, [colorScheme, navigation, returnTarget])
+  );
 
   // écoute en temps réel des tetees ET biberons
   useEffect(() => {

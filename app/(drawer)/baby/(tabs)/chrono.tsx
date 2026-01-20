@@ -1,4 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
@@ -21,13 +22,13 @@ import React, {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   Animated,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -137,13 +138,13 @@ const FILTER_CONFIG: Record<
     eventTypes: ["pompage"],
   },
   immunos: {
-    label: "Immunos",
+    label: "Santé",
     icon: "prescription-bottle",
     color: "#9C27B0",
     eventTypes: ["vitamine", "vaccin"],
   },
   diapers: {
-    label: "Pipi popo",
+    label: "Couches",
     icon: "toilet",
     color: "#17a2b8",
     eventTypes: ["miction", "selle"],
@@ -259,19 +260,19 @@ function getEditRoute(event: Event): string | null {
   const id = encodeURIComponent(event.id);
   switch (event.type) {
     case "tetee":
-      return `/baby/meals?tab=seins&editId=${id}&returnTo=chrono`;
+      return `/baby/plus/meals?tab=seins&editId=${id}&returnTo=chrono`;
     case "biberon":
-      return `/baby/meals?tab=biberons&editId=${id}&returnTo=chrono`;
+      return `/baby/plus/meals?tab=biberons&editId=${id}&returnTo=chrono`;
     case "pompage":
-      return `/baby/pumping?editId=${id}&returnTo=chrono`;
+      return `/baby/plus/pumping?editId=${id}&returnTo=chrono`;
     case "miction":
-      return `/baby/diapers?tab=mictions&editId=${id}&returnTo=chrono`;
+      return `/baby/plus/diapers?tab=mictions&editId=${id}&returnTo=chrono`;
     case "selle":
-      return `/baby/diapers?tab=selles&editId=${id}&returnTo=chrono`;
+      return `/baby/plus/diapers?tab=selles&editId=${id}&returnTo=chrono`;
     case "vaccin":
-      return `/baby/immunizations?tab=vaccins&editId=${id}&returnTo=chrono`;
+      return `/baby/plus/immunizations?tab=vaccins&editId=${id}&returnTo=chrono`;
     case "vitamine":
-      return `/baby/immunizations?tab=vitamines&editId=${id}&returnTo=chrono`;
+      return `/baby/plus/immunizations?tab=vitamines&editId=${id}&returnTo=chrono`;
     default:
       return null;
   }
@@ -490,6 +491,9 @@ const TimelineCard = React.memo(
           <View style={[styles.dot, { backgroundColor: config.color }]} />
           <View style={[styles.line, { backgroundColor: borderColor }]} />
         </View>
+        <Text style={[styles.cardTimeLeft, { color: secondaryTextColor }]}>
+          {formatTime(date)}
+        </Text>
         <TouchableOpacity
           style={[styles.card, { backgroundColor, borderColor }]}
           activeOpacity={0.9}
@@ -503,9 +507,11 @@ const TimelineCard = React.memo(
                 {config.label}
               </Text>
             </View>
-            <Text style={[styles.cardTime, { color: secondaryTextColor }]}>
-              {formatTime(date)}
-            </Text>
+            <FontAwesome
+              name="pen-to-square"
+              size={14}
+              color={secondaryTextColor}
+            />
           </View>
           {details && (
             <Text style={[styles.cardDetails, { color: secondaryTextColor }]}>
@@ -542,6 +548,7 @@ export default function ChronoScreen() {
   const [selectedTypes, setSelectedTypes] = useState<FilterType[]>(ALL_FILTERS);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const hasLoadedPrefs = useRef(false);
   const [infoModalMessage, setInfoModalMessage] = useState<string | null>(null);
 
@@ -661,6 +668,19 @@ export default function ChronoScreen() {
     [filteredEvents],
   );
 
+  useEffect(() => {
+    if (loading) {
+      setEmptyDelayDone(false);
+      return;
+    }
+    if (sections.length > 0) {
+      setEmptyDelayDone(true);
+      return;
+    }
+    const timer = setTimeout(() => setEmptyDelayDone(true), 500);
+    return () => clearTimeout(timer);
+  }, [loading, sections.length]);
+
   // Handlers with useCallback
   const handleRangeChange = useCallback((value: RangeOption) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -762,28 +782,31 @@ export default function ChronoScreen() {
         </View>
 
         {/* Filter ScrollView */}
-        <View style={styles.filterScroll}>
-          <View style={styles.filterRow}>
-            {ALL_FILTERS.map((type) => (
-              <FilterChip
-                key={type}
-                type={type}
-                isActive={selectedTypes.includes(type)}
-                borderColor={colors.border}
-                tintColor={colors.tint}
-                backgroundColor={colors.background}
-                textColor={colors.text}
-                onPress={() => handleFilterToggle(type)}
-              />
-            ))}
-          </View>
-        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterRow}
+        >
+          {ALL_FILTERS.map((type) => (
+            <FilterChip
+              key={type}
+              type={type}
+              isActive={selectedTypes.includes(type)}
+              borderColor={colors.border}
+              tintColor={colors.tint}
+              backgroundColor={colors.background}
+              textColor={colors.text}
+              onPress={() => handleFilterToggle(type)}
+            />
+          ))}
+        </ScrollView>
 
         {/* Content */}
         <View style={styles.content}>
-          {loading ? (
+          {loading || (!emptyDelayDone && sections.length === 0) ? (
             <View style={styles.loading}>
-              <ActivityIndicator size="large" color={colors.tint} />
+              <IconPulseDots color={colors.tint} />
               <Text style={[styles.loadingText, { color: colors.secondary }]}>
                 Chargement de la timeline...
               </Text>
@@ -846,6 +869,7 @@ export default function ChronoScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    backgroundColor: "#f8f9fa",
   },
   safeArea: {
     flex: 1,
@@ -881,11 +905,12 @@ const styles = StyleSheet.create({
   filterScroll: {
     flexGrow: 0,
     flexShrink: 0,
+    paddingTop: 6,
   },
   filterRow: {
     flexDirection: "row",
     paddingHorizontal: 20,
-    paddingVertical: 6,
+    paddingTop: 6,
     // paddingTop: 4,
     gap: 8,
   },
@@ -1005,6 +1030,12 @@ const styles = StyleSheet.create({
   cardTime: {
     fontSize: 12,
     fontWeight: "600",
+  },
+  cardTimeLeft: {
+    fontSize: 12,
+    fontWeight: "600",
+    width: 42,
+    marginTop: 6,
   },
   cardDetails: {
     marginTop: 6,

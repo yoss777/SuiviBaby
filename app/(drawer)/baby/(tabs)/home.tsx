@@ -24,7 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useHeaderRight } from "../_layout";
+import { useHeaderRight } from "../../_layout";
 
 // ============================================
 // TYPES
@@ -252,7 +252,7 @@ export default function HomeDashboard() {
 
     return merged
       .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime())
-      .slice(0, 4);
+      .slice(0, 5);
   }, [
     data.biberons,
     data.mictions,
@@ -741,7 +741,7 @@ export default function HomeDashboard() {
   }: any) => {
     const lastSessionDate = currentTime.getTime() - (lastTimestamp || 0);
     const thresholdHours =
-      title === "Repas total"
+      title === "Alimentation"
         ? reminderThresholds.repas
         : title === "Pompages"
           ? reminderThresholds.pompages
@@ -879,14 +879,14 @@ export default function HomeDashboard() {
             <LoadingCard />
           ) : (
             <StatsCard
-              title="Repas total"
+              title="Alimentation"
               value={todayStats.meals.total.count}
-              unit={todayStats.meals.total.count > 1 ? "sessions" : "session"}
+              unit="repas"
               icon="baby"
               color="#4A90E2"
               lastActivity={todayStats.meals.total.lastTime}
               lastTimestamp={todayStats.meals.total.lastTimestamp}
-              onPress={() => router.push("/baby/meals" as any)}
+              onPress={() => router.push("/baby/plus/meals" as any)}
             />
           )}
 
@@ -902,7 +902,9 @@ export default function HomeDashboard() {
               lastActivity={todayStats.pompages.lastTime}
               lastTimestamp={todayStats.pompages.lastTimestamp}
               onPress={() =>
-                router.push("/baby/pumping?openModal=true&returnTo=home" as any)
+                router.push(
+                  "/baby/plus/pumping?openModal=true&returnTo=home" as any
+                )
               }
             />
           )}
@@ -927,7 +929,7 @@ export default function HomeDashboard() {
                 lastTimestamp={todayStats.meals.seins.lastTimestamp}
                 onPress={() =>
                   router.push(
-                    "/baby/meals?tab=seins&openModal=true&returnTo=home" as any,
+                    "/baby/plus/meals?tab=seins&openModal=true&returnTo=home" as any,
                   )
                 }
               />
@@ -941,7 +943,7 @@ export default function HomeDashboard() {
                 lastTimestamp={todayStats.meals.biberons.lastTimestamp}
                 onPress={() =>
                   router.push(
-                    "/baby/meals?tab=biberons&openModal=true&returnTo=home" as any,
+                    "/baby/plus/meals?tab=biberons&openModal=true&returnTo=home" as any,
                   )
                 }
               />
@@ -964,7 +966,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.vitamines.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/immunizations?tab=vitamines&openModal=true&returnTo=home" as any,
+                  "/baby/plus/immunizations?tab=vitamines&openModal=true&returnTo=home" as any,
                 )
               }
             />
@@ -982,7 +984,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.vaccins.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/immunizations?tab=vaccins&openModal=true&returnTo=home" as any,
+                  "/baby/plus/immunizations?tab=vaccins&openModal=true&returnTo=home" as any,
                 )
               }
             />
@@ -1007,7 +1009,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.mictions.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/diapers?tab=mictions&openModal=true&returnTo=home" as any,
+                  "/baby/plus/diapers?tab=mictions&openModal=true&returnTo=home" as any,
                 )
               }
             />
@@ -1025,7 +1027,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.selles.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/diapers?tab=selles&openModal=true&returnTo=home" as any,
+                  "/baby/plus/diapers?tab=selles&openModal=true&returnTo=home" as any,
                 )
               }
             />
@@ -1037,7 +1039,7 @@ export default function HomeDashboard() {
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <Text style={[styles.sectionTitle, styles.sectionTitleInline]}>
-            Chronologie récente
+            Évènements récents
           </Text>
           <TouchableOpacity
             onPress={() => router.push("/baby/chrono" as any)}
@@ -1093,6 +1095,14 @@ export default function HomeDashboard() {
                     ]}
                   />
                 </View>
+                <Text
+                  style={[
+                    styles.recentTimeLeft,
+                    { color: Colors[colorScheme].tabIconDefault },
+                  ]}
+                >
+                  {formatTime(date)}
+                </Text>
                 <View
                   style={[
                     styles.recentCard,
@@ -1102,25 +1112,15 @@ export default function HomeDashboard() {
                     },
                   ]}
                 >
-                  <View style={styles.recentHeader}>
-                    <View style={styles.recentTitleRow}>
-                      {renderEventIcon(config.icon, config.color)}
-                      <Text
-                        style={[
-                          styles.recentTitle,
-                          { color: Colors[colorScheme].text },
-                        ]}
-                      >
-                        {config.label}
-                      </Text>
-                    </View>
+                  <View style={styles.recentTitleRow}>
+                    {renderEventIcon(config.icon, config.color)}
                     <Text
                       style={[
-                        styles.recentTime,
-                        { color: Colors[colorScheme].tabIconDefault },
+                        styles.recentTitle,
+                        { color: Colors[colorScheme].text },
                       ]}
                     >
-                      {formatTime(date)}
+                      {config.label}
                     </Text>
                   </View>
                   {details ? (
@@ -1266,6 +1266,12 @@ const styles = StyleSheet.create({
   recentTime: {
     fontSize: 12,
     fontWeight: "600",
+  },
+  recentTimeLeft: {
+    fontSize: 12,
+    fontWeight: "600",
+    width: 42,
+    marginTop: 6,
   },
   recentDetails: {
     marginTop: 6,

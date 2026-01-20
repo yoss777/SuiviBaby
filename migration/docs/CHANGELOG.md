@@ -1,5 +1,45 @@
 # CHANGELOG
 
+## 2026-01-20 — Navigation + Chrono/Growth Unification
+
+### Résumé
+Refonte de la navigation (onglet Plus), intégration d'une timeline cohérente dans Home/Chrono, et ajout du suivi Croissance avec intégration events/migration.
+
+### Summary
+Navigation refactor (Plus tab), consistent timeline styling across Home/Chrono, and new Growth tracking wired into events/migration services.
+
+### Navigation & IA d'affichage
+- Onglets visibles réduits a Home/Chrono/Stats/Plus, avec acces aux ecrans detail via Plus. Fichier: app/(drawer)/baby/_layout.tsx, app/(drawer)/baby/plus.tsx
+- Timeline recente integree a Home avec styles Chrono (dot + ligne + icones). Fichier: app/(drawer)/baby/home.tsx
+
+### Navigation & Display (EN)
+- Visible tabs reduced to Home/Chrono/Stats/Plus, with detail screens routed via Plus. File: app/(drawer)/baby/_layout.tsx, app/(drawer)/baby/plus.tsx
+- Recent timeline integrated into Home using Chrono styles (dot + line + icons). File: app/(drawer)/baby/home.tsx
+
+### Croissance
+- Nouvel ecran Croissance avec graphe + liste timeline, edition via bottom sheet global. Fichier: app/(drawer)/baby/croissance.tsx
+- Nouveau service de persistance Croissance (collection legacy) + integration double-write/hybride. Fichiers: services/croissanceService.ts, migration/eventsDoubleWriteService.ts, migration/eventsHybridService.ts
+- Extension des types events pour inclure Croissance. Fichier: services/eventsService.ts
+
+### Growth (EN)
+- New Growth screen with chart + timeline list, edits via global bottom sheet. File: app/(drawer)/baby/croissance.tsx
+- New Growth persistence service (legacy collection) + double-write/hybrid integration. Files: services/croissanceService.ts, migration/eventsDoubleWriteService.ts, migration/eventsHybridService.ts
+- Events types extended to include Growth. File: services/eventsService.ts
+
+### Bottom sheet global
+- GlobalSheetManager centralise l'affichage du FormBottomSheet et stabilise les retours d'ecran. Fichiers: components/ui/GlobalSheetManager.tsx, contexts/SheetContext.tsx, app/_layout.tsx
+- Ecrans repas/pompages/couches/immunos migrés vers l'ouverture via contexte. Fichiers: app/(drawer)/baby/meals.tsx, app/(drawer)/baby/pumping.tsx, app/(drawer)/baby/diapers.tsx, app/(drawer)/baby/immunizations.tsx
+
+### Global bottom sheet (EN)
+- GlobalSheetManager centralizes FormBottomSheet rendering and stabilizes navigation returns. Files: components/ui/GlobalSheetManager.tsx, contexts/SheetContext.tsx, app/_layout.tsx
+- Meals/Pumping/Diapers/Immunos screens migrated to context-based opening. Files: app/(drawer)/baby/meals.tsx, app/(drawer)/baby/pumping.tsx, app/(drawer)/baby/diapers.tsx, app/(drawer)/baby/immunizations.tsx
+
+### Chargement
+- Loader Chrono harmonise et evite le flash "aucun evenement" au chargement initial. Fichier: app/(drawer)/baby/chrono.tsx
+
+### Loading (EN)
+- Chrono loader harmonized and avoids the initial "no events" flash. File: app/(drawer)/baby/chrono.tsx
+
 ## 2025-01-12 — UX & Offline Stabilization
 
 ### Résumé

@@ -36,6 +36,7 @@ export type EventType =
   | "miction"       // Pipi
   | "selle"         // Popo
   | "sommeil"
+  | "croissance"    // Taille, poids, tête
   | "vaccin"
   | "vitamine";
 
@@ -100,6 +101,13 @@ export interface SommeilEvent extends BaseEvent {
   heureFin?: Date | Timestamp;
 }
 
+export interface CroissanceEvent extends BaseEvent {
+  type: "croissance";
+  tailleCm?: number;
+  poidsKg?: number;
+  teteCm?: number;
+}
+
 export interface VaccinEvent extends BaseEvent {
   type: "vaccin";
   nomVaccin: string;
@@ -120,6 +128,7 @@ export type Event =
   | MictionEvent
   | SelleEvent
   | SommeilEvent
+  | CroissanceEvent
   | VaccinEvent
   | VitamineEvent;
 
