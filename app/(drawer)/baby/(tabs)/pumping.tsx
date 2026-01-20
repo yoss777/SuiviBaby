@@ -114,6 +114,10 @@ export default function PumpingScreen() {
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [quantiteGauche, setQuantiteGauche] = useState<number>(100);
   const [quantiteDroite, setQuantiteDroite] = useState<number>(100);
+  const [useLeftBreast, setUseLeftBreast] = useState(true);
+  const [useRightBreast, setUseRightBreast] = useState(true);
+  const lastLeftQuantityRef = useRef<number>(100);
+  const lastRightQuantityRef = useRef<number>(100);
 
   // États des pickers
   const [showDate, setShowDate] = useState(false);
@@ -157,6 +161,10 @@ export default function PumpingScreen() {
     setIsSubmitting(false);
     setQuantiteGauche(100);
     setQuantiteDroite(100);
+    setUseLeftBreast(true);
+    setUseRightBreast(true);
+    lastLeftQuantityRef.current = 100;
+    lastRightQuantityRef.current = 100;
   }, []);
 
   const openAddModal = useCallback(() => {
@@ -655,6 +663,17 @@ export default function PumpingScreen() {
     setDateHeure(new Date(pompage.date.seconds * 1000));
     setQuantiteGauche(pompage.quantiteGauche);
     setQuantiteDroite(pompage.quantiteDroite);
+    lastLeftQuantityRef.current = pompage.quantiteGauche ?? 0;
+    lastRightQuantityRef.current = pompage.quantiteDroite ?? 0;
+    const hasLeft = (pompage.quantiteGauche ?? 0) > 0;
+    const hasRight = (pompage.quantiteDroite ?? 0) > 0;
+    if (!hasLeft && !hasRight) {
+      setUseLeftBreast(true);
+      setUseRightBreast(true);
+    } else {
+      setUseLeftBreast(hasLeft);
+      setUseRightBreast(hasRight);
+    }
     setEditingPompage(pompage);
     setIsSubmitting(false);
     setPendingMode("edit");
@@ -700,13 +719,17 @@ export default function PumpingScreen() {
 
   const handleSubmit = async () => {
     if (isSubmitting || !activeChild) return;
+    if (!useLeftBreast && !useRightBreast) {
+      showAlert("Attention", "Sélectionnez au moins un sein.");
+      return;
+    }
 
     try {
       setIsSubmitting(true);
 
       const dataToSave = {
-        quantiteGauche,
-        quantiteDroite,
+        quantiteGauche: useLeftBreast ? quantiteGauche : 0,
+        quantiteDroite: useRightBreast ? quantiteDroite : 0,
         date: dateHeure,
       };
 
@@ -763,97 +786,188 @@ export default function PumpingScreen() {
   };
 
   function renderSheetContent() {
+    const toggleLeftBreast = () => {
+      if (isSubmitting) return;
+      setUseLeftBreast((prev) => {
+        if (prev && !useRightBreast) return prev;
+        const next = !prev;
+        setQuantiteGauche((q) => {
+          if (next) {
+            return lastLeftQuantityRef.current > 0
+              ? lastLeftQuantityRef.current
+              : 100;
+          }
+          lastLeftQuantityRef.current = q;
+          return 0;
+        });
+        return next;
+      });
+    };
+    const toggleRightBreast = () => {
+      if (isSubmitting) return;
+      setUseRightBreast((prev) => {
+        if (prev && !useLeftBreast) return prev;
+        const next = !prev;
+        setQuantiteDroite((q) => {
+          if (next) {
+            return lastRightQuantityRef.current > 0
+              ? lastRightQuantityRef.current
+              : 100;
+          }
+          lastRightQuantityRef.current = q;
+          return 0;
+        });
+        return next;
+      });
+    };
+
     return (
       <>
-        <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
-        <View style={styles.quantityPickerRow}>
+        <Text style={styles.modalCategoryLabel}>Seins</Text>
+        <View style={styles.breastToggleRow}>
           <TouchableOpacity
             style={[
-              styles.quantityButton,
-              isSubmitting && styles.quantityButtonDisabled,
+              styles.breastToggleButton,
+              useLeftBreast && {
+                backgroundColor: Colors[colorScheme].tint,
+                borderColor: Colors[colorScheme].tint,
+              },
             ]}
-            onPressIn={() =>
-              handlePressIn(() => setQuantiteGauche((q) => Math.max(0, q - 5)))
-            }
-            onPressOut={handlePressOut}
+            onPress={toggleLeftBreast}
             disabled={isSubmitting}
           >
             <Text
               style={[
-                styles.quantityButtonText,
-                isSubmitting && styles.quantityButtonTextDisabled,
+                styles.breastToggleText,
+                useLeftBreast && styles.breastToggleTextActive,
               ]}
             >
-              -
+              Gauche
             </Text>
           </TouchableOpacity>
-          <Text style={styles.quantityPickerValue}>{quantiteGauche} ml</Text>
           <TouchableOpacity
             style={[
-              styles.quantityButton,
-              isSubmitting && styles.quantityButtonDisabled,
+              styles.breastToggleButton,
+              useRightBreast && {
+                backgroundColor: Colors[colorScheme].tint,
+                borderColor: Colors[colorScheme].tint,
+              },
             ]}
-            onPressIn={() =>
-              handlePressIn(() => setQuantiteGauche((q) => q + 5))
-            }
-            onPressOut={handlePressOut}
+            onPress={toggleRightBreast}
             disabled={isSubmitting}
           >
             <Text
               style={[
-                styles.quantityButtonText,
-                isSubmitting && styles.quantityButtonTextDisabled,
+                styles.breastToggleText,
+                useRightBreast && styles.breastToggleTextActive,
               ]}
             >
-              +
+              Droit
             </Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
-        <View style={styles.quantityPickerRow}>
-          <TouchableOpacity
-            style={[
-              styles.quantityButton,
-              isSubmitting && styles.quantityButtonDisabled,
-            ]}
-            onPressIn={() =>
-              handlePressIn(() => setQuantiteDroite((q) => Math.max(0, q - 5)))
-            }
-            onPressOut={handlePressOut}
-            disabled={isSubmitting}
-          >
-            <Text
-              style={[
-                styles.quantityButtonText,
-                isSubmitting && styles.quantityButtonTextDisabled,
-              ]}
-            >
-              -
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.quantityPickerValue}>{quantiteDroite} ml</Text>
-          <TouchableOpacity
-            style={[
-              styles.quantityButton,
-              isSubmitting && styles.quantityButtonDisabled,
-            ]}
-            onPressIn={() =>
-              handlePressIn(() => setQuantiteDroite((q) => q + 5))
-            }
-            onPressOut={handlePressOut}
-            disabled={isSubmitting}
-          >
-            <Text
-              style={[
-                styles.quantityButtonText,
-                isSubmitting && styles.quantityButtonTextDisabled,
-              ]}
-            >
-              +
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {useLeftBreast && (
+          <>
+            <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
+            <View style={styles.quantityPickerRow}>
+              <TouchableOpacity
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
+                onPressIn={() =>
+                  handlePressIn(() =>
+                    setQuantiteGauche((q) => Math.max(0, q - 5)),
+                  )
+                }
+                onPressOut={handlePressOut}
+                disabled={isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  -
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.quantityPickerValue}>{quantiteGauche} ml</Text>
+              <TouchableOpacity
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
+                onPressIn={() =>
+                  handlePressIn(() => setQuantiteGauche((q) => q + 5))
+                }
+                onPressOut={handlePressOut}
+                disabled={isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  +
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
+        {useRightBreast && (
+          <>
+            <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
+            <View style={styles.quantityPickerRow}>
+              <TouchableOpacity
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
+                onPressIn={() =>
+                  handlePressIn(() =>
+                    setQuantiteDroite((q) => Math.max(0, q - 5)),
+                  )
+                }
+                onPressOut={handlePressOut}
+                disabled={isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  -
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.quantityPickerValue}>{quantiteDroite} ml</Text>
+              <TouchableOpacity
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
+                onPressIn={() =>
+                  handlePressIn(() => setQuantiteDroite((q) => q + 5))
+                }
+                onPressOut={handlePressOut}
+                disabled={isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  +
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
         <View style={styles.dateTimeContainer}>
@@ -1595,6 +1709,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
+  },
+  breastToggleRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
+  breastToggleButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d7dbe0",
+    backgroundColor: "#f5f6f8",
+  },
+  breastToggleText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  breastToggleTextActive: {
+    color: "#fff",
   },
   // Date/Time
   dateTimeContainer: {
