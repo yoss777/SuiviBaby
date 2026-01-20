@@ -187,10 +187,17 @@ export async function ajouterEvenementAvecId(
 
     // Utiliser setDoc au lieu de addDoc pour spécifier l'ID
     const docRef = doc(db, COLLECTION_NAME, id);
-    await setDoc(docRef, eventData);
+    await setDoc(docRef, eventData, { merge: true });
 
     console.log(`✅ ${data.type} ajouté avec ID spécifique :`, id);
   } catch (e) {
+    const err = e as { code?: string };
+    if (err?.code === "already-exists") {
+      const docRef = doc(db, COLLECTION_NAME, id);
+      await updateDoc(docRef, eventData);
+      console.log(`✅ ${data.type} mis à jour (ID existant) :`, id);
+      return;
+    }
     console.error("❌ Erreur lors de l'ajout avec ID :", e);
     throw e;
   }

@@ -26,8 +26,8 @@ import { normalizeQuery } from "@/utils/text";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { HeaderBackButton } from "@react-navigation/elements";
 import { useNetInfo } from "@react-native-community/netinfo";
+import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -52,7 +52,7 @@ import { useHeaderLeft, useHeaderRight } from "../../_layout";
 // ============================================
 type ImmunoType = "vitamine" | "vaccin";
 type FilterType = "today" | "past";
-type SheetStep = "form" | "vaccinPicker";
+type SheetStep = "form" | "vaccinPicker" | "vitaminePicker";
 
 interface Immuno {
   id: string;
@@ -61,6 +61,7 @@ interface Immuno {
   createdAt: { seconds: number };
   nomVaccin?: string;
   nomVitamine?: string;
+  dosage?: string;
   lib?: string;
 }
 
@@ -101,6 +102,8 @@ const VACCINS_LIST = [
   "Autre vaccin",
 ];
 
+const VITAMINES_LIST = ["Vitamine D", "Vitamine K"];
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -110,7 +113,9 @@ export default function ImmunizationsScreen() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const { openSheet, closeSheet, viewProps } = useSheet();
-  const headerOwnerId = useRef(`immunizations-${Math.random().toString(36).slice(2)}`);
+  const headerOwnerId = useRef(
+    `immunizations-${Math.random().toString(36).slice(2)}`,
+  );
   const { showAlert } = useModal();
   const navigation = useNavigation();
   const { setHeaderLeft } = useHeaderLeft();
@@ -150,6 +155,9 @@ export default function ImmunizationsScreen() {
   const [immunoType, setImmunoType] = useState<ImmunoType>("vitamine");
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [selectedVaccin, setSelectedVaccin] = useState<string>("");
+  const [selectedVitamine, setSelectedVitamine] =
+    useState<string>("Vitamine D");
+  const [gouttesCount, setGouttesCount] = useState<number>(3);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sheetStep, setSheetStep] = useState<SheetStep>("form");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -165,7 +173,6 @@ export default function ImmunizationsScreen() {
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
 
-
   // ============================================
   // EFFECTS - HEADER
   // ============================================
@@ -177,7 +184,7 @@ export default function ImmunizationsScreen() {
       if (newValue) {
         const today = new Date();
         const todayString = `${today.getFullYear()}-${String(
-          today.getMonth() + 1
+          today.getMonth() + 1,
         ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
         setSelectedDate(todayString);
         setSelectedFilter(null);
@@ -193,6 +200,8 @@ export default function ImmunizationsScreen() {
       setEditingImmuno(null);
       setIsSubmitting(false);
       setSelectedVaccin("");
+      setSelectedVitamine("Vitamine D");
+      setGouttesCount(3);
       setSearchQuery("");
       setSheetStep("form");
 
@@ -202,12 +211,12 @@ export default function ImmunizationsScreen() {
         preferredType === "vaccins"
           ? "vaccin"
           : preferredType === "vitamines"
-          ? "vitamine"
-          : selectedType;
+            ? "vitamine"
+            : selectedType;
 
       setImmunoType(typeToUse);
     },
-    [selectedType]
+    [selectedType],
   );
 
   const openAddModal = useCallback(
@@ -216,40 +225,40 @@ export default function ImmunizationsScreen() {
       setPendingMode("add");
       setPendingOpen(true);
     },
-    [prepareAddModal]
+    [prepareAddModal],
   );
 
   useFocusEffect(
     useCallback(() => {
       const headerButtons = (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingRight: 16,
-          gap: 0,
-        }}
-      >
-        <Pressable
-          onPress={handleCalendarPress}
-          style={[
-            styles.headerButton,
-            { paddingLeft: 12 },
-            showCalendar && {
-              backgroundColor: Colors[colorScheme].tint + "20",
-            },
-          ]}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingRight: 16,
+            gap: 0,
+          }}
         >
-          <Ionicons
-            name="calendar-outline"
-            size={24}
-            color={Colors[colorScheme].tint}
-          />
-        </Pressable>
-        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
-          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={handleCalendarPress}
+            style={[
+              styles.headerButton,
+              { paddingLeft: 12 },
+              showCalendar && {
+                backgroundColor: Colors[colorScheme].tint + "20",
+              },
+            ]}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={24}
+              color={Colors[colorScheme].tint}
+            />
+          </Pressable>
+          <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+          </Pressable>
+        </View>
       );
 
       setHeaderRight(headerButtons, headerOwnerId.current);
@@ -263,7 +272,7 @@ export default function ImmunizationsScreen() {
       colorScheme,
       setHeaderRight,
       openAddModal,
-    ])
+    ]),
   );
 
   // ============================================
@@ -306,7 +315,7 @@ export default function ImmunizationsScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, returnTarget, setHeaderLeft])
+    }, [colorScheme, returnTarget, setHeaderLeft]),
   );
 
   useFocusEffect(
@@ -314,7 +323,7 @@ export default function ImmunizationsScreen() {
       if (openModal !== "true") return;
       setPendingMode("add");
       setPendingOpen(true);
-    }, [openModal])
+    }, [openModal]),
   );
 
   useEffect(() => {
@@ -371,7 +380,7 @@ export default function ImmunizationsScreen() {
 
     const mergeAndSortImmunos = () => {
       const merged = [...vitaminesData, ...vaccinsData].sort(
-        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
       setImmunos(merged);
       if (
@@ -395,7 +404,7 @@ export default function ImmunizationsScreen() {
         setVitaminesLoaded(true);
         mergeAndSortImmunos();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday },
     );
 
     const unsubscribeVaccins = ecouterVaccins(
@@ -408,7 +417,7 @@ export default function ImmunizationsScreen() {
         setVaccinsLoaded(true);
         mergeAndSortImmunos();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday },
     );
 
     return () => {
@@ -449,17 +458,20 @@ export default function ImmunizationsScreen() {
     return () => clearTimeout(timer);
   }, [isImmunosLoading, groupedImmunos.length, selectedType]);
 
-  const loadMoreStep = useCallback((auto = false) => {
-    if (!hasMore) return;
-    setIsLoadingMore(true);
-    pendingLoadMoreRef.current = 2;
-    loadMoreVersionRef.current += 1;
-    setDaysWindow((prev) => prev + 14);
-    if (!auto) {
-      setAutoLoadMore(true);
-      setAutoLoadMoreAttempts(0);
-    }
-  }, [hasMore]);
+  const loadMoreStep = useCallback(
+    (auto = false) => {
+      if (!hasMore) return;
+      setIsLoadingMore(true);
+      pendingLoadMoreRef.current = 2;
+      loadMoreVersionRef.current += 1;
+      setDaysWindow((prev) => prev + 14);
+      if (!auto) {
+        setAutoLoadMore(true);
+        setAutoLoadMoreAttempts(0);
+      }
+    },
+    [hasMore],
+  );
 
   const handleLoadMore = useCallback(() => {
     loadMoreStep(false);
@@ -467,7 +479,12 @@ export default function ImmunizationsScreen() {
 
   useEffect(() => {
     if (selectedFilter === "today" || selectedDate) return;
-    if (!autoLoadMore && !isImmunosLoading && groupedImmunos.length === 0 && hasMore) {
+    if (
+      !autoLoadMore &&
+      !isImmunosLoading &&
+      groupedImmunos.length === 0 &&
+      hasMore
+    ) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
@@ -529,7 +546,6 @@ export default function ImmunizationsScreen() {
     };
   }, [activeChild?.id, daysWindow, selectedType]);
 
-
   // Filtrage et regroupement par jour
   useEffect(() => {
     const today = new Date();
@@ -538,7 +554,7 @@ export default function ImmunizationsScreen() {
 
     // Filtrer par type sélectionné
     const filteredByType = immunos.filter(
-      (immuno) => immuno.type === selectedType
+      (immuno) => immuno.type === selectedType,
     );
 
     // Filtrer par date
@@ -608,7 +624,7 @@ export default function ImmunizationsScreen() {
   const applyTodayFilter = useCallback(() => {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
+      today.getMonth() + 1,
     ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     setSelectedFilter("today");
     setSelectedDate(null);
@@ -633,7 +649,7 @@ export default function ImmunizationsScreen() {
       if (!selectedFilter && !selectedDate) {
         applyTodayFilter();
       }
-    }, [applyTodayFilter, selectedDate, selectedFilter])
+    }, [applyTodayFilter, selectedDate, selectedFilter]),
   );
 
   // ============================================
@@ -646,7 +662,7 @@ export default function ImmunizationsScreen() {
     immunos.forEach((immuno) => {
       const date = new Date(immuno.date?.seconds * 1000);
       const dateKey = `${date.getFullYear()}-${String(
-        date.getMonth() + 1
+        date.getMonth() + 1,
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
       if (!groups[dateKey]) {
@@ -659,13 +675,13 @@ export default function ImmunizationsScreen() {
       .map(([dateKey, immunos]) => {
         const date = new Date(dateKey);
         const vitaminesCount = immunos.filter(
-          (i) => i.type === "vitamine"
+          (i) => i.type === "vitamine",
         ).length;
         const vaccinsCount = immunos.filter((i) => i.type === "vaccin").length;
         const lastImmuno = immunos.reduce((latest, current) =>
           (current.date?.seconds || 0) > (latest.date?.seconds || 0)
             ? current
-            : latest
+            : latest,
         );
 
         return {
@@ -677,7 +693,7 @@ export default function ImmunizationsScreen() {
             year: "numeric",
           }),
           immunos: immunos.sort(
-            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
           ),
           vitaminesCount,
           vaccinsCount,
@@ -724,7 +740,8 @@ export default function ImmunizationsScreen() {
     if (immuno.type === "vaccin") {
       return immuno.nomVaccin || immuno.lib || "Vaccin non spécifié";
     }
-    return immuno.nomVitamine || "Vitamine";
+    const baseName = immuno.nomVitamine || "Vitamine";
+    return immuno.dosage ? `${baseName} · ${immuno.dosage}` : baseName;
   };
 
   const deleteTargetLabel = editingImmuno
@@ -737,8 +754,17 @@ export default function ImmunizationsScreen() {
     setSheetStep("form");
   };
 
+  const selectVitamine = (vitamine: string) => {
+    setSelectedVitamine(vitamine);
+    setSearchQuery("");
+    setSheetStep("form");
+  };
+
   const filteredVaccins = VACCINS_LIST.filter((vaccin) =>
-    normalizeQuery(vaccin).includes(normalizeQuery(searchQuery))
+    normalizeQuery(vaccin).includes(normalizeQuery(searchQuery)),
+  );
+  const filteredVitamines = VITAMINES_LIST.filter((vitamine) =>
+    normalizeQuery(vitamine).includes(normalizeQuery(searchQuery)),
   );
 
   // ============================================
@@ -757,6 +783,11 @@ export default function ImmunizationsScreen() {
 
     if (type === "vaccin") {
       setSelectedVaccin(immuno.nomVaccin || immuno.lib || "");
+    } else {
+      setSelectedVitamine(immuno.nomVitamine || "Vitamine D");
+      const dosage = String(immuno.dosage || "");
+      const match = dosage.match(/\d+/);
+      setGouttesCount(match ? Number.parseInt(match[0], 10) : 3);
     }
     setPendingMode("edit");
     setPendingOpen(true);
@@ -814,7 +845,12 @@ export default function ImmunizationsScreen() {
       const isVitamine = immunoType === "vitamine";
       const dataToSave = {
         date: dateHeure,
-        ...(immunoType === "vitamine" && { nomVitamine: "Vitamine D" }),
+        ...(immunoType === "vitamine" && {
+          nomVitamine: selectedVitamine || "Vitamine D",
+          ...(selectedVitamine === "Vitamine D" && {
+            dosage: `${gouttesCount} gouttes`,
+          }),
+        }),
         ...(immunoType === "vaccin" && { nomVaccin: selectedVaccin }),
       };
 
@@ -838,7 +874,7 @@ export default function ImmunizationsScreen() {
         showToast(
           editingImmuno
             ? "Modification en attente de synchronisation"
-            : "Ajout en attente de synchronisation"
+            : "Ajout en attente de synchronisation",
         );
       }
       closeModal();
@@ -883,75 +919,186 @@ export default function ImmunizationsScreen() {
     if (sheetStep === "vaccinPicker") {
       return (
         <>
-        <View style={styles.sheetBreadcrumb}>
-          <Pressable
-            style={styles.sheetBackButton}
-            onPress={() => setSheetStep("form")}
-          >
-            <FontAwesome name="chevron-left" size={14} color="#666" />
-            <Text style={styles.sheetBackText}>Retour</Text>
-          </Pressable>
-          <Text style={styles.sheetBreadcrumbText}>
-            Immunos / Vaccins / Choisir
-          </Text>
-        </View>
-        <View style={styles.searchContainer}>
-          <FontAwesome
-            name="search"
-            size={16}
-            color="#999"
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Rechercher un vaccin..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoFocus={true}
-          />
-          {searchQuery && (
-            <TouchableOpacity
-              style={styles.clearButton}
-              onPress={() => setSearchQuery("")}
+          <View style={styles.sheetBreadcrumb}>
+            <Pressable
+              style={styles.sheetBackButton}
+              onPress={() => setSheetStep("form")}
             >
-              <FontAwesome name="times-circle" size={16} color="#999" />
-            </TouchableOpacity>
-          )}
-        </View>
-        <ScrollView style={styles.vaccinList} showsVerticalScrollIndicator={false}>
-          {filteredVaccins.length > 0 ? (
-            filteredVaccins.map((vaccin, index) => (
+              <FontAwesome name="chevron-left" size={14} color="#666" />
+              <Text style={styles.sheetBackText}>Retour</Text>
+            </Pressable>
+            <Text style={styles.sheetBreadcrumbText}>
+              Immunos / Vaccins / Choisir
+            </Text>
+          </View>
+          <View style={styles.searchContainer}>
+            <FontAwesome
+              name="search"
+              size={16}
+              color="#999"
+              style={styles.searchIcon}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Rechercher un vaccin..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus={true}
+            />
+            {searchQuery && (
               <TouchableOpacity
-                key={index}
-                style={[
-                  styles.vaccinListItem,
-                  selectedVaccin === vaccin && styles.vaccinListItemSelected,
-                ]}
-                onPress={() => selectVaccin(vaccin)}
-                activeOpacity={0.7}
+                style={styles.clearButton}
+                onPress={() => setSearchQuery("")}
               >
-                <FontAwesome
-                  name="syringe"
-                  size={16}
-                  color={selectedVaccin === vaccin ? "#9C27B0" : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.vaccinListItemText,
-                    selectedVaccin === vaccin && styles.vaccinListItemTextSelected,
-                  ]}
-                >
-                  {vaccin}
-                </Text>
-                {selectedVaccin === vaccin && (
-                  <FontAwesome name="check" size={16} color="#9C27B0" />
-                )}
+                <FontAwesome name="times-circle" size={16} color="#999" />
               </TouchableOpacity>
-            ))
-          ) : (
-            <Text style={styles.noResultsText}>Aucun vaccin trouvé</Text>
-          )}
-        </ScrollView>
+            )}
+          </View>
+          <ScrollView
+            style={styles.vaccinList}
+            showsVerticalScrollIndicator={false}
+          >
+            {filteredVaccins.length > 0 ? (
+              filteredVaccins.map((vaccin, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.vaccinListItem,
+                    selectedVaccin === vaccin && {
+                      backgroundColor: Colors[colorScheme].tint + "20",
+                    },
+                  ]}
+                  onPress={() => selectVaccin(vaccin)}
+                  activeOpacity={0.7}
+                >
+                  <FontAwesome
+                    name="syringe"
+                    size={16}
+                    color={
+                      selectedVaccin === vaccin
+                        ? Colors[colorScheme].tint
+                        : "#666"
+                    }
+                    style={styles.vaccinListItemIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.vaccinListItemText,
+                      selectedVaccin === vaccin && {
+                        color: Colors[colorScheme].tint,
+                      },
+                      selectedVaccin === vaccin &&
+                        styles.vaccinListItemTextSelected,
+                    ]}
+                  >
+                    {vaccin}
+                  </Text>
+                  {selectedVaccin === vaccin && (
+                    <FontAwesome
+                      name="check"
+                      size={16}
+                      color={Colors[colorScheme].tint}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={styles.noResultsText}>Aucun vaccin trouvé</Text>
+            )}
+          </ScrollView>
+        </>
+      );
+    }
+    if (sheetStep === "vitaminePicker") {
+      return (
+        <>
+          <View style={styles.sheetBreadcrumb}>
+            <Pressable
+              style={styles.sheetBackButton}
+              onPress={() => setSheetStep("form")}
+            >
+              <FontAwesome name="chevron-left" size={14} color="#666" />
+              <Text style={styles.sheetBackText}>Retour</Text>
+            </Pressable>
+            <Text style={styles.sheetBreadcrumbText}>
+              Immunos / Vitamines / Choisir
+            </Text>
+          </View>
+          <View style={styles.searchContainer}>
+            <FontAwesome
+              name="search"
+              size={16}
+              color="#999"
+              style={styles.searchIcon}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Rechercher une vitamine..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus={true}
+            />
+            {searchQuery && (
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={() => setSearchQuery("")}
+              >
+                <FontAwesome name="times-circle" size={16} color="#999" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <ScrollView
+            style={styles.vaccinList}
+            showsVerticalScrollIndicator={false}
+          >
+            {filteredVitamines.length > 0 ? (
+              filteredVitamines.map((vitamine) => (
+                <TouchableOpacity
+                  key={vitamine}
+                  style={[
+                    styles.vaccinListItem,
+                    selectedVitamine === vitamine && {
+                      backgroundColor: Colors[colorScheme].tint + "20",
+                    },
+                  ]}
+                  onPress={() => selectVitamine(vitamine)}
+                  activeOpacity={0.7}
+                >
+                  <FontAwesome
+                    name="pills"
+                    size={16}
+                    color={
+                      selectedVitamine === vitamine
+                        ? Colors[colorScheme].tint
+                        : "#666"
+                    }
+                    style={styles.vaccinListItemIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.vaccinListItemText,
+                      selectedVitamine === vitamine && {
+                        color: Colors[colorScheme].tint,
+                      },
+                      selectedVitamine === vitamine &&
+                        styles.vaccinListItemTextSelected,
+                    ]}
+                  >
+                    {vitamine}
+                  </Text>
+                  {selectedVitamine === vitamine && (
+                    <FontAwesome
+                      name="check"
+                      size={16}
+                      color={Colors[colorScheme].tint}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={styles.noResultsText}>Aucune vitamine trouvée</Text>
+            )}
+          </ScrollView>
         </>
       );
     }
@@ -985,10 +1132,88 @@ export default function ImmunizationsScreen() {
           </TouchableOpacity>
         )}
 
+        {immunoType === "vitamine" && (
+          <TouchableOpacity
+            style={[
+              styles.vaccinSelector,
+              isSubmitting && styles.vaccinSelectorDisabled,
+            ]}
+            onPress={() => {
+              if (!isSubmitting) {
+                setSearchQuery("");
+                setSheetStep("vitaminePicker");
+              }
+            }}
+            disabled={isSubmitting}
+          >
+            <FontAwesome name="list" size={20} color="#666" />
+            <Text
+              style={[
+                styles.vaccinSelectorText,
+                selectedVitamine && styles.vaccinSelectorTextSelected,
+                isSubmitting && styles.vaccinSelectorTextDisabled,
+              ]}
+            >
+              {selectedVitamine || "Choisir une vitamine"}
+            </Text>
+            <FontAwesome name="chevron-right" size={16} color="#999" />
+          </TouchableOpacity>
+        )}
+
+        {immunoType === "vitamine" && selectedVitamine === "Vitamine D" && (
+          <>
+            <Text style={styles.modalCategoryLabel}>Quantité</Text>
+            <View style={styles.quantityPickerRow}>
+              <TouchableOpacity
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
+                onPress={() =>
+                  setGouttesCount((value) => Math.max(0, value - 1))
+                }
+                disabled={isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  -
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.quantityPickerValue}>
+                {gouttesCount} gouttes
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
+                onPress={() => setGouttesCount((value) => value + 1)}
+                disabled={isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  +
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
         <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
         <View style={styles.dateTimeContainer}>
           <TouchableOpacity
-            style={[styles.dateButton, isSubmitting && styles.dateButtonDisabled]}
+            style={[
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
+            ]}
             onPress={() => setShowDate(true)}
             disabled={isSubmitting}
           >
@@ -1007,7 +1232,10 @@ export default function ImmunizationsScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.dateButton, isSubmitting && styles.dateButtonDisabled]}
+            style={[
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
+            ]}
             onPress={() => setShowTime(true)}
             disabled={isSubmitting}
           >
@@ -1072,8 +1300,8 @@ export default function ImmunizationsScreen() {
       title: editingImmuno
         ? `Modifier ${immunoType === "vitamine" ? "vitamine" : "vaccin"}`
         : immunoType === "vitamine"
-        ? "Nouvelle vitamine"
-        : "Nouveau vaccin",
+          ? "Nouvelle vitamine"
+          : "Nouveau vaccin",
       icon: immunoType === "vitamine" ? "pills" : "syringe",
       accentColor: immunoType === "vitamine" ? "#FF9800" : "#9C27B0",
       isEditing: !!editingImmuno,
@@ -1104,6 +1332,8 @@ export default function ImmunizationsScreen() {
     immunoType,
     isSubmitting,
     selectedVaccin,
+    selectedVitamine,
+    gouttesCount,
     searchQuery,
     sheetStep,
     dateHeure,
@@ -1123,7 +1353,7 @@ export default function ImmunizationsScreen() {
         newDate.setFullYear(
           selectedDate.getFullYear(),
           selectedDate.getMonth(),
-          selectedDate.getDate()
+          selectedDate.getDate(),
         );
         return newDate;
       });
@@ -1183,7 +1413,7 @@ export default function ImmunizationsScreen() {
                     {
                       hour: "2-digit",
                       minute: "2-digit",
-                    }
+                    },
                   )}
                 </Text>
               </View>
@@ -1200,7 +1430,7 @@ export default function ImmunizationsScreen() {
         </TouchableOpacity>
       );
     },
-    []
+    [],
   );
 
   // ============================================
@@ -1260,7 +1490,7 @@ export default function ImmunizationsScreen() {
         </View>
       );
     },
-    [expandedDays, renderImmunoItem, toggleExpand, selectedType]
+    [expandedDays, renderImmunoItem, toggleExpand, selectedType],
   );
 
   // ============================================
@@ -1403,8 +1633,8 @@ export default function ImmunizationsScreen() {
               {immunos.length === 0
                 ? "Aucune immunisation"
                 : selectedType === "vitamine"
-                ? "Aucune vitamine pour ce filtre"
-                : "Aucun vaccin pour ce filtre"}
+                  ? "Aucune vitamine pour ce filtre"
+                  : "Aucun vaccin pour ce filtre"}
             </ThemedText>
             {!(selectedFilter === "today" || selectedDate) && (
               <LoadMoreButton
@@ -1652,6 +1882,37 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     marginBottom: 10,
   },
+  quantityPickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+    marginBottom: 8,
+  },
+  quantityButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quantityButtonDisabled: {
+    opacity: 0.6,
+  },
+  quantityButtonText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#333",
+  },
+  quantityButtonTextDisabled: {
+    color: "#999",
+  },
+  quantityPickerValue: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
 
   // Vaccin Selector
   vaccinSelector: {
@@ -1771,9 +2032,14 @@ const styles = StyleSheet.create({
     gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
+    borderRadius: 12,
+  },
+  vaccinListItemIcon: {
+    width: 18,
+    textAlign: "center",
   },
   vaccinListItemSelected: {
-    backgroundColor: "#f3e5f5",
+    backgroundColor: "transparent",
   },
   vaccinListItemText: {
     flex: 1,
@@ -1781,8 +2047,7 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   vaccinListItemTextSelected: {
-    color: "#9C27B0",
-    fontWeight: "500",
+    fontWeight: "600",
   },
   searchContainer: {
     flexDirection: "row",

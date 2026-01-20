@@ -237,7 +237,10 @@ function buildDetails(event: Event) {
     case "vaccin":
       return event.nomVaccin;
     case "vitamine":
-      return event.nomVitamine || event.dosage;
+      if (!event.nomVitamine) return event.dosage;
+      return event.dosage
+        ? `${event.nomVitamine} · ${event.dosage}`
+        : event.nomVitamine;
     default:
       return undefined;
   }

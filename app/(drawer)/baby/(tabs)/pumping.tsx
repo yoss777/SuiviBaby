@@ -21,8 +21,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { HeaderBackButton } from "@react-navigation/elements";
 import { useNetInfo } from "@react-native-community/netinfo";
+import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -74,7 +74,9 @@ export default function PumpingScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const { openSheet, closeSheet, viewProps } = useSheet();
   const { showAlert } = useModal();
-  const headerOwnerId = useRef(`pumping-${Math.random().toString(36).slice(2)}`);
+  const headerOwnerId = useRef(
+    `pumping-${Math.random().toString(36).slice(2)}`,
+  );
   const navigation = useNavigation();
   const { setHeaderLeft } = useHeaderLeft();
   const { showToast } = useToast();
@@ -127,7 +129,6 @@ export default function PumpingScreen() {
   // Ref pour la gestion du picker avec accélération
   const intervalRef = useRef<number | undefined>(undefined);
 
-
   // ============================================
   // EFFECTS - HEADER
   // ============================================
@@ -140,7 +141,7 @@ export default function PumpingScreen() {
       if (newValue) {
         const today = new Date();
         const todayString = `${today.getFullYear()}-${String(
-          today.getMonth() + 1
+          today.getMonth() + 1,
         ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
         setSelectedDate(todayString);
         setSelectedFilter(null);
@@ -168,34 +169,34 @@ export default function PumpingScreen() {
   useFocusEffect(
     useCallback(() => {
       const headerButtons = (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingRight: 16,
-          gap: 0,
-        }}
-      >
-        <Pressable
-          onPress={handleCalendarPress}
-          style={[
-            styles.headerButton,
-            { paddingLeft: 12 },
-            showCalendar && {
-              backgroundColor: Colors[colorScheme].tint + "20",
-            },
-          ]}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingRight: 16,
+            gap: 0,
+          }}
         >
-          <Ionicons
-            name="calendar-outline"
-            size={24}
-            color={Colors[colorScheme].tint}
-          />
-        </Pressable>
-        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
-          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={handleCalendarPress}
+            style={[
+              styles.headerButton,
+              { paddingLeft: 12 },
+              showCalendar && {
+                backgroundColor: Colors[colorScheme].tint + "20",
+              },
+            ]}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={24}
+              color={Colors[colorScheme].tint}
+            />
+          </Pressable>
+          <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+          </Pressable>
+        </View>
       );
 
       setHeaderRight(headerButtons, headerOwnerId.current);
@@ -209,7 +210,7 @@ export default function PumpingScreen() {
       colorScheme,
       setHeaderRight,
       openAddModal,
-    ])
+    ]),
   );
 
   useFocusEffect(
@@ -240,7 +241,7 @@ export default function PumpingScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, returnTarget, setHeaderLeft])
+    }, [colorScheme, returnTarget, setHeaderLeft]),
   );
 
   // ============================================
@@ -253,7 +254,7 @@ export default function PumpingScreen() {
       if (openModal !== "true") return;
       setPendingMode("add");
       setPendingOpen(true);
-    }, [openModal])
+    }, [openModal]),
   );
 
   useEffect(() => {
@@ -320,7 +321,7 @@ export default function PumpingScreen() {
           }
         }
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfToday },
     );
     return () => unsubscribe();
   }, [activeChild, daysWindow]);
@@ -351,17 +352,20 @@ export default function PumpingScreen() {
     return () => clearTimeout(timer);
   }, [pompagesLoaded, groupedPompages.length]);
 
-  const loadMoreStep = useCallback((auto = false) => {
-    if (!hasMore) return;
-    setIsLoadingMore(true);
-    pendingLoadMoreRef.current = 1;
-    loadMoreVersionRef.current += 1;
-    setDaysWindow((prev) => prev + 14);
-    if (!auto) {
-      setAutoLoadMore(true);
-      setAutoLoadMoreAttempts(0);
-    }
-  }, [hasMore]);
+  const loadMoreStep = useCallback(
+    (auto = false) => {
+      if (!hasMore) return;
+      setIsLoadingMore(true);
+      pendingLoadMoreRef.current = 1;
+      loadMoreVersionRef.current += 1;
+      setDaysWindow((prev) => prev + 14);
+      if (!auto) {
+        setAutoLoadMore(true);
+        setAutoLoadMoreAttempts(0);
+      }
+    },
+    [hasMore],
+  );
 
   const handleLoadMore = useCallback(() => {
     loadMoreStep(false);
@@ -369,7 +373,12 @@ export default function PumpingScreen() {
 
   useEffect(() => {
     if (selectedFilter === "today" || selectedDate) return;
-    if (!autoLoadMore && pompagesLoaded && groupedPompages.length === 0 && hasMore) {
+    if (
+      !autoLoadMore &&
+      pompagesLoaded &&
+      groupedPompages.length === 0 &&
+      hasMore
+    ) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
@@ -511,7 +520,7 @@ export default function PumpingScreen() {
   const applyTodayFilter = useCallback(() => {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
+      today.getMonth() + 1,
     ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     setSelectedFilter("today");
     setSelectedDate(null);
@@ -536,7 +545,7 @@ export default function PumpingScreen() {
       if (!selectedFilter && !selectedDate) {
         applyTodayFilter();
       }
-    }, [applyTodayFilter, selectedDate, selectedFilter])
+    }, [applyTodayFilter, selectedDate, selectedFilter]),
   );
 
   // ============================================
@@ -549,7 +558,7 @@ export default function PumpingScreen() {
     pompages.forEach((pompage) => {
       const date = new Date(pompage.date?.seconds * 1000);
       const dateKey = `${date.getFullYear()}-${String(
-        date.getMonth() + 1
+        date.getMonth() + 1,
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
       if (!groups[dateKey]) {
@@ -563,17 +572,17 @@ export default function PumpingScreen() {
         const date = new Date(dateKey);
         const totalQuantityLeft = pompages.reduce(
           (sum, pompage) => sum + (pompage.quantiteGauche || 0),
-          0
+          0,
         );
         const totalQuantityRight = pompages.reduce(
           (sum, pompage) => sum + (pompage.quantiteDroite || 0),
-          0
+          0,
         );
         const totalQuantity = totalQuantityLeft + totalQuantityRight;
         const lastPompage = pompages.reduce((latest, current) =>
           (current.date?.seconds || 0) > (latest.date?.seconds || 0)
             ? current
-            : latest
+            : latest,
         );
 
         return {
@@ -585,7 +594,7 @@ export default function PumpingScreen() {
             year: "numeric",
           }),
           pompages: pompages.sort(
-            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
           ),
           totalQuantityLeft,
           totalQuantityRight,
@@ -711,7 +720,7 @@ export default function PumpingScreen() {
         showToast(
           editingPompage
             ? "Modification en attente de synchronisation"
-            : "Ajout en attente de synchronisation"
+            : "Ajout en attente de synchronisation",
         );
       }
       closeModal();
@@ -719,7 +728,7 @@ export default function PumpingScreen() {
       console.error("Erreur lors de la sauvegarde du pompage:", error);
       showAlert(
         "Erreur",
-        "Impossible de sauvegarder le pompage. Veuillez réessayer."
+        "Impossible de sauvegarder le pompage. Veuillez réessayer.",
       );
     } finally {
       setIsSubmitting(false);
@@ -744,7 +753,10 @@ export default function PumpingScreen() {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la suppression:", error);
-      showAlert("Erreur", "Impossible de supprimer le pompage. Veuillez réessayer.");
+      showAlert(
+        "Erreur",
+        "Impossible de supprimer le pompage. Veuillez réessayer.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -753,174 +765,178 @@ export default function PumpingScreen() {
   function renderSheetContent() {
     return (
       <>
-      <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
-      <View style={styles.quantityPickerRow}>
-        <TouchableOpacity
-          style={[
-            styles.quantityButton,
-            isSubmitting && styles.quantityButtonDisabled,
-          ]}
-          onPressIn={() =>
-            handlePressIn(() => setQuantiteGauche((q) => Math.max(0, q - 5)))
-          }
-          onPressOut={handlePressOut}
-          disabled={isSubmitting}
-        >
-          <Text
+        <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
+        <View style={styles.quantityPickerRow}>
+          <TouchableOpacity
             style={[
-              styles.quantityButtonText,
-              isSubmitting && styles.quantityButtonTextDisabled,
+              styles.quantityButton,
+              isSubmitting && styles.quantityButtonDisabled,
             ]}
+            onPressIn={() =>
+              handlePressIn(() => setQuantiteGauche((q) => Math.max(0, q - 5)))
+            }
+            onPressOut={handlePressOut}
+            disabled={isSubmitting}
           >
-            -
-          </Text>
-        </TouchableOpacity>
-        <Text style={styles.quantityPickerValue}>{quantiteGauche} ml</Text>
-        <TouchableOpacity
-          style={[
-            styles.quantityButton,
-            isSubmitting && styles.quantityButtonDisabled,
-          ]}
-          onPressIn={() => handlePressIn(() => setQuantiteGauche((q) => q + 5))}
-          onPressOut={handlePressOut}
-          disabled={isSubmitting}
-        >
-          <Text
+            <Text
+              style={[
+                styles.quantityButtonText,
+                isSubmitting && styles.quantityButtonTextDisabled,
+              ]}
+            >
+              -
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.quantityPickerValue}>{quantiteGauche} ml</Text>
+          <TouchableOpacity
             style={[
-              styles.quantityButtonText,
-              isSubmitting && styles.quantityButtonTextDisabled,
+              styles.quantityButton,
+              isSubmitting && styles.quantityButtonDisabled,
             ]}
+            onPressIn={() =>
+              handlePressIn(() => setQuantiteGauche((q) => q + 5))
+            }
+            onPressOut={handlePressOut}
+            disabled={isSubmitting}
           >
-            +
-          </Text>
-        </TouchableOpacity>
-      </View>
+            <Text
+              style={[
+                styles.quantityButtonText,
+                isSubmitting && styles.quantityButtonTextDisabled,
+              ]}
+            >
+              +
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
-      <View style={styles.quantityPickerRow}>
-        <TouchableOpacity
-          style={[
-            styles.quantityButton,
-            isSubmitting && styles.quantityButtonDisabled,
-          ]}
-          onPressIn={() =>
-            handlePressIn(() => setQuantiteDroite((q) => Math.max(0, q - 5)))
-          }
-          onPressOut={handlePressOut}
-          disabled={isSubmitting}
-        >
-          <Text
+        <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
+        <View style={styles.quantityPickerRow}>
+          <TouchableOpacity
             style={[
-              styles.quantityButtonText,
-              isSubmitting && styles.quantityButtonTextDisabled,
+              styles.quantityButton,
+              isSubmitting && styles.quantityButtonDisabled,
             ]}
+            onPressIn={() =>
+              handlePressIn(() => setQuantiteDroite((q) => Math.max(0, q - 5)))
+            }
+            onPressOut={handlePressOut}
+            disabled={isSubmitting}
           >
-            -
-          </Text>
-        </TouchableOpacity>
-        <Text style={styles.quantityPickerValue}>{quantiteDroite} ml</Text>
-        <TouchableOpacity
-          style={[
-            styles.quantityButton,
-            isSubmitting && styles.quantityButtonDisabled,
-          ]}
-          onPressIn={() => handlePressIn(() => setQuantiteDroite((q) => q + 5))}
-          onPressOut={handlePressOut}
-          disabled={isSubmitting}
-        >
-          <Text
+            <Text
+              style={[
+                styles.quantityButtonText,
+                isSubmitting && styles.quantityButtonTextDisabled,
+              ]}
+            >
+              -
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.quantityPickerValue}>{quantiteDroite} ml</Text>
+          <TouchableOpacity
             style={[
-              styles.quantityButtonText,
-              isSubmitting && styles.quantityButtonTextDisabled,
+              styles.quantityButton,
+              isSubmitting && styles.quantityButtonDisabled,
             ]}
+            onPressIn={() =>
+              handlePressIn(() => setQuantiteDroite((q) => q + 5))
+            }
+            onPressOut={handlePressOut}
+            disabled={isSubmitting}
           >
-            +
-          </Text>
-        </TouchableOpacity>
-      </View>
+            <Text
+              style={[
+                styles.quantityButtonText,
+                isSubmitting && styles.quantityButtonTextDisabled,
+              ]}
+            >
+              +
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-      <View style={styles.dateTimeContainer}>
-        <TouchableOpacity
-          style={[
-            styles.dateButton,
-            isSubmitting && styles.dateButtonDisabled,
-          ]}
-          onPress={() => setShowDate(true)}
-          disabled={isSubmitting}
-        >
-          <FontAwesome
-            name="calendar-alt"
-            size={16}
-            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+        <View style={styles.dateTimeContainer}>
+          <TouchableOpacity
+            style={[
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
+            ]}
+            onPress={() => setShowDate(true)}
+            disabled={isSubmitting}
+          >
+            <FontAwesome
+              name="calendar-alt"
+              size={16}
+              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+            />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Date
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
+            ]}
+            onPress={() => setShowTime(true)}
+            disabled={isSubmitting}
+          >
+            <FontAwesome
+              name="clock"
+              size={16}
+              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+            />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Heure
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.selectedDateTime}>
+          <Text style={styles.selectedDate}>
+            {dateHeure.toLocaleDateString("fr-FR", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </Text>
+          <Text style={styles.selectedTime}>
+            {dateHeure.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
+
+        {showDate && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeDate}
           />
-          <Text
-            style={[
-              styles.dateButtonText,
-              isSubmitting && styles.dateButtonTextDisabled,
-            ]}
-          >
-            Date
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.dateButton,
-            isSubmitting && styles.dateButtonDisabled,
-          ]}
-          onPress={() => setShowTime(true)}
-          disabled={isSubmitting}
-        >
-          <FontAwesome
-            name="clock"
-            size={16}
-            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+        )}
+        {showTime && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="time"
+            is24Hour={true}
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeTime}
           />
-          <Text
-            style={[
-              styles.dateButtonText,
-              isSubmitting && styles.dateButtonTextDisabled,
-            ]}
-          >
-            Heure
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate}>
-          {dateHeure.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </Text>
-        <Text style={styles.selectedTime}>
-          {dateHeure.toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-      </View>
-
-      {showDate && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={onChangeDate}
-        />
-      )}
-      {showTime && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="time"
-          is24Hour={true}
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={onChangeTime}
-        />
-      )}
+        )}
       </>
     );
   }
@@ -973,7 +989,7 @@ export default function PumpingScreen() {
         newDate.setFullYear(
           selectedDate.getFullYear(),
           selectedDate.getMonth(),
-          selectedDate.getDate()
+          selectedDate.getDate(),
         );
         return newDate;
       });
@@ -1015,7 +1031,7 @@ export default function PumpingScreen() {
               {
                 hour: "2-digit",
                 minute: "2-digit",
-              }
+              },
             )}
           </Text>
         </View>
@@ -1065,7 +1081,7 @@ export default function PumpingScreen() {
   // RENDER - DAY GROUP
   // ============================================
 
-const renderDayGroup = ({ item }: { item: PompageGroup }) => {
+  const renderDayGroup = ({ item }: { item: PompageGroup }) => {
     const isExpanded = expandedDays.has(item.date);
     const hasMultiplePompages = item.pompages.length > 1;
 
@@ -1080,8 +1096,8 @@ const renderDayGroup = ({ item }: { item: PompageGroup }) => {
                   <FontAwesome name="pump-medical" size={14} color="#28a745" />
                   <Text style={styles.summaryText}>
                     {item.pompages.length} session
-                    {item.pompages.length > 1 ? "s" : ""} •{" "}
-                    {item.totalQuantity} ml
+                    {item.pompages.length > 1 ? "s" : ""} • {item.totalQuantity}{" "}
+                    ml
                   </Text>
                 </View>
               </View>
@@ -1553,32 +1569,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    gap: 16,
+    marginBottom: 8,
   },
   quantityButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#f0f0f0",
-    padding: 12,
-    borderRadius: 8,
-    minWidth: 40,
     alignItems: "center",
+    justifyContent: "center",
   },
   quantityButtonDisabled: {
-    backgroundColor: "#f8f8f8",
-    opacity: 0.5,
+    opacity: 0.6,
   },
   quantityButtonText: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#666",
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#333",
   },
   quantityButtonTextDisabled: {
-    color: "#ccc",
+    color: "#999",
   },
   quantityPickerValue: {
-    fontSize: 20,
-    marginHorizontal: 20,
-    fontWeight: "bold",
-    color: "#000000",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
   },
   // Date/Time
   dateTimeContainer: {

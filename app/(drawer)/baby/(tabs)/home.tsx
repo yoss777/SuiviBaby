@@ -169,8 +169,10 @@ export default function HomeDashboard() {
         return event.volume ? `${event.volume} ml` : event.couleur;
       case "selle":
         return event.consistance || event.couleur;
-      case "vitamine":
-        return event.nomVitamine || "Vitamine";
+      case "vitamine": {
+        const name = event.nomVitamine || "Vitamine";
+        return event.dosage ? `${name} · ${event.dosage}` : name;
+      }
       case "vaccin":
         return event.nomVaccin || "Vaccin";
       default:
