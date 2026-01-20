@@ -1,13 +1,14 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome5';
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedView } from '@/components/themed-view';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useModal } from '@/contexts/ModalContext';
 import { Child } from '@/contexts/BabyContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { afficherEnfant, obtenirPreferences } from '@/services/userPreferencesService';
@@ -18,6 +19,7 @@ const { width } = Dimensions.get('window');
 export default function HiddenChildrenScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
+  const { showAlert } = useModal();
   const { user } = useAuth();
   const [hiddenChildren, setHiddenChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +66,7 @@ export default function HiddenChildrenScreen() {
       setHiddenChildren(hidden);
     } catch (error) {
       console.error('Erreur lors du chargement des enfants masqués:', error);
-      Alert.alert('Erreur', 'Impossible de charger les enfants masqués.');
+      showAlert('Erreur', 'Impossible de charger les enfants masqués.');
     } finally {
       setLoading(false);
     }
@@ -111,7 +113,7 @@ export default function HiddenChildrenScreen() {
       await loadHiddenChildren();
     } catch (error) {
       console.error('Erreur lors de la restauration:', error);
-      Alert.alert('Erreur', 'Impossible de restaurer l\'enfant.');
+      showAlert('Erreur', 'Impossible de restaurer l\'enfant.');
     }
   };
 

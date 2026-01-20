@@ -4,13 +4,13 @@
  */
 
 import { Colors } from '@/constants/theme';
+import { useModal } from '@/contexts/ModalContext';
 import { MigrationLogger } from '@/migration/monitoringLogger';
 import type { FullSyncReport } from '@/migration/verifySync';
 import { generateReport, verifyFullSync } from '@/migration/verifySync';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +23,7 @@ interface Props {
 }
 
 export function MigrationMonitoringPanel({ childId }: Props) {
+  const { showAlert } = useModal();
   const [stats, setStats] = useState<any>(null);
   const [syncReport, setSyncReport] = useState<FullSyncReport | null>(null);
   const [loading, setLoading] = useState(false);
@@ -51,7 +52,7 @@ export function MigrationMonitoringPanel({ childId }: Props) {
       const reportText = generateReport(report);
       console.log(reportText);
 
-      Alert.alert(
+      showAlert(
         '✅ Vérification Terminée',
         `Taux de synchronisation: ${report.summary.overallSyncRate.toFixed(2)}%\n\n` +
           `Synchronisés: ${report.summary.totalBoth}\n` +
@@ -66,7 +67,7 @@ export function MigrationMonitoringPanel({ childId }: Props) {
         ]
       );
     } catch (error) {
-      Alert.alert('❌ Erreur', (error as Error).message);
+      showAlert('❌ Erreur', (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -77,14 +78,14 @@ export function MigrationMonitoringPanel({ childId }: Props) {
       const hours = activeTab === '24h' ? 24 : activeTab === '7d' ? 168 : undefined;
       const report = await MigrationLogger.generateReport(hours);
       console.log(report);
-      Alert.alert('📊 Rapport Généré', 'Le rapport a été affiché dans la console.');
+      showAlert('📊 Rapport Généré', 'Le rapport a été affiché dans la console.');
     } catch (error) {
-      Alert.alert('❌ Erreur', (error as Error).message);
+      showAlert('❌ Erreur', (error as Error).message);
     }
   };
 
   const handleClearLogs = () => {
-    Alert.alert(
+    showAlert(
       '⚠️ Effacer les Logs',
       'Cette action est irréversible. Continuer ?',
       [
@@ -95,7 +96,7 @@ export function MigrationMonitoringPanel({ childId }: Props) {
           onPress: async () => {
             await MigrationLogger.clearLogs();
             await loadStats();
-            Alert.alert('✅', 'Logs effacés');
+            showAlert('✅', 'Logs effacés');
           },
         },
       ]

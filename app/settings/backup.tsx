@@ -1,16 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useModal } from '@/contexts/ModalContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function BackupScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const { showAlert } = useModal();
 
   const [autoBackup, setAutoBackup] = useState(true);
   const [wifiOnly, setWifiOnly] = useState(true);
@@ -25,12 +27,12 @@ export default function BackupScreen() {
     setIsBackingUp(true);
     setTimeout(() => {
       setIsBackingUp(false);
-      Alert.alert('Sauvegarde terminée', 'Vos données ont été sauvegardées avec succès');
+      showAlert('Sauvegarde terminée', 'Vos données ont été sauvegardées avec succès');
     }, 2000);
   };
 
   const handleRestore = () => {
-    Alert.alert(
+    showAlert(
       'Restaurer les données',
       'Êtes-vous sûr de vouloir restaurer vos données ? Les données actuelles seront remplacées.',
       [
@@ -42,7 +44,7 @@ export default function BackupScreen() {
             setIsRestoring(true);
             setTimeout(() => {
               setIsRestoring(false);
-              Alert.alert('Restauration terminée', 'Vos données ont été restaurées avec succès');
+              showAlert('Restauration terminée', 'Vos données ont été restaurées avec succès');
             }, 2000);
           },
         },

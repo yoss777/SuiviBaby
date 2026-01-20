@@ -5,6 +5,7 @@ import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -26,7 +27,6 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   FlatList,
   InteractionManager,
   Platform,
@@ -73,6 +73,7 @@ export default function PumpingScreen() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const { openSheet, closeSheet, viewProps } = useSheet();
+  const { showAlert } = useModal();
   const headerOwnerId = useRef(`pumping-${Math.random().toString(36).slice(2)}`);
   const navigation = useNavigation();
   const { setHeaderLeft } = useHeaderLeft();
@@ -716,7 +717,7 @@ export default function PumpingScreen() {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde du pompage:", error);
-      Alert.alert(
+      showAlert(
         "Erreur",
         "Impossible de sauvegarder le pompage. Veuillez réessayer."
       );
@@ -743,7 +744,7 @@ export default function PumpingScreen() {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la suppression:", error);
-      Alert.alert("Erreur", "Impossible de supprimer le pompage. Veuillez réessayer.");
+      showAlert("Erreur", "Impossible de supprimer le pompage. Veuillez réessayer.");
     } finally {
       setIsSubmitting(false);
     }
@@ -849,9 +850,9 @@ export default function PumpingScreen() {
           disabled={isSubmitting}
         >
           <FontAwesome
-            name="calendar"
+            name="calendar-alt"
             size={16}
-            color={isSubmitting ? "#ccc" : "#666"}
+            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
           />
           <Text
             style={[
@@ -873,7 +874,7 @@ export default function PumpingScreen() {
           <FontAwesome
             name="clock"
             size={16}
-            color={isSubmitting ? "#ccc" : "#666"}
+            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
           />
           <Text
             style={[
@@ -1544,6 +1545,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
+    paddingTop: 20,
     marginBottom: 10,
   },
   // Quantity Picker
@@ -1581,41 +1583,37 @@ const styles = StyleSheet.create({
   // Date/Time
   dateTimeContainer: {
     flexDirection: "row",
+    justifyContent: "center",
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 10,
   },
   dateButton: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
     flex: 1,
     flexDirection: "row",
-    justifyContent: "center",
     gap: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e9ecef",
+    borderColor: "#d7dbe0",
+    backgroundColor: "#f5f6f8",
   },
   dateButtonDisabled: {
     backgroundColor: "#f5f5f5",
     opacity: 0.5,
   },
   dateButtonText: {
-    fontSize: 16,
-    color: "#666",
-    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#4a4f55",
   },
   dateButtonTextDisabled: {
     color: "#ccc",
   },
   selectedDateTime: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
     alignItems: "center",
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
+    marginBottom: 16,
   },
   selectedDate: {
     fontSize: 16,

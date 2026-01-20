@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BabyProvider } from "@/contexts/BabyContext";
+import { ModalProvider } from "@/contexts/ModalContext";
 import { ThemeProvider as AppThemeProvider } from "@/contexts/ThemeContext";
 import { SheetProvider } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -21,18 +22,20 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <AppThemeProvider>
-            <BabyProvider>
-              <MigrationProvider>
-                <SheetProvider>
-                  <AppNavigation />
-                  <GlobalSheetManager />
-                </SheetProvider>
-              </MigrationProvider>
-            </BabyProvider>
-          </AppThemeProvider>
-        </AuthProvider>
+        <ModalProvider>
+          <AuthProvider>
+            <AppThemeProvider>
+              <BabyProvider>
+                <MigrationProvider>
+                  <SheetProvider>
+                    <AppNavigation />
+                    <GlobalSheetManager />
+                  </SheetProvider>
+                </MigrationProvider>
+              </BabyProvider>
+            </AppThemeProvider>
+          </AuthProvider>
+        </ModalProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

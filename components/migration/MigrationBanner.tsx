@@ -1,14 +1,16 @@
 // Bannière pour informer l'utilisateur de la migration
 import { Colors } from '@/constants/theme';
+import { useModal } from '@/contexts/ModalContext';
 import { useMigration } from '@/migration/MigrationProvider';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface MigrationBannerProps {
   childId: string;
 }
 
 export function MigrationBanner({ childId }: MigrationBannerProps) {
+  const { showAlert } = useModal();
   const {
     phase,
     shouldShowMigrationBanner,
@@ -28,11 +30,11 @@ export function MigrationBanner({ childId }: MigrationBannerProps) {
     console.log('🔍 Debug Migration - childId:', childId);
 
     if (!userId) {
-      Alert.alert('Erreur', 'Utilisateur non connecté. Veuillez vous reconnecter.');
+      showAlert('Erreur', 'Utilisateur non connecté. Veuillez vous reconnecter.');
       return;
     }
 
-    Alert.alert(
+    showAlert(
       '🚀 Migration des données',
       'Cette opération va migrer toutes vos données vers une nouvelle structure plus performante.\n\n• Vos données actuelles restent intactes\n• L\'opération prend quelques secondes\n• L\'app sera plus rapide après\n\nContinuer ?',
       [

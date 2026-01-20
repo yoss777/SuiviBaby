@@ -3,6 +3,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -17,7 +18,6 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Dimensions,
   FlatList,
   Platform,
@@ -56,6 +56,7 @@ export default function CroissanceScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
   const { openSheet, closeSheet, viewProps } = useSheet();
+  const { showAlert } = useModal();
   const headerOwnerId = useRef(
     `croissance-${Math.random().toString(36).slice(2)}`,
   );
@@ -178,7 +179,7 @@ export default function CroissanceScreen() {
     const teteValue = parseNumber(teteCm);
 
     if (!tailleValue && !poidsValue && !teteValue) {
-      Alert.alert("Attention", "Entrez au moins une mesure.");
+      showAlert("Attention", "Entrez au moins une mesure.");
       return;
     }
 
@@ -199,7 +200,7 @@ export default function CroissanceScreen() {
       closeSheet();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde:", error);
-      Alert.alert("Erreur", "Impossible de sauvegarder la croissance.");
+      showAlert("Erreur", "Impossible de sauvegarder la croissance.");
     } finally {
       setIsSubmitting(false);
     }
@@ -219,7 +220,7 @@ export default function CroissanceScreen() {
       closeSheet();
     } catch (error) {
       console.error("Erreur lors de la suppression:", error);
-      Alert.alert("Erreur", "Impossible de supprimer la mesure.");
+      showAlert("Erreur", "Impossible de supprimer la mesure.");
     } finally {
       setIsSubmitting(false);
     }
@@ -254,7 +255,7 @@ export default function CroissanceScreen() {
   function renderSheetContent() {
     return (
       <>
-        <Text style={styles.modalLabel}>Taille (cm)</Text>
+        <Text style={styles.modalCategoryLabel}>Taille (cm)</Text>
         <TextInput
           value={tailleCm}
           onChangeText={setTailleCm}
@@ -263,7 +264,7 @@ export default function CroissanceScreen() {
           style={styles.input}
         />
 
-        <Text style={styles.modalLabel}>Poids (kg)</Text>
+        <Text style={styles.modalCategoryLabel}>Poids (kg)</Text>
         <TextInput
           value={poidsKg}
           onChangeText={setPoidsKg}
@@ -272,7 +273,7 @@ export default function CroissanceScreen() {
           style={styles.input}
         />
 
-        <Text style={styles.modalLabel}>Tour de tête (cm)</Text>
+        <Text style={styles.modalCategoryLabel}>Tour de tête (cm)</Text>
         <TextInput
           value={teteCm}
           onChangeText={setTeteCm}
@@ -281,14 +282,14 @@ export default function CroissanceScreen() {
           style={styles.input}
         />
 
-        <Text style={styles.modalLabel}>Date & heure</Text>
-        <View style={styles.dateRow}>
+        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+        <View style={styles.dateTimeContainer}>
           <Pressable
             style={[styles.dateButton, isSubmitting && styles.buttonDisabled]}
             onPress={() => setShowDate(true)}
             disabled={isSubmitting}
           >
-            <FontAwesome name="calendar" size={14} color={colors.tint} />
+            <FontAwesome name="calendar-alt" size={16} color={colors.tint} />
             <Text style={styles.dateButtonText}>Date</Text>
           </Pressable>
           <Pressable
@@ -296,13 +297,13 @@ export default function CroissanceScreen() {
             onPress={() => setShowTime(true)}
             disabled={isSubmitting}
           >
-            <FontAwesome name="clock" size={14} color={colors.tint} />
+            <FontAwesome name="clock" size={16} color={colors.tint} />
             <Text style={styles.dateButtonText}>Heure</Text>
           </Pressable>
         </View>
 
-        <View style={styles.selectedDateRow}>
-          <Text style={styles.selectedDateText}>
+        <View style={styles.selectedDateTime}>
+          <Text style={styles.selectedDate}>
             {dateHeure.toLocaleDateString("fr-FR", {
               weekday: "long",
               year: "numeric",
@@ -310,7 +311,7 @@ export default function CroissanceScreen() {
               day: "numeric",
             })}
           </Text>
-          <Text style={styles.selectedTimeText}>
+          <Text style={styles.selectedTime}>
             {dateHeure.toLocaleTimeString("fr-FR", {
               hour: "2-digit",
               minute: "2-digit",
@@ -964,12 +965,13 @@ const styles = StyleSheet.create({
   headerButton: {
     padding: 6,
   },
-  modalLabel: {
-    marginTop: 12,
-    marginBottom: 6,
-    fontSize: 13,
+  modalCategoryLabel: {
+    alignSelf: "center",
+    fontSize: 16,
     fontWeight: "600",
     color: "#333",
+    paddingTop: 20,
+    marginBottom: 10,
   },
   input: {
     borderWidth: 1,
@@ -980,10 +982,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     backgroundColor: "#fff",
   },
-  dateRow: {
+  dateTimeContainer: {
     flexDirection: "row",
+    justifyContent: "center",
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   dateButton: {
     flex: 1,
@@ -1002,18 +1005,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#4a4f55",
   },
-  selectedDateRow: {
+  selectedDateTime: {
     alignItems: "center",
-    paddingVertical: 8,
+    marginBottom: 16,
   },
-  selectedDateText: {
-    fontSize: 13,
-    color: "#6c757d",
+  selectedDate: {
+    fontSize: 16,
+    color: "#333",
+    fontWeight: "600",
+    marginBottom: 4,
   },
-  selectedTimeText: {
-    fontSize: 15,
-    fontWeight: "700",
-    marginTop: 4,
+  selectedTime: {
+    fontSize: 20,
+    color: "#004cdaff",
+    fontWeight: "bold",
   },
   buttonDisabled: {
     opacity: 0.6,

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import { db } from '@/config/firebase';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBaby, type Child } from '@/contexts/BabyContext';
+import { useModal } from '@/contexts/ModalContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { afficherEnfant, obtenirPreferences } from '@/services/userPreferencesService';
 import { collection, getDocs, query, where } from 'firebase/firestore';
@@ -34,6 +35,7 @@ export default function Explore() {
   const colorScheme = useColorScheme() ?? 'light';
   const { signOut, user } = useAuth();
   const { children, setActiveChild, loading } = useBaby();
+  const { showAlert } = useModal();
   const [showUnhideModal, setShowUnhideModal] = useState(false);
   const [hiddenChildren, setHiddenChildren] = useState<Child[]>([]);
   const [toggledIds, setToggledIds] = useState<Set<string>>(new Set());
@@ -138,7 +140,7 @@ export default function Explore() {
         setShowUnhideModal(true);
       } catch (error) {
         console.error('Erreur lors du chargement des enfants masqués:', error);
-        Alert.alert('Erreur', 'Impossible de charger les enfants masqués');
+        showAlert('Erreur', 'Impossible de charger les enfants masqués');
       } finally {
         setLoadingHidden(false);
       }
@@ -173,7 +175,7 @@ export default function Explore() {
 
   const handleUnhideConfirm = async () => {
     if (toggledIds.size === 0) {
-      Alert.alert('Attention', 'Veuillez sélectionner au moins un enfant à réactiver');
+      showAlert('Attention', 'Veuillez sélectionner au moins un enfant à réactiver');
       return;
     }
 
@@ -188,7 +190,7 @@ export default function Explore() {
       // Pas d'alert - le feedback est la redirection automatique ou l'apparition des enfants
     } catch (error) {
       console.error('Erreur lors de la réactivation:', error);
-      Alert.alert('Erreur', 'Impossible de réactiver les enfants');
+      showAlert('Erreur', 'Impossible de réactiver les enfants');
     }
   };
 

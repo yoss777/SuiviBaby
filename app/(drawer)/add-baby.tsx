@@ -2,6 +2,7 @@ import { ThemedView } from '@/components/themed-view';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useModal } from '@/contexts/ModalContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { router } from "expo-router";
@@ -9,7 +10,6 @@ import { addDoc, collection } from 'firebase/firestore';
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function AddBabyScreen() {
   const colorScheme = useColorScheme();
   const { user } = useAuth();
+  const { showAlert } = useModal();
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [gender, setGender] = useState<'male' | 'female' | ''>('');
@@ -64,17 +65,17 @@ export default function AddBabyScreen() {
   // Valider le formulaire
   const validateForm = (): boolean => {
     if (!name.trim()) {
-      Alert.alert('Erreur', 'Veuillez saisir le nom de l\'enfant');
+      showAlert('Erreur', 'Veuillez saisir le nom de l\'enfant');
       return false;
     }
     
     if (!isValidDate(birthDate)) {
-      Alert.alert('Erreur', 'Veuillez saisir une date de naissance valide (JJ/MM/AAAA)');
+      showAlert('Erreur', 'Veuillez saisir une date de naissance valide (JJ/MM/AAAA)');
       return false;
     }
     
     if (!gender) {
-      Alert.alert('Erreur', 'Veuillez sélectionner le sexe de l\'enfant');
+      showAlert('Erreur', 'Veuillez sélectionner le sexe de l\'enfant');
       return false;
     }
     
@@ -85,7 +86,7 @@ export default function AddBabyScreen() {
   const handleAddBaby = async () => {
     if (!validateForm()) return;
     if (!user?.uid) {
-      Alert.alert('Erreur', 'Utilisateur non connecté');
+      showAlert('Erreur', 'Utilisateur non connecté');
       return;
     }
 
@@ -102,7 +103,7 @@ export default function AddBabyScreen() {
 
       await addDoc(collection(db, 'children'), childData);
 
-      Alert.alert(
+      showAlert(
         'Succès',
         `${name} a été ajouté avec succès !`,
         [
@@ -119,7 +120,7 @@ export default function AddBabyScreen() {
       setGender('');
     } catch (error) {
       console.error('Erreur lors de l\'ajout de l\'enfant:', error);
-      Alert.alert('Erreur', 'Impossible d\'ajouter l\'enfant. Veuillez réessayer.');
+      showAlert('Erreur', 'Impossible d\'ajouter l\'enfant. Veuillez réessayer.');
     } finally {
       setIsLoading(false);
     }

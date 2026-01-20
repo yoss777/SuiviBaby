@@ -5,7 +5,8 @@ import type { User, UserType } from '@/types/user';
 import { User as FirebaseUser, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { useModal } from '@/contexts/ModalContext';
 
 interface AuthContextType {
   firebaseUser: FirebaseUser | null;
@@ -36,6 +37,7 @@ export function AuthProvider({ children: childrenProp }: { children: React.React
   const [email, setEmail] = useState<string | null>(null);
   const [userType, setUserType] = useState<UserType | null>(null);
   const [loading, setLoading] = useState(true);
+  const { showAlert } = useModal();
 
   // Fonction pour charger les données utilisateur
   const loadUserData = async (fbUser: FirebaseUser) => {
@@ -62,7 +64,7 @@ export function AuthProvider({ children: childrenProp }: { children: React.React
         // L'utilisateur ne peut pas accéder à cette app
         console.log('Access denied:', accessCheck.reason);
 
-        Alert.alert(
+        showAlert(
           'Accès non autorisé',
           accessCheck.reason || 'Vous ne pouvez pas accéder à cette application avec ce compte.',
           [
@@ -97,7 +99,7 @@ export function AuthProvider({ children: childrenProp }: { children: React.React
 
     } catch (error) {
       console.error("Erreur lors de la récupération des données utilisateur:", error);
-      Alert.alert(
+      showAlert(
         'Erreur',
         'Impossible de charger vos données. Veuillez réessayer.',
         [{ text: 'OK', onPress: async () => await firebaseSignOut(auth) }]

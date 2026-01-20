@@ -2,6 +2,7 @@ import { ThemedView } from '@/components/themed-view';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useModal } from '@/contexts/ModalContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   createEmailInvitation,
@@ -14,7 +15,6 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Clipboard,
   Share as RNShare,
   ScrollView,
@@ -28,6 +28,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ShareChildScreen() {
   const colorScheme = useColorScheme();
+  const { showAlert } = useModal();
   const { user } = useAuth();
   const params = useLocalSearchParams();
   const childId = params.childId as string;
@@ -72,9 +73,9 @@ export default function ShareChildScreen() {
     try {
       const code = await createShareCode(childId, childName);
       setShareCode(code);
-      Alert.alert('Succès', 'Code de partage créé avec succès !');
+      showAlert('Succès', 'Code de partage créé avec succès !');
     } catch (error: any) {
-      Alert.alert('Erreur', error.message || 'Impossible de créer le code');
+      showAlert('Erreur', error.message || 'Impossible de créer le code');
     } finally {
       setIsLoadingCode(false);
     }
@@ -83,7 +84,7 @@ export default function ShareChildScreen() {
   const handleCopyCode = () => {
     if (shareCode) {
       Clipboard.setString(shareCode);
-      Alert.alert('✅', 'Code copié dans le presse-papier');
+      showAlert('✅', 'Code copié dans le presse-papier');
     }
   };
 
@@ -101,27 +102,27 @@ export default function ShareChildScreen() {
 
   const handleSendInvitation = async () => {
     if (!inviteEmail.trim()) {
-      Alert.alert('Erreur', 'Veuillez saisir une adresse email');
+      showAlert('Erreur', 'Veuillez saisir une adresse email');
       return;
     }
 
     // Validation email simple
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(inviteEmail)) {
-      Alert.alert('Erreur', 'Veuillez saisir une adresse email valide');
+      showAlert('Erreur', 'Veuillez saisir une adresse email valide');
       return;
     }
 
     setIsLoadingInvite(true);
     try {
       await createEmailInvitation(childId, childName, inviteEmail);
-      Alert.alert(
+      showAlert(
         'Invitation envoyée',
         `Une invitation a été envoyée à ${inviteEmail}. L'autre parent recevra une notification dans l'app.`
       );
       setInviteEmail('');
     } catch (error: any) {
-      Alert.alert('Erreur', error.message || 'Impossible d\'envoyer l\'invitation');
+      showAlert('Erreur', error.message || 'Impossible d\'envoyer l\'invitation');
     } finally {
       setIsLoadingInvite(false);
     }

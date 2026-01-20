@@ -18,6 +18,8 @@ interface ConfirmModalProps {
   textColor: string;
   confirmButtonColor?: string;
   confirmTextColor?: string;
+  cancelButtonColor?: string;
+  cancelTextColor?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -32,6 +34,8 @@ export function ConfirmModal({
   textColor,
   confirmButtonColor = "#dc3545",
   confirmTextColor = "#fff",
+  cancelButtonColor = "#f2f2f2",
+  cancelTextColor = "#333",
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
@@ -58,11 +62,17 @@ export function ConfirmModal({
 
           <View style={styles.modalButtons}>
             <TouchableOpacity
-              style={[styles.modalButton, styles.cancelButton]}
+              style={[
+                styles.modalButton,
+                styles.cancelButton,
+                { backgroundColor: cancelButtonColor },
+              ]}
               onPress={onCancel}
               activeOpacity={0.7}
             >
-              <Text style={styles.cancelButtonText}>{cancelText}</Text>
+              <Text style={[styles.cancelButtonText, { color: cancelTextColor }]}>
+                {cancelText}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[

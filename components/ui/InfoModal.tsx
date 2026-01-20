@@ -16,6 +16,8 @@ interface InfoModalProps {
   confirmText?: string;
   backgroundColor: string;
   textColor: string;
+  confirmButtonColor?: string;
+  confirmTextColor?: string;
   onClose: () => void;
   onConfirm?: () => void;
 }
@@ -27,6 +29,8 @@ export function InfoModal({
   confirmText = 'OK',
   backgroundColor,
   textColor,
+  confirmButtonColor = '#28a745',
+  confirmTextColor = '#fff',
   onClose,
   onConfirm,
 }: InfoModalProps) {
@@ -55,11 +59,17 @@ export function InfoModal({
           )}
           <View style={styles.modalButtons}>
             <TouchableOpacity
-              style={[styles.modalButton, styles.confirmButton]}
+              style={[
+                styles.modalButton,
+                styles.confirmButton,
+                { backgroundColor: confirmButtonColor },
+              ]}
               onPress={handleConfirm}
               activeOpacity={0.7}
             >
-              <Text style={styles.confirmButtonText}>{confirmText}</Text>
+              <Text style={[styles.confirmButtonText, { color: confirmTextColor }]}>
+                {confirmText}
+              </Text>
             </TouchableOpacity>
           </View>
         </Pressable>

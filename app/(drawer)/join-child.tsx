@@ -1,5 +1,6 @@
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useModal } from '@/contexts/ModalContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   acceptInvitation,
@@ -13,7 +14,6 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function JoinChildScreen() {
   const colorScheme = useColorScheme();
+  const { showAlert } = useModal();
   const [shareCode, setShareCode] = useState("");
   const [isLoadingCode, setIsLoadingCode] = useState(false);
   const [pendingInvitations, setPendingInvitations] = useState<ShareInvitation[]>([]);
@@ -49,7 +50,7 @@ export default function JoinChildScreen() {
 
   const handleUseCode = async () => {
     if (!shareCode.trim()) {
-      Alert.alert('Erreur', 'Veuillez saisir un code');
+      showAlert('Erreur', 'Veuillez saisir un code');
       return;
     }
 
@@ -57,7 +58,7 @@ export default function JoinChildScreen() {
     try {
       const result = await useShareCode(shareCode.trim().toUpperCase());
       
-      Alert.alert(
+      showAlert(
         'Succès !',
         `Vous avez maintenant accès au suivi de ${result.childName}`,
         [
@@ -70,7 +71,7 @@ export default function JoinChildScreen() {
       
       setShareCode('');
     } catch (error: any) {
-      Alert.alert('Erreur', error.message || 'Code invalide');
+      showAlert('Erreur', error.message || 'Code invalide');
     } finally {
       setIsLoadingCode(false);
     }
@@ -81,7 +82,7 @@ export default function JoinChildScreen() {
     try {
       await acceptInvitation(invitationId);
       
-      Alert.alert(
+      showAlert(
         'Invitation acceptée !',
         `Vous avez maintenant accès au suivi de ${childName}`,
         [
@@ -94,14 +95,14 @@ export default function JoinChildScreen() {
       
       await loadInvitations();
     } catch (error: any) {
-      Alert.alert('Erreur', error.message || 'Impossible d\'accepter l\'invitation');
+      showAlert('Erreur', error.message || 'Impossible d\'accepter l\'invitation');
     } finally {
       setProcessingInvitation(null);
     }
   };
 
   const handleRejectInvitation = async (invitationId: string) => {
-    Alert.alert(
+    showAlert(
       'Refuser l\'invitation',
       'Êtes-vous sûr de vouloir refuser cette invitation ?',
       [
@@ -115,7 +116,7 @@ export default function JoinChildScreen() {
               await rejectInvitation(invitationId);
               await loadInvitations();
             } catch (error) {
-              Alert.alert('Erreur', 'Impossible de refuser l\'invitation');
+              showAlert('Erreur', 'Impossible de refuser l\'invitation');
             } finally {
               setProcessingInvitation(null);
             }

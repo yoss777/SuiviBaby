@@ -1,9 +1,9 @@
 // Context React pour gérer la migration de manière centralisée
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useModal } from '@/contexts/ModalContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert } from 'react-native';
 import {
   setMigrationConfig,
   type MigrationStats
@@ -76,6 +76,7 @@ const STORAGE_KEYS = {
 
 export function MigrationProvider({ children }: { children: React.ReactNode }) {
   const { firebaseUser } = useAuth();
+  const { showAlert } = useModal();
 
   const [state, setState] = useState<MigrationState>({
     phase: 'COMPLETE', // 🎯 MIGRATION TERMINÉE - Utilise uniquement le nouveau système
@@ -294,7 +295,7 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
       
       configureServicesForPhase('DOUBLE_WRITE');
 
-      Alert.alert(
+      showAlert(
         '✅ Migration réussie !',
         `${result.success} événements migrés avec succès.\n\nL'app utilise maintenant le nouveau système.`,
         [{ text: 'OK' }]
@@ -310,7 +311,7 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
         progress: 0,
       }));
 
-      Alert.alert(
+      showAlert(
         '❌ Erreur de migration',
         `La migration a échoué: ${(error as Error).message}\n\nL'app continue d'utiliser l'ancien système.`,
         [{ text: 'OK' }]
@@ -359,11 +360,11 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
         break;
 
       default:
-        Alert.alert('Info', 'Impossible d\'avancer à la phase suivante.');
+        showAlert('Info', 'Impossible d\'avancer à la phase suivante.');
         return;
     }
 
-    Alert.alert(
+    showAlert(
       'Confirmer la progression',
       `Passer de "${phase}" à "${nextPhase}" ?\n\n${message}`,
       [
@@ -375,7 +376,7 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
             await saveMigrationState({ phase: nextPhase });
             configureServicesForPhase(nextPhase);
 
-            Alert.alert('✅ Phase mise à jour', message);
+            showAlert('✅ Phase mise à jour', message);
           },
         },
       ]
@@ -383,7 +384,7 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
   };
 
   const rollbackToOldSystem = () => {
-    Alert.alert(
+    showAlert(
       '⚠️ Rollback',
       'Revenir à l\'ancien système ? Les nouvelles données ne seront plus visibles.',
       [
@@ -396,7 +397,7 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
             await saveMigrationState({ phase: 'NOT_STARTED' });
             configureServicesForPhase('NOT_STARTED');
 
-            Alert.alert('✅ Rollback effectué', 'L\'app utilise l\'ancien système.');
+            showAlert('✅ Rollback effectué', 'L\'app utilise l\'ancien système.');
           },
         },
       ]
@@ -404,7 +405,7 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetMigration = async () => {
-    Alert.alert(
+    showAlert(
       '⚠️ Réinitialiser',
       'Réinitialiser complètement la migration ? Cette action ne supprime pas les données.',
       [
@@ -427,7 +428,7 @@ export function MigrationProvider({ children }: { children: React.ReactNode }) {
 
             configureServicesForPhase('NOT_STARTED');
 
-            Alert.alert('✅ Réinitialisé', 'État de migration réinitialisé.');
+            showAlert('✅ Réinitialisé', 'État de migration réinitialisé.');
           },
         },
       ]

@@ -12,6 +12,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
 // ============================================
 // TYPES
@@ -54,6 +56,8 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
     },
     ref
   ) => {
+    const colorScheme = useColorScheme() ?? "light";
+    const tintColor = Colors[colorScheme].tint;
     const snapPoints = useMemo(
       () => customSnapPoints || ["75%", "90%"],
       [customSnapPoints]
@@ -68,8 +72,8 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
       />
     );
 
-    return (
-      <BottomSheet
+  return (
+    <BottomSheet
         ref={ref}
         index={-1}
         snapPoints={snapPoints}
@@ -105,7 +109,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                 <TouchableOpacity
                   style={[
                     styles.validateButton,
-                    { backgroundColor: "#4A90E2" },
+                    { backgroundColor: tintColor },
                     isSubmitting && styles.buttonDisabled,
                   ]}
                   onPress={onSubmit}

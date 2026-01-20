@@ -5,6 +5,7 @@ import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -29,7 +30,6 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   FlatList,
   InteractionManager,
   Platform,
@@ -75,6 +75,7 @@ export default function MealsScreen() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const { openSheet, closeSheet, viewProps } = useSheet();
+  const { showAlert } = useModal();
   const { showToast } = useToast();
   const headerOwnerId = useRef(`meals-${Math.random().toString(36).slice(2)}`);
   const navigation = useNavigation();
@@ -818,7 +819,7 @@ export default function MealsScreen() {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde du repas:", error);
-      Alert.alert(
+      showAlert(
         "Erreur",
         "Impossible de sauvegarder le repas. Veuillez réessayer."
       );
@@ -845,7 +846,7 @@ export default function MealsScreen() {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la suppression:", error);
-      Alert.alert("Erreur", "Impossible de supprimer le repas. Veuillez réessayer.");
+      showAlert("Erreur", "Impossible de supprimer le repas. Veuillez réessayer.");
     } finally {
       setIsSubmitting(false);
     }
@@ -974,7 +975,7 @@ export default function MealsScreen() {
           <FontAwesome
             name="calendar-alt"
             size={16}
-            color={isSubmitting ? "#ccc" : "#666"}
+            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
           />
           <Text
             style={[
@@ -996,7 +997,7 @@ export default function MealsScreen() {
           <FontAwesome
             name="clock"
             size={16}
-            color={isSubmitting ? "#ccc" : "#666"}
+            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
           />
           <Text
             style={[
@@ -1658,6 +1659,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
+    paddingTop: 20,
     marginBottom: 10,
   },
 
@@ -1743,24 +1745,29 @@ const styles = StyleSheet.create({
   dateTimeContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     marginBottom: 10,
   },
   dateButton: {
-    backgroundColor: "#f0f0f0",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
     flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#d7dbe0",
+    backgroundColor: "#f5f6f8",
   },
   dateButtonDisabled: {
     backgroundColor: "#f5f5f5",
     opacity: 0.5,
   },
   dateButtonText: {
-    fontSize: 16,
-    color: "#666",
-    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#4a4f55",
   },
   dateButtonTextDisabled: {
     color: "#ccc",

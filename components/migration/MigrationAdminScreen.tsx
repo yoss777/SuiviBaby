@@ -1,11 +1,11 @@
 // Écran admin pour gérer la migration (à mettre dans Settings par exemple)
 import { Colors } from '@/constants/theme';
+import { useModal } from '@/contexts/ModalContext';
 import { useMigration } from '@/migration/MigrationProvider';
 import { verifierMigration } from '@/migration/migrationScript';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +19,7 @@ interface MigrationAdminScreenProps {
 }
 
 export function MigrationAdminScreen({ childId }: MigrationAdminScreenProps) {
+  const { showAlert } = useModal();
   const {
     phase,
     userId,
@@ -45,7 +46,7 @@ export function MigrationAdminScreen({ childId }: MigrationAdminScreenProps) {
     try {
       const result = await verifierMigration(userId, childId);
       setVerificationResult(result);
-      Alert.alert(
+      showAlert(
         '✅ Vérification terminée',
         `Events migrés: ${result.eventCount}\n` +
           Object.entries(result.oldCollectionsCount)
@@ -53,7 +54,7 @@ export function MigrationAdminScreen({ childId }: MigrationAdminScreenProps) {
             .join('\n')
       );
     } catch (error) {
-      Alert.alert('❌ Erreur', (error as Error).message);
+      showAlert('❌ Erreur', (error as Error).message);
       console.error('Erreur lors de la vérification de la migration:', error);
     } finally {
       setChecking(false);
@@ -63,7 +64,7 @@ export function MigrationAdminScreen({ childId }: MigrationAdminScreenProps) {
   const handleStartMigration = async () => {
     if (!userId) return;
 
-    Alert.alert(
+    showAlert(
       '⚠️ Démarrer la migration',
       'Cette opération va migrer toutes les données. Continuer ?',
       [
