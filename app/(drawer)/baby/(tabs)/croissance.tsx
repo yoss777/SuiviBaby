@@ -16,7 +16,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -365,110 +365,144 @@ export default function CroissanceScreen() {
     };
   }
 
-  const renderItem = ({ item }: { item: CroissanceEntry }) => {
+  const renderItem = ({
+    item,
+    index,
+  }: {
+    item: CroissanceEntry;
+    index: number;
+  }) => {
     const date = toDate(item.date);
+    const currentDayLabel = getDayLabel(date);
+    const prevEntry = index > 0 ? entries[index - 1] : null;
+    const prevDate = prevEntry ? toDate(prevEntry.date) : null;
+    const prevDayLabel = prevDate ? getDayLabel(prevDate) : null;
+    // const isToday = currentDayLabel === "Aujourd'hui";
+    const showDaySeparator = index === 0 || currentDayLabel !== prevDayLabel;
+
     return (
-      <View style={styles.itemRow}>
-        <View style={styles.timelineColumn}>
-          <View style={[styles.dot, { backgroundColor: "#8BCF9B" }]} />
-          <View
-            style={[
-              styles.line,
-              { backgroundColor: `${colors.tabIconDefault}30` },
-            ]}
-          />
-        </View>
-        <View style={styles.timeColumn}>
+      <React.Fragment>
+        {showDaySeparator && (
+          <View style={styles.daySeparator}>
+            <View
+              style={[
+                styles.daySeparatorLine,
+                { backgroundColor: `${colors.tabIconDefault}30` },
+              ]}
+            />
+            <Text
+              style={[
+                styles.daySeparatorText,
+                { color: colors.tabIconDefault },
+              ]}
+            >
+              {currentDayLabel}
+            </Text>
+            <View
+              style={[
+                styles.daySeparatorLine,
+                { backgroundColor: `${colors.tabIconDefault}30` },
+              ]}
+            />
+          </View>
+        )}
+        <View style={styles.itemRow}>
+          <View style={styles.timelineColumn}>
+            <View style={[styles.dot, { backgroundColor: "#8BCF9B" }]} />
+            <View
+              style={[
+                styles.line,
+                { backgroundColor: `${colors.tabIconDefault}30` },
+              ]}
+            />
+          </View>
           <Text style={[styles.timeText, { color: colors.tabIconDefault }]}>
             {date.toLocaleTimeString("fr-FR", {
               hour: "2-digit",
               minute: "2-digit",
             })}
           </Text>
-          <Text style={[styles.dateText, { color: colors.tabIconDefault }]}>
-            {date.toLocaleDateString("fr-FR", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-            })}
-          </Text>
-        </View>
-        <Pressable
-          onLongPress={() => openEditModal(item)}
-          delayLongPress={250}
-          style={({ pressed }) => [
-            styles.card,
-            {
-              borderColor: `${colors.tabIconDefault}30`,
-              backgroundColor: colors.background,
-            },
-            pressed && { opacity: 0.9 },
-          ]}
-        >
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleRow}>
-              <FontAwesome name="seedling" size={14} color="#8BCF9B" />
-              <Text style={[styles.cardTitle, { color: colors.text }]}>
-                Croissance
-              </Text>
+          <Pressable
+            onLongPress={() => openEditModal(item)}
+            delayLongPress={250}
+            style={({ pressed }) => [
+              styles.card,
+              {
+                borderColor: `${colors.tabIconDefault}30`,
+                backgroundColor: colors.background,
+              },
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <View style={styles.cardHeader}>
+              <View style={styles.cardTitleRow}>
+                <FontAwesome name="seedling" size={14} color="#8BCF9B" />
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  Croissance
+                </Text>
+              </View>
+              <FontAwesome
+                name="pen-to-square"
+                size={12}
+                color={colors.tabIconDefault}
+              />
             </View>
-            <FontAwesome
-              name="pen-to-square"
-              size={12}
-              color={colors.tabIconDefault}
-            />
-          </View>
-          <View style={styles.metricsRow}>
-            {item.tailleCm ? (
-              <View style={[styles.metricPill, styles.metricPillTaille]}>
-                <View style={styles.metricHeader}>
-                  <FontAwesome
-                    name="ruler-vertical"
-                    size={12}
-                    color="#4A90E2"
-                  />
-                  <Text style={[styles.metricLabel, { color: colors.text }]}>
-                    Taille
+            <View style={styles.metricsRow}>
+              {item.tailleCm ? (
+                <View style={[styles.metricPill, styles.metricPillTaille]}>
+                  <View style={styles.metricHeader}>
+                    <FontAwesome
+                      name="ruler-vertical"
+                      size={12}
+                      color="#4A90E2"
+                    />
+                    <Text style={[styles.metricLabel, { color: colors.text }]}>
+                      Taille
+                    </Text>
+                  </View>
+                  <Text style={[styles.metricValue, { color: colors.text }]}>
+                    {item.tailleCm} cm
                   </Text>
                 </View>
-                <Text style={[styles.metricValue, { color: colors.text }]}>
-                  {item.tailleCm} cm
-                </Text>
-              </View>
-            ) : null}
-            {item.poidsKg ? (
-              <View style={[styles.metricPill, styles.metricPillPoids]}>
-                <View style={styles.metricHeader}>
-                  <FontAwesome name="weight-scale" size={12} color="#6f42c1" />
-                  <Text style={[styles.metricLabel, { color: colors.text }]}>
-                    Poids
+              ) : null}
+              {item.poidsKg ? (
+                <View style={[styles.metricPill, styles.metricPillPoids]}>
+                  <View style={styles.metricHeader}>
+                    <FontAwesome
+                      name="weight-scale"
+                      size={12}
+                      color="#6f42c1"
+                    />
+                    <Text style={[styles.metricLabel, { color: colors.text }]}>
+                      Poids
+                    </Text>
+                  </View>
+                  <Text style={[styles.metricValue, { color: colors.text }]}>
+                    {item.poidsKg} kg
                   </Text>
                 </View>
-                <Text style={[styles.metricValue, { color: colors.text }]}>
-                  {item.poidsKg} kg
-                </Text>
-              </View>
-            ) : null}
-            {item.teteCm ? (
-              <View style={[styles.metricPill, styles.metricPillTete]}>
-                <View style={styles.metricHeader}>
-                  <MaterialCommunityIcons
-                    name="baby-face-outline"
-                    size={12}
-                    color="#FF9800"
-                  />
-                  <Text style={[styles.metricLabel, { color: colors.text }]}>
-                    Tête
+              ) : null}
+              {item.teteCm ? (
+                <View style={[styles.metricPill, styles.metricPillTete]}>
+                  <View style={styles.metricHeader}>
+                    <MaterialCommunityIcons
+                      name="baby-face-outline"
+                      size={12}
+                      color="#FF9800"
+                    />
+                    <Text style={[styles.metricLabel, { color: colors.text }]}>
+                      Tête
+                    </Text>
+                  </View>
+                  <Text style={[styles.metricValue, { color: colors.text }]}>
+                    {item.teteCm} cm
                   </Text>
                 </View>
-                <Text style={[styles.metricValue, { color: colors.text }]}>
-                  {item.teteCm} cm
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </Pressable>
-      </View>
+              ) : null}
+            </View>
+          </Pressable>
+        </View>
+      </React.Fragment>
     );
   };
 
@@ -533,6 +567,28 @@ export default function CroissanceScreen() {
 
   const { labels, labelsFull, values, hasData } = chartData();
   const metricStyle = metricConfig[metric];
+
+  const getDayLabel = useCallback((date: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const eventDay = new Date(date);
+    eventDay.setHours(0, 0, 0, 0);
+
+    if (eventDay.getTime() === today.getTime()) {
+      return "Aujourd'hui";
+    }
+    if (eventDay.getTime() === yesterday.getTime()) {
+      return "Hier";
+    }
+    return date.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+  }, []);
 
   return (
     <ThemedView style={styles.screen}>
@@ -879,18 +935,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
+    marginVertical: 7,
   },
   timelineColumn: {
     width: 20,
     alignItems: "center",
   },
-  timeColumn: {
-    width: 68,
-    paddingTop: 4,
-  },
   timeText: {
     fontSize: 12,
     fontWeight: "700",
+    width: 42,
+    marginTop: 6,
   },
   dot: {
     width: 10,
@@ -954,6 +1009,21 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
+  daySeparator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+    gap: 12,
+  },
+  daySeparatorLine: {
+    flex: 1,
+    height: 1,
+  },
+  daySeparatorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
   chartEmpty: {
     alignItems: "center",
     paddingVertical: 16,
@@ -1010,10 +1080,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
-  },
-  dateText: {
-    fontSize: 12,
-    fontWeight: "600",
   },
   metricPill: {
     // flexBasis: "33.333%",

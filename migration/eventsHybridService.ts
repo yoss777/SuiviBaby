@@ -51,6 +51,16 @@ function getTodayRange() {
   return { startOfDay, endOfDayInclusive };
 }
 
+function getRecentRange() {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const endOfDayInclusive = new Date(endOfDay.getTime() - 1);
+  return { startOfYesterday, endOfDayInclusive };
+}
+
 export async function obtenirEvenementsDuJourHybrid(childId: string) {
   const { startOfDay, endOfDayInclusive } = getTodayRange();
   const types = getTodayTypes() as EventType[];
@@ -112,13 +122,13 @@ export function ecouterEvenementsDuJourHybrid(
   callback: (events: any[]) => void,
   options?: { waitForServer?: boolean }
 ): () => void {
-  const { startOfDay, endOfDayInclusive } = getTodayRange();
+  const { startOfYesterday, endOfDayInclusive } = getRecentRange();
   const types = getTodayTypes() as EventType[];
 
   // En mode NEW_ONLY, on écoute la collection unifiée.
   return ecouterEvenements(childId, callback, {
     type: types,
-    depuis: startOfDay,
+    depuis: startOfYesterday,
     jusqu: endOfDayInclusive,
     waitForServer: options?.waitForServer,
   });

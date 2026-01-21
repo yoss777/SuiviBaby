@@ -15,7 +15,13 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -130,6 +136,11 @@ export default function HomeDashboard() {
   });
 
   const [currentTime, setCurrentTime] = useState(new Date());
+  // Track current day to detect day changes (for listener refresh)
+  const [currentDay, setCurrentDay] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+  });
   const [loading, setLoading] = useState({
     tetees: true,
     biberons: true,
@@ -269,7 +280,30 @@ export default function HomeDashboard() {
     [],
   );
 
+  const getDayLabel = useCallback((date: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const eventDay = new Date(date);
+    eventDay.setHours(0, 0, 0, 0);
+
+    if (eventDay.getTime() === today.getTime()) {
+      return "Aujourd'hui";
+    }
+    if (eventDay.getTime() === yesterday.getTime()) {
+      return "Hier";
+    }
+    return date.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+  }, []);
+
   const recentEvents = useMemo(() => {
+    const cutoff = new Date(currentTime.getTime() - 24 * 60 * 60 * 1000);
     const merged = [
       ...data.tetees,
       ...data.biberons,
@@ -285,8 +319,9 @@ export default function HomeDashboard() {
     }));
 
     return merged
+      .filter((event) => toDate(event.date) >= cutoff)
       .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime())
-      .slice(0, 5);
+      .slice(0, 10);
   }, [
     data.biberons,
     data.mictions,
@@ -295,6 +330,7 @@ export default function HomeDashboard() {
     data.tetees,
     data.vaccins,
     data.vitamines,
+    currentTime,
     toDate,
   ]);
 
@@ -307,7 +343,11 @@ export default function HomeDashboard() {
     let timer: ReturnType<typeof setTimeout>;
 
     const updateTime = () => {
-      setCurrentTime(new Date());
+      const now = new Date();
+      setCurrentTime(now);
+      // Check if day changed to refresh the listener
+      const newDay = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+      setCurrentDay((prev) => (prev !== newDay ? newDay : prev));
       scheduleNextUpdate();
     };
 
@@ -327,7 +367,12 @@ export default function HomeDashboard() {
 
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === "active") {
-        updateTime();
+        // On app foreground, update time and check day change
+        const now = new Date();
+        setCurrentTime(now);
+        const newDay = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+        setCurrentDay((prev) => (prev !== newDay ? newDay : prev));
+        scheduleNextUpdate();
       }
     };
 
@@ -550,8 +595,20 @@ export default function HomeDashboard() {
   // ============================================
 
   // Écoute en temps réel de toutes les données
+  // Re-subscribe when day changes to get fresh "today" range
   useEffect(() => {
     if (!activeChild?.id) return;
+
+    // Reset loading state on day change to show fresh data
+    setLoading({
+      tetees: true,
+      biberons: true,
+      pompages: true,
+      mictions: true,
+      selles: true,
+      vitamines: true,
+      vaccins: true,
+    });
 
     const cached = getTodayEventsCache(activeChild.id);
     if (cached) {
@@ -589,7 +646,7 @@ export default function HomeDashboard() {
     return () => {
       unsubscribe();
     };
-  }, [activeChild]);
+  }, [activeChild, currentDay]);
 
   // ============================================
   // EFFECTS - STATS CALCULATION
@@ -1202,78 +1259,114 @@ export default function HomeDashboard() {
             const date = toDate(event.date);
             const details = buildDetails(event);
             const borderColor = `${Colors[colorScheme].tabIconDefault}30`;
+
+            // Check if we need to show a day separator
+            const currentDayLabel = getDayLabel(date);
+            const prevEvent = index > 0 ? recentEvents[index - 1] : null;
+            const prevDayLabel = prevEvent
+              ? getDayLabel(toDate(prevEvent.date))
+              : null;
+            const showDaySeparator =
+              currentDayLabel !== "Aujourd'hui" &&
+              (index === 0 || currentDayLabel !== prevDayLabel);
+
             return (
-              <TouchableOpacity
-                key={event.id ?? `${event.type}-${event.date}`}
-                style={styles.recentRow}
-                activeOpacity={0.85}
-                onLongPress={() => {
-                  const route = getEditRoute(event);
-                  if (route) router.push(route as any);
-                }}
-              >
-                <View style={styles.recentTimelineColumn}>
-                  <View
-                    style={[
-                      styles.recentDot,
-                      { backgroundColor: config.color },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.recentLine,
-                      { backgroundColor: borderColor },
-                      index === recentEvents.length - 1 &&
-                        styles.recentLineLast,
-                    ]}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.recentTimeLeft,
-                    { color: Colors[colorScheme].tabIconDefault },
-                  ]}
-                >
-                  {formatTime(date)}
-                </Text>
-                <View
-                  style={[
-                    styles.recentCard,
-                    {
-                      borderColor,
-                      backgroundColor: Colors[colorScheme].background,
-                    },
-                  ]}
-                >
-                  <View style={styles.recentTitleRow}>
-                    {renderEventIcon(config.icon, config.color)}
-                    <Text
+              <React.Fragment key={event.id ?? `${event.type}-${event.date}`}>
+                {showDaySeparator && (
+                  <View style={styles.daySeparator}>
+                    <View
                       style={[
-                        styles.recentTitle,
-                        { color: Colors[colorScheme].text },
+                        styles.daySeparatorLine,
+                        { backgroundColor: borderColor },
                       ]}
-                    >
-                      {config.label}
-                    </Text>
-                    {/* <FontAwesome
-                      name="pen-to-square"
-                      size={14}
-                      color={Colors[colorScheme].tabIconDefault}
-                      style={{ marginLeft: "auto" }}
-                    /> */}
-                  </View>
-                  {details ? (
+                    />
                     <Text
                       style={[
-                        styles.recentDetails,
+                        styles.daySeparatorText,
                         { color: Colors[colorScheme].tabIconDefault },
                       ]}
                     >
-                      {details}
+                      {currentDayLabel}
                     </Text>
-                  ) : null}
-                </View>
-              </TouchableOpacity>
+                    <View
+                      style={[
+                        styles.daySeparatorLine,
+                        { backgroundColor: borderColor },
+                      ]}
+                    />
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.recentRow}
+                  activeOpacity={0.85}
+                  onLongPress={() => {
+                    const route = getEditRoute(event);
+                    if (route) router.push(route as any);
+                  }}
+                >
+                  <View style={styles.recentTimelineColumn}>
+                    <View
+                      style={[
+                        styles.recentDot,
+                        { backgroundColor: config.color },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.recentLine,
+                        { backgroundColor: borderColor },
+                        index === recentEvents.length - 1 &&
+                          styles.recentLineLast,
+                      ]}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.recentTimeLeft,
+                      { color: Colors[colorScheme].tabIconDefault },
+                    ]}
+                  >
+                    {formatTime(date)}
+                  </Text>
+                  <View
+                    style={[
+                      styles.recentCard,
+                      {
+                        borderColor,
+                        backgroundColor: Colors[colorScheme].background,
+                      },
+                    ]}
+                  >
+                    <View style={styles.recentTitleRow}>
+                      {renderEventIcon(config.icon, config.color)}
+                      <Text
+                        style={[
+                          styles.recentTitle,
+                          { color: Colors[colorScheme].text },
+                        ]}
+                      >
+                        {config.label}
+                      </Text>
+                      {/* <FontAwesome
+                        name="pen-to-square"
+                        size={14}
+                        color={Colors[colorScheme].tabIconDefault}
+                        style={{ marginLeft: "auto" }}
+                      /> */}
+                    </View>
+                    {details ? (
+                      <Text
+                        style={[
+                          styles.recentDetails,
+                          { color: Colors[colorScheme].tabIconDefault },
+                        ]}
+                      >
+                        {details}
+                      </Text>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              </React.Fragment>
             );
           })
         )}
@@ -1424,6 +1517,22 @@ const styles = StyleSheet.create({
   recentDetails: {
     marginTop: 6,
     fontSize: 12,
+  },
+  daySeparator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 20,
+    marginBottom: 14,
+    gap: 12,
+  },
+  daySeparatorLine: {
+    flex: 1,
+    height: 1,
+  },
+  daySeparatorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "capitalize",
   },
   statsCard: {
     flex: 1,

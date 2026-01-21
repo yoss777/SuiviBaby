@@ -4,11 +4,16 @@ import { InfoModal } from "@/components/ui/InfoModal";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import type { Event, EventType } from "@/services/eventsService";
 import {
-  ecouterEvenements,
-  type Event,
-  type EventType,
-} from "@/services/eventsService";
+  ecouterBiberonsHybrid,
+  ecouterMictionsHybrid,
+  ecouterPompagesHybrid,
+  ecouterSellesHybrid,
+  ecouterTeteesHybrid,
+  ecouterVaccinsHybrid,
+  ecouterVitaminesHybrid,
+} from "@/migration/eventsHybridService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -23,6 +28,7 @@ import React, {
 } from "react";
 import {
   Animated,
+  AppState,
   ScrollView,
   SectionList,
   StyleSheet,
@@ -168,6 +174,10 @@ function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+function dayKey(date: Date) {
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
 function formatTime(date: Date) {
   return date.toLocaleTimeString("fr-FR", {
     hour: "2-digit",
@@ -192,9 +202,13 @@ function buildSections(events: Event[]): TimelineSection[] {
   const grouped = new Map<string, { date: Date; items: Event[] }>();
   events.forEach((event) => {
     const date = toDate(event.date);
-    const key = date.toISOString().slice(0, 10);
+    const day = startOfDay(date);
+    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(
+      2,
+      "0",
+    )}-${String(day.getDate()).padStart(2, "0")}`;
     if (!grouped.has(key)) {
-      grouped.set(key, { date, items: [] });
+      grouped.set(key, { date: day, items: [] });
     }
     grouped.get(key)!.items.push(event);
   });
@@ -552,6 +566,7 @@ export default function ChronoScreen() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
+  const [currentDay, setCurrentDay] = useState(() => dayKey(new Date()));
   const hasLoadedPrefs = useRef(false);
   const [infoModalMessage, setInfoModalMessage] = useState<string | null>(null);
 
@@ -570,6 +585,24 @@ export default function ChronoScreen() {
     [colorScheme],
   );
 
+  const updateCurrentDay = useCallback(() => {
+    const next = dayKey(new Date());
+    setCurrentDay((prev) => (prev === next ? prev : next));
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(updateCurrentDay, 60 * 1000);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        updateCurrentDay();
+      }
+    });
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [updateCurrentDay]);
+
   // Load events
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -580,23 +613,120 @@ export default function ChronoScreen() {
     const since = startOfDay(new Date());
     since.setDate(since.getDate() - (range - 1));
 
-    const unsubscribe = ecouterEvenements(
-      activeChild.id,
-      (data) => {
-        setEvents(data);
+    const loaded = {
+      tetees: false,
+      biberons: false,
+      pompages: false,
+      mictions: false,
+      selles: false,
+      vaccins: false,
+      vitamines: false,
+    };
+    let teteesData: Event[] = [];
+    let biberonsData: Event[] = [];
+    let pompagesData: Event[] = [];
+    let mictionsData: Event[] = [];
+    let sellesData: Event[] = [];
+    let vaccinsData: Event[] = [];
+    let vitaminesData: Event[] = [];
+
+    const merge = () => {
+      const merged = [
+        ...teteesData,
+        ...biberonsData,
+        ...pompagesData,
+        ...mictionsData,
+        ...sellesData,
+        ...vaccinsData,
+        ...vitaminesData,
+      ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+      setEvents(merged);
+      const allLoaded = Object.values(loaded).every(Boolean);
+      if (allLoaded) {
         setLoading(false);
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 300,
           useNativeDriver: true,
         }).start();
+      }
+    };
+
+    const unsubscribeTetees = ecouterTeteesHybrid(
+      activeChild.id,
+      (data) => {
+        teteesData = data;
+        loaded.tetees = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
+    const unsubscribeBiberons = ecouterBiberonsHybrid(
+      activeChild.id,
+      (data) => {
+        biberonsData = data;
+        loaded.biberons = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
+    const unsubscribePompages = ecouterPompagesHybrid(
+      activeChild.id,
+      (data) => {
+        pompagesData = data;
+        loaded.pompages = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
+    const unsubscribeMictions = ecouterMictionsHybrid(
+      activeChild.id,
+      (data) => {
+        mictionsData = data;
+        loaded.mictions = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
+    const unsubscribeSelles = ecouterSellesHybrid(
+      activeChild.id,
+      (data) => {
+        sellesData = data;
+        loaded.selles = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
+    const unsubscribeVaccins = ecouterVaccinsHybrid(
+      activeChild.id,
+      (data) => {
+        vaccinsData = data;
+        loaded.vaccins = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
+    const unsubscribeVitamines = ecouterVitaminesHybrid(
+      activeChild.id,
+      (data) => {
+        vitaminesData = data;
+        loaded.vitamines = true;
+        merge();
       },
       { depuis: since, waitForServer: true },
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeTetees();
+      unsubscribeBiberons();
+      unsubscribePompages();
+      unsubscribeMictions();
+      unsubscribeSelles();
+      unsubscribeVaccins();
+      unsubscribeVitamines();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChild?.id, range]);
+  }, [activeChild?.id, range, currentDay]);
 
   // Reset on child change
   useEffect(() => {
@@ -668,7 +798,7 @@ export default function ChronoScreen() {
   // Sections
   const sections = useMemo(
     () => buildSections(filteredEvents),
-    [filteredEvents],
+    [filteredEvents, currentDay],
   );
 
   useEffect(() => {
