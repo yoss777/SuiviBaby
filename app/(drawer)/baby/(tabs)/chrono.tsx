@@ -4,7 +4,6 @@ import { InfoModal } from "@/components/ui/InfoModal";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import type { Event, EventType } from "@/services/eventsService";
 import {
   ecouterBiberonsHybrid,
   ecouterMictionsHybrid,
@@ -14,6 +13,7 @@ import {
   ecouterVaccinsHybrid,
   ecouterVitaminesHybrid,
 } from "@/migration/eventsHybridService";
+import type { Event, EventType } from "@/services/eventsService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -49,6 +49,7 @@ type TimelineSection = {
   title: string;
   key: string;
   data: Event[];
+  kind?: "filters" | "day";
 };
 
 // ============================================
@@ -159,6 +160,7 @@ const FILTER_CONFIG: Record<
 
 const ALL_FILTERS: FilterType[] = ["meals", "pumping", "immunos", "diapers"];
 const RANGE_OPTIONS: RangeOption[] = [7, 14, 30];
+const LIST_PADDING_TOP = 8;
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -459,11 +461,19 @@ interface SectionHeaderProps {
   counts: Map<EventType, number>;
   borderColor: string;
   textColor: string;
+  backgroundColor: string;
 }
 
 const SectionHeader = React.memo(
-  ({ title, count, counts, borderColor, textColor }: SectionHeaderProps) => (
-    <View style={styles.sectionHeader}>
+  ({
+    title,
+    count,
+    counts,
+    borderColor,
+    textColor,
+    backgroundColor,
+  }: SectionHeaderProps) => (
+    <View style={[styles.sectionHeader, { backgroundColor }]}>
       <View style={styles.sectionTitleRow}>
         <Text style={[styles.sectionTitle, { color: textColor }]}>{title}</Text>
         <View style={[styles.countBadge, { borderColor }]}>
@@ -562,12 +572,16 @@ export default function ChronoScreen() {
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
   const [range, setRange] = useState<RangeOption>(14);
+  const [maxRange, setMaxRange] = useState<RangeOption>(14);
   const [selectedTypes, setSelectedTypes] = useState<FilterType[]>(ALL_FILTERS);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [currentDay, setCurrentDay] = useState(() => dayKey(new Date()));
   const hasLoadedPrefs = useRef(false);
+  const hasInitialLoad = useRef(false);
+  const hasPrefetchedMore = useRef(false);
   const [infoModalMessage, setInfoModalMessage] = useState<string | null>(null);
 
   // Fade animation
@@ -607,11 +621,15 @@ export default function ChronoScreen() {
   useEffect(() => {
     if (!activeChild?.id) return;
 
-    setLoading(true);
-    fadeAnim.setValue(0);
+    const showFullLoading = !hasInitialLoad.current;
+    setLoading(showFullLoading);
+    setIsRefreshing(!showFullLoading);
+    if (showFullLoading) {
+      fadeAnim.setValue(0);
+    }
 
     const since = startOfDay(new Date());
-    since.setDate(since.getDate() - (range - 1));
+    since.setDate(since.getDate() - (maxRange - 1));
 
     const loaded = {
       tetees: false,
@@ -643,7 +661,9 @@ export default function ChronoScreen() {
       setEvents(merged);
       const allLoaded = Object.values(loaded).every(Boolean);
       if (allLoaded) {
+        hasInitialLoad.current = true;
         setLoading(false);
+        setIsRefreshing(false);
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 300,
@@ -726,13 +746,18 @@ export default function ChronoScreen() {
       unsubscribeVitamines();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChild?.id, range, currentDay]);
+  }, [activeChild?.id, maxRange, currentDay]);
 
   // Reset on child change
   useEffect(() => {
     if (!activeChild?.id) return;
     setEvents([]);
     setLoading(true);
+    setIsRefreshing(false);
+    setRange(14);
+    setMaxRange(14);
+    hasInitialLoad.current = false;
+    hasPrefetchedMore.current = false;
   }, [activeChild?.id]);
 
   // Load preferences
@@ -752,6 +777,7 @@ export default function ChronoScreen() {
         const parsed = JSON.parse(raw);
         if (parsed?.range) {
           setRange(parsed.range);
+          setMaxRange(parsed.range);
         }
         if (Array.isArray(parsed?.selectedTypes)) {
           setSelectedTypes(parsed.selectedTypes);
@@ -792,8 +818,14 @@ export default function ChronoScreen() {
       );
     });
 
-    return events.filter((event) => effectiveTypes.has(event.type));
-  }, [events, selectedTypes]);
+    const rangeStart = startOfDay(new Date());
+    rangeStart.setDate(rangeStart.getDate() - (range - 1));
+
+    return events.filter(
+      (event) =>
+        effectiveTypes.has(event.type) && toDate(event.date) >= rangeStart,
+    );
+  }, [events, selectedTypes, range, currentDay]);
 
   // Sections
   const sections = useMemo(
@@ -815,10 +847,24 @@ export default function ChronoScreen() {
   }, [loading, sections.length]);
 
   // Handlers with useCallback
-  const handleRangeChange = useCallback((value: RangeOption) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setRange(value);
-  }, []);
+  const handleRangeChange = useCallback(
+    (value: RangeOption) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (value > maxRange) {
+        setMaxRange(value);
+        setIsRefreshing(true);
+      }
+      setRange(value);
+    },
+    [maxRange],
+  );
+
+  const handleNearEndReached = useCallback(() => {
+    if (maxRange >= 30 || hasPrefetchedMore.current) return;
+    hasPrefetchedMore.current = true;
+    setMaxRange(30);
+    setIsRefreshing(true);
+  }, [maxRange]);
 
   const handleFilterToggle = useCallback((type: FilterType) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -861,10 +907,11 @@ export default function ChronoScreen() {
           counts={counts}
           borderColor={colors.border}
           textColor={colors.text}
+          backgroundColor={colors.background}
         />
       );
     },
-    [colors.border, colors.text],
+    [colors.background, colors.border, colors.text],
   );
 
   // Render item
@@ -891,8 +938,10 @@ export default function ChronoScreen() {
   return (
     <ThemedView style={styles.screen}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
-        {/* Compact Header with Range Selector */}
-        <View style={styles.header}>
+        {/* Fixed Header */}
+        <View
+          style={[styles.fixedHeader, { backgroundColor: colors.background }]}
+        >
           <View style={styles.headerRow}>
             <Text style={[styles.title, { color: colors.text }]}>
               Chronologie
@@ -912,28 +961,26 @@ export default function ChronoScreen() {
               ))}
             </View>
           </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+            style={styles.filterScrollView}
+          >
+            {ALL_FILTERS.map((type) => (
+              <FilterChip
+                key={type}
+                type={type}
+                isActive={selectedTypes.includes(type)}
+                borderColor={colors.border}
+                tintColor={colors.tint}
+                backgroundColor={colors.background}
+                textColor={colors.text}
+                onPress={() => handleFilterToggle(type)}
+              />
+            ))}
+          </ScrollView>
         </View>
-
-        {/* Filter ScrollView */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterScroll}
-          contentContainerStyle={styles.filterRow}
-        >
-          {ALL_FILTERS.map((type) => (
-            <FilterChip
-              key={type}
-              type={type}
-              isActive={selectedTypes.includes(type)}
-              borderColor={colors.border}
-              tintColor={colors.tint}
-              backgroundColor={colors.background}
-              textColor={colors.text}
-              onPress={() => handleFilterToggle(type)}
-            />
-          ))}
-        </ScrollView>
 
         {/* Content */}
         <View style={styles.content}>
@@ -976,6 +1023,9 @@ export default function ChronoScreen() {
                 maxToRenderPerBatch={8}
                 removeClippedSubviews={true}
                 updateCellsBatchingPeriod={50}
+                onEndReached={handleNearEndReached}
+                onEndReachedThreshold={0.4}
+                stickySectionHeadersEnabled
                 renderSectionHeader={renderSectionHeader}
                 renderItem={renderItem}
               />
@@ -1007,15 +1057,16 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
+  fixedHeader: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 10,
+    paddingBottom: 8,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 12,
   },
   title: {
     fontSize: 24,
@@ -1035,16 +1086,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-  filterScroll: {
-    flexGrow: 0,
-    flexShrink: 0,
-    paddingTop: 6,
+  filterScrollView: {
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
   },
   filterRow: {
     flexDirection: "row",
     paddingHorizontal: 20,
-    paddingTop: 6,
-    // paddingTop: 4,
     gap: 8,
   },
   filterChip: {
@@ -1062,6 +1110,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    position: "relative",
   },
   listWrapper: {
     flex: 1,
@@ -1069,11 +1118,13 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
-    paddingTop: 8,
+    paddingTop: LIST_PADDING_TOP,
   },
   sectionHeader: {
-    marginTop: 16,
-    marginBottom: 12,
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
     gap: 6,
   },
   sectionTitleRow: {

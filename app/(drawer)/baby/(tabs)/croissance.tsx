@@ -15,7 +15,7 @@ import { ecouterCroissancesHybrid } from "@/migration/eventsHybridService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import React, {
   useCallback,
   useEffect,
@@ -26,6 +26,7 @@ import React, {
 import {
   Dimensions,
   FlatList,
+  InteractionManager,
   Platform,
   Pressable,
   ScrollView,
@@ -37,6 +38,7 @@ import {
 import { LineChart } from "react-native-chart-kit";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderRight } from "../../_layout";
+import { router, useLocalSearchParams } from "expo-router";
 
 type CroissanceEntry = {
   id: string;
@@ -64,6 +66,8 @@ export default function CroissanceScreen() {
   const colors = Colors[colorScheme];
   const { openSheet, closeSheet, viewProps } = useSheet();
   const { showAlert } = useModal();
+  const { openModal, returnTo } = useLocalSearchParams();
+  const navigation = useNavigation();
   const headerOwnerId = useRef(
     `croissance-${Math.random().toString(36).slice(2)}`,
   );
@@ -97,6 +101,41 @@ export default function CroissanceScreen() {
 
   const sheetOwnerId = "croissance";
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
+  const returnToRef = useRef<string | null>(null);
+
+  const normalizeParam = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+
+  const stashReturnTo = useCallback(() => {
+    const target = normalizeParam(returnTo);
+    if (!target) return;
+    if (
+      target === "home" ||
+      target === "chrono" ||
+      target === "journal" ||
+      target === "plus"
+    ) {
+      returnToRef.current = target;
+      return;
+    }
+    returnToRef.current = null;
+  }, [returnTo]);
+
+  useEffect(() => {
+    stashReturnTo();
+  }, [stashReturnTo]);
+
+  const maybeReturnTo = useCallback((targetOverride?: string | null) => {
+    const target = targetOverride ?? returnToRef.current;
+    returnToRef.current = null;
+    if (target === "home") {
+      router.replace("/baby/home");
+    } else if (target === "chrono" || target === "journal") {
+      router.replace("/baby/chrono");
+    } else if (target === "plus") {
+      router.replace("/baby/plus");
+    }
+  }, []);
 
   const resetForm = useCallback(() => {
     setDateHeure(new Date());
@@ -111,6 +150,17 @@ export default function CroissanceScreen() {
     resetForm();
     openSheet(buildSheetProps());
   }, [openSheet, resetForm]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (openModal !== "true") return;
+      const task = InteractionManager.runAfterInteractions(() => {
+        openAddModal();
+        navigation.setParams({ openModal: undefined, returnTo: undefined });
+      });
+      return () => task.cancel();
+    }, [navigation, openAddModal, openModal]),
+  );
 
   const openEditModal = useCallback(
     (entry: CroissanceEntry) => {
@@ -355,6 +405,7 @@ export default function CroissanceScreen() {
   }
 
   function buildSheetProps() {
+    const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
     return {
       ownerId: sheetOwnerId,
       title: editingEntry ? "Modifier la croissance" : "Nouvelle mesure",
@@ -368,6 +419,7 @@ export default function CroissanceScreen() {
       onDismiss: () => {
         setIsSubmitting(false);
         setEditingEntry(null);
+        maybeReturnTo(returnTarget);
       },
     };
   }

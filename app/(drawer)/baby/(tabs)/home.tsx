@@ -2,6 +2,7 @@ import { MigrationBanner } from "@/components/migration";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
@@ -91,6 +92,7 @@ export default function HomeDashboard() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
+  const { openSheet, closeSheet } = useSheet();
   const { showToast } = useToast();
   const warningStateRef = useRef<
     Record<string, { miction?: number; selle?: number }>
@@ -106,10 +108,17 @@ export default function HomeDashboard() {
   const [showRecentHint, setShowRecentHint] = useState(false);
   const headerMicOpacity = useRef(new Animated.Value(0)).current;
   const inlineMicOpacity = useRef(new Animated.Value(1)).current;
+  const headerAddOpacity = useRef(new Animated.Value(0)).current;
   const [headerMicVisible, setHeaderMicVisible] = useState(false);
+  const [headerAddVisible, setHeaderAddVisible] = useState(false);
   const headerMicVisibleRef = useRef(false);
+  const headerAddVisibleRef = useRef(false);
   const headerRowLayoutRef = useRef<{ y: number; height: number } | null>(null);
+  const activitiesLayoutRef = useRef<{ y: number; height: number } | null>(
+    null,
+  );
   const scrollYRef = useRef(0);
+  const quickAddTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // États des données
   const [data, setData] = useState<DashboardData>({
@@ -468,45 +477,193 @@ export default function HomeDashboard() {
     showToast,
   ]);
 
-  const updateHeaderMicVisibility = useCallback(
-    (scrollY: number, layout: { y: number; height: number }) => {
-      const threshold = layout.y + layout.height - 8;
-      const fadeRange = 70;
-      const fadeStart = threshold - fadeRange;
-      const progress = Math.max(
-        0,
-        Math.min(1, (scrollY - fadeStart) / fadeRange),
-      );
-      const nextHeaderOpacity = progress;
-      const nextInlineOpacity = 1 - progress;
-      headerMicOpacity.setValue(nextHeaderOpacity);
-      inlineMicOpacity.setValue(nextInlineOpacity);
+  const updateHeaderControls = useCallback(
+    (
+      scrollY: number,
+      headerLayout: { y: number; height: number } | null,
+      activitiesLayout: { y: number; height: number } | null,
+    ) => {
+      if (headerLayout) {
+        const threshold = headerLayout.y + headerLayout.height - 8;
+        const fadeRange = 70;
+        const fadeStart = threshold - fadeRange;
+        const progress = Math.max(
+          0,
+          Math.min(1, (scrollY - fadeStart) / fadeRange),
+        );
+        const nextHeaderOpacity = progress;
+        const nextInlineOpacity = 1 - progress;
+        headerMicOpacity.setValue(nextHeaderOpacity);
+        inlineMicOpacity.setValue(nextInlineOpacity);
 
-      const shouldShow = nextHeaderOpacity > 0.05;
-      if (shouldShow !== headerMicVisibleRef.current) {
-        headerMicVisibleRef.current = shouldShow;
-        setHeaderMicVisible(shouldShow);
+        const shouldShow = nextHeaderOpacity > 0.05;
+        if (shouldShow !== headerMicVisibleRef.current) {
+          headerMicVisibleRef.current = shouldShow;
+          setHeaderMicVisible(shouldShow);
+        }
+      }
+
+      if (activitiesLayout) {
+        const threshold =
+          activitiesLayout.y + activitiesLayout.height * 0.5;
+        const fadeRange = 70;
+        const fadeStart = threshold - fadeRange;
+        const progress = Math.max(
+          0,
+          Math.min(1, (scrollY - fadeStart) / fadeRange),
+        );
+        headerAddOpacity.setValue(progress);
+
+        const shouldShow = progress > 0.05;
+        if (shouldShow !== headerAddVisibleRef.current) {
+          headerAddVisibleRef.current = shouldShow;
+          setHeaderAddVisible(shouldShow);
+        }
       }
     },
-    [headerMicOpacity, inlineMicOpacity],
+    [headerAddOpacity, headerMicOpacity, inlineMicOpacity],
   );
 
   const handleScroll = useCallback(
     (event: any) => {
       const scrollY = event.nativeEvent.contentOffset.y || 0;
       scrollYRef.current = scrollY;
-      const layout = headerRowLayoutRef.current;
-      if (!layout) return;
-      updateHeaderMicVisibility(scrollY, layout);
+      updateHeaderControls(
+        scrollY,
+        headerRowLayoutRef.current,
+        activitiesLayoutRef.current,
+      );
     },
-    [updateHeaderMicVisibility],
+    [updateHeaderControls],
   );
 
   useEffect(() => {
-    const layout = headerRowLayoutRef.current;
-    if (!layout) return;
-    updateHeaderMicVisibility(scrollYRef.current, layout);
-  }, [updateHeaderMicVisibility]);
+    updateHeaderControls(
+      scrollYRef.current,
+      headerRowLayoutRef.current,
+      activitiesLayoutRef.current,
+    );
+    return () => {
+      if (quickAddTimeoutRef.current) {
+        clearTimeout(quickAddTimeoutRef.current);
+      }
+    };
+  }, [updateHeaderControls]);
+
+  const quickAddActions = useMemo(
+    () => [
+      {
+        key: "growth",
+        label: "Croissance",
+        icon: { type: "fa", name: "seedling", color: "#8BCF9B" },
+        route: "/baby/croissance?openModal=true&returnTo=home",
+      },
+      {
+        key: "tetee",
+        label: "Tétée",
+        icon: { type: "fa", name: "person-breastfeeding", color: "#4A90E2" },
+        route: "/baby/meals?tab=seins&openModal=true&returnTo=home",
+      },
+      {
+        key: "biberon",
+        label: "Biberon",
+        icon: { type: "mc", name: "baby-bottle", color: "#28a745" },
+        route: "/baby/meals?tab=biberons&openModal=true&returnTo=home",
+      },
+      {
+        key: "pompage",
+        label: "Pompage",
+        icon: { type: "fa", name: "pump-medical", color: "#20c997" },
+        route: "/baby/pumping?openModal=true&returnTo=home",
+      },
+      {
+        key: "vitamine",
+        label: "Vitamine",
+        icon: { type: "fa", name: "pills", color: "#FF9800" },
+        route: "/baby/immunizations?tab=vitamines&openModal=true&returnTo=home",
+      },
+      {
+        key: "vaccin",
+        label: "Vaccin",
+        icon: { type: "fa", name: "syringe", color: "#9C27B0" },
+        route: "/baby/immunizations?tab=vaccins&openModal=true&returnTo=home",
+      },
+      {
+        key: "miction",
+        label: "Miction",
+        icon: { type: "fa", name: "droplet", color: "#17a2b8" },
+        route: "/baby/diapers?tab=mictions&openModal=true&returnTo=home",
+      },
+      {
+        key: "selle",
+        label: "Selle",
+        icon: { type: "fa", name: "poop", color: "#dc3545" },
+        route: "/baby/diapers?tab=selles&openModal=true&returnTo=home",
+      },
+    ],
+    [],
+  );
+
+  const handleQuickAddPress = useCallback(
+    (route: string) => {
+      if (quickAddTimeoutRef.current) {
+        clearTimeout(quickAddTimeoutRef.current);
+      }
+      closeSheet();
+      quickAddTimeoutRef.current = setTimeout(() => {
+        router.push(route as any);
+      }, 420);
+    },
+    [closeSheet],
+  );
+
+  const openQuickAddSheet = useCallback(() => {
+    openSheet({
+      ownerId: "home-quick-add",
+      title: "Ajouter un evenement",
+      icon: "plus",
+      accentColor: Colors[colorScheme].tint,
+      showActions: false,
+      onSubmit: () => {},
+      snapPoints: ["55%", "75%"],
+      children: (
+        <View style={styles.quickSheetList}>
+          {quickAddActions.map((action) => (
+            <TouchableOpacity
+              key={action.key}
+              style={styles.quickSheetItem}
+              onPress={() => handleQuickAddPress(action.route)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.quickSheetIcon}>
+                {action.icon.type === "mc" ? (
+                  <MaterialCommunityIcons
+                    name={action.icon.name as any}
+                    size={18}
+                    color={action.icon.color}
+                  />
+                ) : (
+                  <FontAwesome
+                    name={action.icon.name as any}
+                    size={18}
+                    color={action.icon.color}
+                  />
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.quickSheetLabel,
+                  { color: Colors[colorScheme].text },
+                ]}
+              >
+                {action.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ),
+    });
+  }, [closeSheet, colorScheme, handleQuickAddPress, openSheet, quickAddActions]);
 
   useFocusEffect(
     useCallback(() => {
@@ -516,15 +673,40 @@ export default function HomeDashboard() {
             flexDirection: "row",
             alignItems: "center",
             paddingRight: 16,
-            opacity: headerMicOpacity,
           }}
-          pointerEvents={headerMicVisible ? "auto" : "none"}
+          pointerEvents={headerMicVisible || headerAddVisible ? "auto" : "none"}
         >
-          <VoiceCommandButton
-            size={18}
-            color={Colors[colorScheme].tint}
-            showTestToggle={false}
-          />
+          <Animated.View
+            style={{
+              opacity: headerAddOpacity,
+              marginRight: 8,
+            }}
+            pointerEvents={headerAddVisible ? "auto" : "none"}
+          >
+            <TouchableOpacity
+              onPress={openQuickAddSheet}
+              style={styles.headerActionButton}
+              activeOpacity={0.8}
+            >
+              <FontAwesome
+                name="plus"
+                size={18}
+                color={Colors[colorScheme].tint}
+              />
+            </TouchableOpacity>
+          </Animated.View>
+          <Animated.View
+            style={{
+              opacity: headerMicOpacity,
+            }}
+            pointerEvents={headerMicVisible ? "auto" : "none"}
+          >
+            <VoiceCommandButton
+              size={18}
+              color={Colors[colorScheme].tint}
+              showTestToggle={false}
+            />
+          </Animated.View>
         </Animated.View>
       );
 
@@ -533,7 +715,15 @@ export default function HomeDashboard() {
       return () => {
         setHeaderRight(null, headerOwnerId.current);
       };
-    }, [colorScheme, headerMicOpacity, headerMicVisible, setHeaderRight]),
+    }, [
+      colorScheme,
+      headerAddOpacity,
+      headerAddVisible,
+      headerMicOpacity,
+      headerMicVisible,
+      openQuickAddSheet,
+      setHeaderRight,
+    ]),
   );
 
   useEffect(() => {
@@ -1022,7 +1212,7 @@ export default function HomeDashboard() {
         onLayout={(event) => {
           const { y, height } = event.nativeEvent.layout;
           headerRowLayoutRef.current = { y, height };
-          updateHeaderMicVisibility(scrollYRef.current, { y, height });
+          updateHeaderControls(scrollYRef.current, { y, height }, activitiesLayoutRef.current);
         }}
       >
         <View style={styles.header}>
@@ -1171,7 +1361,18 @@ export default function HomeDashboard() {
       </View>
 
       {/* Activités physiologiques */}
-      <View style={styles.section}>
+      <View
+        style={styles.section}
+        onLayout={(event) => {
+          const { y, height } = event.nativeEvent.layout;
+          activitiesLayoutRef.current = { y, height };
+          updateHeaderControls(
+            scrollYRef.current,
+            headerRowLayoutRef.current,
+            { y, height },
+          );
+        }}
+      >
         <Text style={styles.sectionTitle}>Activités physiologiques</Text>
         <View style={styles.statsGrid}>
           {loading.mictions ? (
@@ -1388,6 +1589,9 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 10,
   },
+  headerActionButton: {
+    padding: 6,
+  },
   greeting: {
     fontSize: 28,
     fontWeight: "700",
@@ -1412,6 +1616,33 @@ const styles = StyleSheet.create({
   sectionTitleInline: {
     marginHorizontal: 0,
     marginBottom: 0,
+  },
+  quickSheetList: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  quickSheetItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#f5f6f8",
+    borderWidth: 1,
+    borderColor: "#e4e7eb",
+  },
+  quickSheetIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+  },
+  quickSheetLabel: {
+    fontSize: 15,
+    fontWeight: "600",
   },
   sectionHeaderRow: {
     flexDirection: "row",
