@@ -1086,17 +1086,16 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 20,
-    paddingBottom: 4,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginBottom: 12,
   },
   filtersPlaceholder: {
     height: 52, // Same height as sticky filters
+    marginTop: 12,
+    marginHorizontal: -20, // Compensate for listContent paddingHorizontal
   },
   title: {
     fontSize: 24,
@@ -1160,7 +1159,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     gap: 6,
-    top: 52, // Offset to position below sticky filters (FILTERS_HEIGHT)
+    top: 52, // Offset to position below sticky filters
   },
   sectionTitleRow: {
     flexDirection: "row",
