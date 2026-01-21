@@ -1030,7 +1030,9 @@ export default function ChronoScreen() {
                 ListHeaderComponent={
                   <View
                     style={styles.header}
-                    onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+                    onLayout={(e) =>
+                      setHeaderHeight(e.nativeEvent.layout.height)
+                    }
                   >
                     <View style={styles.headerRow}>
                       <Text style={[styles.title, { color: colors.text }]}>
@@ -1085,7 +1087,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: 20,
+    paddingTop: 10,
   },
   headerRow: {
     flexDirection: "row",
@@ -1093,7 +1095,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   filtersPlaceholder: {
-    height: 52, // Same height as sticky filters
+    // height: 12, // Same height as sticky filters
     marginTop: 12,
     marginHorizontal: -20, // Compensate for listContent paddingHorizontal
   },
