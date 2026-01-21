@@ -16,7 +16,13 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Dimensions,
   FlatList,
@@ -87,6 +93,7 @@ export default function CroissanceScreen() {
   const [isChartDragging, setIsChartDragging] = useState(false);
   const [chartScrollX, setChartScrollX] = useState(0);
   const chartScrollRef = useRef<ScrollView | null>(null);
+  const autoScrollRef = useRef(false);
 
   const sheetOwnerId = "croissance";
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
@@ -508,7 +515,12 @@ export default function CroissanceScreen() {
 
   const screenWidth = Dimensions.get("window").width;
   const CHART_PADDING = 24;
-  const [chartWidth, setChartWidth] = useState(screenWidth - 64);
+  const CHART_AXIS_WIDTH = 40;
+  const CHART_VISIBLE_POINTS = 5;
+  const CHART_X_PADDING = 32;
+  const [chartWidth, setChartWidth] = useState(
+    screenWidth - 64 - CHART_AXIS_WIDTH,
+  );
   const metricConfig: Record<
     MetricKey,
     { label: string; color: string; rgb: string; unit: string }
@@ -567,6 +579,32 @@ export default function CroissanceScreen() {
 
   const { labels, labelsFull, values, hasData } = chartData();
   const metricStyle = metricConfig[metric];
+  const plotWidth = useMemo(() => {
+    const pointCount = labels.length;
+    if (chartWidth <= 0) return chartWidth;
+    if (pointCount <= CHART_VISIBLE_POINTS) return chartWidth;
+    const spacing =
+      CHART_VISIBLE_POINTS > 1
+        ? (chartWidth - CHART_X_PADDING * 2) / (CHART_VISIBLE_POINTS - 1)
+        : 0;
+    return CHART_X_PADDING * 2 + spacing * (pointCount - 1);
+  }, [chartWidth, labels.length]);
+  const yAxisLabels = useMemo(() => {
+    if (!hasData || values.length === 0) return [];
+    const maxValue = Math.max(...values);
+    const midValue = maxValue / 2;
+    const formatValue = (val: number) => val.toFixed(1);
+    return [formatValue(maxValue), formatValue(midValue), "0"];
+  }, [hasData, values]);
+
+  useEffect(() => {
+    if (!hasData || chartWidth <= 0) return;
+    if (plotWidth <= chartWidth) return;
+    chartScrollRef.current?.scrollTo({
+      x: Math.max(plotWidth - chartWidth, 0),
+      animated: false,
+    });
+  }, [chartWidth, hasData, metric, plotWidth]);
 
   const getDayLabel = useCallback((date: Date) => {
     const today = new Date();
@@ -619,7 +657,10 @@ export default function CroissanceScreen() {
                   },
                 ]}
                 onLayout={(event) => {
-                  const width = event.nativeEvent.layout.width - CHART_PADDING;
+                  const width =
+                    event.nativeEvent.layout.width -
+                    CHART_PADDING -
+                    CHART_AXIS_WIDTH;
                   if (width > 0 && Math.abs(width - chartWidth) > 1) {
                     setChartWidth(width);
                   }
@@ -659,131 +700,139 @@ export default function CroissanceScreen() {
                     </Text>
                   </View>
                 ) : (
-                  <ScrollView
-                    ref={chartScrollRef}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    onScrollBeginDrag={() => setIsChartDragging(true)}
-                    onScroll={(event) => {
-                      const offsetX = event.nativeEvent.contentOffset.x;
-                      if (tooltipPoint) {
-                        setTooltipPoint(null);
-                        setSelectedPointIndex(null);
-                      }
-                      setChartScrollX((prev) =>
-                        Math.abs(prev - offsetX) > 1 ? offsetX : prev,
-                      );
-                    }}
-                    onScrollEndDrag={() => setIsChartDragging(false)}
-                    onMomentumScrollEnd={() => setIsChartDragging(false)}
-                    scrollEventThrottle={16}
-                  >
-                    {(() => {
-                      const plotWidth = Math.max(
-                        chartWidth,
-                        labels.length * 40,
-                      );
-                      return (
-                        <View style={styles.chartWrapper}>
-                          <LineChartUnsafe
-                            data={{
-                              labels:
-                                labels.length > 6
-                                  ? labels.map((label, index) =>
-                                      index % 2 === 0 ? label : "",
-                                    )
-                                  : labels,
-                              datasets: [{ data: values }],
-                            }}
-                            width={plotWidth}
-                            height={220}
-                            fromZero
-                            yAxisSuffix={` ${metricStyle.unit}`}
-                            propsForDots={{
-                              r: "4",
-                              strokeWidth: "14",
-                              stroke: "transparent",
-                            }}
-                            chartConfig={{
-                              backgroundColor: colors.background,
-                              backgroundGradientFrom: colors.background,
-                              backgroundGradientTo: colors.background,
-                              decimalPlaces: 1,
-                              color: (opacity = 1) =>
-                                `rgba(${metricStyle.rgb}, ${opacity})`,
-                              labelColor: (opacity = 1) =>
-                                `rgba(0, 0, 0, ${opacity})`,
-                              strokeWidth: 2,
-                              fillShadowGradient: metricStyle.color,
-                              fillShadowGradientOpacity: 0.15,
-                            }}
-                            bezier
-                            style={styles.chart}
-                            withDots
-                            withShadow={false}
-                            onDataPointClick={(data) => {
-                              if (selectedPointIndex === data.index) {
-                                setSelectedPointIndex(null);
-                                setTooltipPoint(null);
-                                return;
-                              }
-                              setSelectedPointIndex(data.index);
-                              setTooltipPoint({
-                                x: data.x,
-                                y: data.y,
-                                index: data.index,
-                              });
+                  <View style={styles.chartRow}>
+                    <View style={styles.yAxisColumn}>
+                      {yAxisLabels.map((label, index) => (
+                        <Text
+                          key={`${label}-${index}`}
+                          style={[
+                            styles.yAxisLabel,
+                            { color: colors.tabIconDefault },
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      ))}
+                    </View>
+                    <ScrollView
+                      ref={chartScrollRef}
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      onScrollBeginDrag={() => setIsChartDragging(true)}
+                      onScroll={(event) => {
+                        const offsetX = event.nativeEvent.contentOffset.x;
+                        if (tooltipPoint && !autoScrollRef.current) {
+                          setTooltipPoint(null);
+                          setSelectedPointIndex(null);
+                        }
+                        setChartScrollX((prev) =>
+                          Math.abs(prev - offsetX) > 1 ? offsetX : prev,
+                        );
+                      }}
+                      onScrollEndDrag={() => setIsChartDragging(false)}
+                      onMomentumScrollEnd={() => {
+                        setIsChartDragging(false);
+                        autoScrollRef.current = false;
+                      }}
+                      scrollEventThrottle={16}
+                      style={styles.chartScroll}
+                    >
+                      <View style={styles.chartWrapper}>
+                        <LineChartUnsafe
+                          data={{
+                            labels:
+                              labels.length > 6
+                                ? labels.map((label, index) =>
+                                    index % 2 === 0 ? label : "",
+                                  )
+                                : labels,
+                            datasets: [{ data: values }],
+                          }}
+                          width={plotWidth}
+                          height={220}
+                          fromZero
+                          yAxisSuffix={` ${metricStyle.unit}`}
+                          withHorizontalLabels={false}
+                          propsForDots={{
+                            r: "4",
+                            strokeWidth: "14",
+                            stroke: "transparent",
+                          }}
+                          chartConfig={{
+                            backgroundColor: colors.background,
+                            backgroundGradientFrom: colors.background,
+                            backgroundGradientTo: colors.background,
+                            decimalPlaces: 1,
+                            color: (opacity = 1) =>
+                              `rgba(${metricStyle.rgb}, ${opacity})`,
+                            labelColor: (opacity = 1) =>
+                              `rgba(0, 0, 0, ${opacity})`,
+                            strokeWidth: 2,
+                            fillShadowGradient: metricStyle.color,
+                            fillShadowGradientOpacity: 0.15,
+                          }}
+                          bezier
+                          style={styles.chart}
+                          withDots
+                          withShadow={false}
+                          onDataPointClick={(data) => {
+                            if (selectedPointIndex === data.index) {
+                              setSelectedPointIndex(null);
+                              setTooltipPoint(null);
+                              return;
+                            }
+                            setSelectedPointIndex(data.index);
+                            setTooltipPoint({
+                              x: data.x,
+                              y: data.y,
+                              index: data.index,
+                            });
                               if (plotWidth > chartWidth) {
                                 const target = Math.min(
                                   Math.max(data.x - chartWidth / 2, 0),
                                   plotWidth - chartWidth,
                                 );
+                                autoScrollRef.current = true;
                                 chartScrollRef.current?.scrollTo({
                                   x: target,
                                   animated: true,
                                 });
                               }
-                            }}
-                          />
-                          <Pressable
-                            style={styles.chartTapLayer}
-                            pointerEvents={isChartDragging ? "none" : "auto"}
-                            onPress={(event) => {
-                              const pointCount = values.length;
-                              if (pointCount === 0) return;
-                              const paddingX = 32;
-                              const drawableWidth = Math.max(
-                                0,
-                                plotWidth - paddingX * 2,
-                              );
-                              const step =
-                                pointCount > 1
-                                  ? drawableWidth / (pointCount - 1)
-                                  : 0;
-                              const rawX =
-                                event.nativeEvent.locationX + chartScrollX;
-                              const rawIndex =
-                                step > 0
-                                  ? Math.round((rawX - paddingX) / step)
-                                  : 0;
-                              const index = Math.max(
-                                0,
-                                Math.min(pointCount - 1, rawIndex),
-                              );
-                              const value = values[index];
-                              const maxValue = Math.max(...values, 1);
-                              const minValue = 0;
-                              const chartHeight = 220;
-                              const verticalPadding = 16;
-                              const ratio =
-                                maxValue - minValue === 0
-                                  ? 0
-                                  : (value - minValue) / (maxValue - minValue);
-                              const y =
-                                verticalPadding +
-                                (1 - ratio) *
-                                  (chartHeight - verticalPadding * 2);
-                              const x = paddingX + step * index;
+                          }}
+                        />
+                        <Pressable
+                          style={styles.chartTapLayer}
+                          pointerEvents={isChartDragging ? "none" : "auto"}
+                          onPress={(event) => {
+                            const pointCount = values.length;
+                            if (pointCount === 0) return;
+                            const paddingX = CHART_X_PADDING;
+                            const drawableWidth = Math.max(
+                              0,
+                              plotWidth - paddingX * 2,
+                            );
+                            const step =
+                              pointCount > 1
+                                ? drawableWidth / (pointCount - 1)
+                                : 0;
+                              const rawX = event.nativeEvent.locationX;
+                            const rawIndex =
+                              step > 0
+                                ? Math.round((rawX - paddingX) / step)
+                                : 0;
+                            const index = Math.max(
+                              0,
+                              Math.min(pointCount - 1, rawIndex),
+                            );
+                            const value = values[index];
+                            const maxValue = Math.max(...values, 1);
+                            const chartHeight = 220;
+                            const verticalPadding = 24;
+                            const ratio = maxValue === 0 ? 0 : value / maxValue;
+                            const y =
+                              verticalPadding +
+                              (1 - ratio) * (chartHeight - verticalPadding * 2);
+                            const x = paddingX + step * index;
 
                               if (selectedPointIndex === index) {
                                 setSelectedPointIndex(null);
@@ -792,58 +841,68 @@ export default function CroissanceScreen() {
                               }
                               setSelectedPointIndex(index);
                               setTooltipPoint({ x, y, index });
+                              if (plotWidth > chartWidth) {
+                                const target = Math.min(
+                                  Math.max(x - chartWidth / 2, 0),
+                                  plotWidth - chartWidth,
+                                );
+                                autoScrollRef.current = true;
+                                chartScrollRef.current?.scrollTo({
+                                  x: target,
+                                  animated: true,
+                                });
+                              }
                             }}
                           />
-                          {tooltipPoint &&
-                          tooltipPoint.index === selectedPointIndex
-                            ? (() => {
-                                const label =
-                                  labelsFull[tooltipPoint.index] ?? "";
-                                const value = values[tooltipPoint.index];
-                                const tooltipWidth = 140;
-                                const leftLimit = chartScrollX + 6;
+                        {tooltipPoint &&
+                        tooltipPoint.index === selectedPointIndex
+                          ? (() => {
+                              const label =
+                                labelsFull[tooltipPoint.index] ?? "";
+                              const value = values[tooltipPoint.index];
+                              const tooltipWidth = 140;
+                                const leftLimit = 6;
                                 const rightLimit =
-                                  chartScrollX + chartWidth - tooltipWidth - 6;
-                                const tooltipLeft = Math.min(
-                                  Math.max(
-                                    tooltipPoint.x - tooltipWidth / 2,
-                                    leftLimit,
-                                  ),
-                                  rightLimit,
-                                );
-                                const tooltipTop =
-                                  tooltipPoint.y < 24
-                                    ? Math.min(tooltipPoint.y + 12, 220 - 32)
-                                    : Math.max(tooltipPoint.y - 36, 6);
-                                return (
-                                  <View
-                                    pointerEvents="none"
+                                  plotWidth - tooltipWidth - 6;
+                              const tooltipLeft = Math.min(
+                                Math.max(
+                                  tooltipPoint.x - tooltipWidth / 2,
+                                  leftLimit,
+                                ),
+                                rightLimit,
+                              );
+                              const tooltipTop =
+                                tooltipPoint.y < 32
+                                  ? Math.min(tooltipPoint.y + 12, 220 - 32)
+                                  : Math.max(tooltipPoint.y - 36, 6);
+                              return (
+                                <View
+                                  pointerEvents="none"
+                                  style={[
+                                    styles.dotTooltip,
+                                    {
+                                      left: tooltipLeft,
+                                      top: tooltipTop,
+                                      width: tooltipWidth,
+                                      borderColor: metricStyle.color,
+                                    },
+                                  ]}
+                                >
+                                  <Text
                                     style={[
-                                      styles.dotTooltip,
-                                      {
-                                        left: tooltipLeft,
-                                        top: tooltipTop,
-                                        width: tooltipWidth,
-                                        borderColor: metricStyle.color,
-                                      },
+                                      styles.dotTooltipText,
+                                      { color: colors.text },
                                     ]}
                                   >
-                                    <Text
-                                      style={[
-                                        styles.dotTooltipText,
-                                        { color: colors.text },
-                                      ]}
-                                    >
-                                      {label} · {value} {metricStyle.unit}
-                                    </Text>
-                                  </View>
-                                );
-                              })()
-                            : null}
-                        </View>
-                      );
-                    })()}
-                  </ScrollView>
+                                    {label} · {value} {metricStyle.unit}
+                                  </Text>
+                                </View>
+                              );
+                            })()
+                          : null}
+                      </View>
+                    </ScrollView>
+                  </View>
                 )}
               </View>
 
@@ -1001,6 +1060,23 @@ const styles = StyleSheet.create({
   },
   chartWrapper: {
     position: "relative",
+  },
+  chartScroll: {
+    flex: 1,
+  },
+  chartRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  yAxisColumn: {
+    width: 40,
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    // paddingRight: 4,
+  },
+  yAxisLabel: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   chartTapLayer: {
     position: "absolute",
