@@ -30,13 +30,13 @@ import {
   Animated,
   AppState,
   ScrollView,
-  SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
 
 // ============================================
 // TYPES
@@ -160,6 +160,9 @@ const FILTER_CONFIG: Record<
 
 const ALL_FILTERS: FilterType[] = ["meals", "pumping", "immunos", "diapers"];
 const RANGE_OPTIONS: RangeOption[] = [7, 14, 30];
+const FILTERS_TOP_OFFSET = 20;
+const HEADER_SPACING = 0;
+const FILTERS_HEIGHT = 52;
 const LIST_PADDING_TOP = 8;
 
 // ============================================
@@ -938,48 +941,6 @@ export default function ChronoScreen() {
   return (
     <ThemedView style={styles.screen}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
-        {/* Fixed Header */}
-        <View style={[styles.fixedHeader, { backgroundColor: "#f8f9fa" }]}>
-          <View style={styles.headerRow}>
-            <Text style={[styles.title, { color: colors.text }]}>
-              Chronologie
-            </Text>
-            <View style={styles.rangeRow}>
-              {RANGE_OPTIONS.map((value) => (
-                <RangeChip
-                  key={value}
-                  value={value}
-                  isActive={range === value}
-                  borderColor={colors.border}
-                  tintColor={colors.tint}
-                  backgroundColor={colors.background}
-                  textColor={colors.text}
-                  onPress={() => handleRangeChange(value)}
-                />
-              ))}
-            </View>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterRow}
-            style={styles.filterScrollView}
-          >
-            {ALL_FILTERS.map((type) => (
-              <FilterChip
-                key={type}
-                type={type}
-                isActive={selectedTypes.includes(type)}
-                borderColor={colors.border}
-                tintColor={colors.tint}
-                backgroundColor={colors.background}
-                textColor={colors.text}
-                onPress={() => handleFilterToggle(type)}
-              />
-            ))}
-          </ScrollView>
-        </View>
-
         {/* Content */}
         <View style={styles.content}>
           {loading || (!emptyDelayDone && sections.length === 0) ? (
@@ -989,29 +950,9 @@ export default function ChronoScreen() {
                 Chargement de la timeline...
               </Text>
             </View>
-          ) : sections.length === 0 ? (
-            <View style={styles.emptyState}>
-              <View
-                style={[styles.emptyIconCircle, { borderColor: colors.border }]}
-              >
-                <FontAwesome
-                  name="calendar-xmark"
-                  size={32}
-                  color={colors.secondary}
-                />
-              </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                Aucun événement
-              </Text>
-              <Text style={[styles.emptyText, { color: colors.secondary }]}>
-                {selectedTypes.length === 0
-                  ? "Selectionnez au moins un type pour afficher la timeline."
-                  : "Aucun evenement pour ces filtres."}
-              </Text>
-            </View>
           ) : (
             <Animated.View style={[styles.listWrapper, { opacity: fadeAnim }]}>
-              <SectionList
+              <StickyHeaderSectionList
                 sections={sections}
                 keyExtractor={keyExtractor}
                 showsVerticalScrollIndicator={false}
@@ -1019,13 +960,89 @@ export default function ChronoScreen() {
                 windowSize={7}
                 initialNumToRender={12}
                 maxToRenderPerBatch={8}
-                removeClippedSubviews={true}
+                removeClippedSubviews={false}
                 updateCellsBatchingPeriod={50}
                 onEndReached={handleNearEndReached}
                 onEndReachedThreshold={0.4}
                 stickySectionHeadersEnabled
                 renderSectionHeader={renderSectionHeader}
                 renderItem={renderItem}
+                containerStyle={styles.stickyContainer}
+                renderHeader={() => (
+                  <View style={styles.header}>
+                    <View style={styles.headerRow}>
+                      <Text style={[styles.title, { color: colors.text }]}>
+                        Chronologie
+                      </Text>
+                      <View style={styles.rangeRow}>
+                        {RANGE_OPTIONS.map((value) => (
+                          <RangeChip
+                            key={value}
+                            value={value}
+                            isActive={range === value}
+                            borderColor={colors.border}
+                            tintColor={colors.tint}
+                            backgroundColor={colors.background}
+                            textColor={colors.text}
+                            onPress={() => handleRangeChange(value)}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                )}
+                renderTabs={() => (
+                  <View style={styles.stickyFilters}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.filterRow}
+                    >
+                      {ALL_FILTERS.map((type) => (
+                        <FilterChip
+                          key={type}
+                          type={type}
+                          isActive={selectedTypes.includes(type)}
+                          borderColor={colors.border}
+                          tintColor={colors.tint}
+                          backgroundColor={colors.background}
+                          textColor={colors.text}
+                          onPress={() => handleFilterToggle(type)}
+                        />
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+                stickyTabs
+                style={styles.listPadding}
+                ListFooterComponent={
+                  sections.length === 0 ? (
+                    <View style={styles.emptyState}>
+                      <View
+                        style={[
+                          styles.emptyIconCircle,
+                          { borderColor: colors.border },
+                        ]}
+                      >
+                        <FontAwesome
+                          name="calendar-xmark"
+                          size={32}
+                          color={colors.secondary}
+                        />
+                      </View>
+                      <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                        Aucun événement
+                      </Text>
+                      <Text
+                        style={[styles.emptyText, { color: colors.secondary }]}
+                      >
+                        {selectedTypes.length === 0
+                          ? "Selectionnez au moins un type pour afficher la timeline."
+                          : "Aucun evenement pour ces filtres."}
+                      </Text>
+                    </View>
+                  ) : null
+                }
               />
             </Animated.View>
           )}
@@ -1055,16 +1072,19 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  fixedHeader: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 8,
+  stickyContainer: {
+    paddingTop: 0,
+    backgroundColor: "#f8f9fa",
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: HEADER_SPACING,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
   title: {
     fontSize: 24,
@@ -1084,15 +1104,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-  filterScrollView: {
-    marginHorizontal: -20,
-    // paddingHorizontal: 20,
+  listPadding: {
+    paddingTop: 0,
   },
   filterRow: {
     flexDirection: "row",
     paddingHorizontal: 20,
-    paddingTop: 4,
     gap: 8,
+  },
+  stickyFilters: {
+    height: FILTERS_HEIGHT + FILTERS_TOP_OFFSET,
+    justifyContent: "flex-end",
+    paddingTop: FILTERS_TOP_OFFSET,
+    backgroundColor: "#f8f9fa",
   },
   filterChip: {
     flexDirection: "row",
@@ -1109,7 +1133,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    position: "relative",
   },
   listWrapper: {
     flex: 1,
@@ -1118,6 +1141,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
     paddingTop: LIST_PADDING_TOP,
+  },
+  listContentEmpty: {
+    flexGrow: 1,
   },
   sectionHeader: {
     marginHorizontal: -20,
