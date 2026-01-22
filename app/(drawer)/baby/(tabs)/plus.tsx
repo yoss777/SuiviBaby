@@ -31,14 +31,14 @@ const ITEMS = [
     route: "/baby/pumping",
   },
   {
-    title: "Immunos",
+    title: "Santé",
     subtitle: "Vitamines et vaccins",
     icon: "prescription-bottle",
     color: "#9C27B0",
     route: "/baby/immunizations",
   },
   {
-    title: "Pipi popo",
+    title: "Couches",
     subtitle: "Mictions et selles",
     icon: "toilet",
     color: "#17a2b8",
@@ -55,7 +55,7 @@ export default function PlusScreen() {
   useFocusEffect(
     useCallback(() => {
       navLockRef.current = false;
-    }, [])
+    }, []),
   );
 
   const handleNavigate = useCallback((route: string) => {

@@ -1505,14 +1505,7 @@ export default function HomeDashboard() {
                     />
                   </View>
                 )}
-                <TouchableOpacity
-                  style={styles.recentRow}
-                  activeOpacity={0.85}
-                  onLongPress={() => {
-                    const route = getEditRoute(event);
-                    if (route) router.push(route as any);
-                  }}
-                >
+                <View style={styles.recentRow}>
                   <View style={styles.recentTimelineColumn}>
                     <View
                       style={[
@@ -1537,7 +1530,7 @@ export default function HomeDashboard() {
                   >
                     {formatTime(date)}
                   </Text>
-                  <View
+                  <TouchableOpacity
                     style={[
                       styles.recentCard,
                       {
@@ -1545,6 +1538,11 @@ export default function HomeDashboard() {
                         backgroundColor: Colors[colorScheme].background,
                       },
                     ]}
+                    activeOpacity={0.85}
+                    onLongPress={() => {
+                      const route = getEditRoute(event);
+                      if (route) router.push(route as any);
+                    }}
                   >
                     <View style={styles.recentTitleRow}>
                       {renderEventIcon(config.icon, config.color)}
@@ -1573,8 +1571,8 @@ export default function HomeDashboard() {
                         {details}
                       </Text>
                     ) : null}
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                </View>
               </React.Fragment>
             );
           })
