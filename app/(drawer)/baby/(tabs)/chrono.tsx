@@ -30,6 +30,7 @@ import {
   Animated,
   AppState,
   ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -48,6 +49,7 @@ type TimelineSection = {
   title: string;
   key: string;
   data: Event[];
+  kind?: "filters" | "day";
 };
 
 // ============================================
@@ -582,10 +584,6 @@ export default function ChronoScreen() {
   const hasPrefetchedMore = useRef(false);
   const [infoModalMessage, setInfoModalMessage] = useState<string | null>(null);
 
-  // Scroll and sticky tracking
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const [headerHeight, setHeaderHeight] = useState(60); // Initial estimate
-
   // Fade animation
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -898,6 +896,24 @@ export default function ChronoScreen() {
     setInfoModalMessage(null);
   }, []);
 
+  // Render section header
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: TimelineSection }) => {
+      const counts = buildCounts(section.data);
+      return (
+        <SectionHeader
+          title={section.title}
+          count={section.data.length}
+          counts={counts}
+          borderColor={colors.border}
+          textColor={colors.text}
+          backgroundColor={"#f8f9fa"}
+        />
+      );
+    },
+    [colors.border, colors.text],
+  );
+
   // Render item
   const renderItem = useCallback(
     ({ item }: { item: Event }) => (
@@ -919,34 +935,51 @@ export default function ChronoScreen() {
     [],
   );
 
-  // Render section header
-  const renderSectionHeader = useCallback(
-    ({ section }: { section: TimelineSection }) => {
-      const counts = buildCounts(section.data);
-      return (
-        <SectionHeader
-          title={section.title}
-          count={section.data.length}
-          counts={counts}
-          borderColor={colors.border}
-          textColor={colors.text}
-          backgroundColor={colors.background}
-        />
-      );
-    },
-    [colors.background, colors.border, colors.text],
-  );
-
-  // Filters position: starts at headerHeight, scrolls up with content, then sticks at 0
-  const filtersTranslateY = scrollY.interpolate({
-    inputRange: [0, headerHeight],
-    outputRange: [headerHeight, 0],
-    extrapolate: "clamp",
-  });
-
   return (
     <ThemedView style={styles.screen}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+        {/* Fixed Header */}
+        <View style={[styles.fixedHeader, { backgroundColor: "#f8f9fa" }]}>
+          <View style={styles.headerRow}>
+            <Text style={[styles.title, { color: colors.text }]}>
+              Chronologie
+            </Text>
+            <View style={styles.rangeRow}>
+              {RANGE_OPTIONS.map((value) => (
+                <RangeChip
+                  key={value}
+                  value={value}
+                  isActive={range === value}
+                  borderColor={colors.border}
+                  tintColor={colors.tint}
+                  backgroundColor={colors.background}
+                  textColor={colors.text}
+                  onPress={() => handleRangeChange(value)}
+                />
+              ))}
+            </View>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+            style={styles.filterScrollView}
+          >
+            {ALL_FILTERS.map((type) => (
+              <FilterChip
+                key={type}
+                type={type}
+                isActive={selectedTypes.includes(type)}
+                borderColor={colors.border}
+                tintColor={colors.tint}
+                backgroundColor={colors.background}
+                textColor={colors.text}
+                onPress={() => handleFilterToggle(type)}
+              />
+            ))}
+          </ScrollView>
+        </View>
+
         {/* Content */}
         <View style={styles.content}>
           {loading || (!emptyDelayDone && sections.length === 0) ? (
@@ -978,36 +1011,7 @@ export default function ChronoScreen() {
             </View>
           ) : (
             <Animated.View style={[styles.listWrapper, { opacity: fadeAnim }]}>
-              {/* Sticky filters bar - positioned absolute, follows scroll until pinned */}
-              <Animated.View
-                style={[
-                  styles.stickyFilters,
-                  {
-                    backgroundColor: colors.background,
-                    transform: [{ translateY: filtersTranslateY }],
-                  },
-                ]}
-              >
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterRow}
-                >
-                  {ALL_FILTERS.map((type) => (
-                    <FilterChip
-                      key={type}
-                      type={type}
-                      isActive={selectedTypes.includes(type)}
-                      borderColor={colors.border}
-                      tintColor={colors.tint}
-                      backgroundColor={colors.background}
-                      textColor={colors.text}
-                      onPress={() => handleFilterToggle(type)}
-                    />
-                  ))}
-                </ScrollView>
-              </Animated.View>
-              <Animated.SectionList
+              <SectionList
                 sections={sections}
                 keyExtractor={keyExtractor}
                 showsVerticalScrollIndicator={false}
@@ -1022,41 +1026,6 @@ export default function ChronoScreen() {
                 stickySectionHeadersEnabled
                 renderSectionHeader={renderSectionHeader}
                 renderItem={renderItem}
-                onScroll={Animated.event(
-                  [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-                  { useNativeDriver: true },
-                )}
-                scrollEventThrottle={16}
-                ListHeaderComponent={
-                  <View
-                    style={styles.header}
-                    onLayout={(e) =>
-                      setHeaderHeight(e.nativeEvent.layout.height)
-                    }
-                  >
-                    <View style={styles.headerRow}>
-                      <Text style={[styles.title, { color: colors.text }]}>
-                        Chronologie
-                      </Text>
-                      <View style={styles.rangeRow}>
-                        {RANGE_OPTIONS.map((value) => (
-                          <RangeChip
-                            key={value}
-                            value={value}
-                            isActive={range === value}
-                            borderColor={colors.border}
-                            tintColor={colors.tint}
-                            backgroundColor={colors.background}
-                            textColor={colors.text}
-                            onPress={() => handleRangeChange(value)}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                    {/* Spacer for filters (rendered as absolute overlay) */}
-                    <View style={styles.filtersPlaceholder} />
-                  </View>
-                }
               />
             </Animated.View>
           )}
@@ -1086,18 +1055,16 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
-    paddingTop: 10,
+  fixedHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  filtersPlaceholder: {
-    // height: 12, // Same height as sticky filters
-    marginTop: 12,
-    marginHorizontal: -20, // Compensate for listContent paddingHorizontal
+    marginBottom: 12,
   },
   title: {
     fontSize: 24,
@@ -1117,17 +1084,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-  stickyFilters: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    paddingVertical: 10,
+  filterScrollView: {
+    marginHorizontal: -20,
     paddingHorizontal: 20,
   },
   filterRow: {
     flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingTop: 4,
     gap: 8,
   },
   filterChip: {
@@ -1161,7 +1125,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     gap: 6,
-    top: 52, // Offset to position below sticky filters
   },
   sectionTitleRow: {
     flexDirection: "row",

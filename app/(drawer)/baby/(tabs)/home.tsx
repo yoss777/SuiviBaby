@@ -504,8 +504,7 @@ export default function HomeDashboard() {
       }
 
       if (activitiesLayout) {
-        const threshold =
-          activitiesLayout.y + activitiesLayout.height * 0.5;
+        const threshold = activitiesLayout.y + activitiesLayout.height * 0.5;
         const fadeRange = 70;
         const fadeStart = threshold - fadeRange;
         const progress = Math.max(
@@ -663,7 +662,13 @@ export default function HomeDashboard() {
         </View>
       ),
     });
-  }, [closeSheet, colorScheme, handleQuickAddPress, openSheet, quickAddActions]);
+  }, [
+    closeSheet,
+    colorScheme,
+    handleQuickAddPress,
+    openSheet,
+    quickAddActions,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1212,7 +1217,11 @@ export default function HomeDashboard() {
         onLayout={(event) => {
           const { y, height } = event.nativeEvent.layout;
           headerRowLayoutRef.current = { y, height };
-          updateHeaderControls(scrollYRef.current, { y, height }, activitiesLayoutRef.current);
+          updateHeaderControls(
+            scrollYRef.current,
+            { y, height },
+            activitiesLayoutRef.current,
+          );
         }}
       >
         <View style={styles.header}>
@@ -1366,11 +1375,10 @@ export default function HomeDashboard() {
         onLayout={(event) => {
           const { y, height } = event.nativeEvent.layout;
           activitiesLayoutRef.current = { y, height };
-          updateHeaderControls(
-            scrollYRef.current,
-            headerRowLayoutRef.current,
-            { y, height },
-          );
+          updateHeaderControls(scrollYRef.current, headerRowLayoutRef.current, {
+            y,
+            height,
+          });
         }}
       >
         <Text style={styles.sectionTitle}>Activités physiologiques</Text>
