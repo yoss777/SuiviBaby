@@ -29,14 +29,18 @@ import React, {
 import {
   Animated,
   AppState,
+  LayoutChangeEvent,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { runOnJS, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
+import { useHeaderRight } from "../../_layout";
+import { useFocusEffect } from "@react-navigation/native";
 
 // ============================================
 // TYPES
@@ -385,6 +389,7 @@ interface RangeChipProps {
   backgroundColor: string;
   textColor: string;
   onPress: () => void;
+  compact?: boolean;
 }
 
 const RangeChip = React.memo(
@@ -396,10 +401,12 @@ const RangeChip = React.memo(
     backgroundColor,
     textColor,
     onPress,
+    compact = false,
   }: RangeChipProps) => (
     <TouchableOpacity
       style={[
         styles.rangeChip,
+        compact && styles.rangeChipCompact,
         { borderColor },
         isActive && { backgroundColor: tintColor },
       ]}
@@ -409,6 +416,7 @@ const RangeChip = React.memo(
       <Text
         style={[
           styles.rangeChipText,
+          compact && styles.rangeChipTextCompact,
           { color: isActive ? backgroundColor : textColor },
         ]}
       >
@@ -573,6 +581,7 @@ TimelineCard.displayName = "TimelineCard";
 
 export default function ChronoScreen() {
   const { activeChild } = useBaby();
+  const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const [range, setRange] = useState<RangeOption>(14);
   const [maxRange, setMaxRange] = useState<RangeOption>(14);
@@ -586,6 +595,13 @@ export default function ChronoScreen() {
   const hasInitialLoad = useRef(false);
   const hasPrefetchedMore = useRef(false);
   const [infoModalMessage, setInfoModalMessage] = useState<string | null>(null);
+  const [showRangeInHeader, setShowRangeInHeader] = useState(false);
+  const [headerRangeVisible, setHeaderRangeVisible] = useState(false);
+  const showRangeRef = useRef(false);
+  const headerHeight = useSharedValue(0);
+  const headerScrollState = useSharedValue(0);
+  const headerOwnerId = useRef(`chrono-${Math.random().toString(36).slice(2)}`);
+  const headerRangeOpacity = useRef(new Animated.Value(0)).current;
 
   // Fade animation
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -600,6 +616,35 @@ export default function ChronoScreen() {
       border: `${Colors[colorScheme].tabIconDefault}20`,
     }),
     [colorScheme],
+  );
+
+  const updateHeaderRangeVisibility = useCallback((next: boolean) => {
+    if (showRangeRef.current === next) return;
+    showRangeRef.current = next;
+    setShowRangeInHeader(next);
+  }, []);
+
+  const handleHeaderLayout = useCallback((event: LayoutChangeEvent) => {
+    const height = event.nativeEvent.layout.height;
+    if (Math.abs(headerHeight.value - height) > 1) {
+      headerHeight.value = height;
+    }
+  }, []);
+
+  const handleScroll = useCallback(
+    (event: { contentOffset: { y: number } }) => {
+      "worklet";
+      if (headerHeight.value <= 0) {
+        return;
+      }
+      const threshold = Math.max(headerHeight.value - 1, 0);
+      const next = event.contentOffset.y >= threshold ? 1 : 0;
+      if (headerScrollState.value !== next) {
+        headerScrollState.value = next;
+        runOnJS(updateHeaderRangeVisibility)(next === 1);
+      }
+    },
+    [updateHeaderRangeVisibility],
   );
 
   const updateCurrentDay = useCallback(() => {
@@ -869,6 +914,67 @@ export default function ChronoScreen() {
     setIsRefreshing(true);
   }, [maxRange]);
 
+  useEffect(() => {
+    if (showRangeInHeader) {
+      if (!headerRangeVisible) {
+        setHeaderRangeVisible(true);
+      }
+      Animated.timing(headerRangeOpacity, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+    Animated.timing(headerRangeOpacity, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setHeaderRangeVisible(false);
+      }
+    });
+  }, [headerRangeOpacity, headerRangeVisible, showRangeInHeader]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const headerButtons = (
+        <Animated.View
+          style={[styles.headerRangeRow, { opacity: headerRangeOpacity }]}
+          pointerEvents={headerRangeVisible ? "auto" : "none"}
+        >
+          {RANGE_OPTIONS.map((value) => (
+            <RangeChip
+              key={value}
+              value={value}
+              isActive={range === value}
+              borderColor={colors.border}
+              tintColor={colors.tint}
+              backgroundColor={colors.background}
+              textColor={colors.text}
+              onPress={() => handleRangeChange(value)}
+              compact
+            />
+          ))}
+        </Animated.View>
+      );
+
+      setHeaderRight(headerButtons, headerOwnerId.current);
+
+      return () => {
+        setHeaderRight(null, headerOwnerId.current);
+      };
+    }, [
+      colors,
+      handleRangeChange,
+      headerRangeOpacity,
+      headerRangeVisible,
+      range,
+      setHeaderRight,
+    ]),
+  );
+
   const handleFilterToggle = useCallback((type: FilterType) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedTypes((prev) =>
@@ -957,6 +1063,9 @@ export default function ChronoScreen() {
                 keyExtractor={keyExtractor}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.listContent}
+                onHeaderLayout={handleHeaderLayout}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
                 windowSize={7}
                 initialNumToRender={12}
                 maxToRenderPerBatch={8}
@@ -1086,6 +1195,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
   },
+  headerRangeRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginRight: 20,
+  },
   title: {
     fontSize: 24,
     fontWeight: "700",
@@ -1100,9 +1214,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
   },
+  rangeChipCompact: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
   rangeChipText: {
     fontSize: 13,
     fontWeight: "600",
+  },
+  rangeChipTextCompact: {
+    fontSize: 12,
   },
   listPadding: {
     paddingTop: 0,
