@@ -20,14 +20,14 @@ import {
 import {
   ecouterMictionsHybrid as ecouterMictions,
   ecouterSellesHybrid as ecouterSelles,
-  hasMoreEventsBeforeHybrid,
   getNextEventDateBeforeHybrid,
+  hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { HeaderBackButton } from "@react-navigation/elements";
 import { useNetInfo } from "@react-native-community/netinfo";
+import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -53,11 +53,23 @@ import { useHeaderLeft, useHeaderRight } from "../../_layout";
 type ExcretionType = "miction" | "selle";
 type FilterType = "today" | "past";
 
+// Types pour les attributs miction/selle
+type MictionCouleur = "claire" | "jaune" | "foncee" | "autre";
+type SelleConsistance = "liquide" | "molle" | "normale" | "dure";
+type SelleQuantite = "peu" | "moyen" | "beaucoup";
+
 interface Excretion {
   id: string;
   type?: ExcretionType;
   date: { seconds: number };
   createdAt: { seconds: number };
+  // Attributs miction
+  couleur?: MictionCouleur;
+  volume?: number;
+  // Attributs selle
+  consistance?: SelleConsistance;
+  couleurSelle?: string;
+  quantite?: SelleQuantite;
 }
 
 interface ExcretionGroup {
@@ -78,7 +90,9 @@ export default function DiapersScreen() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
-  const headerOwnerId = useRef(`diapers-${Math.random().toString(36).slice(2)}`);
+  const headerOwnerId = useRef(
+    `diapers-${Math.random().toString(36).slice(2)}`,
+  );
   const { showAlert } = useModal();
   const navigation = useNavigation();
   const { setHeaderLeft } = useHeaderLeft();
@@ -98,7 +112,9 @@ export default function DiapersScreen() {
 
   // États des données
   const [excretions, setExcretions] = useState<Excretion[]>([]);
-  const [groupedExcretions, setGroupedExcretions] = useState<ExcretionGroup[]>([]);
+  const [groupedExcretions, setGroupedExcretions] = useState<ExcretionGroup[]>(
+    [],
+  );
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [mictionsLoaded, setMictionsLoaded] = useState(false);
   const [sellesLoaded, setSellesLoaded] = useState(false);
@@ -114,7 +130,9 @@ export default function DiapersScreen() {
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingExcretion, setEditingExcretion] = useState<Excretion | null>(null);
+  const [editingExcretion, setEditingExcretion] = useState<Excretion | null>(
+    null,
+  );
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [includeMiction, setIncludeMiction] = useState<boolean>(true);
   const [includeSelle, setIncludeSelle] = useState<boolean>(false);
@@ -124,13 +142,24 @@ export default function DiapersScreen() {
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
 
+  // États des attributs miction
+  const [mictionCouleur, setMictionCouleur] = useState<MictionCouleur | null>(
+    null,
+  );
+
+  // États des attributs selle
+  const [selleConsistance, setSelleConsistance] =
+    useState<SelleConsistance | null>(null);
+  const [selleQuantite, setSelleQuantite] = useState<SelleQuantite | null>(
+    null,
+  );
+
   // Récupérer les paramètres de l'URL
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
   const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
-
 
   // ============================================
   // EFFECTS - HEADER
@@ -143,7 +172,7 @@ export default function DiapersScreen() {
       if (newValue) {
         const today = new Date();
         const todayString = `${today.getFullYear()}-${String(
-          today.getMonth() + 1
+          today.getMonth() + 1,
         ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
         setSelectedDate(todayString);
         setSelectedFilter(null);
@@ -153,60 +182,71 @@ export default function DiapersScreen() {
     });
   }, []);
 
-  const prepareAddModal = useCallback((preferredType?: "mictions" | "selles") => {
-    setDateHeure(new Date());
-    setEditingExcretion(null);
-    setIsSubmitting(false);
+  const prepareAddModal = useCallback(
+    (preferredType?: "mictions" | "selles") => {
+      setDateHeure(new Date());
+      setEditingExcretion(null);
+      setIsSubmitting(false);
 
-    if (preferredType === "selles") {
-      setIncludeMiction(false);
-      setIncludeSelle(true);
-    } else if (preferredType === "mictions") {
-      setIncludeMiction(true);
-      setIncludeSelle(false);
-    } else {
-      setIncludeMiction(true);
-      setIncludeSelle(false);
-    }
-  }, []);
+      // Réinitialiser tous les attributs
+      setMictionCouleur(null);
+      setSelleConsistance(null);
+      setSelleQuantite(null);
 
-  const openAddModal = useCallback((preferredType?: "mictions" | "selles") => {
-    prepareAddModal(preferredType);
-    setPendingMode("add");
-    setPendingOpen(true);
-  }, [prepareAddModal]);
+      if (preferredType === "selles") {
+        setIncludeMiction(false);
+        setIncludeSelle(true);
+      } else if (preferredType === "mictions") {
+        setIncludeMiction(true);
+        setIncludeSelle(false);
+      } else {
+        setIncludeMiction(true);
+        setIncludeSelle(false);
+      }
+    },
+    [],
+  );
+
+  const openAddModal = useCallback(
+    (preferredType?: "mictions" | "selles") => {
+      prepareAddModal(preferredType);
+      setPendingMode("add");
+      setPendingOpen(true);
+    },
+    [prepareAddModal],
+  );
 
   useFocusEffect(
     useCallback(() => {
       const headerButtons = (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingRight: 16,
-          gap: 0,
-        }}
-      >
-        <Pressable
-          onPress={handleCalendarPress}
-          style={[
-            styles.headerButton,
-            { paddingLeft: 12 },
-            showCalendar && {
-              backgroundColor: Colors[colorScheme].tint + "20",
-            },
-          ]}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingRight: 16,
+            gap: 0,
+          }}
         >
-          <Ionicons
-            name="calendar-outline"
-            size={24}
-            color={Colors[colorScheme].tint}
-          />
-        </Pressable>
-        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
-          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={handleCalendarPress}
+            style={[
+              styles.headerButton,
+              { paddingLeft: 12 },
+              showCalendar && {
+                backgroundColor: Colors[colorScheme].tint + "20",
+              },
+            ]}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={24}
+              color={Colors[colorScheme].tint}
+            />
+          </Pressable>
+          <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+          </Pressable>
+        </View>
       );
 
       setHeaderRight(headerButtons, headerOwnerId.current);
@@ -220,7 +260,7 @@ export default function DiapersScreen() {
       colorScheme,
       setHeaderRight,
       openAddModal,
-    ])
+    ]),
   );
 
   // ============================================
@@ -265,7 +305,7 @@ export default function DiapersScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, returnTarget, setHeaderLeft])
+    }, [colorScheme, returnTarget, setHeaderLeft]),
   );
 
   useFocusEffect(
@@ -296,7 +336,7 @@ export default function DiapersScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen, returnTarget, router])
+    }, [closeSheet, isOpen, returnTarget, router]),
   );
 
   useFocusEffect(
@@ -304,7 +344,7 @@ export default function DiapersScreen() {
       if (openModal !== "true") return;
       setPendingMode("add");
       setPendingOpen(true);
-    }, [openModal])
+    }, [openModal]),
   );
 
   useEffect(() => {
@@ -335,7 +375,9 @@ export default function DiapersScreen() {
     if (!editId || !layoutReady) return;
     const normalizedId = Array.isArray(editId) ? editId[0] : editId;
     if (!normalizedId || editIdRef.current === normalizedId) return;
-    const target = excretions.find((excretion) => excretion.id === normalizedId);
+    const target = excretions.find(
+      (excretion) => excretion.id === normalizedId,
+    );
     if (!target) return;
     stashReturnTo();
     editIdRef.current = normalizedId;
@@ -361,7 +403,7 @@ export default function DiapersScreen() {
 
     const mergeAndSortExcretions = () => {
       const merged = [...mictionsData, ...sellesData].sort(
-        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
       setExcretions(merged);
       if (
@@ -385,7 +427,7 @@ export default function DiapersScreen() {
         setMictionsLoaded(true);
         mergeAndSortExcretions();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
     const unsubscribeSelles = ecouterSelles(
@@ -398,7 +440,7 @@ export default function DiapersScreen() {
         setSellesLoaded(true);
         mergeAndSortExcretions();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
     return () => {
@@ -477,13 +519,7 @@ export default function DiapersScreen() {
         setAutoLoadMoreAttempts(0);
       }
     },
-    [
-      hasMore,
-      activeChild?.id,
-      autoLoadMoreAttempts,
-      daysWindow,
-      rangeEndDate,
-    ],
+    [hasMore, activeChild?.id, autoLoadMoreAttempts, daysWindow, rangeEndDate],
   );
 
   const handleLoadMore = useCallback(() => {
@@ -492,7 +528,12 @@ export default function DiapersScreen() {
 
   useEffect(() => {
     if (selectedFilter === "today" || selectedDate) return;
-    if (!autoLoadMore && !isExcretionsLoading && groupedExcretions.length === 0 && hasMore) {
+    if (
+      !autoLoadMore &&
+      !isExcretionsLoading &&
+      groupedExcretions.length === 0 &&
+      hasMore
+    ) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
@@ -626,7 +667,7 @@ export default function DiapersScreen() {
   const applyTodayFilter = useCallback(() => {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
+      today.getMonth() + 1,
     ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     setSelectedFilter("today");
     setSelectedDate(null);
@@ -651,7 +692,7 @@ export default function DiapersScreen() {
       if (!selectedFilter && !selectedDate) {
         applyTodayFilter();
       }
-    }, [applyTodayFilter, selectedDate, selectedFilter])
+    }, [applyTodayFilter, selectedDate, selectedFilter]),
   );
 
   // ============================================
@@ -664,7 +705,7 @@ export default function DiapersScreen() {
     excretions.forEach((excretion) => {
       const date = new Date(excretion.date?.seconds * 1000);
       const dateKey = `${date.getFullYear()}-${String(
-        date.getMonth() + 1
+        date.getMonth() + 1,
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
       if (!groups[dateKey]) {
@@ -676,12 +717,14 @@ export default function DiapersScreen() {
     return Object.entries(groups)
       .map(([dateKey, excretions]) => {
         const date = new Date(dateKey);
-        const mictionsCount = excretions.filter(e => e.type === "miction").length;
-        const sellesCount = excretions.filter(e => e.type === "selle").length;
+        const mictionsCount = excretions.filter(
+          (e) => e.type === "miction",
+        ).length;
+        const sellesCount = excretions.filter((e) => e.type === "selle").length;
         const lastExcretion = excretions.reduce((latest, current) =>
           (current.date?.seconds || 0) > (latest.date?.seconds || 0)
             ? current
-            : latest
+            : latest,
         );
 
         return {
@@ -693,7 +736,7 @@ export default function DiapersScreen() {
             year: "numeric",
           }),
           excretions: excretions.sort(
-            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
           ),
           mictionsCount,
           sellesCount,
@@ -708,7 +751,7 @@ export default function DiapersScreen() {
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
-    setExpandedDays(prev => {
+    setExpandedDays((prev) => {
       const newExpandedDays = new Set(prev);
       if (newExpandedDays.has(dateKey)) {
         newExpandedDays.delete(dateKey);
@@ -749,6 +792,20 @@ export default function DiapersScreen() {
     const type = excretion.type || "miction";
     setIncludeMiction(type === "miction");
     setIncludeSelle(type === "selle");
+
+    // Charger les attributs existants
+    if (type === "miction") {
+      setMictionCouleur(excretion.couleur || null);
+      // Réinitialiser les attributs selle
+      setSelleConsistance(null);
+      setSelleQuantite(null);
+    } else {
+      setSelleConsistance(excretion.consistance || null);
+      setSelleQuantite(excretion.quantite || null);
+      // Réinitialiser les attributs miction
+      setMictionCouleur(null);
+    }
+
     setPendingMode("edit");
     setPendingOpen(true);
   };
@@ -797,7 +854,7 @@ export default function DiapersScreen() {
     if (!includeMiction && !includeSelle) {
       showAlert(
         "Attention",
-        "Veuillez sélectionner au moins un type (miction ou selle)"
+        "Veuillez sélectionner au moins un type (miction ou selle)",
       );
       return;
     }
@@ -805,25 +862,63 @@ export default function DiapersScreen() {
     try {
       setIsSubmitting(true);
 
-      const dataToSave = {
-        date: dateHeure,
-      };
-
       if (editingExcretion) {
         // Mode édition : modifier l'excrétion existante
         const isMiction = editingExcretion.type === "miction";
         if (isMiction) {
-          await modifierMiction(activeChild.id, editingExcretion.id, dataToSave);
+          const mictionData: { date: Date; couleur?: MictionCouleur } = {
+            date: dateHeure,
+          };
+          if (mictionCouleur) {
+            mictionData.couleur = mictionCouleur;
+          }
+          await modifierMiction(
+            activeChild.id,
+            editingExcretion.id,
+            mictionData,
+          );
         } else {
-          await modifierSelle(activeChild.id, editingExcretion.id, dataToSave);
+          const selleData: {
+            date: Date;
+            consistance?: SelleConsistance;
+            quantite?: SelleQuantite;
+          } = {
+            date: dateHeure,
+          };
+          if (selleConsistance) {
+            selleData.consistance = selleConsistance;
+          }
+          if (selleQuantite) {
+            selleData.quantite = selleQuantite;
+          }
+          await modifierSelle(activeChild.id, editingExcretion.id, selleData);
         }
       } else {
         // Mode ajout : ajouter une ou deux excrétions
         if (includeMiction) {
-          await ajouterMiction(activeChild.id, dataToSave);
+          const mictionData: { date: Date; couleur?: MictionCouleur } = {
+            date: dateHeure,
+          };
+          if (mictionCouleur) {
+            mictionData.couleur = mictionCouleur;
+          }
+          await ajouterMiction(activeChild.id, mictionData);
         }
         if (includeSelle) {
-          await ajouterSelle(activeChild.id, dataToSave);
+          const selleData: {
+            date: Date;
+            consistance?: SelleConsistance;
+            quantite?: SelleQuantite;
+          } = {
+            date: dateHeure,
+          };
+          if (selleConsistance) {
+            selleData.consistance = selleConsistance;
+          }
+          if (selleQuantite) {
+            selleData.quantite = selleQuantite;
+          }
+          await ajouterSelle(activeChild.id, selleData);
         }
       }
 
@@ -831,16 +926,13 @@ export default function DiapersScreen() {
         showToast(
           editingExcretion
             ? "Modification en attente de synchronisation"
-            : "Ajout en attente de synchronisation"
+            : "Ajout en attente de synchronisation",
         );
       }
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde:", error);
-      showAlert(
-        "Erreur",
-        "Impossible de sauvegarder. Veuillez réessayer."
-      );
+      showAlert("Erreur", "Impossible de sauvegarder. Veuillez réessayer.");
     } finally {
       setIsSubmitting(false);
     }
@@ -878,144 +970,289 @@ export default function DiapersScreen() {
   function renderSheetContent() {
     return (
       <>
-      {!editingExcretion && (
-        <>
-          <Text style={styles.modalCategoryLabel}>Type d'excrétion</Text>
-          <Text style={styles.toggleSubtitle}>
-            Vous pouvez sélectionner les deux si nécessaire
-          </Text>
-          <View style={styles.typeRow}>
-            <TouchableOpacity
-              style={[
-                styles.typeButton,
-                includeMiction && styles.typeButtonActiveMiction,
-                isSubmitting && styles.typeButtonDisabled,
-              ]}
-              onPress={() => setIncludeMiction((prev) => !prev)}
-              disabled={isSubmitting}
-              activeOpacity={0.7}
-            >
-              <FontAwesome
-                name="water"
-                size={18}
-                color={includeMiction ? "white" : "#17a2b8"}
-              />
-              <Text
+        {!editingExcretion && (
+          <>
+            <Text style={styles.modalCategoryLabel}>Type d'excrétion</Text>
+            <Text style={styles.toggleSubtitle}>
+              Vous pouvez sélectionner les deux si nécessaire
+            </Text>
+            <View style={styles.typeRow}>
+              <TouchableOpacity
                 style={[
-                  styles.typeText,
-                  includeMiction && styles.typeTextActive,
-                  isSubmitting && styles.typeTextDisabled,
+                  styles.typeButton,
+                  includeMiction && styles.typeButtonActiveMiction,
+                  isSubmitting && styles.typeButtonDisabled,
                 ]}
+                onPress={() => setIncludeMiction((prev) => !prev)}
+                disabled={isSubmitting}
+                activeOpacity={0.7}
               >
-                Miction
-              </Text>
-            </TouchableOpacity>
+                <FontAwesome
+                  name="water"
+                  size={18}
+                  color={includeMiction ? "white" : "#17a2b8"}
+                />
+                <Text
+                  style={[
+                    styles.typeText,
+                    includeMiction && styles.typeTextActive,
+                    isSubmitting && styles.typeTextDisabled,
+                  ]}
+                >
+                  Miction
+                </Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[
-                styles.typeButton,
-                includeSelle && styles.typeButtonActiveSelle,
-                isSubmitting && styles.typeButtonDisabled,
-              ]}
-              onPress={() => setIncludeSelle((prev) => !prev)}
-              disabled={isSubmitting}
-              activeOpacity={0.7}
-            >
-              <FontAwesome
-                name="poop"
-                size={18}
-                color={includeSelle ? "white" : "#dc3545"}
-              />
-              <Text
+              <TouchableOpacity
                 style={[
-                  styles.typeText,
-                  includeSelle && styles.typeTextActive,
-                  isSubmitting && styles.typeTextDisabled,
+                  styles.typeButton,
+                  includeSelle && styles.typeButtonActiveSelle,
+                  isSubmitting && styles.typeButtonDisabled,
                 ]}
+                onPress={() => setIncludeSelle((prev) => !prev)}
+                disabled={isSubmitting}
+                activeOpacity={0.7}
               >
-                Selle
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
+                <FontAwesome
+                  name="poop"
+                  size={18}
+                  color={includeSelle ? "white" : "#dc3545"}
+                />
+                <Text
+                  style={[
+                    styles.typeText,
+                    includeSelle && styles.typeTextActive,
+                    isSubmitting && styles.typeTextDisabled,
+                  ]}
+                >
+                  Selle
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
-      <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-      <View style={styles.dateTimeContainer}>
-        <TouchableOpacity
-          style={[styles.dateButton, isSubmitting && styles.dateButtonDisabled]}
-          onPress={() => setShowDate(true)}
-          disabled={isSubmitting}
-        >
-          <FontAwesome
-            name="calendar-alt"
-            size={16}
-            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
-          />
-          <Text
+        {/* Options pour Miction */}
+        {includeMiction && (
+          <>
+            <Text style={styles.modalCategoryLabel}>Couleur de l'urine</Text>
+            <Text style={styles.toggleSubtitle}>Optionnel</Text>
+            <View style={styles.optionsRow}>
+              {(
+                [
+                  { value: "claire", label: "Claire", color: "#e8f4f8" },
+                  { value: "jaune", label: "Jaune", color: "#fff3cd" },
+                  { value: "foncee", label: "Foncée", color: "#f5c87b" },
+                  { value: "autre", label: "Autre", color: "#e0e0e0" },
+                ] as const
+              ).map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.optionButton,
+                    { backgroundColor: option.color },
+                    mictionCouleur === option.value &&
+                      styles.optionButtonSelected,
+                    isSubmitting && styles.optionButtonDisabled,
+                  ]}
+                  onPress={() =>
+                    setMictionCouleur((prev) =>
+                      prev === option.value ? null : option.value,
+                    )
+                  }
+                  disabled={isSubmitting}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      // mictionCouleur === option.value && styles.optionTextSelectedMiction,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* Options pour Selle */}
+        {includeSelle && (
+          <>
+            <Text style={styles.modalCategoryLabel}>Consistance</Text>
+            <Text style={styles.toggleSubtitle}>Optionnel</Text>
+            <View style={styles.optionsRow}>
+              {(
+                [
+                  { value: "liquide", label: "Liquide", icon: "tint" },
+                  { value: "molle", label: "Molle", icon: "cloud" },
+                  { value: "normale", label: "Normale", icon: "check-circle" },
+                  { value: "dure", label: "Dure", icon: "circle" },
+                ] as const
+              ).map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.optionButton,
+                    styles.optionButtonSelle,
+                    selleConsistance === option.value &&
+                      styles.optionButtonSelectedSelle,
+                    isSubmitting && styles.optionButtonDisabled,
+                  ]}
+                  onPress={() =>
+                    setSelleConsistance((prev) =>
+                      prev === option.value ? null : option.value,
+                    )
+                  }
+                  disabled={isSubmitting}
+                  activeOpacity={0.7}
+                >
+                  <FontAwesome
+                    name={option.icon as any}
+                    size={14}
+                    color={
+                      selleConsistance === option.value ? "white" : "#dc3545"
+                    }
+                    style={{ marginBottom: 4 }}
+                  />
+                  <Text
+                    style={[
+                      styles.optionText,
+                      selleConsistance === option.value &&
+                        styles.optionTextSelected,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.modalCategoryLabel}>Quantité</Text>
+            <Text style={styles.toggleSubtitle}>Optionnel</Text>
+            <View style={styles.optionsRow}>
+              {(
+                [
+                  { value: "peu", label: "Peu" },
+                  { value: "moyen", label: "Moyen" },
+                  { value: "beaucoup", label: "Beaucoup" },
+                ] as const
+              ).map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.optionButton,
+                    styles.optionButtonSelle,
+                    selleQuantite === option.value &&
+                      styles.optionButtonSelectedSelle,
+                    isSubmitting && styles.optionButtonDisabled,
+                  ]}
+                  onPress={() =>
+                    setSelleQuantite((prev) =>
+                      prev === option.value ? null : option.value,
+                    )
+                  }
+                  disabled={isSubmitting}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      selleQuantite === option.value &&
+                        styles.optionTextSelected,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
+        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+        <View style={styles.dateTimeContainer}>
+          <TouchableOpacity
             style={[
-              styles.dateButtonText,
-              isSubmitting && styles.dateButtonTextDisabled,
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
             ]}
+            onPress={() => setShowDate(true)}
+            disabled={isSubmitting}
           >
-            Date
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.dateButton, isSubmitting && styles.dateButtonDisabled]}
-          onPress={() => setShowTime(true)}
-          disabled={isSubmitting}
-        >
-          <FontAwesome
-            name="clock"
-            size={16}
-            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
-          />
-          <Text
+            <FontAwesome
+              name="calendar-alt"
+              size={16}
+              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+            />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Date
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[
-              styles.dateButtonText,
-              isSubmitting && styles.dateButtonTextDisabled,
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
             ]}
+            onPress={() => setShowTime(true)}
+            disabled={isSubmitting}
           >
-            Heure
+            <FontAwesome
+              name="clock"
+              size={16}
+              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+            />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Heure
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.selectedDateTime}>
+          <Text style={styles.selectedDate}>
+            {dateHeure.toLocaleDateString("fr-FR", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
           </Text>
-        </TouchableOpacity>
-      </View>
+          <Text style={styles.selectedTime}>
+            {dateHeure.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
 
-      <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate}>
-          {dateHeure.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </Text>
-        <Text style={styles.selectedTime}>
-          {dateHeure.toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-      </View>
-
-      {showDate && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={onChangeDate}
-        />
-      )}
-      {showTime && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="time"
-          is24Hour={true}
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={onChangeTime}
-        />
-      )}
+        {showDate && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeDate}
+          />
+        )}
+        {showTime && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="time"
+            is24Hour={true}
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeTime}
+          />
+        )}
       </>
     );
   }
@@ -1032,10 +1269,10 @@ export default function DiapersScreen() {
         includeMiction && includeSelle
           ? "#6c757d"
           : includeMiction
-          ? "#17a2b8"
-          : includeSelle
-          ? "#dc3545"
-          : "#6c757d",
+            ? "#17a2b8"
+            : includeSelle
+              ? "#dc3545"
+              : "#6c757d",
       isEditing: !!editingExcretion,
       isSubmitting,
       onSubmit: handleSubmit,
@@ -1063,6 +1300,9 @@ export default function DiapersScreen() {
     dateHeure,
     showDate,
     showTime,
+    mictionCouleur,
+    selleConsistance,
+    selleQuantite,
   ]);
 
   // ============================================
@@ -1077,7 +1317,7 @@ export default function DiapersScreen() {
         newDate.setFullYear(
           selectedDate.getFullYear(),
           selectedDate.getMonth(),
-          selectedDate.getDate()
+          selectedDate.getDate(),
         );
         return newDate;
       });
@@ -1099,114 +1339,122 @@ export default function DiapersScreen() {
   // RENDER - EXCRETION ITEM
   // ============================================
 
-  const renderExcretionItem = useCallback((excretion: Excretion, isLast: boolean = false) => {
-    const typeLabel = getExcretionTypeLabel(excretion.type);
-    const color = getExcretionColor(excretion.type);
+  const renderExcretionItem = useCallback(
+    (excretion: Excretion, isLast: boolean = false) => {
+      const typeLabel = getExcretionTypeLabel(excretion.type);
+      const color = getExcretionColor(excretion.type);
 
-    return (
-      <TouchableOpacity
-        key={excretion.id}
-        style={[styles.excretionItem, isLast && styles.lastExcretionItem]}
-        onPress={() => openEditModal(excretion)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.excretionContent}>
-          <View style={[styles.avatar, { backgroundColor: color }]}>
-            <FontAwesome
-              name={getExcretionIcon(excretion.type)}
-              size={20}
-              color="#ffffff"
-            />
-          </View>
-          <View style={styles.excretionInfo}>
-            <View style={styles.infoRow}>
-              <Text style={styles.excretionTypeText}>{typeLabel}</Text>
+      return (
+        <TouchableOpacity
+          key={excretion.id}
+          style={[styles.excretionItem, isLast && styles.lastExcretionItem]}
+          onPress={() => openEditModal(excretion)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.excretionContent}>
+            <View style={[styles.avatar, { backgroundColor: color }]}>
+              <FontAwesome
+                name={getExcretionIcon(excretion.type)}
+                size={20}
+                color="#ffffff"
+              />
             </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.timeText}>
-                {new Date(excretion.date?.seconds * 1000).toLocaleTimeString(
-                  "fr-FR",
-                  {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }
-                )}
-              </Text>
+            <View style={styles.excretionInfo}>
+              <View style={styles.infoRow}>
+                <Text style={styles.excretionTypeText}>{typeLabel}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.timeText}>
+                  {new Date(excretion.date?.seconds * 1000).toLocaleTimeString(
+                    "fr-FR",
+                    {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    },
+                  )}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.excretionActions}>
+              <FontAwesome
+                name="edit"
+                size={16}
+                color={color}
+                style={styles.editIcon}
+              />
             </View>
           </View>
-          <View style={styles.excretionActions}>
-            <FontAwesome
-              name="edit"
-              size={16}
-              color={color}
-              style={styles.editIcon}
-            />
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }, []);
+        </TouchableOpacity>
+      );
+    },
+    [],
+  );
 
   // ============================================
   // RENDER - DAY GROUP
   // ============================================
 
-  const renderDayGroup = useCallback(({ item }: { item: ExcretionGroup }) => {
-    const isExpanded = expandedDays.has(item.date);
-    const hasMultipleExcretions = item.excretions.length > 1;
+  const renderDayGroup = useCallback(
+    ({ item }: { item: ExcretionGroup }) => {
+      const isExpanded = expandedDays.has(item.date);
+      const hasMultipleExcretions = item.excretions.length > 1;
 
-    return (
-      <View style={styles.dayCard}>
-        <View style={styles.dayHeader}>
-          <View style={styles.dayInfo}>
-            <Text style={styles.dayDate}>{item.dateFormatted}</Text>
-            <View style={styles.summaryInfo}>
-              <View style={styles.summaryRow}>
-                {item.mictionsCount > 0 && (
-                  <View style={styles.summaryBadge}>
-                    <FontAwesome name="water" size={12} color="#17a2b8" />
-                    <Text style={styles.summaryText}>
-                      {item.mictionsCount} miction{item.mictionsCount > 1 ? "s" : ""}
-                    </Text>
-                  </View>
-                )}
-                {item.sellesCount > 0 && (
-                  <View style={styles.summaryBadge}>
-                    <FontAwesome name="poop" size={12} color="#dc3545" />
-                    <Text style={styles.summaryText}>
-                      {item.sellesCount} selle{item.sellesCount > 1 ? "s" : ""}
-                    </Text>
-                  </View>
-                )}
+      return (
+        <View style={styles.dayCard}>
+          <View style={styles.dayHeader}>
+            <View style={styles.dayInfo}>
+              <Text style={styles.dayDate}>{item.dateFormatted}</Text>
+              <View style={styles.summaryInfo}>
+                <View style={styles.summaryRow}>
+                  {item.mictionsCount > 0 && (
+                    <View style={styles.summaryBadge}>
+                      <FontAwesome name="water" size={12} color="#17a2b8" />
+                      <Text style={styles.summaryText}>
+                        {item.mictionsCount} miction
+                        {item.mictionsCount > 1 ? "s" : ""}
+                      </Text>
+                    </View>
+                  )}
+                  {item.sellesCount > 0 && (
+                    <View style={styles.summaryBadge}>
+                      <FontAwesome name="poop" size={12} color="#dc3545" />
+                      <Text style={styles.summaryText}>
+                        {item.sellesCount} selle
+                        {item.sellesCount > 1 ? "s" : ""}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
             </View>
+            {hasMultipleExcretions && (
+              <TouchableOpacity
+                style={styles.expandButton}
+                onPress={() => toggleExpand(item.date)}
+              >
+                <FontAwesome
+                  name={isExpanded ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color="#666"
+                />
+              </TouchableOpacity>
+            )}
           </View>
-          {hasMultipleExcretions && (
-            <TouchableOpacity
-              style={styles.expandButton}
-              onPress={() => toggleExpand(item.date)}
-            >
-              <FontAwesome
-                name={isExpanded ? "chevron-up" : "chevron-down"}
-                size={16}
-                color="#666"
-              />
-            </TouchableOpacity>
+          {renderExcretionItem(item.lastExcretion, true)}
+          {hasMultipleExcretions && isExpanded && (
+            <View style={styles.expandedContent}>
+              <View style={styles.separator} />
+              <Text style={styles.historyLabel}>Historique du jour</Text>
+              {item.excretions
+                .filter((excretion) => excretion.id !== item.lastExcretion.id)
+                .map((excretion) => renderExcretionItem(excretion))}
+            </View>
           )}
         </View>
-        {renderExcretionItem(item.lastExcretion, true)}
-        {hasMultipleExcretions && isExpanded && (
-          <View style={styles.expandedContent}>
-            <View style={styles.separator} />
-            <Text style={styles.historyLabel}>Historique du jour</Text>
-            {item.excretions
-              .filter((excretion) => excretion.id !== item.lastExcretion.id)
-              .map((excretion) => renderExcretionItem(excretion))}
-          </View>
-        )}
-      </View>
-    );
-  }, [expandedDays, renderExcretionItem, toggleExpand]);
+      );
+    },
+    [expandedDays, renderExcretionItem, toggleExpand],
+  );
 
   // ============================================
   // RENDER - MAIN
@@ -1595,6 +1843,57 @@ const styles = StyleSheet.create({
     color: "#999",
     textAlign: "center",
     marginBottom: 12,
+  },
+  // Options Row (couleur miction, consistance selle, etc.)
+  optionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  optionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "transparent",
+    minWidth: 70,
+    alignItems: "center",
+  },
+  optionButtonSelle: {
+    backgroundColor: "#f8f9fa",
+    borderColor: "#e0e0e0",
+  },
+  optionButtonSelected: {
+    borderColor: "#17a2b8",
+    borderWidth: 2,
+    shadowColor: "#17a2b8",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  optionButtonSelectedSelle: {
+    backgroundColor: "#dc3545",
+    borderColor: "#dc3545",
+  },
+  optionButtonDisabled: {
+    opacity: 0.5,
+  },
+  optionText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#333",
+  },
+  optionTextSelected: {
+    color: "white",
+    fontWeight: "600",
+  },
+  optionTextSelectedMiction: {
+    color: "#17a2b8",
+    fontWeight: "700",
   },
   warningText: {
     fontSize: 13,
