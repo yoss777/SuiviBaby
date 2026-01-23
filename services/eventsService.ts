@@ -211,15 +211,10 @@ export async function obtenirEvenement(
   id: string
 ): Promise<Event | null> {
   try {
-    const userId = getUserId();
     const docRef = doc(db, COLLECTION_NAME, id);
     const docSnap = await getDoc(docRef);
 
-    if (
-      docSnap.exists() &&
-      docSnap.data().userId === userId &&
-      docSnap.data().childId === childId
-    ) {
+    if (docSnap.exists() && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() } as Event;
     }
     return null;
@@ -242,11 +237,8 @@ export async function obtenirEvenements(
   }
 ): Promise<Event[]> {
   try {
-    const userId = getUserId();
-
     let q = query(
       collection(db, COLLECTION_NAME),
-      where("userId", "==", userId),
       where("childId", "==", childId)
     );
 
@@ -295,12 +287,10 @@ export function ecouterEvenements(
     waitForServer?: boolean;
   }
 ): () => void {
-  const userId = getUserId();
   let hasReceivedServerSnapshot = false;
 
   let q = query(
     collection(db, COLLECTION_NAME),
-    where("userId", "==", userId),
     where("childId", "==", childId)
   );
 
@@ -386,15 +376,10 @@ export async function modifierEvenement(
   data: Partial<Event>
 ): Promise<void> {
   try {
-    const userId = getUserId();
     const docRef = doc(db, COLLECTION_NAME, id);
     const docSnap = await getDoc(docRef);
 
-    if (
-      !docSnap.exists() ||
-      docSnap.data().userId !== userId ||
-      docSnap.data().childId !== childId
-    ) {
+    if (!docSnap.exists() || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
 
@@ -417,15 +402,10 @@ export async function supprimerEvenement(
   id: string
 ): Promise<void> {
   try {
-    const userId = getUserId();
     const docRef = doc(db, COLLECTION_NAME, id);
     const docSnap = await getDoc(docRef);
 
-    if (
-      !docSnap.exists() ||
-      docSnap.data().userId !== userId ||
-      docSnap.data().childId !== childId
-    ) {
+    if (!docSnap.exists() || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
 

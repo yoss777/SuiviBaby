@@ -40,11 +40,10 @@ export async function ajouterVitamine(childId: string, data: any) {
 
 export async function obtenirVitamine(childId: string, id: string) {
   try {
-    const userId = getUserId();
     const docRef = doc(db, "vitamines", id);
     const docSnap = await getDoc(docRef);
 
-    if (docSnap.exists() && docSnap.data().userId === userId && docSnap.data().childId === childId) {
+    if (docSnap.exists() && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
       console.log("Aucune prise de vitamines trouvée avec cet ID ou accès refusé");
@@ -58,10 +57,8 @@ export async function obtenirVitamine(childId: string, id: string) {
 
 export async function obtenirToutesLesVitamines(childId: string) {
   try {
-    const userId = getUserId();
     const q = query(
       collection(db, "vitamines"),
-      where("userId", "==", userId),
       where("childId", "==", childId),
       orderBy("createdAt", "desc")
     );
@@ -79,10 +76,8 @@ export async function obtenirToutesLesVitamines(childId: string) {
 
 export async function obtenirVitaminesAvecLimite(childId: string, nombreLimit: number) {
   try {
-    const userId = getUserId();
     const q = query(
       collection(db, "vitamines"),
-      where("userId", "==", userId),
       where("childId", "==", childId),
       orderBy("createdAt", "desc"),
       limit(nombreLimit)
@@ -100,10 +95,8 @@ export async function obtenirVitaminesAvecLimite(childId: string, nombreLimit: n
 }
 
 export function ecouterVitamines(childId: string, callback: (docs: any[]) => void) {
-  const userId = getUserId();
   const q = query(
     collection(db, "vitamines"),
-    where("userId", "==", userId),
     where("childId", "==", childId),
     orderBy("createdAt", "desc")
   );
@@ -121,11 +114,10 @@ export function ecouterVitamines(childId: string, callback: (docs: any[]) => voi
 
 export async function modifierVitamine(childId: string, id: string, nouveausDonnees: any) {
   try {
-    const userId = getUserId();
     const docRef = doc(db, "vitamines", id);
     const docSnap = await getDoc(docRef);
 
-    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
+    if (!docSnap.exists() || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
 
@@ -143,11 +135,10 @@ export async function modifierVitamine(childId: string, id: string, nouveausDonn
 
 export async function supprimerVitamine(childId: string, id: string) {
   try {
-    const userId = getUserId();
     const docRef = doc(db, "vitamines", id);
     const docSnap = await getDoc(docRef);
 
-    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
+    if (!docSnap.exists() || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
 

@@ -20,9 +20,28 @@ interface ConfirmModalProps {
   confirmTextColor?: string;
   cancelButtonColor?: string;
   cancelTextColor?: string;
+  allowBackdropDismiss?: boolean;
+  onDismiss?: () => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
+
+const getReadableTextColor = (color: string, fallback = "#fff") => {
+  if (!color || !color.startsWith("#")) return fallback;
+  let hex = color.slice(1);
+  if (hex.length === 3) {
+    hex = hex
+      .split("")
+      .map((char) => char + char)
+      .join("");
+  }
+  if (hex.length !== 6) return fallback;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.7 ? "#1b1b1b" : "#fff";
+};
 
 export function ConfirmModal({
   visible,
@@ -33,12 +52,16 @@ export function ConfirmModal({
   backgroundColor,
   textColor,
   confirmButtonColor = "#dc3545",
-  confirmTextColor = "#fff",
+  confirmTextColor,
   cancelButtonColor = "#f2f2f2",
   cancelTextColor = "#333",
+  allowBackdropDismiss = false,
+  onDismiss,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const resolvedConfirmTextColor =
+    confirmTextColor ?? getReadableTextColor(confirmButtonColor);
   return (
     <Modal
       visible={visible}
@@ -46,7 +69,10 @@ export function ConfirmModal({
       animationType="fade"
       onRequestClose={() => {}}
     >
-      <Pressable style={styles.modalOverlay}>
+      <Pressable
+        style={styles.modalOverlay}
+        onPress={allowBackdropDismiss ? onDismiss : undefined}
+      >
         <Pressable
           style={[styles.modalContent, { backgroundColor }]}
           onPress={(event) => event.stopPropagation()}
@@ -83,7 +109,12 @@ export function ConfirmModal({
               onPress={onConfirm}
               activeOpacity={0.7}
             >
-              <Text style={[styles.confirmButtonText, { color: confirmTextColor }]}>
+              <Text
+                style={[
+                  styles.confirmButtonText,
+                  { color: resolvedConfirmTextColor },
+                ]}
+              >
                 {confirmText}
               </Text>
             </TouchableOpacity>

@@ -19,6 +19,7 @@ interface BabyContextType {
   activeChild: Child | null;
   loading: boolean;
   childrenLoaded: boolean;
+  hiddenChildrenIds: string[];
   setActiveChild: (child: Child) => void;
   addChild: (child: Child) => void;
   updateChild: (id: string, child: Partial<Child>) => void;
@@ -233,6 +234,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
         activeChild,
         loading,
         childrenLoaded,
+        hiddenChildrenIds,
         setActiveChild,
         addChild,
         updateChild,

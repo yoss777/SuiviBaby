@@ -31,6 +31,23 @@ interface PromptModalProps {
   onCancel: () => void;
 }
 
+const getReadableTextColor = (color: string, fallback = "#fff") => {
+  if (!color || !color.startsWith("#")) return fallback;
+  let hex = color.slice(1);
+  if (hex.length === 3) {
+    hex = hex
+      .split("")
+      .map((char) => char + char)
+      .join("");
+  }
+  if (hex.length !== 6) return fallback;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.7 ? "#1b1b1b" : "#fff";
+};
+
 export function PromptModal({
   visible,
   title,
@@ -44,7 +61,7 @@ export function PromptModal({
   confirmText = "Valider",
   cancelText = "Annuler",
   confirmButtonColor = "#28a745",
-  confirmTextColor = "#fff",
+  confirmTextColor,
   confirmDisabled = false,
   backgroundColor,
   textColor,
@@ -52,6 +69,8 @@ export function PromptModal({
   onConfirm,
   onCancel,
 }: PromptModalProps) {
+  const resolvedConfirmTextColor =
+    confirmTextColor ?? getReadableTextColor(confirmButtonColor);
   return (
     <Modal
       visible={visible}
@@ -103,7 +122,12 @@ export function PromptModal({
               activeOpacity={0.7}
               disabled={confirmDisabled}
             >
-              <Text style={[styles.confirmButtonText, { color: confirmTextColor }]}>
+              <Text
+                style={[
+                  styles.confirmButtonText,
+                  { color: resolvedConfirmTextColor },
+                ]}
+              >
                 {confirmText}
               </Text>
             </TouchableOpacity>

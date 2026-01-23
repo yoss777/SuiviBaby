@@ -1,12 +1,16 @@
 // contexts/AuthContext.tsx
-import { auth, db } from '@/config/firebase';
-import { canUserAccessApp, updateLastLogin } from '@/services/userService';
-import type { User, UserType } from '@/types/user';
-import { User as FirebaseUser, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { createContext, useContext, useEffect, useState } from 'react';
-import { Platform } from 'react-native';
-import { useModal } from '@/contexts/ModalContext';
+import { auth, db } from "@/config/firebase";
+import { useModal } from "@/contexts/ModalContext";
+import { canUserAccessApp, updateLastLogin } from "@/services/userService";
+import type { User, UserType } from "@/types/user";
+import {
+  User as FirebaseUser,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { createContext, useContext, useEffect, useState } from "react";
+import { Platform } from "react-native";
 
 interface AuthContextType {
   firebaseUser: FirebaseUser | null;
@@ -30,7 +34,11 @@ const AuthContext = createContext<AuthContextType>({
   refreshUser: async () => {},
 });
 
-export function AuthProvider({ children: childrenProp }: { children: React.ReactNode }) {
+export function AuthProvider({
+  children: childrenProp,
+}: {
+  children: React.ReactNode;
+}) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
@@ -51,30 +59,35 @@ export function AuthProvider({ children: childrenProp }: { children: React.React
 
       const userData = {
         uid: fbUser.uid, // Ajouter l'UID depuis Firebase Auth
-        ...userDoc.data()
+        ...userDoc.data(),
       } as User;
 
-      console.log('[AuthContext] User data loaded, uid:', userData.uid);
+      console.log("[AuthContext] User data loaded, uid:", userData.uid);
 
       // Vérifier si l'utilisateur peut accéder à l'app actuelle
-      const appType = process.env.EXPO_PUBLIC_APP_TYPE === 'professional' ? 'professional' : 'patient';
+      const appType =
+        process.env.EXPO_PUBLIC_APP_TYPE === "professional"
+          ? "professional"
+          : "patient";
+      // const appType = process.env.EXPO_PUBLIC_APP_TYPE === 'blockedAccount' ? 'blockedAccount' : 'patient';
       const accessCheck = await canUserAccessApp(fbUser.uid, appType);
 
       if (!accessCheck.canAccess) {
         // L'utilisateur ne peut pas accéder à cette app
-        console.log('Access denied:', accessCheck.reason);
+        console.log("Access denied:", accessCheck.reason);
 
         showAlert(
-          'Accès non autorisé',
-          accessCheck.reason || 'Vous ne pouvez pas accéder à cette application avec ce compte.',
+          "Accès non autorisé",
+          accessCheck.reason ||
+            "Vous ne pouvez pas accéder à cette application avec ce compte.",
           [
             {
-              text: 'OK',
+              text: "OK",
               onPress: async () => {
                 await firebaseSignOut(auth);
               },
             },
-          ]
+          ],
         );
 
         setLoading(false);
@@ -83,11 +96,11 @@ export function AuthProvider({ children: childrenProp }: { children: React.React
 
       // Mettre à jour le dernier login
       // Utilise la version du package partagé (monorepo)
-      const sharedPackage = require('../package.json');
+      const sharedPackage = require("../package.json");
       await updateLastLogin(
         fbUser.uid,
-        Platform.OS as 'ios' | 'android' | 'web',
-        sharedPackage.version
+        Platform.OS as "ios" | "android" | "web",
+        sharedPackage.version,
       );
 
       // Tout est OK, charger l'utilisateur
@@ -96,13 +109,15 @@ export function AuthProvider({ children: childrenProp }: { children: React.React
       setEmail(userData.email || null);
       setUserType(userData.userType);
       setFirebaseUser(fbUser);
-
     } catch (error) {
-      console.error("Erreur lors de la récupération des données utilisateur:", error);
+      console.error(
+        "Erreur lors de la récupération des données utilisateur:",
+        error,
+      );
       showAlert(
-        'Erreur',
-        'Impossible de charger vos données. Veuillez réessayer.',
-        [{ text: 'OK', onPress: async () => await firebaseSignOut(auth) }]
+        "Erreur",
+        "Impossible de charger vos données. Veuillez réessayer.",
+        [{ text: "OK", onPress: async () => await firebaseSignOut(auth) }],
       );
     } finally {
       setLoading(false);
@@ -135,7 +150,7 @@ export function AuthProvider({ children: childrenProp }: { children: React.React
       setEmail(null);
       setUserType(null);
     } catch (error) {
-      console.error('Erreur lors de la déconnexion:', error);
+      console.error("Erreur lors de la déconnexion:", error);
       throw error;
     }
   };
@@ -156,7 +171,7 @@ export function AuthProvider({ children: childrenProp }: { children: React.React
         userType,
         loading,
         signOut,
-        refreshUser
+        refreshUser,
       }}
     >
       {childrenProp}

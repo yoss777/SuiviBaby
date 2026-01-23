@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +16,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBaby, type Child } from '@/contexts/BabyContext';
 import { useModal } from '@/contexts/ModalContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  listenToPendingInvitations,
+  type ShareInvitation,
+} from '@/services/childSharingService';
 import { afficherEnfant, obtenirPreferences } from '@/services/userPreferencesService';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
@@ -34,7 +38,7 @@ interface MedicalCategory {
 export default function Explore() {
   const colorScheme = useColorScheme() ?? 'light';
   const { signOut, user } = useAuth();
-  const { children, setActiveChild, loading } = useBaby();
+  const { children, setActiveChild, loading, hiddenChildrenIds } = useBaby();
   const { showAlert } = useModal();
   const [showUnhideModal, setShowUnhideModal] = useState(false);
   const [hiddenChildren, setHiddenChildren] = useState<Child[]>([]);
@@ -43,6 +47,9 @@ export default function Explore() {
   const [showAddChildModal, setShowAddChildModal] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [errorModal, setErrorModal] = useState({ visible: false, message: '' });
+  const [pendingInvitations, setPendingInvitations] = useState<
+    ShareInvitation[]
+  >([]);
 
   const categories: MedicalCategory[] = useMemo(() => {
     const childTiles = children.map((child) => ({
@@ -55,26 +62,28 @@ export default function Explore() {
     }));
 
     if (children.length === 0) {
-      return [
-        {
+      const items: MedicalCategory[] = [];
+      if (hiddenChildrenIds.length > 0) {
+        items.push({
           id: 'unhide-children',
           emoji: '👁️',
           title: 'Réactiver des enfants',
           route: 'unhide',
           enabled: true,
-        },
-        {
-          id: 'add-baby',
-          emoji: '➕',
-          title: 'Ajouter un enfant',
-          route: 'add-baby',
-          enabled: true,
-        },
-      ];
+        });
+      }
+      items.push({
+        id: 'add-baby',
+        emoji: '➕',
+        title: 'Ajouter un enfant',
+        route: 'add-baby',
+        enabled: true,
+      });
+      return items;
     }
 
     return childTiles;
-  }, [children, loading]);
+  }, [children, hiddenChildrenIds.length, loading]);
 
   const anim0 = { opacity: useSharedValue(0), translateY: useSharedValue(20) };
   const anim1 = { opacity: useSharedValue(0), translateY: useSharedValue(20) };
@@ -103,14 +112,26 @@ export default function Explore() {
     });
   }, [categories]);
 
+  const redirectAfterUnhideRef = useRef(false);
+
   // Rediriger automatiquement vers l'enfant unique après réactivation
   React.useEffect(() => {
+    if (!redirectAfterUnhideRef.current) return;
     if (children.length === 1 && !loading) {
       console.log('[Explore] Un seul enfant réactivé, redirection automatique');
       setActiveChild(children[0]);
       router.replace('/(drawer)/baby');
+      redirectAfterUnhideRef.current = false;
     }
   }, [children.length, loading]);
+
+  React.useEffect(() => {
+    const unsubscribe = listenToPendingInvitations((invitations) => {
+      setPendingInvitations(invitations);
+    });
+
+    return unsubscribe;
+  }, []);
 
   const handleCategoryPress = async (category: MedicalCategory) => {
     if (!category.enabled || !category.route) return;
@@ -186,6 +207,7 @@ export default function Explore() {
       setShowUnhideModal(false);
       setToggledIds(new Set());
       setHiddenChildren([]);
+      redirectAfterUnhideRef.current = true;
       
       // Pas d'alert - le feedback est la redirection automatique ou l'apparition des enfants
     } catch (error) {
@@ -266,6 +288,22 @@ export default function Explore() {
             <ThemedText style={styles.subtitle}>
               L'Amour au Cœur de la Vie
             </ThemedText>
+
+            {pendingInvitations.length > 0 && (
+              <TouchableOpacity
+                style={[
+                  styles.inviteButton,
+                  { backgroundColor: Colors[colorScheme].tint },
+                ]}
+                onPress={() => router.push('/(drawer)/join-child' as any)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="mail-outline" size={18} color="#fff" />
+                <Text style={styles.inviteButtonText}>
+                  Voir les invitations ({pendingInvitations.length})
+                </Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               onPress={handleSignOut}
@@ -445,6 +483,20 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
     opacity: 0.7,
+  },
+  inviteButton: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inviteButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   logoutButton: {
     position: 'absolute',

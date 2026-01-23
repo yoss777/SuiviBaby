@@ -93,11 +93,13 @@ export default function AddBabyScreen() {
     setIsLoading(true);
 
     try {
+      const parentEmail = user.email?.toLowerCase();
       const childData = {
         name: name.trim(),
         birthDate: birthDate,
         gender: gender,
         parentIds: [user.uid],
+        parentEmails: parentEmail ? [parentEmail] : [],
         photoUri: "",
       };
 

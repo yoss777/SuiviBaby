@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
@@ -19,6 +26,8 @@ type ModalState =
       title: string;
       message: React.ReactNode;
       confirmText: string;
+      confirmButtonColor?: string;
+      confirmTextColor?: string;
       onConfirm?: () => void;
     }
   | {
@@ -44,18 +53,26 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
   const [modalState, setModalState] = useState<ModalState>(null);
+  const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const backgroundColor = colors.background;
   const textColor = colors.text;
+  const tintTextColor =
+    colors.tint === "#fff" ? "#1b1b1b" : "#fff";
+  const isErrorTitle = (value: string) =>
+    /erreur|error|echec|failed|❌/i.test(value);
 
   const showAlert = (title: string, message: React.ReactNode = "", buttons: AlertButton[] = []) => {
     if (buttons.length <= 1) {
       const onlyButton = buttons[0];
+      const isError = isErrorTitle(title);
       setModalState({
         type: "info",
         title,
         message,
-        confirmText: onlyButton?.text || "OK",
+        confirmText: onlyButton?.text ?? "OK",
+        confirmButtonColor: isError ? "#dc3545" : colors.tint,
+        confirmTextColor: isError ? "#fff" : tintTextColor,
         onConfirm: onlyButton?.onPress,
       });
       return;
@@ -81,6 +98,26 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
 
   const hide = () => setModalState(null);
 
+  useEffect(() => {
+    if (!modalState || modalState.type !== "info") return;
+    if (modalState.confirmText !== "") return;
+
+    if (autoDismissRef.current) {
+      clearTimeout(autoDismissRef.current);
+    }
+
+    autoDismissRef.current = setTimeout(() => {
+      hide();
+    }, 2000);
+
+    return () => {
+      if (autoDismissRef.current) {
+        clearTimeout(autoDismissRef.current);
+        autoDismissRef.current = null;
+      }
+    };
+  }, [modalState]);
+
   const value = useMemo(
     () => ({
       showAlert,
@@ -98,8 +135,8 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
           title={modalState.title}
           message={modalState.message}
           confirmText={modalState.confirmText}
-          confirmButtonColor={colors.tint}
-          confirmTextColor="#fff"
+          confirmButtonColor={modalState.confirmButtonColor ?? colors.tint}
+          confirmTextColor={modalState.confirmTextColor ?? tintTextColor}
           backgroundColor={backgroundColor}
           textColor={textColor}
           onConfirm={modalState.onConfirm}
@@ -114,7 +151,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
           confirmText={modalState.confirmText}
           cancelText={modalState.cancelText}
           confirmButtonColor={modalState.confirmButtonColor}
-          confirmTextColor={modalState.confirmTextColor}
+          confirmTextColor={modalState.confirmTextColor ?? tintTextColor}
           cancelButtonColor={`${colors.tabIconDefault}20`}
           cancelTextColor={colors.text}
           backgroundColor={backgroundColor}

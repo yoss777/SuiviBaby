@@ -31,12 +31,13 @@ export async function createPatientUser(
   userName: string,
   babyName?: string
 ): Promise<User> {
+  const safeUserName = userName?.trim() || email.split("@")[0];
   const user: User = {
     uid,
     email,
-    userName,
+    userName: safeUserName,
     userType: 'patient',
-    babyName,
+    babyName: babyName?.trim() ? babyName.trim() : null,
     children: [],
     createdAt: Timestamp.now(),
     lastLogin: Timestamp.now(),

@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GlobalSheetManager } from "@/components/ui/GlobalSheetManager";
+import { InvitationListener } from "@/components/ui/InvitationListener";
 
 export const unstable_settings = {
   anchor: "(drawer)",
@@ -30,6 +31,7 @@ export default function RootLayout() {
                   <SheetProvider>
                     <AppNavigation />
                     <GlobalSheetManager />
+                    <InvitationListener />
                   </SheetProvider>
                 </MigrationProvider>
               </BabyProvider>

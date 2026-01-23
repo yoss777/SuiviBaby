@@ -19,7 +19,7 @@ export function CustomDrawerContent(props: any) {
   const router = useRouter();
   const pathname = usePathname();
   const colorScheme = useColorScheme() ?? "light";
-  const { activeChild, children, setActiveChild } = useBaby();
+  const { activeChild, children, childrenLoaded, setActiveChild } = useBaby();
   const { signOut, user, userName, email } = useAuth();
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,11 +40,12 @@ export function CustomDrawerContent(props: any) {
 
   // Rediriger vers explore si tous les enfants sont masqués
   useEffect(() => {
+    if (!childrenLoaded) return;
     if (children.length === 0 && pathname.includes('/baby')) {
       console.log('[CustomDrawer] Tous les enfants masqués, redirection vers explore');
       router.replace('/explore');
     }
-  }, [children.length, pathname]);
+  }, [children.length, childrenLoaded, pathname]);
 
   // Calculate baby's age in years and months
   const calculateAge = (birthDate: string) => {

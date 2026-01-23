@@ -39,15 +39,10 @@ export async function ajouterCroissance(childId: string, data: any) {
 
 export async function obtenirCroissance(childId: string, id: string) {
   try {
-    const userId = getUserId();
     const docRef = doc(db, "croissances", id);
     const docSnap = await getDoc(docRef);
 
-    if (
-      docSnap.exists() &&
-      docSnap.data().userId === userId &&
-      docSnap.data().childId === childId
-    ) {
+    if (docSnap.exists() && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     }
     console.log("Aucune croissance trouvée avec cet ID ou accès refusé");
@@ -60,10 +55,8 @@ export async function obtenirCroissance(childId: string, id: string) {
 
 export async function obtenirToutesLesCroissances(childId: string) {
   try {
-    const userId = getUserId();
     const q = query(
       collection(db, "croissances"),
-      where("userId", "==", userId),
       where("childId", "==", childId),
       orderBy("createdAt", "desc"),
     );
@@ -83,10 +76,8 @@ export function ecouterCroissances(
   childId: string,
   callback: (docs: any[]) => void
 ) {
-  const userId = getUserId();
   const q = query(
     collection(db, "croissances"),
-    where("userId", "==", userId),
     where("childId", "==", childId),
     orderBy("createdAt", "desc"),
   );
@@ -108,13 +99,11 @@ export async function modifierCroissance(
   nouvellesDonnees: any
 ) {
   try {
-    const userId = getUserId();
     const docRef = doc(db, "croissances", id);
     const docSnap = await getDoc(docRef);
 
     if (
       !docSnap.exists() ||
-      docSnap.data().userId !== userId ||
       docSnap.data().childId !== childId
     ) {
       throw new Error("Accès refusé");
@@ -134,13 +123,11 @@ export async function modifierCroissance(
 
 export async function supprimerCroissance(childId: string, id: string) {
   try {
-    const userId = getUserId();
     const docRef = doc(db, "croissances", id);
     const docSnap = await getDoc(docRef);
 
     if (
       !docSnap.exists() ||
-      docSnap.data().userId !== userId ||
       docSnap.data().childId !== childId
     ) {
       throw new Error("Accès refusé");

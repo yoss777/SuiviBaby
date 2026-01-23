@@ -7,12 +7,14 @@ import {
     collection,
     doc,
     getDoc,
+    getDocFromServer,
     getDocs,
     onSnapshot,
     query,
     setDoc,
     Timestamp,
     updateDoc,
+    writeBatch,
     where,
 } from 'firebase/firestore';
 
@@ -111,14 +113,19 @@ export async function useShareCode(code: string): Promise<{ childId: string; chi
       throw new Error('Enfant introuvable');
     }
 
-    const childData = childDoc.data();
+    const childData = childDoc.data() as {
+      parentIds?: string[];
+      parentEmails?: string[];
+    };
     if (childData.parentIds?.includes(user.uid)) {
       throw new Error('Vous avez déjà accès à cet enfant');
     }
 
     // Ajouter l'utilisateur aux parents de l'enfant
+    const userEmail = user.email?.toLowerCase();
     await updateDoc(doc(db, 'children', shareCode.childId), {
       parentIds: arrayUnion(user.uid),
+      ...(userEmail ? { parentEmails: arrayUnion(userEmail) } : {}),
     });
 
     // Marquer le code comme utilisé
@@ -149,15 +156,88 @@ export async function createEmailInvitation(
     if (!user || !user.email) throw new Error('Utilisateur non connecté');
 
     // Vérifier que l'email invité n'est pas le même que celui de l'utilisateur
-    if (invitedEmail.toLowerCase() === user.email.toLowerCase()) {
+    const invitedEmailLower = invitedEmail.trim().toLowerCase();
+
+    if (invitedEmailLower === user.email.toLowerCase()) {
       throw new Error('Vous ne pouvez pas vous inviter vous-même');
+    }
+
+    // Vérifier si l'utilisateur est déjà lié à l'enfant
+    const childDoc = await getDocFromServer(doc(db, 'children', childId));
+    if (childDoc.exists()) {
+      const childData = childDoc.data() as {
+        parentIds?: string[];
+        parentEmails?: string[];
+      };
+      if (childData.parentIds?.length) {
+        if (
+          childData.parentEmails?.some(
+            (email) => email?.toLowerCase() === invitedEmailLower
+          )
+        ) {
+          const error: Error & { code?: string; email?: string } = new Error(
+            'Cet enfant est déjà lié à ce destinataire.'
+          );
+          error.code = 'already-linked';
+          error.email = invitedEmail;
+          throw error;
+        }
+
+        const emailQuery = query(
+          collection(db, 'users'),
+          where('email', '==', invitedEmailLower)
+        );
+        const emailSnapshot = await getDocs(emailQuery);
+        const emailMatch = emailSnapshot.docs[0];
+        const destUid = emailMatch?.id;
+        if (destUid && childData.parentIds.includes(destUid)) {
+          const error: Error & { code?: string; email?: string } = new Error(
+            'Cet enfant est déjà lié à ce destinataire.'
+          );
+          error.code = 'already-linked';
+          error.email = invitedEmail;
+          throw error;
+        }
+
+        const parentDocs = await Promise.all(
+          childData.parentIds.map((parentId) =>
+            getDoc(doc(db, 'users', parentId))
+          )
+        );
+        const parentEmails = parentDocs
+          .map((parentDoc) => {
+            if (!parentDoc.exists()) return null;
+            const parentData = parentDoc.data() as { email?: string };
+            return parentData.email?.toLowerCase() ?? null;
+          })
+          .filter((email): email is string => !!email);
+
+        if (parentEmails.length > 0) {
+          await updateDoc(doc(db, 'children', childId), {
+            parentEmails: arrayUnion(...parentEmails),
+          });
+        }
+
+        const isAlreadyLinked = parentEmails.some(
+          (email) => email === invitedEmailLower
+        );
+
+        if (isAlreadyLinked) {
+          const error: Error & { code?: string; email?: string } = new Error(
+            'Cet enfant est déjà lié à ce destinataire.'
+          );
+          error.code = 'already-linked';
+          error.email = invitedEmail;
+          throw error;
+        }
+      }
     }
 
     // Vérifier si une invitation existe déjà pour cet email
     const q = query(
       collection(db, 'shareInvitations'),
       where('childId', '==', childId),
-      where('invitedEmail', '==', invitedEmail.toLowerCase()),
+      where('invitedEmail', '==', invitedEmailLower),
       where('status', '==', 'pending')
     );
     const existingInvites = await getDocs(q);
@@ -170,7 +250,7 @@ export async function createEmailInvitation(
       childId,
       childName,
       inviterEmail: user.email,
-      invitedEmail: invitedEmail.toLowerCase(),
+      invitedEmail: invitedEmailLower,
       status: 'pending',
       createdAt: Timestamp.now(),
     };
@@ -240,6 +320,108 @@ export function listenToPendingInvitations(
 }
 
 /**
+ * Nettoie les invitations en doublon (même enfant, même destinataire).
+ */
+export async function cleanupDuplicatePendingInvitations(
+  invitedEmail?: string
+): Promise<number> {
+  const user = auth.currentUser;
+  const email = (invitedEmail ?? user?.email ?? '').toLowerCase();
+  if (!email) return 0;
+
+  const q = query(
+    collection(db, 'shareInvitations'),
+    where('invitedEmail', '==', email),
+    where('status', '==', 'pending')
+  );
+
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return 0;
+
+  const byChildId = new Map<string, typeof snapshot.docs>();
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data() as ShareInvitation;
+    const key = data.childId;
+    const list = byChildId.get(key) ?? [];
+    list.push(docSnap);
+    byChildId.set(key, list);
+  });
+
+  const batch = writeBatch(db);
+  let deletedCount = 0;
+
+  byChildId.forEach((docs) => {
+    if (docs.length <= 1) return;
+    const sorted = [...docs].sort((a, b) => {
+      const aTime = (a.data() as ShareInvitation).createdAt?.toMillis?.() ?? 0;
+      const bTime = (b.data() as ShareInvitation).createdAt?.toMillis?.() ?? 0;
+      return bTime - aTime;
+    });
+    const duplicates = sorted.slice(1);
+    duplicates.forEach((dup) => {
+      batch.delete(dup.ref);
+      deletedCount += 1;
+    });
+  });
+
+  if (deletedCount > 0) {
+    await batch.commit();
+  }
+
+  return deletedCount;
+}
+
+/**
+ * Supprime les invitations en attente si le destinataire est déjà lié à l'enfant.
+ */
+export async function cleanupAlreadyLinkedInvitations(
+  invitedEmail?: string
+): Promise<number> {
+  const user = auth.currentUser;
+  const email = (invitedEmail ?? user?.email ?? '').toLowerCase();
+  if (!email || !user?.uid) return 0;
+
+  const q = query(
+    collection(db, 'shareInvitations'),
+    where('invitedEmail', '==', email),
+    where('status', '==', 'pending')
+  );
+
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return 0;
+
+  const batch = writeBatch(db);
+  let deletedCount = 0;
+
+  await Promise.all(
+    snapshot.docs.map(async (docSnap) => {
+      const data = docSnap.data() as ShareInvitation;
+      const childDoc = await getDoc(doc(db, 'children', data.childId));
+      if (!childDoc.exists()) return;
+      const childData = childDoc.data() as {
+        parentIds?: string[];
+        parentEmails?: string[];
+      };
+      if (
+        childData.parentIds?.includes(user.uid) ||
+        childData.parentEmails?.some(
+          (parentEmail) => parentEmail?.toLowerCase() === email
+        )
+      ) {
+        batch.delete(docSnap.ref);
+        deletedCount += 1;
+      }
+    })
+  );
+
+  if (deletedCount > 0) {
+    await batch.commit();
+  }
+
+  return deletedCount;
+}
+
+/**
  * Accepte une invitation
  */
 export async function acceptInvitation(invitationId: string): Promise<void> {
@@ -268,6 +450,7 @@ export async function acceptInvitation(invitationId: string): Promise<void> {
     // Ajouter l'utilisateur aux parents de l'enfant
     await updateDoc(doc(db, 'children', invitation.childId), {
       parentIds: arrayUnion(user.uid),
+      parentEmails: arrayUnion(invitation.invitedEmail.toLowerCase()),
     });
 
     // Marquer l'invitation comme acceptée

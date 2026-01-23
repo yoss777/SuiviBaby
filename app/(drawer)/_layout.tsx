@@ -1,28 +1,40 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useRouter } from "expo-router";
 import { Drawer } from "expo-router/drawer";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { useBaby } from "@/contexts/BabyContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 // Importer la configuration AssemblyAI
-import '@/config/assemblyai.config';
+import "@/config/assemblyai.config";
+import { useBaby } from "@/contexts/BabyContext";
 
 // Contexte pour gérer le headerRight dynamiquement
 const HeaderRightContext = createContext<{
-  setHeaderRight: (component: React.ReactElement | null, ownerId?: string) => void;
+  setHeaderRight: (
+    component: React.ReactElement | null,
+    ownerId?: string,
+  ) => void;
 }>({ setHeaderRight: () => {} });
 
 // Contexte pour gérer le headerLeft dynamiquement
 const HeaderLeftContext = createContext<{
-  setHeaderLeft: (component: React.ReactElement | null, ownerId?: string) => void;
+  setHeaderLeft: (
+    component: React.ReactElement | null,
+    ownerId?: string,
+  ) => void;
 }>({ setHeaderLeft: () => {} });
 
 export const useHeaderRight = () => useContext(HeaderRightContext);
@@ -72,37 +84,43 @@ export default function DrawerLayout() {
 
   const patientId = firebaseUser?.uid || user?.uid;
 
-  const setHeaderRight = useCallback((component: React.ReactElement | null, ownerId?: string) => {
-    setHeaderRightState((prev) => {
-      if (component === null) {
-        if (!ownerId) {
+  const setHeaderRight = useCallback(
+    (component: React.ReactElement | null, ownerId?: string) => {
+      setHeaderRightState((prev) => {
+        if (component === null) {
+          if (!ownerId) {
+            return { component: null, ownerId: undefined };
+          }
+          if (prev.ownerId && prev.ownerId !== ownerId) {
+            return prev;
+          }
           return { component: null, ownerId: undefined };
         }
-        if (prev.ownerId && prev.ownerId !== ownerId) {
-          return prev;
-        }
-        return { component: null, ownerId: undefined };
-      }
 
-      return { component, ownerId };
-    });
-  }, []);
+        return { component, ownerId };
+      });
+    },
+    [],
+  );
 
-  const setHeaderLeft = useCallback((component: React.ReactElement | null, ownerId?: string) => {
-    setHeaderLeftState((prev) => {
-      if (component === null) {
-        if (!ownerId) {
+  const setHeaderLeft = useCallback(
+    (component: React.ReactElement | null, ownerId?: string) => {
+      setHeaderLeftState((prev) => {
+        if (component === null) {
+          if (!ownerId) {
+            return { component: null, ownerId: undefined };
+          }
+          if (prev.ownerId && prev.ownerId !== ownerId) {
+            return prev;
+          }
           return { component: null, ownerId: undefined };
         }
-        if (prev.ownerId && prev.ownerId !== ownerId) {
-          return prev;
-        }
-        return { component: null, ownerId: undefined };
-      }
 
-      return { component, ownerId };
-    });
-  }, []);
+        return { component, ownerId };
+      });
+    },
+    [],
+  );
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -142,7 +160,12 @@ export default function DrawerLayout() {
     <HeaderRightContext.Provider value={{ setHeaderRight }}>
       <HeaderLeftContext.Provider value={{ setHeaderLeft }}>
         <ToastProvider>
-          <View style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
+          <View
+            style={[
+              styles.container,
+              { backgroundColor: Colors[colorScheme].background },
+            ]}
+          >
             {isOffline && (
               <View style={[styles.offlineBanner, { paddingTop: insets.top }]}>
                 <Text style={styles.offlineText}>Hors ligne</Text>
@@ -163,45 +186,49 @@ export default function DrawerLayout() {
                 },
               }}
             >
-            <Drawer.Screen
-              name="settings"
-              options={{
-                title: "Paramètres",
-                drawerItemStyle: { display: "none" },
-              }}
-            />
+              <Drawer.Screen
+                name="settings"
+                options={{
+                  title: "Paramètres",
+                  drawerItemStyle: { display: "none" },
+                }}
+              />
 
-            {/* Section: Suivi Bébé */}
-            <Drawer.Screen
-              name="baby"
-              options={{
-                headerTitle: () => <BabyHeaderTitle />,
-                drawerItemStyle: { display: "none" },
-                headerRight: headerRightState.component ? () => headerRightState.component : undefined,
-                headerLeft: headerLeftState.component ? () => headerLeftState.component : undefined,
-              }}
-            />
-            <Drawer.Screen
-              name="add-baby"
-              options={{
-                title: "Ajouter un enfant",
-                drawerItemStyle: { display: "none" },
-              }}
-            />
-            <Drawer.Screen
-              name="join-child"
-              options={{
-                title: "Ajouter avec un code",
-                drawerItemStyle: { display: "none" },
-              }}
-            />
-            <Drawer.Screen
-              name="share-child"
-              options={{
-                title: "Partage",
-                drawerItemStyle: { display: "none" },
-              }}
-            />
+              {/* Section: Suivi Bébé */}
+              <Drawer.Screen
+                name="baby"
+                options={{
+                  headerTitle: () => <BabyHeaderTitle />,
+                  drawerItemStyle: { display: "none" },
+                  headerRight: headerRightState.component
+                    ? () => headerRightState.component
+                    : undefined,
+                  headerLeft: headerLeftState.component
+                    ? () => headerLeftState.component
+                    : undefined,
+                }}
+              />
+              <Drawer.Screen
+                name="add-baby"
+                options={{
+                  title: "Ajouter un enfant",
+                  drawerItemStyle: { display: "none" },
+                }}
+              />
+              <Drawer.Screen
+                name="join-child"
+                options={{
+                  title: "Ajouter avec un code",
+                  drawerItemStyle: { display: "none" },
+                }}
+              />
+              <Drawer.Screen
+                name="share-child"
+                options={{
+                  title: "Partage",
+                  drawerItemStyle: { display: "none" },
+                }}
+              />
             </Drawer>
           </View>
         </ToastProvider>

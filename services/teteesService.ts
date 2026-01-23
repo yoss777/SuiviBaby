@@ -42,11 +42,10 @@ export async function ajouterTetee(childId: string, data: any) {
 
 export async function obtenirTetee(childId: string, id: string) {
   try {
-    const userId = getUserId();
     const docRef = doc(db, "tetees", id);
     const docSnap = await getDoc(docRef);
 
-    if (docSnap.exists() && docSnap.data().userId === userId && docSnap.data().childId === childId) {
+    if (docSnap.exists() && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
       console.log("Aucune tétée trouvée avec cet ID ou accès refusé");
@@ -60,10 +59,8 @@ export async function obtenirTetee(childId: string, id: string) {
 
 export async function obtenirToutesLesTetees(childId: string) {
   try {
-    const userId = getUserId();
     const q = query(
       collection(db, "tetees"),
-      where("userId", "==", userId),
       where("childId", "==", childId),
       orderBy("createdAt", "desc")
     );
@@ -81,10 +78,8 @@ export async function obtenirToutesLesTetees(childId: string) {
 
 export async function obtenirTeteesAvecLimite(childId: string, nombreLimit: number) {
   try {
-    const userId = getUserId();
     const q = query(
       collection(db, "tetees"),
-      where("userId", "==", userId),
       where("childId", "==", childId),
       orderBy("createdAt", "desc"),
       limit(nombreLimit)
@@ -102,10 +97,8 @@ export async function obtenirTeteesAvecLimite(childId: string, nombreLimit: numb
 }
 
 export function ecouterTetees(childId: string, callback: (docs: any[]) => void) {
-  const userId = getUserId();
   const q = query(
     collection(db, "tetees"),
-    where("userId", "==", userId),
     where("childId", "==", childId),
     orderBy("createdAt", "desc")
   );
@@ -123,11 +116,10 @@ export function ecouterTetees(childId: string, callback: (docs: any[]) => void) 
 
 export async function modifierTetee(childId: string, id: string, nouveausDonnees: any) {
   try {
-    const userId = getUserId();
     const docRef = doc(db, "tetees", id);
     const docSnap = await getDoc(docRef);
 
-    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
+    if (!docSnap.exists() || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
 
@@ -145,11 +137,10 @@ export async function modifierTetee(childId: string, id: string, nouveausDonnees
 
 export async function supprimerTetee(childId: string, id: string) {
   try {
-    const userId = getUserId();
     const docRef = doc(db, "tetees", id);
     const docSnap = await getDoc(docRef);
 
-    if (!docSnap.exists() || docSnap.data().userId !== userId || docSnap.data().childId !== childId) {
+    if (!docSnap.exists() || docSnap.data().childId !== childId) {
       throw new Error("Accès refusé");
     }
 

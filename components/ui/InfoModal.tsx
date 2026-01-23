@@ -22,6 +22,23 @@ interface InfoModalProps {
   onConfirm?: () => void;
 }
 
+const getReadableTextColor = (color: string, fallback = "#fff") => {
+  if (!color || !color.startsWith("#")) return fallback;
+  let hex = color.slice(1);
+  if (hex.length === 3) {
+    hex = hex
+      .split("")
+      .map((char) => char + char)
+      .join("");
+  }
+  if (hex.length !== 6) return fallback;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.7 ? "#1b1b1b" : "#fff";
+};
+
 export function InfoModal({
   visible,
   title,
@@ -30,10 +47,41 @@ export function InfoModal({
   backgroundColor,
   textColor,
   confirmButtonColor = '#28a745',
-  confirmTextColor = '#fff',
+  confirmTextColor,
   onClose,
   onConfirm,
 }: InfoModalProps) {
+  const resolvedConfirmTextColor =
+    confirmTextColor ?? getReadableTextColor(confirmButtonColor);
+  const showConfirmButton = !!confirmText;
+  const renderMessage = () => {
+    if (typeof message === 'string') {
+      return (
+        <Text style={[styles.modalMessage, { color: textColor }]}>
+          {message}
+        </Text>
+      );
+    }
+
+    const isTextElement =
+      React.isValidElement(message) &&
+      (message.type === Text ||
+        (typeof message.type === 'function' &&
+          (message.type.displayName === 'Text' ||
+            message.type.name === 'Text')));
+
+    if (isTextElement) {
+      return React.cloneElement(message, {
+        style: [
+          styles.modalMessage,
+          { color: textColor },
+          (message.props as { style?: any }).style,
+        ],
+      });
+    }
+
+    return <View style={styles.modalMessageContainer}>{message}</View>;
+  };
   const handleConfirm = () => {
     if (onConfirm) onConfirm();
     onClose();
@@ -52,26 +100,29 @@ export function InfoModal({
           onPress={(event) => event.stopPropagation()}
         >
           <Text style={[styles.modalTitle, { color: textColor }]}>{title}</Text>
-          {typeof message === 'string' ? (
-            <Text style={[styles.modalMessage, { color: textColor }]}>{message}</Text>
-          ) : (
-            <View style={styles.modalMessageContainer}>{message}</View>
+          {renderMessage()}
+          {showConfirmButton && (
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.confirmButton,
+                  { backgroundColor: confirmButtonColor },
+                ]}
+                onPress={handleConfirm}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.confirmButtonText,
+                    { color: resolvedConfirmTextColor },
+                  ]}
+                >
+                  {confirmText}
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
-          <View style={styles.modalButtons}>
-            <TouchableOpacity
-              style={[
-                styles.modalButton,
-                styles.confirmButton,
-                { backgroundColor: confirmButtonColor },
-              ]}
-              onPress={handleConfirm}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.confirmButtonText, { color: confirmTextColor }]}>
-                {confirmText}
-              </Text>
-            </TouchableOpacity>
-          </View>
         </Pressable>
       </Pressable>
     </Modal>

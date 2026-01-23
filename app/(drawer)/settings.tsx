@@ -125,6 +125,15 @@ export default function SettingsScreen() {
       },
     },
     {
+      id: 'join-child',
+      icon: 'person-add-outline',
+      label: 'Ajouter un enfant',
+      description: 'Entrer un code ou accepter une invitation',
+      onPress: () => {
+        router.push('/(drawer)/join-child');
+      },
+    },
+    {
       id: 'notifications',
       icon: 'notifications-outline',
       label: 'Notifications',
