@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ============================================
 // TYPES
@@ -58,6 +59,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
   ) => {
     const colorScheme = useColorScheme() ?? "light";
     const tintColor = Colors[colorScheme].tint;
+    const insets = useSafeAreaInsets();
     const snapPoints = useMemo(
       () => customSnapPoints || ["75%", "90%"],
       [customSnapPoints]
@@ -81,7 +83,10 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         backdropComponent={renderBackdrop}
         onClose={onClose}
       >
-        <BottomSheetScrollView style={styles.container}>
+        <BottomSheetScrollView
+          style={styles.container}
+          contentContainerStyle={{ paddingBottom: Math.max(16, insets.bottom) }}
+        >
           {/* Header */}
           <View style={styles.header}>
             <FontAwesome name={icon} size={24} color={accentColor} />
@@ -93,7 +98,12 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
 
           {/* Boutons d'action */}
           {showActions && (
-            <View style={styles.buttonsContainer}>
+            <View
+              style={[
+                styles.buttonsContainer,
+                { paddingBottom: Math.max(16, insets.bottom) },
+              ]}
+            >
               <View style={styles.primaryRow}>
                 <TouchableOpacity
                   style={[

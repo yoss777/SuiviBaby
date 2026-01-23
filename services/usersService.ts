@@ -1,10 +1,14 @@
 // services/usersService.ts
 import {
-    doc,
-    getDoc,
-    onSnapshot,
-    setDoc,
-    updateDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  setDoc,
+  updateDoc,
+  where,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 
@@ -23,6 +27,31 @@ const getUserId = () => {
   return user.uid;
 };
 
+export async function getUserById(uid: string): Promise<UserProfile | null> {
+  const userDoc = await getDoc(doc(db, "users", uid));
+  if (!userDoc.exists()) {
+    return null;
+  }
+  return userDoc.data() as UserProfile;
+}
+
+export async function getUserByEmail(
+  email: string,
+): Promise<UserProfile | null> {
+  const emailQuery = query(
+    collection(db, "users"),
+    where("email", "==", email.toLowerCase()),
+  );
+  const snapshot = await getDocs(emailQuery);
+
+  if (snapshot.empty) {
+    return null;
+  }
+
+  const userDoc = snapshot.docs[0];
+  return { id: userDoc.id, ...userDoc.data() } as UserProfile;
+}
+
 // Créer ou mettre à jour le profil utilisateur
 export async function creerOuMettreAJourProfil(data: {
   userName: string;
@@ -32,10 +61,14 @@ export async function creerOuMettreAJourProfil(data: {
     const userId = getUserId();
     const userRef = doc(db, "users", userId);
 
-    await setDoc(userRef, {
-      ...data,
-      updatedAt: new Date(),
-    }, { merge: true });
+    await setDoc(
+      userRef,
+      {
+        ...data,
+        updatedAt: new Date(),
+      },
+      { merge: true },
+    );
 
     console.log("Profil utilisateur mis à jour");
     return true;
@@ -51,7 +84,7 @@ export async function obtenirProfil(): Promise<UserProfile | null> {
     const userId = getUserId();
     const docRef = doc(db, "users", userId);
     const docSnap = await getDoc(docRef);
-    
+
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() } as UserProfile;
     } else {

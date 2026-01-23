@@ -7,7 +7,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   createEmailInvitation,
   createShareCode,
-  getActiveShareCode,
+  cleanupExpiredShareCodes,
+  listenToActiveShareCode,
 } from "@/services/childSharingService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { useLocalSearchParams } from "expo-router";
@@ -46,7 +47,13 @@ export default function ShareChildScreen() {
   // Charger les infos de l'enfant et le code existant
   useEffect(() => {
     loadChildInfo();
-    loadExistingCode();
+    cleanupExpiredShareCodes(childId).catch((error) => {
+      console.warn("[ShareChild] cleanup expired codes failed:", error);
+    });
+    const unsubscribe = listenToActiveShareCode(childId, setShareCode);
+    return () => {
+      unsubscribe();
+    };
   }, [childId]);
 
   const loadChildInfo = async () => {
@@ -62,14 +69,6 @@ export default function ShareChildScreen() {
     }
   };
 
-  const loadExistingCode = async () => {
-    try {
-      const code = await getActiveShareCode(childId);
-      setShareCode(code);
-    } catch (error) {
-      console.error("Erreur chargement code:", error);
-    }
-  };
 
   const handleGenerateCode = async () => {
     setIsLoadingCode(true);
@@ -150,7 +149,7 @@ export default function ShareChildScreen() {
   const testHandleSendInvitation = async () => {
     if (isSendingInviteRef.current || isLoadingInvite) return;
 
-    const inviteEmail = "aguene.yohannes@gmail.com"; // Example email for testing
+    const inviteEmail = "nessy107@gmail.com"; // Example email for testing
     if (!inviteEmail.trim()) {
       showAlert("Erreur", "Veuillez saisir une adresse email");
       return;
