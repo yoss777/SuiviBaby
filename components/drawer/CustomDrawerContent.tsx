@@ -2,7 +2,16 @@ import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { DrawerContentScrollView } from "@react-navigation/drawer";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Dimensions, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  Dimensions,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 import { AddChildModal } from "@/components/suivibaby/AddChildModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -13,7 +22,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { masquerEnfant } from "@/services/userPreferencesService";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 export function CustomDrawerContent(props: any) {
   const router = useRouter();
@@ -24,7 +33,10 @@ export function CustomDrawerContent(props: any) {
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showHideModal, setShowHideModal] = useState(false);
-  const [childToHide, setChildToHide] = useState<{ id: string; name: string } | null>(null);
+  const [childToHide, setChildToHide] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [showAddChildModal, setShowAddChildModal] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
@@ -41,9 +53,11 @@ export function CustomDrawerContent(props: any) {
   // Rediriger vers explore si tous les enfants sont masqués
   useEffect(() => {
     if (!childrenLoaded) return;
-    if (children.length === 0 && pathname.includes('/baby')) {
-      console.log('[CustomDrawer] Tous les enfants masqués, redirection vers explore');
-      router.replace('/explore');
+    if (children.length === 0 && pathname.includes("/baby")) {
+      console.log(
+        "[CustomDrawer] Tous les enfants masqués, redirection vers explore",
+      );
+      router.replace("/explore");
     }
   }, [children.length, childrenLoaded, pathname]);
 
@@ -89,10 +103,13 @@ export function CustomDrawerContent(props: any) {
       await masquerEnfant(childToHide.id);
       setShowHideModal(false);
       setChildToHide(null);
-      
+
       // Si c'était le dernier enfant visible, la redirection se fera via useEffect
     } catch (error) {
-      setErrorModal({ visible: true, message: "Impossible de masquer l'enfant." });
+      setErrorModal({
+        visible: true,
+        message: "Impossible de masquer l'enfant.",
+      });
     }
   };
 
@@ -108,7 +125,7 @@ export function CustomDrawerContent(props: any) {
             <Text
               style={[styles.userName, { color: Colors[colorScheme].text }]}
             >
-              {userName || email?.split('@')[0] || user.email?.split('@')[0]}
+              {userName || email?.split("@")[0] || user.email?.split("@")[0]}
             </Text>
 
             <Text
@@ -120,7 +137,6 @@ export function CustomDrawerContent(props: any) {
               {email || user.email}
             </Text>
           </View>
-
         </View>
       )}
 
@@ -139,15 +155,20 @@ export function CustomDrawerContent(props: any) {
         {/* Liste des enfants */}
         {children.map((child) => {
           const ageText = calculateAge(child.birthDate);
-          const isActive = child.id === activeChild?.id && pathname.includes("/baby");
-          const itemColor = isActive ? Colors[colorScheme].tint : Colors[colorScheme].text;
+          const isActive =
+            child.id === activeChild?.id && pathname.includes("/baby");
+          const itemColor = isActive
+            ? Colors[colorScheme].tint
+            : Colors[colorScheme].text;
 
           return (
             <View key={child.id} style={styles.childItemContainer}>
               <TouchableOpacity
                 style={[
                   styles.childItem,
-                  isActive && { backgroundColor: Colors[colorScheme].tint + '15' }
+                  isActive && {
+                    backgroundColor: Colors[colorScheme].tint + "15",
+                  },
                 ]}
                 onPress={() => {
                   setActiveChild(child);
@@ -164,7 +185,12 @@ export function CustomDrawerContent(props: any) {
                   <Text style={[styles.childName, { color: itemColor }]}>
                     {child.name}
                   </Text>
-                  <Text style={[styles.childBirthDate, { color: itemColor, opacity: 0.7 }]}>
+                  <Text
+                    style={[
+                      styles.childBirthDate,
+                      { color: itemColor, opacity: 0.7 },
+                    ]}
+                  >
                     {ageText} • {child.birthDate}
                   </Text>
                 </View>
@@ -174,7 +200,11 @@ export function CustomDrawerContent(props: any) {
               <View style={styles.childActions}>
                 <TouchableOpacity
                   style={styles.actionButton}
-                  onPress={() => router.push(`/(drawer)/share-child?childId=${child.id}` as any)}
+                  onPress={() =>
+                    router.push(
+                      `/(drawer)/share-child?childId=${child.id}` as any,
+                    )
+                  }
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   <FontAwesome name="share-alt" size={16} color="#4A90E2" />
@@ -248,16 +278,28 @@ export function CustomDrawerContent(props: any) {
           onPress={() => setShowHideModal(false)}
         >
           <Pressable
-            style={[styles.modalContent, { backgroundColor: Colors[colorScheme].background }]}
+            style={[
+              styles.modalContent,
+              { backgroundColor: Colors[colorScheme].background },
+            ]}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={[styles.modalTitle, { color: Colors[colorScheme].text }]}>
+            <Text
+              style={[styles.modalTitle, { color: Colors[colorScheme].text }]}
+            >
               Masquer de la liste
             </Text>
-            <Text style={[styles.modalSubtitle, { color: Colors[colorScheme].text }]}>
-              Êtes-vous sûr de vouloir masquer <Text style={styles.childNameInModal}>{childToHide?.name}</Text> de votre liste de suivi ?
-              {'\n\n'}
-              L'enfant restera accessible aux autres parents et vous pourrez le réafficher à tout moment depuis les paramètres.
+            <Text
+              style={[
+                styles.modalSubtitle,
+                { color: Colors[colorScheme].text },
+              ]}
+            >
+              Êtes-vous sûr de vouloir masquer{" "}
+              <Text style={styles.childNameInModal}>{childToHide?.name}</Text>{" "}
+              de votre liste de suivi ?{"\n\n"}
+              L'enfant restera accessible aux autres parents et vous pourrez le
+              réafficher à tout moment depuis les paramètres.
             </Text>
 
             <View style={styles.modalButtons}>
@@ -295,7 +337,10 @@ export function CustomDrawerContent(props: any) {
             await signOut();
             router.replace("/(auth)/login");
           } catch (error) {
-            setErrorModal({ visible: true, message: "Impossible de se déconnecter." });
+            setErrorModal({
+              visible: true,
+              message: "Impossible de se déconnecter.",
+            });
           }
         }}
       />
@@ -469,7 +514,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   childActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 4,
   },
   actionButton: {
@@ -486,7 +531,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderStyle: "dashed",
     alignItems: "center",
-    backgroundColor: '#f8f0ff',
+    backgroundColor: "#f8f0ff",
   },
   joinChildText: {
     fontSize: 14,
@@ -494,15 +539,15 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContent: {
     width: width * 0.85,
     borderRadius: 20,
     padding: 24,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -510,45 +555,45 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: "700",
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   modalSubtitle: {
     fontSize: 14,
     marginBottom: 24,
-    textAlign: 'center',
+    textAlign: "center",
     opacity: 0.7,
     lineHeight: 20,
   },
   modalButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   modalButton: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   cancelButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: "#f0f0f0",
   },
   deleteButton: {
-    backgroundColor: '#dc3545',
+    backgroundColor: "#dc3545",
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: "600",
+    color: "#666",
   },
   deleteButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: "600",
+    color: "#fff",
   },
   childNameInModal: {
-    fontWeight: '700',
+    fontWeight: "700",
   },
 });

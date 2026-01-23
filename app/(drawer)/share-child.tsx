@@ -7,7 +7,6 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   createEmailInvitation,
   createShareCode,
-  cleanupExpiredShareCodes,
   listenToActiveShareCode,
 } from "@/services/childSharingService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
@@ -47,14 +46,15 @@ export default function ShareChildScreen() {
   // Charger les infos de l'enfant et le code existant
   useEffect(() => {
     loadChildInfo();
-    cleanupExpiredShareCodes(childId).catch((error) => {
-      console.warn("[ShareChild] cleanup expired codes failed:", error);
-    });
+    if (!user?.uid) {
+      setShareCode(null);
+      return;
+    }
     const unsubscribe = listenToActiveShareCode(childId, setShareCode);
     return () => {
       unsubscribe();
     };
-  }, [childId]);
+  }, [childId, user?.uid]);
 
   const loadChildInfo = async () => {
     try {
@@ -68,7 +68,6 @@ export default function ShareChildScreen() {
       setIsLoadingChild(false);
     }
   };
-
 
   const handleGenerateCode = async () => {
     setIsLoadingCode(true);
@@ -146,51 +145,6 @@ export default function ShareChildScreen() {
       isSendingInviteRef.current = false;
     }
   };
-  const testHandleSendInvitation = async () => {
-    if (isSendingInviteRef.current || isLoadingInvite) return;
-
-    const inviteEmail = "nessy107@gmail.com"; // Example email for testing
-    if (!inviteEmail.trim()) {
-      showAlert("Erreur", "Veuillez saisir une adresse email");
-      return;
-    }
-
-    // Validation email simple
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(inviteEmail)) {
-      showAlert("Erreur", "Veuillez saisir une adresse email valide");
-      return;
-    }
-
-    isSendingInviteRef.current = true;
-    setIsLoadingInvite(true);
-    try {
-      await createEmailInvitation(childId, childName, inviteEmail);
-      showAlert(
-        "Invitation envoyée",
-        `Une invitation a été envoyée à ${inviteEmail}. L'autre parent recevra une notification dans l'app.`,
-        [{ text: "" }],
-      );
-      setInviteEmail("");
-    } catch (error: any) {
-      if (error?.code === "already-linked") {
-        const email = error?.email ?? inviteEmail;
-        showAlert(
-          "Déjà lié",
-          `Cet enfant est déjà lié au destinataire ${email}.`,
-          [{ text: "" }],
-        );
-      } else {
-        showAlert(
-          "Erreur",
-          error.message || "Impossible d'envoyer l'invitation",
-        );
-      }
-    } finally {
-      setIsLoadingInvite(false);
-      isSendingInviteRef.current = false;
-    }
-  };
 
   if (isLoadingChild) {
     return (
@@ -234,12 +188,7 @@ export default function ShareChildScreen() {
             contentContainerStyle={styles.scrollContent}
           >
             <View style={styles.header}>
-              <TouchableOpacity
-                activeOpacity={1}
-                onPress={testHandleSendInvitation}
-              >
-                <FontAwesome name="share-alt" size={48} color="#4A90E2" />
-              </TouchableOpacity>
+              <FontAwesome name="share-alt" size={48} color="#4A90E2" />
               <Text style={styles.title}>Partager {childName}</Text>
               <Text style={styles.subtitle}>
                 Donnez accès au suivi de votre enfant à un autre parent

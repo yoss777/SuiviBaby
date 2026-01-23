@@ -30,7 +30,7 @@ const sections = [
     {
       title: "4. Hébergement et Transferts de données",
       content:
-        "Vos données sont hébergées par Google Firebase sur des serveurs sécurisés situés au sein de l'Union Européenne (Belgique ou Allemagne). Tout transfert éventuel vers une entité hors UE est strictement encadré par les Clauses Contractuelles Types (CCT) de la Commission Européenne pour garantir un niveau de protection équivalent.",
+        "Vos données sont hébergées par Google Firebase sur des serveurs sécurisés situés dans la région us-central1 (Etats-Unis). Tout transfert éventuel hors UE est encadré par les Clauses Contractuelles Types (CCT) de la Commission Europeenne pour garantir un niveau de protection equivalent.",
     },
     {
       title: "5. Conservation et Suppression des données",

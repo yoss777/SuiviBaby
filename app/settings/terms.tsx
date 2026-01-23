@@ -35,7 +35,7 @@ export default function TermsScreen() {
     {
       title: '5. Donnees et sauvegarde',
       content:
-        'Vos donnees sont enregistrees dans le cloud pour assurer leur synchronisation. Des fonctionnalites d\'export peuvent etre proposees, mais vous restez responsable de vos sauvegardes personnelles.',
+        "Vos donnees sont enregistrees dans le cloud pour assurer leur synchronisation, dans la region us-central1. Des fonctionnalites d'export peuvent etre proposees, mais vous restez responsable de vos sauvegardes personnelles.",
     },
     {
       title: '6. Propriete intellectuelle',
