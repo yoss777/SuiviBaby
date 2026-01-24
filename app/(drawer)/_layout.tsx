@@ -216,13 +216,6 @@ export default function DrawerLayout() {
                 }}
               />
               <Drawer.Screen
-                name="join-child"
-                options={{
-                  title: "Ajouter avec un code",
-                  drawerItemStyle: { display: "none" },
-                }}
-              />
-              <Drawer.Screen
                 name="share-child"
                 options={{
                   title: "Partage",

@@ -295,7 +295,7 @@ export default function Explore() {
                   styles.inviteButton,
                   { backgroundColor: Colors[colorScheme].tint },
                 ]}
-                onPress={() => router.push('/(drawer)/join-child' as any)}
+                onPress={() => router.push('/settings/join-child' as any)}
                 activeOpacity={0.8}
               >
                 <Ionicons name="mail-outline" size={18} color="#fff" />

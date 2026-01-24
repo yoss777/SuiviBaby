@@ -130,7 +130,7 @@ export default function SettingsScreen() {
       label: 'Ajouter un enfant',
       description: 'Entrer un code ou accepter une invitation',
       onPress: () => {
-        router.push('/(drawer)/join-child');
+        router.push('/settings/join-child');
       },
     },
     {

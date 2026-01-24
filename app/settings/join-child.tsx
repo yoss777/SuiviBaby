@@ -21,7 +21,7 @@ import {
   setTodayEventsCache,
 } from "@/services/todayEventsCache";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { router } from "expo-router";
+import { Stack, router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -230,6 +230,12 @@ export default function JoinChildScreen() {
           ]}
           edges={["bottom"]}
         >
+          <Stack.Screen
+            options={{
+              title: "Ajouter avec un code",
+              headerBackTitle: "Retour",
+            }}
+          />
           <ScrollView
             style={styles.container}
             showsVerticalScrollIndicator={false}
