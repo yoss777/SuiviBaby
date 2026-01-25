@@ -1,5 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -19,14 +20,14 @@ import {
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
   ecouterTeteesHybrid as ecouterTetees,
-  hasMoreEventsBeforeHybrid,
   getNextEventDateBeforeHybrid,
+  hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { HeaderBackButton } from "@react-navigation/elements";
 import { useNetInfo } from "@react-native-community/netinfo";
+import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,7 +37,6 @@ import {
   InteractionManager,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -133,7 +133,6 @@ export default function MealsScreen() {
   // Ref pour la gestion du picker avec accélération
   const intervalRef = useRef<number | undefined>(undefined);
 
-
   // ============================================
   // EFFECTS - URL PARAMS
   // ============================================
@@ -147,7 +146,7 @@ export default function MealsScreen() {
       if (newValue) {
         const today = new Date();
         const todayString = `${today.getFullYear()}-${String(
-          today.getMonth() + 1
+          today.getMonth() + 1,
         ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
         setSelectedDate(todayString);
         setSelectedFilter(null);
@@ -158,65 +157,71 @@ export default function MealsScreen() {
     });
   }, []);
 
-  const prepareAddModal = useCallback((preferredType?: "seins" | "biberons") => {
-    setDateHeure(new Date());
-    setEditingMeal(null);
-    setIsSubmitting(false);
+  const prepareAddModal = useCallback(
+    (preferredType?: "seins" | "biberons") => {
+      setDateHeure(new Date());
+      setEditingMeal(null);
+      setIsSubmitting(false);
 
-    if (preferredType === "seins") {
-      setMealType("tetee");
-    } else if (preferredType === "biberons") {
-      setMealType("biberon");
-      setQuantite(100);
-    } else {
-      setMealType("tetee");
-    }
-  }, []);
+      if (preferredType === "seins") {
+        setMealType("tetee");
+      } else if (preferredType === "biberons") {
+        setMealType("biberon");
+        setQuantite(100);
+      } else {
+        setMealType("tetee");
+      }
+    },
+    [],
+  );
 
-  const openAddModal = useCallback((preferredType?: "seins" | "biberons") => {
-    prepareAddModal(preferredType);
-    setPendingMode("add");
-    setPendingOpen(true);
-  }, [prepareAddModal]);
+  const openAddModal = useCallback(
+    (preferredType?: "seins" | "biberons") => {
+      prepareAddModal(preferredType);
+      setPendingMode("add");
+      setPendingOpen(true);
+    },
+    [prepareAddModal],
+  );
 
   // Définir les boutons du header (calendrier + ajouter)
   useFocusEffect(
     useCallback(() => {
       const headerButtons = (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingRight: 16,
-          gap: 0,
-        }}
-      >
-        {/* <VoiceCommandButton
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingRight: 16,
+            gap: 0,
+          }}
+        >
+          {/* <VoiceCommandButton
           size={18}
           color={Colors[colorScheme].tint}
           showTestToggle={false}
         /> */}
 
-        <Pressable
-          onPress={handleCalendarPress}
-          style={[
-            styles.headerButton,
-            { paddingLeft: 12 },
-            showCalendar && {
-              backgroundColor: Colors[colorScheme].tint + "20",
-            },
-          ]}
-        >
-          <Ionicons
-            name="calendar-outline"
-            size={24}
-            color={Colors[colorScheme].tint}
-          />
-        </Pressable>
-        <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
-          <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={handleCalendarPress}
+            style={[
+              styles.headerButton,
+              { paddingLeft: 12 },
+              showCalendar && {
+                backgroundColor: Colors[colorScheme].tint + "20",
+              },
+            ]}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={24}
+              color={Colors[colorScheme].tint}
+            />
+          </Pressable>
+          <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+          </Pressable>
+        </View>
       );
 
       setHeaderRight(headerButtons, headerOwnerId.current);
@@ -230,7 +235,7 @@ export default function MealsScreen() {
       colorScheme,
       setHeaderRight,
       openAddModal,
-    ])
+    ]),
   );
 
   // ============================================
@@ -274,7 +279,7 @@ export default function MealsScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, returnTarget, setHeaderLeft])
+    }, [colorScheme, returnTarget, setHeaderLeft]),
   );
 
   useFocusEffect(
@@ -305,7 +310,7 @@ export default function MealsScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen, returnTarget, router])
+    }, [closeSheet, isOpen, returnTarget, router]),
   );
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
@@ -314,7 +319,7 @@ export default function MealsScreen() {
       if (openModal !== "true") return;
       setPendingMode("add");
       setPendingOpen(true);
-    }, [openModal])
+    }, [openModal]),
   );
 
   useEffect(() => {
@@ -372,7 +377,7 @@ export default function MealsScreen() {
 
     const mergeAndSortMeals = () => {
       const merged = [...teteesData, ...biberonsData].sort(
-        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
       setMeals(merged);
       if (
@@ -393,7 +398,7 @@ export default function MealsScreen() {
         setTeteesLoaded(true);
         mergeAndSortMeals();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
     const unsubscribeBiberons = ecouterBiberons(
@@ -403,7 +408,7 @@ export default function MealsScreen() {
         setBiberonsLoaded(true);
         mergeAndSortMeals();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
     return () => {
@@ -482,13 +487,7 @@ export default function MealsScreen() {
         setAutoLoadMoreAttempts(0);
       }
     },
-    [
-      hasMore,
-      activeChild?.id,
-      autoLoadMoreAttempts,
-      daysWindow,
-      rangeEndDate,
-    ],
+    [hasMore, activeChild?.id, autoLoadMoreAttempts, daysWindow, rangeEndDate],
   );
 
   const handleLoadMore = useCallback(() => {
@@ -497,7 +496,12 @@ export default function MealsScreen() {
 
   useEffect(() => {
     if (selectedFilter === "today" || selectedDate) return;
-    if (!autoLoadMore && !isMealsLoading && groupedMeals.length === 0 && hasMore) {
+    if (
+      !autoLoadMore &&
+      !isMealsLoading &&
+      groupedMeals.length === 0 &&
+      hasMore
+    ) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
@@ -649,7 +653,7 @@ export default function MealsScreen() {
   const applyTodayFilter = useCallback(() => {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
+      today.getMonth() + 1,
     ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     setSelectedFilter("today");
     setSelectedDate(null);
@@ -676,7 +680,7 @@ export default function MealsScreen() {
       if (!selectedFilter && !selectedDate) {
         applyTodayFilter();
       }
-    }, [applyTodayFilter, selectedDate, selectedFilter])
+    }, [applyTodayFilter, selectedDate, selectedFilter]),
   );
 
   // ============================================
@@ -689,7 +693,7 @@ export default function MealsScreen() {
     meals.forEach((meal) => {
       const date = new Date(meal.date?.seconds * 1000);
       const dateKey = `${date.getFullYear()}-${String(
-        date.getMonth() + 1
+        date.getMonth() + 1,
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
       if (!groups[dateKey]) {
@@ -708,7 +712,7 @@ export default function MealsScreen() {
         const lastMeal = meals.reduce((latest, current) =>
           (current.date?.seconds || 0) > (latest.date?.seconds || 0)
             ? current
-            : latest
+            : latest,
         );
 
         return {
@@ -720,7 +724,7 @@ export default function MealsScreen() {
             year: "numeric",
           }),
           meals: meals.sort(
-            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
           ),
           totalQuantity,
           lastMeal,
@@ -886,7 +890,7 @@ export default function MealsScreen() {
         showToast(
           editingMeal
             ? "Modification en attente de synchronisation"
-            : "Ajout en attente de synchronisation"
+            : "Ajout en attente de synchronisation",
         );
       }
       closeModal();
@@ -894,7 +898,7 @@ export default function MealsScreen() {
       console.error("Erreur lors de la sauvegarde du repas:", error);
       showAlert(
         "Erreur",
-        "Impossible de sauvegarder le repas. Veuillez réessayer."
+        "Impossible de sauvegarder le repas. Veuillez réessayer.",
       );
     } finally {
       setIsSubmitting(false);
@@ -919,7 +923,10 @@ export default function MealsScreen() {
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la suppression:", error);
-      showAlert("Erreur", "Impossible de supprimer le repas. Veuillez réessayer.");
+      showAlert(
+        "Erreur",
+        "Impossible de supprimer le repas. Veuillez réessayer.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -928,195 +935,195 @@ export default function MealsScreen() {
   function renderSheetContent() {
     return (
       <>
-      <Text style={styles.modalCategoryLabel}>Type de repas</Text>
-      <View style={styles.typeRow}>
-        <TouchableOpacity
-          style={[
-            styles.typeButton,
-            mealType === "tetee" && styles.typeButtonActive,
-            isSubmitting && styles.typeButtonDisabled,
-          ]}
-          onPress={() => setMealType("tetee")}
-          disabled={isSubmitting}
-        >
-          <FontAwesome
-            name="person-breastfeeding"
-            size={20}
-            color={mealType === "tetee" ? "white" : "#666"}
-          />
-          <Text
+        <Text style={styles.modalCategoryLabel}>Type de repas</Text>
+        <View style={styles.typeRow}>
+          <TouchableOpacity
             style={[
-              styles.typeText,
-              mealType === "tetee" && styles.typeTextActive,
-              isSubmitting && styles.typeTextDisabled,
+              styles.typeButton,
+              mealType === "tetee" && styles.typeButtonActive,
+              isSubmitting && styles.typeButtonDisabled,
             ]}
+            onPress={() => setMealType("tetee")}
+            disabled={isSubmitting}
           >
-            Seins
-          </Text>
-        </TouchableOpacity>
+            <FontAwesome
+              name="person-breastfeeding"
+              size={20}
+              color={mealType === "tetee" ? "white" : "#666"}
+            />
+            <Text
+              style={[
+                styles.typeText,
+                mealType === "tetee" && styles.typeTextActive,
+                isSubmitting && styles.typeTextDisabled,
+              ]}
+            >
+              Seins
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.typeButton,
-            mealType === "biberon" && styles.typeButtonActive,
-            isSubmitting && styles.typeButtonDisabled,
-          ]}
-          onPress={() => {
-            setMealType("biberon");
-            setQuantite(100);
-          }}
-          disabled={isSubmitting}
-        >
-          <FontAwesome
-            name="jar-wheat"
-            size={20}
-            color={mealType === "biberon" ? "white" : "#666"}
-          />
-          <Text
+          <TouchableOpacity
             style={[
-              styles.typeText,
-              mealType === "biberon" && styles.typeTextActive,
-              isSubmitting && styles.typeTextDisabled,
+              styles.typeButton,
+              mealType === "biberon" && styles.typeButtonActive,
+              isSubmitting && styles.typeButtonDisabled,
             ]}
+            onPress={() => {
+              setMealType("biberon");
+              setQuantite(100);
+            }}
+            disabled={isSubmitting}
           >
-            Biberon
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {isQuantityVisible ? (
-        <>
-          <Text style={styles.modalCategoryLabel}>Quantité</Text>
-          <View style={styles.quantityRow}>
-            <TouchableOpacity
+            <FontAwesome
+              name="jar-wheat"
+              size={20}
+              color={mealType === "biberon" ? "white" : "#666"}
+            />
+            <Text
               style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
+                styles.typeText,
+                mealType === "biberon" && styles.typeTextActive,
+                isSubmitting && styles.typeTextDisabled,
               ]}
-              onPressIn={() =>
-                handlePressIn(() => setQuantite((q) => Math.max(0, q - 5)))
-              }
-              onPressOut={handlePressOut}
-              disabled={isSubmitting}
             >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                -
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.quantityValue}>{quantite} ml</Text>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPressIn={() => handlePressIn(() => setQuantite((q) => q + 5))}
-              onPressOut={handlePressOut}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                +
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : (
-        <View style={styles.quantityNA}>
-          <Text style={styles.quantityNAText}>Quantité : N/A</Text>
+              Biberon
+            </Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-      <View style={styles.dateTimeContainer}>
-        <TouchableOpacity
-          style={[
-            styles.dateButton,
-            isSubmitting && styles.dateButtonDisabled,
-          ]}
-          onPress={() => setShowDate(true)}
-          disabled={isSubmitting}
-        >
-          <FontAwesome
-            name="calendar-alt"
-            size={16}
-            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
-          />
-          <Text
+        {isQuantityVisible ? (
+          <>
+            <Text style={styles.modalCategoryLabel}>Quantité</Text>
+            <View style={styles.quantityRow}>
+              <TouchableOpacity
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
+                onPressIn={() =>
+                  handlePressIn(() => setQuantite((q) => Math.max(0, q - 5)))
+                }
+                onPressOut={handlePressOut}
+                disabled={isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  -
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.quantityValue}>{quantite} ml</Text>
+              <TouchableOpacity
+                style={[
+                  styles.quantityButton,
+                  isSubmitting && styles.quantityButtonDisabled,
+                ]}
+                onPressIn={() => handlePressIn(() => setQuantite((q) => q + 5))}
+                onPressOut={handlePressOut}
+                disabled={isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.quantityButtonText,
+                    isSubmitting && styles.quantityButtonTextDisabled,
+                  ]}
+                >
+                  +
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <View style={styles.quantityNA}>
+            <Text style={styles.quantityNAText}>Quantité : N/A</Text>
+          </View>
+        )}
+
+        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
+        <View style={styles.dateTimeContainer}>
+          <TouchableOpacity
             style={[
-              styles.dateButtonText,
-              isSubmitting && styles.dateButtonTextDisabled,
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
             ]}
+            onPress={() => setShowDate(true)}
+            disabled={isSubmitting}
           >
-            Date
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.dateButton,
-            isSubmitting && styles.dateButtonDisabled,
-          ]}
-          onPress={() => setShowTime(true)}
-          disabled={isSubmitting}
-        >
-          <FontAwesome
-            name="clock"
-            size={16}
-            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
-          />
-          <Text
+            <FontAwesome
+              name="calendar-alt"
+              size={16}
+              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+            />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Date
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[
-              styles.dateButtonText,
-              isSubmitting && styles.dateButtonTextDisabled,
+              styles.dateButton,
+              isSubmitting && styles.dateButtonDisabled,
             ]}
+            onPress={() => setShowTime(true)}
+            disabled={isSubmitting}
           >
-            Heure
+            <FontAwesome
+              name="clock"
+              size={16}
+              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+            />
+            <Text
+              style={[
+                styles.dateButtonText,
+                isSubmitting && styles.dateButtonTextDisabled,
+              ]}
+            >
+              Heure
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.selectedDateTime}>
+          <Text style={styles.selectedDate}>
+            {dateHeure.toLocaleDateString("fr-FR", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
           </Text>
-        </TouchableOpacity>
-      </View>
+          <Text style={styles.selectedTime}>
+            {dateHeure.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
 
-      <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate}>
-          {dateHeure.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </Text>
-        <Text style={styles.selectedTime}>
-          {dateHeure.toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-      </View>
-
-      {showDate && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={onChangeDate}
-        />
-      )}
-      {showTime && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="time"
-          is24Hour={true}
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={onChangeTime}
-        />
-      )}
+        {showDate && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeDate}
+          />
+        )}
+        {showTime && (
+          <DateTimePicker
+            value={dateHeure}
+            mode="time"
+            is24Hour={true}
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChangeTime}
+          />
+        )}
       </>
     );
   }
@@ -1169,7 +1176,7 @@ export default function MealsScreen() {
         newDate.setFullYear(
           selectedDate.getFullYear(),
           selectedDate.getMonth(),
-          selectedDate.getDate()
+          selectedDate.getDate(),
         );
         return newDate;
       });
@@ -1228,7 +1235,7 @@ export default function MealsScreen() {
                   {
                     hour: "2-digit",
                     minute: "2-digit",
-                  }
+                  },
                 )}
               </Text>
             </View>
@@ -1321,57 +1328,17 @@ export default function MealsScreen() {
       <SafeAreaView
         style={[
           { flex: 1 },
-          { backgroundColor: Colors[colorScheme].background },
+          // { backgroundColor: Colors[colorScheme].background },
         ]}
         edges={["bottom"]}
         onLayout={() => setLayoutReady(true)}
       >
         <View>
           {/* Filtres */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterContainer}
-            contentContainerStyle={styles.filterContent}
-          >
-            <Pressable
-              onPress={() => handleFilterPress("today")}
-              style={[
-                styles.filterButton,
-                selectedFilter === "today" && {
-                  backgroundColor: Colors[colorScheme].tint,
-                },
-              ]}
-            >
-              <ThemedText
-                style={[
-                  styles.filterText,
-                  selectedFilter === "today" && styles.filterTextActive,
-                ]}
-              >
-                Aujourd&apos;hui
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => handleFilterPress("past")}
-              style={[
-                styles.filterButton,
-                selectedFilter === "past" && {
-                  backgroundColor: Colors[colorScheme].tint,
-                },
-              ]}
-            >
-              <ThemedText
-                style={[
-                  styles.filterText,
-                  selectedFilter === "past" && styles.filterTextActive,
-                ]}
-              >
-                Passés
-              </ThemedText>
-            </Pressable>
-          </ScrollView>
+          <DateFilterBar
+            selected={selectedFilter}
+            onSelect={handleFilterPress}
+          />
 
           {/* Calendrier */}
           {showCalendar && (
@@ -1474,8 +1441,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f9fa",
   },
   flatlistContent: {
-    paddingVertical: 16,
-    // paddingBottom: 8,
+    paddingBottom: 8,
   },
   headerButton: {
     paddingVertical: 8,
@@ -1493,37 +1459,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e0e0e0",
   },
   // Filter Bar
-  filterContainer: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  filterContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filterButtonActive: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  filterTextActive: {
-    color: "#fff",
-  },
   addButton: {
     backgroundColor: "#4A90E2",
     flexDirection: "row",

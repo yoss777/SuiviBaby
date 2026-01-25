@@ -1,5 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -37,11 +38,10 @@ import {
   InteractionManager,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -1465,57 +1465,17 @@ export default function DiapersScreen() {
       <SafeAreaView
         style={[
           { flex: 1 },
-          { backgroundColor: Colors[colorScheme].background },
+          // { backgroundColor: Colors[colorScheme].background },
         ]}
         edges={["bottom"]}
         onLayout={() => setLayoutReady(true)}
       >
         <View>
           {/* Filtres */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterContainer}
-            contentContainerStyle={styles.filterContent}
-          >
-            <Pressable
-              onPress={() => handleFilterPress("today")}
-              style={[
-                styles.filterButton,
-                selectedFilter === "today" && {
-                  backgroundColor: Colors[colorScheme].tint,
-                },
-              ]}
-            >
-              <ThemedText
-                style={[
-                  styles.filterText,
-                  selectedFilter === "today" && styles.filterTextActive,
-                ]}
-              >
-                Aujourd&apos;hui
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => handleFilterPress("past")}
-              style={[
-                styles.filterButton,
-                selectedFilter === "past" && {
-                  backgroundColor: Colors[colorScheme].tint,
-                },
-              ]}
-            >
-              <ThemedText
-                style={[
-                  styles.filterText,
-                  selectedFilter === "past" && styles.filterTextActive,
-                ]}
-              >
-                Passés
-              </ThemedText>
-            </Pressable>
-          </ScrollView>
+          <DateFilterBar
+            selected={selectedFilter}
+            onSelect={handleFilterPress}
+          />
 
           {/* Calendrier */}
           {showCalendar && (
@@ -1617,7 +1577,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f9fa",
   },
   flatlistContent: {
-    paddingVertical: 16,
+    paddingBottom: 8,
   },
   headerButton: {
     paddingVertical: 8,
@@ -1631,30 +1591,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e0e0e0",
   },
   // Filter Bar
-  filterContainer: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  filterContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  filterTextActive: {
-    color: "#fff",
-  },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,

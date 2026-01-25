@@ -17,6 +17,7 @@ import type { Event, EventType } from "@/services/eventsService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, {
@@ -40,7 +41,6 @@ import { runOnJS, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
 import { useHeaderRight } from "../../_layout";
-import { useFocusEffect } from "@react-navigation/native";
 
 // ============================================
 // TYPES
@@ -356,23 +356,16 @@ const FilterChip = React.memo(
       <TouchableOpacity
         style={[
           styles.filterChip,
-          { borderColor },
-          isActive && { backgroundColor: tintColor },
+          { borderColor: config.color },
+          // !isActive &&
+          { borderWidth: 0 },
+          isActive && { backgroundColor: `${config.color}1A` },
         ]}
         onPress={onPress}
         activeOpacity={0.8}
       >
-        <FontAwesome
-          name={config.icon as any}
-          size={12}
-          color={isActive ? backgroundColor : config.color}
-        />
-        <Text
-          style={[
-            styles.filterChipText,
-            { color: isActive ? backgroundColor : textColor },
-          ]}
-        >
+        <FontAwesome name={config.icon as any} size={12} color={config.color} />
+        <Text style={[styles.filterChipText, { color: textColor }]}>
           {config.label}
         </Text>
       </TouchableOpacity>
@@ -408,7 +401,7 @@ const RangeChip = React.memo(
         styles.rangeChip,
         compact && styles.rangeChipCompact,
         { borderColor },
-        isActive && { backgroundColor: tintColor },
+        isActive && { backgroundColor: "#f8f9fa" },
       ]}
       onPress={onPress}
       activeOpacity={0.8}
@@ -417,7 +410,7 @@ const RangeChip = React.memo(
         style={[
           styles.rangeChipText,
           compact && styles.rangeChipTextCompact,
-          { color: isActive ? backgroundColor : textColor },
+          { color: isActive ? tintColor : "#999999" },
         ]}
       >
         {value}j
@@ -1207,12 +1200,20 @@ const styles = StyleSheet.create({
   rangeRow: {
     flexDirection: "row",
     gap: 8,
+    borderWidth: 1,
+    borderColor: "#e1e4e8",
+    borderRadius: 20,
+    padding: 4,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
   },
   rangeChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 16,
-    borderWidth: 1,
+    // borderWidth: 1,
+    // backgroundColor: "#f8f9fa",
   },
   rangeChipCompact: {
     paddingHorizontal: 10,
