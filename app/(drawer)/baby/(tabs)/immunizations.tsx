@@ -1601,8 +1601,19 @@ export default function ImmunizationsScreen() {
         onLayout={() => setLayoutReady(true)}
       >
         <View>
-          {/* Filtres */}
-          <DateFilterBar selected={selectedFilter} onSelect={handleFilterPress}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingRight: 16,
+            }}
+          >
+            {/* Filtres */}
+            <DateFilterBar
+              selected={selectedFilter}
+              onSelect={handleFilterPress}
+            />
             {/* Switch Vitamines/Vaccins */}
             <View style={styles.typeSwitchContainer}>
               <TouchableOpacity
@@ -1638,7 +1649,7 @@ export default function ImmunizationsScreen() {
                 />
               </TouchableOpacity>
             </View>
-          </DateFilterBar>
+          </View>
 
           {/* Calendrier */}
           {showCalendar && (
@@ -2108,8 +2119,9 @@ const styles = StyleSheet.create({
   // Type Switch
   typeSwitchContainer: {
     flexDirection: "row",
-    backgroundColor: "#f0f0f0",
-    // borderWidth: 1,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d7dbe0",
     borderRadius: 20,
     padding: 2,
     marginLeft: 8,
