@@ -776,30 +776,6 @@ export default function MealsScreen() {
     setExpandedDays(newExpandedDays);
   };
 
-  const getMealTypeLabel = (type?: MealType): string => {
-    if (!type) return "Inconnu";
-    return type === "tetee" ? "Sein" : "Biberon";
-  };
-
-  const getMealIcon = (type?: MealType) => {
-    switch (type) {
-      case "tetee":
-        return {
-          lib: "FontAwesome",
-          name: "person-breastfeeding",
-        };
-      case "biberon":
-        return {
-          lib: "MaterialCommunityIcons",
-          name: "baby-bottle",
-        };
-      default:
-        return {
-          lib: "FontAwesome",
-          name: "utensils",
-        };
-    }
-  };
 
   // ============================================
   // HANDLERS - MODAL
@@ -1200,59 +1176,64 @@ export default function MealsScreen() {
   // ============================================
 
   const renderMealItem = (meal: Meal, isLast: boolean = false) => {
-    const typeLabel = getMealTypeLabel(meal.type);
-    const icon = getMealIcon(meal.type);
-
-    const quantityDisplay =
-      meal.quantite !== null && meal.quantite !== undefined
-        ? `${meal.quantite} ml`
-        : "N/A";
+    const mealTime = new Date(meal.date?.seconds * 1000);
+    const isTetee = meal.type === "tetee";
 
     return (
-      <TouchableOpacity
+      <Pressable
         key={meal.id}
-        style={[styles.mealItem, isLast && styles.lastMealItem]}
+        style={({ pressed }) => [
+          styles.mealRow,
+          isLast && styles.mealRowLast,
+          pressed && styles.mealRowPressed,
+        ]}
         onPress={() => openEditModal(meal)}
-        activeOpacity={0.7}
       >
-        <View style={styles.mealContent}>
+        {/* Timeline indicator */}
+        <View style={styles.timelineColumn}>
+          <Text style={[styles.timelineTime, isLast && styles.timelineTimeLast]}>
+            {mealTime.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
+
+        {/* Dot & line */}
+        <View style={styles.timelineDotColumn}>
           <View
-            style={[styles.avatar, { backgroundColor: eventColors.meal.dark }]}
-          >
-            {icon.lib === "FontAwesome" ? (
-              <FontAwesome name={icon.name} size={20} color="#fff" />
+            style={[
+              styles.timelineDot,
+              { backgroundColor: isLast ? eventColors.meal.dark : "#d1d5db" },
+            ]}
+          />
+        </View>
+
+        {/* Content */}
+        <View style={styles.mealContent}>
+          <View style={styles.mealIconWrapper}>
+            {isTetee ? (
+              <FontAwesome
+                name="person-breastfeeding"
+                size={16}
+                color={eventColors.meal.dark}
+              />
             ) : (
-              <MaterialCommunityIcons name={icon.name} size={20} color="#fff" />
+              <MaterialCommunityIcons
+                name="baby-bottle"
+                size={18}
+                color={eventColors.meal.dark}
+              />
             )}
           </View>
-          <View style={styles.mealInfo}>
-            <View style={styles.infoRow}>
-              <Text style={styles.mealTypeText}>
-                Quantité : {quantityDisplay}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.timeText}>
-                {new Date(meal.date?.seconds * 1000).toLocaleTimeString(
-                  "fr-FR",
-                  {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  },
-                )}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.mealActions}>
-            <FontAwesome
-              name="edit"
-              size={16}
-              color={eventColors.meal.dark}
-              style={styles.editIcon}
-            />
+          <View style={styles.mealDetails}>
+            <Text style={styles.mealType}>{isTetee ? "Allaitement" : "Biberon"}</Text>
+            {!isTetee && meal.quantite && (
+              <Text style={styles.mealQuantity}>{meal.quantite} ml</Text>
+            )}
           </View>
         </View>
-      </TouchableOpacity>
+      </Pressable>
     );
   };
 
@@ -1263,64 +1244,100 @@ export default function MealsScreen() {
   const renderDayGroup = ({ item }: { item: MealGroup }) => {
     const isExpanded = expandedDays.has(item.date);
     const hasMultipleMeals = item.meals.length > 1;
+    const teteesCount = item.meals.filter((m) => m.type === "tetee").length;
+    const biberonsCount = item.meals.filter((m) => m.type === "biberon").length;
+
+    // Format date: "Aujourd'hui", "Hier", or "Lun. 23 janv."
+    const formatDayLabel = () => {
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const itemDate = new Date(item.date);
+
+      if (itemDate.toDateString() === today.toDateString()) {
+        return "Aujourd'hui";
+      } else if (itemDate.toDateString() === yesterday.toDateString()) {
+        return "Hier";
+      }
+      return itemDate.toLocaleDateString("fr-FR", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+    };
 
     return (
-      <View style={styles.dayCard}>
+      <View style={styles.daySection}>
+        {/* Day Header */}
         <View style={styles.dayHeader}>
-          <View style={styles.dayInfo}>
-            <Text style={styles.dayDate}>{item.dateFormatted}</Text>
-            <View style={styles.summaryInfo}>
-              <View style={styles.summaryRow}>
-                <View style={styles.summaryBadge}>
-                  <FontAwesome
-                    name="baby"
-                    size={14}
-                    color={eventColors.meal.dark}
-                  />
-                  <Text style={styles.summaryText}>
-                    {item.meals.length} repas
-                  </Text>
-                </View>
+          <Text style={styles.dayLabel}>{formatDayLabel()}</Text>
+          <View style={styles.daySummary}>
+            {teteesCount > 0 && (
+              <View style={styles.summaryPill}>
+                <FontAwesome
+                  name="person-breastfeeding"
+                  size={10}
+                  color="#6b7280"
+                />
+                <Text style={styles.summaryPillText}>{teteesCount}</Text>
               </View>
-            </View>
-            <View style={styles.dailySummary}>
-              <View style={styles.dailyQuantityItem}>
-                {item.totalQuantity > 0 ? (
-                  <Text style={styles.dailyQuantityLabel}>
-                    Biberon(s) :{" "}
-                    <Text style={styles.dailyQuantityValue}>
-                      {item.totalQuantity} ml
-                    </Text>
-                  </Text>
-                ) : (
-                  <Text style={styles.dailyQuantityLabel}>0 biberon</Text>
-                )}
+            )}
+            {biberonsCount > 0 && (
+              <View style={styles.summaryPill}>
+                <MaterialCommunityIcons
+                  name="baby-bottle"
+                  size={12}
+                  color="#6b7280"
+                />
+                <Text style={styles.summaryPillText}>{biberonsCount}</Text>
               </View>
-            </View>
+            )}
+            {item.totalQuantity > 0 && (
+              <View style={[styles.summaryPill, styles.summaryPillAccent]}>
+                <Text style={styles.summaryPillTextAccent}>
+                  {item.totalQuantity} ml
+                </Text>
+              </View>
+            )}
           </View>
+        </View>
+
+        {/* Meals Card */}
+        <View style={styles.dayCard}>
+          {/* Last meal always visible */}
+          {renderMealItem(item.lastMeal, true)}
+
+          {/* Expandable history */}
           {hasMultipleMeals && (
-            <TouchableOpacity
-              style={styles.expandButton}
-              onPress={() => toggleExpand(item.date)}
-            >
-              <FontAwesome
-                name={isExpanded ? "chevron-up" : "chevron-down"}
-                size={16}
-                color="#666"
-              />
-            </TouchableOpacity>
+            <>
+              {isExpanded &&
+                item.meals
+                  .filter((meal) => meal.id !== item.lastMeal.id)
+                  .map((meal, index) => (
+                    <View key={meal.id}>
+                      <View style={styles.mealDivider} />
+                      {renderMealItem(meal, false)}
+                    </View>
+                  ))}
+
+              <Pressable
+                style={styles.expandTrigger}
+                onPress={() => toggleExpand(item.date)}
+              >
+                <Text style={styles.expandTriggerText}>
+                  {isExpanded
+                    ? "Masquer"
+                    : `Voir ${item.meals.length - 1} autre${item.meals.length > 2 ? "s" : ""}`}
+                </Text>
+                <Ionicons
+                  name={isExpanded ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color={eventColors.meal.dark}
+                />
+              </Pressable>
+            </>
           )}
         </View>
-        {renderMealItem(item.lastMeal, true)}
-        {hasMultipleMeals && isExpanded && (
-          <View style={styles.expandedContent}>
-            <View style={styles.separator} />
-            <Text style={styles.historyLabel}>Historique du jour</Text>
-            {item.meals
-              .filter((meal) => meal.id !== item.lastMeal.id)
-              .map((meal) => renderMealItem(meal))}
-          </View>
-        )}
       </View>
     );
   };
@@ -1486,170 +1503,154 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
 
-  // Day Card
-  dayCard: {
-    backgroundColor: "white",
-    marginBottom: 12,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+  // Day Section
+  daySection: {
+    marginBottom: 20,
   },
   dayHeader: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  dayInfo: {
-    flex: 1,
-  },
-  dayDate: {
-    fontSize: 17,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-  summaryInfo: {
-    flexDirection: "column",
-    gap: 4,
-    marginBottom: 8,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  summaryBadge: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#f5f6f8",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 10,
+    justifyContent: "space-between",
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
-  summaryText: {
+  dayLabel: {
     fontSize: 13,
-    color: "#666",
-  },
-  dailySummary: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  dailyQuantityItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  dailyQuantityLabel: {
-    fontSize: 12,
-    color: "#666",
-  },
-  dailyQuantityValue: {
-    fontSize: 12,
-    color: eventColors.meal.dark,
     fontWeight: "600",
-  },
-  expandButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0",
-  },
-  // Meal Section
-  section: {
-    marginBottom: 24,
-  },
-  dateHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-  },
-  dateText: {
-    fontSize: 16,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  // Meal Item
-  mealItem: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  lastMealItem: {
-    backgroundColor: eventColors.meal.light,
-    borderLeftWidth: 4,
-    borderLeftColor: eventColors.meal.dark,
-  },
-  mealContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-  },
-  mealInfo: {
-    flex: 1,
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 2,
-  },
-  timeText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  mealTypeText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  mealActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  quantityBadge: {
-    backgroundColor: eventColors.meal.dark,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  quantityText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  editIcon: {
-    opacity: 0.7,
-  },
-
-  // Expanded Content
-  expandedContent: {
-    marginTop: 8,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: "#eee",
-    marginBottom: 12,
-  },
-  historyLabel: {
-    fontSize: 12,
-    color: "#999",
-    marginBottom: 8,
+    color: "#6b7280",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  daySummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  summaryPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  summaryPillAccent: {
+    backgroundColor: eventColors.meal.dark,
+  },
+  summaryPillText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  summaryPillTextAccent: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+
+  // Day Card
+  dayCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+
+  // Meal Row (Timeline style)
+  mealRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  mealRowLast: {
+    backgroundColor: eventColors.meal.light + "60",
+  },
+  mealRowPressed: {
+    backgroundColor: "#f9fafb",
+  },
+  mealDivider: {
+    height: 1,
+    backgroundColor: "#f3f4f6",
+    marginLeft: 72,
+  },
+
+  // Timeline
+  timelineColumn: {
+    width: 44,
+    marginRight: 12,
+  },
+  timelineTime: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#9ca3af",
+  },
+  timelineTimeLast: {
+    color: "#374151",
+    fontWeight: "600",
+  },
+  timelineDotColumn: {
+    width: 16,
+    alignItems: "center",
+    marginRight: 12,
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+
+  // Meal Content
+  mealContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  mealIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: eventColors.meal.light,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mealDetails: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  mealType: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#111827",
+  },
+  mealQuantity: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: eventColors.meal.dark,
+  },
+
+  // Expand Trigger
+  expandTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+  },
+  expandTriggerText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: eventColors.meal.dark,
   },
 
   // Empty State
@@ -1803,20 +1804,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: eventColors.meal.dark,
     fontWeight: "bold",
-  },
-  // autres...
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    flexWrap: "wrap",
-  },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
   },
   emptyContainer: {
     flex: 1,

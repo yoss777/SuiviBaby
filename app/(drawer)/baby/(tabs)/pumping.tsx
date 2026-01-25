@@ -1195,71 +1195,75 @@ export default function PumpingScreen() {
   // RENDER - POMPAGE ITEM
   // ============================================
 
-  const renderPompageItem = (pompage: Pompage, isLast: boolean = false) => (
-    <TouchableOpacity
-      key={pompage.id}
-      style={[styles.pompageItem, isLast && styles.lastPompageItem]}
-      onPress={() => openEditModal(pompage)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.pompageHeader}>
-        <View style={styles.timeContainer}>
-          <FontAwesome
-            name="clock"
-            size={16}
-            color={isLast ? eventColors.pumping.dark : "#666"}
-          />
-          <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
-            {new Date(pompage.date?.seconds * 1000).toLocaleTimeString(
-              "fr-FR",
-              {
-                hour: "2-digit",
-                minute: "2-digit",
-              },
-            )}
+  const renderPompageItem = (pompage: Pompage, isLast: boolean = false) => {
+    const totalQty = (pompage.quantiteGauche || 0) + (pompage.quantiteDroite || 0);
+    const leftPercent = totalQty > 0 ? (pompage.quantiteGauche / totalQty) * 100 : 50;
+    const pompageTime = new Date(pompage.date?.seconds * 1000);
+
+    return (
+      <Pressable
+        key={pompage.id}
+        style={({ pressed }) => [
+          styles.sessionCard,
+          isLast && styles.sessionCardLast,
+          pressed && styles.sessionCardPressed,
+        ]}
+        onPress={() => openEditModal(pompage)}
+      >
+        {/* Time badge */}
+        <View style={styles.sessionTime}>
+          <Text style={[styles.sessionTimeText, isLast && styles.sessionTimeTextLast]}>
+            {pompageTime.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </Text>
         </View>
-        <View style={styles.headerActions}>
-          {/* {isLast && (
-            <View style={styles.recentBadge}>
-              <Text style={styles.recentText}>Récent</Text>
+
+        {/* Quantities visualization */}
+        <View style={styles.sessionContent}>
+          {/* Visual bar */}
+          <View style={styles.quantityBar}>
+            <View
+              style={[
+                styles.quantityBarLeft,
+                { flex: pompage.quantiteGauche || 1 },
+              ]}
+            />
+            <View
+              style={[
+                styles.quantityBarRight,
+                { flex: pompage.quantiteDroite || 1 },
+              ]}
+            />
+          </View>
+
+          {/* Labels */}
+          <View style={styles.quantityLabels}>
+            <View style={styles.quantityLabelItem}>
+              <View style={[styles.quantityDot, styles.quantityDotLeft]} />
+              <Text style={styles.quantityLabelText}>G</Text>
+              <Text style={styles.quantityLabelValue}>{pompage.quantiteGauche} ml</Text>
             </View>
-          )} */}
-          <FontAwesome
-            name="edit"
-            size={16}
-            color={eventColors.pumping.dark}
-            style={styles.editIcon}
-          />
-        </View>
-      </View>
-
-      <View style={styles.quantitiesContainer}>
-        <View style={styles.quantityRow}>
-          <View style={styles.quantityInfo}>
-            <FontAwesome name="chevron-left" size={12} color="#666" />
-            <Text style={styles.quantityLabel}>Gauche</Text>
+            <View style={styles.quantityLabelItem}>
+              <View style={[styles.quantityDot, styles.quantityDotRight]} />
+              <Text style={styles.quantityLabelText}>D</Text>
+              <Text style={styles.quantityLabelValue}>{pompage.quantiteDroite} ml</Text>
+            </View>
           </View>
-          <Text style={styles.quantityValue}>{pompage.quantiteGauche} ml</Text>
         </View>
 
-        <View style={styles.quantityRow}>
-          <View style={styles.quantityInfo}>
-            <FontAwesome name="chevron-right" size={12} color="#666" />
-            <Text style={styles.quantityLabel}>Droite</Text>
-          </View>
-          <Text style={styles.quantityValue}>{pompage.quantiteDroite} ml</Text>
+        {/* Total */}
+        <View style={styles.sessionTotal}>
+          <Text style={styles.sessionTotalValue}>{totalQty}</Text>
+          <Text style={styles.sessionTotalUnit}>ml</Text>
         </View>
 
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>
-            {(pompage.quantiteGauche || 0) + (pompage.quantiteDroite || 0)} ml
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+        {/* Chevron */}
+        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+      </Pressable>
+    );
+  };
 
   // ============================================
   // RENDER - DAY GROUP
@@ -1269,67 +1273,88 @@ export default function PumpingScreen() {
     const isExpanded = expandedDays.has(item.date);
     const hasMultiplePompages = item.pompages.length > 1;
 
+    // Format date intelligently
+    const formatDayLabel = () => {
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const itemDate = new Date(item.date);
+
+      if (itemDate.toDateString() === today.toDateString()) {
+        return "Aujourd'hui";
+      } else if (itemDate.toDateString() === yesterday.toDateString()) {
+        return "Hier";
+      }
+      return itemDate.toLocaleDateString("fr-FR", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+    };
+
     return (
-      <View style={styles.dayCard}>
+      <View style={styles.daySection}>
+        {/* Day Header with stats */}
         <View style={styles.dayHeader}>
-          <View style={styles.dayInfo}>
-            <Text style={styles.dayDate}>{item.dateFormatted}</Text>
-            <View style={styles.summaryInfo}>
-              <View style={styles.summaryRow}>
-                <View style={styles.summaryBadge}>
-                  <FontAwesome
-                    name="pump-medical"
-                    size={14}
-                    color={eventColors.pumping.dark}
-                  />
-                  <Text style={styles.summaryText}>
-                    {item.pompages.length} session
-                    {item.pompages.length > 1 ? "s" : ""} • {item.totalQuantity}{" "}
-                    ml
-                  </Text>
-                </View>
-              </View>
+          <Text style={styles.dayLabel}>{formatDayLabel()}</Text>
+          <View style={styles.dayStats}>
+            <View style={styles.dayStatItem}>
+              <Text style={styles.dayStatValue}>{item.pompages.length}</Text>
+              <Text style={styles.dayStatLabel}>session{item.pompages.length > 1 ? "s" : ""}</Text>
             </View>
-            <View style={styles.dailySummary}>
-              <View style={styles.dailyQuantityItem}>
-                <Text style={styles.dailyQuantityLabel}>Gauche:</Text>
-                <Text style={styles.dailyQuantityValue}>
-                  {item.totalQuantityLeft} ml
-                </Text>
-              </View>
-              <View style={styles.dailyQuantityItem}>
-                <Text style={styles.dailyQuantityLabel}>Droite:</Text>
-                <Text style={styles.dailyQuantityValue}>
-                  {item.totalQuantityRight} ml
-                </Text>
-              </View>
+            <View style={styles.dayStatDivider} />
+            <View style={styles.dayStatItem}>
+              <Text style={[styles.dayStatValue, styles.dayStatValueAccent]}>
+                {item.totalQuantity}
+              </Text>
+              <Text style={styles.dayStatLabel}>ml total</Text>
             </View>
           </View>
-          {hasMultiplePompages && (
-            <TouchableOpacity
-              style={styles.expandButton}
-              onPress={() => toggleExpand(item.date)}
-            >
-              <FontAwesome
-                name={isExpanded ? "chevron-up" : "chevron-down"}
-                size={16}
-                color="#666"
-              />
-            </TouchableOpacity>
-          )}
         </View>
 
-        {renderPompageItem(item.lastPompage, true)}
-
-        {hasMultiplePompages && isExpanded && (
-          <View style={styles.expandedContent}>
-            <View style={styles.separator} />
-            <Text style={styles.historyLabel}>Historique du jour</Text>
-            {item.pompages
-              .filter((pompage) => pompage.id !== item.lastPompage.id)
-              .map((pompage) => renderPompageItem(pompage))}
+        {/* Stats breakdown */}
+        <View style={styles.statsBreakdown}>
+          <View style={styles.statsBreakdownItem}>
+            <View style={[styles.statsBreakdownDot, { backgroundColor: "#10b981" }]} />
+            <Text style={styles.statsBreakdownLabel}>Gauche</Text>
+            <Text style={styles.statsBreakdownValue}>{item.totalQuantityLeft} ml</Text>
           </View>
-        )}
+          <View style={styles.statsBreakdownItem}>
+            <View style={[styles.statsBreakdownDot, { backgroundColor: "#6366f1" }]} />
+            <Text style={styles.statsBreakdownLabel}>Droite</Text>
+            <Text style={styles.statsBreakdownValue}>{item.totalQuantityRight} ml</Text>
+          </View>
+        </View>
+
+        {/* Sessions list */}
+        <View style={styles.sessionsContainer}>
+          {renderPompageItem(item.lastPompage, true)}
+
+          {hasMultiplePompages && (
+            <>
+              {isExpanded &&
+                item.pompages
+                  .filter((pompage) => pompage.id !== item.lastPompage.id)
+                  .map((pompage) => renderPompageItem(pompage, false))}
+
+              <Pressable
+                style={styles.expandTrigger}
+                onPress={() => toggleExpand(item.date)}
+              >
+                <Text style={styles.expandTriggerText}>
+                  {isExpanded
+                    ? "Masquer"
+                    : `${item.pompages.length - 1} autre${item.pompages.length > 2 ? "s" : ""} session${item.pompages.length > 2 ? "s" : ""}`}
+                </Text>
+                <Ionicons
+                  name={isExpanded ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color={eventColors.pumping.dark}
+                />
+              </Pressable>
+            </>
+          )}
+        </View>
       </View>
     );
   };
@@ -1470,204 +1495,198 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
-  // Filter Bar
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
-  // Section
-  section: {
+
+  // Day Section
+  daySection: {
     marginBottom: 24,
-  },
-  dateHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-  },
-  dateText: {
-    fontSize: 16,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  // Day Card
-  dayCard: {
-    backgroundColor: "white",
-    marginBottom: 12,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
   },
   dayHeader: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  dayInfo: {
-    flex: 1,
+  dayLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
   },
-  summaryInfo: {
-    flexDirection: "column",
-    gap: 4,
-    marginBottom: 8,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  summaryBadge: {
+  dayStats: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#f5f6f8",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 10,
+    gap: 12,
   },
-  summaryText: {
+  dayStatItem: {
+    alignItems: "flex-end",
+  },
+  dayStatValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  dayStatValueAccent: {
+    color: eventColors.pumping.dark,
+  },
+  dayStatLabel: {
+    fontSize: 11,
+    color: "#9ca3af",
+  },
+  dayStatDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: "#e5e7eb",
+  },
+
+  // Stats breakdown
+  statsBreakdown: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  statsBreakdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  statsBreakdownDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statsBreakdownLabel: {
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  statsBreakdownValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#374151",
+  },
+
+  // Sessions container
+  sessionsContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+
+  // Session Card
+  sessionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  sessionCardLast: {
+    backgroundColor: eventColors.pumping.light + "40",
+    borderBottomWidth: 0,
+  },
+  sessionCardPressed: {
+    backgroundColor: "#f9fafb",
+  },
+  sessionTime: {
+    width: 52,
+  },
+  sessionTimeText: {
     fontSize: 13,
-    color: "#666",
+    fontWeight: "500",
+    color: "#9ca3af",
   },
-  dailySummary: {
+  sessionTimeTextLast: {
+    color: "#374151",
+    fontWeight: "600",
+  },
+  sessionContent: {
+    flex: 1,
+    gap: 6,
+  },
+  quantityBar: {
+    flexDirection: "row",
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  quantityBarLeft: {
+    backgroundColor: "#10b981",
+  },
+  quantityBarRight: {
+    backgroundColor: "#6366f1",
+  },
+  quantityLabels: {
     flexDirection: "row",
     gap: 16,
   },
-  dailyQuantityItem: {
+  quantityLabelItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  dailyQuantityLabel: {
-    fontSize: 12,
-    color: "#666",
+  quantityDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-  dailyQuantityValue: {
-    fontSize: 12,
-    color: eventColors.pumping.dark,
-    fontWeight: "600",
+  quantityDotLeft: {
+    backgroundColor: "#10b981",
   },
-  expandButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0",
+  quantityDotRight: {
+    backgroundColor: "#6366f1",
   },
-  // Pompage Item
-  pompageItem: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-  },
-  lastPompageItem: {
-    backgroundColor: eventColors.pumping.light,
-    borderLeftWidth: 4,
-    borderLeftColor: eventColors.pumping.dark,
-  },
-  pompageHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  timeContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  timeText: {
-    fontSize: 16,
+  quantityLabelText: {
+    fontSize: 11,
     fontWeight: "500",
-    color: "#666",
+    color: "#9ca3af",
   },
-  lastTimeText: {
-    color: "#333",
+  quantityLabelValue: {
+    fontSize: 11,
     fontWeight: "600",
+    color: "#4b5563",
   },
-  headerActions: {
+  sessionTotal: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 2,
+    minWidth: 50,
+    justifyContent: "flex-end",
+  },
+  sessionTotalValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: eventColors.pumping.dark,
+  },
+  sessionTotalUnit: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#9ca3af",
+  },
+
+  // Expand trigger
+  expandTrigger: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
   },
-  recentBadge: {
-    backgroundColor: eventColors.pumping.dark,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  recentText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  editIcon: {
-    opacity: 0.7,
-  },
-  quantitiesContainer: {
-    gap: 8,
-  },
-  quantityRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: "white",
-    borderRadius: 8,
-  },
-  quantityInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  quantityLabel: {
-    fontSize: 14,
-    color: "#666",
-  },
-  quantityValue: {
-    fontSize: 14,
-    color: "#333",
-    fontWeight: "600",
-  },
-  totalRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: eventColors.pumping.dark,
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  totalLabel: {
-    fontSize: 14,
-    color: "white",
-    fontWeight: "600",
-  },
-  totalValue: {
-    fontSize: 16,
-    color: "white",
-    fontWeight: "bold",
-  },
-  // Expanded Content
-  expandedContent: {
-    marginTop: 8,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: "#eee",
-    marginBottom: 12,
+  expandTriggerText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: eventColors.pumping.dark,
   },
   // Empty State
   emptyContainer: {
@@ -1789,78 +1808,5 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: eventColors.pumping.dark,
     fontWeight: "bold",
-  },
-  //////////////////
-  header: {
-    padding: 16,
-    paddingBottom: 8,
-  },
-  addButton: {
-    backgroundColor: eventColors.pumping.dark,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
-  },
-  addButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  dayDate: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-
-  historyLabel: {
-    fontSize: 12,
-    color: "#999",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#999",
-    marginTop: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    width: "90%",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    backgroundColor: "white",
-    borderRadius: 12,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  actionButtonsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
 });

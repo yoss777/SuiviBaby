@@ -1474,58 +1474,40 @@ export default function ImmunizationsScreen() {
       const typeLabel = getImmunoTypeLabel(immuno.type);
       const color = getImmunoColor(immuno.type);
       const name = getImmunoName(immuno);
-      const type = immuno.type || "vitamine";
-
-      const lastItemStyle = isLast
-        ? {
-            backgroundColor:
-              eventColors[type as keyof typeof eventColors]?.light ||
-              eventColors.default.light,
-            borderLeftColor:
-              eventColors[type as keyof typeof eventColors]?.dark ||
-              eventColors.default.dark,
-            borderLeftWidth: 4,
-          }
-        : {};
+      const timeLabel = new Date(
+        immuno.date?.seconds * 1000,
+      ).toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
 
       return (
         <TouchableOpacity
           key={immuno.id}
-          style={[styles.immunoItem, lastItemStyle]}
+          style={styles.immunoRow}
           onPress={() => openEditModal(immuno)}
           activeOpacity={0.7}
         >
-          <View style={styles.immunoContent}>
-            <View style={[styles.avatar, { backgroundColor: color }]}>
+          <View style={styles.timeColumn}>
+            <Text style={styles.timeText}>{timeLabel}</Text>
+            <View style={[styles.timelineDot, { backgroundColor: color }]} />
+            {!isLast && <View style={styles.timelineLine} />}
+          </View>
+          <View style={styles.immunoCard}>
+            <View style={styles.cardHeader}>
               <FontAwesome
                 name={getImmunoIcon(immuno.type)}
-                size={20}
-                color="#ffffff"
+                size={14}
+                color={color}
               />
+              <Text style={styles.immunoNameText}>{name}</Text>
             </View>
-            <View style={styles.immunoInfo}>
-              <View style={styles.infoRow}>
-                <Text style={styles.immunoTypeText}>{name}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.timeText}>
-                  {new Date(immuno.date?.seconds * 1000).toLocaleTimeString(
-                    "fr-FR",
-                    {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    },
-                  )}
+            <View style={styles.cardMeta}>
+              <View style={[styles.typePill, { borderColor: color }]}>
+                <Text style={[styles.typePillText, { color }]}>
+                  {typeLabel}
                 </Text>
               </View>
-            </View>
-            <View style={styles.immunoActions}>
-              <FontAwesome
-                name="edit"
-                size={16}
-                color={color}
-                style={styles.editIcon}
-              />
             </View>
           </View>
         </TouchableOpacity>
@@ -1848,42 +1830,70 @@ const styles = StyleSheet.create({
   },
 
   // Immuno Item
-  immunoItem: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  immunoContent: {
+  immunoRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
+    marginBottom: 10,
   },
-  immunoInfo: {
-    flex: 1,
-  },
-  infoRow: {
-    flexDirection: "row",
+  timeColumn: {
+    width: 56,
     alignItems: "center",
-    marginBottom: 2,
   },
   timeText: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 12,
+    color: "#7b828a",
+    marginBottom: 6,
   },
-  immunoTypeText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginBottom: 6,
   },
-  immunoActions: {
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: "#e6e9ee",
+    borderRadius: 2,
+  },
+  immunoCard: {
+    flex: 1,
+    backgroundColor: "white",
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#edf1f4",
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  immunoNameText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#222",
+  },
+  cardMeta: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  editIcon: {
-    opacity: 0.7,
+  typePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: "white",
+  },
+  typePillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
   },
 
   // Expanded Content
@@ -2031,13 +2041,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: eventColors.default.dark,
     fontWeight: "bold",
-  },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
   },
 
   // Vaccin Picker Header

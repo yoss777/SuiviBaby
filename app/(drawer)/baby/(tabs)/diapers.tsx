@@ -1341,129 +1341,81 @@ export default function DiapersScreen() {
   // ============================================
 
     const renderExcretionItem = useCallback(
-
       (excretion: Excretion, isLast: boolean = false) => {
-
         const typeLabel = getExcretionTypeLabel(excretion.type);
-
         const color = getExcretionColor(excretion.type);
+        const timeLabel = new Date(
+          excretion.date?.seconds * 1000,
+        ).toLocaleTimeString("fr-FR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
 
-        const type = excretion.type || "miction";
-
-  
-
-        const lastItemStyle = isLast
-
-          ? {
-
-              backgroundColor:
-
-                eventColors[type as keyof typeof eventColors]?.light ||
-
-                eventColors.default.light,
-
-              borderLeftColor:
-
-                eventColors[type as keyof typeof eventColors]?.dark ||
-
-                eventColors.default.dark,
-
-              borderLeftWidth: 4,
-
-            }
-
-          : {};
-
-  
+        const detailParts: string[] = [];
+        if (excretion.type === "miction" && excretion.couleur) {
+          const couleurLabel =
+            excretion.couleur === "claire"
+              ? "Claire"
+              : excretion.couleur === "jaune"
+              ? "Jaune"
+              : excretion.couleur === "foncee"
+              ? "Foncee"
+              : "Autre";
+          detailParts.push(`Couleur ${couleurLabel}`);
+        }
+        if (excretion.type === "selle") {
+          if (excretion.consistance) {
+            const consistanceLabel =
+              excretion.consistance === "liquide"
+                ? "Liquide"
+                : excretion.consistance === "molle"
+                ? "Molle"
+                : excretion.consistance === "normale"
+                ? "Normale"
+                : "Dure";
+            detailParts.push(`Consistance ${consistanceLabel}`);
+          }
+          if (excretion.quantite) {
+            const quantiteLabel =
+              excretion.quantite === "peu"
+                ? "Peu"
+                : excretion.quantite === "moyen"
+                ? "Moyen"
+                : "Beaucoup";
+            detailParts.push(`Quantite ${quantiteLabel}`);
+          }
+        }
+        const detailsText = detailParts.join(" · ");
 
         return (
-
           <TouchableOpacity
-
             key={excretion.id}
-
-            style={[styles.excretionItem, lastItemStyle]}
-
+            style={styles.excretionRow}
             onPress={() => openEditModal(excretion)}
-
             activeOpacity={0.7}
-
           >
-
-            <View style={styles.excretionContent}>
-
-              <View style={[styles.avatar, { backgroundColor: color }]}>
-
-                <FontAwesome
-
-                  name={getExcretionIcon(excretion.type)}
-
-                  size={20}
-
-                  color="#ffffff"
-
-                />
-
-              </View>
-
-              <View style={styles.excretionInfo}>
-
-                <View style={styles.infoRow}>
-
-                  <Text style={styles.excretionTypeText}>{typeLabel}</Text>
-
-                </View>
-
-                <View style={styles.infoRow}>
-
-                  <Text style={styles.timeText}>
-
-                    {new Date(excretion.date?.seconds * 1000).toLocaleTimeString(
-
-                      "fr-FR",
-
-                      {
-
-                        hour: "2-digit",
-
-                        minute: "2-digit",
-
-                      },
-
-                    )}
-
-                  </Text>
-
-                </View>
-
-              </View>
-
-              <View style={styles.excretionActions}>
-
-                <FontAwesome
-
-                  name="edit"
-
-                  size={16}
-
-                  color={color}
-
-                  style={styles.editIcon}
-
-                />
-
-              </View>
-
+            <View style={styles.timeColumn}>
+              <Text style={styles.timeText}>{timeLabel}</Text>
+              <View style={[styles.timelineDot, { backgroundColor: color }]} />
+              {!isLast && <View style={styles.timelineLine} />}
             </View>
-
+            <View style={styles.excretionCard}>
+              <View style={styles.cardHeader}>
+                <FontAwesome
+                  name={getExcretionIcon(excretion.type)}
+                  size={14}
+                  color={color}
+                />
+                <Text style={styles.excretionTypeText}>{typeLabel}</Text>
+              </View>
+              {detailsText.length > 0 && (
+                <Text style={styles.detailText}>{detailsText}</Text>
+              )}
+            </View>
           </TouchableOpacity>
-
         );
-
       },
-
       [],
-
     );
 
   
@@ -1904,21 +1856,21 @@ export default function DiapersScreen() {
 
       marginBottom: 12,
 
-      borderRadius: 14,
+      borderRadius: 16,
 
-      padding: 14,
+      padding: 16,
 
       borderWidth: 1,
 
-      borderColor: "#e9ecef",
+      borderColor: "#edf1f4",
 
       shadowColor: "#000",
 
       shadowOffset: { width: 0, height: 3 },
 
-      shadowOpacity: 0.04,
+      shadowOpacity: 0.03,
 
-      shadowRadius: 6,
+      shadowRadius: 4,
 
       elevation: 1,
 
@@ -1980,11 +1932,11 @@ export default function DiapersScreen() {
 
       gap: 4,
 
-      backgroundColor: "#f5f6f8",
+      backgroundColor: "#f3f4f6",
 
-      paddingHorizontal: 6,
+      paddingHorizontal: 8,
 
-      paddingVertical: 3,
+      paddingVertical: 4,
 
       borderRadius: 10,
 
@@ -1992,11 +1944,11 @@ export default function DiapersScreen() {
 
     summaryText: {
 
-      fontSize: 13,
+      fontSize: 12,
 
-      color: "#666",
+      color: "#5f6368",
 
-      fontWeight: "500",
+      fontWeight: "600",
 
     },
 
@@ -2004,9 +1956,11 @@ export default function DiapersScreen() {
 
       padding: 8,
 
-      borderRadius: 8,
+      borderRadius: 10,
 
-      backgroundColor: "#f0f0f0",
+      backgroundColor: "white",
+      borderWidth: 1,
+      borderColor: "#e6e9ee",
 
     },
 
@@ -2014,65 +1968,79 @@ export default function DiapersScreen() {
 
     // Excretion Item
 
-    excretionItem: {
-
-      backgroundColor: "#f8f9fa",
-
-      borderRadius: 8,
-
-      padding: 12,
-
-      marginBottom: 8,
-
-    },
-
-    excretionContent: {
+    excretionRow: {
 
       flexDirection: "row",
 
-      justifyContent: "space-between",
-
-      alignItems: "center",
+      alignItems: "flex-start",
 
       gap: 12,
 
-    },
-
-    excretionInfo: {
-
-      flex: 1,
+      marginBottom: 10,
 
     },
 
-    infoRow: {
+    timeColumn: {
 
-      flexDirection: "row",
+      width: 56,
 
       alignItems: "center",
-
-      marginBottom: 2,
 
     },
 
     timeText: {
 
-      fontSize: 14,
+      fontSize: 12,
 
-      color: "#666",
+      color: "#7b828a",
 
-    },
-
-    excretionTypeText: {
-
-      fontSize: 16,
-
-      fontWeight: "600",
-
-      color: "#333",
+      marginBottom: 6,
 
     },
 
-    excretionActions: {
+    timelineDot: {
+
+      width: 8,
+
+      height: 8,
+
+      borderRadius: 4,
+
+      marginBottom: 6,
+
+    },
+
+    timelineLine: {
+
+      width: 2,
+
+      flex: 1,
+
+      backgroundColor: "#e6e9ee",
+
+      borderRadius: 2,
+
+    },
+
+    excretionCard: {
+
+      flex: 1,
+
+      backgroundColor: "white",
+
+      borderRadius: 14,
+
+      paddingVertical: 12,
+
+      paddingHorizontal: 14,
+
+      borderWidth: 1,
+
+      borderColor: "#edf1f4",
+
+    },
+
+    cardHeader: {
 
       flexDirection: "row",
 
@@ -2080,11 +2048,25 @@ export default function DiapersScreen() {
 
       gap: 8,
 
+      marginBottom: 6,
+
     },
 
-    editIcon: {
+    excretionTypeText: {
 
-      opacity: 0.7,
+      fontSize: 15,
+
+      fontWeight: "700",
+
+      color: "#222",
+
+    },
+
+    detailText: {
+
+      fontSize: 12,
+
+      color: "#6b7280",
 
     },
 
@@ -2102,7 +2084,7 @@ export default function DiapersScreen() {
 
       height: 1,
 
-      backgroundColor: "#eee",
+      backgroundColor: "#edf1f4",
 
       marginBottom: 12,
 
@@ -2501,20 +2483,6 @@ export default function DiapersScreen() {
         fontWeight: "bold",
 
       },
-
-    avatar: {
-
-      width: 46,
-
-      height: 46,
-
-      borderRadius: 28,
-
-      alignItems: "center",
-
-      justifyContent: "center",
-
-    },
 
   });
 
