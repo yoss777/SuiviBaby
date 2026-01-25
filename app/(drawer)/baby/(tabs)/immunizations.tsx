@@ -1800,9 +1800,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   summaryInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+    flexDirection: "column",
+    gap: 4,
+    marginBottom: 8,
   },
   summaryRow: {
     flexDirection: "row",

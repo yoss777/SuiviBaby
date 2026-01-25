@@ -1807,7 +1807,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 6,
+    marginBottom: 4,
   },
 
   historyLabel: {
