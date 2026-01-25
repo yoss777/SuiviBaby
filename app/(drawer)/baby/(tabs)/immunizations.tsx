@@ -3,6 +3,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
@@ -824,9 +825,9 @@ export default function ImmunizationsScreen() {
   };
 
   const getImmunoColor = (type?: ImmunoType): string => {
-    if (type === "vitamine") return "#FF9800";
-    if (type === "vaccin") return "#9C27B0";
-    return "#666";
+    if (type === "vitamine") return eventColors.vitamine.dark;
+    if (type === "vaccin") return eventColors.vaccin.dark;
+    return eventColors.default.dark;
   };
 
   const getImmunoName = (immuno: Immuno): string => {
@@ -1473,17 +1474,24 @@ export default function ImmunizationsScreen() {
       const typeLabel = getImmunoTypeLabel(immuno.type);
       const color = getImmunoColor(immuno.type);
       const name = getImmunoName(immuno);
+      const type = immuno.type || "vitamine";
+
+      const lastItemStyle = isLast
+        ? {
+            backgroundColor:
+              eventColors[type as keyof typeof eventColors]?.light ||
+              eventColors.default.light,
+            borderLeftColor:
+              eventColors[type as keyof typeof eventColors]?.dark ||
+              eventColors.default.dark,
+            borderLeftWidth: 4,
+          }
+        : {};
 
       return (
         <TouchableOpacity
           key={immuno.id}
-          style={[
-            styles.immunoItem,
-            isLast &&
-              immuno.type === "vitamine" &&
-              styles.lastImmunoItemVitamine,
-            isLast && immuno.type === "vaccin" && styles.lastImmunoItemVaccin,
-          ]}
+          style={[styles.immunoItem, lastItemStyle]}
           onPress={() => openEditModal(immuno)}
           activeOpacity={0.7}
         >
@@ -1629,7 +1637,11 @@ export default function ImmunizationsScreen() {
                 <FontAwesome
                   name="pills"
                   size={16}
-                  color={selectedType === "vitamine" ? "white" : "#FF9800"}
+                  color={
+                    selectedType === "vitamine"
+                      ? "white"
+                      : eventColors.vitamine.dark
+                  }
                 />
               </TouchableOpacity>
               <TouchableOpacity
@@ -1645,7 +1657,11 @@ export default function ImmunizationsScreen() {
                 <FontAwesome
                   name="syringe"
                   size={16}
-                  color={selectedType === "vaccin" ? "white" : "#9C27B0"}
+                  color={
+                    selectedType === "vaccin"
+                      ? "white"
+                      : eventColors.vaccin.dark
+                  }
                 />
               </TouchableOpacity>
             </View>
@@ -1838,16 +1854,6 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
   },
-  lastImmunoItemVitamine: {
-    backgroundColor: "#fff3e0",
-    borderLeftWidth: 4,
-    borderLeftColor: "#FF9800",
-  },
-  lastImmunoItemVaccin: {
-    backgroundColor: "#f3e5f5",
-    borderLeftWidth: 4,
-    borderLeftColor: "#9C27B0",
-  },
   immunoContent: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2023,7 +2029,7 @@ const styles = StyleSheet.create({
   },
   selectedTime: {
     fontSize: 20,
-    color: "#004cdaff",
+    color: eventColors.default.dark,
     fontWeight: "bold",
   },
   avatar: {
@@ -2125,7 +2131,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#d7dbe0",
     borderRadius: 20,
-    padding: 2,
+    padding: 3,
     marginLeft: 8,
   },
   typeSwitchButton: {
@@ -2145,9 +2151,9 @@ const styles = StyleSheet.create({
     // borderBottomLeftRadius: 0,
   },
   typeSwitchButtonActiveVitamine: {
-    backgroundColor: "#FF9800",
+    backgroundColor: eventColors.vitamine.dark,
   },
   typeSwitchButtonActiveVaccin: {
-    backgroundColor: "#9C27B0",
+    backgroundColor: eventColors.vaccin.dark,
   },
 });

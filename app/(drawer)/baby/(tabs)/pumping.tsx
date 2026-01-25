@@ -4,6 +4,7 @@ import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
+import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -1130,7 +1131,7 @@ export default function PumpingScreen() {
       ownerId: sheetOwnerId,
       title: editingPompage ? "Modifier la session" : "Nouvelle session",
       icon: "pump-medical",
-      accentColor: "#28a745",
+      accentColor: eventColors.pumping.dark,
       isEditing: !!editingPompage,
       isSubmitting,
       onSubmit: handleSubmit,
@@ -1206,7 +1207,7 @@ export default function PumpingScreen() {
           <FontAwesome
             name="clock"
             size={16}
-            color={isLast ? "#28a745" : "#666"}
+            color={isLast ? eventColors.pumping.dark : "#666"}
           />
           <Text style={[styles.timeText, isLast && styles.lastTimeText]}>
             {new Date(pompage.date?.seconds * 1000).toLocaleTimeString(
@@ -1227,7 +1228,7 @@ export default function PumpingScreen() {
           <FontAwesome
             name="edit"
             size={16}
-            color="#28a745"
+            color={eventColors.pumping.dark}
             style={styles.editIcon}
           />
         </View>
@@ -1276,7 +1277,11 @@ export default function PumpingScreen() {
             <View style={styles.summaryInfo}>
               <View style={styles.summaryRow}>
                 <View style={styles.summaryBadge}>
-                  <FontAwesome name="pump-medical" size={14} color="#28a745" />
+                  <FontAwesome
+                    name="pump-medical"
+                    size={14}
+                    color={eventColors.pumping.dark}
+                  />
                   <Text style={styles.summaryText}>
                     {item.pompages.length} session
                     {item.pompages.length > 1 ? "s" : ""} • {item.totalQuantity}{" "}
@@ -1550,7 +1555,7 @@ const styles = StyleSheet.create({
   },
   dailyQuantityValue: {
     fontSize: 12,
-    color: "#28a745",
+    color: eventColors.pumping.dark,
     fontWeight: "600",
   },
   expandButton: {
@@ -1566,9 +1571,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   lastPompageItem: {
-    backgroundColor: "#f0f8f4",
+    backgroundColor: eventColors.pumping.light,
     borderLeftWidth: 4,
-    borderLeftColor: "#28a745",
+    borderLeftColor: eventColors.pumping.dark,
   },
   pompageHeader: {
     flexDirection: "row",
@@ -1596,7 +1601,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   recentBadge: {
-    backgroundColor: "#28a745",
+    backgroundColor: eventColors.pumping.dark,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -1641,7 +1646,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: "#28a745",
+    backgroundColor: eventColors.pumping.dark,
     borderRadius: 8,
     marginTop: 4,
   },
@@ -1782,7 +1787,7 @@ const styles = StyleSheet.create({
   },
   selectedTime: {
     fontSize: 20,
-    color: "#28a745",
+    color: eventColors.pumping.dark,
     fontWeight: "bold",
   },
   //////////////////
@@ -1791,7 +1796,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   addButton: {
-    backgroundColor: "#28a745",
+    backgroundColor: eventColors.pumping.dark,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

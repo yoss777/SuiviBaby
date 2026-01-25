@@ -3,6 +3,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
@@ -1134,7 +1135,7 @@ export default function MealsScreen() {
       ownerId: sheetOwnerId,
       title: editingMeal ? "Modifier le repas" : "Nouveau repas",
       icon: "baby",
-      accentColor: "#4A90E2",
+      accentColor: eventColors.meal.dark,
       isEditing: !!editingMeal,
       isSubmitting,
       onSubmit: handleSubmit,
@@ -1215,7 +1216,9 @@ export default function MealsScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.mealContent}>
-          <View style={[styles.avatar, { backgroundColor: "#4A90E2" }]}>
+          <View
+            style={[styles.avatar, { backgroundColor: eventColors.meal.dark }]}
+          >
             {icon.lib === "FontAwesome" ? (
               <FontAwesome name={icon.name} size={20} color="#fff" />
             ) : (
@@ -1244,7 +1247,7 @@ export default function MealsScreen() {
             <FontAwesome
               name="edit"
               size={16}
-              color="#4A90E2"
+              color={eventColors.meal.dark}
               style={styles.editIcon}
             />
           </View>
@@ -1269,7 +1272,11 @@ export default function MealsScreen() {
             <View style={styles.summaryInfo}>
               <View style={styles.summaryRow}>
                 <View style={styles.summaryBadge}>
-                  <FontAwesome name="baby" size={14} color="#4A90E2" />
+                  <FontAwesome
+                    name="baby"
+                    size={14}
+                    color={eventColors.meal.dark}
+                  />
                   <Text style={styles.summaryText}>
                     {item.meals.length} repas
                   </Text>
@@ -1546,7 +1553,7 @@ const styles = StyleSheet.create({
   },
   dailyQuantityValue: {
     fontSize: 12,
-    color: "#4A90E2",
+    color: eventColors.meal.dark,
     fontWeight: "600",
   },
   expandButton: {
@@ -1581,9 +1588,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   lastMealItem: {
-    backgroundColor: "#e8f4fd",
+    backgroundColor: eventColors.meal.light,
     borderLeftWidth: 4,
-    borderLeftColor: "#4A90E2",
+    borderLeftColor: eventColors.meal.dark,
   },
   mealContent: {
     flexDirection: "row",
@@ -1614,7 +1621,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   quantityBadge: {
-    backgroundColor: "#4A90E2",
+    backgroundColor: eventColors.meal.dark,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -1690,7 +1697,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   typeButtonActive: {
-    backgroundColor: "#4A90E2",
+    backgroundColor: eventColors.meal.dark,
   },
   typeButtonDisabled: {
     backgroundColor: "#f8f8f8",
@@ -1794,7 +1801,7 @@ const styles = StyleSheet.create({
   },
   selectedTime: {
     fontSize: 20,
-    color: "#004cdaff",
+    color: eventColors.meal.dark,
     fontWeight: "bold",
   },
   // autres...
