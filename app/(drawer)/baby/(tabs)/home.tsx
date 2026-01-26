@@ -203,7 +203,8 @@ export default function HomeDashboard() {
         return event.dosage ? `${name} · ${event.dosage}` : name;
       }
       case "vaccin":
-        return event.nomVaccin || "Vaccin";
+        const name = event.nomVaccin || "Vaccin";
+        return event.dosage ? `${name} · ${event.dosage}` : name;
       default:
         return undefined;
     }

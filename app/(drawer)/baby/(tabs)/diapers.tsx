@@ -3,8 +3,8 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
-import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { eventColors } from "@/constants/eventColors";
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -42,7 +42,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -1340,1150 +1340,858 @@ export default function DiapersScreen() {
   // RENDER - EXCRETION ITEM
   // ============================================
 
-    const renderExcretionItem = useCallback(
-      (excretion: Excretion, isLast: boolean = false) => {
-        const typeLabel = getExcretionTypeLabel(excretion.type);
-        const color = getExcretionColor(excretion.type);
-        const timeLabel = new Date(
-          excretion.date?.seconds * 1000,
-        ).toLocaleTimeString("fr-FR", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
+  const renderExcretionItem = useCallback(
+    (excretion: Excretion, isLast: boolean = false) => {
+      const typeLabel = getExcretionTypeLabel(excretion.type);
+      const color = getExcretionColor(excretion.type);
+      const excretionTime = new Date(excretion.date?.seconds * 1000);
 
-        const detailParts: string[] = [];
-        if (excretion.type === "miction" && excretion.couleur) {
-          const couleurLabel =
-            excretion.couleur === "claire"
-              ? "Claire"
-              : excretion.couleur === "jaune"
+      const detailParts: string[] = [];
+      if (excretion.type === "miction" && excretion.couleur) {
+        const couleurLabel =
+          excretion.couleur === "claire"
+            ? "Claire"
+            : excretion.couleur === "jaune"
               ? "Jaune"
               : excretion.couleur === "foncee"
-              ? "Foncee"
-              : "Autre";
-          detailParts.push(`Couleur ${couleurLabel}`);
-        }
-        if (excretion.type === "selle") {
-          if (excretion.consistance) {
-            const consistanceLabel =
-              excretion.consistance === "liquide"
-                ? "Liquide"
-                : excretion.consistance === "molle"
+                ? "Foncée"
+                : "Autre";
+        detailParts.push(couleurLabel);
+      }
+      if (excretion.type === "selle") {
+        if (excretion.consistance) {
+          const consistanceLabel =
+            excretion.consistance === "liquide"
+              ? "Liquide"
+              : excretion.consistance === "molle"
                 ? "Molle"
                 : excretion.consistance === "normale"
-                ? "Normale"
-                : "Dure";
-            detailParts.push(`Consistance ${consistanceLabel}`);
-          }
-          if (excretion.quantite) {
-            const quantiteLabel =
-              excretion.quantite === "peu"
-                ? "Peu"
-                : excretion.quantite === "moyen"
+                  ? "Normale"
+                  : "Dure";
+          detailParts.push(consistanceLabel);
+        }
+        if (excretion.quantite) {
+          const quantiteLabel =
+            excretion.quantite === "peu"
+              ? "Peu"
+              : excretion.quantite === "moyen"
                 ? "Moyen"
                 : "Beaucoup";
-            detailParts.push(`Quantite ${quantiteLabel}`);
-          }
+          detailParts.push(quantiteLabel);
         }
-        const detailsText = detailParts.join(" · ");
+      }
+      const detailsText = detailParts.join(" · ");
 
-        return (
-          <TouchableOpacity
-            key={excretion.id}
-            style={styles.excretionRow}
-            onPress={() => openEditModal(excretion)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.timeColumn}>
-              <Text style={styles.timeText}>{timeLabel}</Text>
-              <View style={[styles.timelineDot, { backgroundColor: color }]} />
-              {!isLast && <View style={styles.timelineLine} />}
+      return (
+        <Pressable
+          key={excretion.id}
+          style={({ pressed }) => [
+            styles.sessionCard,
+            // isLast && { backgroundColor: color + "15" },
+            pressed && styles.sessionCardPressed,
+          ]}
+          onPress={() => openEditModal(excretion)}
+        >
+          {/* Time badge */}
+          <View style={styles.sessionTime}>
+            <Text
+              style={[
+                styles.sessionTimeText,
+                isLast && styles.sessionTimeTextLast,
+              ]}
+            >
+              {excretionTime.toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+          </View>
+
+          {/* Content */}
+          <View style={styles.sessionContent}>
+            <View
+              style={[
+                styles.sessionIconWrapper,
+                { backgroundColor: color + "20" },
+              ]}
+            >
+              <FontAwesome
+                name={getExcretionIcon(excretion.type)}
+                size={14}
+                color={color}
+              />
             </View>
-            <View style={styles.excretionCard}>
-              <View style={styles.cardHeader}>
-                <FontAwesome
-                  name={getExcretionIcon(excretion.type)}
-                  size={14}
-                  color={color}
-                />
-                <Text style={styles.excretionTypeText}>{typeLabel}</Text>
-              </View>
+            <View style={styles.sessionDetails}>
+              <Text style={styles.sessionType}>{typeLabel}</Text>
               {detailsText.length > 0 && (
-                <Text style={styles.detailText}>{detailsText}</Text>
+                <Text style={styles.sessionDetailText}>{detailsText}</Text>
               )}
             </View>
-          </TouchableOpacity>
-        );
-      },
-      [],
-    );
+          </View>
 
-  
+          {/* Chevron */}
+          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+        </Pressable>
+      );
+    },
+    [],
+  );
 
-    // ============================================
+  // ============================================
+  // RENDER - DAY GROUP
+  // ============================================
 
-    // RENDER - DAY GROUP
+  const renderDayGroup = useCallback(
+    ({ item }: { item: ExcretionGroup }) => {
+      const isExpanded = expandedDays.has(item.date);
+      const hasMultipleExcretions = item.excretions.length > 1;
 
-    // ============================================
+      // Format date intelligently
+      const formatDayLabel = () => {
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const itemDate = new Date(item.date);
 
-  
+        if (itemDate.toDateString() === today.toDateString()) {
+          return "Aujourd'hui";
+        } else if (itemDate.toDateString() === yesterday.toDateString()) {
+          return "Hier";
+        }
+        return itemDate.toLocaleDateString("fr-FR", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+        });
+      };
 
-    const renderDayGroup = useCallback(
-
-      ({ item }: { item: ExcretionGroup }) => {
-
-        const isExpanded = expandedDays.has(item.date);
-
-        const hasMultipleExcretions = item.excretions.length > 1;
-
-  
-
-        return (
-
-          <View style={styles.dayCard}>
-
-            <View style={styles.dayHeader}>
-
-              <View style={styles.dayInfo}>
-
-                <Text style={styles.dayDate}>{item.dateFormatted}</Text>
-
-                <View style={styles.summaryInfo}>
-
-                  <View style={styles.summaryRow}>
-
-                    {item.mictionsCount > 0 && (
-
-                      <View style={styles.summaryBadge}>
-
-                        <FontAwesome
-
-                          name="water"
-
-                          size={12}
-
-                          color={eventColors.miction.dark}
-
-                        />
-
-                        <Text style={styles.summaryText}>
-
-                          {item.mictionsCount} miction
-
-                          {item.mictionsCount > 1 ? "s" : ""}
-
-                        </Text>
-
-                      </View>
-
-                    )}
-
-                    {item.sellesCount > 0 && (
-
-                      <View style={styles.summaryBadge}>
-
-                        <FontAwesome
-
-                          name="poop"
-
-                          size={12}
-
-                          color={eventColors.selle.dark}
-
-                        />
-
-                        <Text style={styles.summaryText}>
-
-                          {item.sellesCount} selle
-
-                          {item.sellesCount > 1 ? "s" : ""}
-
-                        </Text>
-
-                      </View>
-
-                    )}
-
-                  </View>
-
+      return (
+        <View style={styles.daySection}>
+          {/* Day Header with stats */}
+          <View style={styles.dayHeader}>
+            <Text style={styles.dayLabel}>{formatDayLabel()}</Text>
+            <View style={styles.dayStats}>
+              {item.mictionsCount > 0 && (
+                <View style={styles.dayStatItem}>
+                  <Text
+                    style={[
+                      styles.dayStatValue,
+                      { color: eventColors.miction.dark },
+                    ]}
+                  >
+                    {item.mictionsCount}
+                  </Text>
+                  <Text style={styles.dayStatLabel}>
+                    miction{item.mictionsCount > 1 ? "s" : ""}
+                  </Text>
                 </View>
-
-              </View>
-
-              {hasMultipleExcretions && (
-
-                <TouchableOpacity
-
-                  style={styles.expandButton}
-
-                  onPress={() => toggleExpand(item.date)}
-
-                >
-
-                  <FontAwesome
-
-                    name={isExpanded ? "chevron-up" : "chevron-down"}
-
-                    size={16}
-
-                    color="#666"
-
-                  />
-
-                </TouchableOpacity>
-
               )}
-
+              {item.mictionsCount > 0 && item.sellesCount > 0 && (
+                <View style={styles.dayStatDivider} />
+              )}
+              {item.sellesCount > 0 && (
+                <View style={styles.dayStatItem}>
+                  <Text
+                    style={[
+                      styles.dayStatValue,
+                      { color: eventColors.selle.dark },
+                    ]}
+                  >
+                    {item.sellesCount}
+                  </Text>
+                  <Text style={styles.dayStatLabel}>
+                    selle{item.sellesCount > 1 ? "s" : ""}
+                  </Text>
+                </View>
+              )}
             </View>
+          </View>
 
+          {/* Stats breakdown */}
+          {/* <View style={styles.statsBreakdown}>
+            <View style={styles.statsBreakdownItem}>
+              <View
+                style={[
+                  styles.statsBreakdownDot,
+                  { backgroundColor: eventColors.miction.dark },
+                ]}
+              />
+              <Text style={styles.statsBreakdownLabel}>Mictions</Text>
+              <Text style={styles.statsBreakdownValue}>
+                {item.mictionsCount}
+              </Text>
+            </View>
+            <View style={styles.statsBreakdownItem}>
+              <View
+                style={[
+                  styles.statsBreakdownDot,
+                  { backgroundColor: eventColors.selle.dark },
+                ]}
+              />
+              <Text style={styles.statsBreakdownLabel}>Selles</Text>
+              <Text style={styles.statsBreakdownValue}>{item.sellesCount}</Text>
+            </View>
+          </View> */}
+
+          {/* Sessions list */}
+          <View style={styles.sessionsContainer}>
             {renderExcretionItem(item.lastExcretion, true)}
 
-            {hasMultipleExcretions && isExpanded && (
-
-              <View style={styles.expandedContent}>
-
-                <View style={styles.separator} />
-
-                <Text style={styles.historyLabel}>Historique du jour</Text>
-
-                {item.excretions
-
-                  .filter((excretion) => excretion.id !== item.lastExcretion.id)
-
-                  .map((excretion) => renderExcretionItem(excretion))}
-
-              </View>
-
-            )}
-
-          </View>
-
-        );
-
-      },
-
-      [expandedDays, renderExcretionItem, toggleExpand],
-
-    );
-
-  
-
-    // ============================================
-
-    // RENDER - MAIN
-
-    // ============================================
-
-  
-
-    return (
-
-      <View style={styles.container}>
-
-        <SafeAreaView
-
-          style={[
-
-            { flex: 1 },
-
-            // { backgroundColor: Colors[colorScheme].background },
-
-          ]}
-
-          edges={["bottom"]}
-
-          onLayout={() => setLayoutReady(true)}
-
-        >
-
-          <View>
-
-            {/* Filtres */}
-
-            <DateFilterBar
-
-              selected={selectedFilter}
-
-              onSelect={handleFilterPress}
-
-            />
-
-  
-
-            {/* Calendrier */}
-
-            {showCalendar && (
-
-              <View style={styles.calendarContainer}>
-
-                <Calendar
-
-                  onDayPress={handleDateSelect}
-
-                  markedDates={markedDates}
-
-                  theme={{
-
-                    backgroundColor: Colors[colorScheme].background,
-
-                    calendarBackground: Colors[colorScheme].background,
-
-                    textSectionTitleColor: Colors[colorScheme].text,
-
-                    selectedDayBackgroundColor: Colors[colorScheme].tint,
-
-                    selectedDayTextColor: "#ffffff",
-
-                    todayTextColor: Colors[colorScheme].tint,
-
-                    dayTextColor: Colors[colorScheme].text,
-
-                    textDisabledColor: Colors[colorScheme].tabIconDefault,
-
-                    dotColor: Colors[colorScheme].tint,
-
-                    selectedDotColor: "#ffffff",
-
-                    arrowColor: Colors[colorScheme].tint,
-
-                    monthTextColor: Colors[colorScheme].text,
-
-                    indicatorColor: Colors[colorScheme].tint,
-
-                  }}
-
-                />
-
-              </View>
-
-            )}
-
-          </View>
-
-  
-
-          {/* Liste des excrétions */}
-
-          {isExcretionsLoading || !emptyDelayDone ? (
-
-            <View style={styles.emptyContainer}>
-
-              <IconPulseDots color={Colors[colorScheme].tint} />
-
-            </View>
-
-          ) : groupedExcretions.length === 0 ? (
-
-            <View style={styles.emptyContainer}>
-
-              <Ionicons
-
-                name="calendar-outline"
-
-                size={64}
-
-                color={Colors[colorScheme].tabIconDefault}
-
-              />
-
-              <ThemedText style={styles.emptyText}>
-
-                {excretions.length === 0
-
-                  ? "Aucune excrétion"
-
-                  : "Aucune excrétion pour ce filtre"}
-
-              </ThemedText>
-
-              {!(selectedFilter === "today" || selectedDate) && (
-
-                <LoadMoreButton
-
-                  hasMore={hasMore}
-
-                  loading={isLoadingMore}
-
-                  onPress={handleLoadMore}
-
-                  text="Voir plus"
-
-                  accentColor={Colors[colorScheme].tint}
-
-                />
-
-              )}
-
-            </View>
-
-          ) : (
-
-            <FlatList
-
-              data={groupedExcretions}
-
-              keyExtractor={(item) => item.date}
-
-              renderItem={renderDayGroup}
-
-              showsVerticalScrollIndicator={false}
-
-              style={styles.flatlistContent}
-
-              contentContainerStyle={styles.listContent}
-
-              ListFooterComponent={
-
-                selectedFilter === "today" || selectedDate ? null : (
-
-                  <LoadMoreButton
-
-                    hasMore={hasMore}
-
-                    loading={isLoadingMore}
-
-                    onPress={handleLoadMore}
-
-                    text="Voir plus"
-
-                    accentColor={Colors[colorScheme].tint}
-
+            {hasMultipleExcretions && (
+              <>
+                {isExpanded &&
+                  item.excretions
+                    .filter(
+                      (excretion) => excretion.id !== item.lastExcretion.id,
+                    )
+                    .map((excretion) => renderExcretionItem(excretion, false))}
+
+                <Pressable
+                  style={styles.expandTrigger}
+                  onPress={() => toggleExpand(item.date)}
+                >
+                  <Text style={styles.expandTriggerText}>
+                    {isExpanded
+                      ? "Masquer"
+                      : `${item.excretions.length - 1} autre${item.excretions.length > 2 ? "s" : ""}`}
+                  </Text>
+                  <Ionicons
+                    name={isExpanded ? "chevron-up" : "chevron-down"}
+                    size={14}
+                    color={eventColors.miction.dark}
                   />
+                </Pressable>
+              </>
+            )}
+          </View>
+        </View>
+      );
+    },
+    [expandedDays, renderExcretionItem, toggleExpand],
+  );
 
-                )
+  // ============================================
 
-              }
+  // RENDER - MAIN
 
-            />
+  // ============================================
 
-          )}
+  return (
+    <View style={styles.container}>
+      <SafeAreaView
+        style={[
+          { flex: 1 },
 
-          <ConfirmModal
+          // { backgroundColor: Colors[colorScheme].background },
+        ]}
+        edges={["bottom"]}
+        onLayout={() => setLayoutReady(true)}
+      >
+        <View>
+          {/* Filtres */}
 
-            visible={showDeleteModal}
-
-            title="Suppression"
-
-            message="Voulez-vous vraiment supprimer ?"
-
-            confirmText="Supprimer"
-
-            cancelText="Annuler"
-
-            backgroundColor={Colors[colorScheme].background}
-
-            textColor={Colors[colorScheme].text}
-
-            onCancel={() => setShowDeleteModal(false)}
-
-            onConfirm={confirmDelete}
-
+          <DateFilterBar
+            selected={selectedFilter}
+            onSelect={handleFilterPress}
           />
 
-        </SafeAreaView>
+          {/* Calendrier */}
+
+          {showCalendar && (
+            <View style={styles.calendarContainer}>
+              <Calendar
+                onDayPress={handleDateSelect}
+                markedDates={markedDates}
+                theme={{
+                  backgroundColor: Colors[colorScheme].background,
+
+                  calendarBackground: Colors[colorScheme].background,
+
+                  textSectionTitleColor: Colors[colorScheme].text,
+
+                  selectedDayBackgroundColor: Colors[colorScheme].tint,
+
+                  selectedDayTextColor: "#ffffff",
+
+                  todayTextColor: Colors[colorScheme].tint,
+
+                  dayTextColor: Colors[colorScheme].text,
+
+                  textDisabledColor: Colors[colorScheme].tabIconDefault,
+
+                  dotColor: Colors[colorScheme].tint,
+
+                  selectedDotColor: "#ffffff",
+
+                  arrowColor: Colors[colorScheme].tint,
+
+                  monthTextColor: Colors[colorScheme].text,
+
+                  indicatorColor: Colors[colorScheme].tint,
+                }}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* Liste des excrétions */}
+
+        {isExcretionsLoading || !emptyDelayDone ? (
+          <View style={styles.emptyContainer}>
+            <IconPulseDots color={Colors[colorScheme].tint} />
+          </View>
+        ) : groupedExcretions.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons
+              name="calendar-outline"
+              size={64}
+              color={Colors[colorScheme].tabIconDefault}
+            />
+
+            <ThemedText style={styles.emptyText}>
+              {excretions.length === 0
+                ? "Aucune excrétion"
+                : "Aucune excrétion pour ce filtre"}
+            </ThemedText>
+
+            {!(selectedFilter === "today" || selectedDate) && (
+              <LoadMoreButton
+                hasMore={hasMore}
+                loading={isLoadingMore}
+                onPress={handleLoadMore}
+                text="Voir plus"
+                accentColor={Colors[colorScheme].tint}
+              />
+            )}
+          </View>
+        ) : (
+          <FlatList
+            data={groupedExcretions}
+            keyExtractor={(item) => item.date}
+            renderItem={renderDayGroup}
+            showsVerticalScrollIndicator={false}
+            style={styles.flatlistContent}
+            contentContainerStyle={styles.listContent}
+            ListFooterComponent={
+              selectedFilter === "today" || selectedDate ? null : (
+                <LoadMoreButton
+                  hasMore={hasMore}
+                  loading={isLoadingMore}
+                  onPress={handleLoadMore}
+                  text="Voir plus"
+                  accentColor={Colors[colorScheme].tint}
+                />
+              )
+            }
+          />
+        )}
+
+        <ConfirmModal
+          visible={showDeleteModal}
+          title="Suppression"
+          message="Voulez-vous vraiment supprimer ?"
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          backgroundColor={Colors[colorScheme].background}
+          textColor={Colors[colorScheme].text}
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirm={confirmDelete}
+        />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+// ============================================
+
+// STYLES
+
+// ============================================
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+
+    backgroundColor: "#f8f9fa",
+  },
+
+  flatlistContent: {
+    paddingBottom: 8,
+  },
+
+  headerButton: {
+    paddingVertical: 8,
+
+    borderRadius: 8,
+
+    paddingHorizontal: 8,
+  },
+
+  calendarContainer: {
+    paddingHorizontal: 16,
+
+    paddingVertical: 8,
+
+    borderBottomWidth: 1,
+
+    borderBottomColor: "#e0e0e0",
+  },
+
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+
+  // Day Section
+  daySection: {
+    marginBottom: 24,
+  },
+  dayHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  dayLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  dayStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  dayStatItem: {
+    alignItems: "flex-end",
+  },
+  dayStatValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  dayStatLabel: {
+    fontSize: 11,
+    color: "#9ca3af",
+  },
+  dayStatDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: "#e5e7eb",
+  },
+
+  // Stats breakdown
+  statsBreakdown: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  statsBreakdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  statsBreakdownDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statsBreakdownLabel: {
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  statsBreakdownValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#374151",
+  },
+
+  // Sessions container
+  sessionsContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+
+  // Session Card
+  sessionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  sessionCardPressed: {
+    backgroundColor: "#f9fafb",
+  },
+  sessionTime: {
+    width: 52,
+  },
+  sessionTimeText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#9ca3af",
+  },
+  sessionTimeTextLast: {
+    color: "#374151",
+    fontWeight: "600",
+  },
+  sessionContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  sessionIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sessionDetails: {
+    flex: 1,
+  },
+  sessionType: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  sessionDetailText: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 2,
+  },
+
+  // Expand trigger
+  expandTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+  },
+  expandTriggerText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: eventColors.miction.dark,
+  },
+
+  // Empty State
+
+  emptyContainer: {
+    flex: 1,
+
+    alignItems: "center",
+
+    justifyContent: "center",
+  },
+
+  emptyText: {
+    fontSize: 18,
+
+    color: "#666",
+
+    marginTop: 16,
+
+    fontWeight: "600",
+  },
+
+  // Modal Content
+
+  modalCategoryLabel: {
+    alignSelf: "center",
+
+    fontSize: 16,
+
+    fontWeight: "600",
+
+    color: "#333",
+
+    paddingTop: 20,
+
+    marginBottom: 10,
+  },
+
+  // Type Selection
+
+  typeRow: {
+    flexDirection: "row",
+
+    justifyContent: "space-around",
+
+    marginBottom: 16,
+
+    gap: 12,
+  },
+
+  typeButton: {
+    flex: 1,
+
+    flexDirection: "column",
+
+    alignItems: "center",
+
+    gap: 8,
+
+    padding: 16,
+
+    backgroundColor: "#f0f0f0",
+
+    borderRadius: 12,
+  },
+
+  typeButtonActiveMiction: {
+    backgroundColor: eventColors.miction.dark,
+  },
+
+  typeButtonActiveSelle: {
+    backgroundColor: eventColors.selle.dark,
+  },
+
+  typeButtonDisabled: {
+    backgroundColor: "#f8f8f8",
+
+    opacity: 0.5,
+  },
+
+  typeText: {
+    fontSize: 16,
+
+    color: "#666",
+
+    fontWeight: "500",
+  },
+
+  typeTextActive: {
+    color: "white",
+
+    fontWeight: "bold",
+  },
+
+  typeTextDisabled: {
+    color: "#ccc",
+  },
+
+  toggleSubtitle: {
+    fontSize: 13,
+
+    color: "#999",
 
-      </View>
+    textAlign: "center",
 
-    );
+    marginBottom: 12,
+  },
 
-  }
+  // Options Row (couleur miction, consistance selle, etc.)
 
-  
+  optionsRow: {
+    flexDirection: "row",
 
-  // ============================================
+    flexWrap: "wrap",
 
-  // STYLES
+    justifyContent: "center",
 
-  // ============================================
+    gap: 8,
 
-  
+    marginBottom: 16,
 
-  const styles = StyleSheet.create({
+    paddingHorizontal: 8,
+  },
 
-    container: {
+  optionButton: {
+    paddingHorizontal: 16,
 
-      flex: 1,
+    paddingVertical: 10,
 
-      backgroundColor: "#f8f9fa",
+    borderRadius: 20,
 
-    },
+    borderWidth: 2,
 
-    flatlistContent: {
+    borderColor: "transparent",
 
-      paddingBottom: 8,
+    minWidth: 70,
 
-    },
+    alignItems: "center",
+  },
 
-    headerButton: {
+  optionButtonSelle: {
+    backgroundColor: "#f8f9fa",
 
-      paddingVertical: 8,
+    borderColor: "#e0e0e0",
+  },
 
-      borderRadius: 8,
+  optionButtonSelected: {
+    borderColor: eventColors.miction.dark,
 
-      paddingHorizontal: 8,
+    borderWidth: 2,
 
-    },
+    shadowColor: eventColors.miction.dark,
 
-    calendarContainer: {
+    shadowOffset: { width: 0, height: 2 },
 
-      paddingHorizontal: 16,
+    shadowOpacity: 0.3,
 
-      paddingVertical: 8,
+    shadowRadius: 3,
 
-      borderBottomWidth: 1,
+    elevation: 3,
+  },
 
-      borderBottomColor: "#e0e0e0",
+  optionButtonSelectedSelle: {
+    backgroundColor: eventColors.selle.dark,
 
-    },
+    borderColor: eventColors.selle.dark,
+  },
 
-    // Filter Bar
+  optionButtonDisabled: {
+    opacity: 0.5,
+  },
 
-    listContent: {
+  optionText: {
+    fontSize: 14,
 
-      paddingHorizontal: 16,
+    fontWeight: "500",
 
-      paddingBottom: 20,
+    color: "#333",
+  },
 
-    },
+  optionTextSelected: {
+    color: "white",
 
-  
+    fontWeight: "600",
+  },
 
-    // Day Card
+  optionTextSelectedMiction: {
+    color: eventColors.miction.dark,
 
-    dayCard: {
+    fontWeight: "700",
+  },
 
-      backgroundColor: "white",
+  warningText: {
+    fontSize: 13,
 
-      marginBottom: 12,
+    color: eventColors.selle.dark,
 
-      borderRadius: 16,
+    textAlign: "center",
 
-      padding: 16,
+    marginTop: 8,
 
-      borderWidth: 1,
+    marginBottom: 12,
 
-      borderColor: "#edf1f4",
+    fontWeight: "500",
+  },
 
-      shadowColor: "#000",
+  editModeLabel: {
+    flexDirection: "row",
 
-      shadowOffset: { width: 0, height: 3 },
+    alignItems: "center",
 
-      shadowOpacity: 0.03,
+    justifyContent: "center",
 
-      shadowRadius: 4,
+    gap: 8,
 
-      elevation: 1,
+    paddingVertical: 12,
 
-    },
+    paddingHorizontal: 16,
 
-    dayHeader: {
+    backgroundColor: "#f8f9fa",
 
-      flexDirection: "row",
+    borderRadius: 8,
 
-      alignItems: "flex-start",
+    marginBottom: 20,
+  },
 
-      justifyContent: "space-between",
+  editModeLabelText: {
+    fontSize: 14,
 
-      marginBottom: 10,
+    fontWeight: "600",
 
-    },
+    color: "#666",
+  },
 
-    dayInfo: {
+  // Date/Time
 
-      flex: 1,
+  dateTimeContainer: {
+    flexDirection: "row",
 
-    },
+    justifyContent: "center",
 
-    dayDate: {
+    gap: 12,
 
-      fontSize: 17,
+    marginBottom: 10,
+  },
 
-      fontWeight: "bold",
+  dateButton: {
+    flex: 1,
 
-      color: "#333",
+    flexDirection: "row",
 
-      marginBottom: 4,
+    gap: 8,
 
-    },
+    alignItems: "center",
 
-    summaryInfo: {
+    justifyContent: "center",
 
-      flexDirection: "column",
+    paddingVertical: 12,
 
-      gap: 4,
+    borderRadius: 12,
 
-    },
+    borderWidth: 1,
 
-    summaryRow: {
+    borderColor: "#d7dbe0",
 
-      flexDirection: "row",
+    backgroundColor: "#f5f6f8",
+  },
 
-      flexWrap: "wrap",
+  dateButtonDisabled: {
+    backgroundColor: "#f5f5f5",
 
-      gap: 8,
+    opacity: 0.5,
+  },
 
-    },
+  dateButtonText: {
+    fontSize: 14,
 
-    summaryBadge: {
+    fontWeight: "600",
 
-      flexDirection: "row",
+    color: "#4a4f55",
+  },
 
-      alignItems: "center",
+  dateButtonTextDisabled: {
+    color: "#ccc",
+  },
 
-      gap: 4,
+  selectedDateTime: {
+    alignItems: "center",
 
-      backgroundColor: "#f3f4f6",
+    marginBottom: 16,
+  },
 
-      paddingHorizontal: 8,
+  selectedDate: {
+    fontSize: 16,
 
-      paddingVertical: 4,
+    color: "#333",
 
-      borderRadius: 10,
+    fontWeight: "600",
 
-    },
+    marginBottom: 4,
+  },
 
-    summaryText: {
+  selectedTime: {
+    fontSize: 20,
 
-      fontSize: 12,
+    color: eventColors.default.dark,
 
-      color: "#5f6368",
-
-      fontWeight: "600",
-
-    },
-
-    expandButton: {
-
-      padding: 8,
-
-      borderRadius: 10,
-
-      backgroundColor: "white",
-      borderWidth: 1,
-      borderColor: "#e6e9ee",
-
-    },
-
-  
-
-    // Excretion Item
-
-    excretionRow: {
-
-      flexDirection: "row",
-
-      alignItems: "flex-start",
-
-      gap: 12,
-
-      marginBottom: 10,
-
-    },
-
-    timeColumn: {
-
-      width: 56,
-
-      alignItems: "center",
-
-    },
-
-    timeText: {
-
-      fontSize: 12,
-
-      color: "#7b828a",
-
-      marginBottom: 6,
-
-    },
-
-    timelineDot: {
-
-      width: 8,
-
-      height: 8,
-
-      borderRadius: 4,
-
-      marginBottom: 6,
-
-    },
-
-    timelineLine: {
-
-      width: 2,
-
-      flex: 1,
-
-      backgroundColor: "#e6e9ee",
-
-      borderRadius: 2,
-
-    },
-
-    excretionCard: {
-
-      flex: 1,
-
-      backgroundColor: "white",
-
-      borderRadius: 14,
-
-      paddingVertical: 12,
-
-      paddingHorizontal: 14,
-
-      borderWidth: 1,
-
-      borderColor: "#edf1f4",
-
-    },
-
-    cardHeader: {
-
-      flexDirection: "row",
-
-      alignItems: "center",
-
-      gap: 8,
-
-      marginBottom: 6,
-
-    },
-
-    excretionTypeText: {
-
-      fontSize: 15,
-
-      fontWeight: "700",
-
-      color: "#222",
-
-    },
-
-    detailText: {
-
-      fontSize: 12,
-
-      color: "#6b7280",
-
-    },
-
-  
-
-    // Expanded Content
-
-    expandedContent: {
-
-      marginTop: 8,
-
-    },
-
-    separator: {
-
-      height: 1,
-
-      backgroundColor: "#edf1f4",
-
-      marginBottom: 12,
-
-    },
-
-    historyLabel: {
-
-      fontSize: 12,
-
-      color: "#999",
-
-      marginBottom: 8,
-
-      textTransform: "uppercase",
-
-      letterSpacing: 0.5,
-
-    },
-
-  
-
-    // Empty State
-
-    emptyContainer: {
-
-      flex: 1,
-
-      alignItems: "center",
-
-      justifyContent: "center",
-
-    },
-
-    emptyText: {
-
-      fontSize: 18,
-
-      color: "#666",
-
-      marginTop: 16,
-
-      fontWeight: "600",
-
-    },
-
-  
-
-    // Modal Content
-
-    modalCategoryLabel: {
-
-      alignSelf: "center",
-
-      fontSize: 16,
-
-      fontWeight: "600",
-
-      color: "#333",
-
-      paddingTop: 20,
-
-      marginBottom: 10,
-
-    },
-
-  
-
-    // Type Selection
-
-    typeRow: {
-
-      flexDirection: "row",
-
-      justifyContent: "space-around",
-
-      marginBottom: 16,
-
-      gap: 12,
-
-    },
-
-    typeButton: {
-
-      flex: 1,
-
-      flexDirection: "column",
-
-      alignItems: "center",
-
-      gap: 8,
-
-      padding: 16,
-
-      backgroundColor: "#f0f0f0",
-
-      borderRadius: 12,
-
-    },
-
-      typeButtonActiveMiction: {
-
-        backgroundColor: eventColors.miction.dark,
-
-      },
-
-      typeButtonActiveSelle: {
-
-        backgroundColor: eventColors.selle.dark,
-
-      },
-
-      typeButtonDisabled: {
-
-        backgroundColor: "#f8f8f8",
-
-        opacity: 0.5,
-
-      },
-
-      typeText: {
-
-        fontSize: 16,
-
-        color: "#666",
-
-        fontWeight: "500",
-
-      },
-
-      typeTextActive: {
-
-        color: "white",
-
-        fontWeight: "bold",
-
-      },
-
-      typeTextDisabled: {
-
-        color: "#ccc",
-
-      },
-
-      toggleSubtitle: {
-
-        fontSize: 13,
-
-        color: "#999",
-
-        textAlign: "center",
-
-        marginBottom: 12,
-
-      },
-
-      // Options Row (couleur miction, consistance selle, etc.)
-
-      optionsRow: {
-
-        flexDirection: "row",
-
-        flexWrap: "wrap",
-
-        justifyContent: "center",
-
-        gap: 8,
-
-        marginBottom: 16,
-
-        paddingHorizontal: 8,
-
-      },
-
-      optionButton: {
-
-        paddingHorizontal: 16,
-
-        paddingVertical: 10,
-
-        borderRadius: 20,
-
-        borderWidth: 2,
-
-        borderColor: "transparent",
-
-        minWidth: 70,
-
-        alignItems: "center",
-
-      },
-
-      optionButtonSelle: {
-
-        backgroundColor: "#f8f9fa",
-
-        borderColor: "#e0e0e0",
-
-      },
-
-      optionButtonSelected: {
-
-        borderColor: eventColors.miction.dark,
-
-        borderWidth: 2,
-
-        shadowColor: eventColors.miction.dark,
-
-        shadowOffset: { width: 0, height: 2 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 3,
-
-        elevation: 3,
-
-      },
-
-      optionButtonSelectedSelle: {
-
-        backgroundColor: eventColors.selle.dark,
-
-        borderColor: eventColors.selle.dark,
-
-      },
-
-      optionButtonDisabled: {
-
-        opacity: 0.5,
-
-      },
-
-      optionText: {
-
-        fontSize: 14,
-
-        fontWeight: "500",
-
-        color: "#333",
-
-      },
-
-      optionTextSelected: {
-
-        color: "white",
-
-        fontWeight: "600",
-
-      },
-
-      optionTextSelectedMiction: {
-
-        color: eventColors.miction.dark,
-
-        fontWeight: "700",
-
-      },
-
-      warningText: {
-
-        fontSize: 13,
-
-        color: eventColors.selle.dark,
-
-        textAlign: "center",
-
-        marginTop: 8,
-
-        marginBottom: 12,
-
-        fontWeight: "500",
-
-      },
-
-      editModeLabel: {
-
-        flexDirection: "row",
-
-        alignItems: "center",
-
-        justifyContent: "center",
-
-        gap: 8,
-
-        paddingVertical: 12,
-
-        paddingHorizontal: 16,
-
-        backgroundColor: "#f8f9fa",
-
-        borderRadius: 8,
-
-        marginBottom: 20,
-
-      },
-
-      editModeLabelText: {
-
-        fontSize: 14,
-
-        fontWeight: "600",
-
-        color: "#666",
-
-      },
-
-    
-
-      // Date/Time
-
-      dateTimeContainer: {
-
-        flexDirection: "row",
-
-        justifyContent: "center",
-
-        gap: 12,
-
-        marginBottom: 10,
-
-      },
-
-      dateButton: {
-
-        flex: 1,
-
-        flexDirection: "row",
-
-        gap: 8,
-
-        alignItems: "center",
-
-        justifyContent: "center",
-
-        paddingVertical: 12,
-
-        borderRadius: 12,
-
-        borderWidth: 1,
-
-        borderColor: "#d7dbe0",
-
-        backgroundColor: "#f5f6f8",
-
-      },
-
-      dateButtonDisabled: {
-
-        backgroundColor: "#f5f5f5",
-
-        opacity: 0.5,
-
-      },
-
-      dateButtonText: {
-
-        fontSize: 14,
-
-        fontWeight: "600",
-
-        color: "#4a4f55",
-
-      },
-
-      dateButtonTextDisabled: {
-
-        color: "#ccc",
-
-      },
-
-      selectedDateTime: {
-
-        alignItems: "center",
-
-        marginBottom: 16,
-
-      },
-
-      selectedDate: {
-
-        fontSize: 16,
-
-        color: "#333",
-
-        fontWeight: "600",
-
-        marginBottom: 4,
-
-      },
-
-      selectedTime: {
-
-        fontSize: 20,
-
-        color: eventColors.default.dark,
-
-        fontWeight: "bold",
-
-      },
-
-  });
-
-  
+    fontWeight: "bold",
+  },
+});

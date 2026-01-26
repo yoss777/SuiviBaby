@@ -27,6 +27,8 @@ export interface FormBottomSheetProps {
   isEditing?: boolean;
   isSubmitting?: boolean;
   showActions?: boolean;
+  enablePanDownToClose?: boolean;
+  enableOverDrag?: boolean;
   children: React.ReactNode;
   onSubmit: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
@@ -48,6 +50,8 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
       isEditing = false,
       isSubmitting = false,
       showActions = true,
+      enablePanDownToClose = false,
+      enableOverDrag = false,
       children,
       onSubmit,
       onDelete,
@@ -79,7 +83,8 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         ref={ref}
         index={-1}
         snapPoints={snapPoints}
-        enablePanDownToClose={true}
+        enablePanDownToClose={enablePanDownToClose}
+        enableOverDrag={enableOverDrag}
         backdropComponent={renderBackdrop}
         onClose={onClose}
       >

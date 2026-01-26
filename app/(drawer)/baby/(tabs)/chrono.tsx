@@ -258,7 +258,10 @@ function buildDetails(event: Event) {
     case "sommeil":
       return event.duree ? `${Math.round(event.duree)} min` : undefined;
     case "vaccin":
-      return event.nomVaccin;
+      if (!event.nomVaccin) return event.dosage;
+      return event.dosage
+        ? `${event.nomVaccin} · ${event.dosage}`
+        : event.nomVaccin;
     case "vitamine":
       if (!event.nomVitamine) return event.dosage;
       return event.dosage

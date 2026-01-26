@@ -12,13 +12,13 @@ import {
 } from "@/services/eventsService";
 
 // Import des anciens services
+import * as croissanceService from "@/services/croissanceService";
 import * as mictionsService from "@/services/mictionsService";
 import * as pompagesService from "@/services/pompagesService";
 import * as sellesService from "@/services/sellesService";
 import * as teteesService from "@/services/teteesService";
 import * as vaccinsService from "@/services/vaccinsService";
 import * as vitaminesService from "@/services/vitaminesService";
-import * as croissanceService from "@/services/croissanceService";
 
 // ============================================
 // HELPER - Remove undefined
@@ -44,19 +44,19 @@ function removeUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
 interface MigrationConfig {
   // Phase de migration
   phase: "OLD_ONLY" | "DOUBLE_WRITE" | "NEW_ONLY";
-  
+
   // Lecture depuis quelle source
   readFrom: "OLD" | "NEW";
-  
+
   // En cas d'erreur sur une écriture, continuer ou échouer ?
   failOnError: boolean;
 }
 
 // Configuration globale (à ajuster selon l'avancement)
 let config: MigrationConfig = {
-  phase: "NEW_ONLY",     // 🎯 MIGRATION TERMINÉE - Nouveau système uniquement
-  readFrom: "NEW",       // Lire depuis la nouvelle collection
-  failOnError: true,     // Les erreurs sont critiques maintenant
+  phase: "NEW_ONLY", // 🎯 MIGRATION TERMINÉE - Nouveau système uniquement
+  readFrom: "NEW", // Lire depuis la nouvelle collection
+  failOnError: true, // Les erreurs sont critiques maintenant
 };
 
 // Fonction pour changer la config (utile pour tests A/B)
@@ -124,7 +124,7 @@ export async function ajouterTetee(childId: string, data: any) {
 
   if (errors.length > 0 && config.failOnError) {
     throw new Error(
-      `Erreurs lors de la double écriture: ${errors.map((e) => e.message).join(", ")}`
+      `Erreurs lors de la double écriture: ${errors.map((e) => e.message).join(", ")}`,
     );
   }
 
@@ -139,7 +139,10 @@ export async function obtenirToutesLesTetees(childId: string) {
   }
 }
 
-export function ecouterTetees(childId: string, callback: (docs: any[]) => void) {
+export function ecouterTetees(
+  childId: string,
+  callback: (docs: any[]) => void,
+) {
   if (config.readFrom === "NEW") {
     return ecouterEvenements(childId, callback, { type: "tetee" });
   } else {
@@ -147,11 +150,7 @@ export function ecouterTetees(childId: string, callback: (docs: any[]) => void) 
   }
 }
 
-export async function modifierTetee(
-  childId: string,
-  id: string,
-  data: any
-) {
+export async function modifierTetee(childId: string, id: string, data: any) {
   const errors: Error[] = [];
 
   // Modifier dans NOUVEAU
@@ -264,7 +263,7 @@ export async function ajouterCroissance(childId: string, data: any) {
 
   if (errors.length > 0 && config.failOnError) {
     throw new Error(
-      `Erreurs lors de la double écriture: ${errors.map((e) => e.message).join(", ")}`
+      `Erreurs lors de la double écriture: ${errors.map((e) => e.message).join(", ")}`,
     );
   }
 
@@ -280,7 +279,7 @@ export async function obtenirToutesLesCroissances(childId: string) {
 
 export function ecouterCroissances(
   childId: string,
-  callback: (docs: any[]) => void
+  callback: (docs: any[]) => void,
 ) {
   if (config.readFrom === "NEW") {
     return ecouterEvenements(childId, callback, { type: "croissance" });
@@ -291,7 +290,7 @@ export function ecouterCroissances(
 export async function modifierCroissance(
   childId: string,
   id: string,
-  data: any
+  data: any,
 ) {
   const errors: Error[] = [];
 
@@ -406,7 +405,7 @@ export async function ajouterBiberon(childId: string, data: any) {
 
   if (errors.length > 0 && config.failOnError) {
     throw new Error(
-      `Erreurs lors de la double écriture: ${errors.map((e) => e.message).join(", ")}`
+      `Erreurs lors de la double écriture: ${errors.map((e) => e.message).join(", ")}`,
     );
   }
 
@@ -421,7 +420,10 @@ export async function obtenirToutesLesBiberons(childId: string) {
   }
 }
 
-export function ecouterBiberons(childId: string, callback: (docs: any[]) => void) {
+export function ecouterBiberons(
+  childId: string,
+  callback: (docs: any[]) => void,
+) {
   if (config.readFrom === "NEW") {
     return ecouterEvenements(childId, callback, { type: "biberon" });
   } else {
@@ -429,11 +431,7 @@ export function ecouterBiberons(childId: string, callback: (docs: any[]) => void
   }
 }
 
-export async function modifierBiberon(
-  childId: string,
-  id: string,
-  data: any
-) {
+export async function modifierBiberon(childId: string, id: string, data: any) {
   const errors: Error[] = [];
 
   // Modifier dans NOUVEAU
@@ -559,7 +557,10 @@ export async function obtenirToutesLesMictions(childId: string) {
   }
 }
 
-export function ecouterMictions(childId: string, callback: (docs: any[]) => void) {
+export function ecouterMictions(
+  childId: string,
+  callback: (docs: any[]) => void,
+) {
   if (config.readFrom === "NEW") {
     return ecouterEvenements(childId, callback, { type: "miction" });
   } else {
@@ -567,11 +568,7 @@ export function ecouterMictions(childId: string, callback: (docs: any[]) => void
   }
 }
 
-export async function modifierMiction(
-  childId: string,
-  id: string,
-  data: any
-) {
+export async function modifierMiction(childId: string, id: string, data: any) {
   const errors: Error[] = [];
 
   // Modifier dans NOUVEAU
@@ -697,7 +694,10 @@ export async function obtenirToutesLesSelles(childId: string) {
   }
 }
 
-export function ecouterSelles(childId: string, callback: (docs: any[]) => void) {
+export function ecouterSelles(
+  childId: string,
+  callback: (docs: any[]) => void,
+) {
   if (config.readFrom === "NEW") {
     return ecouterEvenements(childId, callback, { type: "selle" });
   } else {
@@ -705,11 +705,7 @@ export function ecouterSelles(childId: string, callback: (docs: any[]) => void) 
   }
 }
 
-export async function modifierSelle(
-  childId: string,
-  id: string,
-  data: any
-) {
+export async function modifierSelle(childId: string, id: string, data: any) {
   const errors: Error[] = [];
 
   // Modifier dans NOUVEAU
@@ -834,11 +830,7 @@ export async function obtenirTousLesPompages(childId: string) {
   }
 }
 
-export async function modifierPompage(
-  childId: string,
-  id: string,
-  data: any
-) {
+export async function modifierPompage(childId: string, id: string, data: any) {
   const errors: Error[] = [];
 
   // Modifier dans NOUVEAU
@@ -914,6 +906,7 @@ export async function ajouterVaccin(childId: string, data: any) {
   const newEventData = removeUndefined({
     type: "vaccin" as EventType,
     nomVaccin: data.nomVaccin || data.nom,
+    dosage: data.dosage,
     lieu: data.lieu,
     date: data.date || new Date(),
     note: data.note,
@@ -962,11 +955,7 @@ export async function obtenirToutesLesVaccins(childId: string) {
   }
 }
 
-export async function modifierVaccin(
-  childId: string,
-  id: string,
-  data: any
-) {
+export async function modifierVaccin(childId: string, id: string, data: any) {
   const errors: Error[] = [];
 
   // Modifier dans NOUVEAU
@@ -1090,11 +1079,7 @@ export async function obtenirToutesLesVitamines(childId: string) {
   }
 }
 
-export async function modifierVitamine(
-  childId: string,
-  id: string,
-  data: any
-) {
+export async function modifierVitamine(childId: string, id: string, data: any) {
   const errors: Error[] = [];
 
   // Modifier dans NOUVEAU

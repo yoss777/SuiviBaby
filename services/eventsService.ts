@@ -14,7 +14,7 @@ import {
   setDoc,
   Timestamp,
   updateDoc,
-  where
+  where,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 
@@ -32,11 +32,11 @@ export type EventType =
   | "biberon"
   | "tetee"
   | "pompage"
-  | "couche"        // Change de couche (sans détail)
-  | "miction"       // Pipi
-  | "selle"         // Popo
+  | "couche" // Change de couche (sans détail)
+  | "miction" // Pipi
+  | "selle" // Popo
   | "sommeil"
-  | "croissance"    // Taille, poids, tête
+  | "croissance" // Taille, poids, tête
   | "vaccin"
   | "vitamine";
 
@@ -111,6 +111,7 @@ export interface CroissanceEvent extends BaseEvent {
 export interface VaccinEvent extends BaseEvent {
   type: "vaccin";
   nomVaccin: string;
+  dosage?: string;
   lieu?: string;
 }
 
@@ -143,7 +144,7 @@ const COLLECTION_NAME = "events";
  */
 export async function ajouterEvenement(
   childId: string,
-  data: Omit<Event, "id" | "childId" | "userId" | "createdAt">
+  data: Omit<Event, "id" | "childId" | "userId" | "createdAt">,
 ): Promise<string> {
   try {
     const userId = getUserId();
@@ -153,7 +154,8 @@ export async function ajouterEvenement(
       childId,
       userId,
       createdAt: Timestamp.now(),
-      date: data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
+      date:
+        data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
     };
 
     const ref = await addDoc(collection(db, COLLECTION_NAME), eventData);
@@ -172,7 +174,7 @@ export async function ajouterEvenement(
 export async function ajouterEvenementAvecId(
   childId: string,
   id: string,
-  data: Omit<Event, "id" | "childId" | "userId" | "createdAt">
+  data: Omit<Event, "id" | "childId" | "userId" | "createdAt">,
 ): Promise<void> {
   try {
     const userId = getUserId();
@@ -182,7 +184,8 @@ export async function ajouterEvenementAvecId(
       childId,
       userId,
       createdAt: Timestamp.now(),
-      date: data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
+      date:
+        data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
     };
 
     // Utiliser setDoc au lieu de addDoc pour spécifier l'ID
@@ -208,7 +211,7 @@ export async function ajouterEvenementAvecId(
  */
 export async function obtenirEvenement(
   childId: string,
-  id: string
+  id: string,
 ): Promise<Event | null> {
   try {
     const docRef = doc(db, COLLECTION_NAME, id);
@@ -234,12 +237,12 @@ export async function obtenirEvenements(
     limite?: number;
     depuis?: Date;
     jusqu?: Date;
-  }
+  },
 ): Promise<Event[]> {
   try {
     let q = query(
       collection(db, COLLECTION_NAME),
-      where("childId", "==", childId)
+      where("childId", "==", childId),
     );
 
     // Filtre par type(s)
@@ -285,13 +288,13 @@ export function ecouterEvenements(
     depuis?: Date;
     jusqu?: Date;
     waitForServer?: boolean;
-  }
+  },
 ): () => void {
   let hasReceivedServerSnapshot = false;
 
   let q = query(
     collection(db, COLLECTION_NAME),
-    where("childId", "==", childId)
+    where("childId", "==", childId),
   );
 
   if (options?.type) {
@@ -355,7 +358,7 @@ export function ecouterEvenements(
       }
 
       callback(events);
-    }
+    },
   );
 
   return () => {
@@ -373,7 +376,7 @@ export function ecouterEvenements(
 export async function modifierEvenement(
   childId: string,
   id: string,
-  data: Partial<Event>
+  data: Partial<Event>,
 ): Promise<void> {
   try {
     const docRef = doc(db, COLLECTION_NAME, id);
@@ -399,7 +402,7 @@ export async function modifierEvenement(
  */
 export async function supprimerEvenement(
   childId: string,
-  id: string
+  id: string,
 ): Promise<void> {
   try {
     const docRef = doc(db, COLLECTION_NAME, id);
@@ -425,7 +428,7 @@ export async function ajouterBiberon(
   childId: string,
   quantite: number,
   date?: Date,
-  note?: string
+  note?: string,
 ) {
   return ajouterEvenement(childId, {
     type: "biberon",
@@ -444,7 +447,7 @@ export async function ajouterTetee(
     dureeDroite?: number;
     date?: Date;
     note?: string;
-  }
+  },
 ) {
   return ajouterEvenement(childId, {
     type: "tetee",
@@ -465,7 +468,7 @@ export async function ajouterPompage(
     duree?: number;
     date?: Date;
     note?: string;
-  }
+  },
 ) {
   return ajouterEvenement(childId, {
     type: "pompage",
@@ -485,7 +488,7 @@ export async function ajouterCouche(
   options?: {
     date?: Date;
     note?: string;
-  }
+  },
 ) {
   return ajouterEvenement(childId, {
     type: "couche",
@@ -505,7 +508,7 @@ export async function ajouterMiction(
     avecCouche?: boolean;
     date?: Date;
     note?: string;
-  }
+  },
 ) {
   return ajouterEvenement(childId, {
     type: "miction",
@@ -529,7 +532,7 @@ export async function ajouterSelle(
     avecCouche?: boolean;
     date?: Date;
     note?: string;
-  }
+  },
 ) {
   return ajouterEvenement(childId, {
     type: "selle",
@@ -555,7 +558,7 @@ export async function ajouterCoucheAvecDetails(
     selleDetails?: Partial<SelleEvent>;
     date?: Date;
     note?: string;
-  }
+  },
 ) {
   const date = options.date || new Date();
   const eventIds: string[] = [];
@@ -595,7 +598,7 @@ export async function ajouterSommeil(
     heureFin?: Date;
     date?: Date;
     note?: string;
-  }
+  },
 ) {
   return ajouterEvenement(childId, {
     type: "sommeil",
@@ -611,14 +614,16 @@ export async function ajouterVaccin(
   childId: string,
   nomVaccin: string,
   options?: {
+    dosage?: string;
     lieu?: string;
     date?: Date;
     note?: string;
-  }
+  },
 ) {
   return ajouterEvenement(childId, {
     type: "vaccin",
     nomVaccin,
+    dosage: options?.dosage,
     lieu: options?.lieu,
     date: options?.date || new Date(),
     note: options?.note,
@@ -632,7 +637,7 @@ export async function ajouterVitamine(
     dosage?: string;
     date?: Date;
     note?: string;
-  }
+  },
 ) {
   return ajouterEvenement(childId, {
     type: "vitamine",

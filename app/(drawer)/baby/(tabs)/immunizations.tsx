@@ -40,12 +40,11 @@ import {
   InteractionManager,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -80,30 +79,102 @@ interface ImmunoGroup {
 
 // Liste des vaccins pour enfants de 0 à 3 ans
 const VACCINS_LIST = [
-  "Bronchiolite",
-  "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
-  "Pneumocoque (PCV13)",
-  "Rotavirus",
-  "DTCaP-Hib (2ème injection)",
-  "Pneumocoque (2ème injection)",
-  "Rotavirus (2ème dose)",
-  "DTCaP-Hib (3ème injection)",
-  "Pneumocoque (3ème injection)",
-  "Rotavirus (3ème dose)",
-  "ROR (Rougeole, Oreillons, Rubéole)",
-  "ROR (2ème injection)",
-  "Méningocoque A,C,W,Y",
-  "Méningocoque A,C,W,Y (rappel)",
-  "Méningocoque B",
-  "Méningocoque B (rappel)",
-  "DTCaP-Hib (rappel)",
-  "Pneumocoque (rappel)",
-  "DTCaP (rappel)",
-  "Hépatite B",
-  "BCG (Tuberculose)",
-  "Varicelle",
-  "Grippe saisonnière",
-  "Autre vaccin",
+  {
+    nomVaccin: "BCG (Tuberculose)",
+    dosage: null,
+  },
+  {
+    nomVaccin: "Bronchiolite",
+    dosage: null,
+  },
+  {
+    nomVaccin: "DTCaP",
+    dosage: "rappel",
+  },
+  {
+    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
+    dosage: "1ère injection",
+  },
+  {
+    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
+    dosage: "2ème injection",
+  },
+  {
+    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
+    dosage: "3ème injection",
+  },
+  {
+    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
+    dosage: "rappel",
+  },
+  {
+    nomVaccin: "Grippe saisonnière",
+    dosage: "",
+  },
+  {
+    nomVaccin: "Hépatite B",
+    dosage: "",
+  },
+  {
+    nomVaccin: "Méningocoque A,C,W,Y",
+    dosage: "1ère injection",
+  },
+  {
+    nomVaccin: "Méningocoque A,C,W,Y",
+    dosage: "rappel",
+  },
+  {
+    nomVaccin: "Méningocoque B",
+    dosage: "1ère injection",
+  },
+  {
+    nomVaccin: "Méningocoque B",
+    dosage: "rappel",
+  },
+  {
+    nomVaccin: "Pneumocoque (PCV13)",
+    dosage: "1ère injection",
+  },
+  {
+    nomVaccin: "Pneumocoque (PCV13)",
+    dosage: "2ème injection",
+  },
+  {
+    nomVaccin: "Pneumocoque (PCV13)",
+    dosage: "3ème injection",
+  },
+  {
+    nomVaccin: "Pneumocoque (PCV13)",
+    dosage: "rappel",
+  },
+  {
+    nomVaccin: "ROR (Rougeole, Oreillons, Rubéole)",
+    dosage: "1ère injection",
+  },
+  {
+    nomVaccin: "ROR (Rougeole, Oreillons, Rubéole)",
+    dosage: "2ème injection",
+  },
+  {
+    nomVaccin: "Rotavirus",
+    dosage: "1ère injection",
+  },
+  {
+    nomVaccin: "Rotavirus",
+    dosage: "2ème injection",
+  },
+  {
+    nomVaccin: "Rotavirus",
+    dosage: "3ème injection",
+  },
+  {
+    nomVaccin: "Varicelle",
+    dosage: "",
+  },
+  {
+    nomVaccin: "Autre vaccin",
+    dosage: "",
+  },
 ];
 
 const VITAMINES_LIST = ["Vitamine D", "Vitamine K"];
@@ -159,7 +230,8 @@ export default function ImmunizationsScreen() {
   const [editingImmuno, setEditingImmuno] = useState<Immuno | null>(null);
   const [immunoType, setImmunoType] = useState<ImmunoType>("vitamine");
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [selectedVaccin, setSelectedVaccin] = useState<string>("");
+  const [selectedVaccinName, setSelectedVaccinName] = useState<string>("");
+  const [selectedVaccinDosage, setSelectedVaccinDosage] = useState<string>("");
   const [selectedVitamine, setSelectedVitamine] =
     useState<string>("Vitamine D");
   const [gouttesCount, setGouttesCount] = useState<number>(3);
@@ -204,7 +276,8 @@ export default function ImmunizationsScreen() {
       setDateHeure(new Date());
       setEditingImmuno(null);
       setIsSubmitting(false);
-      setSelectedVaccin("");
+      setSelectedVaccinName("");
+      setSelectedVaccinDosage("");
       setSelectedVitamine("Vitamine D");
       setGouttesCount(3);
       setSearchQuery("");
@@ -541,8 +614,14 @@ export default function ImmunizationsScreen() {
       );
 
       if (nextEventDate) {
-        setDaysWindow(14);
-        setRangeEndDate(nextEventDate);
+        const startOfNext = new Date(nextEventDate);
+        startOfNext.setHours(0, 0, 0, 0);
+        const diffDays =
+          Math.floor(
+            (endOfRange.getTime() - startOfNext.getTime()) /
+              (24 * 60 * 60 * 1000),
+          ) + 1;
+        setDaysWindow((prev) => Math.max(prev, diffDays));
       } else {
         setHasMore(false);
         pendingLoadMoreRef.current = 0;
@@ -834,16 +913,23 @@ export default function ImmunizationsScreen() {
     if (immuno.type === "vaccin") {
       return immuno.nomVaccin || immuno.lib || "Vaccin non spécifié";
     }
-    const baseName = immuno.nomVitamine || "Vitamine";
-    return immuno.dosage ? `${baseName} · ${immuno.dosage}` : baseName;
+    return immuno.nomVitamine || "Vitamine";
   };
 
   const deleteTargetLabel = editingImmuno
     ? `${getImmunoTypeLabel(editingImmuno.type)} "${getImmunoName(editingImmuno)}"`
     : "element";
 
-  const selectVaccin = (vaccin: string) => {
-    setSelectedVaccin(vaccin);
+  const getVaccinDisplay = (nomVaccin: string, dosage?: string | null) =>
+    // dosage && dosage.length > 0 ? `${nomVaccin} (${dosage})` : nomVaccin;
+    dosage && dosage.length > 0 ? `${nomVaccin} · ${dosage}` : nomVaccin;
+
+  const selectVaccin = (vaccin: {
+    nomVaccin: string;
+    dosage: string | null;
+  }) => {
+    setSelectedVaccinName(vaccin.nomVaccin);
+    setSelectedVaccinDosage(vaccin.dosage ?? "");
     setSearchQuery("");
     setSheetStep("form");
   };
@@ -855,7 +941,7 @@ export default function ImmunizationsScreen() {
   };
 
   const filteredVaccins = VACCINS_LIST.filter((vaccin) =>
-    normalizeQuery(vaccin).includes(normalizeQuery(searchQuery)),
+    normalizeQuery(vaccin.nomVaccin).includes(normalizeQuery(searchQuery)),
   );
   const filteredVitamines = VITAMINES_LIST.filter((vitamine) =>
     normalizeQuery(vitamine).includes(normalizeQuery(searchQuery)),
@@ -876,7 +962,8 @@ export default function ImmunizationsScreen() {
     setImmunoType(type);
 
     if (type === "vaccin") {
-      setSelectedVaccin(immuno.nomVaccin || immuno.lib || "");
+      setSelectedVaccinName(immuno.nomVaccin || immuno.lib || "");
+      setSelectedVaccinDosage(immuno.dosage || "");
     } else {
       setSelectedVitamine(immuno.nomVitamine || "Vitamine D");
       const dosage = String(immuno.dosage || "");
@@ -928,7 +1015,7 @@ export default function ImmunizationsScreen() {
     if (isSubmitting || !activeChild) return;
 
     // Validation pour les vaccins
-    if (immunoType === "vaccin" && !selectedVaccin.trim()) {
+    if (immunoType === "vaccin" && !selectedVaccinName.trim()) {
       showAlert("Attention", "Veuillez sélectionner un vaccin");
       return;
     }
@@ -945,7 +1032,10 @@ export default function ImmunizationsScreen() {
             dosage: `${gouttesCount} gouttes`,
           }),
         }),
-        ...(immunoType === "vaccin" && { nomVaccin: selectedVaccin }),
+        ...(immunoType === "vaccin" && {
+          nomVaccin: selectedVaccinName,
+          ...(selectedVaccinDosage && { dosage: selectedVaccinDosage }),
+        }),
       };
 
       if (editingImmuno) {
@@ -1048,58 +1138,57 @@ export default function ImmunizationsScreen() {
               </TouchableOpacity>
             )}
           </View>
-          <ScrollView
-            style={styles.vaccinList}
-            showsVerticalScrollIndicator={false}
-          >
+          <View style={styles.vaccinList}>
             {filteredVaccins.length > 0 ? (
-              filteredVaccins.map((vaccin, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.vaccinListItem,
-                    selectedVaccin === vaccin && {
-                      backgroundColor: Colors[colorScheme].tint + "20",
-                    },
-                  ]}
-                  onPress={() => selectVaccin(vaccin)}
-                  activeOpacity={0.7}
-                >
-                  <FontAwesome
-                    name="syringe"
-                    size={16}
-                    color={
-                      selectedVaccin === vaccin
-                        ? Colors[colorScheme].tint
-                        : "#666"
-                    }
-                    style={styles.vaccinListItemIcon}
-                  />
-                  <Text
+              filteredVaccins.map((vaccin, index) => {
+                const vaccinName = getVaccinDisplay(
+                  vaccin.nomVaccin,
+                  vaccin.dosage,
+                );
+                const isSelected =
+                  selectedVaccinName === vaccin.nomVaccin &&
+                  (selectedVaccinDosage || "") === (vaccin.dosage ?? "");
+                return (
+                  <TouchableOpacity
+                    key={index}
                     style={[
-                      styles.vaccinListItemText,
-                      selectedVaccin === vaccin && {
-                        color: "#000000",
+                      styles.vaccinListItem,
+                      isSelected && {
+                        backgroundColor: Colors[colorScheme].tint + "20",
                       },
-                      selectedVaccin === vaccin &&
-                        styles.vaccinListItemTextSelected,
                     ]}
+                    onPress={() => selectVaccin(vaccin)}
+                    activeOpacity={0.7}
                   >
-                    {vaccin}
-                  </Text>
-                  {selectedVaccin === vaccin && (
                     <FontAwesome
-                      name="check"
+                      name="syringe"
                       size={16}
-                      color={Colors[colorScheme].tint}
+                      color={isSelected ? Colors[colorScheme].tint : "#666"}
+                      style={styles.vaccinListItemIcon}
                     />
-                  )}
-                </TouchableOpacity>
-              ))
+                    <Text
+                      style={[
+                        styles.vaccinListItemText,
+                        isSelected && { color: "#000000" },
+                        isSelected && styles.vaccinListItemTextSelected,
+                      ]}
+                    >
+                      {vaccinName}
+                    </Text>
+                    {isSelected && (
+                      <FontAwesome
+                        name="check"
+                        size={16}
+                        color={Colors[colorScheme].tint}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })
             ) : (
               <Text style={styles.noResultsText}>Aucun vaccin trouvé</Text>
             )}
-          </ScrollView>
+          </View>
         </>
       );
     }
@@ -1141,10 +1230,7 @@ export default function ImmunizationsScreen() {
               </TouchableOpacity>
             )}
           </View>
-          <ScrollView
-            style={styles.vaccinList}
-            showsVerticalScrollIndicator={false}
-          >
+          <View style={styles.vaccinList}>
             {filteredVitamines.length > 0 ? (
               filteredVitamines.map((vitamine) => (
                 <TouchableOpacity
@@ -1192,7 +1278,7 @@ export default function ImmunizationsScreen() {
             ) : (
               <Text style={styles.noResultsText}>Aucune vitamine trouvée</Text>
             )}
-          </ScrollView>
+          </View>
         </>
       );
     }
@@ -1216,11 +1302,13 @@ export default function ImmunizationsScreen() {
             <Text
               style={[
                 styles.vaccinSelectorText,
-                selectedVaccin && styles.vaccinSelectorTextSelected,
+                selectedVaccinName && styles.vaccinSelectorTextSelected,
                 isSubmitting && styles.vaccinSelectorTextDisabled,
               ]}
             >
-              {selectedVaccin || "Sélectionner un vaccin"}
+              {selectedVaccinName
+                ? getVaccinDisplay(selectedVaccinName, selectedVaccinDosage)
+                : "Sélectionner un vaccin"}
             </Text>
             <FontAwesome name="chevron-right" size={16} color="#999" />
           </TouchableOpacity>
@@ -1401,13 +1489,16 @@ export default function ImmunizationsScreen() {
       isEditing: !!editingImmuno,
       isSubmitting,
       showActions: sheetStep === "form",
+      enablePanDownToClose: sheetStep === "form",
+      enableOverDrag: sheetStep === "form",
       onSubmit: handleSubmit,
       onDelete: editingImmuno ? handleDelete : undefined,
       children: renderSheetContent(),
       onDismiss: () => {
         setIsSubmitting(false);
         setEditingImmuno(null);
-        setSelectedVaccin("");
+        setSelectedVaccinName("");
+        setSelectedVaccinDosage("");
         setSearchQuery("");
         setSheetStep("form");
         editIdRef.current = null;
@@ -1425,7 +1516,8 @@ export default function ImmunizationsScreen() {
     editingImmuno,
     immunoType,
     isSubmitting,
-    selectedVaccin,
+    selectedVaccinName,
+    selectedVaccinDosage,
     selectedVitamine,
     gouttesCount,
     searchQuery,
@@ -1471,46 +1563,60 @@ export default function ImmunizationsScreen() {
 
   const renderImmunoItem = useCallback(
     (immuno: Immuno, isLast: boolean = false) => {
-      const typeLabel = getImmunoTypeLabel(immuno.type);
       const color = getImmunoColor(immuno.type);
       const name = getImmunoName(immuno);
-      const timeLabel = new Date(
-        immuno.date?.seconds * 1000,
-      ).toLocaleTimeString("fr-FR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const typeLabel = getImmunoTypeLabel(immuno.type);
+      const immunoDate = new Date(immuno.date?.seconds * 1000);
 
       return (
-        <TouchableOpacity
+        <Pressable
           key={immuno.id}
-          style={styles.immunoRow}
+          style={({ pressed }) => [
+            styles.sessionCard,
+            // isLast && { backgroundColor: color + "15" },
+            pressed && styles.sessionCardPressed,
+          ]}
           onPress={() => openEditModal(immuno)}
-          activeOpacity={0.7}
         >
-          <View style={styles.timeColumn}>
-            <Text style={styles.timeText}>{timeLabel}</Text>
-            <View style={[styles.timelineDot, { backgroundColor: color }]} />
-            {!isLast && <View style={styles.timelineLine} />}
+          <View style={styles.sessionTime}>
+            <Text
+              style={[
+                styles.sessionTimeText,
+                isLast && styles.sessionTimeTextLast,
+              ]}
+            >
+              {immunoDate.toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
           </View>
-          <View style={styles.immunoCard}>
-            <View style={styles.cardHeader}>
+
+          <View style={styles.sessionContent}>
+            <View
+              style={[
+                styles.sessionIconWrapper,
+                { backgroundColor: color + "20" },
+              ]}
+            >
               <FontAwesome
-                name={getImmunoIcon(immuno.type)}
+                name={immuno.type === "vaccin" ? "syringe" : "pills"}
                 size={14}
                 color={color}
               />
-              <Text style={styles.immunoNameText}>{name}</Text>
             </View>
-            <View style={styles.cardMeta}>
-              <View style={[styles.typePill, { borderColor: color }]}>
-                <Text style={[styles.typePillText, { color }]}>
-                  {typeLabel}
-                </Text>
-              </View>
+            <View style={styles.sessionDetails}>
+              <Text style={styles.sessionType} numberOfLines={3}>
+                {name}
+              </Text>
+              {immuno.dosage && (
+                <Text style={styles.sessionDetailText}>{immuno.dosage}</Text>
+              )}
             </View>
           </View>
-        </TouchableOpacity>
+
+          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+        </Pressable>
       );
     },
     [],
@@ -1524,52 +1630,98 @@ export default function ImmunizationsScreen() {
     ({ item }: { item: ImmunoGroup }) => {
       const isExpanded = expandedDays.has(item.date);
       const hasMultipleImmunos = item.immunos.length > 1;
+      const accentColor = getImmunoColor(selectedType);
+
+      // Format date intelligently
+      const formatDayLabel = () => {
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const itemDate = new Date(item.date);
+
+        if (itemDate.toDateString() === today.toDateString()) {
+          return "Aujourd'hui";
+        } else if (itemDate.toDateString() === yesterday.toDateString()) {
+          return "Hier";
+        }
+        return itemDate.toLocaleDateString("fr-FR", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+        });
+      };
+
+      const typeLabel = selectedType === "vitamine" ? "vitamine" : "vaccin";
+      const breakdownLabel =
+        selectedType === "vitamine" ? "Vitamine" : "Vaccin";
 
       return (
-        <View style={styles.dayCard}>
+        <View style={styles.daySection}>
+          {/* Day Header with stats (pumping style) */}
           <View style={styles.dayHeader}>
-            <View style={styles.dayInfo}>
-              <Text style={styles.dayDate}>{item.dateFormatted}</Text>
-              <View style={styles.summaryInfo}>
-                <View style={styles.summaryRow}>
-                  <View style={styles.summaryBadge}>
-                    <FontAwesome
-                      name={selectedType === "vitamine" ? "pills" : "syringe"}
-                      size={14}
-                      color={getImmunoColor(selectedType)}
-                    />
-                    <Text style={styles.summaryText}>
-                      {item.immunos.length}{" "}
-                      {selectedType === "vitamine" ? "vitamine" : "vaccin"}
-                      {item.immunos.length > 1 ? "s" : ""}
-                    </Text>
-                  </View>
-                </View>
+            <Text style={styles.dayLabel}>{formatDayLabel()}</Text>
+            <View style={styles.dayStats}>
+              <View style={styles.dayStatItem}>
+                <Text style={[styles.dayStatValue, { color: accentColor }]}>
+                  {item.immunos.length}
+                </Text>
+                <Text style={styles.dayStatLabel}>
+                  {typeLabel}
+                  {item.immunos.length > 1 ? "s" : ""}
+                </Text>
               </View>
             </View>
+          </View>
+
+          {/* <View style={styles.statsBreakdown}>
+            <View style={styles.statsBreakdownItem}>
+              <View
+                style={[
+                  styles.statsBreakdownDot,
+                  { backgroundColor: accentColor },
+                ]}
+              />
+              <Text style={styles.statsBreakdownLabel}>
+                {breakdownLabel}
+                {item.immunos.length > 1 ? "s" : ""}
+              </Text>
+              <Text style={styles.statsBreakdownValue}>
+                {item.immunos.length}
+              </Text>
+            </View>
+          </View> */}
+
+          {/* Cards container */}
+          <View style={styles.sessionsContainer}>
+            {renderImmunoItem(item.lastImmuno, true)}
+
             {hasMultipleImmunos && (
-              <TouchableOpacity
-                style={styles.expandButton}
-                onPress={() => toggleExpand(item.date)}
-              >
-                <FontAwesome
-                  name={isExpanded ? "chevron-up" : "chevron-down"}
-                  size={16}
-                  color="#666"
-                />
-              </TouchableOpacity>
+              <>
+                {isExpanded &&
+                  item.immunos
+                    .filter((immuno) => immuno.id !== item.lastImmuno.id)
+                    .map((immuno) => renderImmunoItem(immuno, false))}
+
+                <Pressable
+                  style={styles.expandTrigger}
+                  onPress={() => toggleExpand(item.date)}
+                >
+                  <Text
+                    style={[styles.expandTriggerText, { color: accentColor }]}
+                  >
+                    {isExpanded
+                      ? "Masquer"
+                      : `${item.immunos.length - 1} autre${item.immunos.length > 2 ? "s" : ""} ${typeLabel}${item.immunos.length > 2 ? "s" : ""}`}
+                  </Text>
+                  <Ionicons
+                    name={isExpanded ? "chevron-up" : "chevron-down"}
+                    size={14}
+                    color={accentColor}
+                  />
+                </Pressable>
+              </>
             )}
           </View>
-          {renderImmunoItem(item.lastImmuno, true)}
-          {hasMultipleImmunos && isExpanded && (
-            <View style={styles.expandedContent}>
-              <View style={styles.separator} />
-              <Text style={styles.historyLabel}>Historique du jour</Text>
-              {item.immunos
-                .filter((immuno) => immuno.id !== item.lastImmuno.id)
-                .map((immuno) => renderImmunoItem(immuno))}
-            </View>
-          )}
         </View>
       );
     },
@@ -1764,153 +1916,150 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
-  // Filter Bar
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
 
-  // Day Card
-  dayCard: {
-    backgroundColor: "white",
-    marginBottom: 12,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+  // Day Section
+  daySection: {
+    marginBottom: 20,
   },
   dayHeader: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  dayInfo: {
-    flex: 1,
-  },
-  dayDate: {
-    fontSize: 17,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-  summaryInfo: {
-    flexDirection: "column",
-    gap: 4,
     marginBottom: 8,
+    paddingHorizontal: 4,
   },
-  summaryRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+  dayLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6b7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
-  summaryBadge: {
+  dayStats: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#f5f6f8",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 10,
+    gap: 12,
   },
-  summaryText: {
-    fontSize: 13,
-    color: "#666",
-    fontWeight: "500",
+  dayStatItem: {
+    alignItems: "flex-end",
   },
-  expandButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0",
+  dayStatValue: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  dayStatLabel: {
+    fontSize: 11,
+    color: "#9ca3af",
   },
 
-  // Immuno Item
-  immunoRow: {
+  // Stats breakdown
+  statsBreakdown: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 10,
+    gap: 16,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
-  timeColumn: {
-    width: 56,
+  statsBreakdownItem: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 6,
   },
-  timeText: {
-    fontSize: 12,
-    color: "#7b828a",
-    marginBottom: 6,
-  },
-  timelineDot: {
+  statsBreakdownDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginBottom: 6,
   },
-  timelineLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: "#e6e9ee",
-    borderRadius: 2,
+  statsBreakdownLabel: {
+    fontSize: 12,
+    color: "#6b7280",
   },
-  immunoCard: {
-    flex: 1,
-    backgroundColor: "white",
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: "#edf1f4",
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
-  },
-  immunoNameText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#222",
-  },
-  cardMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  typePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    backgroundColor: "white",
-  },
-  typePillText: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-    textTransform: "uppercase",
+  statsBreakdownValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#374151",
   },
 
-  // Expanded Content
-  expandedContent: {
-    marginTop: 8,
+  // Sessions container
+  sessionsContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  separator: {
-    height: 1,
-    backgroundColor: "#eee",
-    marginBottom: 12,
+
+  // Session Card
+  sessionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
   },
-  historyLabel: {
+  sessionCardPressed: {
+    backgroundColor: "#f9fafb",
+  },
+  sessionTime: {
+    width: 52,
+  },
+  sessionTimeText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#9ca3af",
+  },
+  sessionTimeTextLast: {
+    color: "#374151",
+    fontWeight: "600",
+  },
+  sessionContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  sessionIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sessionDetails: {
+    flex: 1,
+  },
+  sessionType: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  sessionDetailText: {
     fontSize: 12,
-    color: "#999",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    color: "#6b7280",
+    marginTop: 2,
+  },
+
+  // Expand trigger
+  expandTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+  },
+  expandTriggerText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
 
   // Empty State
@@ -2069,7 +2218,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   vaccinList: {
-    maxHeight: 400,
+    paddingBottom: 8,
   },
   vaccinListItem: {
     flexDirection: "row",

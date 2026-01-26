@@ -776,7 +776,6 @@ export default function MealsScreen() {
     setExpandedDays(newExpandedDays);
   };
 
-
   // ============================================
   // HANDLERS - MODAL
   // ============================================
@@ -1183,15 +1182,20 @@ export default function MealsScreen() {
       <Pressable
         key={meal.id}
         style={({ pressed }) => [
-          styles.mealRow,
-          isLast && styles.mealRowLast,
-          pressed && styles.mealRowPressed,
+          styles.sessionCard,
+          // isLast && { backgroundColor: eventColors.meal.light + "60" },
+          pressed && styles.sessionCardPressed,
         ]}
         onPress={() => openEditModal(meal)}
       >
-        {/* Timeline indicator */}
-        <View style={styles.timelineColumn}>
-          <Text style={[styles.timelineTime, isLast && styles.timelineTimeLast]}>
+        {/* Time badge */}
+        <View style={styles.sessionTime}>
+          <Text
+            style={[
+              styles.sessionTimeText,
+              isLast && styles.sessionTimeTextLast,
+            ]}
+          >
             {mealTime.toLocaleTimeString("fr-FR", {
               hour: "2-digit",
               minute: "2-digit",
@@ -1199,40 +1203,40 @@ export default function MealsScreen() {
           </Text>
         </View>
 
-        {/* Dot & line */}
-        <View style={styles.timelineDotColumn}>
+        {/* Content */}
+        <View style={styles.sessionContent}>
           <View
             style={[
-              styles.timelineDot,
-              { backgroundColor: isLast ? eventColors.meal.dark : "#d1d5db" },
+              styles.sessionIconWrapper,
+              { backgroundColor: eventColors.meal.light },
             ]}
-          />
-        </View>
-
-        {/* Content */}
-        <View style={styles.mealContent}>
-          <View style={styles.mealIconWrapper}>
+          >
             {isTetee ? (
               <FontAwesome
                 name="person-breastfeeding"
-                size={16}
+                size={14}
                 color={eventColors.meal.dark}
               />
             ) : (
               <MaterialCommunityIcons
                 name="baby-bottle"
-                size={18}
+                size={16}
                 color={eventColors.meal.dark}
               />
             )}
           </View>
-          <View style={styles.mealDetails}>
-            <Text style={styles.mealType}>{isTetee ? "Allaitement" : "Biberon"}</Text>
+          <View style={styles.sessionDetails}>
+            <Text style={styles.sessionType}>
+              {isTetee ? "Tétée" : "Biberon"}
+            </Text>
             {!isTetee && meal.quantite && (
-              <Text style={styles.mealQuantity}>{meal.quantite} ml</Text>
+              <Text style={styles.sessionDetailText}>{meal.quantite} ml</Text>
             )}
           </View>
         </View>
+
+        {/* Chevron */}
+        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
       </Pressable>
     );
   };
@@ -1268,57 +1272,65 @@ export default function MealsScreen() {
 
     return (
       <View style={styles.daySection}>
-        {/* Day Header */}
+        {/* Day Header with stats */}
         <View style={styles.dayHeader}>
           <Text style={styles.dayLabel}>{formatDayLabel()}</Text>
-          <View style={styles.daySummary}>
-            {teteesCount > 0 && (
-              <View style={styles.summaryPill}>
-                <FontAwesome
-                  name="person-breastfeeding"
-                  size={10}
-                  color="#6b7280"
-                />
-                <Text style={styles.summaryPillText}>{teteesCount}</Text>
-              </View>
-            )}
-            {biberonsCount > 0 && (
-              <View style={styles.summaryPill}>
-                <MaterialCommunityIcons
-                  name="baby-bottle"
-                  size={12}
-                  color="#6b7280"
-                />
-                <Text style={styles.summaryPillText}>{biberonsCount}</Text>
-              </View>
-            )}
-            {item.totalQuantity > 0 && (
-              <View style={[styles.summaryPill, styles.summaryPillAccent]}>
-                <Text style={styles.summaryPillTextAccent}>
-                  {item.totalQuantity} ml
-                </Text>
-              </View>
-            )}
+          <View style={styles.dayStats}>
+            <View style={styles.dayStatItem}>
+              <Text
+                style={[styles.dayStatValue, { color: eventColors.meal.dark }]}
+              >
+                {item.meals.length}
+              </Text>
+              <Text style={styles.dayStatLabel}>repas</Text>
+            </View>
           </View>
         </View>
 
-        {/* Meals Card */}
-        <View style={styles.dayCard}>
-          {/* Last meal always visible */}
+        {/* Stats breakdown */}
+        <View style={styles.statsBreakdown}>
+          <View style={styles.statsBreakdownItem}>
+            <View
+              style={[
+                styles.statsBreakdownDot,
+                { backgroundColor: eventColors.meal.dark },
+              ]}
+            />
+            <Text style={styles.statsBreakdownLabel}>
+              Tétée{teteesCount > 1 ? "s" : ""}
+            </Text>
+            <Text style={styles.statsBreakdownValue}>{teteesCount}</Text>
+          </View>
+          <View style={styles.statsBreakdownItem}>
+            <View
+              style={[styles.statsBreakdownDot, { backgroundColor: "#6366f1" }]}
+            />
+            <Text style={styles.statsBreakdownLabel}>
+              Biberon{biberonsCount > 1 ? "s" : ""}
+            </Text>
+            <Text style={styles.statsBreakdownValue}>{biberonsCount}</Text>
+            <Text style={styles.statsBreakdownLabel}>·</Text>
+            <Text
+              style={[
+                styles.statsBreakdownLabel,
+                { color: eventColors.meal.dark, fontWeight: "600" },
+              ]}
+            >
+              {biberonsCount > 0 ? `${item.totalQuantity} ml` : ""}
+            </Text>
+          </View>
+        </View>
+
+        {/* Sessions list */}
+        <View style={styles.sessionsContainer}>
           {renderMealItem(item.lastMeal, true)}
 
-          {/* Expandable history */}
           {hasMultipleMeals && (
             <>
               {isExpanded &&
                 item.meals
                   .filter((meal) => meal.id !== item.lastMeal.id)
-                  .map((meal, index) => (
-                    <View key={meal.id}>
-                      <View style={styles.mealDivider} />
-                      {renderMealItem(meal, false)}
-                    </View>
-                  ))}
+                  .map((meal) => renderMealItem(meal, false))}
 
               <Pressable
                 style={styles.expandTrigger}
@@ -1327,7 +1339,7 @@ export default function MealsScreen() {
                 <Text style={styles.expandTriggerText}>
                   {isExpanded
                     ? "Masquer"
-                    : `Voir ${item.meals.length - 1} autre${item.meals.length > 2 ? "s" : ""}`}
+                    : `${item.meals.length - 1} autre${item.meals.length > 2 ? "s" : ""} repas`}
                 </Text>
                 <Ionicons
                   name={isExpanded ? "chevron-up" : "chevron-down"}
@@ -1505,52 +1517,71 @@ const styles = StyleSheet.create({
 
   // Day Section
   daySection: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   dayHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
-    paddingHorizontal: 4,
+    marginBottom: 12,
   },
   dayLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#6b7280",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
   },
-  daySummary: {
+  dayStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  dayStatItem: {
+    alignItems: "flex-end",
+  },
+  dayStatValue: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  dayStatLabel: {
+    fontSize: 11,
+    color: "#9ca3af",
+  },
+  dayStatDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: "#e5e7eb",
+  },
+
+  // Stats Breakdown
+  statsBreakdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  statsBreakdownItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  summaryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#f3f4f6",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+  statsBreakdownDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  summaryPillAccent: {
-    backgroundColor: eventColors.meal.dark,
-  },
-  summaryPillText: {
-    fontSize: 11,
-    fontWeight: "600",
+  statsBreakdownLabel: {
+    fontSize: 12,
     color: "#6b7280",
   },
-  summaryPillTextAccent: {
-    fontSize: 11,
+  statsBreakdownValue: {
+    fontSize: 12,
     fontWeight: "600",
-    color: "#ffffff",
+    color: "#374151",
   },
 
-  // Day Card
-  dayCard: {
+  // Sessions Container
+  sessionsContainer: {
     backgroundColor: "#ffffff",
     borderRadius: 16,
     overflow: "hidden",
@@ -1561,80 +1592,56 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
 
-  // Meal Row (Timeline style)
-  mealRow: {
+  // Session Card
+  sessionCard: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
   },
-  mealRowLast: {
-    backgroundColor: eventColors.meal.light + "60",
-  },
-  mealRowPressed: {
+  sessionCardPressed: {
     backgroundColor: "#f9fafb",
   },
-  mealDivider: {
-    height: 1,
-    backgroundColor: "#f3f4f6",
-    marginLeft: 72,
+  sessionTime: {
+    width: 52,
   },
-
-  // Timeline
-  timelineColumn: {
-    width: 44,
-    marginRight: 12,
-  },
-  timelineTime: {
+  sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
     color: "#9ca3af",
   },
-  timelineTimeLast: {
+  sessionTimeTextLast: {
     color: "#374151",
     fontWeight: "600",
   },
-  timelineDotColumn: {
-    width: 16,
-    alignItems: "center",
-    marginRight: 12,
-  },
-  timelineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-
-  // Meal Content
-  mealContent: {
+  sessionContent: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  mealIconWrapper: {
+  sessionIconWrapper: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: eventColors.meal.light,
     alignItems: "center",
     justifyContent: "center",
   },
-  mealDetails: {
+  sessionDetails: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    gap: 2,
   },
-  mealType: {
+  sessionType: {
     fontSize: 15,
-    fontWeight: "500",
+    fontWeight: "600",
     color: "#111827",
   },
-  mealQuantity: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: eventColors.meal.dark,
+  sessionDetailText: {
+    fontSize: 12,
+    color: "#6b7280",
   },
 
   // Expand Trigger
