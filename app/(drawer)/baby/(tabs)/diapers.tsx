@@ -2189,9 +2189,8 @@ const styles = StyleSheet.create({
 
   selectedTime: {
     fontSize: 20,
+    color: "#374151",
 
-    color: eventColors.default.dark,
-
-    fontWeight: "bold",
+    fontWeight: "600",
   },
 });

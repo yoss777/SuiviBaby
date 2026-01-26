@@ -1312,8 +1312,8 @@ const styles = StyleSheet.create({
   },
   selectedTime: {
     fontSize: 20,
-    color: "#004cdaff",
-    fontWeight: "bold",
+    color: "#374151",
+    fontWeight: "600",
   },
   buttonDisabled: {
     opacity: 0.6,
