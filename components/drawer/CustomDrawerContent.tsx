@@ -172,7 +172,7 @@ export function CustomDrawerContent(props: any) {
                 ]}
                 onPress={() => {
                   setActiveChild(child);
-                  router.push("/(drawer)/baby" as any);
+                  router.replace("/(drawer)/baby" as any);
                 }}
                 activeOpacity={0.7}
               >
