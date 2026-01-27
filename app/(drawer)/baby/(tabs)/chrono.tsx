@@ -893,7 +893,7 @@ export default function ChronoScreen() {
   // Handlers with useCallback
   const handleRangeChange = useCallback(
     (value: RangeOption) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       if (value > maxRange) {
         setMaxRange(value);
         setIsRefreshing(true);
@@ -972,7 +972,7 @@ export default function ChronoScreen() {
   );
 
   const handleFilterToggle = useCallback((type: FilterType) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedTypes((prev) =>
       prev.includes(type)
         ? prev.filter((value) => value !== type)

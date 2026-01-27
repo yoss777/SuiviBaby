@@ -1,4 +1,15 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import {
+  Canvas,
+  Circle,
+  LinearGradient,
+  Path,
+  RoundedRect,
+  Shadow,
+  Skia,
+  Line as SkiaLine,
+  vec,
+} from "@shopify/react-native-skia";
 import { Timestamp } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -8,17 +19,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  Canvas,
-  Circle,
-  Line as SkiaLine,
-  LinearGradient,
-  Path,
-  RoundedRect,
-  Shadow,
-  Skia,
-  vec,
-} from "@shopify/react-native-skia";
 import {
   Gesture,
   GestureDetector,
@@ -126,10 +126,10 @@ function createFillPath(points: { x: number; y: number }[]) {
 export default function PompagesChart({ pompages }: Props) {
   const [currentDay, setCurrentDay] = useState<Date>(startOfDay(new Date()));
   const [currentWeek, setCurrentWeek] = useState<Date>(
-    getStartOfWeek(new Date())
+    getStartOfWeek(new Date()),
   );
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(
-    null
+    null,
   );
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
 
@@ -164,7 +164,8 @@ export default function PompagesChart({ pompages }: Props) {
     return pompages
       .map((p) => ({
         ...p,
-        dateObj: p.date instanceof Timestamp ? p.date.toDate() : new Date(p.date),
+        dateObj:
+          p.date instanceof Timestamp ? p.date.toDate() : new Date(p.date),
         totalQuantite: (p.quantiteDroite || 0) + (p.quantiteGauche || 0),
       }))
       .filter((p) => startOfDay(p.dateObj).getTime() === currentDay.getTime())
@@ -176,7 +177,7 @@ export default function PompagesChart({ pompages }: Props) {
     p.dateObj.toLocaleTimeString("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",
-    })
+    }),
   );
 
   const maxDaily = Math.max(...dailyValues, 0);
@@ -192,7 +193,8 @@ export default function PompagesChart({ pompages }: Props) {
   };
 
   const xScale = (index: number) => {
-    const spacing = CHART_WIDTH / (dailyValues.length > 1 ? dailyValues.length - 1 : 1);
+    const spacing =
+      CHART_WIDTH / (dailyValues.length > 1 ? dailyValues.length - 1 : 1);
     return CHART_PADDING.left + index * spacing;
   };
 
@@ -306,8 +308,10 @@ export default function PompagesChart({ pompages }: Props) {
   const weeklyBars = useMemo(() => {
     return jours.map((jour, index) => {
       const value = weeklyValues[index];
-      const barHeight = maxWeekly > 0 ? (value / maxWeekly) * weeklyChartHeight : 0;
-      const x = CHART_PADDING.left + index * (weeklyBarWidth + weeklyBarSpacing);
+      const barHeight =
+        maxWeekly > 0 ? (value / maxWeekly) * weeklyChartHeight : 0;
+      const x =
+        CHART_PADDING.left + index * (weeklyBarWidth + weeklyBarSpacing);
       const y = CHART_PADDING.top + (weeklyChartHeight - barHeight);
       const isMax = value === maxWeekly && value > 0;
       return {
@@ -422,7 +426,9 @@ export default function PompagesChart({ pompages }: Props) {
                 <Text style={styles.metricValue}>{dailyTotal} ml</Text>
               </View>
               <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>Sessions</Text>
+                <Text style={styles.metricLabel}>
+                  Session{dailyValues.length > 1 ? "s" : ""}
+                </Text>
                 <Text style={styles.metricValue}>{dailyValues.length}</Text>
               </View>
               <View style={styles.metricCard}>
@@ -449,13 +455,18 @@ export default function PompagesChart({ pompages }: Props) {
                     x={CHART_PADDING.left}
                     y={CHART_PADDING.top}
                     width={CHART_WIDTH}
-                    height={CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom}
+                    height={
+                      CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
+                    }
                     r={12}
                     color={COLORS.surface}
                   >
                     <LinearGradient
                       start={vec(CHART_PADDING.left, CHART_PADDING.top)}
-                      end={vec(CHART_PADDING.left, CHART_HEIGHT - CHART_PADDING.bottom)}
+                      end={vec(
+                        CHART_PADDING.left,
+                        CHART_HEIGHT - CHART_PADDING.bottom,
+                      )}
                       colors={["#f4fbf5", "#ffffff"]}
                     />
                   </RoundedRect>
@@ -474,7 +485,10 @@ export default function PompagesChart({ pompages }: Props) {
                     <LinearGradient
                       start={vec(0, CHART_PADDING.top)}
                       end={vec(0, CHART_HEIGHT - CHART_PADDING.bottom)}
-                      colors={["rgba(46, 125, 50, 0.3)", "rgba(46, 125, 50, 0.02)"]}
+                      colors={[
+                        "rgba(46, 125, 50, 0.3)",
+                        "rgba(46, 125, 50, 0.02)",
+                      ]}
                     />
                   </Path>
 
@@ -484,7 +498,12 @@ export default function PompagesChart({ pompages }: Props) {
                     strokeWidth={3}
                     color={COLORS.green}
                   >
-                    <Shadow dx={0} dy={2} blur={4} color="rgba(46, 125, 50, 0.35)" />
+                    <Shadow
+                      dx={0}
+                      dy={2}
+                      blur={4}
+                      color="rgba(46, 125, 50, 0.35)"
+                    />
                   </Path>
 
                   {chartPoints.map((point, index) => {
@@ -529,8 +548,9 @@ export default function PompagesChart({ pompages }: Props) {
 
               <View style={styles.xAxisContainer}>
                 {chartPoints
-                  .filter((_, i) =>
-                    i % Math.max(1, Math.floor(chartPoints.length / 5)) === 0
+                  .filter(
+                    (_, i) =>
+                      i % Math.max(1, Math.floor(chartPoints.length / 5)) === 0,
                   )
                   .map((point, index) => (
                     <Text
@@ -557,10 +577,13 @@ export default function PompagesChart({ pompages }: Props) {
               {`${weekStart.toLocaleDateString("fr-FR", {
                 day: "numeric",
                 month: "short",
-              })} - ${new Date(weekEnd.getTime() - 1).toLocaleDateString("fr-FR", {
-                day: "numeric",
-                month: "short",
-              })}`}
+              })} - ${new Date(weekEnd.getTime() - 1).toLocaleDateString(
+                "fr-FR",
+                {
+                  day: "numeric",
+                  month: "short",
+                },
+              )}`}
             </Text>
           </View>
         </View>
@@ -633,7 +656,10 @@ export default function PompagesChart({ pompages }: Props) {
               >
                 <LinearGradient
                   start={vec(CHART_PADDING.left, CHART_PADDING.top)}
-                  end={vec(CHART_PADDING.left, CHART_HEIGHT - CHART_PADDING.bottom)}
+                  end={vec(
+                    CHART_PADDING.left,
+                    CHART_HEIGHT - CHART_PADDING.bottom,
+                  )}
                   colors={["#f6fbf7", "#ffffff"]}
                 />
               </RoundedRect>
@@ -659,7 +685,12 @@ export default function PompagesChart({ pompages }: Props) {
                   color={bar.color}
                 >
                   {bar.isMax && (
-                    <Shadow dx={0} dy={2} blur={6} color="rgba(245, 183, 0, 0.4)" />
+                    <Shadow
+                      dx={0}
+                      dy={2}
+                      blur={6}
+                      color="rgba(245, 183, 0, 0.4)"
+                    />
                   )}
                 </RoundedRect>
               ))}
@@ -695,7 +726,10 @@ export default function PompagesChart({ pompages }: Props) {
                 key={`wx-${index}`}
                 style={[
                   styles.xAxisText,
-                  { left: weeklyBars[index].x + weeklyBars[index].width / 2 - 15 },
+                  {
+                    left:
+                      weeklyBars[index].x + weeklyBars[index].width / 2 - 15,
+                  },
                 ]}
               >
                 {jour}

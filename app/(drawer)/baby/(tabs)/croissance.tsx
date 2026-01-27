@@ -54,6 +54,7 @@ import {
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -81,9 +82,19 @@ type ChartPoint = {
 };
 
 const CHART_HEIGHT = 210;
-const CHART_PADDING = { top: 16, right: 20, bottom: 30, left: 32 };
+const CHART_PADDING = { top: 16, right: 32, bottom: 30, left: 32 };
 const CHART_VISIBLE_POINTS = 5;
 const CHART_AXIS_WIDTH = 40;
+
+const TOOLTIP_H = 62; // 54 body + 8 arrow
+const TOOLTIP_W = 84;
+
+// const CHART_PADDING = {
+//   top: TOOLTIP_H + 4,
+//   right: TOOLTIP_W / 2 + 18,
+//   bottom: 30,
+//   left: TOOLTIP_W / 2 + 8,
+// };
 
 function toDate(value: any): Date {
   if (value?.seconds) return new Date(value.seconds * 1000);
@@ -169,6 +180,7 @@ export default function CroissanceScreen() {
   );
   const selectedX = useSharedValue(0);
   const selectedY = useSharedValue(0);
+  const scrollX = useSharedValue(0);
   const [chartWidth, setChartWidth] = useState(
     Dimensions.get("window").width - 80,
   );
@@ -183,14 +195,15 @@ export default function CroissanceScreen() {
     () => ({
       surface: colorScheme === "dark" ? "#12161c" : "#ffffff",
       surfaceAlt: colorScheme === "dark" ? "#171c24" : "#f5f7f9",
-      ink: colorScheme === "dark" ? "#f5f7fb" : "#1b2430",
+      ink: colorScheme === "dark" ? "#f5f7fb" : "#1e2a36",
       muted: colorScheme === "dark" ? "#9aa5b1" : "#6a7784",
-      border: colorScheme === "dark" ? "#2a3340" : "#e5e9ef",
+      border: colorScheme === "dark" ? "#2a3340" : "#e5ecf2",
       tint: Colors[colorScheme].tint,
       orange: "#f97316",
       orangeSoft: "#fff3e6",
       green: "#8BCF9B",
-      blue: "#2563eb",
+      blue: "#2f80ed",
+      blueDeep: "#1b4f9c",
       blueSoft: "#e8efff",
       violet: "#7c3aed",
       violetSoft: "#f1eaff",
@@ -857,9 +870,15 @@ export default function CroissanceScreen() {
       }
     });
 
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollX.value = event.contentOffset.x;
+    },
+  });
+
   const animatedTooltipStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: selectedX.value - 40 },
+      { translateX: CHART_AXIS_WIDTH + selectedX.value - scrollX.value - 40 },
       { translateY: selectedY.value - 74 },
     ],
   }));
@@ -996,11 +1015,12 @@ export default function CroissanceScreen() {
                         </Text>
                       ))}
                     </View>
-                    <ScrollView
+                    <Animated.ScrollView
                       ref={chartScrollRef}
                       horizontal
                       showsHorizontalScrollIndicator={false}
                       onScrollBeginDrag={() => setSelectedPointIndex(null)}
+                      onScroll={scrollHandler}
                       onMomentumScrollEnd={() => {
                         autoScrollRef.current = false;
                       }}
@@ -1109,41 +1129,41 @@ export default function CroissanceScreen() {
                             })}
                           </Canvas>
                         </GestureDetector>
+                      </View>
+                    </Animated.ScrollView>
 
-                        {selectedPointIndex !== null &&
-                        chartPoints[selectedPointIndex] ? (
-                          <Animated.View
-                            pointerEvents="none"
+                    {selectedPointIndex !== null &&
+                    chartPoints[selectedPointIndex] ? (
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[
+                          styles.tooltip,
+                          { borderColor: metricStyle.color },
+                          animatedTooltipStyle,
+                        ]}
+                      >
+                        <View style={styles.tooltipContent}>
+                          <Text style={styles.tooltipTime}>
+                            {chartPoints[selectedPointIndex].labelFull}
+                          </Text>
+                          <Text
                             style={[
-                              styles.tooltip,
-                              { borderColor: metricStyle.color },
-                              animatedTooltipStyle,
+                              styles.tooltipValue,
+                              { color: metricStyle.color },
                             ]}
                           >
-                            <View style={styles.tooltipContent}>
-                              <Text style={styles.tooltipTime}>
-                                {chartPoints[selectedPointIndex].labelFull}
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.tooltipValue,
-                                  { color: metricStyle.color },
-                                ]}
-                              >
-                                {chartPoints[selectedPointIndex].value}{" "}
-                                {metricStyle.unit}
-                              </Text>
-                            </View>
-                            <View
-                              style={[
-                                styles.tooltipArrow,
-                                { borderTopColor: metricStyle.color },
-                              ]}
-                            />
-                          </Animated.View>
-                        ) : null}
-                      </View>
-                    </ScrollView>
+                            {chartPoints[selectedPointIndex].value}{" "}
+                            {metricStyle.unit}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.tooltipArrow,
+                            { borderTopColor: metricStyle.color },
+                          ]}
+                        />
+                      </Animated.View>
+                    ) : null}
                   </View>
                 )}
               </View>
@@ -1296,6 +1316,7 @@ const styles = StyleSheet.create({
   chartRow: {
     flexDirection: "row",
     alignItems: "stretch",
+    position: "relative",
   },
   yAxisColumn: {
     width: CHART_AXIS_WIDTH,

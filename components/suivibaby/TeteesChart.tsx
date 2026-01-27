@@ -1,4 +1,12 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import {
+  Canvas,
+  LinearGradient,
+  RoundedRect,
+  Shadow,
+  Line as SkiaLine,
+  vec,
+} from "@shopify/react-native-skia";
 import { Timestamp } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -8,14 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  Canvas,
-  Line as SkiaLine,
-  RoundedRect,
-  Shadow,
-  LinearGradient,
-  vec,
-} from "@shopify/react-native-skia";
 import {
   Gesture,
   GestureDetector,
@@ -66,13 +66,13 @@ function addWeeks(date: Date, weeks: number) {
 
 export default function TeteesChart({ tetees }: Props) {
   const [viewMode, setViewMode] = useState<"quantity" | "frequency">(
-    "quantity"
+    "quantity",
   );
-  const [typeFilter, setTypeFilter] = useState<
-    "tous" | "seins" | "biberons"
-  >("tous");
+  const [typeFilter, setTypeFilter] = useState<"tous" | "seins" | "biberons">(
+    "tous",
+  );
   const [currentWeek, setCurrentWeek] = useState<Date>(
-    getStartOfWeek(new Date())
+    getStartOfWeek(new Date()),
   );
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
 
@@ -130,13 +130,55 @@ export default function TeteesChart({ tetees }: Props) {
       biberonsQuantity: number;
     }
   > = {
-    Lun: { quantity: 0, count: 0, seinsCount: 0, biberonsCount: 0, biberonsQuantity: 0 },
-    Mar: { quantity: 0, count: 0, seinsCount: 0, biberonsCount: 0, biberonsQuantity: 0 },
-    Mer: { quantity: 0, count: 0, seinsCount: 0, biberonsCount: 0, biberonsQuantity: 0 },
-    Jeu: { quantity: 0, count: 0, seinsCount: 0, biberonsCount: 0, biberonsQuantity: 0 },
-    Ven: { quantity: 0, count: 0, seinsCount: 0, biberonsCount: 0, biberonsQuantity: 0 },
-    Sam: { quantity: 0, count: 0, seinsCount: 0, biberonsCount: 0, biberonsQuantity: 0 },
-    Dim: { quantity: 0, count: 0, seinsCount: 0, biberonsCount: 0, biberonsQuantity: 0 },
+    Lun: {
+      quantity: 0,
+      count: 0,
+      seinsCount: 0,
+      biberonsCount: 0,
+      biberonsQuantity: 0,
+    },
+    Mar: {
+      quantity: 0,
+      count: 0,
+      seinsCount: 0,
+      biberonsCount: 0,
+      biberonsQuantity: 0,
+    },
+    Mer: {
+      quantity: 0,
+      count: 0,
+      seinsCount: 0,
+      biberonsCount: 0,
+      biberonsQuantity: 0,
+    },
+    Jeu: {
+      quantity: 0,
+      count: 0,
+      seinsCount: 0,
+      biberonsCount: 0,
+      biberonsQuantity: 0,
+    },
+    Ven: {
+      quantity: 0,
+      count: 0,
+      seinsCount: 0,
+      biberonsCount: 0,
+      biberonsQuantity: 0,
+    },
+    Sam: {
+      quantity: 0,
+      count: 0,
+      seinsCount: 0,
+      biberonsCount: 0,
+      biberonsQuantity: 0,
+    },
+    Dim: {
+      quantity: 0,
+      count: 0,
+      seinsCount: 0,
+      biberonsCount: 0,
+      biberonsQuantity: 0,
+    },
   };
 
   filteredTetees.forEach((t) => {
@@ -167,12 +209,30 @@ export default function TeteesChart({ tetees }: Props) {
   const totalWeekCount = countValues.reduce((acc, v) => acc + v, 0);
   const totalSeinsCount = jours.reduce(
     (acc, j) => acc + weeklyData[j].seinsCount,
-    0
+    0,
   );
   const totalBiberonsCount = jours.reduce(
     (acc, j) => acc + weeklyData[j].biberonsCount,
-    0
+    0,
   );
+  const totalCountLabel =
+    typeFilter === "tous"
+      ? "Repas"
+      : typeFilter === "biberons"
+        ? "Biberon"
+        : "Tétée";
+  const frequencyUnit =
+    typeFilter === "tous"
+      ? "repas"
+      : typeFilter === "biberons"
+        ? "biberons"
+        : "tétées";
+  const recordLabel =
+    typeFilter === "tous"
+      ? "Record: repas"
+      : typeFilter === "biberons"
+        ? "Record: biberon"
+        : "Record: tétée";
 
   const dailyAverageQuantity =
     totalWeekQuantity > 0 ? Math.round(totalWeekQuantity / 7) : 0;
@@ -195,7 +255,8 @@ export default function TeteesChart({ tetees }: Props) {
   const bars = useMemo(() => {
     return jours.map((jour, index) => {
       const value = currentValues[index];
-      const barHeight = currentMax > 0 ? (value / currentMax) * chartAreaHeight : 0;
+      const barHeight =
+        currentMax > 0 ? (value / currentMax) * chartAreaHeight : 0;
       const x = CHART_PADDING.left + index * (barWidth + barSpacing);
       const y = CHART_PADDING.top + (chartAreaHeight - barHeight);
 
@@ -262,7 +323,10 @@ export default function TeteesChart({ tetees }: Props) {
     });
 
   const animatedTooltipStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: selectedScale.value }, { translateY: selectedLift.value }],
+    transform: [
+      { scale: selectedScale.value },
+      { translateY: selectedLift.value },
+    ],
   }));
 
   return (
@@ -314,7 +378,7 @@ export default function TeteesChart({ tetees }: Props) {
         <View style={styles.typeFilterContainer}>
           {[
             { key: "tous", label: "Tous", icon: "baby" },
-            { key: "seins", label: "Seins", icon: "person-breastfeeding" },
+            { key: "seins", label: "Tétées", icon: "person-breastfeeding" },
             { key: "biberons", label: "Biberons", icon: "jar-wheat" },
           ].map((type) => (
             <TouchableOpacity
@@ -397,7 +461,10 @@ export default function TeteesChart({ tetees }: Props) {
 
         <View style={styles.metricsRow}>
           <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Total tétées</Text>
+            <Text style={styles.metricLabel}>
+              {totalCountLabel}
+              {totalCountLabel !== "Repas" && totalWeekCount > 1 ? "s" : ""}
+            </Text>
             <Text style={styles.metricValue}>{totalWeekCount}</Text>
           </View>
           <View style={styles.metricCard}>
@@ -415,7 +482,9 @@ export default function TeteesChart({ tetees }: Props) {
         <View style={styles.chartContainer}>
           <View style={styles.yAxisContainer}>
             {yAxisLabels.map((label, index) => (
-              <View key={index} style={[styles.yAxisLabel, { top: label.y - 8 }]}
+              <View
+                key={index}
+                style={[styles.yAxisLabel, { top: label.y - 8 }]}
               >
                 <Text style={styles.yAxisText}>{label.value}</Text>
               </View>
@@ -434,7 +503,10 @@ export default function TeteesChart({ tetees }: Props) {
               >
                 <LinearGradient
                   start={vec(CHART_PADDING.left, CHART_PADDING.top)}
-                  end={vec(CHART_PADDING.left, CHART_HEIGHT - CHART_PADDING.bottom)}
+                  end={vec(
+                    CHART_PADDING.left,
+                    CHART_HEIGHT - CHART_PADDING.bottom,
+                  )}
                   colors={["#f5f9ff", "#ffffff"]}
                 />
               </RoundedRect>
@@ -460,7 +532,12 @@ export default function TeteesChart({ tetees }: Props) {
                   color={bar.color}
                 >
                   {bar.isMax && (
-                    <Shadow dx={0} dy={2} blur={6} color="rgba(245, 183, 0, 0.35)" />
+                    <Shadow
+                      dx={0}
+                      dy={2}
+                      blur={6}
+                      color="rgba(245, 183, 0, 0.35)"
+                    />
                   )}
                 </RoundedRect>
               ))}
@@ -473,15 +550,20 @@ export default function TeteesChart({ tetees }: Props) {
                 styles.tooltip,
                 animatedTooltipStyle,
                 {
-                  left: bars[selectedBarIndex].x + bars[selectedBarIndex].width / 2 - 50,
+                  left:
+                    bars[selectedBarIndex].x +
+                    bars[selectedBarIndex].width / 2 -
+                    50,
                   top: bars[selectedBarIndex].y - 60,
                 },
               ]}
             >
-              <Text style={styles.tooltipDay}>{bars[selectedBarIndex].jour}</Text>
+              <Text style={styles.tooltipDay}>
+                {bars[selectedBarIndex].jour}
+              </Text>
               <Text style={styles.tooltipValue}>
                 {bars[selectedBarIndex].value}{" "}
-                {viewMode === "quantity" ? "ml" : "tétées"}
+                {viewMode === "quantity" ? "ml" : frequencyUnit}
               </Text>
             </Animated.View>
           )}
@@ -506,7 +588,7 @@ export default function TeteesChart({ tetees }: Props) {
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{totalWeekCount}</Text>
-                <Text style={styles.statLabel}>Total tétées</Text>
+                <Text style={styles.statLabel}>{totalCountLabel}</Text>
               </View>
               <View style={styles.statItem}>
                 <FontAwesome
@@ -517,14 +599,18 @@ export default function TeteesChart({ tetees }: Props) {
                 <Text style={[styles.statValue, { color: COLORS.green }]}>
                   {totalSeinsCount}
                 </Text>
-                <Text style={styles.statLabel}>Seins</Text>
+                <Text style={styles.statLabel}>
+                  Tétée{totalSeinsCount > 1 ? "s" : ""}
+                </Text>
               </View>
               <View style={styles.statItem}>
                 <FontAwesome name="jar-wheat" size={14} color={COLORS.cyan} />
                 <Text style={[styles.statValue, { color: COLORS.cyan }]}>
                   {totalBiberonsCount}
                 </Text>
-                <Text style={styles.statLabel}>Biberons</Text>
+                <Text style={styles.statLabel}>
+                  Biberon{totalBiberonsCount > 1 ? "s" : ""}
+                </Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{totalWeekQuantity} ml</Text>
@@ -572,7 +658,10 @@ export default function TeteesChart({ tetees }: Props) {
                 >
                   {totalWeekCount}
                 </Text>
-                <Text style={styles.statLabel}>Total tétées</Text>
+                <Text style={styles.statLabel}>
+                  {totalCountLabel}
+                  {totalWeekCount > 1 ? "s" : ""}
+                </Text>
               </View>
               <View style={styles.statItem}>
                 <Text
@@ -593,7 +682,10 @@ export default function TeteesChart({ tetees }: Props) {
                   <Text style={[styles.statValue, { color: COLORS.gold }]}>
                     {bestCountDay}
                   </Text>
-                  <Text style={styles.statLabel}>Record: {maxCount} tétées</Text>
+                  <Text style={styles.statLabel}>
+                    {recordLabel}
+                    {maxCount > 1 ? "s" : ""} {maxCount}
+                  </Text>
                 </View>
               )}
             </View>
@@ -611,20 +703,20 @@ export default function TeteesChart({ tetees }: Props) {
               </Text>
               <Text style={styles.insightText}>
                 {typeFilter === "tous"
-                  ? `Cette semaine: ${totalSeinsCount} tétées au sein, ${totalBiberonsCount} biberons (${totalWeekQuantity} ml au total). ${
+                  ? `Cette semaine: ${totalSeinsCount} tétée${totalSeinsCount > 1 ? "s" : ""} au sein, ${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s" : ""} (${totalWeekQuantity} ml au total). ${
                       totalSeinsCount > totalBiberonsCount
                         ? "L'allaitement domine cette semaine."
                         : totalBiberonsCount > totalSeinsCount
-                        ? "Les biberons dominent cette semaine."
-                        : "Équilibre entre seins et biberons."
+                          ? "Les biberons dominent cette semaine."
+                          : "Équilibre entre seins et biberons."
                     }`
                   : typeFilter === "seins"
-                  ? `${totalSeinsCount} tétées au sein cette semaine, soit ${dailyAverageCount} par jour en moyenne. ${
-                      maxCount > dailyAverageCount * 1.5
-                        ? `Le ${bestCountDay} a été particulièrement actif.`
-                        : "Rythme régulier cette semaine."
-                    }`
-                  : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberons). Moyenne de ${dailyAverageQuantity} ml par jour.`}
+                    ? `${totalSeinsCount} tétée{${totalSeinsCount > 1 ? "s" : ""} au sein cette semaine, soit ${dailyAverageCount} par jour en moyenne. ${
+                        maxCount > dailyAverageCount * 1.5
+                          ? `Le ${bestCountDay} a été particulièrement actif.`
+                          : "Rythme régulier cette semaine."
+                      }`
+                    : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberon{${totalBiberonsCount > 1 ? "s" : ""} au total). Moyenne de ${dailyAverageQuantity} ml par jour.`}
               </Text>
             </View>
           </View>
