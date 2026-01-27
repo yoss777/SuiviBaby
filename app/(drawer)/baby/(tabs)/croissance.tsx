@@ -16,6 +16,18 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import {
+  Canvas,
+  Circle,
+  LinearGradient,
+  Path,
+  RoundedRect,
+  Shadow,
+  Skia,
+  Line as SkiaLine,
+  vec,
+} from "@shopify/react-native-skia";
+import { router, useLocalSearchParams } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -33,12 +45,16 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
-import { LineChart } from "react-native-chart-kit";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderRight } from "../../_layout";
-import { router, useLocalSearchParams } from "expo-router";
 
 type CroissanceEntry = {
   id: string;
@@ -51,6 +67,19 @@ type CroissanceEntry = {
 
 type MetricKey = "poids" | "taille" | "tete";
 
+type ChartPoint = {
+  x: number;
+  y: number;
+  value: number;
+  label: string;
+  labelFull: string;
+};
+
+const CHART_HEIGHT = 210;
+const CHART_PADDING = { top: 16, right: 20, bottom: 30, left: 32 };
+const CHART_VISIBLE_POINTS = 5;
+const CHART_AXIS_WIDTH = 40;
+
 function toDate(value: any): Date {
   if (value?.seconds) return new Date(value.seconds * 1000);
   if (value?.toDate) return value.toDate();
@@ -58,8 +87,52 @@ function toDate(value: any): Date {
   return new Date(value);
 }
 
+function createSmoothPath(points: { x: number; y: number }[]) {
+  if (points.length === 0) return "";
+
+  const path = Skia.Path.Make();
+  path.moveTo(points[0].x, points[0].y);
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const curr = points[i];
+    const next = points[i + 1];
+    const cpX = (curr.x + next.x) / 2;
+    path.quadTo(curr.x, curr.y, cpX, (curr.y + next.y) / 2);
+  }
+
+  if (points.length > 1) {
+    const last = points[points.length - 1];
+    path.lineTo(last.x, last.y);
+  }
+
+  return path;
+}
+
+function createFillPath(points: { x: number; y: number }[]) {
+  if (points.length === 0) return "";
+
+  const path = Skia.Path.Make();
+  const baseY = CHART_HEIGHT - CHART_PADDING.bottom;
+
+  path.moveTo(points[0].x, baseY);
+  path.lineTo(points[0].x, points[0].y);
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const curr = points[i];
+    const next = points[i + 1];
+    const cpX = (curr.x + next.x) / 2;
+    path.quadTo(curr.x, curr.y, cpX, (curr.y + next.y) / 2);
+  }
+
+  const last = points[points.length - 1];
+  path.lineTo(last.x, last.y);
+  path.lineTo(last.x, baseY);
+  path.close();
+
+  return path;
+}
+
 export default function CroissanceScreen() {
-  const LineChartUnsafe: any = LineChart;
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
@@ -89,19 +162,63 @@ export default function CroissanceScreen() {
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(
     null,
   );
-  const [tooltipPoint, setTooltipPoint] = useState<{
-    x: number;
-    y: number;
-    index: number;
-  } | null>(null);
-  const [isChartDragging, setIsChartDragging] = useState(false);
-  const [chartScrollX, setChartScrollX] = useState(0);
+  const [chartWidth, setChartWidth] = useState(
+    Dimensions.get("window").width - 80,
+  );
   const chartScrollRef = useRef<ScrollView | null>(null);
   const autoScrollRef = useRef(false);
 
   const sheetOwnerId = "croissance";
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
   const returnToRef = useRef<string | null>(null);
+
+  const palette = useMemo(
+    () => ({
+      surface: colorScheme === "dark" ? "#12161c" : "#ffffff",
+      surfaceAlt: colorScheme === "dark" ? "#171c24" : "#f5f7f9",
+      ink: colorScheme === "dark" ? "#f5f7fb" : "#1b2430",
+      muted: colorScheme === "dark" ? "#9aa5b1" : "#6a7784",
+      border: colorScheme === "dark" ? "#2a3340" : "#e5e9ef",
+      tint: Colors[colorScheme].tint,
+      orange: "#f97316",
+      orangeSoft: "#fff3e6",
+      green: "#8BCF9B",
+      blue: "#2563eb",
+      blueSoft: "#e8efff",
+      violet: "#7c3aed",
+      violetSoft: "#f1eaff",
+      amber: "#f59e0b",
+      amberSoft: "#fff3cd",
+    }),
+    [colorScheme],
+  );
+
+  const metricConfig: Record<
+    MetricKey,
+    { label: string; color: string; soft: string; unit: string; rgb: string }
+  > = {
+    taille: {
+      label: "Taille",
+      color: palette.blue,
+      soft: palette.blueSoft,
+      unit: "cm",
+      rgb: "37, 99, 235",
+    },
+    poids: {
+      label: "Poids",
+      color: palette.violet,
+      soft: palette.violetSoft,
+      unit: "kg",
+      rgb: "124, 58, 237",
+    },
+    tete: {
+      label: "Tête",
+      color: palette.amber,
+      soft: palette.amberSoft,
+      unit: "cm",
+      rgb: "245, 158, 11",
+    },
+  };
 
   const normalizeParam = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value;
@@ -424,240 +541,6 @@ export default function CroissanceScreen() {
     };
   }
 
-  const renderItem = ({
-    item,
-    index,
-  }: {
-    item: CroissanceEntry;
-    index: number;
-  }) => {
-    const date = toDate(item.date);
-    const currentDayLabel = getDayLabel(date);
-    const prevEntry = index > 0 ? entries[index - 1] : null;
-    const prevDate = prevEntry ? toDate(prevEntry.date) : null;
-    const prevDayLabel = prevDate ? getDayLabel(prevDate) : null;
-    // const isToday = currentDayLabel === "Aujourd'hui";
-    const showDaySeparator = index === 0 || currentDayLabel !== prevDayLabel;
-
-    return (
-      <React.Fragment>
-        {showDaySeparator && (
-          <View style={styles.daySeparator}>
-            <View
-              style={[
-                styles.daySeparatorLine,
-                { backgroundColor: `${colors.tabIconDefault}30` },
-              ]}
-            />
-            <Text
-              style={[
-                styles.daySeparatorText,
-                { color: colors.tabIconDefault },
-              ]}
-            >
-              {currentDayLabel}
-            </Text>
-            <View
-              style={[
-                styles.daySeparatorLine,
-                { backgroundColor: `${colors.tabIconDefault}30` },
-              ]}
-            />
-          </View>
-        )}
-        <View style={styles.itemRow}>
-          <View style={styles.timelineColumn}>
-            <View style={[styles.dot, { backgroundColor: "#8BCF9B" }]} />
-            <View
-              style={[
-                styles.line,
-                { backgroundColor: `${colors.tabIconDefault}30` },
-              ]}
-            />
-          </View>
-          <Text style={[styles.timeText, { color: colors.tabIconDefault }]}>
-            {date.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-          <Pressable
-            onLongPress={() => openEditModal(item)}
-            delayLongPress={250}
-            style={({ pressed }) => [
-              styles.card,
-              {
-                borderColor: `${colors.tabIconDefault}30`,
-                backgroundColor: colors.background,
-              },
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <View style={styles.cardHeader}>
-              <View style={styles.cardTitleRow}>
-                <FontAwesome name="seedling" size={14} color="#8BCF9B" />
-                <Text style={[styles.cardTitle, { color: colors.text }]}>
-                  Croissance
-                </Text>
-              </View>
-              <FontAwesome
-                name="pen-to-square"
-                size={12}
-                color={colors.tabIconDefault}
-              />
-            </View>
-            <View style={styles.metricsRow}>
-              {item.tailleCm ? (
-                <View style={[styles.metricPill, styles.metricPillTaille]}>
-                  <View style={styles.metricHeader}>
-                    <FontAwesome
-                      name="ruler-vertical"
-                      size={12}
-                      color="#4A90E2"
-                    />
-                    <Text style={[styles.metricLabel, { color: colors.text }]}>
-                      Taille
-                    </Text>
-                  </View>
-                  <Text style={[styles.metricValue, { color: colors.text }]}>
-                    {item.tailleCm} cm
-                  </Text>
-                </View>
-              ) : null}
-              {item.poidsKg ? (
-                <View style={[styles.metricPill, styles.metricPillPoids]}>
-                  <View style={styles.metricHeader}>
-                    <FontAwesome
-                      name="weight-scale"
-                      size={12}
-                      color="#6f42c1"
-                    />
-                    <Text style={[styles.metricLabel, { color: colors.text }]}>
-                      Poids
-                    </Text>
-                  </View>
-                  <Text style={[styles.metricValue, { color: colors.text }]}>
-                    {item.poidsKg} kg
-                  </Text>
-                </View>
-              ) : null}
-              {item.teteCm ? (
-                <View style={[styles.metricPill, styles.metricPillTete]}>
-                  <View style={styles.metricHeader}>
-                    <MaterialCommunityIcons
-                      name="baby-face-outline"
-                      size={12}
-                      color="#FF9800"
-                    />
-                    <Text style={[styles.metricLabel, { color: colors.text }]}>
-                      Tête
-                    </Text>
-                  </View>
-                  <Text style={[styles.metricValue, { color: colors.text }]}>
-                    {item.teteCm} cm
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          </Pressable>
-        </View>
-      </React.Fragment>
-    );
-  };
-
-  const screenWidth = Dimensions.get("window").width;
-  const CHART_PADDING = 24;
-  const CHART_AXIS_WIDTH = 40;
-  const CHART_VISIBLE_POINTS = 5;
-  const CHART_X_PADDING = 32;
-  const [chartWidth, setChartWidth] = useState(
-    screenWidth - 64 - CHART_AXIS_WIDTH,
-  );
-  const metricConfig: Record<
-    MetricKey,
-    { label: string; color: string; rgb: string; unit: string }
-  > = {
-    poids: {
-      label: "Poids",
-      color: "#6f42c1",
-      rgb: "111, 66, 193",
-      unit: "kg",
-    },
-    taille: {
-      label: "Taille",
-      color: "#4A90E2",
-      rgb: "74, 144, 226",
-      unit: "cm",
-    },
-    tete: { label: "Tête", color: "#FF9800", rgb: "255, 152, 0", unit: "cm" },
-  };
-
-  const chartData = useCallback(() => {
-    const entriesForMetric = entries
-      .map((entry) => ({
-        date: toDate(entry.date),
-        value:
-          metric === "poids"
-            ? entry.poidsKg
-            : metric === "taille"
-              ? entry.tailleCm
-              : entry.teteCm,
-      }))
-      .filter((entry) => typeof entry.value === "number")
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    const labels = entriesForMetric.map((entry) =>
-      entry.date.toLocaleDateString("fr-FR", {
-        day: "2-digit",
-        month: "2-digit",
-      }),
-    );
-    const labelsFull = entriesForMetric.map((entry) =>
-      entry.date.toLocaleDateString("fr-FR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }),
-    );
-    const values = entriesForMetric.map((entry) => entry.value as number);
-
-    return {
-      labels,
-      labelsFull,
-      values,
-      hasData: values.length > 0,
-    };
-  }, [entries, metric]);
-
-  const { labels, labelsFull, values, hasData } = chartData();
-  const metricStyle = metricConfig[metric];
-  const plotWidth = useMemo(() => {
-    const pointCount = labels.length;
-    if (chartWidth <= 0) return chartWidth;
-    if (pointCount <= CHART_VISIBLE_POINTS) return chartWidth;
-    const spacing =
-      CHART_VISIBLE_POINTS > 1
-        ? (chartWidth - CHART_X_PADDING * 2) / (CHART_VISIBLE_POINTS - 1)
-        : 0;
-    return CHART_X_PADDING * 2 + spacing * (pointCount - 1);
-  }, [chartWidth, labels.length]);
-  const yAxisLabels = useMemo(() => {
-    if (!hasData || values.length === 0) return [];
-    const maxValue = Math.max(...values);
-    const midValue = maxValue / 2;
-    const formatValue = (val: number) => val.toFixed(1);
-    return [formatValue(maxValue), formatValue(midValue), "0"];
-  }, [hasData, values]);
-
-  useEffect(() => {
-    if (!hasData || chartWidth <= 0) return;
-    if (plotWidth <= chartWidth) return;
-    chartScrollRef.current?.scrollTo({
-      x: Math.max(plotWidth - chartWidth, 0),
-      animated: false,
-    });
-  }, [chartWidth, hasData, metric, plotWidth]);
-
   const getDayLabel = useCallback((date: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -680,23 +563,318 @@ export default function CroissanceScreen() {
     });
   }, []);
 
-  return (
-    <ThemedView style={styles.screen}>
-      <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
-        <View style={styles.container}>
-          <Text style={[styles.title, { color: colors.text }]}>Croissance</Text>
-          <Text style={[styles.subtitle, { color: colors.tabIconDefault }]}>
-            Taille, poids et tour de tête
+  const renderItem = ({
+    item,
+    index,
+  }: {
+    item: CroissanceEntry;
+    index: number;
+  }) => {
+    const date = toDate(item.date);
+    const currentDayLabel = getDayLabel(date);
+    const prevEntry = index > 0 ? entries[index - 1] : null;
+    const prevDate = prevEntry ? toDate(prevEntry.date) : null;
+    const prevDayLabel = prevDate ? getDayLabel(prevDate) : null;
+    const showDaySeparator = index === 0 || currentDayLabel !== prevDayLabel;
+
+    return (
+      <React.Fragment>
+        {showDaySeparator && (
+          <View style={styles.daySeparator}>
+            <View
+              style={[
+                styles.daySeparatorLine,
+                { backgroundColor: palette.border },
+              ]}
+            />
+            <Text style={[styles.daySeparatorText, { color: palette.muted }]}>
+              {currentDayLabel}
+            </Text>
+            <View
+              style={[
+                styles.daySeparatorLine,
+                { backgroundColor: palette.border },
+              ]}
+            />
+          </View>
+        )}
+        <View style={styles.itemRow}>
+          <View style={styles.timelineColumn}>
+            <View style={[styles.dot, { backgroundColor: palette.green }]} />
+            <View style={[styles.line, { backgroundColor: palette.border }]} />
+          </View>
+          <Text style={[styles.timeText, { color: palette.muted }]}>
+            {date.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </Text>
+          <Pressable
+            onLongPress={() => openEditModal(item)}
+            delayLongPress={250}
+            style={({ pressed }) => [
+              styles.card,
+              {
+                borderColor: palette.border,
+                backgroundColor: palette.surface,
+              },
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <View style={styles.cardHeader}>
+              <View style={styles.cardTitleRow}>
+                <FontAwesome name="seedling" size={14} color={palette.green} />
+                <Text style={[styles.cardTitle, { color: palette.ink }]}>
+                  Croissance
+                </Text>
+              </View>
+              <FontAwesome
+                name="pen-to-square"
+                size={12}
+                color={palette.muted}
+              />
+            </View>
+            <View style={styles.metricPillRow}>
+              {item.tailleCm ? (
+                <View
+                  style={[
+                    styles.metricPill,
+                    { backgroundColor: palette.blueSoft },
+                  ]}
+                >
+                  <View style={styles.metricHeader}>
+                    <FontAwesome
+                      name="ruler-vertical"
+                      size={12}
+                      color={palette.blue}
+                    />
+                    <Text style={[styles.metricLabel, { color: palette.ink }]}>
+                      Taille
+                    </Text>
+                  </View>
+                  <Text style={[styles.metricValue, { color: palette.ink }]}>
+                    {item.tailleCm} cm
+                  </Text>
+                </View>
+              ) : null}
+              {item.poidsKg ? (
+                <View
+                  style={[
+                    styles.metricPill,
+                    { backgroundColor: palette.violetSoft },
+                  ]}
+                >
+                  <View style={styles.metricHeader}>
+                    <FontAwesome
+                      name="weight-scale"
+                      size={12}
+                      color={palette.violet}
+                    />
+                    <Text style={[styles.metricLabel, { color: palette.ink }]}>
+                      Poids
+                    </Text>
+                  </View>
+                  <Text style={[styles.metricValue, { color: palette.ink }]}>
+                    {item.poidsKg} kg
+                  </Text>
+                </View>
+              ) : null}
+              {item.teteCm ? (
+                <View
+                  style={[
+                    styles.metricPill,
+                    { backgroundColor: palette.amberSoft },
+                  ]}
+                >
+                  <View style={styles.metricHeader}>
+                    <MaterialCommunityIcons
+                      name="baby-face-outline"
+                      size={12}
+                      color={palette.amber}
+                    />
+                    <Text style={[styles.metricLabel, { color: palette.ink }]}>
+                      Tête
+                    </Text>
+                  </View>
+                  <Text style={[styles.metricValue, { color: palette.ink }]}>
+                    {item.teteCm} cm
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </Pressable>
+        </View>
+      </React.Fragment>
+    );
+  };
+
+  const metricEntries = useMemo(() => {
+    return entries
+      .map((entry) => ({
+        date: toDate(entry.date),
+        value:
+          metric === "poids"
+            ? entry.poidsKg
+            : metric === "taille"
+              ? entry.tailleCm
+              : entry.teteCm,
+      }))
+      .filter((entry) => typeof entry.value === "number")
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [entries, metric]);
+
+  const labels = metricEntries.map((entry) =>
+    entry.date.toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+    }),
+  );
+  const labelsFull = metricEntries.map((entry) =>
+    entry.date.toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }),
+  );
+  const values = metricEntries.map((entry) => entry.value as number);
+  const hasData = values.length > 0;
+  const metricStyle = metricConfig[metric];
+
+  const plotWidth = useMemo(() => {
+    const pointCount = labels.length;
+    if (chartWidth <= 0) return chartWidth;
+    if (pointCount <= CHART_VISIBLE_POINTS) return chartWidth;
+    const spacing =
+      CHART_VISIBLE_POINTS > 1
+        ? (chartWidth - CHART_PADDING.left - CHART_PADDING.right) /
+          (CHART_VISIBLE_POINTS - 1)
+        : 0;
+    return (
+      CHART_PADDING.left + CHART_PADDING.right + spacing * (pointCount - 1)
+    );
+  }, [chartWidth, labels.length]);
+
+  const { chartPoints, yAxisLabels, maxValue } = useMemo(() => {
+    if (!hasData || plotWidth <= 0) {
+      return {
+        chartPoints: [] as ChartPoint[],
+        yAxisLabels: [] as { value: number; y: number }[],
+        maxValue: 0,
+      };
+    }
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    const range = Math.max(max - min, 1);
+    const paddedMin = Math.max(0, min - range * 0.15);
+    const paddedMax = max + range * 0.15;
+    const chartAreaHeight =
+      CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
+    const spacing =
+      values.length > 1
+        ? (plotWidth - CHART_PADDING.left - CHART_PADDING.right) /
+          (values.length - 1)
+        : 0;
+
+    const toY = (value: number) =>
+      CHART_PADDING.top +
+      chartAreaHeight * (1 - (value - paddedMin) / (paddedMax - paddedMin));
+
+    const points = values.map((value, index) => ({
+      x: CHART_PADDING.left + spacing * index,
+      y: toY(value),
+      value,
+      label: labels[index] ?? "",
+      labelFull: labelsFull[index] ?? "",
+    }));
+
+    const yLabels = Array.from({ length: 4 }, (_, i) => {
+      const val = paddedMin + ((paddedMax - paddedMin) / 3) * i;
+      return { value: Number.parseFloat(val.toFixed(1)), y: toY(val) };
+    }).reverse();
+
+    return { chartPoints: points, yAxisLabels: yLabels, maxValue: max };
+  }, [hasData, labels, labelsFull, plotWidth, values]);
+
+  const linePath = useMemo(() => createSmoothPath(chartPoints), [chartPoints]);
+  const fillPath = useMemo(() => createFillPath(chartPoints), [chartPoints]);
+
+  useEffect(() => {
+    if (!hasData || chartWidth <= 0) return;
+    if (plotWidth <= chartWidth) return;
+    chartScrollRef.current?.scrollTo({
+      x: Math.max(plotWidth - chartWidth, 0),
+      animated: false,
+    });
+  }, [chartWidth, hasData, metric, plotWidth]);
+
+  const findNearestPoint = useCallback(
+    (tapX: number) => {
+      let nearest = 0;
+      let minDistance = Infinity;
+      chartPoints.forEach((point, index) => {
+        const distance = Math.abs(point.x - tapX);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearest = index;
+        }
+      });
+      return minDistance < 40 ? nearest : null;
+    },
+    [chartPoints],
+  );
+
+  const tapGesture = Gesture.Tap()
+    .runOnJS(true)
+    .onEnd((event) => {
+      if (!hasData || chartPoints.length === 0) return;
+      const pointIndex = findNearestPoint(event.x);
+      if (pointIndex !== null) {
+        setSelectedPointIndex((prev) =>
+          prev === pointIndex ? null : pointIndex,
+        );
+        if (plotWidth > chartWidth) {
+          const target = Math.min(
+            Math.max(chartPoints[pointIndex].x - chartWidth / 2, 0),
+            plotWidth - chartWidth,
+          );
+          autoScrollRef.current = true;
+          chartScrollRef.current?.scrollTo({ x: target, animated: true });
+        }
+      } else {
+        setSelectedPointIndex(null);
+      }
+    });
+
+  const latestValue = useMemo(() => {
+    const entry = [...metricEntries]
+      .reverse()
+      .find((e) => typeof e.value === "number");
+    return entry?.value;
+  }, [metricEntries]);
+
+  const deltaValue = useMemo(() => {
+    if (metricEntries.length < 2) return null;
+    const last = metricEntries[metricEntries.length - 1].value as number;
+    const prev = metricEntries[metricEntries.length - 2].value as number;
+    return last - prev;
+  }, [metricEntries]);
+
+  return (
+    <ThemedView style={[styles.screen, { backgroundColor: "#f8f9fa" }]}>
+      <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+        <GestureHandlerRootView style={styles.container}>
+          <View style={styles.headerBlock}>
+            <Text style={[styles.title, { color: palette.ink }]}>
+              Croissance
+            </Text>
+            <Text style={[styles.subtitle, { color: palette.muted }]}>
+              Taille, poids et tour de tête
+            </Text>
+          </View>
 
           {loading ? (
             <View style={styles.fullScreenLoading}>
               <IconPulseDots color={colors.tint} />
-              {/* <Text
-                style={[styles.loadingText, { color: colors.tabIconDefault }]}
-              >
-                Chargement des mesures...
-              </Text> */}
             </View>
           ) : (
             <View style={styles.body}>
@@ -704,15 +882,13 @@ export default function CroissanceScreen() {
                 style={[
                   styles.chartCard,
                   {
-                    backgroundColor: colors.background,
-                    borderColor: `${colors.tabIconDefault}30`,
+                    backgroundColor: palette.surface,
+                    borderColor: palette.border,
                   },
                 ]}
                 onLayout={(event) => {
                   const width =
-                    event.nativeEvent.layout.width -
-                    CHART_PADDING -
-                    CHART_AXIS_WIDTH;
+                    event.nativeEvent.layout.width - CHART_AXIS_WIDTH - 12;
                   if (width > 0 && Math.abs(width - chartWidth) > 1) {
                     setChartWidth(width);
                   }
@@ -720,34 +896,72 @@ export default function CroissanceScreen() {
               >
                 <View style={styles.metricTabs}>
                   {(["taille", "poids", "tete"] as MetricKey[]).map((key) => (
-                    <Pressable
+                    <TouchableOpacity
                       key={key}
                       style={[
                         styles.metricTab,
-                        metric === key && styles.metricTabActive,
+                        metric === key && {
+                          backgroundColor: palette.surface,
+                          // borderColor: metricConfig[key].color,
+                        },
                       ]}
                       onPress={() => setMetric(key)}
+                      activeOpacity={0.7}
                     >
                       <Text
                         style={[
                           styles.metricTabText,
-                          metric === key && styles.metricTabTextActive,
+                          metric === key && { color: palette.ink },
                         ]}
                       >
                         {metricConfig[key].label}
                       </Text>
-                    </Pressable>
+                    </TouchableOpacity>
                   ))}
+                </View>
+
+                <View style={styles.metricsRow}>
+                  <View
+                    style={[
+                      styles.summaryCard,
+                      { borderColor: palette.border },
+                    ]}
+                  >
+                    <Text style={styles.summaryLabel}>Dernière mesure</Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        { color: metricStyle.color },
+                      ]}
+                    >
+                      {latestValue ? `${latestValue} ${metricStyle.unit}` : "-"}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.summaryCard,
+                      { borderColor: palette.border },
+                    ]}
+                  >
+                    <Text style={styles.summaryLabel}>Variation</Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        { color: metricStyle.color },
+                      ]}
+                    >
+                      {deltaValue === null
+                        ? "-"
+                        : `${deltaValue > 0 ? "+" : ""}${deltaValue.toFixed(1)} ${
+                            metricStyle.unit
+                          }`}
+                    </Text>
+                  </View>
                 </View>
 
                 {!hasData ? (
                   <View style={styles.chartEmpty}>
-                    <Text
-                      style={[
-                        styles.emptyText,
-                        { color: colors.tabIconDefault },
-                      ]}
-                    >
+                    <Text style={[styles.emptyText, { color: palette.muted }]}>
                       Ajoute une mesure pour voir la courbe.
                     </Text>
                   </View>
@@ -756,13 +970,10 @@ export default function CroissanceScreen() {
                     <View style={styles.yAxisColumn}>
                       {yAxisLabels.map((label, index) => (
                         <Text
-                          key={`${label}-${index}`}
-                          style={[
-                            styles.yAxisLabel,
-                            { color: colors.tabIconDefault },
-                          ]}
+                          key={`${label.value}-${index}`}
+                          style={[styles.yAxisLabel, { color: palette.muted }]}
                         >
-                          {label}
+                          {label.value}
                         </Text>
                       ))}
                     </View>
@@ -770,188 +981,152 @@ export default function CroissanceScreen() {
                       ref={chartScrollRef}
                       horizontal
                       showsHorizontalScrollIndicator={false}
-                      onScrollBeginDrag={() => setIsChartDragging(true)}
-                      onScroll={(event) => {
-                        const offsetX = event.nativeEvent.contentOffset.x;
-                        if (tooltipPoint && !autoScrollRef.current) {
-                          setTooltipPoint(null);
-                          setSelectedPointIndex(null);
-                        }
-                        setChartScrollX((prev) =>
-                          Math.abs(prev - offsetX) > 1 ? offsetX : prev,
-                        );
-                      }}
-                      onScrollEndDrag={() => setIsChartDragging(false)}
+                      onScrollBeginDrag={() => setSelectedPointIndex(null)}
                       onMomentumScrollEnd={() => {
-                        setIsChartDragging(false);
                         autoScrollRef.current = false;
                       }}
                       scrollEventThrottle={16}
                       style={styles.chartScroll}
                     >
                       <View style={styles.chartWrapper}>
-                        <LineChartUnsafe
-                          data={{
-                            labels:
-                              labels.length > 6
-                                ? labels.map((label, index) =>
-                                    index % 2 === 0 ? label : "",
-                                  )
-                                : labels,
-                            datasets: [{ data: values }],
-                          }}
-                          width={plotWidth}
-                          height={220}
-                          fromZero
-                          yAxisSuffix={` ${metricStyle.unit}`}
-                          withHorizontalLabels={false}
-                          propsForDots={{
-                            r: "4",
-                            strokeWidth: "14",
-                            stroke: "transparent",
-                          }}
-                          chartConfig={{
-                            backgroundColor: colors.background,
-                            backgroundGradientFrom: colors.background,
-                            backgroundGradientTo: colors.background,
-                            decimalPlaces: 1,
-                            color: (opacity = 1) =>
-                              `rgba(${metricStyle.rgb}, ${opacity})`,
-                            labelColor: (opacity = 1) =>
-                              `rgba(0, 0, 0, ${opacity})`,
-                            strokeWidth: 2,
-                            fillShadowGradient: metricStyle.color,
-                            fillShadowGradientOpacity: 0.15,
-                          }}
-                          bezier
-                          style={styles.chart}
-                          withDots
-                          withShadow={false}
-                          onDataPointClick={(data) => {
-                            if (selectedPointIndex === data.index) {
-                              setSelectedPointIndex(null);
-                              setTooltipPoint(null);
-                              return;
-                            }
-                            setSelectedPointIndex(data.index);
-                            setTooltipPoint({
-                              x: data.x,
-                              y: data.y,
-                              index: data.index,
-                            });
-                              if (plotWidth > chartWidth) {
-                                const target = Math.min(
-                                  Math.max(data.x - chartWidth / 2, 0),
-                                  plotWidth - chartWidth,
-                                );
-                                autoScrollRef.current = true;
-                                chartScrollRef.current?.scrollTo({
-                                  x: target,
-                                  animated: true,
-                                });
+                        <GestureDetector gesture={tapGesture}>
+                          <Canvas
+                            style={{ width: plotWidth, height: CHART_HEIGHT }}
+                          >
+                            <RoundedRect
+                              x={CHART_PADDING.left}
+                              y={CHART_PADDING.top}
+                              width={
+                                plotWidth -
+                                CHART_PADDING.left -
+                                CHART_PADDING.right
                               }
-                          }}
-                        />
-                        <Pressable
-                          style={styles.chartTapLayer}
-                          pointerEvents={isChartDragging ? "none" : "auto"}
-                          onPress={(event) => {
-                            const pointCount = values.length;
-                            if (pointCount === 0) return;
-                            const paddingX = CHART_X_PADDING;
-                            const drawableWidth = Math.max(
-                              0,
-                              plotWidth - paddingX * 2,
-                            );
-                            const step =
-                              pointCount > 1
-                                ? drawableWidth / (pointCount - 1)
-                                : 0;
-                              const rawX = event.nativeEvent.locationX;
-                            const rawIndex =
-                              step > 0
-                                ? Math.round((rawX - paddingX) / step)
-                                : 0;
-                            const index = Math.max(
-                              0,
-                              Math.min(pointCount - 1, rawIndex),
-                            );
-                            const value = values[index];
-                            const maxValue = Math.max(...values, 1);
-                            const chartHeight = 220;
-                            const verticalPadding = 24;
-                            const ratio = maxValue === 0 ? 0 : value / maxValue;
-                            const y =
-                              verticalPadding +
-                              (1 - ratio) * (chartHeight - verticalPadding * 2);
-                            const x = paddingX + step * index;
+                              height={
+                                CHART_HEIGHT -
+                                CHART_PADDING.top -
+                                CHART_PADDING.bottom
+                              }
+                              r={14}
+                              color={palette.surface}
+                            >
+                              <LinearGradient
+                                start={vec(
+                                  CHART_PADDING.left,
+                                  CHART_PADDING.top,
+                                )}
+                                end={vec(
+                                  CHART_PADDING.left,
+                                  CHART_HEIGHT - CHART_PADDING.bottom,
+                                )}
+                                colors={["#ffffff", "#ffffff"]}
+                              />
+                            </RoundedRect>
 
-                              if (selectedPointIndex === index) {
-                                setSelectedPointIndex(null);
-                                setTooltipPoint(null);
-                                return;
-                              }
-                              setSelectedPointIndex(index);
-                              setTooltipPoint({ x, y, index });
-                              if (plotWidth > chartWidth) {
-                                const target = Math.min(
-                                  Math.max(x - chartWidth / 2, 0),
-                                  plotWidth - chartWidth,
-                                );
-                                autoScrollRef.current = true;
-                                chartScrollRef.current?.scrollTo({
-                                  x: target,
-                                  animated: true,
-                                });
-                              }
-                            }}
-                          />
-                        {tooltipPoint &&
-                        tooltipPoint.index === selectedPointIndex
-                          ? (() => {
-                              const label =
-                                labelsFull[tooltipPoint.index] ?? "";
-                              const value = values[tooltipPoint.index];
-                              const tooltipWidth = 140;
-                                const leftLimit = 6;
-                                const rightLimit =
-                                  plotWidth - tooltipWidth - 6;
-                              const tooltipLeft = Math.min(
-                                Math.max(
-                                  tooltipPoint.x - tooltipWidth / 2,
-                                  leftLimit,
-                                ),
-                                rightLimit,
-                              );
-                              const tooltipTop =
-                                tooltipPoint.y < 32
-                                  ? Math.min(tooltipPoint.y + 12, 220 - 32)
-                                  : Math.max(tooltipPoint.y - 36, 6);
+                            {yAxisLabels.map((label, index) => (
+                              <SkiaLine
+                                key={`grid-${index}`}
+                                p1={vec(CHART_PADDING.left, label.y)}
+                                p2={vec(
+                                  plotWidth - CHART_PADDING.right,
+                                  label.y,
+                                )}
+                                color="rgba(15, 23, 42, 0.08)"
+                                strokeWidth={1}
+                              />
+                            ))}
+
+                            <Path path={fillPath}>
+                              <LinearGradient
+                                start={vec(0, CHART_PADDING.top)}
+                                end={vec(
+                                  0,
+                                  CHART_HEIGHT - CHART_PADDING.bottom,
+                                )}
+                                colors={[
+                                  `rgba(${metricStyle.rgb}, 0.22)`,
+                                  `rgba(${metricStyle.rgb}, 0.02)`,
+                                ]}
+                              />
+                            </Path>
+
+                            <Path
+                              path={linePath}
+                              style="stroke"
+                              strokeWidth={3}
+                              color={metricStyle.color}
+                            >
+                              <Shadow
+                                dx={0}
+                                dy={2}
+                                blur={4}
+                                color={`rgba(${metricStyle.rgb}, 0.35)`}
+                              />
+                            </Path>
+
+                            {chartPoints.map((point, index) => {
+                              const isSelected = selectedPointIndex === index;
+                              const isMax =
+                                point.value === maxValue && point.value > 0;
                               return (
-                                <View
-                                  pointerEvents="none"
-                                  style={[
-                                    styles.dotTooltip,
-                                    {
-                                      left: tooltipLeft,
-                                      top: tooltipTop,
-                                      width: tooltipWidth,
-                                      borderColor: metricStyle.color,
-                                    },
-                                  ]}
+                                <Circle
+                                  key={`pt-${index}`}
+                                  cx={point.x}
+                                  cy={point.y}
+                                  r={isSelected || isMax ? 6 : 4.5}
+                                  color={
+                                    isSelected
+                                      ? palette.orange
+                                      : metricStyle.color
+                                  }
                                 >
-                                  <Text
-                                    style={[
-                                      styles.dotTooltipText,
-                                      { color: colors.text },
-                                    ]}
-                                  >
-                                    {label} · {value} {metricStyle.unit}
-                                  </Text>
-                                </View>
+                                  <Shadow
+                                    dx={0}
+                                    dy={2}
+                                    blur={4}
+                                    color={`rgba(${metricStyle.rgb}, 0.3)`}
+                                  />
+                                </Circle>
                               );
-                            })()
-                          : null}
+                            })}
+                          </Canvas>
+                        </GestureDetector>
+
+                        {selectedPointIndex !== null &&
+                        chartPoints[selectedPointIndex] ? (
+                          <View
+                            pointerEvents="none"
+                            style={[
+                              styles.tooltip,
+                              {
+                                left: Math.min(
+                                  Math.max(
+                                    chartPoints[selectedPointIndex].x - 64,
+                                    8,
+                                  ),
+                                  plotWidth - 128,
+                                ),
+                                top: Math.max(
+                                  chartPoints[selectedPointIndex].y - 48,
+                                  6,
+                                ),
+                                borderColor: metricStyle.color,
+                              },
+                            ]}
+                          >
+                            <Text style={styles.tooltipDate}>
+                              {chartPoints[selectedPointIndex].labelFull}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.tooltipValue,
+                                { color: metricStyle.color },
+                              ]}
+                            >
+                              {chartPoints[selectedPointIndex].value}{" "}
+                              {metricStyle.unit}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     </ScrollView>
                   </View>
@@ -967,12 +1142,7 @@ export default function CroissanceScreen() {
                 initialNumToRender={2}
                 ListEmptyComponent={
                   <View style={styles.emptyState}>
-                    <Text
-                      style={[
-                        styles.emptyText,
-                        { color: colors.tabIconDefault },
-                      ]}
-                    >
+                    <Text style={[styles.emptyText, { color: palette.muted }]}>
                       Aucune mesure pour le moment.
                     </Text>
                   </View>
@@ -980,7 +1150,7 @@ export default function CroissanceScreen() {
               />
             </View>
           )}
-        </View>
+        </GestureHandlerRootView>
       </SafeAreaView>
 
       <ConfirmModal
@@ -1002,7 +1172,6 @@ export default function CroissanceScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   safeArea: {
     flex: 1,
@@ -1012,14 +1181,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
   },
+  headerBlock: {
+    marginBottom: 12,
+  },
   title: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 26,
+    fontWeight: "800",
   },
   subtitle: {
     marginTop: 4,
     fontSize: 13,
-    marginBottom: 16,
   },
   listContent: {
     paddingBottom: 40,
@@ -1033,14 +1204,129 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
-  loading: {
+  chartCard: {
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  metricTabs: {
+    flexDirection: "row",
+    backgroundColor: "#f5f6f8",
+    borderRadius: 12,
+    padding: 4,
+    gap: 6,
+    marginBottom: 12,
+  },
+  metricTab: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
     alignItems: "center",
+    // borderWidth: 1,
+    // borderColor: "transparent",
+  },
+  metricTabText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6c757d",
+  },
+  metricsRow: {
+    flexDirection: "row",
     gap: 10,
+    marginBottom: 12,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#eef1f5",
+  },
+  metricLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    color: "#9aa0a6",
+  },
+  metricValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 6,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
+  summaryCard: {
+    flex: 1,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    backgroundColor: "#ffffff",
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: "#6b7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 6,
+  },
+  chartRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  yAxisColumn: {
+    width: CHART_AXIS_WIDTH,
+    justifyContent: "space-between",
     paddingVertical: 12,
   },
-  loadingText: {
-    fontSize: 12,
+  yAxisLabel: {
+    fontSize: 11,
     fontWeight: "600",
+  },
+  chartWrapper: {
+    position: "relative",
+  },
+  chartScroll: {
+    flex: 1,
+  },
+  chartEmpty: {
+    alignItems: "center",
+    paddingVertical: 18,
+  },
+  emptyText: {
+    fontSize: 13,
+  },
+  tooltip: {
+    position: "absolute",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  tooltipDate: {
+    fontSize: 10,
+    color: "#6b7280",
+    fontWeight: "600",
+  },
+  tooltipValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 2,
   },
   itemRow: {
     flexDirection: "row",
@@ -1069,74 +1355,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: 4,
   },
-  chartCard: {
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-    overflow: "visible",
-  },
-  metricTabs: {
-    flexDirection: "row",
-    backgroundColor: "#f5f6f8",
-    borderRadius: 12,
-    padding: 4,
-    gap: 6,
-    marginBottom: 12,
-  },
-  metricTab: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  metricTabActive: {
-    backgroundColor: "#ffffff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  metricTabText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6c757d",
-  },
-  metricTabTextActive: {
-    color: "#212529",
-  },
-  chart: {
-    borderRadius: 12,
-    overflow: "visible",
-  },
-  chartWrapper: {
-    position: "relative",
-  },
-  chartScroll: {
-    flex: 1,
-  },
-  chartRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-  },
-  yAxisColumn: {
-    width: 40,
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    // paddingRight: 4,
-  },
-  yAxisLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  chartTapLayer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
   daySeparator: {
     flexDirection: "row",
     alignItems: "center",
@@ -1152,25 +1370,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textTransform: "capitalize",
   },
-  chartEmpty: {
-    alignItems: "center",
-    paddingVertical: 16,
-  },
-  dotTooltip: {
-    position: "absolute",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    alignItems: "center",
-    zIndex: 10,
-    elevation: 10,
-  },
-  dotTooltipText: {
-    fontSize: 10,
-    fontWeight: "600",
-  },
   fullScreenLoading: {
     alignItems: "center",
     justifyContent: "center",
@@ -1179,8 +1378,7 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    borderRadius: 14,
-    // width: "50%",
+    borderRadius: 16,
     padding: 12,
     borderWidth: 1,
     shadowColor: "#000",
@@ -1204,32 +1402,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
   },
-  metricsRow: {
+  metricPillRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
   metricPill: {
-    // flexBasis: "33.333%",
     flexGrow: 1,
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 12,
-    borderWidth: 1,
-    // maxWidth: "100%",
-    // flexShrink: 0,
-  },
-  metricPillTaille: {
-    backgroundColor: "#4A90E212",
-    borderColor: "#4A90E220",
-  },
-  metricPillPoids: {
-    backgroundColor: "#6f42c112",
-    borderColor: "#6f42c120",
-  },
-  metricPillTete: {
-    backgroundColor: "#FF980012",
-    borderColor: "#FF980020",
   },
   metricLabel: {
     fontSize: 11,
@@ -1248,9 +1430,6 @@ const styles = StyleSheet.create({
   emptyState: {
     paddingVertical: 24,
     alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 13,
   },
   headerActions: {
     flexDirection: "row",
