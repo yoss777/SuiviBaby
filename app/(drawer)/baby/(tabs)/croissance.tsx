@@ -53,6 +53,11 @@ import {
   GestureDetector,
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderRight } from "../../_layout";
 
@@ -162,6 +167,8 @@ export default function CroissanceScreen() {
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(
     null,
   );
+  const selectedX = useSharedValue(0);
+  const selectedY = useSharedValue(0);
   const [chartWidth, setChartWidth] = useState(
     Dimensions.get("window").width - 80,
   );
@@ -829,9 +836,14 @@ export default function CroissanceScreen() {
       if (!hasData || chartPoints.length === 0) return;
       const pointIndex = findNearestPoint(event.x);
       if (pointIndex !== null) {
-        setSelectedPointIndex((prev) =>
-          prev === pointIndex ? null : pointIndex,
-        );
+        setSelectedPointIndex((prev) => {
+          if (prev === pointIndex) {
+            return null;
+          }
+          selectedX.value = withSpring(chartPoints[pointIndex].x);
+          selectedY.value = withSpring(chartPoints[pointIndex].y);
+          return pointIndex;
+        });
         if (plotWidth > chartWidth) {
           const target = Math.min(
             Math.max(chartPoints[pointIndex].x - chartWidth / 2, 0),
@@ -844,6 +856,13 @@ export default function CroissanceScreen() {
         setSelectedPointIndex(null);
       }
     });
+
+  const animatedTooltipStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: selectedX.value - 40 },
+      { translateY: selectedY.value - 74 },
+    ],
+  }));
 
   const latestValue = useMemo(() => {
     const entry = [...metricEntries]
@@ -1093,39 +1112,35 @@ export default function CroissanceScreen() {
 
                         {selectedPointIndex !== null &&
                         chartPoints[selectedPointIndex] ? (
-                          <View
+                          <Animated.View
                             pointerEvents="none"
                             style={[
                               styles.tooltip,
-                              {
-                                left: Math.min(
-                                  Math.max(
-                                    chartPoints[selectedPointIndex].x - 64,
-                                    8,
-                                  ),
-                                  plotWidth - 128,
-                                ),
-                                top: Math.max(
-                                  chartPoints[selectedPointIndex].y - 48,
-                                  6,
-                                ),
-                                borderColor: metricStyle.color,
-                              },
+                              { borderColor: metricStyle.color },
+                              animatedTooltipStyle,
                             ]}
                           >
-                            <Text style={styles.tooltipDate}>
-                              {chartPoints[selectedPointIndex].labelFull}
-                            </Text>
-                            <Text
+                            <View style={styles.tooltipContent}>
+                              <Text style={styles.tooltipTime}>
+                                {chartPoints[selectedPointIndex].labelFull}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.tooltipValue,
+                                  { color: metricStyle.color },
+                                ]}
+                              >
+                                {chartPoints[selectedPointIndex].value}{" "}
+                                {metricStyle.unit}
+                              </Text>
+                            </View>
+                            <View
                               style={[
-                                styles.tooltipValue,
-                                { color: metricStyle.color },
+                                styles.tooltipArrow,
+                                { borderTopColor: metricStyle.color },
                               ]}
-                            >
-                              {chartPoints[selectedPointIndex].value}{" "}
-                              {metricStyle.unit}
-                            </Text>
-                          </View>
+                            />
+                          </Animated.View>
                         ) : null}
                       </View>
                     </ScrollView>
@@ -1306,27 +1321,46 @@ const styles = StyleSheet.create({
   },
   tooltip: {
     position: "absolute",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: "white",
     borderRadius: 10,
-    backgroundColor: "#ffffff",
     borderWidth: 1,
-    alignItems: "center",
+    borderColor: "#d6e8da",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
     shadowRadius: 6,
     elevation: 6,
+    zIndex: 1000,
+    width: 84,
+    height: 54,
   },
-  tooltipDate: {
+  tooltipContent: {
+    padding: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tooltipTime: {
     fontSize: 10,
-    color: "#6b7280",
-    fontWeight: "600",
+    color: "#6c757d",
+    fontWeight: "500",
   },
   tooltipValue: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     marginTop: 2,
+  },
+  tooltipArrow: {
+    position: "absolute",
+    bottom: -8,
+    left: "50%",
+    marginLeft: -8,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 8,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
   },
   itemRow: {
     flexDirection: "row",
@@ -1412,15 +1446,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 12,
-  },
-  metricLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  metricValue: {
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 4,
   },
   metricHeader: {
     flexDirection: "row",
