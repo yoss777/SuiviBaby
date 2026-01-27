@@ -36,13 +36,12 @@ export default function StatsScreen() {
   const [teteesEmptyDelayDone, setTeteesEmptyDelayDone] = useState(false);
   const [pompagesEmptyDelayDone, setPompagesEmptyDelayDone] = useState(false);
   const [selectedTab, setSelectedTab] = useState<"tetees" | "pompages">(
-    "tetees"
+    "tetees",
   );
 
   // Récupérer les paramètres de l'URL
   const { tab, returnTo } = useLocalSearchParams();
   const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
-
 
   // Définir l'onglet initial en fonction du paramètre
   useEffect(() => {
@@ -81,7 +80,7 @@ export default function StatsScreen() {
       return () => {
         setHeaderLeft(null, "stats");
       };
-    }, [colorScheme, returnTarget, setHeaderLeft])
+    }, [colorScheme, returnTarget, setHeaderLeft]),
   );
 
   useFocusEffect(
@@ -108,7 +107,7 @@ export default function StatsScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [returnTarget, router])
+    }, [returnTarget, router]),
   );
 
   // écoute en temps réel des tetees ET biberons
@@ -121,7 +120,7 @@ export default function StatsScreen() {
     const mergeTeteesAndBiberons = () => {
       // Merger les deux listes et trier par date
       const merged = [...teteesData, ...biberonsData].sort(
-        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
       setTetees(merged);
     };
@@ -133,7 +132,7 @@ export default function StatsScreen() {
         setTeteesLoaded(true);
         mergeTeteesAndBiberons();
       },
-      { waitForServer: true }
+      { waitForServer: true },
     );
 
     const unsubscribeBiberons = ecouterBiberons(
@@ -143,7 +142,7 @@ export default function StatsScreen() {
         setBiberonsLoaded(true);
         mergeTeteesAndBiberons();
       },
-      { waitForServer: true }
+      { waitForServer: true },
     );
 
     return () => {
@@ -161,7 +160,7 @@ export default function StatsScreen() {
         setPompages(data);
         setPompagesLoaded(true);
       },
-      { waitForServer: true }
+      { waitForServer: true },
     );
     return () => unsubscribePompages();
   }, [activeChild]);
@@ -275,8 +274,8 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: "#f8f9fa",
     // borderWidth:1,
-    paddingTop:16,
-    paddingBottom:12,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
   tabButton: {
     paddingVertical: 10,

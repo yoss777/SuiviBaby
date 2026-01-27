@@ -22,6 +22,7 @@
     "@react-navigation/drawer": "^7.3.9",
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
+    "@shopify/react-native-skia": "v2.0.0-next.4",
     "dotenv": "^17.2.3",
     "expo": "~53.0.22",
     "expo-av": "~15.1.7",

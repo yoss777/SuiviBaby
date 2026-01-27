@@ -360,8 +360,10 @@ export default function ImmunizationsScreen() {
   useEffect(() => {
     if (tab === "vaccins") {
       setImmunoType("vaccin");
+      setSelectedType("vaccin");
     } else if (tab === "vitamines") {
       setImmunoType("vitamine");
+      setSelectedType("vitamine");
     }
   }, [tab]);
 
