@@ -1,6 +1,7 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   Canvas,
+  Group,
   LinearGradient,
   RoundedRect,
   Shadow,
@@ -76,8 +77,8 @@ export default function TeteesChart({ tetees }: Props) {
   );
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
 
-  const selectedScale = useSharedValue(1);
-  const selectedLift = useSharedValue(0);
+  const tooltipX = useSharedValue(0);
+  const tooltipY = useSharedValue(0);
 
   const jours = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
@@ -234,18 +235,42 @@ export default function TeteesChart({ tetees }: Props) {
         ? "Record: biberon"
         : "Record: tétée";
 
+  const daysWithCount = countValues.filter((v) => v > 0).length;
+  const daysWithQuantity = quantityValues.filter((v) => v > 0).length;
+  const countAverageLabel = `Moyenne/jour (${daysWithCount}j)`;
+  const quantityAverageLabel = `Moyenne/jour (${daysWithQuantity}j)`;
+
   const dailyAverageQuantity =
-    totalWeekQuantity > 0 ? Math.round(totalWeekQuantity / 7) : 0;
+    totalWeekQuantity > 0 && daysWithQuantity > 0
+      ? Math.round(totalWeekQuantity / daysWithQuantity)
+      : 0;
   const dailyAverageCount =
-    totalWeekCount > 0 ? Math.round((totalWeekCount / 7) * 10) / 10 : 0;
+    totalWeekCount > 0 && daysWithCount > 0
+      ? Math.round((totalWeekCount / daysWithCount) * 10) / 10
+      : 0;
 
   const maxQuantity = Math.max(...quantityValues, 0);
   const maxCount = Math.max(...countValues, 0);
   const bestQuantityDay = jours[quantityValues.indexOf(maxQuantity)];
   const bestCountDay = jours[countValues.indexOf(maxCount)];
+  const maxSeinsCount = Math.max(
+    ...jours.map((j) => weeklyData[j].seinsCount),
+    0,
+  );
+  const maxBiberonsCount = Math.max(
+    ...jours.map((j) => weeklyData[j].biberonsCount),
+    0,
+  );
+  const groupedMax = Math.max(maxSeinsCount, maxBiberonsCount, 0);
 
   const currentValues = viewMode === "quantity" ? quantityValues : countValues;
-  const currentMax = viewMode === "quantity" ? maxQuantity : maxCount;
+  const isGrouped = typeFilter === "tous" && viewMode === "frequency";
+  const currentMax =
+    viewMode === "quantity"
+      ? maxQuantity
+      : isGrouped
+        ? groupedMax
+        : maxCount;
 
   const barWidth = CHART_WIDTH / (jours.length * 1.45);
   const barSpacing = barWidth / 2.2;
@@ -255,9 +280,36 @@ export default function TeteesChart({ tetees }: Props) {
   const bars = useMemo(() => {
     return jours.map((jour, index) => {
       const value = currentValues[index];
+      const x = CHART_PADDING.left + index * (barWidth + barSpacing);
+
+      if (isGrouped) {
+        const total = countValues[index];
+        const seins = weeklyData[jour].seinsCount;
+        const biberons = weeklyData[jour].biberonsCount;
+        const biberonsHeight =
+          currentMax > 0 ? (biberons / currentMax) * chartAreaHeight : 0;
+        const seinsHeight =
+          currentMax > 0 ? (seins / currentMax) * chartAreaHeight : 0;
+        const baseY = CHART_PADDING.top + chartAreaHeight;
+        const topY = baseY - Math.max(biberonsHeight, seinsHeight, 2);
+
+        return {
+          jour,
+          value: total,
+          x,
+          width: barWidth,
+          y: topY,
+          height: Math.max(Math.max(biberonsHeight, seinsHeight), 2),
+          isMax: total === maxCount && total > 0,
+          segments: {
+            biberonsHeight,
+            seinsHeight,
+          },
+        };
+      }
+
       const barHeight =
         currentMax > 0 ? (value / currentMax) * chartAreaHeight : 0;
-      const x = CHART_PADDING.left + index * (barWidth + barSpacing);
       const y = CHART_PADDING.top + (chartAreaHeight - barHeight);
 
       let color = COLORS.blue;
@@ -282,7 +334,18 @@ export default function TeteesChart({ tetees }: Props) {
         isMax: value === currentMax && value > 0,
       };
     });
-  }, [currentValues, currentMax, typeFilter]);
+  }, [
+    barSpacing,
+    barWidth,
+    chartAreaHeight,
+    countValues,
+    currentMax,
+    currentValues,
+    groupedMax,
+    isGrouped,
+    typeFilter,
+    weeklyData,
+  ]);
 
   const yAxisLabels = useMemo(() => {
     const steps = 4;
@@ -312,20 +375,25 @@ export default function TeteesChart({ tetees }: Props) {
     .onEnd((event) => {
       const barIndex = findBarAtPosition(event.x);
       if (barIndex !== null && bars[barIndex].value > 0) {
-        setSelectedBarIndex(barIndex);
-        selectedScale.value = withSpring(1.08);
-        selectedLift.value = withSpring(-6);
+        setSelectedBarIndex((prev) => {
+          if (prev === barIndex) {
+            return null;
+          }
+          tooltipX.value = withSpring(
+            bars[barIndex].x + bars[barIndex].width / 2 - 50,
+          );
+          tooltipY.value = withSpring(bars[barIndex].y - 60);
+          return barIndex;
+        });
       } else {
         setSelectedBarIndex(null);
-        selectedScale.value = withSpring(1);
-        selectedLift.value = withSpring(0);
       }
     });
 
   const animatedTooltipStyle = useAnimatedStyle(() => ({
     transform: [
-      { scale: selectedScale.value },
-      { translateY: selectedLift.value },
+      { translateX: tooltipX.value },
+      { translateY: tooltipY.value },
     ],
   }));
 
@@ -468,7 +536,7 @@ export default function TeteesChart({ tetees }: Props) {
             <Text style={styles.metricValue}>{totalWeekCount}</Text>
           </View>
           <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Moyenne/jour</Text>
+            <Text style={styles.metricLabel}>{countAverageLabel}</Text>
             <Text style={styles.metricValue}>{dailyAverageCount}</Text>
           </View>
           {viewMode === "quantity" && typeFilter !== "seins" && (
@@ -478,6 +546,22 @@ export default function TeteesChart({ tetees }: Props) {
             </View>
           )}
         </View>
+        {isGrouped && (
+          <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+              <View
+                style={[styles.legendSwatch, { backgroundColor: COLORS.green }]}
+              />
+              <Text style={styles.legendLabel}>Tétées</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View
+                style={[styles.legendSwatch, { backgroundColor: COLORS.cyan }]}
+              />
+              <Text style={styles.legendLabel}>Biberons</Text>
+            </View>
+          </View>
+        )}
 
         <View style={styles.chartContainer}>
           <View style={styles.yAxisContainer}>
@@ -521,26 +605,76 @@ export default function TeteesChart({ tetees }: Props) {
                 />
               ))}
 
-              {bars.map((bar, index) => (
-                <RoundedRect
-                  key={`bar-${index}`}
-                  x={bar.x}
-                  y={bar.y}
-                  width={bar.width}
-                  height={bar.height}
-                  r={6}
-                  color={bar.color}
-                >
-                  {bar.isMax && (
-                    <Shadow
-                      dx={0}
-                      dy={2}
-                      blur={6}
-                      color="rgba(245, 183, 0, 0.35)"
-                    />
-                  )}
-                </RoundedRect>
-              ))}
+              {bars.map((bar, index) => {
+                if (isGrouped && bar.segments) {
+                  const baseY = CHART_PADDING.top + chartAreaHeight;
+                  const biberonsHeight = bar.segments.biberonsHeight;
+                  const seinsHeight = bar.segments.seinsHeight;
+                  const groupGap = 4;
+                  const subWidth = Math.max(
+                    (bar.width - groupGap) / 2,
+                    2,
+                  );
+                  const seinsX = bar.x;
+                  const biberonsX = bar.x + subWidth + groupGap;
+                  const seinsY = baseY - seinsHeight;
+                  const biberonsY = baseY - biberonsHeight;
+                  return (
+                    <Group key={`bar-${index}`}>
+                      {seinsHeight > 0 && (
+                        <RoundedRect
+                          x={seinsX}
+                          y={seinsY}
+                          width={subWidth}
+                          height={Math.max(seinsHeight, 2)}
+                          r={6}
+                          color={COLORS.green}
+                        />
+                      )}
+                      {biberonsHeight > 0 && (
+                        <RoundedRect
+                          x={biberonsX}
+                          y={biberonsY}
+                          width={subWidth}
+                          height={Math.max(biberonsHeight, 2)}
+                          r={6}
+                          color={COLORS.cyan}
+                        >
+                          {bar.isMax && (
+                            <Shadow
+                              dx={0}
+                              dy={2}
+                              blur={6}
+                              color="rgba(245, 183, 0, 0.35)"
+                            />
+                          )}
+                        </RoundedRect>
+                      )}
+                    </Group>
+                  );
+                }
+
+                return (
+                  <RoundedRect
+                    key={`bar-${index}`}
+                    x={bar.x}
+                    y={bar.y}
+                    width={bar.width}
+                    height={bar.height}
+                    r={6}
+                    color={bar.color}
+                  >
+                    {bar.isMax && (
+                      <Shadow
+                        dx={0}
+                        dy={2}
+                        blur={6}
+                        color="rgba(245, 183, 0, 0.35)"
+                      />
+                    )}
+                  </RoundedRect>
+                );
+              })}
             </Canvas>
           </GestureDetector>
 
@@ -549,13 +683,6 @@ export default function TeteesChart({ tetees }: Props) {
               style={[
                 styles.tooltip,
                 animatedTooltipStyle,
-                {
-                  left:
-                    bars[selectedBarIndex].x +
-                    bars[selectedBarIndex].width / 2 -
-                    50,
-                  top: bars[selectedBarIndex].y - 60,
-                },
               ]}
             >
               <Text style={styles.tooltipDay}>
@@ -565,6 +692,20 @@ export default function TeteesChart({ tetees }: Props) {
                 {bars[selectedBarIndex].value}{" "}
                 {viewMode === "quantity" ? "ml" : frequencyUnit}
               </Text>
+              {isGrouped && (
+                <Text style={styles.tooltipDetail}>
+                  {weeklyData[bars[selectedBarIndex].jour].seinsCount} tétée
+                  {weeklyData[bars[selectedBarIndex].jour].seinsCount > 1
+                    ? "s"
+                    : ""}
+                  {"\n"}
+                  {weeklyData[bars[selectedBarIndex].jour].biberonsCount}{" "}
+                  biberon
+                  {weeklyData[bars[selectedBarIndex].jour].biberonsCount > 1
+                    ? "s"
+                    : ""}
+                </Text>
+              )}
             </Animated.View>
           )}
 
@@ -588,7 +729,10 @@ export default function TeteesChart({ tetees }: Props) {
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{totalWeekCount}</Text>
-                <Text style={styles.statLabel}>{totalCountLabel}</Text>
+                <Text style={styles.statLabel}>
+                  {totalCountLabel}
+                  {totalCountLabel !== "Repas" && totalWeekCount > 1 ? "s" : ""}
+                </Text>
               </View>
               <View style={styles.statItem}>
                 <FontAwesome
@@ -631,7 +775,7 @@ export default function TeteesChart({ tetees }: Props) {
                 <Text style={[styles.statValue, { color: COLORS.cyan }]}>
                   {dailyAverageQuantity} ml
                 </Text>
-                <Text style={styles.statLabel}>Moyenne/jour</Text>
+                <Text style={styles.statLabel}>{quantityAverageLabel}</Text>
               </View>
               {maxQuantity > 0 && (
                 <View style={styles.statItem}>
@@ -674,7 +818,7 @@ export default function TeteesChart({ tetees }: Props) {
                 >
                   {dailyAverageCount}
                 </Text>
-                <Text style={styles.statLabel}>Moyenne/jour</Text>
+                <Text style={styles.statLabel}>{countAverageLabel}</Text>
               </View>
               {maxCount > 0 && (
                 <View style={styles.statItem}>
@@ -893,6 +1037,26 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 12,
   },
+  legendRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 10,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  legendSwatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+  },
+  legendLabel: {
+    fontSize: 12,
+    color: COLORS.muted,
+    fontWeight: "600",
+  },
   metricCard: {
     flex: 1,
     backgroundColor: "#f7f9fc",
@@ -981,6 +1145,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: COLORS.blueDeep,
     fontWeight: "700",
+    marginTop: 2,
+  },
+  tooltipDetail: {
+    fontSize: 10,
+    color: COLORS.muted,
     marginTop: 2,
   },
   statsContainer: {
