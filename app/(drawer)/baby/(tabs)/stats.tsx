@@ -14,6 +14,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Animated,
   BackHandler,
   ScrollView,
   StyleSheet,
@@ -38,6 +39,8 @@ export default function StatsScreen() {
   const [selectedTab, setSelectedTab] = useState<"tetees" | "pompages">(
     "tetees",
   );
+  const [tabWidth, setTabWidth] = useState(0);
+  const underlineX = useState(() => new Animated.Value(0))[0];
 
   // Récupérer les paramètres de l'URL
   const { tab, returnTo } = useLocalSearchParams();
@@ -51,6 +54,16 @@ export default function StatsScreen() {
       setSelectedTab("tetees"); // Par défaut, ou si tab === 'tetees'
     }
   }, [tab]);
+
+  useEffect(() => {
+    if (tabWidth === 0) return;
+    const target = selectedTab === "pompages" ? tabWidth : 0;
+    Animated.timing(underlineX, {
+      toValue: target,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  }, [selectedTab, tabWidth, underlineX]);
 
   useFocusEffect(
     useCallback(() => {
@@ -206,9 +219,15 @@ export default function StatsScreen() {
   }, [isPompagesLoading, pompages.length]);
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.container}>
       {/* BOUTONS DE SÉLECTION */}
-      <View style={styles.tabContainer}>
+      <View
+        style={styles.tabContainer}
+        onLayout={(event) => {
+          const width = event.nativeEvent.layout.width / 2;
+          if (width !== tabWidth) setTabWidth(width);
+        }}
+      >
         <TouchableOpacity
           style={[
             styles.tabButton,
@@ -242,6 +261,15 @@ export default function StatsScreen() {
             Pompages
           </Text>
         </TouchableOpacity>
+        {tabWidth > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.tabUnderline,
+              { width: tabWidth, transform: [{ translateX: underlineX }] },
+            ]}
+          />
+        )}
       </View>
 
       {/* SCROLLVIEW DES CHARTS */}
@@ -267,32 +295,53 @@ export default function StatsScreen() {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+  },
   tabContainer: {
     flexDirection: "row",
     justifyContent: "center",
     // paddingTop: 10,
     gap: 10,
-    backgroundColor: "#f8f9fa",
+    // backgroundColor: "#f8f9fa",
     // borderWidth:1,
-    paddingTop: 16,
-    paddingBottom: 12,
+    marginHorizontal: 20,
+    // paddingTop: 16,
+    paddingVertical: 12,
+    marginBottom: 10,
+    position: "relative",
   },
   tabButton: {
     paddingVertical: 10,
     paddingHorizontal: 20,
-    backgroundColor: "#eee",
     borderRadius: 12,
+    flex: 1,
+    alignItems: "center",
   },
   tabButtonActive: {
-    backgroundColor: "#4A90E2",
+    // underline handled by animated indicator
   },
   tabText: {
     fontSize: 16,
     color: "#333",
     fontWeight: "bold",
+    // textTransform: "uppercase",
+    textAlign: "center",
+    // letterSpacing: 1,
   },
   tabTextActive: {
-    color: "white",
+    color: "#4A90E2",
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  tabUnderline: {
+    position: "absolute",
+    bottom: 4,
+    left: 0,
+    height: 2,
+    backgroundColor: "#4A90E2",
+    borderRadius: 2,
   },
   scrollContainer: {
     // paddingBottom: 20,

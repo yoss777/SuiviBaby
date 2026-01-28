@@ -745,7 +745,7 @@ export default function PompagesChart({ pompages }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f7f7",
+    backgroundColor: "#f8f9fa",
   },
   emptyContainer: {
     flex: 1,

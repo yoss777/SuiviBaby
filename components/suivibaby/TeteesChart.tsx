@@ -67,7 +67,7 @@ function addWeeks(date: Date, weeks: number) {
 
 export default function TeteesChart({ tetees }: Props) {
   const [viewMode, setViewMode] = useState<"quantity" | "frequency">(
-    "quantity",
+    "frequency",
   );
   const [typeFilter, setTypeFilter] = useState<"tous" | "seins" | "biberons">(
     "tous",
@@ -76,6 +76,7 @@ export default function TeteesChart({ tetees }: Props) {
     getStartOfWeek(new Date()),
   );
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
+  const [isGroupedView, setIsGroupedView] = useState(true);
 
   const tooltipX = useSharedValue(0);
   const tooltipY = useSharedValue(0);
@@ -262,15 +263,13 @@ export default function TeteesChart({ tetees }: Props) {
     0,
   );
   const groupedMax = Math.max(maxSeinsCount, maxBiberonsCount, 0);
-
   const currentValues = viewMode === "quantity" ? quantityValues : countValues;
-  const isGrouped = typeFilter === "tous" && viewMode === "frequency";
+  const isGrouped =
+    typeFilter === "tous" && viewMode === "frequency" && isGroupedView;
+  const isStacked =
+    typeFilter === "tous" && viewMode === "frequency" && !isGroupedView;
   const currentMax =
-    viewMode === "quantity"
-      ? maxQuantity
-      : isGrouped
-        ? groupedMax
-        : maxCount;
+    viewMode === "quantity" ? maxQuantity : isGrouped ? groupedMax : maxCount;
 
   const barWidth = CHART_WIDTH / (jours.length * 1.45);
   const barSpacing = barWidth / 2.2;
@@ -301,6 +300,34 @@ export default function TeteesChart({ tetees }: Props) {
           y: topY,
           height: Math.max(Math.max(biberonsHeight, seinsHeight), 2),
           isMax: total === maxCount && total > 0,
+          segments: {
+            biberonsHeight,
+            seinsHeight,
+          },
+        };
+      }
+
+      if (isStacked) {
+        const total = countValues[index];
+        const seins = weeklyData[jour].seinsCount;
+        const biberons = weeklyData[jour].biberonsCount;
+        const totalParts = seins + biberons;
+        const barHeight =
+          currentMax > 0 ? (total / currentMax) * chartAreaHeight : 0;
+        const biberonsHeight =
+          totalParts > 0 ? (biberons / totalParts) * barHeight : 0;
+        const seinsHeight =
+          totalParts > 0 ? (seins / totalParts) * barHeight : 0;
+        const baseY = CHART_PADDING.top + chartAreaHeight;
+
+        return {
+          jour,
+          value: total,
+          x,
+          width: barWidth,
+          y: baseY - barHeight,
+          height: Math.max(barHeight, 2),
+          isMax: total === currentMax && total > 0,
           segments: {
             biberonsHeight,
             seinsHeight,
@@ -343,6 +370,7 @@ export default function TeteesChart({ tetees }: Props) {
     currentValues,
     groupedMax,
     isGrouped,
+    isStacked,
     typeFilter,
     weeklyData,
   ]);
@@ -391,10 +419,7 @@ export default function TeteesChart({ tetees }: Props) {
     });
 
   const animatedTooltipStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: tooltipX.value },
-      { translateY: tooltipY.value },
-    ],
+    transform: [{ translateX: tooltipX.value }, { translateY: tooltipY.value }],
   }));
 
   return (
@@ -448,36 +473,36 @@ export default function TeteesChart({ tetees }: Props) {
             { key: "tous", label: "Tous", icon: "baby" },
             { key: "seins", label: "Tétées", icon: "person-breastfeeding" },
             { key: "biberons", label: "Biberons", icon: "jar-wheat" },
-          ].map((type) => (
-            <TouchableOpacity
-              key={type.key}
-              style={[
-                styles.typeFilterButton,
-                typeFilter === type.key && styles.typeFilterButtonActive,
-                typeFilter === type.key &&
-                  type.key === "seins" &&
-                  styles.typeFilterButtonSeins,
-                typeFilter === type.key &&
-                  type.key === "biberons" &&
-                  styles.typeFilterButtonBiberons,
-              ]}
-              onPress={() => setTypeFilter(type.key as typeof typeFilter)}
-            >
-              <FontAwesome
-                name={type.icon}
-                size={14}
-                color={typeFilter === type.key ? "white" : COLORS.muted}
-              />
-              <Text
+          ].map((type) => {
+            const isActive = typeFilter === type.key;
+            const activeColor = COLORS.blue;
+            return (
+              <TouchableOpacity
+                key={type.key}
                 style={[
-                  styles.typeFilterText,
-                  typeFilter === type.key && styles.typeFilterTextActive,
+                  styles.typeFilterButton,
+                  isActive && styles.typeFilterButtonActive,
+                  isActive && styles.typeFilterButtonActive,
                 ]}
+                onPress={() => setTypeFilter(type.key as typeof typeFilter)}
               >
-                {type.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <FontAwesome
+                  name={type.icon}
+                  size={14}
+                  color={isActive ? activeColor : COLORS.muted}
+                />
+                <Text
+                  style={[
+                    styles.typeFilterText,
+                    isActive && styles.typeFilterTextActive,
+                    isActive && { color: activeColor },
+                  ]}
+                >
+                  {type.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <View style={styles.toggleContainer}>
@@ -492,7 +517,7 @@ export default function TeteesChart({ tetees }: Props) {
               <FontAwesome
                 name="droplet"
                 size={14}
-                color={viewMode === "quantity" ? "white" : COLORS.muted}
+                color={viewMode === "quantity" ? COLORS.blue : COLORS.muted}
               />
               <Text
                 style={[
@@ -514,7 +539,7 @@ export default function TeteesChart({ tetees }: Props) {
             <FontAwesome
               name="clock"
               size={14}
-              color={viewMode === "frequency" ? "white" : COLORS.muted}
+              color={viewMode === "frequency" ? COLORS.blue : COLORS.muted}
             />
             <Text
               style={[
@@ -546,20 +571,44 @@ export default function TeteesChart({ tetees }: Props) {
             </View>
           )}
         </View>
-        {isGrouped && (
+        {typeFilter === "tous" && viewMode === "frequency" && (
           <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View
-                style={[styles.legendSwatch, { backgroundColor: COLORS.green }]}
-              />
-              <Text style={styles.legendLabel}>Tétées</Text>
+            <View style={styles.legendList}>
+              <View style={styles.legendItem}>
+                <View
+                  style={[
+                    styles.legendSwatch,
+                    { backgroundColor: COLORS.green },
+                  ]}
+                />
+                <Text style={styles.legendLabel}>Tétées</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View
+                  style={[
+                    styles.legendSwatch,
+                    { backgroundColor: COLORS.cyan },
+                  ]}
+                />
+                <Text style={styles.legendLabel}>Biberons</Text>
+              </View>
             </View>
-            <View style={styles.legendItem}>
-              <View
-                style={[styles.legendSwatch, { backgroundColor: COLORS.cyan }]}
-              />
-              <Text style={styles.legendLabel}>Biberons</Text>
-            </View>
+            <TouchableOpacity
+              style={[
+                styles.groupToggle,
+                isGrouped && styles.groupToggleActive,
+              ]}
+              onPress={() => setIsGroupedView((prev) => !prev)}
+            >
+              <Text
+                style={[
+                  styles.groupToggleText,
+                  isGrouped && styles.groupToggleTextActive,
+                ]}
+              >
+                Vue groupée
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -611,10 +660,7 @@ export default function TeteesChart({ tetees }: Props) {
                   const biberonsHeight = bar.segments.biberonsHeight;
                   const seinsHeight = bar.segments.seinsHeight;
                   const groupGap = 4;
-                  const subWidth = Math.max(
-                    (bar.width - groupGap) / 2,
-                    2,
-                  );
+                  const subWidth = Math.max((bar.width - groupGap) / 2, 2);
                   const seinsX = bar.x;
                   const biberonsX = bar.x + subWidth + groupGap;
                   const seinsY = baseY - seinsHeight;
@@ -639,6 +685,47 @@ export default function TeteesChart({ tetees }: Props) {
                           height={Math.max(biberonsHeight, 2)}
                           r={6}
                           color={COLORS.cyan}
+                        >
+                          {bar.isMax && (
+                            <Shadow
+                              dx={0}
+                              dy={2}
+                              blur={6}
+                              color="rgba(245, 183, 0, 0.35)"
+                            />
+                          )}
+                        </RoundedRect>
+                      )}
+                    </Group>
+                  );
+                }
+
+                if (isStacked && bar.segments) {
+                  const baseY = CHART_PADDING.top + chartAreaHeight;
+                  const biberonsHeight = bar.segments.biberonsHeight;
+                  const seinsHeight = bar.segments.seinsHeight;
+                  const biberonsY = baseY - biberonsHeight;
+                  const seinsY = baseY - biberonsHeight - seinsHeight;
+                  return (
+                    <Group key={`bar-${index}`}>
+                      {biberonsHeight > 0 && (
+                        <RoundedRect
+                          x={bar.x}
+                          y={biberonsY}
+                          width={bar.width}
+                          height={Math.max(biberonsHeight, 2)}
+                          r={6}
+                          color={COLORS.cyan}
+                        />
+                      )}
+                      {seinsHeight > 0 && (
+                        <RoundedRect
+                          x={bar.x}
+                          y={seinsY}
+                          width={bar.width}
+                          height={Math.max(seinsHeight, 2)}
+                          r={6}
+                          color={COLORS.green}
                         >
                           {bar.isMax && (
                             <Shadow
@@ -679,12 +766,7 @@ export default function TeteesChart({ tetees }: Props) {
           </GestureDetector>
 
           {selectedBarIndex !== null && (
-            <Animated.View
-              style={[
-                styles.tooltip,
-                animatedTooltipStyle,
-              ]}
-            >
+            <Animated.View style={[styles.tooltip, animatedTooltipStyle]}>
               <Text style={styles.tooltipDay}>
                 {bars[selectedBarIndex].jour}
               </Text>
@@ -692,7 +774,7 @@ export default function TeteesChart({ tetees }: Props) {
                 {bars[selectedBarIndex].value}{" "}
                 {viewMode === "quantity" ? "ml" : frequencyUnit}
               </Text>
-              {isGrouped && (
+              {typeFilter === "tous" && viewMode === "frequency" && (
                 <Text style={styles.tooltipDetail}>
                   {weeklyData[bars[selectedBarIndex].jour].seinsCount} tétée
                   {weeklyData[bars[selectedBarIndex].jour].seinsCount > 1
@@ -873,7 +955,7 @@ export default function TeteesChart({ tetees }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f2f6fb",
+    backgroundColor: "#f8f9fa",
   },
   emptyContainer: {
     flex: 1,
@@ -970,7 +1052,7 @@ const styles = StyleSheet.create({
   },
   typeFilterContainer: {
     flexDirection: "row",
-    backgroundColor: "#f1f4f8",
+    backgroundColor: "#f5f6f8",
     borderRadius: 12,
     padding: 4,
     marginBottom: 12,
@@ -987,13 +1069,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   typeFilterButtonActive: {
-    backgroundColor: COLORS.blue,
-  },
-  typeFilterButtonSeins: {
-    backgroundColor: COLORS.green,
-  },
-  typeFilterButtonBiberons: {
-    backgroundColor: COLORS.cyan,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.blue,
   },
   typeFilterText: {
     fontSize: 13,
@@ -1001,11 +1079,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   typeFilterTextActive: {
-    color: "white",
+    color: COLORS.ink,
+    fontWeight: "700",
   },
   toggleContainer: {
     flexDirection: "row",
-    backgroundColor: "#f1f4f8",
+    backgroundColor: "#f5f6f8",
     borderRadius: 12,
     padding: 4,
     marginBottom: 12,
@@ -1022,7 +1101,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toggleButtonActive: {
-    backgroundColor: COLORS.blue,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.blue,
   },
   toggleText: {
     fontSize: 13,
@@ -1030,7 +1111,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   toggleTextActive: {
-    color: "white",
+    color: COLORS.blue,
+    fontWeight: "700",
   },
   metricsRow: {
     flexDirection: "row",
@@ -1039,8 +1121,15 @@ const styles = StyleSheet.create({
   },
   legendRow: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     marginBottom: 10,
+  },
+  legendList: {
+    flexDirection: "row",
+    gap: 12,
+    flex: 1,
+    alignItems: "center",
   },
   legendItem: {
     flexDirection: "row",
@@ -1056,6 +1145,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.muted,
     fontWeight: "600",
+  },
+  groupToggle: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: "#f7f9fc",
+  },
+  groupToggleActive: {
+    backgroundColor: COLORS.blue,
+    borderColor: COLORS.blue,
+  },
+  groupToggleText: {
+    fontSize: 12,
+    color: COLORS.muted,
+    fontWeight: "600",
+  },
+  groupToggleTextActive: {
+    color: "white",
   },
   metricCard: {
     flex: 1,
