@@ -57,6 +57,10 @@ interface Meal {
   id: string;
   type?: MealType;
   quantite?: number | null;
+  coteGauche?: boolean;
+  coteDroit?: boolean;
+  dureeGauche?: number;
+  dureeDroite?: number;
   date: { seconds: number };
   createdAt: { seconds: number };
 }
@@ -117,6 +121,9 @@ export default function MealsScreen() {
   const [pendingOpen, setPendingOpen] = useState(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [quantite, setQuantite] = useState<number>(100);
+  const [leftSeconds, setLeftSeconds] = useState(0);
+  const [rightSeconds, setRightSeconds] = useState(0);
+  const [runningSide, setRunningSide] = useState<"left" | "right" | null>(null);
   const sheetOwnerId = "meals";
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
@@ -133,6 +140,8 @@ export default function MealsScreen() {
 
   // Ref pour la gestion du picker avec accélération
   const intervalRef = useRef<number | undefined>(undefined);
+  const timerIntervalRef = useRef<number | undefined>(undefined);
+  const timerTickRef = useRef<number | null>(null);
 
   // ============================================
   // EFFECTS - URL PARAMS
@@ -163,6 +172,9 @@ export default function MealsScreen() {
       setDateHeure(new Date());
       setEditingMeal(null);
       setIsSubmitting(false);
+      setLeftSeconds(0);
+      setRightSeconds(0);
+      setRunningSide(null);
 
       if (preferredType === "seins") {
         setMealType("tetee");
@@ -431,6 +443,9 @@ export default function MealsScreen() {
     setHasMore(true);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
+    setLeftSeconds(0);
+    setRightSeconds(0);
+    setRunningSide(null);
   }, [activeChild?.id]);
 
   const isMealsLoading = !(teteesLoaded && biberonsLoaded);
@@ -605,6 +620,9 @@ export default function MealsScreen() {
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+      }
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
       }
     };
   }, []);
@@ -793,6 +811,12 @@ export default function MealsScreen() {
     // Quantité (avec fallback)
     const quantity = meal.quantite ?? 100;
     setQuantite(quantity);
+
+    const leftDuration = Math.max(0, Math.round((meal.dureeGauche ?? 0) * 60));
+    const rightDuration = Math.max(0, Math.round((meal.dureeDroite ?? 0) * 60));
+    setLeftSeconds(leftDuration);
+    setRightSeconds(rightDuration);
+    setRunningSide(null);
     setPendingOpen(true);
   };
 
@@ -826,6 +850,7 @@ export default function MealsScreen() {
   };
 
   const closeModal = () => {
+    setRunningSide(null);
     closeSheet();
   };
 
@@ -840,9 +865,15 @@ export default function MealsScreen() {
       setIsSubmitting(true);
 
       const isTetee = mealType === "tetee";
+      const leftMinutes = Math.round(leftSeconds / 60);
+      const rightMinutes = Math.round(rightSeconds / 60);
       const dataToSave = {
         type: mealType,
         quantite: isTetee ? null : quantite,
+        coteGauche: isTetee ? leftSeconds > 0 : undefined,
+        coteDroit: isTetee ? rightSeconds > 0 : undefined,
+        dureeGauche: isTetee && leftMinutes > 0 ? leftMinutes : undefined,
+        dureeDroite: isTetee && rightMinutes > 0 ? rightMinutes : undefined,
         date: dateHeure,
       };
 
@@ -908,7 +939,68 @@ export default function MealsScreen() {
     }
   };
 
+  const formatDuration = (totalSeconds: number) => {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = Math.max(0, totalSeconds % 60);
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  };
+
+  const toggleChrono = (side: "left" | "right") => {
+    if (isSubmitting || editingMeal) return;
+    setRunningSide((prev) => (prev === side ? null : side));
+  };
+
+  const resetChrono = (side: "left" | "right") => {
+    if (isSubmitting) return;
+    if (side === "left") {
+      setLeftSeconds(0);
+    } else {
+      setRightSeconds(0);
+    }
+    setRunningSide((prev) => (prev === side ? null : prev));
+  };
+
+  useEffect(() => {
+    if (mealType !== "tetee") {
+      setRunningSide(null);
+    }
+  }, [mealType]);
+
+  useEffect(() => {
+    if (!runningSide || mealType !== "tetee" || editingMeal) {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = undefined;
+      }
+      timerTickRef.current = null;
+      return;
+    }
+
+    timerTickRef.current = Date.now();
+    timerIntervalRef.current = setInterval(() => {
+      const now = Date.now();
+      const lastTick = timerTickRef.current ?? now;
+      const deltaSeconds = Math.floor((now - lastTick) / 1000);
+      if (deltaSeconds <= 0) return;
+      timerTickRef.current = lastTick + deltaSeconds * 1000;
+      if (runningSide === "left") {
+        setLeftSeconds((prev) => prev + deltaSeconds);
+      } else {
+        setRightSeconds((prev) => prev + deltaSeconds);
+      }
+    }, 500);
+
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = undefined;
+      }
+      timerTickRef.current = null;
+    };
+  }, [runningSide, mealType, editingMeal]);
+
   function renderSheetContent() {
+    const totalSeconds = leftSeconds + rightSeconds;
     return (
       <>
         <Text style={styles.modalCategoryLabel}>Type de repas</Text>
@@ -947,6 +1039,7 @@ export default function MealsScreen() {
             onPress={() => {
               setMealType("biberon");
               setQuantite(100);
+              setRunningSide(null);
             }}
             disabled={isSubmitting}
           >
@@ -1013,9 +1106,167 @@ export default function MealsScreen() {
             </View>
           </>
         ) : (
-          <View style={styles.quantityNA}>
-            <Text style={styles.quantityNAText}>Quantité : N/A</Text>
-          </View>
+          <>
+            <Text style={styles.modalCategoryLabel}>Chronomètre tétée</Text>
+            <View style={styles.chronoContainer}>
+              <View style={styles.chronoCard}>
+                <Text style={styles.chronoLabel}>Gauche</Text>
+                <Text style={styles.chronoTime}>
+                  {formatDuration(leftSeconds)}
+                </Text>
+                {editingMeal ? (
+                  <View style={styles.chronoAdjustRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.chronoAdjustButton,
+                        isSubmitting && styles.chronoAdjustButtonDisabled,
+                      ]}
+                      onPressIn={() =>
+                        handlePressIn(() =>
+                          setLeftSeconds((prev) => Math.max(0, prev - 60)),
+                        )
+                      }
+                      onPressOut={handlePressOut}
+                      disabled={isSubmitting}
+                    >
+                      <Text style={styles.chronoAdjustButtonText}>-</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.chronoAdjustValue}>
+                      {Math.round(leftSeconds / 60)} min
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.chronoAdjustButton,
+                        isSubmitting && styles.chronoAdjustButtonDisabled,
+                      ]}
+                      onPressIn={() =>
+                        handlePressIn(() => setLeftSeconds((prev) => prev + 60))
+                      }
+                      onPressOut={handlePressOut}
+                      disabled={isSubmitting}
+                    >
+                      <Text style={styles.chronoAdjustButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.chronoControlRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.chronoControlButton,
+                        runningSide === "left" &&
+                          styles.chronoControlButtonActive,
+                      ]}
+                      onPress={() => toggleChrono("left")}
+                      disabled={isSubmitting}
+                    >
+                      <Ionicons
+                        name={runningSide === "left" ? "pause" : "play"}
+                        size={16}
+                        color={runningSide === "left" ? "white" : "#333"}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.chronoControlButton,
+                        leftSeconds === 0 &&
+                          styles.chronoControlButtonDisabled,
+                      ]}
+                      onPress={() => resetChrono("left")}
+                      disabled={isSubmitting || leftSeconds === 0}
+                    >
+                      <Ionicons
+                        name="refresh"
+                        size={16}
+                        color={leftSeconds === 0 ? "#999" : "#333"}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.chronoCard}>
+                <Text style={styles.chronoLabel}>Droit</Text>
+                <Text style={styles.chronoTime}>
+                  {formatDuration(rightSeconds)}
+                </Text>
+                {editingMeal ? (
+                  <View style={styles.chronoAdjustRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.chronoAdjustButton,
+                        isSubmitting && styles.chronoAdjustButtonDisabled,
+                      ]}
+                      onPressIn={() =>
+                        handlePressIn(() =>
+                          setRightSeconds((prev) => Math.max(0, prev - 60)),
+                        )
+                      }
+                      onPressOut={handlePressOut}
+                      disabled={isSubmitting}
+                    >
+                      <Text style={styles.chronoAdjustButtonText}>-</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.chronoAdjustValue}>
+                      {Math.round(rightSeconds / 60)} min
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.chronoAdjustButton,
+                        isSubmitting && styles.chronoAdjustButtonDisabled,
+                      ]}
+                      onPressIn={() =>
+                        handlePressIn(() => setRightSeconds((prev) => prev + 60))
+                      }
+                      onPressOut={handlePressOut}
+                      disabled={isSubmitting}
+                    >
+                      <Text style={styles.chronoAdjustButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.chronoControlRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.chronoControlButton,
+                        runningSide === "right" &&
+                          styles.chronoControlButtonActive,
+                      ]}
+                      onPress={() => toggleChrono("right")}
+                      disabled={isSubmitting}
+                    >
+                      <Ionicons
+                        name={runningSide === "right" ? "pause" : "play"}
+                        size={16}
+                        color={runningSide === "right" ? "white" : "#333"}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.chronoControlButton,
+                        rightSeconds === 0 &&
+                          styles.chronoControlButtonDisabled,
+                      ]}
+                      onPress={() => resetChrono("right")}
+                      disabled={isSubmitting || rightSeconds === 0}
+                    >
+                      <Ionicons
+                        name="refresh"
+                        size={16}
+                        color={rightSeconds === 0 ? "#999" : "#333"}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.chronoTotalRow}>
+              <Text style={styles.chronoTotalLabel}>Total</Text>
+              <Text style={styles.chronoTotalValue}>
+                {formatDuration(totalSeconds)}
+              </Text>
+            </View>
+          </>
         )}
 
         <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
@@ -1135,6 +1386,9 @@ export default function MealsScreen() {
     isSubmitting,
     mealType,
     quantite,
+    leftSeconds,
+    rightSeconds,
+    runningSide,
     dateHeure,
     showDate,
     showTime,
@@ -1177,6 +1431,10 @@ export default function MealsScreen() {
   const renderMealItem = (meal: Meal, isLast: boolean = false) => {
     const mealTime = new Date(meal.date?.seconds * 1000);
     const isTetee = meal.type === "tetee";
+    const leftDuration = meal.dureeGauche ?? 0;
+    const rightDuration = meal.dureeDroite ?? 0;
+    const totalDuration = leftDuration + rightDuration;
+    const hasDuration = leftDuration > 0 || rightDuration > 0;
 
     return (
       <Pressable
@@ -1229,11 +1487,61 @@ export default function MealsScreen() {
             <Text style={styles.sessionType}>
               {isTetee ? "Tétée" : "Biberon"}
             </Text>
-            {!isTetee && meal.quantite && (
-              <Text style={styles.sessionDetailText}>{meal.quantite} ml</Text>
+            {isTetee ? (
+              <>
+                {hasDuration && (
+                  <>
+                    <View style={styles.durationBar}>
+                      <View
+                        style={[
+                          styles.durationBarLeft,
+                          { flex: leftDuration || 1 },
+                        ]}
+                      />
+                      <View
+                        style={[
+                          styles.durationBarRight,
+                          { flex: rightDuration || 1 },
+                        ]}
+                      />
+                    </View>
+                    <View style={styles.durationLabels}>
+                      <View style={styles.durationLabelItem}>
+                        <View
+                          style={[styles.durationDot, styles.durationDotLeft]}
+                        />
+                        <Text style={styles.durationLabelText}>G</Text>
+                        <Text style={styles.durationLabelValue}>
+                          {leftDuration} min
+                        </Text>
+                      </View>
+                      <View style={styles.durationLabelItem}>
+                        <View
+                          style={[styles.durationDot, styles.durationDotRight]}
+                        />
+                        <Text style={styles.durationLabelText}>D</Text>
+                        <Text style={styles.durationLabelValue}>
+                          {rightDuration} min
+                        </Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+              </>
+            ) : (
+              meal.quantite && (
+                <Text style={styles.sessionDetailText}>{meal.quantite} ml</Text>
+              )
             )}
           </View>
         </View>
+
+        {isTetee && hasDuration && (
+          <View style={styles.sessionTotal}>
+            <Text style={styles.sessionTotalValue}>{totalDuration}</Text>
+            <Text style={styles.sessionTotalUnit}>min</Text>
+          </View>
+        )}
 
         {/* Chevron */}
         <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
@@ -1643,6 +1951,66 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6b7280",
   },
+  durationBar: {
+    flexDirection: "row",
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  durationBarLeft: {
+    backgroundColor: "#10b981",
+  },
+  durationBarRight: {
+    backgroundColor: "#6366f1",
+  },
+  durationLabels: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  durationLabelItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  durationDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  durationDotLeft: {
+    backgroundColor: "#10b981",
+  },
+  durationDotRight: {
+    backgroundColor: "#6366f1",
+  },
+  durationLabelText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#9ca3af",
+  },
+  durationLabelValue: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#4b5563",
+  },
+  sessionTotal: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 2,
+    minWidth: 50,
+    justifyContent: "flex-end",
+  },
+  sessionTotalValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: eventColors.meal.dark,
+  },
+  sessionTotalUnit: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#9ca3af",
+  },
 
   // Expand Trigger
   expandTrigger: {
@@ -1764,6 +2132,102 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
+  },
+
+  // Chrono (tétée)
+  chronoContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
+  chronoCard: {
+    flex: 1,
+    backgroundColor: "#f7f7f8",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  chronoLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6b7280",
+    marginBottom: 6,
+  },
+  chronoTime: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  chronoControlRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  chronoControlButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chronoControlButtonActive: {
+    backgroundColor: eventColors.meal.dark,
+    borderColor: eventColors.meal.dark,
+  },
+  chronoControlButtonDisabled: {
+    backgroundColor: "#f3f4f6",
+    borderColor: "#e5e7eb",
+  },
+  chronoAdjustRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  chronoAdjustButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chronoAdjustButtonDisabled: {
+    opacity: 0.6,
+  },
+  chronoAdjustButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+  },
+  chronoAdjustValue: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  chronoTotalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
+  chronoTotalLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  chronoTotalValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
   },
 
   // Date/Time

@@ -152,11 +152,12 @@ export function ecouterTetees(
 
 export async function modifierTetee(childId: string, id: string, data: any) {
   const errors: Error[] = [];
+  const cleanedData = removeUndefined(data);
 
   // Modifier dans NOUVEAU
   if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
     try {
-      await modifierEventNouveau(childId, id, data);
+      await modifierEventNouveau(childId, id, cleanedData);
       console.log("✅ Tétée modifiée dans NEW");
     } catch (error) {
       console.error("❌ Erreur modification NEW:", error);
@@ -168,7 +169,7 @@ export async function modifierTetee(childId: string, id: string, data: any) {
   // Modifier dans ANCIEN
   if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
     try {
-      await teteesService.modifierTetee(childId, id, data);
+      await teteesService.modifierTetee(childId, id, cleanedData);
       console.log("✅ Tétée modifiée dans OLD");
     } catch (error) {
       console.error("❌ Erreur modification OLD:", error);

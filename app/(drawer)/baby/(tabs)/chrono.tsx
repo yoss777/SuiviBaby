@@ -238,8 +238,8 @@ function buildDetails(event: Event) {
     case "biberon":
       return event.quantite ? `${event.quantite} ml` : undefined;
     case "tetee": {
-      const left = event.dureeGauche ? `G ${event.dureeGauche}m` : null;
-      const right = event.dureeDroite ? `D ${event.dureeDroite}m` : null;
+      const left = event.dureeGauche ? `G ${event.dureeGauche} min` : null;
+      const right = event.dureeDroite ? `D ${event.dureeDroite} min` : null;
       const parts = [left, right].filter(Boolean);
       return parts.length > 0 ? parts.join(" • ") : undefined;
     }
