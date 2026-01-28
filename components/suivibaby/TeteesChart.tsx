@@ -95,18 +95,6 @@ export default function TeteesChart({ tetees }: Props) {
 
   const isEmpty = !tetees || tetees.length === 0;
 
-  if (isEmpty) {
-    return (
-      <View style={styles.emptyContainer}>
-        <FontAwesome name="baby" size={64} color="#e9ecef" />
-        <Text style={styles.emptyTitle}>Aucune donnée disponible</Text>
-        <Text style={styles.emptySubtitle}>
-          Commencez à enregistrer des tétées pour voir les statistiques
-        </Text>
-      </View>
-    );
-  }
-
   const start = getStartOfWeek(currentWeek);
   const end = addWeeks(start, 1);
 
@@ -424,530 +412,553 @@ export default function TeteesChart({ tetees }: Props) {
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.iconBadge}>
-            <FontAwesome name="baby" size={18} color={COLORS.blue} />
-          </View>
-          <View style={styles.headerText}>
-            <Text style={styles.sectionTitle}>Statistiques des tétées</Text>
-            <Text style={styles.sectionSubtitle}>
-              {`${start.toLocaleDateString("fr-FR", {
-                day: "numeric",
-                month: "short",
-              })} - ${new Date(end.getTime() - 1).toLocaleDateString("fr-FR", {
-                day: "numeric",
-                month: "short",
-              })}`}
-            </Text>
-          </View>
+      {isEmpty ? (
+        <View style={styles.emptyContainer}>
+          <FontAwesome name="baby" size={64} color="#e9ecef" />
+          <Text style={styles.emptyTitle}>Aucune donnée disponible</Text>
+          <Text style={styles.emptySubtitle}>
+            Commencez à enregistrer des tétées pour voir les statistiques
+          </Text>
         </View>
+      ) : (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.iconBadge}>
+              <FontAwesome name="baby" size={18} color={COLORS.blue} />
+            </View>
+            <View style={styles.headerText}>
+              <Text style={styles.sectionTitle}>Statistiques des tétées</Text>
+              <Text style={styles.sectionSubtitle}>
+                {`${start.toLocaleDateString("fr-FR", {
+                  day: "numeric",
+                  month: "short",
+                })} - ${new Date(end.getTime() - 1).toLocaleDateString(
+                  "fr-FR",
+                  {
+                    day: "numeric",
+                    month: "short",
+                  },
+                )}`}
+              </Text>
+            </View>
+          </View>
 
-        <View style={styles.navigationRow}>
-          <TouchableOpacity
-            style={styles.navButton}
-            onPress={() => setCurrentWeek(addWeeks(currentWeek, -1))}
-          >
-            <FontAwesome name="chevron-left" size={14} color={COLORS.muted} />
-            <Text style={styles.navText}>Préc.</Text>
-          </TouchableOpacity>
+          <View style={styles.navigationRow}>
+            <TouchableOpacity
+              style={styles.navButton}
+              onPress={() => setCurrentWeek(addWeeks(currentWeek, -1))}
+            >
+              <FontAwesome name="chevron-left" size={14} color={COLORS.muted} />
+              <Text style={styles.navText}>Préc.</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.todayButton}
-            onPress={() => setCurrentWeek(getStartOfWeek(new Date()))}
-          >
-            <Text style={styles.todayText}>Cette semaine</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.todayButton}
+              onPress={() => setCurrentWeek(getStartOfWeek(new Date()))}
+            >
+              <Text style={styles.todayText}>Cette semaine</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.navButton}
-            onPress={() => setCurrentWeek(addWeeks(currentWeek, 1))}
-          >
-            <Text style={styles.navText}>Suiv.</Text>
-            <FontAwesome name="chevron-right" size={14} color={COLORS.muted} />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={styles.navButton}
+              onPress={() => setCurrentWeek(addWeeks(currentWeek, 1))}
+            >
+              <Text style={styles.navText}>Suiv.</Text>
+              <FontAwesome
+                name="chevron-right"
+                size={14}
+                color={COLORS.muted}
+              />
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.typeFilterContainer}>
-          {[
-            { key: "tous", label: "Tous", icon: "baby" },
-            { key: "seins", label: "Tétées", icon: "person-breastfeeding" },
-            { key: "biberons", label: "Biberons", icon: "jar-wheat" },
-          ].map((type) => {
-            const isActive = typeFilter === type.key;
-            const activeColor = COLORS.blue;
-            return (
+          <View style={styles.typeFilterContainer}>
+            {[
+              { key: "tous", label: "Tous", icon: "baby" },
+              { key: "seins", label: "Tétées", icon: "person-breastfeeding" },
+              { key: "biberons", label: "Biberons", icon: "jar-wheat" },
+            ].map((type) => {
+              const isActive = typeFilter === type.key;
+              const activeColor = COLORS.blue;
+              return (
+                <TouchableOpacity
+                  key={type.key}
+                  style={[
+                    styles.typeFilterButton,
+                    isActive && styles.typeFilterButtonActive,
+                    isActive && styles.typeFilterButtonActive,
+                  ]}
+                  onPress={() => setTypeFilter(type.key as typeof typeFilter)}
+                >
+                  <FontAwesome
+                    name={type.icon}
+                    size={14}
+                    color={isActive ? activeColor : COLORS.muted}
+                  />
+                  <Text
+                    style={[
+                      styles.typeFilterText,
+                      isActive && styles.typeFilterTextActive,
+                      isActive && { color: activeColor },
+                    ]}
+                  >
+                    {type.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.toggleContainer}>
+            {typeFilter !== "seins" && (
               <TouchableOpacity
-                key={type.key}
                 style={[
-                  styles.typeFilterButton,
-                  isActive && styles.typeFilterButtonActive,
-                  isActive && styles.typeFilterButtonActive,
+                  styles.toggleButton,
+                  viewMode === "quantity" && styles.toggleButtonActive,
                 ]}
-                onPress={() => setTypeFilter(type.key as typeof typeFilter)}
+                onPress={() => setViewMode("quantity")}
               >
                 <FontAwesome
-                  name={type.icon}
+                  name="droplet"
                   size={14}
-                  color={isActive ? activeColor : COLORS.muted}
+                  color={viewMode === "quantity" ? COLORS.blue : COLORS.muted}
                 />
                 <Text
                   style={[
-                    styles.typeFilterText,
-                    isActive && styles.typeFilterTextActive,
-                    isActive && { color: activeColor },
+                    styles.toggleText,
+                    viewMode === "quantity" && styles.toggleTextActive,
                   ]}
                 >
-                  {type.label}
+                  Quantité
                 </Text>
               </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <View style={styles.toggleContainer}>
-          {typeFilter !== "seins" && (
+            )}
             <TouchableOpacity
               style={[
                 styles.toggleButton,
-                viewMode === "quantity" && styles.toggleButtonActive,
+                viewMode === "frequency" && styles.toggleButtonActive,
               ]}
-              onPress={() => setViewMode("quantity")}
+              onPress={() => setViewMode("frequency")}
             >
               <FontAwesome
-                name="droplet"
+                name="clock"
                 size={14}
-                color={viewMode === "quantity" ? COLORS.blue : COLORS.muted}
+                color={viewMode === "frequency" ? COLORS.blue : COLORS.muted}
               />
               <Text
                 style={[
                   styles.toggleText,
-                  viewMode === "quantity" && styles.toggleTextActive,
+                  viewMode === "frequency" && styles.toggleTextActive,
                 ]}
               >
-                Quantité
+                Fréquence
               </Text>
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={[
-              styles.toggleButton,
-              viewMode === "frequency" && styles.toggleButtonActive,
-            ]}
-            onPress={() => setViewMode("frequency")}
-          >
-            <FontAwesome
-              name="clock"
-              size={14}
-              color={viewMode === "frequency" ? COLORS.blue : COLORS.muted}
-            />
-            <Text
-              style={[
-                styles.toggleText,
-                viewMode === "frequency" && styles.toggleTextActive,
-              ]}
-            >
-              Fréquence
-            </Text>
-          </TouchableOpacity>
-        </View>
+          </View>
 
-        <View style={styles.metricsRow}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>
-              {totalCountLabel}
-              {totalCountLabel !== "Repas" && totalWeekCount > 1 ? "s" : ""}
-            </Text>
-            <Text style={styles.metricValue}>{totalWeekCount}</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>{countAverageLabel}</Text>
-            <Text style={styles.metricValue}>{dailyAverageCount}</Text>
-          </View>
-          {viewMode === "quantity" && typeFilter !== "seins" && (
+          <View style={styles.metricsRow}>
             <View style={styles.metricCard}>
-              <Text style={styles.metricLabel}>Total lait</Text>
-              <Text style={styles.metricValue}>{totalWeekQuantity} ml</Text>
+              <Text style={styles.metricLabel}>
+                {totalCountLabel}
+                {totalCountLabel !== "Repas" && totalWeekCount > 1 ? "s" : ""}
+              </Text>
+              <Text style={styles.metricValue}>{totalWeekCount}</Text>
             </View>
-          )}
-        </View>
-        {typeFilter === "tous" && viewMode === "frequency" && (
-          <View style={styles.legendRow}>
-            <View style={styles.legendList}>
-              <View style={styles.legendItem}>
-                <View
-                  style={[
-                    styles.legendSwatch,
-                    { backgroundColor: COLORS.green },
-                  ]}
-                />
-                <Text style={styles.legendLabel}>Tétées</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View
-                  style={[
-                    styles.legendSwatch,
-                    { backgroundColor: COLORS.cyan },
-                  ]}
-                />
-                <Text style={styles.legendLabel}>Biberons</Text>
-              </View>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricLabel}>{countAverageLabel}</Text>
+              <Text style={styles.metricValue}>{dailyAverageCount}</Text>
             </View>
-            <TouchableOpacity
-              style={[
-                styles.groupToggle,
-                isGrouped && styles.groupToggleActive,
-              ]}
-              onPress={() => setIsGroupedView((prev) => !prev)}
-            >
-              <Text
-                style={[
-                  styles.groupToggleText,
-                  isGrouped && styles.groupToggleTextActive,
-                ]}
-              >
-                Vue groupée
-              </Text>
-            </TouchableOpacity>
+            {viewMode === "quantity" && typeFilter !== "seins" && (
+              <View style={styles.metricCard}>
+                <Text style={styles.metricLabel}>Total lait</Text>
+                <Text style={styles.metricValue}>{totalWeekQuantity} ml</Text>
+              </View>
+            )}
           </View>
-        )}
-
-        <View style={styles.chartContainer}>
-          <View style={styles.yAxisContainer}>
-            {yAxisLabels.map((label, index) => (
-              <View
-                key={index}
-                style={[styles.yAxisLabel, { top: label.y - 8 }]}
-              >
-                <Text style={styles.yAxisText}>{label.value}</Text>
-              </View>
-            ))}
-          </View>
-
-          <GestureDetector gesture={tapGesture}>
-            <Canvas style={styles.canvas}>
-              <RoundedRect
-                x={CHART_PADDING.left}
-                y={CHART_PADDING.top}
-                width={CHART_WIDTH}
-                height={CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom}
-                r={12}
-                color={COLORS.surface}
-              >
-                <LinearGradient
-                  start={vec(CHART_PADDING.left, CHART_PADDING.top)}
-                  end={vec(
-                    CHART_PADDING.left,
-                    CHART_HEIGHT - CHART_PADDING.bottom,
-                  )}
-                  colors={["#f5f9ff", "#ffffff"]}
-                />
-              </RoundedRect>
-
-              {yAxisLabels.map((label, index) => (
-                <SkiaLine
-                  key={`grid-${index}`}
-                  p1={vec(CHART_PADDING.left, label.y)}
-                  p2={vec(SCREEN_WIDTH - CHART_PADDING.right, label.y)}
-                  color="rgba(30, 60, 90, 0.08)"
-                  strokeWidth={1}
-                />
-              ))}
-
-              {bars.map((bar, index) => {
-                if (isGrouped && bar.segments) {
-                  const baseY = CHART_PADDING.top + chartAreaHeight;
-                  const biberonsHeight = bar.segments.biberonsHeight;
-                  const seinsHeight = bar.segments.seinsHeight;
-                  const groupGap = 4;
-                  const subWidth = Math.max((bar.width - groupGap) / 2, 2);
-                  const seinsX = bar.x;
-                  const biberonsX = bar.x + subWidth + groupGap;
-                  const seinsY = baseY - seinsHeight;
-                  const biberonsY = baseY - biberonsHeight;
-                  return (
-                    <Group key={`bar-${index}`}>
-                      {seinsHeight > 0 && (
-                        <RoundedRect
-                          x={seinsX}
-                          y={seinsY}
-                          width={subWidth}
-                          height={Math.max(seinsHeight, 2)}
-                          r={6}
-                          color={COLORS.green}
-                        />
-                      )}
-                      {biberonsHeight > 0 && (
-                        <RoundedRect
-                          x={biberonsX}
-                          y={biberonsY}
-                          width={subWidth}
-                          height={Math.max(biberonsHeight, 2)}
-                          r={6}
-                          color={COLORS.cyan}
-                        >
-                          {bar.isMax && (
-                            <Shadow
-                              dx={0}
-                              dy={2}
-                              blur={6}
-                              color="rgba(245, 183, 0, 0.35)"
-                            />
-                          )}
-                        </RoundedRect>
-                      )}
-                    </Group>
-                  );
-                }
-
-                if (isStacked && bar.segments) {
-                  const baseY = CHART_PADDING.top + chartAreaHeight;
-                  const biberonsHeight = bar.segments.biberonsHeight;
-                  const seinsHeight = bar.segments.seinsHeight;
-                  const biberonsY = baseY - biberonsHeight;
-                  const seinsY = baseY - biberonsHeight - seinsHeight;
-                  return (
-                    <Group key={`bar-${index}`}>
-                      {biberonsHeight > 0 && (
-                        <RoundedRect
-                          x={bar.x}
-                          y={biberonsY}
-                          width={bar.width}
-                          height={Math.max(biberonsHeight, 2)}
-                          r={6}
-                          color={COLORS.cyan}
-                        />
-                      )}
-                      {seinsHeight > 0 && (
-                        <RoundedRect
-                          x={bar.x}
-                          y={seinsY}
-                          width={bar.width}
-                          height={Math.max(seinsHeight, 2)}
-                          r={6}
-                          color={COLORS.green}
-                        >
-                          {bar.isMax && (
-                            <Shadow
-                              dx={0}
-                              dy={2}
-                              blur={6}
-                              color="rgba(245, 183, 0, 0.35)"
-                            />
-                          )}
-                        </RoundedRect>
-                      )}
-                    </Group>
-                  );
-                }
-
-                return (
-                  <RoundedRect
-                    key={`bar-${index}`}
-                    x={bar.x}
-                    y={bar.y}
-                    width={bar.width}
-                    height={bar.height}
-                    r={6}
-                    color={bar.color}
-                  >
-                    {bar.isMax && (
-                      <Shadow
-                        dx={0}
-                        dy={2}
-                        blur={6}
-                        color="rgba(245, 183, 0, 0.35)"
-                      />
-                    )}
-                  </RoundedRect>
-                );
-              })}
-            </Canvas>
-          </GestureDetector>
-
-          {selectedBarIndex !== null && (
-            <Animated.View style={[styles.tooltip, animatedTooltipStyle]}>
-              <Text style={styles.tooltipDay}>
-                {bars[selectedBarIndex].jour}
-              </Text>
-              <Text style={styles.tooltipValue}>
-                {bars[selectedBarIndex].value}{" "}
-                {viewMode === "quantity" ? "ml" : frequencyUnit}
-              </Text>
-              {typeFilter === "tous" && viewMode === "frequency" && (
-                <Text style={styles.tooltipDetail}>
-                  {weeklyData[bars[selectedBarIndex].jour].seinsCount} tétée
-                  {weeklyData[bars[selectedBarIndex].jour].seinsCount > 1
-                    ? "s"
-                    : ""}
-                  {"\n"}
-                  {weeklyData[bars[selectedBarIndex].jour].biberonsCount}{" "}
-                  biberon
-                  {weeklyData[bars[selectedBarIndex].jour].biberonsCount > 1
-                    ? "s"
-                    : ""}
-                </Text>
-              )}
-            </Animated.View>
-          )}
-
-          <View style={styles.xAxisContainer}>
-            {jours.map((jour, index) => (
-              <Text
-                key={`xlabel-${index}`}
-                style={[
-                  styles.xAxisText,
-                  { left: bars[index].x + bars[index].width / 2 - 15 },
-                ]}
-              >
-                {jour}
-              </Text>
-            ))}
-          </View>
-        </View>
-
-        {typeFilter === "tous" ? (
-          <View style={styles.statsContainer}>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{totalWeekCount}</Text>
-                <Text style={styles.statLabel}>
-                  {totalCountLabel}
-                  {totalCountLabel !== "Repas" && totalWeekCount > 1 ? "s" : ""}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <FontAwesome
-                  name="person-breastfeeding"
-                  size={14}
-                  color={COLORS.green}
-                />
-                <Text style={[styles.statValue, { color: COLORS.green }]}>
-                  {totalSeinsCount}
-                </Text>
-                <Text style={styles.statLabel}>
-                  Tétée{totalSeinsCount > 1 ? "s" : ""}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <FontAwesome name="jar-wheat" size={14} color={COLORS.cyan} />
-                <Text style={[styles.statValue, { color: COLORS.cyan }]}>
-                  {totalBiberonsCount}
-                </Text>
-                <Text style={styles.statLabel}>
-                  Biberon{totalBiberonsCount > 1 ? "s" : ""}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{totalWeekQuantity} ml</Text>
-                <Text style={styles.statLabel}>Total lait</Text>
-              </View>
-            </View>
-          </View>
-        ) : viewMode === "quantity" ? (
-          <View style={styles.statsContainer}>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: COLORS.cyan }]}>
-                  {totalWeekQuantity} ml
-                </Text>
-                <Text style={styles.statLabel}>Total semaine</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: COLORS.cyan }]}>
-                  {dailyAverageQuantity} ml
-                </Text>
-                <Text style={styles.statLabel}>{quantityAverageLabel}</Text>
-              </View>
-              {maxQuantity > 0 && (
-                <View style={styles.statItem}>
-                  <FontAwesome name="trophy" size={16} color={COLORS.gold} />
-                  <Text style={[styles.statValue, { color: COLORS.gold }]}>
-                    {bestQuantityDay}
-                  </Text>
-                  <Text style={styles.statLabel}>Record: {maxQuantity} ml</Text>
+          {typeFilter === "tous" && viewMode === "frequency" && (
+            <View style={styles.legendRow}>
+              <View style={styles.legendList}>
+                <View style={styles.legendItem}>
+                  <View
+                    style={[
+                      styles.legendSwatch,
+                      { backgroundColor: COLORS.green },
+                    ]}
+                  />
+                  <Text style={styles.legendLabel}>Tétées</Text>
                 </View>
-              )}
+                <View style={styles.legendItem}>
+                  <View
+                    style={[
+                      styles.legendSwatch,
+                      { backgroundColor: COLORS.cyan },
+                    ]}
+                  />
+                  <Text style={styles.legendLabel}>Biberons</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.groupToggle,
+                  isGrouped && styles.groupToggleActive,
+                ]}
+                onPress={() => setIsGroupedView((prev) => !prev)}
+              >
+                <Text
+                  style={[
+                    styles.groupToggleText,
+                    isGrouped && styles.groupToggleTextActive,
+                  ]}
+                >
+                  Vue groupée
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.chartContainer}>
+            <View style={styles.yAxisContainer}>
+              {yAxisLabels.map((label, index) => (
+                <View
+                  key={index}
+                  style={[styles.yAxisLabel, { top: label.y - 8 }]}
+                >
+                  <Text style={styles.yAxisText}>{label.value}</Text>
+                </View>
+              ))}
+            </View>
+
+            <GestureDetector gesture={tapGesture}>
+              <Canvas style={styles.canvas}>
+                <RoundedRect
+                  x={CHART_PADDING.left}
+                  y={CHART_PADDING.top}
+                  width={CHART_WIDTH}
+                  height={
+                    CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
+                  }
+                  r={12}
+                  color={COLORS.surface}
+                >
+                  <LinearGradient
+                    start={vec(CHART_PADDING.left, CHART_PADDING.top)}
+                    end={vec(
+                      CHART_PADDING.left,
+                      CHART_HEIGHT - CHART_PADDING.bottom,
+                    )}
+                    colors={["#f5f9ff", "#ffffff"]}
+                  />
+                </RoundedRect>
+
+                {yAxisLabels.map((label, index) => (
+                  <SkiaLine
+                    key={`grid-${index}`}
+                    p1={vec(CHART_PADDING.left, label.y)}
+                    p2={vec(SCREEN_WIDTH - CHART_PADDING.right, label.y)}
+                    color="rgba(30, 60, 90, 0.08)"
+                    strokeWidth={1}
+                  />
+                ))}
+
+                {bars.map((bar, index) => {
+                  if (isGrouped && bar.segments) {
+                    const baseY = CHART_PADDING.top + chartAreaHeight;
+                    const biberonsHeight = bar.segments.biberonsHeight;
+                    const seinsHeight = bar.segments.seinsHeight;
+                    const groupGap = 4;
+                    const subWidth = Math.max((bar.width - groupGap) / 2, 2);
+                    const seinsX = bar.x;
+                    const biberonsX = bar.x + subWidth + groupGap;
+                    const seinsY = baseY - seinsHeight;
+                    const biberonsY = baseY - biberonsHeight;
+                    return (
+                      <Group key={`bar-${index}`}>
+                        {seinsHeight > 0 && (
+                          <RoundedRect
+                            x={seinsX}
+                            y={seinsY}
+                            width={subWidth}
+                            height={Math.max(seinsHeight, 2)}
+                            r={6}
+                            color={COLORS.green}
+                          />
+                        )}
+                        {biberonsHeight > 0 && (
+                          <RoundedRect
+                            x={biberonsX}
+                            y={biberonsY}
+                            width={subWidth}
+                            height={Math.max(biberonsHeight, 2)}
+                            r={6}
+                            color={COLORS.cyan}
+                          >
+                            {bar.isMax && (
+                              <Shadow
+                                dx={0}
+                                dy={2}
+                                blur={6}
+                                color="rgba(245, 183, 0, 0.35)"
+                              />
+                            )}
+                          </RoundedRect>
+                        )}
+                      </Group>
+                    );
+                  }
+
+                  if (isStacked && bar.segments) {
+                    const baseY = CHART_PADDING.top + chartAreaHeight;
+                    const biberonsHeight = bar.segments.biberonsHeight;
+                    const seinsHeight = bar.segments.seinsHeight;
+                    const biberonsY = baseY - biberonsHeight;
+                    const seinsY = baseY - biberonsHeight - seinsHeight;
+                    return (
+                      <Group key={`bar-${index}`}>
+                        {biberonsHeight > 0 && (
+                          <RoundedRect
+                            x={bar.x}
+                            y={biberonsY}
+                            width={bar.width}
+                            height={Math.max(biberonsHeight, 2)}
+                            r={6}
+                            color={COLORS.cyan}
+                          />
+                        )}
+                        {seinsHeight > 0 && (
+                          <RoundedRect
+                            x={bar.x}
+                            y={seinsY}
+                            width={bar.width}
+                            height={Math.max(seinsHeight, 2)}
+                            r={6}
+                            color={COLORS.green}
+                          >
+                            {bar.isMax && (
+                              <Shadow
+                                dx={0}
+                                dy={2}
+                                blur={6}
+                                color="rgba(245, 183, 0, 0.35)"
+                              />
+                            )}
+                          </RoundedRect>
+                        )}
+                      </Group>
+                    );
+                  }
+
+                  return (
+                    <RoundedRect
+                      key={`bar-${index}`}
+                      x={bar.x}
+                      y={bar.y}
+                      width={bar.width}
+                      height={bar.height}
+                      r={6}
+                      color={bar.color}
+                    >
+                      {bar.isMax && (
+                        <Shadow
+                          dx={0}
+                          dy={2}
+                          blur={6}
+                          color="rgba(245, 183, 0, 0.35)"
+                        />
+                      )}
+                    </RoundedRect>
+                  );
+                })}
+              </Canvas>
+            </GestureDetector>
+
+            {selectedBarIndex !== null && (
+              <Animated.View style={[styles.tooltip, animatedTooltipStyle]}>
+                <Text style={styles.tooltipDay}>
+                  {bars[selectedBarIndex].jour}
+                </Text>
+                <Text style={styles.tooltipValue}>
+                  {bars[selectedBarIndex].value}{" "}
+                  {viewMode === "quantity" ? "ml" : frequencyUnit}
+                </Text>
+                {typeFilter === "tous" && viewMode === "frequency" && (
+                  <Text style={styles.tooltipDetail}>
+                    {weeklyData[bars[selectedBarIndex].jour].seinsCount} tétée
+                    {weeklyData[bars[selectedBarIndex].jour].seinsCount > 1
+                      ? "s"
+                      : ""}
+                    {"\n"}
+                    {weeklyData[bars[selectedBarIndex].jour].biberonsCount}{" "}
+                    biberon
+                    {weeklyData[bars[selectedBarIndex].jour].biberonsCount > 1
+                      ? "s"
+                      : ""}
+                  </Text>
+                )}
+              </Animated.View>
+            )}
+
+            <View style={styles.xAxisContainer}>
+              {jours.map((jour, index) => (
+                <Text
+                  key={`xlabel-${index}`}
+                  style={[
+                    styles.xAxisText,
+                    { left: bars[index].x + bars[index].width / 2 - 15 },
+                  ]}
+                >
+                  {jour}
+                </Text>
+              ))}
             </View>
           </View>
-        ) : (
-          <View style={styles.statsContainer}>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text
-                  style={[
-                    styles.statValue,
-                    typeFilter === "seins"
-                      ? { color: COLORS.green }
-                      : { color: COLORS.cyan },
-                  ]}
-                >
-                  {totalWeekCount}
-                </Text>
-                <Text style={styles.statLabel}>
-                  {totalCountLabel}
-                  {totalWeekCount > 1 ? "s" : ""}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text
-                  style={[
-                    styles.statValue,
-                    typeFilter === "seins"
-                      ? { color: COLORS.green }
-                      : { color: COLORS.cyan },
-                  ]}
-                >
-                  {dailyAverageCount}
-                </Text>
-                <Text style={styles.statLabel}>{countAverageLabel}</Text>
-              </View>
-              {maxCount > 0 && (
+
+          {typeFilter === "tous" ? (
+            <View style={styles.statsContainer}>
+              <View style={styles.statsRow}>
                 <View style={styles.statItem}>
-                  <FontAwesome name="trophy" size={16} color={COLORS.gold} />
-                  <Text style={[styles.statValue, { color: COLORS.gold }]}>
-                    {bestCountDay}
+                  <Text style={styles.statValue}>{totalWeekCount}</Text>
+                  <Text style={styles.statLabel}>
+                    {totalCountLabel}
+                    {totalCountLabel !== "Repas" && totalWeekCount > 1
+                      ? "s"
+                      : ""}
+                  </Text>
+                </View>
+                <View style={styles.statItem}>
+                  <FontAwesome
+                    name="person-breastfeeding"
+                    size={14}
+                    color={COLORS.green}
+                  />
+                  <Text style={[styles.statValue, { color: COLORS.green }]}>
+                    {totalSeinsCount}
                   </Text>
                   <Text style={styles.statLabel}>
-                    {recordLabel}
-                    {maxCount > 1 ? "s" : ""} {maxCount}
+                    Tétée{totalSeinsCount > 1 ? "s" : ""}
                   </Text>
                 </View>
-              )}
+                <View style={styles.statItem}>
+                  <FontAwesome name="jar-wheat" size={14} color={COLORS.cyan} />
+                  <Text style={[styles.statValue, { color: COLORS.cyan }]}>
+                    {totalBiberonsCount}
+                  </Text>
+                  <Text style={styles.statLabel}>
+                    Biberon{totalBiberonsCount > 1 ? "s" : ""}
+                  </Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{totalWeekQuantity} ml</Text>
+                  <Text style={styles.statLabel}>Total lait</Text>
+                </View>
+              </View>
             </View>
-          </View>
-        )}
+          ) : viewMode === "quantity" ? (
+            <View style={styles.statsContainer}>
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, { color: COLORS.cyan }]}>
+                    {totalWeekQuantity} ml
+                  </Text>
+                  <Text style={styles.statLabel}>Total semaine</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, { color: COLORS.cyan }]}>
+                    {dailyAverageQuantity} ml
+                  </Text>
+                  <Text style={styles.statLabel}>{quantityAverageLabel}</Text>
+                </View>
+                {maxQuantity > 0 && (
+                  <View style={styles.statItem}>
+                    <FontAwesome name="trophy" size={16} color={COLORS.gold} />
+                    <Text style={[styles.statValue, { color: COLORS.gold }]}>
+                      {bestQuantityDay}
+                    </Text>
+                    <Text style={styles.statLabel}>
+                      Record: {maxQuantity} ml
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.statsContainer}>
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text
+                    style={[
+                      styles.statValue,
+                      typeFilter === "seins"
+                        ? { color: COLORS.green }
+                        : { color: COLORS.cyan },
+                    ]}
+                  >
+                    {totalWeekCount}
+                  </Text>
+                  <Text style={styles.statLabel}>
+                    {totalCountLabel}
+                    {totalWeekCount > 1 ? "s" : ""}
+                  </Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text
+                    style={[
+                      styles.statValue,
+                      typeFilter === "seins"
+                        ? { color: COLORS.green }
+                        : { color: COLORS.cyan },
+                    ]}
+                  >
+                    {dailyAverageCount}
+                  </Text>
+                  <Text style={styles.statLabel}>{countAverageLabel}</Text>
+                </View>
+                {maxCount > 0 && (
+                  <View style={styles.statItem}>
+                    <FontAwesome name="trophy" size={16} color={COLORS.gold} />
+                    <Text style={[styles.statValue, { color: COLORS.gold }]}>
+                      {bestCountDay}
+                    </Text>
+                    <Text style={styles.statLabel}>
+                      {recordLabel}
+                      {maxCount > 1 ? "s" : ""} {maxCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
 
-        {totalWeekCount > 0 && (
-          <View style={styles.insightContainer}>
-            <FontAwesome name="lightbulb" size={16} color={COLORS.cyan} />
-            <View style={styles.insightContent}>
-              <Text style={styles.insightTitle}>
-                {typeFilter === "tous"
-                  ? "Aperçu global de la semaine"
-                  : `Aperçu ${typeFilter} de la semaine`}
-              </Text>
-              <Text style={styles.insightText}>
-                {typeFilter === "tous"
-                  ? `Cette semaine: ${totalSeinsCount} tétée${totalSeinsCount > 1 ? "s" : ""} au sein, ${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s" : ""} (${totalWeekQuantity} ml au total). ${
-                      totalSeinsCount > totalBiberonsCount
-                        ? "L'allaitement domine cette semaine."
-                        : totalBiberonsCount > totalSeinsCount
-                          ? "Les biberons dominent cette semaine."
-                          : "Équilibre entre seins et biberons."
-                    }`
-                  : typeFilter === "seins"
-                    ? `${totalSeinsCount} tétée{${totalSeinsCount > 1 ? "s" : ""} au sein cette semaine, soit ${dailyAverageCount} par jour en moyenne. ${
-                        maxCount > dailyAverageCount * 1.5
-                          ? `Le ${bestCountDay} a été particulièrement actif.`
-                          : "Rythme régulier cette semaine."
+          {totalWeekCount > 0 && (
+            <View style={styles.insightContainer}>
+              <FontAwesome name="lightbulb" size={16} color={COLORS.cyan} />
+              <View style={styles.insightContent}>
+                <Text style={styles.insightTitle}>
+                  {typeFilter === "tous"
+                    ? "Aperçu global de la semaine"
+                    : `Aperçu ${typeFilter} de la semaine`}
+                </Text>
+                <Text style={styles.insightText}>
+                  {typeFilter === "tous"
+                    ? `Cette semaine: ${totalSeinsCount} tétée${totalSeinsCount > 1 ? "s" : ""} au sein, ${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s" : ""} (${totalWeekQuantity} ml au total). ${
+                        totalSeinsCount > totalBiberonsCount
+                          ? "L'allaitement domine cette semaine."
+                          : totalBiberonsCount > totalSeinsCount
+                            ? "Les biberons dominent cette semaine."
+                            : "Équilibre entre seins et biberons."
                       }`
-                    : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberon{${totalBiberonsCount > 1 ? "s" : ""} au total). Moyenne de ${dailyAverageQuantity} ml par jour.`}
-              </Text>
+                    : typeFilter === "seins"
+                      ? `${totalSeinsCount} tétée{${totalSeinsCount > 1 ? "s" : ""} au sein cette semaine, soit ${dailyAverageCount} par jour en moyenne. ${
+                          maxCount > dailyAverageCount * 1.5
+                            ? `Le ${bestCountDay} a été particulièrement actif.`
+                            : "Rythme régulier cette semaine."
+                        }`
+                      : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberon{${totalBiberonsCount > 1 ? "s" : ""} au total). Moyenne de ${dailyAverageQuantity} ml par jour.`}
+                </Text>
+              </View>
             </View>
-          </View>
-        )}
-      </View>
+          )}
+        </View>
+      )}
     </GestureHandlerRootView>
   );
 }

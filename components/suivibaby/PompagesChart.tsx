@@ -135,8 +135,8 @@ export default function PompagesChart({ pompages }: Props) {
 
   const selectedX = useSharedValue(0);
   const selectedY = useSharedValue(0);
-  const barScale = useSharedValue(1);
-  const barLift = useSharedValue(0);
+  const barTooltipX = useSharedValue(0);
+  const barTooltipY = useSharedValue(0);
 
   useEffect(() => {
     setSelectedPointIndex(null);
@@ -147,18 +147,6 @@ export default function PompagesChart({ pompages }: Props) {
   }, [currentWeek]);
 
   const isEmpty = !pompages || pompages.length === 0;
-
-  if (isEmpty) {
-    return (
-      <View style={styles.emptyContainer}>
-        <FontAwesome name="pump-medical" size={64} color="#e9ecef" />
-        <Text style={styles.emptyTitle}>Aucune donnée disponible</Text>
-        <Text style={styles.emptySubtitle}>
-          Commencez à enregistrer vos sessions pour voir les statistiques
-        </Text>
-      </View>
-    );
-  }
 
   const dailyPompages = useMemo(() => {
     return pompages
@@ -356,21 +344,34 @@ export default function PompagesChart({ pompages }: Props) {
       const barIndex = findBarAtPosition(event.x);
       if (barIndex !== null && weeklyBars[barIndex].value > 0) {
         setSelectedBarIndex(barIndex);
-        barScale.value = withSpring(1.08);
-        barLift.value = withSpring(-6);
+        barTooltipX.value = withSpring(
+          weeklyBars[barIndex].x + weeklyBars[barIndex].width / 2 - 50,
+        );
+        barTooltipY.value = withSpring(weeklyBars[barIndex].y - 60);
       } else {
         setSelectedBarIndex(null);
-        barScale.value = withSpring(1);
-        barLift.value = withSpring(0);
       }
     });
 
   const animatedBarTooltipStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: barScale.value }, { translateY: barLift.value }],
+    transform: [
+      { translateX: barTooltipX.value },
+      { translateY: barTooltipY.value },
+    ],
   }));
 
   return (
     <GestureHandlerRootView style={styles.container}>
+      {isEmpty ? (
+        <View style={styles.emptyContainer}>
+          <FontAwesome name="pump-medical" size={64} color="#e9ecef" />
+          <Text style={styles.emptyTitle}>Aucune donnée disponible</Text>
+          <Text style={styles.emptySubtitle}>
+            Commencez à enregistrer vos sessions pour voir les statistiques
+          </Text>
+        </View>
+      ) : (
+      <>
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <View style={styles.iconBadge}>
@@ -401,7 +402,7 @@ export default function PompagesChart({ pompages }: Props) {
             style={styles.todayButton}
             onPress={() => setCurrentDay(startOfDay(new Date()))}
           >
-            <Text style={styles.todayText}>Aujourd'hui</Text>
+            <Text style={styles.todayText}>Aujourd&apos;hui</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -702,13 +703,6 @@ export default function PompagesChart({ pompages }: Props) {
               style={[
                 styles.barTooltip,
                 animatedBarTooltipStyle,
-                {
-                  left:
-                    weeklyBars[selectedBarIndex].x +
-                    weeklyBars[selectedBarIndex].width / 2 -
-                    50,
-                  top: weeklyBars[selectedBarIndex].y - 60,
-                },
               ]}
             >
               <Text style={styles.tooltipTime}>
@@ -738,6 +732,8 @@ export default function PompagesChart({ pompages }: Props) {
           </View>
         </View>
       </View>
+      </>
+      )}
     </GestureHandlerRootView>
   );
 }

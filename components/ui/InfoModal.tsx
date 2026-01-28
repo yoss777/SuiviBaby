@@ -46,13 +46,16 @@ export function InfoModal({
   confirmText = 'OK',
   backgroundColor,
   textColor,
-  confirmButtonColor = '#28a745',
+  confirmButtonColor,
   confirmTextColor,
   onClose,
   onConfirm,
 }: InfoModalProps) {
+  const isErrorTitle = /erreur|error|echec|failed|❌/i.test(title);
+  const resolvedConfirmButtonColor =
+    confirmButtonColor ?? (isErrorTitle ? "#dc3545" : "#28a745");
   const resolvedConfirmTextColor =
-    confirmTextColor ?? getReadableTextColor(confirmButtonColor);
+    confirmTextColor ?? getReadableTextColor(resolvedConfirmButtonColor);
   const showConfirmButton = !!confirmText;
   const renderMessage = () => {
     if (typeof message === 'string') {
@@ -107,7 +110,7 @@ export function InfoModal({
                 style={[
                   styles.modalButton,
                   styles.confirmButton,
-                  { backgroundColor: confirmButtonColor },
+                  { backgroundColor: resolvedConfirmButtonColor },
                 ]}
                 onPress={handleConfirm}
                 activeOpacity={0.7}
