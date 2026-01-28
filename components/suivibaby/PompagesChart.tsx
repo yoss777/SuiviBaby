@@ -285,7 +285,12 @@ export default function PompagesChart({ pompages }: Props) {
   const weeklyValues = jours.map((j) => weeklyData[j]);
   const maxWeekly = Math.max(...weeklyValues, 0);
   const weeklyTotal = weeklyValues.reduce((a, b) => a + b, 0);
-  const weeklyAverage = Math.round(weeklyTotal / 7);
+  const daysWithWeeklyData = weeklyValues.filter((v) => v > 0).length;
+  const weeklyAverageLabel = `Moyenne/jour (${daysWithWeeklyData}j)`;
+  const weeklyAverage =
+    weeklyTotal > 0 && daysWithWeeklyData > 0
+      ? Math.round(weeklyTotal / daysWithWeeklyData)
+      : 0;
   const bestDay = jours[weeklyValues.indexOf(maxWeekly)];
 
   const weeklyBarWidth = CHART_WIDTH / (jours.length * 1.45);
@@ -371,78 +376,307 @@ export default function PompagesChart({ pompages }: Props) {
           </Text>
         </View>
       ) : (
-      <>
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.iconBadge}>
-            <FontAwesome name="pump-medical" size={18} color={COLORS.green} />
+        <>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.iconBadge}>
+                <FontAwesome
+                  name="pump-medical"
+                  size={18}
+                  color={COLORS.green}
+                />
+              </View>
+              <View style={styles.headerText}>
+                <Text style={styles.sectionTitle}>Pompages du jour</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {currentDay.toLocaleDateString("fr-FR", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                  })}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.navigationRow}>
+              <TouchableOpacity
+                style={styles.navButton}
+                onPress={() => setCurrentDay(addDays(currentDay, -1))}
+              >
+                <FontAwesome
+                  name="chevron-left"
+                  size={14}
+                  color={COLORS.muted}
+                />
+                <Text style={styles.navText}>Préc.</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.todayButton}
+                onPress={() => setCurrentDay(startOfDay(new Date()))}
+              >
+                <Text style={styles.todayText}>Aujourd&apos;hui</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.navButton}
+                onPress={() => setCurrentDay(addDays(currentDay, 1))}
+              >
+                <Text style={styles.navText}>Suiv.</Text>
+                <FontAwesome
+                  name="chevron-right"
+                  size={14}
+                  color={COLORS.muted}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {dailyValues.length === 0 ? (
+              <View style={styles.noDataContainer}>
+                <FontAwesome
+                  name="info-circle"
+                  size={24}
+                  color={COLORS.muted}
+                />
+                <Text style={styles.noDataText}>Aucune session ce jour</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.metricsRow}>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Total</Text>
+                    <Text style={styles.metricValue}>{dailyTotal} ml</Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>
+                      Session{dailyValues.length > 1 ? "s" : ""}
+                    </Text>
+                    <Text style={styles.metricValue}>{dailyValues.length}</Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Moyenne</Text>
+                    <Text style={styles.metricValue}>{dailyAverage} ml</Text>
+                  </View>
+                </View>
+
+                <View style={styles.chartContainer}>
+                  <View style={styles.yAxisContainer}>
+                    {yAxisLabels.map((label, index) => (
+                      <View
+                        key={`y-label-${index}`}
+                        style={[styles.yAxisLabel, { top: label.y - 8 }]}
+                      >
+                        <Text style={styles.yAxisText}>{label.value}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <GestureDetector gesture={pointGesture}>
+                    <Canvas style={[styles.canvas, { width: SCREEN_WIDTH + 20 }]}>
+                      <RoundedRect
+                        x={CHART_PADDING.left}
+                        y={CHART_PADDING.top}
+                        width={CHART_WIDTH}
+                        height={
+                          CHART_HEIGHT -
+                          CHART_PADDING.top -
+                          CHART_PADDING.bottom
+                        }
+                        r={12}
+                        color={COLORS.surface}
+                      >
+                        <LinearGradient
+                          start={vec(CHART_PADDING.left, CHART_PADDING.top)}
+                          end={vec(
+                            CHART_PADDING.left,
+                            CHART_HEIGHT - CHART_PADDING.bottom,
+                          )}
+                          colors={["#f4fbf5", "#ffffff"]}
+                        />
+                      </RoundedRect>
+
+                      {yAxisLabels.map((label, index) => (
+                        <SkiaLine
+                          key={`grid-${index}`}
+                          p1={vec(CHART_PADDING.left, label.y)}
+                          p2={vec(SCREEN_WIDTH - CHART_PADDING.right, label.y)}
+                          color="rgba(34, 75, 44, 0.08)"
+                          strokeWidth={1}
+                        />
+                      ))}
+
+                      <Path path={fillPath}>
+                        <LinearGradient
+                          start={vec(0, CHART_PADDING.top)}
+                          end={vec(0, CHART_HEIGHT - CHART_PADDING.bottom)}
+                          colors={[
+                            "rgba(46, 125, 50, 0.3)",
+                            "rgba(46, 125, 50, 0.02)",
+                          ]}
+                        />
+                      </Path>
+
+                      <Path
+                        path={linePath}
+                        style="stroke"
+                        strokeWidth={3}
+                        color={COLORS.green}
+                      >
+                        <Shadow
+                          dx={0}
+                          dy={2}
+                          blur={4}
+                          color="rgba(46, 125, 50, 0.35)"
+                        />
+                      </Path>
+
+                      {chartPoints.map((point, index) => {
+                        const isRecord = point.value === maxDaily;
+                        return (
+                          <Circle
+                            key={`point-${index}`}
+                            cx={point.x}
+                            cy={point.y}
+                            r={isRecord ? 6.5 : 4.5}
+                            color={isRecord ? COLORS.gold : COLORS.green}
+                          >
+                            <Shadow
+                              dx={0}
+                              dy={2}
+                              blur={4}
+                              color={
+                                isRecord
+                                  ? "rgba(245, 183, 0, 0.45)"
+                                  : "rgba(46, 125, 50, 0.3)"
+                              }
+                            />
+                          </Circle>
+                        );
+                      })}
+                    </Canvas>
+                  </GestureDetector>
+
+                  {selectedPointIndex !== null && (
+                    <Animated.View
+                      style={[styles.tooltip, animatedTooltipStyle]}
+                    >
+                      <View style={styles.tooltipContent}>
+                        <Text style={styles.tooltipTime}>
+                          {chartPoints[selectedPointIndex].label}
+                        </Text>
+                        <Text style={styles.tooltipValue}>
+                          {chartPoints[selectedPointIndex].value} ml
+                        </Text>
+                      </View>
+                      <View style={styles.tooltipArrow} />
+                    </Animated.View>
+                  )}
+
+                  <View style={styles.xAxisContainer}>
+                    {chartPoints
+                      .filter(
+                        (_, i) =>
+                          i %
+                            Math.max(1, Math.floor(chartPoints.length / 5)) ===
+                          0,
+                      )
+                      .map((point, index) => (
+                        <Text
+                          key={`xlabel-${index}`}
+                          style={[styles.xAxisText, { left: point.x - 22 }]}
+                        >
+                          {point.label}
+                        </Text>
+                      ))}
+                  </View>
+                </View>
+              </>
+            )}
           </View>
-          <View style={styles.headerText}>
-            <Text style={styles.sectionTitle}>Pompages du jour</Text>
-            <Text style={styles.sectionSubtitle}>
-              {currentDay.toLocaleDateString("fr-FR", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })}
-            </Text>
-          </View>
-        </View>
 
-        <View style={styles.navigationRow}>
-          <TouchableOpacity
-            style={styles.navButton}
-            onPress={() => setCurrentDay(addDays(currentDay, -1))}
-          >
-            <FontAwesome name="chevron-left" size={14} color={COLORS.muted} />
-            <Text style={styles.navText}>Préc.</Text>
-          </TouchableOpacity>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.iconBadge}>
+                <FontAwesome
+                  name="calendar-week"
+                  size={18}
+                  color={COLORS.green}
+                />
+              </View>
+              <View style={styles.headerText}>
+                <Text style={styles.sectionTitle}>Semaine en cours</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {`${weekStart.toLocaleDateString("fr-FR", {
+                    day: "numeric",
+                    month: "short",
+                  })} - ${new Date(weekEnd.getTime() - 1).toLocaleDateString(
+                    "fr-FR",
+                    {
+                      day: "numeric",
+                      month: "short",
+                    },
+                  )}`}
+                </Text>
+              </View>
+            </View>
 
-          <TouchableOpacity
-            style={styles.todayButton}
-            onPress={() => setCurrentDay(startOfDay(new Date()))}
-          >
-            <Text style={styles.todayText}>Aujourd&apos;hui</Text>
-          </TouchableOpacity>
+            <View style={styles.navigationRow}>
+              <TouchableOpacity
+                style={styles.navButton}
+                onPress={() => setCurrentWeek(addWeeks(currentWeek, -1))}
+              >
+                <FontAwesome
+                  name="chevron-left"
+                  size={14}
+                  color={COLORS.muted}
+                />
+                <Text style={styles.navText}>Préc.</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.navButton}
-            onPress={() => setCurrentDay(addDays(currentDay, 1))}
-          >
-            <Text style={styles.navText}>Suiv.</Text>
-            <FontAwesome name="chevron-right" size={14} color={COLORS.muted} />
-          </TouchableOpacity>
-        </View>
+              <TouchableOpacity
+                style={styles.todayButton}
+                onPress={() => setCurrentWeek(getStartOfWeek(new Date()))}
+              >
+                <Text style={styles.todayText}>Cette semaine</Text>
+              </TouchableOpacity>
 
-        {dailyValues.length === 0 ? (
-          <View style={styles.noDataContainer}>
-            <FontAwesome name="info-circle" size={24} color={COLORS.muted} />
-            <Text style={styles.noDataText}>Aucune session ce jour</Text>
-          </View>
-        ) : (
-          <>
+              <TouchableOpacity
+                style={styles.navButton}
+                onPress={() => setCurrentWeek(addWeeks(currentWeek, 1))}
+              >
+                <Text style={styles.navText}>Suiv.</Text>
+                <FontAwesome
+                  name="chevron-right"
+                  size={14}
+                  color={COLORS.muted}
+                />
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.metricsRow}>
               <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>Total</Text>
-                <Text style={styles.metricValue}>{dailyTotal} ml</Text>
+                <Text style={styles.metricLabel}>Total semaine</Text>
+                <Text style={styles.metricValue}>{weeklyTotal} ml</Text>
               </View>
               <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>
-                  Session{dailyValues.length > 1 ? "s" : ""}
-                </Text>
-                <Text style={styles.metricValue}>{dailyValues.length}</Text>
+                <Text style={styles.metricLabel}>{weeklyAverageLabel}</Text>
+                <Text style={styles.metricValue}>{weeklyAverage} ml</Text>
               </View>
-              <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>Moyenne</Text>
-                <Text style={styles.metricValue}>{dailyAverage} ml</Text>
-              </View>
+              {maxWeekly > 0 && (
+                <View style={[styles.metricCard, styles.metricHighlight]}>
+                  <Text style={styles.metricLabel}>Record</Text>
+                  <Text style={[styles.metricValue, styles.metricValueGold]}>
+                    {bestDay}
+                  </Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.chartContainer}>
               <View style={styles.yAxisContainer}>
-                {yAxisLabels.map((label, index) => (
+                {weeklyYAxisLabels.map((label, index) => (
                   <View
-                    key={`y-label-${index}`}
+                    key={`wy-${index}`}
                     style={[styles.yAxisLabel, { top: label.y - 8 }]}
                   >
                     <Text style={styles.yAxisText}>{label.value}</Text>
@@ -450,7 +684,7 @@ export default function PompagesChart({ pompages }: Props) {
                 ))}
               </View>
 
-              <GestureDetector gesture={pointGesture}>
+              <GestureDetector gesture={weeklyTapGesture}>
                 <Canvas style={styles.canvas}>
                   <RoundedRect
                     x={CHART_PADDING.left}
@@ -468,13 +702,13 @@ export default function PompagesChart({ pompages }: Props) {
                         CHART_PADDING.left,
                         CHART_HEIGHT - CHART_PADDING.bottom,
                       )}
-                      colors={["#f4fbf5", "#ffffff"]}
+                      colors={["#f6fbf7", "#ffffff"]}
                     />
                   </RoundedRect>
 
-                  {yAxisLabels.map((label, index) => (
+                  {weeklyYAxisLabels.map((label, index) => (
                     <SkiaLine
-                      key={`grid-${index}`}
+                      key={`wgrid-${index}`}
                       p1={vec(CHART_PADDING.left, label.y)}
                       p2={vec(SCREEN_WIDTH - CHART_PADDING.right, label.y)}
                       color="rgba(34, 75, 44, 0.08)"
@@ -482,257 +716,61 @@ export default function PompagesChart({ pompages }: Props) {
                     />
                   ))}
 
-                  <Path path={fillPath}>
-                    <LinearGradient
-                      start={vec(0, CHART_PADDING.top)}
-                      end={vec(0, CHART_HEIGHT - CHART_PADDING.bottom)}
-                      colors={[
-                        "rgba(46, 125, 50, 0.3)",
-                        "rgba(46, 125, 50, 0.02)",
-                      ]}
-                    />
-                  </Path>
-
-                  <Path
-                    path={linePath}
-                    style="stroke"
-                    strokeWidth={3}
-                    color={COLORS.green}
-                  >
-                    <Shadow
-                      dx={0}
-                      dy={2}
-                      blur={4}
-                      color="rgba(46, 125, 50, 0.35)"
-                    />
-                  </Path>
-
-                  {chartPoints.map((point, index) => {
-                    const isRecord = point.value === maxDaily;
-                    return (
-                      <Circle
-                        key={`point-${index}`}
-                        cx={point.x}
-                        cy={point.y}
-                        r={isRecord ? 6.5 : 4.5}
-                        color={isRecord ? COLORS.gold : COLORS.green}
-                      >
+                  {weeklyBars.map((bar, index) => (
+                    <RoundedRect
+                      key={`bar-${index}`}
+                      x={bar.x}
+                      y={bar.y}
+                      width={bar.width}
+                      height={bar.height}
+                      r={6}
+                      color={bar.color}
+                    >
+                      {bar.isMax && (
                         <Shadow
                           dx={0}
                           dy={2}
-                          blur={4}
-                          color={
-                            isRecord
-                              ? "rgba(245, 183, 0, 0.45)"
-                              : "rgba(46, 125, 50, 0.3)"
-                          }
+                          blur={6}
+                          color="rgba(245, 183, 0, 0.4)"
                         />
-                      </Circle>
-                    );
-                  })}
+                      )}
+                    </RoundedRect>
+                  ))}
                 </Canvas>
               </GestureDetector>
 
-              {selectedPointIndex !== null && (
-                <Animated.View style={[styles.tooltip, animatedTooltipStyle]}>
-                  <View style={styles.tooltipContent}>
-                    <Text style={styles.tooltipTime}>
-                      {chartPoints[selectedPointIndex].label}
-                    </Text>
-                    <Text style={styles.tooltipValue}>
-                      {chartPoints[selectedPointIndex].value} ml
-                    </Text>
-                  </View>
-                  <View style={styles.tooltipArrow} />
+              {selectedBarIndex !== null && (
+                <Animated.View
+                  style={[styles.barTooltip, animatedBarTooltipStyle]}
+                >
+                  <Text style={styles.tooltipTime}>
+                    {weeklyBars[selectedBarIndex].jour}
+                  </Text>
+                  <Text style={styles.tooltipValue}>
+                    {weeklyBars[selectedBarIndex].value} ml
+                  </Text>
                 </Animated.View>
               )}
 
               <View style={styles.xAxisContainer}>
-                {chartPoints
-                  .filter(
-                    (_, i) =>
-                      i % Math.max(1, Math.floor(chartPoints.length / 5)) === 0,
-                  )
-                  .map((point, index) => (
-                    <Text
-                      key={`xlabel-${index}`}
-                      style={[styles.xAxisText, { left: point.x - 22 }]}
-                    >
-                      {point.label}
-                    </Text>
-                  ))}
+                {jours.map((jour, index) => (
+                  <Text
+                    key={`wx-${index}`}
+                    style={[
+                      styles.xAxisText,
+                      {
+                        left: weeklyBars[index].x - weeklyBarSpacing / 2,
+                        width: weeklyBarWidth + weeklyBarSpacing,
+                      },
+                    ]}
+                  >
+                    {jour}
+                  </Text>
+                ))}
               </View>
             </View>
-          </>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.iconBadge}>
-            <FontAwesome name="calendar-week" size={18} color={COLORS.green} />
           </View>
-          <View style={styles.headerText}>
-            <Text style={styles.sectionTitle}>Semaine en cours</Text>
-            <Text style={styles.sectionSubtitle}>
-              {`${weekStart.toLocaleDateString("fr-FR", {
-                day: "numeric",
-                month: "short",
-              })} - ${new Date(weekEnd.getTime() - 1).toLocaleDateString(
-                "fr-FR",
-                {
-                  day: "numeric",
-                  month: "short",
-                },
-              )}`}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.navigationRow}>
-          <TouchableOpacity
-            style={styles.navButton}
-            onPress={() => setCurrentWeek(addWeeks(currentWeek, -1))}
-          >
-            <FontAwesome name="chevron-left" size={14} color={COLORS.muted} />
-            <Text style={styles.navText}>Préc.</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.todayButton}
-            onPress={() => setCurrentWeek(getStartOfWeek(new Date()))}
-          >
-            <Text style={styles.todayText}>Cette semaine</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navButton}
-            onPress={() => setCurrentWeek(addWeeks(currentWeek, 1))}
-          >
-            <Text style={styles.navText}>Suiv.</Text>
-            <FontAwesome name="chevron-right" size={14} color={COLORS.muted} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.metricsRow}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Total semaine</Text>
-            <Text style={styles.metricValue}>{weeklyTotal} ml</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Moyenne/jour</Text>
-            <Text style={styles.metricValue}>{weeklyAverage} ml</Text>
-          </View>
-          {maxWeekly > 0 && (
-            <View style={[styles.metricCard, styles.metricHighlight]}>
-              <Text style={styles.metricLabel}>Record</Text>
-              <Text style={[styles.metricValue, styles.metricValueGold]}>
-                {bestDay}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.chartContainer}>
-          <View style={styles.yAxisContainer}>
-            {weeklyYAxisLabels.map((label, index) => (
-              <View
-                key={`wy-${index}`}
-                style={[styles.yAxisLabel, { top: label.y - 8 }]}
-              >
-                <Text style={styles.yAxisText}>{label.value}</Text>
-              </View>
-            ))}
-          </View>
-
-          <GestureDetector gesture={weeklyTapGesture}>
-            <Canvas style={styles.canvas}>
-              <RoundedRect
-                x={CHART_PADDING.left}
-                y={CHART_PADDING.top}
-                width={CHART_WIDTH}
-                height={CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom}
-                r={12}
-                color={COLORS.surface}
-              >
-                <LinearGradient
-                  start={vec(CHART_PADDING.left, CHART_PADDING.top)}
-                  end={vec(
-                    CHART_PADDING.left,
-                    CHART_HEIGHT - CHART_PADDING.bottom,
-                  )}
-                  colors={["#f6fbf7", "#ffffff"]}
-                />
-              </RoundedRect>
-
-              {weeklyYAxisLabels.map((label, index) => (
-                <SkiaLine
-                  key={`wgrid-${index}`}
-                  p1={vec(CHART_PADDING.left, label.y)}
-                  p2={vec(SCREEN_WIDTH - CHART_PADDING.right, label.y)}
-                  color="rgba(34, 75, 44, 0.08)"
-                  strokeWidth={1}
-                />
-              ))}
-
-              {weeklyBars.map((bar, index) => (
-                <RoundedRect
-                  key={`bar-${index}`}
-                  x={bar.x}
-                  y={bar.y}
-                  width={bar.width}
-                  height={bar.height}
-                  r={6}
-                  color={bar.color}
-                >
-                  {bar.isMax && (
-                    <Shadow
-                      dx={0}
-                      dy={2}
-                      blur={6}
-                      color="rgba(245, 183, 0, 0.4)"
-                    />
-                  )}
-                </RoundedRect>
-              ))}
-            </Canvas>
-          </GestureDetector>
-
-          {selectedBarIndex !== null && (
-            <Animated.View
-              style={[
-                styles.barTooltip,
-                animatedBarTooltipStyle,
-              ]}
-            >
-              <Text style={styles.tooltipTime}>
-                {weeklyBars[selectedBarIndex].jour}
-              </Text>
-              <Text style={styles.tooltipValue}>
-                {weeklyBars[selectedBarIndex].value} ml
-              </Text>
-            </Animated.View>
-          )}
-
-          <View style={styles.xAxisContainer}>
-            {jours.map((jour, index) => (
-              <Text
-                key={`wx-${index}`}
-                style={[
-                  styles.xAxisText,
-                  {
-                    left:
-                      weeklyBars[index].x + weeklyBars[index].width / 2 - 15,
-                  },
-                ]}
-              >
-                {jour}
-              </Text>
-            ))}
-          </View>
-        </View>
-      </View>
-      </>
+        </>
       )}
     </GestureHandlerRootView>
   );

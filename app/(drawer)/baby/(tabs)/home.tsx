@@ -1261,7 +1261,9 @@ export default function HomeDashboard() {
               color="#4A90E2"
               lastActivity={todayStats.meals.total.lastTime}
               lastTimestamp={todayStats.meals.total.lastTimestamp}
-              onPress={() => router.push("/baby/meals" as any)}
+              onPress={() =>
+                router.push("/baby/stats?tab=tetees&returnTo=home" as any)
+              }
             />
           )}
 
