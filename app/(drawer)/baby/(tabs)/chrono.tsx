@@ -9,6 +9,7 @@ import {
   ecouterActivitesHybrid,
   ecouterBainsHybrid,
   ecouterBiberonsHybrid,
+  ecouterJalonsHybrid,
   ecouterMedicamentsHybrid,
   ecouterMictionsHybrid,
   ecouterPompagesHybrid,
@@ -37,6 +38,7 @@ import React, {
 import {
   Animated,
   AppState,
+  Image,
   LayoutChangeEvent,
   ScrollView,
   StyleSheet,
@@ -60,7 +62,8 @@ type FilterType =
   | "immunos"
   | "diapers"
   | "routines"
-  | "activities";
+  | "activities"
+  | "milestones";
 
 type TimelineSection = {
   title: string;
@@ -86,6 +89,24 @@ const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   eveil: "Éveil sensoriel",
   sortie: "Sortie",
   autre: "Autre",
+};
+
+const JALON_TYPE_LABELS: Record<string, string> = {
+  dent: "Première dent",
+  pas: "Premiers pas",
+  sourire: "Premier sourire",
+  mot: "Premiers mots",
+  humeur: "Humeur du jour",
+  photo: "Moment photo",
+  autre: "Autre moment",
+};
+
+const MOOD_EMOJIS: Record<number, string> = {
+  1: "😢",
+  2: "😐",
+  3: "🙂",
+  4: "😄",
+  5: "🥰",
 };
 
 const EVENT_CONFIG: Record<
@@ -181,6 +202,12 @@ const EVENT_CONFIG: Record<
     short: "Activité",
     icon: { lib: "fa6", name: "play-circle" },
   },
+  jalon: {
+    color: eventColors.jalon.dark,
+    label: "Jalon",
+    short: "Jalon",
+    icon: { lib: "fa6", name: "star" },
+  },
   croissance: {
     color: "#8B5CF6",
     label: "Croissance",
@@ -234,6 +261,12 @@ const FILTER_CONFIG: Record<
     color: "#10b981",
     eventTypes: ["activite"],
   },
+  milestones: {
+    label: "Jalons",
+    icon: "star",
+    color: eventColors.jalon.dark,
+    eventTypes: ["jalon"],
+  },
 };
 
 const ALL_FILTERS: FilterType[] = [
@@ -243,6 +276,7 @@ const ALL_FILTERS: FilterType[] = [
   "immunos",
   "diapers",
   "activities",
+  "milestones",
 ];
 const RANGE_OPTIONS: RangeOption[] = [7, 14, 30];
 const FILTERS_TOP_OFFSET = 20;
@@ -401,6 +435,14 @@ function buildDetails(event: Event) {
       ].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;
     }
+    case "jalon": {
+      if (event.typeJalon === "humeur") {
+        return typeof event.humeur === "number"
+          ? MOOD_EMOJIS[event.humeur]
+          : undefined;
+      }
+      return event.description || undefined;
+    }
     default:
       return undefined;
   }
@@ -444,6 +486,8 @@ function getEditRoute(event: Event): string | null {
       return `/baby/soins?editId=${id}&returnTo=chrono`;
     case "activite":
       return `/baby/activities?editId=${id}&returnTo=chrono`;
+    case "jalon":
+      return `/baby/milestones?editId=${id}&returnTo=chrono`;
     default:
       return null;
   }
@@ -664,6 +708,7 @@ const TimelineCard = React.memo(
     const config = EVENT_CONFIG[event.type];
     const isSleep = event.type === "sommeil";
     const isActivity = event.type === "activite";
+    const isJalon = event.type === "jalon";
 
     // Determine the label based on event type
     let displayLabel = config.label;
@@ -671,6 +716,12 @@ const TimelineCard = React.memo(
       displayLabel = event.isNap ? "Sieste" : "Nuit de sommeil";
     } else if (isActivity && event.typeActivite) {
       displayLabel = ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
+    } else if (isJalon && event.typeJalon) {
+      if (event.typeJalon === "autre") {
+        displayLabel = event.titre || JALON_TYPE_LABELS.autre || config.label;
+      } else {
+        displayLabel = JALON_TYPE_LABELS[event.typeJalon] || config.label;
+      }
     }
 
     const sleepLabel = displayLabel;
@@ -768,12 +819,23 @@ const TimelineCard = React.memo(
               <Text style={[styles.cardTitle, { color: textColor }]}>
                 {sleepLabel}
               </Text>
+              {/* {moodEmoji ? (
+                <Text style={styles.cardMoodEmoji}>{moodEmoji}</Text>
+              ) : null} */}
             </View>
-            <FontAwesome
-              name="pen-to-square"
-              size={14}
-              color={secondaryTextColor}
-            />
+            <View style={styles.cardHeaderActions}>
+              {isJalon && event.photos?.[0] ? (
+                <Image
+                  source={{ uri: event.photos[0] }}
+                  style={styles.cardThumb}
+                />
+              ) : null}
+              <FontAwesome
+                name="pen-to-square"
+                size={14}
+                color={secondaryTextColor}
+              />
+            </View>
           </View>
           {(details || isOngoingSleep) && (
             <Text style={[styles.cardDetails, { color: secondaryTextColor }]}>
@@ -924,6 +986,7 @@ export default function ChronoScreen() {
       medicaments: false,
       symptomes: false,
       activites: false,
+      jalons: false,
     };
     let teteesData: Event[] = [];
     let biberonsData: Event[] = [];
@@ -938,6 +1001,7 @@ export default function ChronoScreen() {
     let medicamentsData: Event[] = [];
     let symptomesData: Event[] = [];
     let activitesData: Event[] = [];
+    let jalonsData: Event[] = [];
 
     const merge = () => {
       const merged = [
@@ -954,6 +1018,7 @@ export default function ChronoScreen() {
         ...sommeilsData,
         ...bainsData,
         ...activitesData,
+        ...jalonsData,
       ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
       setEvents(merged);
       const allLoaded = Object.values(loaded).every(Boolean);
@@ -1086,6 +1151,15 @@ export default function ChronoScreen() {
       },
       { depuis: since, waitForServer: true },
     );
+    const unsubscribeJalons = ecouterJalonsHybrid(
+      activeChild.id,
+      (data) => {
+        jalonsData = data;
+        loaded.jalons = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
 
     return () => {
       unsubscribeTetees();
@@ -1101,6 +1175,7 @@ export default function ChronoScreen() {
       unsubscribeMedicaments();
       unsubscribeSymptomes();
       unsubscribeActivites();
+      unsubscribeJalons();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChild?.id, maxRange, currentDay]);
@@ -1667,6 +1742,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  cardHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  cardThumb: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#f1f3f5",
+  },
   cardTitleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1682,6 +1768,9 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 15,
     fontWeight: "700",
+  },
+  cardMoodEmoji: {
+    fontSize: 16,
   },
   cardTime: {
     fontSize: 12,

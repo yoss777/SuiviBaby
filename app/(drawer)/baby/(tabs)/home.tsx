@@ -7,7 +7,9 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
+  ajouterJalon,
   ajouterSommeil,
+  modifierJalon,
   modifierSommeil,
 } from "@/migration/eventsDoubleWriteService";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
@@ -32,6 +34,7 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -58,6 +61,7 @@ interface DashboardData {
   vitamines: any[];
   vaccins: any[];
   activites: any[];
+  jalons: any[];
 }
 
 interface MealsStats {
@@ -152,6 +156,7 @@ export default function HomeDashboard() {
     vitamines: [],
     vaccins: [],
     activites: [],
+    jalons: [],
   });
 
   const [todayStats, setTodayStats] = useState<TodayStats>({
@@ -169,6 +174,7 @@ export default function HomeDashboard() {
   });
 
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isMoodSaving, setIsMoodSaving] = useState(false);
   // Track current day to detect day changes (for listener refresh)
   const [currentDay, setCurrentDay] = useState(() => {
     const now = new Date();
@@ -188,6 +194,7 @@ export default function HomeDashboard() {
     vitamines: true,
     vaccins: true,
     activites: true,
+    jalons: true,
   });
 
   const toDate = useCallback((value: any) => {
@@ -297,6 +304,14 @@ export default function HomeDashboard() {
         ].filter(Boolean);
         return parts.length > 0 ? parts.join(" · ") : undefined;
       }
+      case "jalon": {
+        if (event.typeJalon === "humeur") {
+          return typeof event.humeur === "number"
+            ? MOOD_EMOJIS[event.humeur]
+            : undefined;
+        }
+        return event.description || undefined;
+      }
       default:
         return undefined;
     }
@@ -313,6 +328,24 @@ export default function HomeDashboard() {
     eveil: "Éveil sensoriel",
     sortie: "Sortie",
     autre: "Autre",
+  };
+
+  const JALON_TYPE_LABELS: Record<string, string> = {
+    dent: "Première dent",
+    pas: "Premiers pas",
+    sourire: "Premier sourire",
+    mot: "Premiers mots",
+    humeur: "Humeur du jour",
+    photo: "Moment photo",
+    autre: "Autre moment",
+  };
+
+  const MOOD_EMOJIS: Record<number, string> = {
+    1: "😢",
+    2: "😐",
+    3: "🙂",
+    4: "😄",
+    5: "🥰",
   };
 
   const EVENT_CONFIG: Record<
@@ -384,6 +417,11 @@ export default function HomeDashboard() {
       icon: { lib: "fa6", name: "play-circle" },
       color: "#10b981",
     },
+    jalon: {
+      label: "Jalon",
+      icon: { lib: "fa6", name: "star" },
+      color: eventColors.jalon.dark,
+    },
   };
 
   function getEditRoute(event: any): string | null {
@@ -412,6 +450,8 @@ export default function HomeDashboard() {
         return `/baby/diapers?tab=selles&editId=${id}&returnTo=home`;
       case "activite":
         return `/baby/activities?editId=${id}&returnTo=home`;
+      case "jalon":
+        return `/baby/milestones?editId=${id}&returnTo=home`;
       default:
         return null;
     }
@@ -471,6 +511,7 @@ export default function HomeDashboard() {
       ...data.vitamines,
       ...data.vaccins,
       ...data.activites,
+      ...data.jalons,
     ].map((event) => ({
       ...event,
       type: event.type,
@@ -495,10 +536,68 @@ export default function HomeDashboard() {
     data.vaccins,
     data.vitamines,
     data.activites,
+    data.jalons,
     currentTime,
     toDate,
   ]);
 
+  const todayJalons = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return data.jalons.filter((item) => {
+      const date = toDate(item.date);
+      return date >= today && date < tomorrow;
+    });
+  }, [data.jalons, toDate, currentTime]);
+
+  const todayMoodEvent = useMemo(() => {
+    const moods = todayJalons
+      .filter((item) => item.typeJalon === "humeur")
+      .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+    return moods[0] ?? null;
+  }, [todayJalons, toDate]);
+
+  const lastJalon = useMemo(() => {
+    if (todayJalons.length === 0) return null;
+    return todayJalons.reduce((latest, current) =>
+      toDate(current.date).getTime() > toDate(latest.date).getTime()
+        ? current
+        : latest,
+    );
+  }, [todayJalons, toDate]);
+
+  const handleSetMood = useCallback(
+    async (value: 1 | 2 | 3 | 4 | 5) => {
+      if (!activeChild?.id || isMoodSaving) return;
+      try {
+        setIsMoodSaving(true);
+        const now = new Date();
+        const dataToSave = {
+          date: now,
+          typeJalon: "humeur" as const,
+          humeur: value,
+          titre: "Humeur du jour",
+        };
+        let moodId = todayMoodEvent?.id ?? null;
+        if (moodId) {
+          await modifierJalon(activeChild.id, moodId, dataToSave);
+        } else {
+          moodId = await ajouterJalon(activeChild.id, dataToSave);
+        }
+
+        if (!moodId) {
+          showToast("Impossible d'enregistrer l'humeur.");
+        }
+      } catch (error) {
+        showToast("Impossible d'enregistrer l'humeur.");
+      } finally {
+        setIsMoodSaving(false);
+      }
+    },
+    [activeChild?.id, isMoodSaving, todayMoodEvent, showToast],
+  );
   const sommeilEnCours = useMemo(() => {
     return data.sommeils.find((item) => !item.heureFin && item.heureDebut);
   }, [data.sommeils]);
@@ -844,6 +943,18 @@ export default function HomeDashboard() {
         icon: { type: "fa", name: "baby", color: "#10b981" },
         route: "/baby/activities?openModal=true&returnTo=home",
       },
+      {
+        key: "jalon",
+        label: "Jalon",
+        icon: { type: "fa", name: "star", color: eventColors.jalon.dark },
+        route: "/baby/milestones?openModal=true&returnTo=home",
+      },
+      {
+        key: "humeur",
+        label: "Humeur du jour",
+        icon: { type: "fa", name: "heart", color: eventColors.jalon.dark },
+        route: "/baby/milestones?type=humeur&openModal=true&returnTo=home",
+      },
     ],
     [],
   );
@@ -1053,6 +1164,7 @@ export default function HomeDashboard() {
       vitamines: true,
       vaccins: true,
       activites: true,
+      jalons: true,
     });
 
     const cached = getTodayEventsCache(activeChild.id);
@@ -1072,6 +1184,8 @@ export default function HomeDashboard() {
         symptomes: false,
         vitamines: false,
         vaccins: false,
+        activites: false,
+        jalons: false,
       }));
     }
 
@@ -1094,6 +1208,7 @@ export default function HomeDashboard() {
           vitamines: false,
           vaccins: false,
           activites: false,
+          jalons: false,
         });
       },
       { waitForServer: true },
@@ -1551,6 +1666,51 @@ export default function HomeDashboard() {
     );
   };
 
+  const MoodQuickCard = () => {
+    const moodValue = todayMoodEvent?.humeur ?? null;
+    const lastMoodTime = todayMoodEvent
+      ? formatTime(toDate(todayMoodEvent.date))
+      : null;
+    const moodOptions: { value: 1 | 2 | 3 | 4 | 5; emoji: string }[] = [
+      { value: 1, emoji: "😢" },
+      { value: 2, emoji: "😐" },
+      { value: 3, emoji: "🙂" },
+      { value: 4, emoji: "😄" },
+      { value: 5, emoji: "🥰" },
+    ];
+
+    return (
+      <View style={[styles.statsCard, styles.moodCard]}>
+        <View style={styles.moodHeader}>
+          <FontAwesome name="heart" size={18} color={eventColors.jalon.dark} />
+          <Text style={styles.moodTitle}>Humeur du jour</Text>
+        </View>
+        <View style={styles.moodRow}>
+          {moodOptions.map((option) => {
+            const active = moodValue === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.moodEmojiChip,
+                  active && styles.moodEmojiChipActive,
+                ]}
+                onPress={() => handleSetMood(option.value)}
+                activeOpacity={0.7}
+                disabled={isMoodSaving}
+              >
+                <Text style={styles.moodEmojiText}>{option.emoji}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {/* <Text style={styles.moodSubtitle}>
+          {lastMoodTime ? `Dernière humeur: ${lastMoodTime}` : "Aucune humeur"}
+        </Text> */}
+      </View>
+    );
+  };
+
   const LoadingCard = () => (
     <View style={styles.statsCard}>
       <View style={[styles.statsHeader, { opacity: 0.5 }]}>
@@ -1715,6 +1875,31 @@ export default function HomeDashboard() {
             // />
 
             <SommeilWidgetCard />
+          )}
+        </View>
+
+        <View style={styles.statsGrid}>
+          {loading.jalons ? <LoadingCard /> : <MoodQuickCard />}
+          {loading.jalons ? (
+            <LoadingCard />
+          ) : (
+            <StatsCard
+              title="Jalons"
+              value={todayJalons.length}
+              unit={todayJalons.length > 1 ? "moments" : "moment"}
+              icon="star"
+              color={eventColors.jalon.dark}
+              lastActivity={
+                lastJalon ? formatTime(toDate(lastJalon.date)) : undefined
+              }
+              lastTimestamp={
+                lastJalon ? toDate(lastJalon.date).getTime() : undefined
+              }
+              onPress={() =>
+                router.push("/baby/milestones?returnTo=home" as any)
+              }
+              addEvent={true}
+            />
           )}
         </View>
 
@@ -1888,7 +2073,8 @@ export default function HomeDashboard() {
         loading.sommeils &&
         loading.temperatures &&
         loading.medicaments &&
-        loading.symptomes ? (
+        loading.symptomes &&
+        loading.jalons ? (
           <View style={styles.recentLoading}>
             <ActivityIndicator size="small" color={Colors[colorScheme].tint} />
             <Text style={styles.recentLoadingText}>Chargement...</Text>
@@ -1906,6 +2092,7 @@ export default function HomeDashboard() {
             };
             const isSleep = event.type === "sommeil";
             const isActivity = event.type === "activite";
+            const isJalon = event.type === "jalon";
 
             // Determine the label based on event type
             let displayLabel = config.label;
@@ -1914,6 +2101,14 @@ export default function HomeDashboard() {
             } else if (isActivity && event.typeActivite) {
               displayLabel =
                 ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
+            } else if (isJalon && event.typeJalon) {
+              if (event.typeJalon === "autre") {
+                displayLabel =
+                  event.titre || JALON_TYPE_LABELS.autre || config.label;
+              } else {
+                displayLabel =
+                  JALON_TYPE_LABELS[event.typeJalon] || config.label;
+              }
             }
 
             const sleepLabel = displayLabel;
@@ -2092,6 +2287,12 @@ export default function HomeDashboard() {
                       >
                         {sleepLabel}
                       </Text>
+                      {isJalon && event.photos?.[0] ? (
+                        <Image
+                          source={{ uri: event.photos[0] }}
+                          style={styles.recentThumb}
+                        />
+                      ) : null}
                       {/* <FontAwesome
                         name="pen-to-square"
                         size={14}
@@ -2355,6 +2556,13 @@ const styles = StyleSheet.create({
     // justifyContent: "space-between",
     gap: 8,
   },
+  recentThumb: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    marginLeft: "auto",
+    backgroundColor: "#f1f3f5",
+  },
   sleepInlineIcon: {
     minWidth: 28,
     height: 24,
@@ -2365,6 +2573,9 @@ const styles = StyleSheet.create({
   recentTitle: {
     fontSize: 15,
     fontWeight: "700",
+  },
+  recentMoodEmoji: {
+    fontSize: 16,
   },
   recentTime: {
     fontSize: 12,
@@ -2446,6 +2657,48 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#28a745",
     fontWeight: "500",
+  },
+  moodCard: {
+    borderWidth: 1,
+    borderColor: `${eventColors.jalon.dark}22`,
+  },
+  moodHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  moodTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6c757d",
+  },
+  moodRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+    // marginBottom: 8,
+  },
+  moodEmojiChip: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f3f4f6",
+  },
+  moodEmojiChipActive: {
+    backgroundColor: `${eventColors.jalon.dark}1A`,
+    borderWidth: 1,
+    borderColor: `${eventColors.jalon.dark}55`,
+  },
+  moodEmojiText: {
+    fontSize: 16,
+  },
+  moodSubtitle: {
+    fontSize: 12,
+    color: "#6c757d",
   },
   quickActionsContainer: {
     paddingHorizontal: 20,

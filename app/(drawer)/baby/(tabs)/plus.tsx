@@ -45,6 +45,13 @@ const ITEMS = [
     route: "/baby/activities",
   },
   {
+    title: "Jalons",
+    subtitle: "Premiers moments et souvenirs",
+    icon: "star",
+    color: "#ec4899",
+    route: "/baby/milestones",
+  },
+  {
     title: "Couches",
     subtitle: "Mictions et selles",
     icon: "toilet",

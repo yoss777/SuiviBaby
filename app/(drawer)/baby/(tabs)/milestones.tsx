@@ -1,8 +1,8 @@
-import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { storage } from "@/config/firebase";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
@@ -11,27 +11,30 @@ import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterActivite,
-  modifierActivite,
-  supprimerActivite,
+  ajouterJalon,
+  modifierJalon,
+  supprimerJalon,
 } from "@/migration/eventsDoubleWriteService";
 import {
-  ecouterActivitesHybrid,
+  ecouterJalonsHybrid,
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
-import { ActiviteEvent } from "@/services/eventsService";
+import { JalonEvent } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   FlatList,
+  Image,
   InteractionManager,
   Platform,
   Pressable,
@@ -49,78 +52,85 @@ import { useHeaderLeft, useHeaderRight } from "../../_layout";
 // TYPES
 // ============================================
 
-type ActiviteType =
-  | "tummyTime" // Temps sur le ventre
-  | "jeux" // Jeux d'éveil
-  | "lecture" // Lecture/histoires
-  | "promenade" // Sortie extérieure
-  | "massage" // Massage bébé
-  | "musique" // Éveil musical
-  | "eveil" // Éveil sensoriel
-  | "sortie" // Sortie (médecin, visite, parc, etc.)
-  | "autre"; // Autre activité
+type JalonType =
+  | "dent"
+  | "pas"
+  | "sourire"
+  | "mot"
+  | "humeur"
+  | "photo"
+  | "autre";
 
 type FilterType = "today" | "past";
 
-type ActivityEventWithId = ActiviteEvent & { id: string };
+type MilestoneEventWithId = JalonEvent & { id: string };
 
-type ActivityGroup = {
+type MilestoneGroup = {
   date: string;
-  events: ActivityEventWithId[];
-  counts: Record<ActiviteType, number>;
-  lastEvent: ActivityEventWithId;
+  events: MilestoneEventWithId[];
+  counts: Record<JalonType, number>;
+  lastEvent: MilestoneEventWithId;
 };
 
 const TYPE_CONFIG: Record<
-  ActiviteType,
-  { label: string; color: string; icon: string }
+  JalonType,
+  { label: string; color: string; icon: string; defaultTitle: string }
 > = {
-  tummyTime: {
-    label: "Tummy Time",
-    color: eventColors.activite.dark,
-    icon: "baby",
+  dent: {
+    label: "Première dent",
+    color: eventColors.jalon.dark,
+    icon: "tooth",
+    defaultTitle: "Première dent",
   },
-  jeux: {
-    label: "Jeux",
-    color: eventColors.activite.dark,
-    icon: "puzzle-piece",
+  pas: {
+    label: "Premiers pas",
+    color: eventColors.jalon.dark,
+    icon: "shoe-prints",
+    defaultTitle: "Premiers pas",
   },
-  lecture: {
-    label: "Lecture",
-    color: eventColors.activite.dark,
-    icon: "book",
+  sourire: {
+    label: "Premier sourire",
+    color: eventColors.jalon.dark,
+    icon: "face-smile",
+    defaultTitle: "Premier sourire",
   },
-  promenade: {
-    label: "Promenade",
-    color: eventColors.activite.dark,
-    icon: "person-walking",
+  mot: {
+    label: "Premiers mots",
+    color: eventColors.jalon.dark,
+    icon: "comment-dots",
+    defaultTitle: "Premiers mots",
   },
-  massage: {
-    label: "Massage",
-    color: eventColors.activite.dark,
-    icon: "hand",
+  humeur: {
+    label: "Humeur",
+    color: eventColors.jalon.dark,
+    icon: "heart",
+    defaultTitle: "Humeur du jour",
   },
-  musique: {
-    label: "Musique",
-    color: eventColors.activite.dark,
-    icon: "music",
-  },
-  eveil: {
-    label: "Éveil sensoriel",
-    color: eventColors.activite.dark,
-    icon: "lightbulb",
-  },
-  sortie: {
-    label: "Sortie",
-    color: eventColors.activite.dark,
-    icon: "door-open",
+  photo: {
+    label: "Moment photo",
+    color: eventColors.jalon.dark,
+    icon: "camera",
+    defaultTitle: "Un beau moment",
   },
   autre: {
-    label: "Autre",
-    color: eventColors.activite.dark,
-    icon: "ellipsis",
+    label: "Autre moment",
+    color: eventColors.jalon.dark,
+    icon: "star",
+    defaultTitle: "Moment important",
   },
 };
+
+const MOOD_OPTIONS: {
+  value: 1 | 2 | 3 | 4 | 5;
+  emoji: string;
+  label: string;
+}[] = [
+  { value: 1, emoji: "😢", label: "Difficile" },
+  { value: 2, emoji: "😐", label: "Mitigé" },
+  { value: 3, emoji: "🙂", label: "OK" },
+  { value: 4, emoji: "😄", label: "Content" },
+  { value: 5, emoji: "🥰", label: "Rayonnant" },
+];
 
 const formatDateKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
@@ -130,14 +140,6 @@ const formatDateKey = (date: Date) =>
 const formatTime = (date: Date) =>
   date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
-const formatDuration = (minutes?: number) => {
-  if (!minutes || minutes <= 0) return "0 min";
-  if (minutes < 60) return `${minutes} min`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
-};
-
 const toDate = (value: any) => {
   if (value?.seconds) return new Date(value.seconds * 1000);
   if (value?.toDate) return value.toDate();
@@ -145,11 +147,22 @@ const toDate = (value: any) => {
   return new Date(value);
 };
 
+const uploadMilestonePhoto = async (childId: string, uri: string) => {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  const extension = uri.split(".").pop()?.split("?")[0] || "jpg";
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const filePath = `children/${childId}/jalons/${fileName}.${extension}`;
+  const storageRef = ref(storage, filePath);
+  await uploadBytes(storageRef, blob);
+  return getDownloadURL(storageRef);
+};
+
 // ============================================
 // COMPONENT
 // ============================================
 
-export default function ActivitiesScreen() {
+export default function MilestonesScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const { setHeaderLeft } = useHeaderLeft();
@@ -159,12 +172,12 @@ export default function ActivitiesScreen() {
   const { showAlert } = useModal();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
-    `activities-${Math.random().toString(36).slice(2)}`,
+    `milestones-${Math.random().toString(36).slice(2)}`,
   );
 
   const { openModal, editId, returnTo, type } = useLocalSearchParams();
   const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
-  const sheetOwnerId = "activities";
+  const sheetOwnerId = "milestones";
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
   const [showCalendar, setShowCalendar] = useState(false);
@@ -174,10 +187,10 @@ export default function ActivitiesScreen() {
   const [pendingOpen, setPendingOpen] = useState(false);
   const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
 
-  const [events, setEvents] = useState<ActivityEventWithId[]>([]);
-  const [groupedEvents, setGroupedEvents] = useState<ActivityGroup[]>([]);
+  const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
+  const [groupedEvents, setGroupedEvents] = useState<MilestoneGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [loaded, setLoaded] = useState({ activites: false });
+  const [loaded, setLoaded] = useState({ jalons: false });
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
@@ -188,20 +201,26 @@ export default function ActivitiesScreen() {
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
 
-  const [editingActivite, setEditingActivite] =
-    useState<ActivityEventWithId | null>(null);
+  const [editingMilestone, setEditingMilestone] =
+    useState<MilestoneEventWithId | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [typeActivite, setTypeActivite] = useState<ActiviteType>("tummyTime");
-  const [duree, setDuree] = useState(15);
+  const [typeJalon, setTypeJalon] = useState<JalonType>("dent");
+  const [title, setTitle] = useState("");
+  const [titleTouched, setTitleTouched] = useState(false);
+  const [titleError, setTitleError] = useState(false);
   const [description, setDescription] = useState("");
+  const [note, setNote] = useState("");
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
+  const [mood, setMood] = useState<1 | 2 | 3 | 4 | 5 | null>(null);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
-  const pendingTypeRef = useRef<ActiviteType | null>(null);
+  const pendingTypeRef = useRef<JalonType | null>(null);
 
   const normalizeParam = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value;
@@ -240,6 +259,7 @@ export default function ActivitiesScreen() {
         const today = new Date();
         setSelectedDate(formatDateKey(today));
         setSelectedFilter(null);
+        setExpandedDays(new Set([formatDateKey(today)]));
       }
       return nextValue;
     });
@@ -254,7 +274,7 @@ export default function ActivitiesScreen() {
   }, []);
 
   const handleAddPress = useCallback(() => {
-    pendingTypeRef.current = "tummyTime";
+    pendingTypeRef.current = "dent";
     setPendingMode("add");
     setPendingOpen(true);
   }, []);
@@ -357,6 +377,7 @@ export default function ActivitiesScreen() {
   // ============================================
   useEffect(() => {
     if (!activeChild?.id) return;
+
     const versionAtSubscribe = loadMoreVersionRef.current;
     const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
     endOfRange.setHours(23, 59, 59, 999);
@@ -364,11 +385,11 @@ export default function ActivitiesScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
-    const unsubscribe = ecouterActivitesHybrid(
+    const unsubscribe = ecouterJalonsHybrid(
       activeChild.id,
       (data) => {
-        setEvents(data as ActivityEventWithId[]);
-        setLoaded({ activites: true });
+        setEvents(data as MilestoneEventWithId[]);
+        setLoaded({ jalons: true });
 
         if (
           pendingLoadMoreRef.current > 0 &&
@@ -381,16 +402,15 @@ export default function ActivitiesScreen() {
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
-    return () => {
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [activeChild?.id, daysWindow, rangeEndDate]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
+
     setEvents([]);
     setGroupedEvents([]);
-    setLoaded({ activites: false });
+    setLoaded({ jalons: false });
     setEmptyDelayDone(false);
     setDaysWindow(14);
     setRangeEndDate(null);
@@ -402,7 +422,7 @@ export default function ActivitiesScreen() {
   }, [activeChild?.id]);
 
   useEffect(() => {
-    if (!Object.values(loaded).every(Boolean)) {
+    if (!loaded.jalons) {
       setEmptyDelayDone(false);
       return;
     }
@@ -412,72 +432,18 @@ export default function ActivitiesScreen() {
     }
     const timer = setTimeout(() => setEmptyDelayDone(true), 300);
     return () => clearTimeout(timer);
-  }, [loaded, groupedEvents.length]);
-
-  useEffect(() => {
-    if (!activeChild?.id) return;
-    let cancelled = false;
-    const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
-    endOfRange.setHours(23, 59, 59, 999);
-    const startOfRange = new Date(endOfRange);
-    startOfRange.setHours(0, 0, 0, 0);
-    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-    const beforeDate = new Date(startOfRange.getTime() - 1);
-
-    setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, ["activite"], beforeDate)
-      .then((result) => {
-        if (!cancelled) setHasMore(result);
-      })
-      .catch(() => {
-        if (!cancelled) setHasMore(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeChild?.id, daysWindow, rangeEndDate]);
+  }, [loaded.jalons, groupedEvents.length]);
 
   // ============================================
-  // FILTERS + GROUPING
+  // FILTERS
   // ============================================
-  const markedDates = useMemo(() => {
-    const marked: Record<string, any> = {};
-    events.forEach((item) => {
-      const date = toDate(item.date);
-      const key = formatDateKey(date);
-      marked[key] = {
-        ...(marked[key] || {}),
-        marked: true,
-        dotColor: eventColors.activite.dark,
-      };
-    });
-    if (selectedDate) {
-      marked[selectedDate] = {
-        ...marked[selectedDate],
-        selected: true,
-        selectedColor: Colors[colorScheme].tint,
-        selectedTextColor: "#ffffff",
-      };
-    }
-    if (selectedFilter === "today") {
-      const todayKey = formatDateKey(new Date());
-      marked[todayKey] = {
-        ...marked[todayKey],
-        selected: true,
-        selectedColor: Colors[colorScheme].tint,
-        selectedTextColor: "#ffffff",
-      };
-    }
-    return marked;
-  }, [events, selectedDate, selectedFilter, colorScheme]);
-
-  const handleDateSelect = (day: DateData) => {
-    setSelectedDate(day.dateString);
-    setSelectedFilter(null);
-    setShowCalendar(false);
-    setExpandedDays(new Set([day.dateString]));
-  };
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedFilter && !selectedDate) {
+        applyTodayFilter();
+      }
+    }, [applyTodayFilter, selectedDate, selectedFilter]),
+  );
 
   const handleFilterPress = (filter: FilterType) => {
     if (filter === "today") {
@@ -490,73 +456,97 @@ export default function ActivitiesScreen() {
     setExpandedDays(new Set());
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!selectedFilter && !selectedDate) {
-        applyTodayFilter();
-      }
-    }, [applyTodayFilter, selectedDate, selectedFilter]),
-  );
+  const handleDateSelect = (day: DateData) => {
+    setSelectedDate(day.dateString);
+    setSelectedFilter(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set([day.dateString]));
+  };
 
-  useEffect(() => {
+  const filteredEvents = useMemo(() => {
+    if (!selectedFilter && !selectedDate) return events;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
-    const filtered = events.filter((item) => {
+    return events.filter((item) => {
       const date = toDate(item.date);
       date.setHours(0, 0, 0, 0);
       const time = date.getTime();
-
-      if (selectedDate) {
-        const [year, month, day] = selectedDate.split("-").map(Number);
-        const selected = new Date(year, month - 1, day);
-        selected.setHours(0, 0, 0, 0);
-        return time === selected.getTime();
-      }
-
       if (selectedFilter === "today") return time === todayTime;
       if (selectedFilter === "past") return time < todayTime;
+      if (selectedDate) return formatDateKey(date) === selectedDate;
       return true;
     });
+  }, [events, selectedFilter, selectedDate]);
 
-    const groups: Record<string, ActivityEventWithId[]> = {};
-    filtered.forEach((item) => {
-      const date = toDate(item.date);
-      const key = formatDateKey(date);
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
+  useEffect(() => {
+    const groups: Record<string, MilestoneGroup> = {};
+    filteredEvents.forEach((event) => {
+      const key = formatDateKey(toDate(event.date));
+      if (!groups[key]) {
+        groups[key] = {
+          date: key,
+          events: [],
+          counts: {
+            dent: 0,
+            pas: 0,
+            sourire: 0,
+            mot: 0,
+            humeur: 0,
+            photo: 0,
+            autre: 0,
+          },
+          lastEvent: event,
+        };
+      }
+      groups[key].events.push(event);
+      groups[key].counts[event.typeJalon] += 1;
+      if (toDate(event.date) > toDate(groups[key].lastEvent.date)) {
+        groups[key].lastEvent = event;
+      }
     });
 
-    const grouped = Object.entries(groups)
-      .map(([date, items]) => {
-        const sorted = items.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-        );
-        const counts = {
-          tummyTime: 0,
-          jeux: 0,
-          lecture: 0,
-          promenade: 0,
-          massage: 0,
-          musique: 0,
-          eveil: 0,
-          autre: 0,
-        } as Record<ActiviteType, number>;
-        sorted.forEach((item) => {
-          counts[item.typeActivite as ActiviteType] += 1;
-        });
-        return {
-          date,
-          events: sorted,
-          counts,
-          lastEvent: sorted[0],
-        };
-      })
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    const sorted = Object.values(groups).sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
 
-    setGroupedEvents(grouped);
-  }, [events, selectedFilter, selectedDate, showCalendar]);
+    sorted.forEach((group) => {
+      group.events.sort(
+        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+      );
+    });
+
+    setGroupedEvents(sorted);
+  }, [filteredEvents]);
+
+  // ============================================
+  // LOAD MORE
+  // ============================================
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+    endOfRange.setHours(23, 59, 59, 999);
+    const startOfRange = new Date(endOfRange);
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+    const beforeDate = new Date(startOfRange.getTime() - 1);
+
+    setHasMore(true);
+    hasMoreEventsBeforeHybrid(activeChild.id, ["jalon"], beforeDate)
+      .then((result) => {
+        if (!cancelled) setHasMore(result);
+      })
+      .catch(() => {
+        if (!cancelled) setHasMore(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChild?.id, daysWindow, rangeEndDate]);
 
   const loadMoreStep = useCallback(
     async (auto = false) => {
@@ -574,7 +564,7 @@ export default function ActivitiesScreen() {
         const beforeDate = new Date(startOfRange.getTime() - 1);
         const nextEventDate = await getNextEventDateBeforeHybrid(
           activeChild.id,
-          ["activite"],
+          ["jalon"],
           beforeDate,
         );
 
@@ -605,19 +595,21 @@ export default function ActivitiesScreen() {
 
   useEffect(() => {
     if (selectedFilter === "today" || selectedDate) return;
-    if (
-      Object.values(loaded).every(Boolean) &&
-      groupedEvents.length === 0 &&
-      hasMore
-    ) {
+    if (loaded.jalons && groupedEvents.length === 0 && hasMore) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
-  }, [loaded, groupedEvents.length, hasMore, selectedFilter, selectedDate]);
+  }, [
+    loaded.jalons,
+    groupedEvents.length,
+    hasMore,
+    selectedFilter,
+    selectedDate,
+  ]);
 
   useEffect(() => {
     if (!autoLoadMore) return;
-    if (!Object.values(loaded).every(Boolean) || isLoadingMore) return;
+    if (!loaded.jalons || isLoadingMore) return;
     if (groupedEvents.length > 0 || !hasMore) {
       setAutoLoadMore(false);
       setAutoLoadMoreAttempts(0);
@@ -631,7 +623,7 @@ export default function ActivitiesScreen() {
     loadMoreStep(true);
   }, [
     autoLoadMore,
-    loaded,
+    loaded.jalons,
     isLoadingMore,
     groupedEvents.length,
     hasMore,
@@ -640,251 +632,202 @@ export default function ActivitiesScreen() {
   ]);
 
   // ============================================
-  // SHEET LOGIC
+  // FORM HELPERS
   // ============================================
   const resetForm = useCallback(() => {
-    setTypeActivite("tummyTime");
-    setDuree(15);
+    setTypeJalon("dent");
+    setTitle("");
+    setTitleTouched(false);
+    setTitleError(false);
     setDescription("");
+    setNote("");
     setDateHeure(new Date());
-    setEditingActivite(null);
+    setMood(null);
+    setPhotoUri(null);
+    setShowDate(false);
+    setShowTime(false);
+    setEditingMilestone(null);
   }, []);
 
-  const openEditModal = useCallback((item: ActivityEventWithId) => {
-    setEditingActivite(item);
-    setTypeActivite(item.typeActivite as ActiviteType);
-    setDuree(item.duree ?? 15);
-    setDescription(item.description ?? "");
-    setDateHeure(toDate(item.date));
-    setIsSubmitting(false);
-    setPendingMode("edit");
-    setPendingOpen(true);
-  }, []);
-
-  function buildSheetProps() {
-    const returnTarget = returnTargetParam ?? returnToRef.current;
-    return {
-      ownerId: sheetOwnerId,
-      title: editingActivite ? "Modifier l'activité" : "Nouvelle activité",
-      icon: "play-circle",
-      accentColor: eventColors.activite.dark,
-      isEditing: !!editingActivite,
-      isSubmitting,
-      onSubmit: handleSubmit,
-      onDelete: editingActivite ? () => setShowDeleteModal(true) : undefined,
-      children: renderSheetContent(),
-      onDismiss: () => {
-        setIsSubmitting(false);
-        setEditingActivite(null);
-        editIdRef.current = null;
-        maybeReturnTo(returnTarget);
-      },
-    };
-  }
-
   useEffect(() => {
-    if (!isSheetActive) return;
-    openSheet(buildSheetProps());
-  }, [
-    isSheetActive,
-    openSheet,
-    typeActivite,
-    duree,
-    description,
-    dateHeure,
-    showDate,
-    showTime,
-    editingActivite,
-  ]);
+    if (typeJalon !== "autre") {
+      setTitle("");
+      setTitleTouched(false);
+      setTitleError(false);
+    }
+  }, [typeJalon]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (openModal !== "true") return;
-      const normalizedType = normalizeParam(type);
-      pendingTypeRef.current =
-        normalizedType && Object.keys(TYPE_CONFIG).includes(normalizedType)
-          ? (normalizedType as ActiviteType)
-          : "tummyTime";
-      setPendingMode("add");
-      setPendingOpen(true);
-    }, [openModal, type]),
-  );
-
-  useEffect(() => {
-    if (!pendingOpen || !layoutReady) return;
-    const task = InteractionManager.runAfterInteractions(() => {
-      stashReturnTo();
-      if (pendingMode !== "edit") {
-        const pendingType = pendingTypeRef.current ?? "tummyTime";
-        resetForm();
-        setTypeActivite(pendingType);
+  const handlePickPhoto = useCallback(async () => {
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        showAlert("Accès refusé", "Autorisez l'accès aux photos.");
+        return;
       }
-      openSheet(buildSheetProps());
-      navigation.setParams({
-        openModal: undefined,
-        editId: undefined,
-        type: undefined,
-        mode: undefined,
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsEditing: true,
+        aspect: [4, 3],
       });
-      setPendingOpen(false);
-      setPendingMode(null);
-      pendingTypeRef.current = null;
-    });
-    return () => task.cancel?.();
-  }, [
-    pendingOpen,
-    layoutReady,
-    pendingMode,
-    navigation,
-    resetForm,
-    stashReturnTo,
-    openSheet,
-    returnTargetParam,
-  ]);
 
-  useEffect(() => {
-    if (!editId || !layoutReady) return;
-    const normalizedId = Array.isArray(editId) ? editId[0] : editId;
-    if (!normalizedId || editIdRef.current === normalizedId) return;
-    const target = events.find((evt) => evt.id === normalizedId);
-    if (!target) return;
-    stashReturnTo();
-    editIdRef.current = normalizedId;
-    openEditModal(target);
-    navigation.setParams({
-      openModal: undefined,
-      editId: undefined,
-      type: undefined,
-      mode: undefined,
-    });
-  }, [editId, layoutReady, events, navigation, openEditModal, stashReturnTo]);
-
-  // ============================================
-  // SUBMIT / DELETE
-  // ============================================
-  const handleSubmit = async () => {
-    if (!activeChild?.id || isSubmitting) return;
-    try {
-      setIsSubmitting(true);
-      const data = {
-        date: dateHeure,
-        typeActivite,
-        duree: duree || undefined,
-        description: description.trim() ? description.trim() : undefined,
-        note: description.trim() ? description.trim() : undefined,
-      };
-
-      if (editingActivite) {
-        await modifierActivite(activeChild.id, editingActivite.id, data);
-      } else {
-        await ajouterActivite(activeChild.id, data);
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setPhotoUri(result.assets[0].uri);
       }
-
-      closeSheet();
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
-      setIsSubmitting(false);
+      console.error("Erreur sélection photo:", error);
+      showAlert("Erreur", "Impossible d'ajouter la photo.");
     }
-  };
+  }, [showAlert]);
 
-  const confirmDelete = async () => {
-    if (!editingActivite || !activeChild?.id || isSubmitting) return;
-    try {
-      setIsSubmitting(true);
-      await supprimerActivite(activeChild.id, editingActivite.id);
-      closeSheet();
-    } catch (error) {
-      console.error("Erreur suppression:", error);
-      showAlert("Erreur", "Impossible de supprimer.");
-    } finally {
-      setIsSubmitting(false);
-      setShowDeleteModal(false);
-    }
-  };
-
-  const renderSheetContent = () => {
+  const renderSheetContent = useCallback(() => {
     return (
       <View style={styles.sheetContent}>
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Type d&apos;activité</Text>
-          <View style={styles.typeRow}>
-            {(Object.keys(TYPE_CONFIG) as ActiviteType[]).map((type) => {
-              const config = TYPE_CONFIG[type];
-              const active = typeActivite === type;
-              return (
-                <TouchableOpacity
-                  key={type}
-                  style={[styles.typeChip, active && styles.typeChipActive]}
-                  onPress={() => setTypeActivite(type)}
+        {/* Type Picker en premier */}
+        <View style={styles.typeRow}>
+          {(Object.keys(TYPE_CONFIG) as JalonType[]).map((type) => {
+            const config = TYPE_CONFIG[type];
+            const active = typeJalon === type;
+            return (
+              <TouchableOpacity
+                key={type}
+                style={[styles.typeChip, active && styles.typeChipActive]}
+                onPress={() => {
+                  setTypeJalon(type);
+                  if (type === "autre") {
+                    setTitle("");
+                    setTitleTouched(false);
+                  } else {
+                    setTitle("");
+                    setTitleTouched(false);
+                  }
+                }}
+              >
+                <Text
+                  style={[
+                    styles.typeChipText,
+                    active && styles.typeChipTextActive,
+                  ]}
                 >
-                  <Text
-                    style={[
-                      styles.typeChipText,
-                      active && styles.typeChipTextActive,
-                    ]}
-                  >
-                    {config.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                  {config.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Durée (minutes)</Text>
-          <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPress={() => setDuree((value) => Math.max(0, value - 5))}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                -
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.quantityPickerValue}>{duree} min</Text>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPress={() => setDuree((value) => value + 5)}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                +
-              </Text>
-            </TouchableOpacity>
+        {/* Titre (seulement pour Autre moment) */}
+        {typeJalon === "autre" && (
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Titre</Text>
+            <TextInput
+              value={title}
+              onChangeText={(value) => {
+                setTitle(value);
+                setTitleTouched(true);
+                if (value.trim()) {
+                  setTitleError(false);
+                }
+              }}
+              placeholder="Ajouter un titre"
+              style={[styles.input, titleError && styles.inputError]}
+            />
           </View>
-        </View>
+        )}
 
+        {/* Description */}
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Description</Text>
           <TextInput
             value={description}
             onChangeText={setDescription}
-            placeholder="Ajouter une description..."
-            style={styles.input}
+            placeholder="Ajouter un détail ou un souvenir..."
+            style={styles.noteInput}
             multiline
           />
         </View>
 
+        {/* Humeur (si type humeur) */}
+        {typeJalon === "humeur" && (
+          <View style={styles.chipSection}>
+            <Text style={styles.chipLabel}>Humeur</Text>
+            <View style={styles.chipRow}>
+              {MOOD_OPTIONS.map((option) => {
+                const active = mood === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[styles.moodChip, active && styles.moodChipActive]}
+                    onPress={() => setMood(option.value)}
+                  >
+                    <Text style={styles.moodEmoji}>{option.emoji}</Text>
+                    <Text
+                      style={[
+                        styles.moodLabel,
+                        active && styles.moodLabelActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Photo */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Photo</Text>
+          <View style={styles.photoRow}>
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <FontAwesome name="image" size={18} color="#c7cbd1" />
+                <Text style={styles.photoPlaceholderText}>Aucune photo</Text>
+              </View>
+            )}
+            <View style={styles.photoActions}>
+              <TouchableOpacity
+                style={styles.photoButton}
+                onPress={handlePickPhoto}
+                activeOpacity={0.8}
+              >
+                <FontAwesome5 name="camera" size={14} color={colors.text} />
+                <Text style={styles.photoButtonText}>Ajouter</Text>
+              </TouchableOpacity>
+              {photoUri ? (
+                <TouchableOpacity
+                  style={styles.photoButtonSecondary}
+                  onPress={() => setPhotoUri(null)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.photoButtonSecondaryText}>Retirer</Text>
+                </TouchableOpacity>
+              ) : null}
+              {photoUploading ? (
+                <Text style={styles.photoUploading}>Téléversement...</Text>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        {/* Note */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Note</Text>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="Ajouter une note personnelle..."
+            style={styles.noteInput}
+            multiline
+          />
+        </View>
+
+        {/* Date et Heure */}
         <View style={styles.dateTimeContainerWithPadding}>
           <TouchableOpacity
             style={styles.dateButton}
@@ -910,14 +853,14 @@ export default function ActivitiesScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Date/heure sélectionnée */}
         <View style={styles.selectedDateTime}>
           <Text style={styles.selectedDate}>
-            {dateHeure.toLocaleDateString("fr-FR", {
+            {`${dateHeure.toLocaleDateString("fr-FR", {
               weekday: "long",
-              year: "numeric",
-              month: "long",
               day: "numeric",
-            })}
+              month: "long",
+            })} ${dateHeure.getFullYear()}`}
           </Text>
           <Text style={styles.selectedTime}>
             {dateHeure.toLocaleTimeString("fr-FR", {
@@ -968,34 +911,265 @@ export default function ActivitiesScreen() {
         )}
       </View>
     );
+  }, [
+    colors.text,
+    dateHeure,
+    description,
+    handlePickPhoto,
+    mood,
+    note,
+    photoUri,
+    photoUploading,
+    showDate,
+    showTime,
+    title,
+    titleTouched,
+    typeJalon,
+    colorScheme,
+  ]);
+
+  // ============================================
+  // SUBMIT / DELETE
+  // ============================================
+  const handleSubmit = useCallback(async () => {
+    if (!activeChild?.id || isSubmitting) return;
+    try {
+    if (typeJalon === "autre" && !title.trim()) {
+      setTitleError(true);
+      showAlert("Titre requis", "Ajoutez un titre pour Autre moment.");
+      return;
+    }
+      setIsSubmitting(true);
+      let photoUrls: string[] | undefined = photoUri ? [photoUri] : undefined;
+
+      if (photoUri && !photoUri.startsWith("http")) {
+        setPhotoUploading(true);
+        const uploadedUrl = await uploadMilestonePhoto(
+          activeChild.id,
+          photoUri,
+        );
+        photoUrls = [uploadedUrl];
+      }
+
+      const data = {
+        date: dateHeure,
+        typeJalon,
+        titre:
+          typeJalon === "autre" && title.trim() ? title.trim() : undefined,
+        description: description.trim() ? description.trim() : undefined,
+        note: note.trim() ? note.trim() : undefined,
+        humeur: mood ?? undefined,
+        photos: photoUrls,
+      };
+
+      if (editingMilestone) {
+        await modifierJalon(activeChild.id, editingMilestone.id, data);
+      } else {
+        await ajouterJalon(activeChild.id, data);
+      }
+
+      closeSheet();
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde:", error);
+      showAlert("Erreur", "Impossible de sauvegarder.");
+    } finally {
+      setPhotoUploading(false);
+      setIsSubmitting(false);
+    }
+  }, [
+    activeChild?.id,
+    closeSheet,
+    dateHeure,
+    description,
+    editingMilestone,
+    isSubmitting,
+    mood,
+    note,
+    photoUri,
+    showAlert,
+    title,
+    typeJalon,
+  ]);
+
+  const confirmDelete = async () => {
+    if (!editingMilestone || !activeChild?.id || isSubmitting) return;
+    try {
+      setIsSubmitting(true);
+      await supprimerJalon(activeChild.id, editingMilestone.id);
+      closeSheet();
+    } catch (error) {
+      console.error("Erreur suppression:", error);
+      showAlert("Erreur", "Impossible de supprimer.");
+    } finally {
+      setIsSubmitting(false);
+      setShowDeleteModal(false);
+    }
   };
+
+  const buildSheetProps = useCallback(() => {
+    const isEditing = !!editingMilestone;
+    const returnTarget = returnTargetParam ?? returnToRef.current;
+    return {
+      ownerId: sheetOwnerId,
+      title: isEditing ? "Modifier le jalon" : "Nouveau jalon",
+      icon: "star",
+      accentColor: eventColors.jalon.dark,
+      isEditing,
+      isSubmitting,
+      showActions: true,
+      onSubmit: handleSubmit,
+      onDelete: isEditing ? () => setShowDeleteModal(true) : undefined,
+      onDismiss: () => {
+        setIsSubmitting(false);
+        editIdRef.current = null;
+        setEditingMilestone(null);
+        maybeReturnTo(returnTarget);
+      },
+      children: renderSheetContent(),
+    };
+  }, [
+    editingMilestone,
+    handleSubmit,
+    isSubmitting,
+    maybeReturnTo,
+    returnTargetParam,
+    renderSheetContent,
+  ]);
+
+  const openEditModal = useCallback((event: MilestoneEventWithId) => {
+    setEditingMilestone(event);
+    setTypeJalon(event.typeJalon);
+    if (event.typeJalon === "autre") {
+      setTitle(event.titre ?? "");
+      setTitleTouched(true);
+    } else {
+      setTitle("");
+      setTitleTouched(false);
+    }
+    setDescription(event.description ?? "");
+    setNote(event.note ?? "");
+    setDateHeure(toDate(event.date));
+    setMood(event.humeur ?? null);
+    setPhotoUri(event.photos?.[0] ?? null);
+    setShowDate(false);
+    setShowTime(false);
+    setShowCalendar(false);
+    setIsSubmitting(false);
+    setPendingMode("edit");
+    setPendingOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isSheetActive) return;
+    openSheet(buildSheetProps());
+  }, [isSheetActive, openSheet, buildSheetProps]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (openModal !== "true") return;
+      const normalizedType = normalizeParam(type);
+      pendingTypeRef.current =
+        normalizedType && Object.keys(TYPE_CONFIG).includes(normalizedType)
+          ? (normalizedType as JalonType)
+          : "dent";
+      setPendingMode("add");
+      setPendingOpen(true);
+    }, [openModal, type]),
+  );
+
+  useEffect(() => {
+    if (!pendingOpen || !layoutReady) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      stashReturnTo();
+      if (pendingMode !== "edit") {
+        const pendingType = pendingTypeRef.current ?? "dent";
+        resetForm();
+        setTypeJalon(pendingType);
+      }
+      openSheet(buildSheetProps());
+      navigation.setParams({
+        openModal: undefined,
+        editId: undefined,
+        type: undefined,
+        mode: undefined,
+      });
+      setPendingOpen(false);
+      setPendingMode(null);
+      pendingTypeRef.current = null;
+    });
+    return () => task.cancel?.();
+  }, [
+    pendingOpen,
+    layoutReady,
+    pendingMode,
+    navigation,
+    resetForm,
+    stashReturnTo,
+    openSheet,
+    returnTargetParam,
+    buildSheetProps,
+  ]);
+
+  useEffect(() => {
+    if (!editId || !layoutReady) return;
+    const normalizedId = Array.isArray(editId) ? editId[0] : editId;
+    if (!normalizedId || editIdRef.current === normalizedId) return;
+    const target = events.find((evt) => evt.id === normalizedId);
+    if (!target) return;
+    stashReturnTo();
+    editIdRef.current = normalizedId;
+    openEditModal(target);
+    navigation.setParams({
+      openModal: undefined,
+      editId: undefined,
+      type: undefined,
+      mode: undefined,
+    });
+  }, [editId, layoutReady, events, navigation, openEditModal, stashReturnTo]);
+
+  const markedDates = useMemo(() => {
+    const marked: Record<string, any> = {};
+    events.forEach((item) => {
+      const dateKey = formatDateKey(toDate(item.date));
+      marked[dateKey] = {
+        marked: true,
+        dotColor: eventColors.jalon.dark,
+      };
+    });
+    if (selectedDate) {
+      marked[selectedDate] = {
+        ...marked[selectedDate],
+        selected: true,
+        selectedColor: Colors[colorScheme].tint,
+        selectedTextColor: "#ffffff",
+      };
+    }
+    if (selectedFilter === "today") {
+      const todayKey = formatDateKey(new Date());
+      marked[todayKey] = {
+        ...marked[todayKey],
+        selected: true,
+        selectedColor: Colors[colorScheme].tint,
+        selectedTextColor: "#ffffff",
+      };
+    }
+    return marked;
+  }, [events, selectedDate, selectedFilter, colorScheme]);
 
   // ============================================
   // RENDER HELPERS
   // ============================================
-  const buildDetails = (event: ActivityEventWithId) => {
-    const parts = [
-      event.duree ? formatDuration(event.duree) : null,
-      event.description,
-    ].filter(Boolean);
-    return parts.length > 0 ? parts.join(" · ") : undefined;
-  };
-
-  const toggleExpand = useCallback((date: string) => {
-    setExpandedDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(date)) {
-        next.delete(date);
-      } else {
-        next.add(date);
-      }
-      return next;
-    });
-  }, []);
-
-  const renderEventItem = (event: ActivityEventWithId, isLast = false) => {
-    const time = toDate(event.date);
-    const config = TYPE_CONFIG[event.typeActivite as ActiviteType];
+  const renderEventItem = (event: MilestoneEventWithId, isLast = false) => {
+    const config = TYPE_CONFIG[event.typeJalon];
+    const date = toDate(event.date);
+    const moodEmoji =
+      typeof event.humeur === "number"
+        ? MOOD_OPTIONS.find((m) => m.value === event.humeur)?.emoji
+        : null;
+    const titleText =
+      event.typeJalon === "autre"
+        ? event.titre ?? TYPE_CONFIG.autre.label
+        : TYPE_CONFIG[event.typeJalon].label;
     return (
       <Pressable
         key={event.id}
@@ -1012,7 +1186,7 @@ export default function ActivitiesScreen() {
               isLast && styles.sessionTimeTextLast,
             ]}
           >
-            {formatTime(time)}
+            {formatTime(date)}
           </Text>
         </View>
         <View
@@ -1028,21 +1202,42 @@ export default function ActivitiesScreen() {
           />
         </View>
         <View style={styles.sessionContent}>
-          <View style={styles.sessionDetails}>
-            <Text style={styles.sessionType}>{config.label}</Text>
-            {buildDetails(event) && (
-              <Text style={styles.sessionDetailText}>
-                {buildDetails(event)}
-              </Text>
-            )}
-          </View>
+        <View style={styles.sessionDetails}>
+          {titleText ? (
+            <Text style={styles.sessionType}>{titleText}</Text>
+          ) : null}
+          {event.description ? (
+            <Text style={styles.sessionDetailText}>{event.description}</Text>
+          ) : null}
+          {event.typeJalon === "humeur" && moodEmoji ? (
+            <Text style={styles.sessionMood}>{moodEmoji}</Text>
+          ) : null}
+        </View>
+          {event.photos?.[0] ? (
+            <Image
+              source={{ uri: event.photos[0] }}
+              style={styles.sessionPhoto}
+            />
+          ) : null}
         </View>
         <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
       </Pressable>
     );
   };
 
-  const renderDayGroup = ({ item }: { item: ActivityGroup }) => {
+  const toggleExpand = (dateKey: string) => {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) {
+        next.delete(dateKey);
+      } else {
+        next.add(dateKey);
+      }
+      return next;
+    });
+  };
+
+  const renderDayGroup = ({ item }: { item: MilestoneGroup }) => {
     const [year, month, day] = item.date.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     const today = new Date();
@@ -1061,7 +1256,6 @@ export default function ActivitiesScreen() {
             });
 
     const isExpanded = expandedDays.has(item.date);
-
     return (
       <View style={styles.dayGroup}>
         <View style={styles.dayHeader}>
@@ -1070,30 +1264,34 @@ export default function ActivitiesScreen() {
             <View style={styles.dayStatItem}>
               <Text style={styles.dayStatValue}>{item.events.length}</Text>
               <Text style={styles.dayStatLabel}>
-                activité{item.events.length > 1 ? "s" : ""}
+                jalon{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
           </View>
         </View>
+
         <View style={styles.statsBreakdown}>
-          {(Object.keys(item.counts) as ActiviteType[]).map((type) => {
-            const count = item.counts[type];
-            if (count === 0) return null;
-            const config = TYPE_CONFIG[type];
-            return (
+          {(Object.keys(TYPE_CONFIG) as JalonType[])
+            .filter((type) => item.counts[type] > 0)
+            .map((type) => (
               <View key={type} style={styles.statsBreakdownItem}>
                 <View
                   style={[
                     styles.statsBreakdownDot,
-                    { backgroundColor: config.color },
+                    { backgroundColor: TYPE_CONFIG[type].color },
                   ]}
                 />
-                <Text style={styles.statsBreakdownLabel}>{config.label}</Text>
-                <Text style={styles.statsBreakdownValue}>{count}</Text>
+                <Text style={styles.statsBreakdownLabel}>
+                  {TYPE_CONFIG[type].label}
+                  {item.counts[type] > 1 ? "s" : ""}
+                </Text>
+                <Text style={styles.statsBreakdownValue}>
+                  {item.counts[type]}
+                </Text>
               </View>
-            );
-          })}
+            ))}
         </View>
+
         <View style={styles.dayContent}>
           <View style={styles.sessionsContainer}>
             {renderEventItem(item.lastEvent, true)}
@@ -1117,7 +1315,7 @@ export default function ActivitiesScreen() {
                     ? "Masquer"
                     : `${item.events.length - 1} autre${
                         item.events.length > 2 ? "s" : ""
-                      } activité${item.events.length > 2 ? "s" : ""}`}
+                      } jalon${item.events.length > 2 ? "s" : ""}`}
                 </Text>
                 <Ionicons
                   name={isExpanded ? "chevron-up" : "chevron-down"}
@@ -1138,64 +1336,19 @@ export default function ActivitiesScreen() {
   return (
     <View style={styles.container}>
       <SafeAreaView
-        style={{ flex: 1 }}
+        style={styles.safeArea}
         edges={["bottom"]}
         onLayout={() => setLayoutReady(true)}
       >
         <View>
-          <View style={styles.filterRow}>
-            <DateFilterBar
-              selected={selectedFilter}
-              onSelect={handleFilterPress}
-            />
-            <View style={styles.quickActionsRow}>
-              <TouchableOpacity
-                style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "tummyTime";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
-              >
-                <FontAwesome
-                  name="baby"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "jeux";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
-              >
-                <FontAwesome
-                  name="puzzle-piece"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "promenade";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
-              >
-                <FontAwesome
-                  name="person-walking"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
+          <DateFilterBar
+            selected={selectedFilter}
+            onSelect={handleFilterPress}
+          />
           {showCalendar && (
             <View style={styles.calendarContainer}>
               <Calendar
+                current={selectedDate || undefined}
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
                 theme={{
@@ -1218,15 +1371,15 @@ export default function ActivitiesScreen() {
           )}
         </View>
 
-        {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
+        {loaded.jalons && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
             <View style={styles.emptyContainer}>
               <IconPulseDots color={Colors[colorScheme].tint} />
-              <ThemedText style={styles.emptyText}>
+              <Text style={styles.emptyText}>
                 {events.length === 0
-                  ? "Aucune activité enregistrée"
-                  : "Aucune activité pour ce filtre"}
-              </ThemedText>
+                  ? "Aucun jalon enregistré"
+                  : "Aucun jalon pour ce filtre"}
+              </Text>
             </View>
           ) : (
             <FlatList
@@ -1237,10 +1390,10 @@ export default function ActivitiesScreen() {
               contentContainerStyle={styles.listContent}
               ListFooterComponent={
                 <LoadMoreButton
-                  isLoading={isLoadingMore}
+                  loading={isLoadingMore || autoLoadMore}
                   hasMore={hasMore}
                   onPress={handleLoadMore}
-                  color={Colors[colorScheme].tint}
+                  accentColor={Colors[colorScheme].tint}
                 />
               }
             />
@@ -1248,7 +1401,7 @@ export default function ActivitiesScreen() {
         ) : (
           <View style={styles.loadingContainer}>
             <IconPulseDots color={Colors[colorScheme].tint} />
-            <Text style={styles.loadingText}>Chargement des activités…</Text>
+            <Text style={styles.loadingText}>Chargement des jalons…</Text>
           </View>
         )}
       </SafeAreaView>
@@ -1256,7 +1409,7 @@ export default function ActivitiesScreen() {
       <ConfirmModal
         visible={showDeleteModal}
         title="Supprimer"
-        message="Cette activité sera supprimée définitivement."
+        message="Ce jalon sera supprimé définitivement."
         confirmText="Supprimer"
         cancelText="Annuler"
         backgroundColor={Colors[colorScheme].background}
@@ -1272,10 +1425,17 @@ export default function ActivitiesScreen() {
   );
 }
 
+// ============================================
+// STYLES
+// ============================================
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
+  },
+  safeArea: {
+    flex: 1,
   },
   headerButtons: {
     flexDirection: "row",
@@ -1294,56 +1454,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingRight: 16,
-  },
-  quickActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginLeft: 8,
-  },
-  quickActionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f0f0f0",
-  },
-  typeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingBottom: 8,
-  },
-  typeChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#f9fafb",
-  },
-  typeChipActive: {
-    backgroundColor: "#fff",
-    borderColor: eventColors.activite.dark,
-  },
-  typeChipText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6b7280",
-  },
-  typeChipTextActive: {
-    color: eventColors.activite.dark,
-    fontWeight: "700",
-  },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 24,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#6b7280",
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    fontSize: 18,
+    color: "#666",
+    marginTop: 16,
+    fontWeight: "600",
   },
   dayGroup: {
     marginBottom: 24,
@@ -1461,6 +1596,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111827",
   },
+  sessionTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+  },
   sessionDetailText: {
     fontSize: 12,
     color: "#6b7280",
@@ -1478,27 +1618,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 24,
+  sessionMood: {
+    fontSize: 16,
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyText: {
-    fontSize: 18,
-    color: "#666",
-    marginTop: 16,
-    fontWeight: "600",
+  sessionPhoto: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
   },
   sheetContent: {
     gap: 12,
@@ -1517,37 +1644,87 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    fontSize: 14,
+    color: "#111827",
   },
-  quantityPickerRow: {
+  inputError: {
+    borderColor: "#dc3545",
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#111827",
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  typeRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    marginBottom: 8,
+    flexWrap: "wrap",
+    gap: 8,
+    paddingBottom: 8,
   },
-  quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    alignItems: "center",
-    justifyContent: "center",
+  typeChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#f9fafb",
   },
-  quantityButtonDisabled: {
-    opacity: 0.6,
+  typeChipActive: {
+    backgroundColor: "#fff",
+    borderColor: eventColors.jalon.dark,
   },
-  quantityButtonText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-  },
-  quantityButtonTextDisabled: {
-    color: "#999",
-  },
-  quantityPickerValue: {
-    fontSize: 16,
+  typeChipText: {
+    fontSize: 12,
     fontWeight: "600",
-    color: "#333",
+    color: "#6b7280",
+  },
+  typeChipTextActive: {
+    color: eventColors.jalon.dark,
+    fontWeight: "700",
+  },
+  chipSection: {
+    gap: 8,
+  },
+  chipLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6b7280",
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  moodChip: {
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    minWidth: 68,
+  },
+  moodChipActive: {
+    borderColor: eventColors.jalon.dark,
+    backgroundColor: "#ede7f6",
+  },
+  moodEmoji: {
+    fontSize: 18,
+  },
+  moodLabel: {
+    fontSize: 11,
+    color: "#6b7280",
+    fontWeight: "600",
+  },
+  moodLabelActive: {
+    color: eventColors.jalon.dark,
   },
   dateTimeContainerWithPadding: {
     flexDirection: "row",
@@ -1560,13 +1737,13 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#d7dbe0",
     backgroundColor: "#f5f6f8",
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
   dateButtonText: {
     fontSize: 14,
@@ -1582,10 +1759,68 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "600",
     marginBottom: 4,
+    textTransform: "capitalize",
   },
   selectedTime: {
     fontSize: 20,
     color: "#374151",
     fontWeight: "600",
+  },
+  photoRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  photoPreview: {
+    width: 88,
+    height: 66,
+    borderRadius: 12,
+    backgroundColor: "#f3f4f6",
+  },
+  photoPlaceholder: {
+    width: 88,
+    height: 66,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: "#f9fafb",
+  },
+  photoPlaceholderText: {
+    fontSize: 11,
+    color: "#9ca3af",
+  },
+  photoActions: {
+    gap: 8,
+    flex: 1,
+  },
+  photoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
+  },
+  photoButtonText: {
+    fontSize: 13,
+    color: "#111827",
+    fontWeight: "600",
+  },
+  photoButtonSecondary: {
+    alignSelf: "flex-start",
+  },
+  photoButtonSecondaryText: {
+    fontSize: 12,
+    color: "#9ca3af",
+  },
+  photoUploading: {
+    fontSize: 12,
+    color: eventColors.jalon.dark,
   },
 });

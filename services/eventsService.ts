@@ -43,7 +43,8 @@ export type EventType =
   | "croissance" // Taille, poids, tête
   | "vaccin"
   | "vitamine"
-  | "activite"; // Activités d'éveil
+  | "activite" // Activités d'éveil
+  | "jalon"; // Jalons et moments
 
 export interface BaseEvent {
   id?: string;
@@ -162,6 +163,15 @@ export interface ActiviteEvent extends BaseEvent {
   description?: string;
 }
 
+export interface JalonEvent extends BaseEvent {
+  type: "jalon";
+  typeJalon: "dent" | "pas" | "sourire" | "mot" | "humeur" | "photo" | "autre";
+  titre?: string;
+  description?: string;
+  photos?: string[]; // URLs
+  humeur?: 1 | 2 | 3 | 4 | 5;
+}
+
 export type Event =
   | BiberonEvent
   | TeteeEvent
@@ -177,7 +187,8 @@ export type Event =
   | CroissanceEvent
   | VaccinEvent
   | VitamineEvent
-  | ActiviteEvent;
+  | ActiviteEvent
+  | JalonEvent;
 
 // ============================================
 // CRUD UNIFIÉ

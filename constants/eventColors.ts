@@ -47,6 +47,10 @@ export const eventColors = {
     dark: "#10b981", // Emerald green
     light: "#d1fae5",
   },
+  jalon: {
+    dark: "#ec4899", // Pink
+    light: "#fde7f3",
+  },
   default: {
     dark: "#6c757d", // Gray
     light: "#f8f9fa",

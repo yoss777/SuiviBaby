@@ -1423,6 +1423,25 @@ export async function supprimerActivite(childId: string, id: string) {
   return supprimerEventNouveau(childId, id);
 }
 
+export async function ajouterJalon(childId: string, data: any) {
+  const newEventData = removeUndefined({
+    type: "jalon",
+    ...data,
+  });
+  return ajouterEventNouveau(childId, newEventData as any);
+}
+
+export async function modifierJalon(childId: string, id: string, data: any) {
+  const newEventData = removeUndefined({
+    ...data,
+  });
+  return modifierEventNouveau(childId, id, newEventData as any);
+}
+
+export async function supprimerJalon(childId: string, id: string) {
+  return supprimerEventNouveau(childId, id);
+}
+
 // ============================================
 // MONITORING & DEBUG
 // ============================================

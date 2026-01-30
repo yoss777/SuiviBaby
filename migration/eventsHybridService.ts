@@ -937,6 +937,19 @@ export function ecouterActivitesHybrid(
   });
 }
 
+export function ecouterJalonsHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
+): () => void {
+  return ecouterEvenements(childId, callback, {
+    type: "jalon",
+    waitForServer: options?.waitForServer,
+    depuis: options?.depuis,
+    jusqu: options?.jusqu,
+  });
+}
+
 // ============================================
 // LECTURE HYBRIDE - BIBERONS
 // ============================================

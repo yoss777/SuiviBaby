@@ -104,11 +104,11 @@ const formatTime = (date: Date) =>
   date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
 const formatDateLabel = (date: Date) =>
-  date.toLocaleDateString("fr-FR", {
+  `${date.toLocaleDateString("fr-FR", {
     weekday: "long",
     day: "numeric",
     month: "long",
-  });
+  })} ${date.getFullYear()}`;
 
 const formatDuration = (minutes?: number) => {
   if (!minutes || minutes <= 0) return "0 min";
@@ -1066,27 +1066,91 @@ export default function RoutinesScreen() {
         <View style={styles.sheetContent}>
           {renderTypePicker()}
 
+          <View style={styles.chipSection}>
+            <Text style={styles.chipLabel}>Lieu</Text>
+            <View style={styles.chipRow}>
+              {LOCATION_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.chip,
+                    location === option && styles.chipActive,
+                  ]}
+                  onPress={() => setLocation(option)}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      location === option && styles.chipTextActive,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.chipSection}>
+            <Text style={styles.chipLabel}>Qualité</Text>
+            <View style={styles.chipRow}>
+              {QUALITY_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[styles.chip, quality === option && styles.chipActive]}
+                  onPress={() => setQuality(option)}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      quality === option && styles.chipTextActive,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Note</Text>
+            <TextInput
+              value={noteSommeil}
+              onChangeText={setNoteSommeil}
+              placeholder="Ajouter une note"
+              style={styles.input}
+            />
+          </View>
+
           <View style={styles.rowBetween}>
             <TouchableOpacity
-              style={styles.sleepDateButton}
+              style={styles.dateButton}
               onPress={() => setShowDateStart(true)}
             >
-              <Text style={styles.sleepDateButtonText}>Date début</Text>
+              <FontAwesome5
+                name="calendar-alt"
+                size={16}
+                color={Colors[colorScheme].tint}
+              />
+              <Text style={styles.dateButtonText}>Date début</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.sleepDateButton}
+              style={styles.dateButton}
               onPress={() => setShowTimeStart(true)}
             >
-              <Text style={styles.sleepDateButtonText}>Heure début</Text>
+              <FontAwesome5
+                name="clock"
+                size={16}
+                color={Colors[colorScheme].tint}
+              />
+              <Text style={styles.dateButtonText}>Heure début</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.rowBetween}>
             <TouchableOpacity
-              style={[
-                styles.sleepDateButton,
-                isOngoing && styles.dateButtonDisabled,
-              ]}
+              style={[styles.dateButton, isOngoing && styles.dateButtonDisabled]}
               onPress={() => {
                 if (!isOngoing) {
                   setHeureFin((prev) => prev ?? new Date());
@@ -1094,13 +1158,15 @@ export default function RoutinesScreen() {
                 }
               }}
             >
-              <Text style={styles.sleepDateButtonText}>Date fin</Text>
+              <FontAwesome5
+                name="calendar-alt"
+                size={16}
+                color={Colors[colorScheme].tint}
+              />
+              <Text style={styles.dateButtonText}>Date fin</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[
-                styles.sleepDateButton,
-                isOngoing && styles.dateButtonDisabled,
-              ]}
+              style={[styles.dateButton, isOngoing && styles.dateButtonDisabled]}
               onPress={() => {
                 if (!isOngoing) {
                   setHeureFin((prev) => prev ?? new Date());
@@ -1108,7 +1174,12 @@ export default function RoutinesScreen() {
                 }
               }}
             >
-              <Text style={styles.sleepDateButtonText}>Heure fin</Text>
+              <FontAwesome5
+                name="clock"
+                size={16}
+                color={Colors[colorScheme].tint}
+              />
+              <Text style={styles.dateButtonText}>Heure fin</Text>
             </TouchableOpacity>
           </View>
 
@@ -1225,63 +1296,6 @@ export default function RoutinesScreen() {
               }}
             />
           )}
-
-          <View style={styles.chipSection}>
-            <Text style={styles.chipLabel}>Lieu</Text>
-            <View style={styles.chipRow}>
-              {LOCATION_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.chip,
-                    location === option && styles.chipActive,
-                  ]}
-                  onPress={() => setLocation(option)}
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      location === option && styles.chipTextActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.chipSection}>
-            <Text style={styles.chipLabel}>Qualité</Text>
-            <View style={styles.chipRow}>
-              {QUALITY_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[styles.chip, quality === option && styles.chipActive]}
-                  onPress={() => setQuality(option)}
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      quality === option && styles.chipTextActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Note</Text>
-            <TextInput
-              value={noteSommeil}
-              onChangeText={setNoteSommeil}
-              placeholder="Ajouter une note"
-              style={styles.input}
-            />
-          </View>
         </View>
       );
     }
@@ -2324,23 +2338,10 @@ const styles = StyleSheet.create({
   },
   rowBetween: {
     flexDirection: "row",
-    gap: 10,
-  },
-  sleepDateButton: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingVertical: 10,
-    alignItems: "center",
+    gap: 12,
   },
   dateButtonDisabled: {
     opacity: 0.5,
-  },
-  sleepDateButtonText: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "600",
   },
   checkboxRow: {
     flexDirection: "row",
@@ -2409,7 +2410,7 @@ const styles = StyleSheet.create({
   },
   sleepSelectedDateTime: {
     alignItems: "center",
-    gap: 4,
+    marginBottom: 16,
   },
   selectedDate: {
     fontSize: 16,
@@ -2418,9 +2419,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sleepSelectedDate: {
-    fontSize: 13,
+    fontSize: 16,
+    color: "#333",
     fontWeight: "600",
-    color: "#4b5563",
+    marginBottom: 4,
     textTransform: "capitalize",
   },
   selectedTime: {
@@ -2429,8 +2431,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   sleepSelectedTime: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#4c2c79",
+    fontSize: 20,
+    color: "#374151",
+    fontWeight: "600",
   },
 });
