@@ -157,7 +157,7 @@ export interface VitamineEvent extends BaseEvent {
 
 export interface ActiviteEvent extends BaseEvent {
   type: "activite";
-  typeActivite: "tummyTime" | "jeux" | "lecture" | "promenade" | "bain" | "massage" | "eveil" | "autre";
+  typeActivite: "tummyTime" | "jeux" | "lecture" | "promenade" | "massage" | "musique" | "eveil" | "sortie" | "autre";
   duree?: number; // minutes
   description?: string;
 }

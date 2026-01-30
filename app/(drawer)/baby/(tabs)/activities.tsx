@@ -57,6 +57,7 @@ type ActiviteType =
   | "massage" // Massage bébé
   | "musique" // Éveil musical
   | "eveil" // Éveil sensoriel
+  | "sortie" // Sortie (médecin, visite, parc, etc.)
   | "autre"; // Autre activité
 
 type FilterType = "today" | "past";
@@ -108,6 +109,11 @@ const TYPE_CONFIG: Record<
     label: "Éveil sensoriel",
     color: eventColors.activite.dark,
     icon: "lightbulb",
+  },
+  sortie: {
+    label: "Sortie",
+    color: eventColors.activite.dark,
+    icon: "door-open",
   },
   autre: {
     label: "Autre",

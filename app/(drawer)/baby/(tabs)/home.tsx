@@ -311,6 +311,7 @@ export default function HomeDashboard() {
     massage: "Massage",
     musique: "Musique",
     eveil: "Éveil sensoriel",
+    sortie: "Sortie",
     autre: "Autre",
   };
 

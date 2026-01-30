@@ -84,6 +84,7 @@ const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   massage: "Massage",
   musique: "Musique",
   eveil: "Éveil sensoriel",
+  sortie: "Sortie",
   autre: "Autre",
 };
 

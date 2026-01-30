@@ -53,19 +53,22 @@
 - Templates rapides: routines courantes (coucher, check-up complet).
 - Mode hors-ligne robuste: indicateur sync clair + queue visible.
 
-## Structure écrans suggérée
+## ✅ Fait: Activités (MVP)
+
+- ✅ Service + type: Activité avec sous-types (tummyTime, jeux, lecture, promenade, massage, musique, éveil, sortie, autre).
+- ✅ Screen Activités complet (Plus) avec logique alignée aux autres écrans.
+- ✅ Bottom sheet Activités: sélecteur de type, durée, description, date/heure, notes.
+- ✅ Home: quick add Activités + redirections edit vers Activités.
+- ✅ Chrono: filtre "Activités" + redirections edit.
+- ✅ Timelines: affichage du type spécifique (ex: "Tummy Time", "Sortie") au lieu de "Activité".
+
+## Structure écrans retenue (3 écrans)
 
 - **Soins / Santé**: Température, Symptômes, Médicaments, Vaccins, Vitamines.
-- **Routines**: Sommeil, Bain, Templates rapides.
-- **Éveil / Activités**: Activités (tummy time, jeux, lecture, etc.) + Jalons.
-- **Sorties / Contexte**: Sorties, Notes rapides.
+- **Routines**: Sommeil, Bain.
+- **Activités**: Tummy Time, Jeux, Lecture, Promenade, Massage, Musique, Éveil sensoriel, Sortie, Autre.
 
-Option retenue (4 écrans):
-
-- **Soins / Santé**
-- **Routines**
-- **Éveil / Activités**
-- **Sorties / Contexte**
+Note: Les sorties sont intégrées comme type d'activité plutôt qu'un écran séparé. Permet de tracker rendez-vous médecin, visites famille, sorties au parc, etc. avec lieu (via description), durée et notes.
 
 ## Home – arbitrage affichage
 
