@@ -1,5 +1,13 @@
 import { MigrationBanner } from "@/components/migration";
+import {
+  MoodCard,
+  RecentEventsList,
+  SleepWidget,
+  StatsCard,
+  StatsCardSkeleton,
+} from "@/components/suivibaby/dashboard";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
+import { MOOD_EMOJIS, QUICK_ADD_ACTIONS } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
@@ -31,10 +39,8 @@ import React, {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   Animated,
   AppState,
-  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -270,13 +276,6 @@ export default function HomeDashboard() {
         ].filter(Boolean);
         return parts.length > 0 ? parts.join(" · ") : undefined;
       }
-      case "bain": {
-        const parts = [
-          event.duree ? `${event.duree} min` : null,
-          event.temperatureEau ? `${event.temperatureEau}°C` : null,
-        ].filter(Boolean);
-        return parts.length > 0 ? parts.join(" · ") : undefined;
-      }
       case "temperature": {
         const value =
           typeof event.valeur === "number" ? `${event.valeur}°C` : undefined;
@@ -315,114 +314,7 @@ export default function HomeDashboard() {
       default:
         return undefined;
     }
-  }, []);
-
-  // Activity type labels
-  const ACTIVITY_TYPE_LABELS: Record<string, string> = {
-    tummyTime: "Tummy Time",
-    jeux: "Jeux",
-    lecture: "Lecture",
-    promenade: "Promenade",
-    massage: "Massage",
-    musique: "Musique",
-    eveil: "Éveil sensoriel",
-    sortie: "Sortie",
-    autre: "Autre",
-  };
-
-  const JALON_TYPE_LABELS: Record<string, string> = {
-    dent: "Première dent",
-    pas: "Premiers pas",
-    sourire: "Premier sourire",
-    mot: "Premiers mots",
-    humeur: "Humeur du jour",
-    photo: "Moment photo",
-    autre: "Autre moment",
-  };
-
-  const MOOD_EMOJIS: Record<number, string> = {
-    1: "😢",
-    2: "😐",
-    3: "🙂",
-    4: "😄",
-    5: "🥰",
-  };
-
-  const EVENT_CONFIG: Record<
-    string,
-    { label: string; icon: { lib: "fa6" | "mci"; name: string }; color: string }
-  > = {
-    tetee: {
-      label: "Tétée",
-      icon: { lib: "fa6", name: "person-breastfeeding" },
-      color: "#E91E63",
-    },
-    biberon: {
-      label: "Biberon",
-      icon: { lib: "mci", name: "baby-bottle" },
-      color: "#FF5722",
-    },
-    pompage: {
-      label: "Pompage",
-      icon: { lib: "fa6", name: "pump-medical" },
-      color: "#28a745",
-    },
-    sommeil: {
-      label: "Sommeil",
-      icon: { lib: "fa6", name: "bed" },
-      color: "#6f42c1",
-    },
-    bain: {
-      label: "Bain",
-      icon: { lib: "fa6", name: "bath" },
-      color: "#3b82f6",
-    },
-    temperature: {
-      label: "Température",
-      icon: { lib: "fa6", name: "temperature-half" },
-      color: "#e03131",
-    },
-    medicament: {
-      label: "Médicament",
-      icon: { lib: "fa6", name: "pills" },
-      color: "#2f9e44",
-    },
-    symptome: {
-      label: "Symptôme",
-      icon: { lib: "fa6", name: "virus" },
-      color: "#f59f00",
-    },
-    miction: {
-      label: "Miction",
-      icon: { lib: "fa6", name: "water" },
-      color: "#17a2b8",
-    },
-    selle: {
-      label: "Selle",
-      icon: { lib: "fa6", name: "poop" },
-      color: "#dc3545",
-    },
-    vitamine: {
-      label: "Vitamine",
-      icon: { lib: "fa6", name: "pills" },
-      color: "#FF9800",
-    },
-    vaccin: {
-      label: "Vaccin",
-      icon: { lib: "fa6", name: "syringe" },
-      color: "#9C27B0",
-    },
-    activite: {
-      label: "Activité",
-      icon: { lib: "fa6", name: "play-circle" },
-      color: "#10b981",
-    },
-    jalon: {
-      label: "Jalon",
-      icon: { lib: "fa6", name: "star" },
-      color: eventColors.jalon.dark,
-    },
-  };
+  }, [formatDuration, toDate]);
 
   function getEditRoute(event: any): string | null {
     if (!event.id) return null;
@@ -456,22 +348,6 @@ export default function HomeDashboard() {
         return null;
     }
   }
-
-  const renderEventIcon = useCallback(
-    (config: { lib: "fa6" | "mci"; name: string }, color: string) => {
-      if (config.lib === "mci") {
-        return (
-          <MaterialCommunityIcons
-            name={config.name as any}
-            size={14}
-            color={color}
-          />
-        );
-      }
-      return <FontAwesome name={config.name as any} size={14} color={color} />;
-    },
-    [],
-  );
 
   const getDayLabel = useCallback((date: Date) => {
     const today = new Date();
@@ -550,7 +426,7 @@ export default function HomeDashboard() {
       const date = toDate(item.date);
       return date >= today && date < tomorrow;
     });
-  }, [data.jalons, toDate, currentTime]);
+  }, [data.jalons, toDate]);
 
   const todayMoodEvent = useMemo(() => {
     const moods = todayJalons
@@ -590,7 +466,7 @@ export default function HomeDashboard() {
         if (!moodId) {
           showToast("Impossible d'enregistrer l'humeur.");
         }
-      } catch (error) {
+      } catch {
         showToast("Impossible d'enregistrer l'humeur.");
       } finally {
         setIsMoodSaving(false);
@@ -857,108 +733,6 @@ export default function HomeDashboard() {
     router.push(route as any);
   }, [isOpen]);
 
-  const quickAddActions = useMemo(
-    () => [
-      {
-        key: "growth",
-        label: "Croissance",
-        icon: { type: "fa", name: "seedling", color: "#8BCF9B" },
-        route: "/baby/croissance?openModal=true&returnTo=home",
-      },
-      {
-        key: "tetee",
-        label: "Tétée",
-        icon: { type: "fa", name: "person-breastfeeding", color: "#4A90E2" },
-        route: "/baby/meals?tab=seins&openModal=true&returnTo=home",
-      },
-      {
-        key: "biberon",
-        label: "Biberon",
-        icon: { type: "mc", name: "baby-bottle", color: "#28a745" },
-        route: "/baby/meals?tab=biberons&openModal=true&returnTo=home",
-      },
-      {
-        key: "pompage",
-        label: "Pompage",
-        icon: { type: "fa", name: "pump-medical", color: "#20c997" },
-        route: "/baby/pumping?openModal=true&returnTo=home",
-      },
-      {
-        key: "vitamine",
-        label: "Vitamine",
-        icon: { type: "fa", name: "pills", color: "#FF9800" },
-        route: "/baby/soins?type=vitamine&openModal=true&returnTo=home",
-      },
-      {
-        key: "vaccin",
-        label: "Vaccin",
-        icon: { type: "fa", name: "syringe", color: "#9C27B0" },
-        route: "/baby/soins?type=vaccin&openModal=true&returnTo=home",
-      },
-      {
-        key: "temperature",
-        label: "Température",
-        icon: { type: "fa", name: "temperature-half", color: "#FF6B6B" },
-        route: "/baby/soins?type=temperature&openModal=true&returnTo=home",
-      },
-      {
-        key: "medicament",
-        label: "Médicament",
-        icon: { type: "fa", name: "pills", color: "#4CAF50" },
-        route: "/baby/soins?type=medicament&openModal=true&returnTo=home",
-      },
-      {
-        key: "symptome",
-        label: "Symptôme",
-        icon: { type: "fa", name: "virus", color: "#FF8C42" },
-        route: "/baby/soins?type=symptome&openModal=true&returnTo=home",
-      },
-      {
-        key: "bain",
-        label: "Bain",
-        icon: { type: "fa", name: "bath", color: "#3b82f6" },
-        route: "/baby/routines?type=bain&openModal=true&returnTo=home",
-      },
-      {
-        key: "miction",
-        label: "Miction",
-        icon: { type: "fa", name: "droplet", color: "#17a2b8" },
-        route: "/baby/diapers?tab=mictions&openModal=true&returnTo=home",
-      },
-      {
-        key: "selle",
-        label: "Selle",
-        icon: { type: "fa", name: "poop", color: "#dc3545" },
-        route: "/baby/diapers?tab=selles&openModal=true&returnTo=home",
-      },
-      {
-        key: "sommeil",
-        label: "Sommeil",
-        icon: { type: "fa", name: "bed", color: "#6f42c1" },
-        route: "/baby/routines?type=sommeil&openModal=true&returnTo=home",
-      },
-      {
-        key: "activite",
-        label: "Activité",
-        icon: { type: "fa", name: "baby", color: "#10b981" },
-        route: "/baby/activities?openModal=true&returnTo=home",
-      },
-      {
-        key: "jalon",
-        label: "Jalon",
-        icon: { type: "fa", name: "star", color: eventColors.jalon.dark },
-        route: "/baby/milestones?openModal=true&returnTo=home",
-      },
-      {
-        key: "humeur",
-        label: "Humeur du jour",
-        icon: { type: "fa", name: "heart", color: eventColors.jalon.dark },
-        route: "/baby/milestones?type=humeur&openModal=true&returnTo=home",
-      },
-    ],
-    [],
-  );
-
   const handleQuickAddPress = useCallback(
     (route: string) => {
       if (isOpen) {
@@ -982,12 +756,14 @@ export default function HomeDashboard() {
       snapPoints: ["55%", "75%"],
       children: (
         <View style={styles.quickSheetList}>
-          {quickAddActions.map((action) => (
+          {QUICK_ADD_ACTIONS.map((action) => (
             <TouchableOpacity
               key={action.key}
               style={styles.quickSheetItem}
               onPress={() => handleQuickAddPress(action.route)}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`Ajouter ${action.label}`}
             >
               <View style={styles.quickSheetIcon}>
                 {action.icon.type === "mc" ? (
@@ -1017,13 +793,7 @@ export default function HomeDashboard() {
         </View>
       ),
     });
-  }, [
-    closeSheet,
-    colorScheme,
-    handleQuickAddPress,
-    openSheet,
-    quickAddActions,
-  ]);
+  }, [colorScheme, handleQuickAddPress, openSheet]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1126,7 +896,7 @@ export default function HomeDashboard() {
             selles: prefs.reminders?.thresholds?.selles ?? 0,
             vitamines: prefs.reminders?.thresholds?.vitamines ?? 0,
           });
-        } catch (error) {
+        } catch {
           if (!isActive) return;
           setRemindersEnabled(true);
         }
@@ -1438,7 +1208,7 @@ export default function HomeDashboard() {
         lastTimestamp: getTimestamp(lastVaccin),
       },
     });
-  }, [data]);
+  }, [data, toDate]);
 
   // ============================================
   // HELPERS - UI
@@ -1451,297 +1221,6 @@ export default function HomeDashboard() {
     return "Bonsoir";
   };
 
-  const getTimeSinceLastActivity = (lastTimestamp?: number) => {
-    if (!lastTimestamp || isNaN(lastTimestamp)) return null;
-
-    const now = new Date(currentTime.getTime());
-    const actionTime = new Date(lastTimestamp);
-
-    const nowTotalMinutes = Math.floor(now.getTime() / (1000 * 60));
-    const actionTotalMinutes = Math.floor(actionTime.getTime() / (1000 * 60));
-
-    const diffMinutes = nowTotalMinutes - actionTotalMinutes;
-
-    if (diffMinutes < 0) return null;
-
-    if (diffMinutes === 0) {
-      return "à l'instant";
-    }
-
-    const diffHours = Math.floor(diffMinutes / 60);
-    const remainingMinutes = diffMinutes % 60;
-
-    if (diffHours > 0) {
-      return `il y a ${diffHours}h${
-        remainingMinutes > 0 ? ` ${remainingMinutes}min` : ""
-      }`;
-    }
-
-    return `il y a ${diffMinutes}min`;
-  };
-
-  // ============================================
-  // COMPONENTS - CARDS
-  // ============================================
-
-  const StatsCard = ({
-    title,
-    value,
-    unit,
-    icon,
-    color,
-    lastActivity,
-    lastTimestamp,
-    onPress,
-    addEvent,
-  }: any) => {
-    const lastSessionDate = currentTime.getTime() - (lastTimestamp || 0);
-    const thresholdHours =
-      title === "Alimentation"
-        ? reminderThresholds.repas
-        : title === "Pompages"
-          ? reminderThresholds.pompages
-          : title === "Mictions"
-            ? reminderThresholds.mictions
-            : title === "Selles"
-              ? reminderThresholds.selles
-              : null;
-    const warnThreshold =
-      remindersEnabled && thresholdHours && thresholdHours > 0
-        ? thresholdHours * 60 * 60 * 1000
-        : null;
-
-    return (
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={onPress}
-        style={styles.statsCard}
-      >
-        <View style={styles.statsHeader}>
-          {title === "Biberons" ? (
-            <MaterialCommunityIcons
-              name="baby-bottle"
-              size={20}
-              color={color}
-            />
-          ) : (
-            <FontAwesome name={icon} size={20} color={color} />
-          )}
-          <Text style={styles.statsTitle}>{title}</Text>
-          {/* {addEvent && (
-            <FontAwesome
-              name="plus"
-              size={18}
-              color={Colors[colorScheme].tabIconDefault}
-              style={{ marginLeft: "auto" }}
-            />
-          )} */}
-        </View>
-        <Text style={[styles.statsValue, { color }]}>
-          {value} {unit}
-        </Text>
-        {lastActivity && (
-          <Text style={styles.statsLastActivity}>
-            Dernière fois: {lastActivity}
-          </Text>
-        )}
-        {lastTimestamp &&
-        warnThreshold !== null &&
-        lastSessionDate > warnThreshold ? (
-          <Text style={[styles.statsTimeSince, { color: "#dc3545" }]}>
-            {/* {"⚠️ "}{getTimeSinceLastActivity(lastTimestamp)} */}
-            {getTimeSinceLastActivity(lastTimestamp)}
-          </Text>
-        ) : (
-          lastTimestamp && (
-            <Text style={styles.statsTimeSince}>
-              {getTimeSinceLastActivity(lastTimestamp)}
-            </Text>
-          )
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  const SommeilWidgetCard = ({ title, value, unit, icon, color }: any) => {
-    return (
-      <View style={[styles.statsCard, styles.sleepWidget]}>
-        {sommeilEnCours ? (
-          <>
-            <View style={styles.sleepWidgetHeader}>
-              <Text style={styles.sleepWidgetTitle}>
-                {sommeilEnCours.isNap ? "Sieste" : "Nuit"} en cours
-              </Text>
-              {/* {typeof sommeilEnCours.isNap === "boolean" && (
-                <View style={styles.sleepWidgetBadge}>
-                  <Text style={styles.sleepWidgetBadgeText}>
-                    {sommeilEnCours.isNap ? "Sieste" : "Nuit"}
-                  </Text>
-                </View>
-              )} */}
-            </View>
-            <Text style={styles.sleepWidgetValue}>
-              {formatDuration(elapsedSleepMinutes)}
-            </Text>
-            <Text style={styles.sleepWidgetSubtitle}>
-              Début {formatTime(toDate(sommeilEnCours.heureDebut))}
-            </Text>
-            <TouchableOpacity
-              style={styles.sleepWidgetStop}
-              onPress={handleStopSleep}
-            >
-              <Text style={styles.sleepWidgetStopText}>Terminer</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text style={styles.sleepWidgetTitle}>Nouvelle session</Text>
-            <Text style={styles.sleepWidgetSubtitle}>Tap pour démarrer</Text>
-            <View style={styles.sleepWidgetButtons}>
-              <TouchableOpacity
-                style={styles.sleepWidgetPrimary}
-                onPress={() => handleStartSleep(true)}
-              >
-                <Text style={styles.sleepWidgetPrimaryText}>Sieste</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.sleepWidgetSecondary}
-                onPress={() => handleStartSleep(false)}
-              >
-                <Text style={styles.sleepWidgetSecondaryText}>Nuit</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-      </View>
-
-      // <TouchableOpacity
-      //   activeOpacity={0.7}
-      //   onPress={onPress}
-      //   style={styles.statsCard}
-      // >
-      //   <View style={styles.statsHeader}>
-      //     {title === "Biberons" ? (
-      //       <MaterialCommunityIcons
-      //         name="baby-bottle"
-      //         size={20}
-      //         color={color}
-      //       />
-      //     ) : (
-      //       <FontAwesome name={icon} size={20} color={color} />
-      //     )}
-      //     <Text style={styles.statsTitle}>{title}</Text>
-      //     {/* {addEvent && (
-      //       <FontAwesome
-      //         name="plus"
-      //         size={18}
-      //         color={Colors[colorScheme].tabIconDefault}
-      //         style={{ marginLeft: "auto" }}
-      //       />
-      //     )} */}
-      //   </View>
-      //   <Text style={[styles.statsValue, { color }]}>
-      //     {value} {unit}
-      //   </Text>
-      //   {lastActivity && (
-      //     <Text style={styles.statsLastActivity}>
-      //       Dernière fois: {lastActivity}
-      //     </Text>
-      //   )}
-      //   {lastTimestamp &&
-      //   warnThreshold !== null &&
-      //   lastSessionDate > warnThreshold ? (
-      //     <Text style={[styles.statsTimeSince, { color: "#dc3545" }]}>
-      //       {/* {"⚠️ "}{getTimeSinceLastActivity(lastTimestamp)} */}
-      //       {getTimeSinceLastActivity(lastTimestamp)}
-      //     </Text>
-      //   ) : (
-      //     lastTimestamp && (
-      //       <Text style={styles.statsTimeSince}>
-      //         {getTimeSinceLastActivity(lastTimestamp)}
-      //       </Text>
-      //     )
-      //   )}
-      // </TouchableOpacity>
-    );
-  };
-
-  const MoodQuickCard = () => {
-    const moodValue = todayMoodEvent?.humeur ?? null;
-    const lastMoodTime = todayMoodEvent
-      ? formatTime(toDate(todayMoodEvent.date))
-      : null;
-    const moodOptions: { value: 1 | 2 | 3 | 4 | 5; emoji: string }[] = [
-      { value: 1, emoji: "😢" },
-      { value: 2, emoji: "😐" },
-      { value: 3, emoji: "🙂" },
-      { value: 4, emoji: "😄" },
-      { value: 5, emoji: "🥰" },
-    ];
-
-    return (
-      <View style={[styles.statsCard, styles.moodCard]}>
-        <View style={styles.moodHeader}>
-          <FontAwesome name="heart" size={18} color={eventColors.jalon.dark} />
-          <Text style={styles.moodTitle}>Humeur du jour</Text>
-        </View>
-        <View style={styles.moodRow}>
-          {moodOptions.map((option) => {
-            const active = moodValue === option.value;
-            return (
-              <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.moodEmojiChip,
-                  active && styles.moodEmojiChipActive,
-                ]}
-                onPress={() => handleSetMood(option.value)}
-                activeOpacity={0.7}
-                disabled={isMoodSaving}
-              >
-                <Text style={styles.moodEmojiText}>{option.emoji}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        {/* <Text style={styles.moodSubtitle}>
-          {lastMoodTime ? `Dernière humeur: ${lastMoodTime}` : "Aucune humeur"}
-        </Text> */}
-      </View>
-    );
-  };
-
-  const LoadingCard = () => (
-    <View style={styles.statsCard}>
-      <View style={[styles.statsHeader, { opacity: 0.5 }]}>
-        <View
-          style={{
-            width: 20,
-            height: 20,
-            backgroundColor: "#e9ecef",
-            borderRadius: 10,
-          }}
-        />
-        <View
-          style={{
-            width: 60,
-            height: 12,
-            backgroundColor: "#e9ecef",
-            borderRadius: 6,
-          }}
-        />
-      </View>
-      <View
-        style={{
-          alignItems: "center",
-          justifyContent: "center",
-          paddingVertical: 10,
-        }}
-      >
-        <ActivityIndicator size="small" color="#6c757d" />
-      </View>
-    </View>
-  );
 
   // ============================================
   // RENDER
@@ -1802,7 +1281,7 @@ export default function HomeDashboard() {
         {/* Repas & Pompages - Vue d'ensemble */}
         <View style={styles.statsGrid}>
           {loading.tetees ? (
-            <LoadingCard />
+            <StatsCardSkeleton />
           ) : (
             <StatsCard
               title="Alimentation"
@@ -1815,11 +1294,14 @@ export default function HomeDashboard() {
               onPress={() =>
                 router.push("/baby/stats?tab=tetees&returnTo=home" as any)
               }
+              remindersEnabled={remindersEnabled}
+              reminderThreshold={reminderThresholds.repas}
+              currentTime={currentTime}
             />
           )}
 
           {loading.pompages ? (
-            <LoadingCard />
+            <StatsCardSkeleton />
           ) : (
             <StatsCard
               title="Pompages"
@@ -1832,14 +1314,16 @@ export default function HomeDashboard() {
               onPress={() =>
                 router.push("/baby/pumping?openModal=true&returnTo=home" as any)
               }
-              addEvent={true}
+              remindersEnabled={remindersEnabled}
+              reminderThreshold={reminderThresholds.pompages}
+              currentTime={currentTime}
             />
           )}
         </View>
 
         <View style={styles.statsGrid}>
           {loading.sommeils ? (
-            <LoadingCard />
+            <StatsCardSkeleton />
           ) : (
             <StatsCard
               title="Sommeil"
@@ -1858,30 +1342,35 @@ export default function HomeDashboard() {
             />
           )}
           {loading.sommeils ? (
-            <LoadingCard />
+            <StatsCardSkeleton />
           ) : (
-            // <StatsCard
-            //   title="Sommeil"
-            //   value={formatDuration(todayStats.sommeil.totalMinutes)}
-            //   unit=""
-            //   icon="bed"
-            //   color="#6f42c1"
-            //   lastActivity={todayStats.sommeil.lastTime}
-            //   lastTimestamp={todayStats.sommeil.lastTimestamp}
-            //   onPress={() =>
-            //     router.push("/baby/sommeil?openModal=true&returnTo=home" as any)
-            //   }
-            //   addEvent={true}
-            // />
-
-            <SommeilWidgetCard />
+            <SleepWidget
+              isActive={!!sommeilEnCours}
+              isNap={sommeilEnCours?.isNap}
+              elapsedMinutes={elapsedSleepMinutes}
+              startTime={
+                sommeilEnCours?.heureDebut
+                  ? formatTime(toDate(sommeilEnCours.heureDebut))
+                  : undefined
+              }
+              onStartSleep={handleStartSleep}
+              onStopSleep={handleStopSleep}
+            />
           )}
         </View>
 
         <View style={styles.statsGrid}>
-          {loading.jalons ? <LoadingCard /> : <MoodQuickCard />}
           {loading.jalons ? (
-            <LoadingCard />
+            <StatsCardSkeleton />
+          ) : (
+            <MoodCard
+              currentMood={todayMoodEvent?.humeur ?? null}
+              onSelectMood={handleSetMood}
+              isLoading={isMoodSaving}
+            />
+          )}
+          {loading.jalons ? (
+            <StatsCardSkeleton />
           ) : (
             <StatsCard
               title="Jalons"
@@ -1907,8 +1396,8 @@ export default function HomeDashboard() {
         <View style={styles.statsGrid}>
           {loading.tetees || loading.biberons ? (
             <>
-              <LoadingCard />
-              <LoadingCard />
+              <StatsCardSkeleton />
+              <StatsCardSkeleton />
             </>
           ) : (
             <>
@@ -1949,7 +1438,7 @@ export default function HomeDashboard() {
         {/* Immunité et soins */}
         <View style={styles.statsGrid}>
           {loading.vitamines ? (
-            <LoadingCard />
+            <StatsCardSkeleton />
           ) : (
             <StatsCard
               title="Vitamines"
@@ -1968,7 +1457,7 @@ export default function HomeDashboard() {
             />
           )}
           {loading.vaccins ? (
-            <LoadingCard />
+            <StatsCardSkeleton />
           ) : (
             <StatsCard
               title="Vaccins"
@@ -2004,7 +1493,7 @@ export default function HomeDashboard() {
         <Text style={styles.sectionTitle}>Activités physiologiques</Text>
         <View style={styles.statsGrid}>
           {loading.mictions ? (
-            <LoadingCard />
+            <StatsCardSkeleton />
           ) : (
             <StatsCard
               title="Mictions"
@@ -2019,11 +1508,13 @@ export default function HomeDashboard() {
                   "/baby/diapers?tab=mictions&openModal=true&returnTo=home" as any,
                 )
               }
-              addEvent={true}
+              remindersEnabled={remindersEnabled}
+              reminderThreshold={reminderThresholds.mictions}
+              currentTime={currentTime}
             />
           )}
           {loading.selles ? (
-            <LoadingCard />
+            <StatsCardSkeleton />
           ) : (
             <StatsCard
               title="Selles"
@@ -2038,289 +1529,45 @@ export default function HomeDashboard() {
                   "/baby/diapers?tab=selles&openModal=true&returnTo=home" as any,
                 )
               }
-              addEvent={true}
+              remindersEnabled={remindersEnabled}
+              reminderThreshold={reminderThresholds.selles}
+              currentTime={currentTime}
             />
           )}
         </View>
       </View>
 
       {/* Chronologie récente */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={[styles.sectionTitle, styles.sectionTitleInline]}>
-            Évènements récents
-          </Text>
-          <TouchableOpacity
-            onPress={() => router.push("/baby/chrono" as any)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.sectionLink}>Voir tout</Text>
-          </TouchableOpacity>
-        </View>
-        {showRecentHint && recentEvents.length > 0 && (
-          <Text style={styles.recentHint}>
-            Maintenir un événement pour le modifier
-          </Text>
-        )}
-
-        {loading.tetees &&
-        loading.biberons &&
-        loading.pompages &&
-        loading.mictions &&
-        loading.selles &&
-        loading.vitamines &&
-        loading.vaccins &&
-        loading.sommeils &&
-        loading.temperatures &&
-        loading.medicaments &&
-        loading.symptomes &&
-        loading.jalons ? (
-          <View style={styles.recentLoading}>
-            <ActivityIndicator size="small" color={Colors[colorScheme].tint} />
-            <Text style={styles.recentLoadingText}>Chargement...</Text>
-          </View>
-        ) : recentEvents.length === 0 ? (
-          <Text style={styles.recentEmpty}>
-            Aucun événement aujourd&apos;hui.
-          </Text>
-        ) : (
-          recentEvents.map((event, index) => {
-            const config = EVENT_CONFIG[event.type] || {
-              label: event.type,
-              icon: { lib: "fa6", name: "circle" },
-              color: Colors[colorScheme].tint,
-            };
-            const isSleep = event.type === "sommeil";
-            const isActivity = event.type === "activite";
-            const isJalon = event.type === "jalon";
-
-            // Determine the label based on event type
-            let displayLabel = config.label;
-            if (isSleep && typeof event.isNap === "boolean") {
-              displayLabel = event.isNap ? "Sieste" : "Nuit de sommeil";
-            } else if (isActivity && event.typeActivite) {
-              displayLabel =
-                ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
-            } else if (isJalon && event.typeJalon) {
-              if (event.typeJalon === "autre") {
-                displayLabel =
-                  event.titre || JALON_TYPE_LABELS.autre || config.label;
-              } else {
-                displayLabel =
-                  JALON_TYPE_LABELS[event.typeJalon] || config.label;
-              }
-            }
-
-            const sleepLabel = displayLabel;
-            const sleepIconName =
-              isSleep && typeof event.isNap === "boolean"
-                ? event.isNap
-                  ? "bed"
-                  : "moon"
-                : null;
-            const date = toDate(event.date);
-            const details = buildDetails(event);
-            const borderColor = `${Colors[colorScheme].tabIconDefault}30`;
-
-            // Calculate elapsed time for ongoing sleep
-            const isOngoingSleep =
-              isSleep && !event.heureFin && event.heureDebut;
-            const elapsedMinutes = isOngoingSleep
-              ? Math.max(
-                  0,
-                  Math.round(
-                    (currentTime.getTime() -
-                      toDate(event.heureDebut).getTime()) /
-                      60000,
-                  ),
-                )
-              : 0;
-
-            // Check if we need to show a day separator
-            const currentDayLabel = getDayLabel(date);
-            const prevEvent = index > 0 ? recentEvents[index - 1] : null;
-            const prevDayLabel = prevEvent
-              ? getDayLabel(toDate(prevEvent.date))
-              : null;
-            const showDaySeparator =
-              currentDayLabel !== "Aujourd'hui" &&
-              (index === 0 || currentDayLabel !== prevDayLabel);
-
-            return (
-              <React.Fragment key={event.id ?? `${event.type}-${event.date}`}>
-                {showDaySeparator && (
-                  <View style={styles.daySeparator}>
-                    <View
-                      style={[
-                        styles.daySeparatorLine,
-                        { backgroundColor: borderColor },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.daySeparatorText,
-                        { color: Colors[colorScheme].tabIconDefault },
-                      ]}
-                    >
-                      {currentDayLabel}
-                    </Text>
-                    <View
-                      style={[
-                        styles.daySeparatorLine,
-                        { backgroundColor: borderColor },
-                      ]}
-                    />
-                  </View>
-                )}
-                <View style={styles.recentRow}>
-                  <View style={styles.recentTimelineColumn}>
-                    <View
-                      style={[
-                        styles.recentDot,
-                        { backgroundColor: config.color },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.recentLine,
-                        { backgroundColor: borderColor },
-                        index === recentEvents.length - 1 &&
-                          styles.recentLineLast,
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.recentTimeLeft}>
-                    {isSleep && event.heureFin ? (
-                      <>
-                        <Text
-                          style={[
-                            styles.recentTimeText,
-                            { color: Colors[colorScheme].tabIconDefault },
-                          ]}
-                        >
-                          {formatTime(date)}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.recentTimeArrow,
-                            { color: Colors[colorScheme].tabIconDefault },
-                          ]}
-                        >
-                          ↓
-                        </Text>
-                        <Text
-                          style={[
-                            styles.recentTimeTextSecondary,
-                            { color: Colors[colorScheme].tabIconDefault },
-                          ]}
-                        >
-                          {formatTime(toDate(event.heureFin))}
-                        </Text>
-                      </>
-                    ) : isSleep && !event.heureFin ? (
-                      <>
-                        <Text
-                          style={[
-                            styles.recentTimeText,
-                            { color: Colors[colorScheme].tabIconDefault },
-                          ]}
-                        >
-                          {formatTime(date)}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.recentTimeArrow,
-                            { color: Colors[colorScheme].tabIconDefault },
-                          ]}
-                        >
-                          ↓
-                        </Text>
-                        <Text
-                          style={[
-                            styles.recentTimeOngoing,
-                            { color: eventColors.sommeil.dark },
-                          ]}
-                        >
-                          en cours
-                        </Text>
-                      </>
-                    ) : (
-                      <Text
-                        style={[
-                          styles.recentTimeText,
-                          { color: Colors[colorScheme].tabIconDefault },
-                        ]}
-                      >
-                        {formatTime(date)}
-                      </Text>
-                    )}
-                  </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.recentCard,
-                      {
-                        borderColor,
-                        backgroundColor: Colors[colorScheme].background,
-                      },
-                    ]}
-                    activeOpacity={0.85}
-                    onLongPress={() => {
-                      const route = getEditRoute(event);
-                      if (route) router.push(route as any);
-                    }}
-                  >
-                    <View style={styles.recentTitleRow}>
-                      {isSleep && sleepIconName ? (
-                        <FontAwesome
-                          name={sleepIconName as any}
-                          size={12}
-                          color={config.color}
-                        />
-                      ) : (
-                        renderEventIcon(config.icon, config.color)
-                      )}
-                      <Text
-                        style={[
-                          styles.recentTitle,
-                          { color: Colors[colorScheme].text },
-                        ]}
-                      >
-                        {sleepLabel}
-                      </Text>
-                      {isJalon && event.photos?.[0] ? (
-                        <Image
-                          source={{ uri: event.photos[0] }}
-                          style={styles.recentThumb}
-                        />
-                      ) : null}
-                      {/* <FontAwesome
-                        name="pen-to-square"
-                        size={14}
-                        color={Colors[colorScheme].tabIconDefault}
-                        style={{ marginLeft: "auto" }}
-                      /> */}
-                    </View>
-                    {details || isOngoingSleep ? (
-                      <Text
-                        style={[
-                          styles.recentDetails,
-                          { color: Colors[colorScheme].tabIconDefault },
-                        ]}
-                      >
-                        {isOngoingSleep
-                          ? details
-                            ? `${formatDuration(elapsedMinutes)} · ${details}`
-                            : formatDuration(elapsedMinutes)
-                          : details}
-                      </Text>
-                    ) : null}
-                  </TouchableOpacity>
-                </View>
-              </React.Fragment>
-            );
-          })
-        )}
-      </View>
+      <RecentEventsList
+        events={recentEvents}
+        loading={
+          loading.tetees &&
+          loading.biberons &&
+          loading.pompages &&
+          loading.mictions &&
+          loading.selles &&
+          loading.vitamines &&
+          loading.vaccins &&
+          loading.sommeils &&
+          loading.temperatures &&
+          loading.medicaments &&
+          loading.symptomes &&
+          loading.jalons
+        }
+        showHint={showRecentHint}
+        colorScheme={colorScheme}
+        currentTime={currentTime}
+        onEventLongPress={(event) => {
+          const route = getEditRoute(event);
+          if (route) router.push(route as any);
+        }}
+        onViewAllPress={() => router.push("/baby/chrono" as any)}
+        toDate={toDate}
+        formatTime={formatTime}
+        formatDuration={formatDuration}
+        buildDetails={buildDetails}
+        getDayLabel={getDayLabel}
+      />
     </ScrollView>
   );
 }
@@ -2393,357 +1640,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginHorizontal: 20,
-    marginBottom: 16,
-  },
-  sectionLink: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#0a7ea4",
-  },
   statsGrid: {
     flexDirection: "row",
     paddingHorizontal: 20,
     gap: 12,
     marginBottom: 12,
-  },
-  sleepWidget: {
-    flex: 1,
-    backgroundColor: "#f5f0ff",
-    borderWidth: 1,
-    borderColor: "#ede7f6",
-  },
-  sleepWidgetHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  sleepWidgetTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#4c2c79",
-  },
-  sleepWidgetBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "#ede7f6",
-  },
-  sleepWidgetBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#4c2c79",
-  },
-  sleepWidgetValue: {
-    marginTop: 6,
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#4c2c79",
-  },
-  sleepWidgetSubtitle: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#6b5c85",
-  },
-  sleepWidgetButtons: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 10,
-  },
-  sleepWidgetPrimary: {
-    flex: 1,
-    backgroundColor: "#6f42c1",
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  sleepWidgetPrimaryText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  sleepWidgetSecondary: {
-    flex: 1,
-    backgroundColor: "#efe7ff",
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  sleepWidgetSecondaryText: {
-    color: "#6f42c1",
-    fontWeight: "700",
-  },
-  sleepWidgetStop: {
-    marginTop: 10,
-    backgroundColor: "#6f42c1",
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  sleepWidgetStopText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  recentLoading: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginHorizontal: 20,
-  },
-  recentLoadingText: {
-    fontSize: 13,
-    color: "#6c757d",
-  },
-  recentEmpty: {
-    fontSize: 13,
-    color: "#6c757d",
-    marginHorizontal: 20,
-  },
-  recentRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 14,
-    marginHorizontal: 20,
-  },
-  recentTimelineColumn: {
-    width: 20,
-    alignItems: "center",
-  },
-  recentDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    marginTop: 6,
-  },
-  recentLine: {
-    width: 2,
-    flex: 1,
-    marginTop: 4,
-  },
-  recentLineLast: {
-    backgroundColor: "transparent",
-  },
-  recentCard: {
-    flex: 1,
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  recentHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  recentHint: {
-    marginTop: -2,
-    marginBottom: 8,
-    marginHorizontal: 20,
-    fontSize: 12,
-    color: "#9aa0a6",
-    fontWeight: "500",
-  },
-  recentTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    // justifyContent: "space-between",
-    gap: 8,
-  },
-  recentThumb: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    marginLeft: "auto",
-    backgroundColor: "#f1f3f5",
-  },
-  sleepInlineIcon: {
-    minWidth: 28,
-    height: 24,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  recentTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  recentMoodEmoji: {
-    fontSize: 16,
-  },
-  recentTime: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  recentTimeLeft: {
-    width: 42,
-    marginTop: 6,
-  },
-  recentTimeText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  recentTimeArrow: {
-    fontSize: 10,
-    lineHeight: 10,
-    fontWeight: "600",
-  },
-  recentTimeTextSecondary: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  recentTimeOngoing: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  recentDetails: {
-    marginTop: 6,
-    fontSize: 12,
-  },
-  daySeparator: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 20,
-    marginBottom: 14,
-    gap: 12,
-  },
-  daySeparatorLine: {
-    flex: 1,
-    height: 1,
-  },
-  daySeparatorText: {
-    fontSize: 13,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  statsCard: {
-    flex: 1,
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  statsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-    gap: 8,
-  },
-  statsTitle: {
-    fontSize: 14,
-    color: "#6c757d",
-    fontWeight: "500",
-  },
-  statsValue: {
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  statsLastActivity: {
-    fontSize: 12,
-    color: "#6c757d",
-  },
-  statsTimeSince: {
-    fontSize: 11,
-    color: "#28a745",
-    fontWeight: "500",
-  },
-  moodCard: {
-    borderWidth: 1,
-    borderColor: `${eventColors.jalon.dark}22`,
-  },
-  moodHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 10,
-  },
-  moodTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6c757d",
-  },
-  moodRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 8,
-    // marginBottom: 8,
-  },
-  moodEmojiChip: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f3f4f6",
-  },
-  moodEmojiChipActive: {
-    backgroundColor: `${eventColors.jalon.dark}1A`,
-    borderWidth: 1,
-    borderColor: `${eventColors.jalon.dark}55`,
-  },
-  moodEmojiText: {
-    fontSize: 16,
-  },
-  moodSubtitle: {
-    fontSize: 12,
-    color: "#6c757d",
-  },
-  quickActionsContainer: {
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  quickActionCard: {
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  quickActionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  quickActionContent: {
-    flex: 1,
-  },
-  quickActionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#212529",
-    marginBottom: 2,
-  },
-  quickActionSubtitle: {
-    fontSize: 13,
-    color: "#6c757d",
-  },
-  badge: {
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  badgeText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "600",
   },
   statsButton: {
     flexDirection: "row",

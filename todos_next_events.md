@@ -1,8 +1,7 @@
 # TODO - Next Events (MVP+)
 
-## Prioritaire: Sommeil
+## Prioritaire: Sommeil (restant)
 
-- Chronomètre de sommeil: gros bouton "Dodo" pour démarrer/arrêter un timer.
 - Visualisations et statistiques:
   - Frise 24h avec barres de sommeil.
   - Totaux par jour/semaine + comparaison aux moyennes recommandées.
@@ -24,9 +23,9 @@
 
 ## ✅ Fait: Routines (MVP)
 
-- ✅ Service + type: Bain.
+- ✅ Service + types: Sommeil + Bain.
 - ✅ Screen Routines (Plus) avec Sommeil + Bain + Templates rapides.
-- ✅ Bottom sheet Bain aligné aux autres écrans (date/heure, notes, actions).
+- ✅ Bottom sheet Sommeil/Bain aligné aux autres écrans (date/heure, validations, notes, actions).
 - ✅ Home: quick add Routines + redirections edit vers Routines.
 - ✅ Chrono: redirections edit Routines.
 
@@ -62,11 +61,20 @@
 - ✅ Chrono: filtre "Activités" + redirections edit.
 - ✅ Timelines: affichage du type spécifique (ex: "Tummy Time", "Sortie") au lieu de "Activité".
 
-## Structure écrans retenue (3 écrans)
+## ✅ Fait: Jalons / Milestones (MVP)
+
+- ✅ Service + type: Jalon avec sous‑types (dent, pas, sourire, mot, humeur, photo, autre).
+- ✅ Screen Jalons complet (Plus) avec types prédéfinis, photo, description, humeur.
+- ✅ Quick add Humeur du jour dans Home (sans redirection sheet).
+- ✅ Home/Chrono: timelines affichent le type de jalon (ou titre pour “Autre”), description en détail.
+- ✅ Upload photo (1 image) via image picker + Firebase Storage.
+
+## Structure écrans retenue (4 écrans)
 
 - **Soins / Santé**: Température, Symptômes, Médicaments, Vaccins, Vitamines.
 - **Routines**: Sommeil, Bain.
 - **Activités**: Tummy Time, Jeux, Lecture, Promenade, Massage, Musique, Éveil sensoriel, Sortie, Autre.
+- **Jalons / Milestones**: Dent, Pas, Sourire, Mots, Humeur, Photo, Autre.
 
 Note: Les sorties sont intégrées comme type d'activité plutôt qu'un écran séparé. Permet de tracker rendez-vous médecin, visites famille, sorties au parc, etc. avec lieu (via description), durée et notes.
 

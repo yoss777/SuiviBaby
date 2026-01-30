@@ -1586,11 +1586,7 @@ export default function MealsScreen() {
           <Text style={styles.dayLabel}>{formatDayLabel()}</Text>
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
-              <Text
-                style={[styles.dayStatValue, { color: eventColors.meal.dark }]}
-              >
-                {item.meals.length}
-              </Text>
+              <Text style={styles.dayStatValue}>{item.meals.length}</Text>
               <Text style={styles.dayStatLabel}>repas</Text>
             </View>
           </View>

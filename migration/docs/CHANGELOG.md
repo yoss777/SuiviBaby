@@ -1,5 +1,65 @@
 # CHANGELOG
 
+## 2026-01-30 — Routines / Jalons / Activités (MVP)
+
+### Résumé
+
+Ajout des écrans Routines, Jalons (Milestones) et Activités, avec intégration complète Home/Chrono et nouveaux types d’événements.
+
+### Summary
+
+Added Routines, Milestones, and Activities screens, with full Home/Chrono integration and new event types.
+
+### Routines
+
+- Nouvel écran Routines (Sommeil + Bain) aligné sur les autres écrans (filtres, calendrier, pagination, sheet).
+- Sommeil: gestion sieste/nuit, sommeil en cours, durée et fin, validations dates, affichage fin/début.
+- Bain: durée + température eau + produits, mêmes patterns de saisie que les autres.
+- Timeline Home/Chrono: icônes spécifiques (lit/lune) et labels sieste/nuit.
+
+### Routines (EN)
+
+- New Routines screen (Sleep + Bath) aligned with other screens (filters, calendar, pagination, sheet).
+- Sleep: nap/night handling, ongoing sleep, duration/end, date validations, start/end display.
+- Bath: duration + water temperature + products, same input patterns as other screens.
+- Home/Chrono timeline: specific icons (bed/moon) and nap/night labels.
+
+### Jalons / Milestones
+
+- Nouvel écran Jalons (Milestones) avec types prédéfinis + “Autre moment”, photo, description, humeur.
+- Humeur du jour: quick add dans Home (sans redirection sheet).
+- Timeline Home/Chrono: label par type de jalon (ou titre pour “Autre”), description en détail, emoji humeur en détail.
+- Upload photo (1 image) via image picker + stockage Firebase.
+
+### Milestones (EN)
+
+- New Milestones screen with predefined types + “Other moment”, photo, description, mood.
+- Mood quick add in Home (no sheet redirect).
+- Home/Chrono timeline: label from milestone type (or title for “Other”), description in details, mood emoji in details.
+- Photo upload (single image) via image picker + Firebase storage.
+
+### Activités / Activities
+
+- Nouvel écran Activités (Plus) avec types d’activité prédéfinis.
+- Pagination et grouping identiques aux autres écrans.
+- Intégration Home/Chrono pour ajout/édition.
+
+### Activities (EN)
+
+- New Activities screen (Plus) with predefined activity types.
+- Pagination and grouping aligned with other screens.
+- Home/Chrono integration for add/edit.
+
+### Événements / Events
+
+- Nouveaux types: `sommeil`, `bain`, `activite`, `jalon`.
+- Services migration (double-write + hybride) et cache Today mis à jour pour ces types.
+
+### Events (EN)
+
+- New types: `sommeil`, `bain`, `activite`, `jalon`.
+- Migration services (double-write + hybrid) and Today cache updated for these types.
+
 ## 2026-01-30 — Soins / Santé (MVP)
 
 ### Résumé
