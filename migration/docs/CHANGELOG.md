@@ -1,5 +1,45 @@
 # CHANGELOG
 
+## 2026-01-30 — Soins / Santé (MVP)
+
+### Résumé
+
+Création de l’écran Soins, ajout des nouveaux types santé, et intégration Home/Chrono avec quick add et édition directe.
+
+### Summary
+
+Introduced the Soins screen, added new health event types, and wired Home/Chrono for quick add and direct edit.
+
+### Soins / Santé
+
+- Nouveaux types d’événements: température, symptôme, médicament, vaccin, vitamine.
+- Écran Soins (Plus) aligné avec les autres écrans (filtres, calendrier, pagination, sheet).
+- Sheet Soins: breadcrumbs vaccin/vitamine, recherche + sélection, “Autre” avec champ libre.
+- Vaccins: dose affichée (readonly sauf “Autre”), affichage de la dose dans la liste.
+- Vitamines D/K: quantité en gouttes avec picker +/− (auto-repeat).
+- Température: picker +/− borné 34–45°C, mode de prise requis (défaut axillaire).
+- Température + Symptôme: création simultanée possible, même date/heure (chips principales).
+
+### Soins / Health (EN)
+
+- New event types: temperature, symptom, medication, vaccine, vitamin.
+- New Soins screen aligned with other screens (filters, calendar, pagination, sheet).
+- Soins sheet: vaccine/vitamin breadcrumbs, search + selection, “Other” with free text.
+- Vaccines: dose displayed (readonly except “Other”), dose shown in list.
+- Vitamins D/K: drop quantity with +/- picker (auto-repeat).
+- Temperature: +/- picker capped 34–45°C, intake mode required (default axillary).
+- Temperature + Symptom: can be created together at the same date/time (main chips).
+
+### Navigation & UX
+
+- Home: quick add Soins avec type pré‑sélectionné.
+- Home/Chrono: édition des events santé redirigée vers Soins.
+
+### Navigation & UX (EN)
+
+- Home: quick add Soins with preselected type.
+- Home/Chrono: health event edits routed to Soins.
+
 ## 2026-01-24 — Share & Invitations
 
 ### Résumé
