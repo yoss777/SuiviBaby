@@ -566,6 +566,15 @@ export default function SommeilScreen() {
     if (!activeChild?.id || isSubmitting) return;
     try {
       setIsSubmitting(true);
+      // Empêcher de créer un sommeil en cours si un autre est déjà en cours
+      if (isOngoing && !editingSommeil && sommeilEnCours) {
+        showAlert(
+          "Attention",
+          "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
       const fin = isOngoing ? undefined : (heureFin ?? undefined);
       const start = heureDebut;
       const dataToSave = {

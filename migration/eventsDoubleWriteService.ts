@@ -807,6 +807,21 @@ export async function ajouterSommeil(childId: string, data: any) {
   const duree = computeSleepDuration(heureDebut, heureFin, data.duree);
   const date = data.date || heureDebut || new Date();
 
+  // Protection : empêcher de créer un sommeil en cours si un autre existe déjà
+  if (!heureFin) {
+    const existingSommeils = await obtenirEvenements(childId, {
+      type: "sommeil",
+    });
+    const sommeilEnCours = existingSommeils.find(
+      (s: any) => s.heureDebut && !s.heureFin,
+    );
+    if (sommeilEnCours) {
+      throw new Error(
+        "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
+      );
+    }
+  }
+
   const newEventData = removeUndefined({
     type: "sommeil" as EventType,
     heureDebut,
@@ -876,6 +891,22 @@ export function ecouterSommeils(
 export async function modifierSommeil(childId: string, id: string, data: any) {
   const errors: Error[] = [];
   const cleanedData = removeUndefined(data);
+
+  // Protection : empêcher de transformer un sommeil terminé en sommeil "en cours"
+  // si un autre sommeil est déjà en cours
+  if (data.heureFin === null || data.heureFin === undefined) {
+    const existingSommeils = await obtenirEvenements(childId, {
+      type: "sommeil",
+    });
+    const sommeilEnCours = existingSommeils.find(
+      (s: any) => s.heureDebut && !s.heureFin && s.id !== id,
+    );
+    if (sommeilEnCours) {
+      throw new Error(
+        "Un autre sommeil est déjà en cours. Terminez-le avant de modifier celui-ci.",
+      );
+    }
+  }
 
   if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
     try {

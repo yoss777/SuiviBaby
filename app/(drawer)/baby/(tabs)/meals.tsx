@@ -1026,7 +1026,7 @@ export default function MealsScreen() {
                 isSubmitting && styles.typeTextDisabled,
               ]}
             >
-              Seins
+              Tétée
             </Text>
           </TouchableOpacity>
 

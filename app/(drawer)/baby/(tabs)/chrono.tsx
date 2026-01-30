@@ -846,7 +846,7 @@ const TimelineCard = React.memo(
                 : details}
             </Text>
           )}
-          {event.note && (
+          {event.type !== "activite" && event.note && (
             <View style={[styles.noteContainer, { borderColor }]}>
               <FontAwesome
                 name="message"

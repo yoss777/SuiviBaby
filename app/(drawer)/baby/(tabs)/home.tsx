@@ -1019,10 +1019,22 @@ export default function HomeDashboard() {
         return itemDate >= startOfToday && itemDate < endOfToday;
       });
 
+    // Filtre spécial pour le sommeil : inclure les sessions qui chevauchent aujourd'hui
+    // (ex: nuit commencée hier à 21h et terminée aujourd'hui à 6h)
+    const filterTodaySleep = (items: any[]) =>
+      items.filter((item) => {
+        const start = item.heureDebut
+          ? toDate(item.heureDebut)
+          : toDate(item.date);
+        const end = item.heureFin ? toDate(item.heureFin) : new Date();
+        // Inclure si le sommeil chevauche aujourd'hui
+        return start < endOfToday && end >= startOfToday;
+      });
+
     const todayTetees = filterToday(data.tetees);
     const todayBiberons = filterToday(data.biberons);
     const todayPompages = filterToday(data.pompages);
-    const todaySommeils = filterToday(data.sommeils);
+    const todaySommeils = filterTodaySleep(data.sommeils);
     const todayMictions = filterToday(data.mictions);
     const todaySelles = filterToday(data.selles);
     const todayVitamines = filterToday(data.vitamines);
@@ -1086,15 +1098,19 @@ export default function HomeDashboard() {
           )
         : null;
 
+    // Calculer le sommeil total en ne comptant que la portion d'aujourd'hui
     const totalSleepMinutes = todaySommeils.reduce((sum, item) => {
-      if (item.duree) return sum + item.duree;
       const start = item.heureDebut
         ? toDate(item.heureDebut)
         : toDate(item.date);
       const end = item.heureFin ? toDate(item.heureFin) : new Date();
-      return (
-        sum + Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000))
-      );
+
+      // Ne compter que la portion qui tombe aujourd'hui
+      const effectiveStart = Math.max(start.getTime(), startOfToday.getTime());
+      const effectiveEnd = Math.min(end.getTime(), endOfToday.getTime());
+      const todayMinutes = Math.round((effectiveEnd - effectiveStart) / 60000);
+
+      return sum + Math.max(0, todayMinutes);
     }, 0);
 
     const lastSommeil =
