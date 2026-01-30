@@ -80,12 +80,18 @@ type HealthEvent = {
   createdAt?: { seconds: number } | Date;
   note?: string;
   valeur?: number;
-  modePrise?: "rectale" | "axillaire" | "auriculaire" | "frontale" | "autre";
+  modePrise?:
+    | "axillaire"
+    | "auriculaire"
+    | "buccale"
+    | "frontale"
+    | "rectale"
+    | "autre";
   nomMedicament?: string;
   dosage?: string;
   voie?: "orale" | "topique" | "inhalation" | "autre";
   symptomes?: string[];
-  intensite?: "leger" | "modere" | "fort";
+  intensite?: "léger" | "modéré" | "fort";
   nomVaccin?: string;
   nomVitamine?: string;
 };
@@ -230,14 +236,15 @@ const VACCINS_LIST = [
 const VITAMINES_LIST = ["Vitamine D", "Vitamine K", "Autre vitamine"];
 
 const MODE_TEMPERATURE = [
-  "rectale",
   "axillaire",
   "auriculaire",
+  "buccale",
   "frontale",
+  "rectale",
   "autre",
 ];
 const VOIES_MEDICAMENT = ["orale", "topique", "inhalation", "autre"];
-const INTENSITES = ["leger", "modere", "fort"];
+const INTENSITES = ["léger", "modéré", "fort"];
 const SYMPTOMES_OPTIONS = [
   "fièvre",
   "toux",
@@ -336,7 +343,8 @@ export default function SoinsScreen() {
 
   const [temperatureValue, setTemperatureValue] = useState(36.8);
   const [temperatureMode, setTemperatureMode] =
-    useState<HealthEvent["modePrise"]>();
+    useState<HealthEvent["modePrise"]>("axillaire");
+  const [includeTemperature, setIncludeTemperature] = useState(true);
   const [medicamentName, setMedicamentName] = useState("");
   const [medicamentDosage, setMedicamentDosage] = useState("");
   const [medicamentVoie, setMedicamentVoie] = useState<HealthEvent["voie"]>();
@@ -344,6 +352,7 @@ export default function SoinsScreen() {
   const [symptomeAutre, setSymptomeAutre] = useState("");
   const [symptomeIntensite, setSymptomeIntensite] =
     useState<HealthEvent["intensite"]>();
+  const [includeSymptome, setIncludeSymptome] = useState(false);
   const [vaccinName, setVaccinName] = useState("");
   const [vaccinDosage, setVaccinDosage] = useState("");
   const [vaccinCustomName, setVaccinCustomName] = useState("");
@@ -905,13 +914,15 @@ export default function SoinsScreen() {
     setSearchQuery("");
     setDateHeure(new Date());
     setTemperatureValue(36.8);
-    setTemperatureMode(undefined);
+    setTemperatureMode("axillaire");
+    setIncludeTemperature(nextType === "temperature");
     setMedicamentName("");
     setMedicamentDosage("");
     setMedicamentVoie(undefined);
     setSymptomes([]);
     setSymptomeAutre("");
     setSymptomeIntensite(undefined);
+    setIncludeSymptome(nextType === "symptome");
     setVaccinName("");
     setVaccinDosage("");
     setVaccinCustomName("");
@@ -926,6 +937,8 @@ export default function SoinsScreen() {
   const openEditModal = useCallback((item: HealthEvent) => {
     setEditingEvent(item);
     setSelectedType(item.type);
+    setIncludeTemperature(item.type === "temperature");
+    setIncludeSymptome(item.type === "symptome");
     setSheetStep("form");
     setSearchQuery("");
     setDateHeure(toDate(item.date));
@@ -934,7 +947,7 @@ export default function SoinsScreen() {
 
     if (item.type === "temperature") {
       setTemperatureValue(typeof item.valeur === "number" ? item.valeur : 36.8);
-      setTemperatureMode(item.modePrise);
+      setTemperatureMode(item.modePrise ?? "axillaire");
     }
     if (item.type === "medicament") {
       setMedicamentName(item.nomMedicament ?? "");
@@ -1016,12 +1029,14 @@ export default function SoinsScreen() {
     selectedType,
     temperatureValue,
     temperatureMode,
+    includeTemperature,
     medicamentName,
     medicamentDosage,
     medicamentVoie,
     symptomes,
     symptomeAutre,
     symptomeIntensite,
+    includeSymptome,
     vaccinName,
     vaccinDosage,
     vaccinCustomName,
@@ -1113,28 +1128,75 @@ export default function SoinsScreen() {
         note: note.trim() ? note.trim() : undefined,
       };
 
-      if (selectedType === "temperature") {
-        const valeur = Number(temperatureValue);
-        if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
-          showAlert("Erreur", "Indiquez une température valide.");
-          return;
-        }
+      if (selectedType === "temperature" || selectedType === "symptome") {
         if (editingEvent) {
-          await modifierTemperature(activeChild.id, editingEvent.id, {
-            ...common,
-            valeur,
-            modePrise: temperatureMode,
-          });
+          if (selectedType === "temperature") {
+            const valeur = Number(temperatureValue);
+            if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
+              showAlert("Erreur", "Indiquez une température valide.");
+              return;
+            }
+            if (!temperatureMode) {
+              showAlert("Erreur", "Sélectionnez un mode de prise.");
+              return;
+            }
+            await modifierTemperature(activeChild.id, editingEvent.id, {
+              ...common,
+              valeur,
+              modePrise: temperatureMode,
+            });
+          } else {
+            const list = [...symptomes];
+            if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
+            if (list.length === 0) {
+              showAlert("Erreur", "Sélectionnez au moins un symptôme.");
+              return;
+            }
+            await modifierSymptome(activeChild.id, editingEvent.id, {
+              ...common,
+              symptomes: list,
+              intensite: symptomeIntensite,
+            });
+          }
         } else {
-          await ajouterTemperature(activeChild.id, {
-            ...common,
-            valeur,
-            modePrise: temperatureMode,
-          });
+          if (!includeTemperature && !includeSymptome) {
+            showAlert(
+              "Erreur",
+              "Sélectionnez au moins Température ou Symptôme.",
+            );
+            return;
+          }
+          if (includeTemperature) {
+            const valeur = Number(temperatureValue);
+            if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
+              showAlert("Erreur", "Indiquez une température valide.");
+              return;
+            }
+            if (!temperatureMode) {
+              showAlert("Erreur", "Sélectionnez un mode de prise.");
+              return;
+            }
+            await ajouterTemperature(activeChild.id, {
+              ...common,
+              valeur,
+              modePrise: temperatureMode,
+            });
+          }
+          if (includeSymptome) {
+            const list = [...symptomes];
+            if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
+            if (list.length === 0) {
+              showAlert("Erreur", "Sélectionnez au moins un symptôme.");
+              return;
+            }
+            await ajouterSymptome(activeChild.id, {
+              ...common,
+              symptomes: list,
+              intensite: symptomeIntensite,
+            });
+          }
         }
-      }
-
-      if (selectedType === "medicament") {
+      } else if (selectedType === "medicament") {
         if (!medicamentName.trim()) {
           showAlert("Erreur", "Indiquez un médicament.");
           return;
@@ -1154,31 +1216,7 @@ export default function SoinsScreen() {
             voie: medicamentVoie,
           });
         }
-      }
-
-      if (selectedType === "symptome") {
-        const list = [...symptomes];
-        if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
-        if (list.length === 0) {
-          showAlert("Erreur", "Sélectionnez au moins un symptôme.");
-          return;
-        }
-        if (editingEvent) {
-          await modifierSymptome(activeChild.id, editingEvent.id, {
-            ...common,
-            symptomes: list,
-            intensite: symptomeIntensite,
-          });
-        } else {
-          await ajouterSymptome(activeChild.id, {
-            ...common,
-            symptomes: list,
-            intensite: symptomeIntensite,
-          });
-        }
-      }
-
-      if (selectedType === "vaccin") {
+      } else if (selectedType === "vaccin") {
         const normalizedVaccinName =
           vaccinName === "Autre vaccin" ? vaccinCustomName : vaccinName;
         if (!normalizedVaccinName.trim()) {
@@ -1202,9 +1240,7 @@ export default function SoinsScreen() {
             dosage: finalDosage,
           });
         }
-      }
-
-      if (selectedType === "vitamine") {
+      } else if (selectedType === "vitamine") {
         const normalizedVitamineName =
           vitamineName === "Autre vitamine" ? vitamineCustomName : vitamineName;
         if (!normalizedVitamineName.trim()) {
@@ -1476,13 +1512,21 @@ export default function SoinsScreen() {
           {(
             [
               "temperature",
-              "medicament",
               "symptome",
+              "medicament",
               "vaccin",
               "vitamine",
             ] as HealthType[]
           ).map((type) => {
-            const active = selectedType === type;
+            const isTempSymptome =
+              type === "temperature" || type === "symptome";
+            const active = isEditing
+              ? selectedType === type
+              : isTempSymptome
+                ? type === "temperature"
+                  ? includeTemperature
+                  : includeSymptome
+                : selectedType === type;
             const isDisabled = isEditing && !active;
             return (
               <TouchableOpacity
@@ -1496,6 +1540,24 @@ export default function SoinsScreen() {
                 activeOpacity={1}
                 onPress={() => {
                   if (isEditing) return;
+                  if (type === "temperature") {
+                    setIncludeTemperature((prev) => {
+                      if (prev && !includeSymptome) return true;
+                      return !prev;
+                    });
+                    setSelectedType("temperature");
+                    return;
+                  }
+                  if (type === "symptome") {
+                    setIncludeSymptome((prev) => {
+                      if (prev && !includeTemperature) return true;
+                      return !prev;
+                    });
+                    setSelectedType("symptome");
+                    return;
+                  }
+                  setIncludeTemperature(false);
+                  setIncludeSymptome(false);
                   setSelectedType(type);
                   setSheetStep("form");
                   setSearchQuery("");
@@ -1516,8 +1578,17 @@ export default function SoinsScreen() {
             );
           })}
         </View>
+        {!isEditing &&
+          (includeTemperature || includeSymptome) &&
+          includeTemperature !== includeSymptome && (
+            <Text
+              style={[styles.toggleHint, { color: Colors[colorScheme].tint }]}
+            >
+              Vous pouvez sélectionner Température et Symptôme ensemble
+            </Text>
+          )}
 
-        {selectedType === "temperature" && (
+        {includeTemperature && (
           <>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Température (°C)</Text>
@@ -1585,11 +1656,7 @@ export default function SoinsScreen() {
                       styles.chip,
                       temperatureMode === mode && styles.chipActive,
                     ]}
-                    onPress={() =>
-                      setTemperatureMode(
-                        temperatureMode === mode ? undefined : (mode as any),
-                      )
-                    }
+                    onPress={() => setTemperatureMode(mode as any)}
                   >
                     <Text
                       style={[
@@ -1657,9 +1724,9 @@ export default function SoinsScreen() {
           </>
         )}
 
-        {selectedType === "symptome" && (
+        {includeSymptome && (
           <>
-            <View style={styles.chipSection}>
+            <View style={[styles.chipSection, { marginTop: 6 }]}>
               <Text style={styles.chipLabel}>Symptômes</Text>
               <View style={styles.chipRow}>
                 {SYMPTOMES_OPTIONS.map((symptome) => {
@@ -1669,11 +1736,15 @@ export default function SoinsScreen() {
                       key={symptome}
                       style={[styles.chip, active && styles.chipActive]}
                       onPress={() => {
-                        setSymptomes((prev) =>
-                          prev.includes(symptome)
+                        setSymptomes((prev) => {
+                          const next = prev.includes(symptome)
                             ? prev.filter((item) => item !== symptome)
-                            : [...prev, symptome],
-                        );
+                            : [...prev, symptome];
+                          if (next.length === 0) {
+                            setSymptomeIntensite(undefined);
+                          }
+                          return next;
+                        });
                       }}
                     >
                       <Text
@@ -1689,16 +1760,18 @@ export default function SoinsScreen() {
                 })}
               </View>
             </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Autre symptôme</Text>
-              <TextInput
-                value={symptomeAutre}
-                onChangeText={setSymptomeAutre}
-                placeholder="Préciser"
-                style={styles.input}
-              />
-            </View>
-            <View style={styles.chipSection}>
+            {symptomes.includes("autre") && (
+              <View style={[styles.inputGroup, { marginTop: 6 }]}>
+                <Text style={styles.inputLabel}>Autre(s) symptôme(s)</Text>
+                <TextInput
+                  value={symptomeAutre}
+                  onChangeText={setSymptomeAutre}
+                  placeholder="Préciser"
+                  style={styles.input}
+                />
+              </View>
+            )}
+            <View style={[styles.chipSection, { marginTop: 6 }]}>
               <Text style={styles.chipLabel}>Intensité</Text>
               <View style={styles.chipRow}>
                 {INTENSITES.map((item) => (
@@ -1710,14 +1783,21 @@ export default function SoinsScreen() {
                     ]}
                     onPress={() =>
                       setSymptomeIntensite(
-                        symptomeIntensite === item ? undefined : (item as any),
+                        symptomes.length === 0
+                          ? undefined
+                          : symptomeIntensite === item
+                            ? undefined
+                            : (item as any),
                       )
                     }
+                    disabled={symptomes.length === 0}
+                    activeOpacity={symptomes.length === 0 ? 1 : 0.7}
                   >
                     <Text
                       style={[
                         styles.chipText,
                         symptomeIntensite === item && styles.chipTextActive,
+                        symptomes.length === 0 && styles.chipTextDisabled,
                       ]}
                     >
                       {item}
@@ -2727,7 +2807,16 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontWeight: "600",
   },
+  chipTextDisabled: {
+    color: "#c4c4c4",
+  },
   chipTextActive: {
     color: "#4c2c79",
+  },
+  toggleHint: {
+    fontSize: 13,
+    color: "#999",
+    textAlign: "center",
+    marginBottom: 12,
   },
 });

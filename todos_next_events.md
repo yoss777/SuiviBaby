@@ -11,6 +11,17 @@
 - Vue "Nuit": thème sombre automatique la nuit.
 - Widget accueil: démarrer/arrêter le chrono sans ouvrir l'app (à étudier).
 
+## ✅ Fait: Soins / Santé (MVP)
+
+- ✅ Service + types: Température, Médicament, Symptôme, Vaccin, Vitamine.
+- ✅ Screen Soins complet (Plus) avec logique alignée aux autres écrans (headers, filtres, load more).
+- ✅ Bottom sheet Soins: breadcrumbs vaccin/vitamine, listes + recherche, “Autre” avec champ libre.
+- ✅ Vitamines D/K: quantité en gouttes (picker +/− auto).
+- ✅ Température: picker +/− borné 34–45°C.
+- ✅ Vaccins: dose affichée (readonly sauf “Autre”), liste affiche dose.
+- ✅ Home: quick add Soins + redirections edit vers Soins.
+- ✅ Chrono: redirections edit Soins.
+
 ## Propositions pour enrichir l'UX (après Sommeil)
 
 - Symptômes / Santé rapide (fièvre, toux, nez bouché, vomi, diarrhée, dents).
