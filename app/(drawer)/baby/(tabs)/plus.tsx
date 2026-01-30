@@ -5,7 +5,13 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { useCallback, useRef } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const ITEMS = [
@@ -91,54 +97,62 @@ export default function PlusScreen() {
   return (
     <ThemedView style={styles.screen}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Plus</Text>
-          <Text style={[styles.subtitle, { color: colors.tabIconDefault }]}>
-            Accès aux écrans détaillés
-          </Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: colors.text }]}>Plus</Text>
+            <Text style={[styles.subtitle, { color: colors.tabIconDefault }]}>
+              Accès aux écrans détaillés
+            </Text>
+          </View>
 
-        <View style={styles.list}>
-          {ITEMS.map((item) => (
-            <TouchableOpacity
-              key={item.title}
-              style={[
-                styles.row,
-                { backgroundColor: colors.background, borderColor },
-              ]}
-              onPress={() => handleNavigate(item.route)}
-              activeOpacity={0.85}
-            >
-              <View
+          <View style={styles.list}>
+            {ITEMS.map((item) => (
+              <TouchableOpacity
+                key={item.title}
                 style={[
-                  styles.iconWrap,
-                  { backgroundColor: `${item.color}1A` },
+                  styles.row,
+                  { backgroundColor: colors.background, borderColor },
                 ]}
+                onPress={() => handleNavigate(item.route)}
+                activeOpacity={0.85}
               >
-                <FontAwesome
-                  name={item.icon as any}
-                  size={18}
-                  color={item.color}
-                />
-              </View>
-              <View style={styles.textBlock}>
-                <Text style={[styles.rowTitle, { color: colors.text }]}>
-                  {item.title}
-                </Text>
-                <Text
-                  style={[styles.rowSubtitle, { color: colors.tabIconDefault }]}
+                <View
+                  style={[
+                    styles.iconWrap,
+                    { backgroundColor: `${item.color}1A` },
+                  ]}
                 >
-                  {item.subtitle}
-                </Text>
-              </View>
-              <FontAwesome
-                name="chevron-right"
-                size={14}
-                color={colors.tabIconDefault}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
+                  <FontAwesome
+                    name={item.icon as any}
+                    size={18}
+                    color={item.color}
+                  />
+                </View>
+                <View style={styles.textBlock}>
+                  <Text style={[styles.rowTitle, { color: colors.text }]}>
+                    {item.title}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.rowSubtitle,
+                      { color: colors.tabIconDefault },
+                    ]}
+                  >
+                    {item.subtitle}
+                  </Text>
+                </View>
+                <FontAwesome
+                  name="chevron-right"
+                  size={14}
+                  color={colors.tabIconDefault}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
   );
@@ -151,6 +165,10 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingTop: 12,
+    paddingBottom: 24,
   },
   header: {
     paddingHorizontal: 20,

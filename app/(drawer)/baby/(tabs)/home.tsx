@@ -31,7 +31,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import React, {
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -225,96 +225,99 @@ export default function HomeDashboard() {
     return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
   }, []);
 
-  const buildDetails = useCallback((event: any) => {
-    switch (event.type) {
-      case "biberon":
-        return event.quantite ? `${event.quantite} ml` : undefined;
-      case "tetee": {
-        const left = event.dureeGauche ? `G ${event.dureeGauche} min` : null;
-        const right = event.dureeDroite ? `D ${event.dureeDroite} min` : null;
-        const parts = [left, right].filter(Boolean);
-        return parts.length > 0 ? parts.join(" • ") : undefined;
-      }
-      case "pompage": {
-        const left = event.quantiteGauche
-          ? `G ${event.quantiteGauche} ml`
-          : null;
-        const right = event.quantiteDroite
-          ? `D ${event.quantiteDroite} ml`
-          : null;
-        const parts = [left, right].filter(Boolean);
-        return parts.length > 0 ? parts.join(" • ") : undefined;
-      }
-      case "miction":
-        return event.volume ? `${event.volume} ml` : event.couleur;
-      case "selle":
-        return event.consistance || event.couleur;
-      case "vitamine": {
-        const name = event.nomVitamine || "Vitamine";
-        return event.dosage ? `${name} · ${event.dosage}` : name;
-      }
-      case "sommeil": {
-        const start = event.heureDebut
-          ? toDate(event.heureDebut)
-          : toDate(event.date);
-        const end = event.heureFin ? toDate(event.heureFin) : null;
-        const duration =
-          event.duree ??
-          (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
-
-        const parts = [
-          end ? formatDuration(duration) : null, // Only show duration if sleep is finished
-          event.location,
-          event.quality,
-        ].filter(Boolean);
-        return parts.length > 0 ? parts.join(" · ") : undefined;
-      }
-      case "bain": {
-        const parts = [
-          event.duree ? `${event.duree} min` : null,
-          event.temperatureEau ? `${event.temperatureEau}°C` : null,
-        ].filter(Boolean);
-        return parts.length > 0 ? parts.join(" · ") : undefined;
-      }
-      case "temperature": {
-        const value =
-          typeof event.valeur === "number" ? `${event.valeur}°C` : undefined;
-        const parts = [value, event.modePrise].filter(Boolean);
-        return parts.length > 0 ? parts.join(" · ") : undefined;
-      }
-      case "medicament": {
-        const name = event.nomMedicament || "Médicament";
-        return event.dosage ? `${name} · ${event.dosage}` : name;
-      }
-      case "symptome": {
-        const list = Array.isArray(event.symptomes)
-          ? event.symptomes.join(", ")
-          : undefined;
-        const parts = [list, event.intensite].filter(Boolean);
-        return parts.length > 0 ? parts.join(" · ") : undefined;
-      }
-      case "vaccin":
-        const name = event.nomVaccin || "Vaccin";
-        return event.dosage ? `${name} · ${event.dosage}` : name;
-      case "activite": {
-        const parts = [
-          event.duree ? `${event.duree} min` : null,
-          event.description,
-        ].filter(Boolean);
-        return parts.length > 0 ? parts.join(" · ") : undefined;
-      }
-      case "jalon": {
-        if (event.typeJalon === "humeur") {
-          return typeof event.humeur === "number"
-            ? MOOD_EMOJIS[event.humeur]
-            : undefined;
+  const buildDetails = useCallback(
+    (event: any) => {
+      switch (event.type) {
+        case "biberon":
+          return event.quantite ? `${event.quantite} ml` : undefined;
+        case "tetee": {
+          const left = event.dureeGauche ? `G ${event.dureeGauche} min` : null;
+          const right = event.dureeDroite ? `D ${event.dureeDroite} min` : null;
+          const parts = [left, right].filter(Boolean);
+          return parts.length > 0 ? parts.join(" • ") : undefined;
         }
-        return event.description || undefined;
+        case "pompage": {
+          const left = event.quantiteGauche
+            ? `G ${event.quantiteGauche} ml`
+            : null;
+          const right = event.quantiteDroite
+            ? `D ${event.quantiteDroite} ml`
+            : null;
+          const parts = [left, right].filter(Boolean);
+          return parts.length > 0 ? parts.join(" • ") : undefined;
+        }
+        case "miction":
+          return event.volume ? `${event.volume} ml` : event.couleur;
+        case "selle":
+          return event.consistance || event.couleur;
+        case "vitamine": {
+          const name = event.nomVitamine || "Vitamine";
+          return event.dosage ? `${name} · ${event.dosage}` : name;
+        }
+        case "sommeil": {
+          const start = event.heureDebut
+            ? toDate(event.heureDebut)
+            : toDate(event.date);
+          const end = event.heureFin ? toDate(event.heureFin) : null;
+          const duration =
+            event.duree ??
+            (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
+
+          const parts = [
+            end ? formatDuration(duration) : null, // Only show duration if sleep is finished
+            event.location,
+            event.quality,
+          ].filter(Boolean);
+          return parts.length > 0 ? parts.join(" · ") : undefined;
+        }
+        case "bain": {
+          const parts = [
+            event.duree ? `${event.duree} min` : null,
+            event.temperatureEau ? `${event.temperatureEau}°C` : null,
+          ].filter(Boolean);
+          return parts.length > 0 ? parts.join(" · ") : undefined;
+        }
+        case "temperature": {
+          const value =
+            typeof event.valeur === "number" ? `${event.valeur}°C` : undefined;
+          const parts = [value, event.modePrise].filter(Boolean);
+          return parts.length > 0 ? parts.join(" · ") : undefined;
+        }
+        case "medicament": {
+          const name = event.nomMedicament || "Médicament";
+          return event.dosage ? `${name} · ${event.dosage}` : name;
+        }
+        case "symptome": {
+          const list = Array.isArray(event.symptomes)
+            ? event.symptomes.join(", ")
+            : undefined;
+          const parts = [list, event.intensite].filter(Boolean);
+          return parts.length > 0 ? parts.join(" · ") : undefined;
+        }
+        case "vaccin":
+          const name = event.nomVaccin || "Vaccin";
+          return event.dosage ? `${name} · ${event.dosage}` : name;
+        case "activite": {
+          const parts = [
+            event.duree ? `${event.duree} min` : null,
+            event.description,
+          ].filter(Boolean);
+          return parts.length > 0 ? parts.join(" · ") : undefined;
+        }
+        case "jalon": {
+          if (event.typeJalon === "humeur") {
+            return typeof event.humeur === "number"
+              ? MOOD_EMOJIS[event.humeur]
+              : undefined;
+          }
+          return event.description || undefined;
+        }
+        default:
+          return undefined;
       }
-      default:
-        return undefined;
-    }
-  }, [formatDuration, toDate]);
+    },
+    [formatDuration, toDate],
+  );
 
   function getEditRoute(event: any): string | null {
     if (!event.id) return null;
@@ -1221,7 +1224,6 @@ export default function HomeDashboard() {
     return "Bonsoir";
   };
 
-
   // ============================================
   // RENDER
   // ============================================
@@ -1304,7 +1306,7 @@ export default function HomeDashboard() {
             <StatsCardSkeleton />
           ) : (
             <StatsCard
-              title="Pompages"
+              title="Tire-lait"
               value={`${todayStats.pompages.count} • ${todayStats.pompages.quantity}`}
               unit="ml"
               icon="pump-medical"
