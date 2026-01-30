@@ -23,6 +23,22 @@ export const eventColors = {
     dark: "#9C27B0", // Purple
     light: "#f3e5f5",
   },
+  sommeil: {
+    dark: "#6f42c1", // Purple night
+    light: "#f1e9ff",
+  },
+  temperature: {
+    dark: "#e03131", // Red
+    light: "#fff5f5",
+  },
+  medicament: {
+    dark: "#2f9e44", // Green
+    light: "#ebfbee",
+  },
+  symptome: {
+    dark: "#f59f00", // Amber
+    light: "#fff9db",
+  },
   default: {
     dark: "#6c757d", // Gray
     light: "#f8f9fa",

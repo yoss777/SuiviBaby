@@ -19,6 +19,7 @@ import * as sellesService from "@/services/sellesService";
 import * as teteesService from "@/services/teteesService";
 import * as vaccinsService from "@/services/vaccinsService";
 import * as vitaminesService from "@/services/vitaminesService";
+import * as sommeilService from "@/services/sommeilService";
 
 // ============================================
 // HELPER - Remove undefined
@@ -36,6 +37,28 @@ function removeUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
   }
   return cleaned;
 }
+
+const toDate = (value?: any) => {
+  if (!value) return undefined;
+  if (value instanceof Date) return value;
+  if (typeof value?.toDate === "function") return value.toDate();
+  return new Date(value);
+};
+
+const computeSleepDuration = (
+  heureDebut?: Date,
+  heureFin?: Date,
+  duree?: number,
+) => {
+  if (typeof duree === "number") return duree;
+  if (heureDebut && heureFin) {
+    return Math.max(
+      0,
+      Math.round((heureFin.getTime() - heureDebut.getTime()) / 60000),
+    );
+  }
+  return undefined;
+};
 
 // ============================================
 // CONFIGURATION
@@ -771,6 +794,147 @@ export async function supprimerSelle(childId: string, id: string) {
 }
 
 // ============================================
+// DOUBLE ÉCRITURE - SOMMEIL
+// ============================================
+
+export async function ajouterSommeil(childId: string, data: any) {
+  const errors: Error[] = [];
+  let sharedId: string | null = null;
+  let oldRef: any = null;
+
+  const heureDebut = toDate(data.heureDebut);
+  const heureFin = toDate(data.heureFin);
+  const duree = computeSleepDuration(heureDebut, heureFin, data.duree);
+  const date = data.date || heureDebut || new Date();
+
+  const newEventData = removeUndefined({
+    type: "sommeil" as EventType,
+    heureDebut,
+    heureFin,
+    duree,
+    location: data.location,
+    quality: data.quality,
+    isNap: data.isNap ?? true,
+    date,
+    note: data.note,
+  });
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
+    try {
+      oldRef = await sommeilService.ajouterSommeil(childId, {
+        ...data,
+        heureDebut,
+        heureFin,
+        duree,
+        date,
+      });
+      sharedId = oldRef.id;
+      console.log("✅ Sommeil ajouté dans OLD:", sharedId);
+    } catch (error) {
+      console.error("❌ Erreur OLD:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
+    try {
+      if (sharedId) {
+        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
+        console.log("✅ Sommeil ajouté dans NEW avec ID:", sharedId);
+      } else {
+        sharedId = await ajouterEventNouveau(childId, newEventData as any);
+        console.log("✅ Sommeil ajouté dans NEW:", sharedId);
+      }
+    } catch (error) {
+      console.error("❌ Erreur NEW:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  return sharedId;
+}
+
+export async function obtenirTousLesSommeils(childId: string) {
+  if (config.readFrom === "NEW") {
+    return obtenirEvenements(childId, { type: "sommeil" });
+  }
+  return sommeilService.obtenirTousLesSommeils(childId);
+}
+
+export function ecouterSommeils(
+  childId: string,
+  callback: (docs: any[]) => void,
+) {
+  if (config.readFrom === "NEW") {
+    return ecouterEvenements(childId, callback, { type: "sommeil" });
+  }
+  return sommeilService.ecouterSommeils(childId, callback);
+}
+
+export async function modifierSommeil(childId: string, id: string, data: any) {
+  const errors: Error[] = [];
+  const cleanedData = removeUndefined(data);
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
+    try {
+      await modifierEventNouveau(childId, id, cleanedData);
+      console.log("✅ Sommeil modifié dans NEW");
+    } catch (error) {
+      console.error("❌ Erreur modification NEW:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
+    try {
+      await sommeilService.modifierSommeil(childId, id, cleanedData);
+      console.log("✅ Sommeil modifié dans OLD");
+    } catch (error) {
+      console.error("❌ Erreur modification OLD:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (errors.length > 0 && config.failOnError) {
+    throw new Error("Erreurs lors de la modification");
+  }
+}
+
+export async function supprimerSommeil(childId: string, id: string) {
+  const errors: Error[] = [];
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
+    try {
+      await supprimerEventNouveau(childId, id);
+      console.log("✅ Sommeil supprimé dans NEW");
+    } catch (error) {
+      console.error("❌ Erreur suppression NEW:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
+    try {
+      await sommeilService.supprimerSommeil(childId, id);
+      console.log("✅ Sommeil supprimé dans OLD");
+    } catch (error) {
+      console.error("❌ Erreur suppression OLD:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (errors.length > 0 && config.failOnError) {
+    throw new Error("Erreurs lors de la suppression");
+  }
+}
+
+// ============================================
 // DOUBLE ÉCRITURE - POMPAGES
 // ============================================
 
@@ -1142,6 +1306,79 @@ export async function supprimerVitamine(childId: string, id: string) {
   if (errors.length > 0 && config.failOnError) {
     throw new Error("Erreurs lors de la suppression");
   }
+}
+
+// ============================================
+// TEMPÉRATURE / MÉDICAMENT / SYMPTÔME (NOUVEAU)
+// ============================================
+
+export async function ajouterTemperature(childId: string, data: any) {
+  const newEventData = removeUndefined({
+    type: "temperature",
+    ...data,
+  });
+  return ajouterEventNouveau(childId, newEventData as any);
+}
+
+export async function modifierTemperature(
+  childId: string,
+  id: string,
+  data: any,
+) {
+  const newEventData = removeUndefined({
+    ...data,
+  });
+  return modifierEventNouveau(childId, id, newEventData as any);
+}
+
+export async function supprimerTemperature(childId: string, id: string) {
+  return supprimerEventNouveau(childId, id);
+}
+
+export async function ajouterMedicament(childId: string, data: any) {
+  const newEventData = removeUndefined({
+    type: "medicament",
+    ...data,
+  });
+  return ajouterEventNouveau(childId, newEventData as any);
+}
+
+export async function modifierMedicament(
+  childId: string,
+  id: string,
+  data: any,
+) {
+  const newEventData = removeUndefined({
+    ...data,
+  });
+  return modifierEventNouveau(childId, id, newEventData as any);
+}
+
+export async function supprimerMedicament(childId: string, id: string) {
+  return supprimerEventNouveau(childId, id);
+}
+
+export async function ajouterSymptome(childId: string, data: any) {
+  const newEventData = removeUndefined({
+    type: "symptome",
+    ...data,
+  });
+  return ajouterEventNouveau(childId, newEventData as any);
+}
+
+export async function modifierSymptome(
+  childId: string,
+  id: string,
+  data: any,
+) {
+  const newEventData = removeUndefined({
+    ...data,
+  });
+  return modifierEventNouveau(childId, id, newEventData as any);
+}
+
+export async function supprimerSymptome(childId: string, id: string) {
+  return supprimerEventNouveau(childId, id);
 }
 
 // ============================================

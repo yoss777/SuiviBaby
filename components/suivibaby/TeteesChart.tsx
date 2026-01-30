@@ -76,7 +76,7 @@ export default function TeteesChart({ tetees }: Props) {
     getStartOfWeek(new Date()),
   );
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
-  const [isGroupedView, setIsGroupedView] = useState(true);
+  const [isGroupedView, setIsGroupedView] = useState(false);
 
   const tooltipX = useSharedValue(0);
   const tooltipY = useSharedValue(0);
@@ -947,12 +947,12 @@ export default function TeteesChart({ tetees }: Props) {
                             : "Équilibre entre seins et biberons."
                       }`
                     : typeFilter === "seins"
-                      ? `${totalSeinsCount} tétée{${totalSeinsCount > 1 ? "s" : ""} au sein cette semaine, soit ${dailyAverageCount} par jour en moyenne. ${
+                      ? `${totalSeinsCount} tétée${totalSeinsCount > 1 ? "s" : ""} cette semaine, soit ${dailyAverageCount} par jour en moyenne. ${
                           maxCount > dailyAverageCount * 1.5
                             ? `Le ${bestCountDay} a été particulièrement actif.`
                             : "Rythme régulier cette semaine."
                         }`
-                      : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberon{${totalBiberonsCount > 1 ? "s" : ""} au total). Moyenne de ${dailyAverageQuantity} ml par jour.`}
+                      : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s au total" : ""}). Moyenne de ${dailyAverageQuantity} ml par jour.`}
                 </Text>
               </View>
             </View>

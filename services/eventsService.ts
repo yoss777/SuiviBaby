@@ -36,6 +36,9 @@ export type EventType =
   | "miction" // Pipi
   | "selle" // Popo
   | "sommeil"
+  | "temperature"
+  | "medicament"
+  | "symptome"
   | "croissance" // Taille, poids, tête
   | "vaccin"
   | "vitamine";
@@ -96,9 +99,31 @@ export interface SelleEvent extends BaseEvent {
 
 export interface SommeilEvent extends BaseEvent {
   type: "sommeil";
-  duree?: number; // minutes
   heureDebut?: Date | Timestamp;
-  heureFin?: Date | Timestamp;
+  heureFin?: Date | Timestamp; // Le sommeil est peut-être en cours
+  duree?: number; // minutes // Calculé à partir de heureDebut et heureFin
+  location?: "lit" | "cododo" | "poussette" | "voiture" | "autre";
+  quality?: "paisible" | "agité" | "mauvais";
+  isNap: boolean; // Si c'est une sieste (true) ou sommeil nocturne (false)
+}
+
+export interface TemperatureEvent extends BaseEvent {
+  type: "temperature";
+  valeur: number; // °C
+  modePrise?: "rectale" | "axillaire" | "auriculaire" | "frontale" | "autre";
+}
+
+export interface MedicamentEvent extends BaseEvent {
+  type: "medicament";
+  nomMedicament: string;
+  dosage?: string;
+  voie?: "orale" | "topique" | "inhalation" | "autre";
+}
+
+export interface SymptomeEvent extends BaseEvent {
+  type: "symptome";
+  symptomes: string[];
+  intensite?: "leger" | "modere" | "fort";
 }
 
 export interface CroissanceEvent extends BaseEvent {
@@ -129,6 +154,9 @@ export type Event =
   | MictionEvent
   | SelleEvent
   | SommeilEvent
+  | TemperatureEvent
+  | MedicamentEvent
+  | SymptomeEvent
   | CroissanceEvent
   | VaccinEvent
   | VitamineEvent;
@@ -597,17 +625,88 @@ export async function ajouterSommeil(
     heureDebut?: Date;
     heureFin?: Date;
     date?: Date;
+    location?: "lit" | "cododo" | "poussette" | "voiture" | "autre";
+    quality?: "paisible" | "agité" | "mauvais";
+    isNap?: boolean;
+    note?: string;
+  },
+) {
+  const heureDebut = options.heureDebut;
+  const heureFin = options.heureFin;
+  const calculatedDuration =
+    heureDebut && heureFin
+      ? Math.max(
+          0,
+          Math.round((heureFin.getTime() - heureDebut.getTime()) / 60000),
+        )
+      : undefined;
+  return ajouterEvenement(childId, {
+    type: "sommeil",
+    duree: options.duree ?? calculatedDuration,
+    heureDebut,
+    heureFin,
+    location: options.location,
+    quality: options.quality,
+    isNap: options.isNap ?? true,
+    date: options.date || heureDebut || new Date(),
+    note: options.note,
+  } as SommeilEvent);
+}
+
+export async function ajouterTemperature(
+  childId: string,
+  valeur: number,
+  options?: {
+    modePrise?: TemperatureEvent["modePrise"];
+    date?: Date;
     note?: string;
   },
 ) {
   return ajouterEvenement(childId, {
-    type: "sommeil",
-    duree: options.duree,
-    heureDebut: options.heureDebut,
-    heureFin: options.heureFin,
-    date: options.date || new Date(),
-    note: options.note,
-  } as SommeilEvent);
+    type: "temperature",
+    valeur,
+    modePrise: options?.modePrise,
+    date: options?.date || new Date(),
+    note: options?.note,
+  } as TemperatureEvent);
+}
+
+export async function ajouterMedicament(
+  childId: string,
+  nomMedicament: string,
+  options?: {
+    dosage?: string;
+    voie?: MedicamentEvent["voie"];
+    date?: Date;
+    note?: string;
+  },
+) {
+  return ajouterEvenement(childId, {
+    type: "medicament",
+    nomMedicament,
+    dosage: options?.dosage,
+    voie: options?.voie,
+    date: options?.date || new Date(),
+    note: options?.note,
+  } as MedicamentEvent);
+}
+
+export async function ajouterSymptome(
+  childId: string,
+  symptomes: string[],
+  options?: {
+    intensite?: SymptomeEvent["intensite"];
+    date?: Date;
+    note?: string;
+  },
+) {
+  return ajouterEvenement(childId, {
+    type: "symptome",
+    symptomes,
+    intensite: options?.intensite,
+    date: options?.date || new Date(),
+    note: options?.note,
+  } as SymptomeEvent);
 }
 
 export async function ajouterVaccin(

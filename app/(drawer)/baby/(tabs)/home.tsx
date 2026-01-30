@@ -5,6 +5,10 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import {
+  ajouterSommeil,
+  modifierSommeil,
+} from "@/migration/eventsDoubleWriteService";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import {
   buildTodayEventsData,
@@ -43,8 +47,12 @@ interface DashboardData {
   tetees: any[];
   biberons: any[];
   pompages: any[];
+  sommeils: any[];
   mictions: any[];
   selles: any[];
+  temperatures: any[];
+  medicaments: any[];
+  symptomes: any[];
   vitamines: any[];
   vaccins: any[];
 }
@@ -77,6 +85,12 @@ interface TodayStats {
     lastTime?: string;
     lastTimestamp?: number;
   };
+  sommeil: {
+    count: number;
+    totalMinutes: number;
+    lastTime?: string;
+    lastTimestamp?: number;
+  };
   mictions: { count: number; lastTime?: string; lastTimestamp?: number };
   selles: { count: number; lastTime?: string; lastTimestamp?: number };
   vitamines: { count: number; lastTime?: string; lastTimestamp?: number };
@@ -92,7 +106,7 @@ export default function HomeDashboard() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
-  const { openSheet, closeSheet } = useSheet();
+  const { openSheet, closeSheet, isOpen } = useSheet();
   const { showToast } = useToast();
   const warningStateRef = useRef<
     Record<string, { miction?: number; selle?: number }>
@@ -118,7 +132,7 @@ export default function HomeDashboard() {
     null,
   );
   const scrollYRef = useRef(0);
-  const quickAddTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingQuickAddRouteRef = useRef<string | null>(null);
 
   // États des données
   const [data, setData] = useState<DashboardData>({
@@ -127,6 +141,10 @@ export default function HomeDashboard() {
     pompages: [],
     mictions: [],
     selles: [],
+    sommeils: [],
+    temperatures: [],
+    medicaments: [],
+    symptomes: [],
     vitamines: [],
     vaccins: [],
   });
@@ -138,6 +156,7 @@ export default function HomeDashboard() {
       biberons: { count: 0, quantity: 0 },
     },
     pompages: { count: 0, quantity: 0 },
+    sommeil: { count: 0, totalMinutes: 0 },
     mictions: { count: 0 },
     selles: { count: 0 },
     vitamines: { count: 0 },
@@ -154,8 +173,12 @@ export default function HomeDashboard() {
     tetees: true,
     biberons: true,
     pompages: true,
+    sommeils: true,
     mictions: true,
     selles: true,
+    temperatures: true,
+    medicaments: true,
+    symptomes: true,
     vitamines: true,
     vaccins: true,
   });
@@ -172,6 +195,14 @@ export default function HomeDashboard() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  }, []);
+
+  const formatDuration = useCallback((minutes?: number) => {
+    if (!minutes || minutes <= 0) return "0 min";
+    if (minutes < 60) return `${minutes} min`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
   }, []);
 
   const buildDetails = useCallback((event: any) => {
@@ -202,6 +233,42 @@ export default function HomeDashboard() {
         const name = event.nomVitamine || "Vitamine";
         return event.dosage ? `${name} · ${event.dosage}` : name;
       }
+      case "sommeil": {
+        const start = event.heureDebut
+          ? toDate(event.heureDebut)
+          : toDate(event.date);
+        const end = event.heureFin ? toDate(event.heureFin) : null;
+        const duration =
+          event.duree ??
+          (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
+
+        const tag =
+          typeof event.isNap === "boolean" ? (event.isNap ? "Zz" : "Zzz") : null;
+        const parts = [
+          tag,
+          formatDuration(duration),
+          event.location,
+          event.quality,
+        ].filter(Boolean);
+        return parts.length > 0 ? parts.join(" · ") : undefined;
+      }
+      case "temperature": {
+        const value =
+          typeof event.valeur === "number" ? `${event.valeur}°C` : undefined;
+        const parts = [value, event.modePrise].filter(Boolean);
+        return parts.length > 0 ? parts.join(" · ") : undefined;
+      }
+      case "medicament": {
+        const name = event.nomMedicament || "Médicament";
+        return event.dosage ? `${name} · ${event.dosage}` : name;
+      }
+      case "symptome": {
+        const list = Array.isArray(event.symptomes)
+          ? event.symptomes.join(", ")
+          : undefined;
+        const parts = [list, event.intensite].filter(Boolean);
+        return parts.length > 0 ? parts.join(" · ") : undefined;
+      }
       case "vaccin":
         const name = event.nomVaccin || "Vaccin";
         return event.dosage ? `${name} · ${event.dosage}` : name;
@@ -228,6 +295,26 @@ export default function HomeDashboard() {
       label: "Pompage",
       icon: { lib: "fa6", name: "pump-medical" },
       color: "#28a745",
+    },
+    sommeil: {
+      label: "Sommeil",
+      icon: { lib: "fa6", name: "bed" },
+      color: "#6f42c1",
+    },
+    temperature: {
+      label: "Température",
+      icon: { lib: "fa6", name: "temperature-half" },
+      color: "#e03131",
+    },
+    medicament: {
+      label: "Médicament",
+      icon: { lib: "fa6", name: "pills" },
+      color: "#2f9e44",
+    },
+    symptome: {
+      label: "Symptôme",
+      icon: { lib: "fa6", name: "virus" },
+      color: "#f59f00",
     },
     miction: {
       label: "Miction",
@@ -261,14 +348,18 @@ export default function HomeDashboard() {
         return `/baby/meals?tab=biberons&editId=${id}&returnTo=home`;
       case "pompage":
         return `/baby/pumping?editId=${id}&returnTo=home`;
+      case "sommeil":
+        return `/baby/sommeil?editId=${id}&returnTo=home`;
+      case "temperature":
+      case "medicament":
+      case "symptome":
+      case "vaccin":
+      case "vitamine":
+        return `/baby/soins?editId=${id}&returnTo=home`;
       case "miction":
         return `/baby/diapers?tab=mictions&editId=${id}&returnTo=home`;
       case "selle":
         return `/baby/diapers?tab=selles&editId=${id}&returnTo=home`;
-      case "vaccin":
-        return `/baby/immunizations?tab=vaccins&editId=${id}&returnTo=home`;
-      case "vitamine":
-        return `/baby/immunizations?tab=vitamines&editId=${id}&returnTo=home`;
       default:
         return null;
     }
@@ -318,8 +409,12 @@ export default function HomeDashboard() {
       ...data.tetees,
       ...data.biberons,
       ...data.pompages,
+      ...data.sommeils,
       ...data.mictions,
       ...data.selles,
+      ...data.temperatures,
+      ...data.medicaments,
+      ...data.symptomes,
       ...data.vitamines,
       ...data.vaccins,
     ].map((event) => ({
@@ -336,13 +431,67 @@ export default function HomeDashboard() {
     data.biberons,
     data.mictions,
     data.pompages,
+    data.sommeils,
     data.selles,
+    data.temperatures,
+    data.medicaments,
+    data.symptomes,
     data.tetees,
     data.vaccins,
     data.vitamines,
     currentTime,
     toDate,
   ]);
+
+  const sommeilEnCours = useMemo(() => {
+    return data.sommeils.find((item) => !item.heureFin && item.heureDebut);
+  }, [data.sommeils]);
+
+  const elapsedSleepMinutes = useMemo(() => {
+    if (!sommeilEnCours?.heureDebut) return 0;
+    const start = toDate(sommeilEnCours.heureDebut);
+    return Math.max(
+      0,
+      Math.round((currentTime.getTime() - start.getTime()) / 60000),
+    );
+  }, [sommeilEnCours, currentTime, toDate]);
+
+  const handleStartSleep = useCallback(
+    async (isNap: boolean) => {
+      if (!activeChild?.id || sommeilEnCours) return;
+      try {
+        await ajouterSommeil(activeChild.id, {
+          heureDebut: new Date(),
+          isNap,
+        });
+      } catch (error) {
+        console.error("Erreur démarrage sommeil:", error);
+        showToast("Impossible de démarrer le sommeil");
+      }
+    },
+    [activeChild?.id, sommeilEnCours, showToast],
+  );
+
+  const handleStopSleep = useCallback(async () => {
+    if (!activeChild?.id || !sommeilEnCours?.id) return;
+    try {
+      const fin = new Date();
+      const start = toDate(sommeilEnCours.heureDebut);
+      const duree = Math.max(
+        0,
+        Math.round((fin.getTime() - start.getTime()) / 60000),
+      );
+      await modifierSommeil(activeChild.id, sommeilEnCours.id, {
+        heureFin: fin,
+        duree,
+      });
+      const encodedId = encodeURIComponent(sommeilEnCours.id);
+      router.push(`/baby/sommeil?editId=${encodedId}&returnTo=home` as any);
+    } catch (error) {
+      console.error("Erreur arrêt sommeil:", error);
+      showToast("Impossible d'arrêter le sommeil");
+    }
+  }, [activeChild?.id, sommeilEnCours, showToast, toDate]);
 
   // ============================================
   // EFFECTS - TIMER
@@ -543,12 +692,15 @@ export default function HomeDashboard() {
       headerRowLayoutRef.current,
       activitiesLayoutRef.current,
     );
-    return () => {
-      if (quickAddTimeoutRef.current) {
-        clearTimeout(quickAddTimeoutRef.current);
-      }
-    };
   }, [updateHeaderControls]);
+
+  useEffect(() => {
+    if (isOpen) return;
+    if (!pendingQuickAddRouteRef.current) return;
+    const route = pendingQuickAddRouteRef.current;
+    pendingQuickAddRouteRef.current = null;
+    router.push(route as any);
+  }, [isOpen]);
 
   const quickAddActions = useMemo(
     () => [
@@ -580,13 +732,31 @@ export default function HomeDashboard() {
         key: "vitamine",
         label: "Vitamine",
         icon: { type: "fa", name: "pills", color: "#FF9800" },
-        route: "/baby/immunizations?tab=vitamines&openModal=true&returnTo=home",
+        route: "/baby/soins?type=vitamine&openModal=true&returnTo=home",
       },
       {
         key: "vaccin",
         label: "Vaccin",
         icon: { type: "fa", name: "syringe", color: "#9C27B0" },
-        route: "/baby/immunizations?tab=vaccins&openModal=true&returnTo=home",
+        route: "/baby/soins?type=vaccin&openModal=true&returnTo=home",
+      },
+      {
+        key: "temperature",
+        label: "Température",
+        icon: { type: "fa", name: "temperature-half", color: "#FF6B6B" },
+        route: "/baby/soins?type=temperature&openModal=true&returnTo=home",
+      },
+      {
+        key: "medicament",
+        label: "Médicament",
+        icon: { type: "fa", name: "pills", color: "#4CAF50" },
+        route: "/baby/soins?type=medicament&openModal=true&returnTo=home",
+      },
+      {
+        key: "symptome",
+        label: "Symptôme",
+        icon: { type: "fa", name: "virus", color: "#FF8C42" },
+        route: "/baby/soins?type=symptome&openModal=true&returnTo=home",
       },
       {
         key: "miction",
@@ -600,21 +770,26 @@ export default function HomeDashboard() {
         icon: { type: "fa", name: "poop", color: "#dc3545" },
         route: "/baby/diapers?tab=selles&openModal=true&returnTo=home",
       },
+      {
+        key: "sommeil",
+        label: "Sommeil",
+        icon: { type: "fa", name: "bed", color: "#6f42c1" },
+        route: "/baby/sommeil?openModal=true&returnTo=home",
+      },
     ],
     [],
   );
 
   const handleQuickAddPress = useCallback(
     (route: string) => {
-      if (quickAddTimeoutRef.current) {
-        clearTimeout(quickAddTimeoutRef.current);
+      if (isOpen) {
+        pendingQuickAddRouteRef.current = route;
+        closeSheet();
+        return;
       }
-      closeSheet();
-      quickAddTimeoutRef.current = setTimeout(() => {
-        router.push(route as any);
-      }, 420);
+      router.push(route as any);
     },
-    [closeSheet],
+    [closeSheet, isOpen],
   );
 
   const openQuickAddSheet = useCallback(() => {
@@ -800,8 +975,12 @@ export default function HomeDashboard() {
       tetees: true,
       biberons: true,
       pompages: true,
+      sommeils: true,
       mictions: true,
       selles: true,
+      temperatures: true,
+      medicaments: true,
+      symptomes: true,
       vitamines: true,
       vaccins: true,
     });
@@ -814,8 +993,12 @@ export default function HomeDashboard() {
         tetees: false,
         biberons: false,
         pompages: false,
+        sommeils: false,
         mictions: false,
         selles: false,
+        temperatures: false,
+        medicaments: false,
+        symptomes: false,
         vitamines: false,
         vaccins: false,
       }));
@@ -830,8 +1013,12 @@ export default function HomeDashboard() {
           tetees: false,
           biberons: false,
           pompages: false,
+          sommeils: false,
           mictions: false,
           selles: false,
+          temperatures: false,
+          medicaments: false,
+          symptomes: false,
           vitamines: false,
           vaccins: false,
         });
@@ -874,6 +1061,7 @@ export default function HomeDashboard() {
     const todayTetees = filterToday(data.tetees);
     const todayBiberons = filterToday(data.biberons);
     const todayPompages = filterToday(data.pompages);
+    const todaySommeils = filterToday(data.sommeils);
     const todayMictions = filterToday(data.mictions);
     const todaySelles = filterToday(data.selles);
     const todayVitamines = filterToday(data.vitamines);
@@ -937,6 +1125,26 @@ export default function HomeDashboard() {
           )
         : null;
 
+    const totalSleepMinutes = todaySommeils.reduce((sum, item) => {
+      if (item.duree) return sum + item.duree;
+      const start = item.heureDebut
+        ? toDate(item.heureDebut)
+        : toDate(item.date);
+      const end = item.heureFin ? toDate(item.heureFin) : new Date();
+      return (
+        sum + Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000))
+      );
+    }, 0);
+
+    const lastSommeil =
+      todaySommeils.length > 0
+        ? todaySommeils.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest,
+          )
+        : null;
+
     // Calculer les dernières activités
     const lastMiction =
       todayMictions.length > 0
@@ -976,16 +1184,17 @@ export default function HomeDashboard() {
 
     // Helpers pour formater le temps
     const formatTime = (item: any) => {
-      if (!item?.date?.seconds) return undefined;
-      return new Date(item.date.seconds * 1000).toLocaleTimeString("fr-FR", {
+      if (!item?.date) return undefined;
+      const dateObj = toDate(item.date);
+      return dateObj.toLocaleTimeString("fr-FR", {
         hour: "2-digit",
         minute: "2-digit",
       });
     };
 
     const getTimestamp = (item: any) => {
-      if (!item?.date?.seconds) return undefined;
-      return item.date.seconds * 1000;
+      if (!item?.date) return undefined;
+      return toDate(item.date).getTime();
     };
 
     setTodayStats({
@@ -1013,6 +1222,12 @@ export default function HomeDashboard() {
         quantity: pompagesQuantity,
         lastTime: formatTime(lastPompage),
         lastTimestamp: getTimestamp(lastPompage),
+      },
+      sommeil: {
+        count: todaySommeils.length,
+        totalMinutes: totalSleepMinutes,
+        lastTime: formatTime(lastSommeil),
+        lastTimestamp: getTimestamp(lastSommeil),
       },
       mictions: {
         count: todayMictions.length,
@@ -1160,6 +1375,109 @@ export default function HomeDashboard() {
     );
   };
 
+  const SommeilWidgetCard = ({ title, value, unit, icon, color }: any) => {
+    return (
+      <View style={[styles.statsCard, styles.sleepWidget]}>
+        {sommeilEnCours ? (
+          <>
+            <View style={styles.sleepWidgetHeader}>
+              <Text style={styles.sleepWidgetTitle}>
+                {sommeilEnCours.isNap ? "Sieste" : "Nuit"} en cours
+              </Text>
+              {/* {typeof sommeilEnCours.isNap === "boolean" && (
+                <View style={styles.sleepWidgetBadge}>
+                  <Text style={styles.sleepWidgetBadgeText}>
+                    {sommeilEnCours.isNap ? "Sieste" : "Nuit"}
+                  </Text>
+                </View>
+              )} */}
+            </View>
+            <Text style={styles.sleepWidgetValue}>
+              {formatDuration(elapsedSleepMinutes)}
+            </Text>
+            <Text style={styles.sleepWidgetSubtitle}>
+              Début {formatTime(toDate(sommeilEnCours.heureDebut))}
+            </Text>
+            <TouchableOpacity
+              style={styles.sleepWidgetStop}
+              onPress={handleStopSleep}
+            >
+              <Text style={styles.sleepWidgetStopText}>Terminer</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.sleepWidgetTitle}>Nouvelle session</Text>
+            <Text style={styles.sleepWidgetSubtitle}>Tap pour démarrer</Text>
+            <View style={styles.sleepWidgetButtons}>
+              <TouchableOpacity
+                style={styles.sleepWidgetPrimary}
+                onPress={() => handleStartSleep(true)}
+              >
+                <Text style={styles.sleepWidgetPrimaryText}>Sieste</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sleepWidgetSecondary}
+                onPress={() => handleStartSleep(false)}
+              >
+                <Text style={styles.sleepWidgetSecondaryText}>Nuit</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </View>
+
+      // <TouchableOpacity
+      //   activeOpacity={0.7}
+      //   onPress={onPress}
+      //   style={styles.statsCard}
+      // >
+      //   <View style={styles.statsHeader}>
+      //     {title === "Biberons" ? (
+      //       <MaterialCommunityIcons
+      //         name="baby-bottle"
+      //         size={20}
+      //         color={color}
+      //       />
+      //     ) : (
+      //       <FontAwesome name={icon} size={20} color={color} />
+      //     )}
+      //     <Text style={styles.statsTitle}>{title}</Text>
+      //     {/* {addEvent && (
+      //       <FontAwesome
+      //         name="plus"
+      //         size={18}
+      //         color={Colors[colorScheme].tabIconDefault}
+      //         style={{ marginLeft: "auto" }}
+      //       />
+      //     )} */}
+      //   </View>
+      //   <Text style={[styles.statsValue, { color }]}>
+      //     {value} {unit}
+      //   </Text>
+      //   {lastActivity && (
+      //     <Text style={styles.statsLastActivity}>
+      //       Dernière fois: {lastActivity}
+      //     </Text>
+      //   )}
+      //   {lastTimestamp &&
+      //   warnThreshold !== null &&
+      //   lastSessionDate > warnThreshold ? (
+      //     <Text style={[styles.statsTimeSince, { color: "#dc3545" }]}>
+      //       {/* {"⚠️ "}{getTimeSinceLastActivity(lastTimestamp)} */}
+      //       {getTimeSinceLastActivity(lastTimestamp)}
+      //     </Text>
+      //   ) : (
+      //     lastTimestamp && (
+      //       <Text style={styles.statsTimeSince}>
+      //         {getTimeSinceLastActivity(lastTimestamp)}
+      //       </Text>
+      //     )
+      //   )}
+      // </TouchableOpacity>
+    );
+  };
+
   const LoadingCard = () => (
     <View style={styles.statsCard}>
       <View style={[styles.statsHeader, { opacity: 0.5 }]}>
@@ -1286,6 +1604,45 @@ export default function HomeDashboard() {
           )}
         </View>
 
+        <View style={styles.statsGrid}>
+          {loading.sommeils ? (
+            <LoadingCard />
+          ) : (
+            <StatsCard
+              title="Sommeil"
+              value={formatDuration(todayStats.sommeil.totalMinutes)}
+              unit=""
+              icon="bed"
+              color="#6f42c1"
+              lastActivity={todayStats.sommeil.lastTime}
+              lastTimestamp={todayStats.sommeil.lastTimestamp}
+              onPress={() =>
+                router.push("/baby/sommeil?openModal=true&returnTo=home" as any)
+              }
+              addEvent={true}
+            />
+          )}
+          {loading.sommeils ? (
+            <LoadingCard />
+          ) : (
+            // <StatsCard
+            //   title="Sommeil"
+            //   value={formatDuration(todayStats.sommeil.totalMinutes)}
+            //   unit=""
+            //   icon="bed"
+            //   color="#6f42c1"
+            //   lastActivity={todayStats.sommeil.lastTime}
+            //   lastTimestamp={todayStats.sommeil.lastTimestamp}
+            //   onPress={() =>
+            //     router.push("/baby/sommeil?openModal=true&returnTo=home" as any)
+            //   }
+            //   addEvent={true}
+            // />
+
+            <SommeilWidgetCard />
+          )}
+        </View>
+
         {/* Repas - Détail par type */}
         <View style={styles.statsGrid}>
           {loading.tetees || loading.biberons ? (
@@ -1344,7 +1701,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.vitamines.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/immunizations?tab=vitamines&openModal=true&returnTo=home" as any,
+                  "/baby/soins?type=vitamine&openModal=true&returnTo=home" as any,
                 )
               }
               addEvent={true}
@@ -1363,7 +1720,7 @@ export default function HomeDashboard() {
               lastTimestamp={todayStats.vaccins.lastTimestamp}
               onPress={() =>
                 router.push(
-                  "/baby/immunizations?tab=vaccins&openModal=true&returnTo=home" as any,
+                  "/baby/soins?type=vaccin&openModal=true&returnTo=home" as any,
                 )
               }
               addEvent={true}
@@ -1452,7 +1809,11 @@ export default function HomeDashboard() {
         loading.mictions &&
         loading.selles &&
         loading.vitamines &&
-        loading.vaccins ? (
+        loading.vaccins &&
+        loading.sommeils &&
+        loading.temperatures &&
+        loading.medicaments &&
+        loading.symptomes ? (
           <View style={styles.recentLoading}>
             <ActivityIndicator size="small" color={Colors[colorScheme].tint} />
             <Text style={styles.recentLoadingText}>Chargement...</Text>
@@ -1468,6 +1829,19 @@ export default function HomeDashboard() {
               icon: { lib: "fa6", name: "circle" },
               color: Colors[colorScheme].tint,
             };
+            const isSleep = event.type === "sommeil";
+            const sleepLabel =
+              isSleep && typeof event.isNap === "boolean"
+                ? event.isNap
+                  ? "Sieste"
+                  : "Nuit"
+                : config.label;
+            const sleepIconText =
+              isSleep && typeof event.isNap === "boolean"
+                ? event.isNap
+                  ? "Zz"
+                  : "Zzz"
+                : null;
             const date = toDate(event.date);
             const details = buildDetails(event);
             const borderColor = `${Colors[colorScheme].tabIconDefault}30`;
@@ -1548,14 +1922,33 @@ export default function HomeDashboard() {
                     }}
                   >
                     <View style={styles.recentTitleRow}>
-                      {renderEventIcon(config.icon, config.color)}
+                      {isSleep && sleepIconText ? (
+                        <View
+                        // style={[
+                        //   styles.sleepInlineIcon,
+                        //   { backgroundColor: `${config.color}20` },
+                        // ]}
+                        >
+                          <Text
+                            style={[
+                              styles.sleepInlineIconText,
+                              { color: config.color },
+                            ]}
+                          >
+                            {sleepIconText}
+                            {/* {sleepIconText === "Zz" ? " " : ""} */}
+                          </Text>
+                        </View>
+                      ) : (
+                        renderEventIcon(config.icon, config.color)
+                      )}
                       <Text
                         style={[
                           styles.recentTitle,
                           { color: Colors[colorScheme].text },
                         ]}
                       >
-                        {config.label}
+                        {sleepLabel}
                       </Text>
                       {/* <FontAwesome
                         name="pen-to-square"
@@ -1671,6 +2064,82 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
+  sleepWidget: {
+    flex: 1,
+    backgroundColor: "#f5f0ff",
+    borderWidth: 1,
+    borderColor: "#ede7f6",
+  },
+  sleepWidgetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sleepWidgetTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#4c2c79",
+  },
+  sleepWidgetBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#ede7f6",
+  },
+  sleepWidgetBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#4c2c79",
+  },
+  sleepWidgetValue: {
+    marginTop: 6,
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#4c2c79",
+  },
+  sleepWidgetSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#6b5c85",
+  },
+  sleepWidgetButtons: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+  },
+  sleepWidgetPrimary: {
+    flex: 1,
+    backgroundColor: "#6f42c1",
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  sleepWidgetPrimaryText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  sleepWidgetSecondary: {
+    flex: 1,
+    backgroundColor: "#efe7ff",
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  sleepWidgetSecondaryText: {
+    color: "#6f42c1",
+    fontWeight: "700",
+  },
+  sleepWidgetStop: {
+    marginTop: 10,
+    backgroundColor: "#6f42c1",
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  sleepWidgetStopText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
   recentLoading: {
     flexDirection: "row",
     alignItems: "center",
@@ -1739,6 +2208,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     // justifyContent: "space-between",
     gap: 8,
+  },
+  sleepInlineIcon: {
+    minWidth: 28,
+    height: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sleepInlineIconText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   recentTitle: {
     fontSize: 15,

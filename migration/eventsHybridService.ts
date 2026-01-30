@@ -16,6 +16,7 @@ import * as teteesService from "@/services/teteesService";
 import * as vaccinsService from "@/services/vaccinsService";
 import * as vitaminesService from "@/services/vitaminesService";
 import * as croissanceService from "@/services/croissanceService";
+import * as sommeilService from "@/services/sommeilService";
 
 // ============================================
 // CONFIGURATION
@@ -460,6 +461,128 @@ export function ecouterSellesHybrid(
     unsubscribeOld();
     unsubscribeNew();
   };
+}
+
+// ============================================
+// LECTURE HYBRIDE - SOMMEIL
+// ============================================
+
+export async function obtenirTousLesSommeilsHybrid(
+  childId: string
+): Promise<any[]> {
+  if (config.mode === "NEW_ONLY") {
+    return obtenirEvenements(childId, { type: "sommeil" });
+  }
+
+  if (config.mode === "OLD_ONLY") {
+    return sommeilService.obtenirTousLesSommeils(childId);
+  }
+
+  const [oldSommeils, newSommeils] = await Promise.all([
+    sommeilService.obtenirTousLesSommeils(childId).catch(() => []),
+    obtenirEvenements(childId, { type: "sommeil" }).catch(() => []),
+  ]);
+
+  console.log(
+    `📊 Sommeil OLD: ${oldSommeils.length}, NEW: ${newSommeils.length}`,
+  );
+
+  return deduplicateEvents(
+    oldSommeils,
+    newSommeils,
+    config.preferSource,
+    config.deduplicationWindow
+  );
+}
+
+export function ecouterSommeilsHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
+): () => void {
+  if (config.mode === "NEW_ONLY") {
+    return ecouterEvenements(childId, callback, {
+      type: "sommeil",
+      waitForServer: options?.waitForServer,
+      depuis: options?.depuis,
+      jusqu: options?.jusqu,
+    });
+  }
+
+  if (config.mode === "OLD_ONLY") {
+    return sommeilService.ecouterSommeils(childId, callback);
+  }
+
+  let oldEvents: any[] = [];
+  let newEvents: any[] = [];
+
+  const merge = () => {
+    const merged = deduplicateEvents(
+      oldEvents,
+      newEvents,
+      config.preferSource,
+      config.deduplicationWindow
+    );
+    callback(merged);
+  };
+
+  const unsubscribeOld = sommeilService.ecouterSommeils(childId, (events) => {
+    oldEvents = events;
+    merge();
+  });
+
+  const unsubscribeNew = ecouterEvenements(
+    childId,
+    (events) => {
+      newEvents = events;
+      merge();
+    },
+    { type: "sommeil" }
+  );
+
+  return () => {
+    unsubscribeOld();
+    unsubscribeNew();
+  };
+}
+
+export function ecouterTemperaturesHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
+): () => void {
+  return ecouterEvenements(childId, callback, {
+    type: "temperature",
+    waitForServer: options?.waitForServer,
+    depuis: options?.depuis,
+    jusqu: options?.jusqu,
+  });
+}
+
+export function ecouterMedicamentsHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
+): () => void {
+  return ecouterEvenements(childId, callback, {
+    type: "medicament",
+    waitForServer: options?.waitForServer,
+    depuis: options?.depuis,
+    jusqu: options?.jusqu,
+  });
+}
+
+export function ecouterSymptomesHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
+): () => void {
+  return ecouterEvenements(childId, callback, {
+    type: "symptome",
+    waitForServer: options?.waitForServer,
+    depuis: options?.depuis,
+    jusqu: options?.jusqu,
+  });
 }
 
 // ============================================

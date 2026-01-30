@@ -9,6 +9,10 @@ import {
   ecouterMictionsHybrid,
   ecouterPompagesHybrid,
   ecouterSellesHybrid,
+  ecouterSommeilsHybrid,
+  ecouterTemperaturesHybrid,
+  ecouterMedicamentsHybrid,
+  ecouterSymptomesHybrid,
   ecouterTeteesHybrid,
   ecouterVaccinsHybrid,
   ecouterVitaminesHybrid,
@@ -47,7 +51,7 @@ import { useHeaderRight } from "../../_layout";
 // ============================================
 
 type RangeOption = 7 | 14 | 30;
-type FilterType = "meals" | "pumping" | "immunos" | "diapers";
+type FilterType = "meals" | "pumping" | "immunos" | "diapers" | "sleep";
 
 type TimelineSection = {
   title: string;
@@ -113,6 +117,24 @@ const EVENT_CONFIG: Record<
     short: "Sommeil",
     icon: { lib: "fa6", name: "bed" },
   },
+  temperature: {
+    color: "#e03131",
+    label: "Température",
+    short: "Temp",
+    icon: { lib: "fa6", name: "temperature-half" },
+  },
+  medicament: {
+    color: "#2f9e44",
+    label: "Médicament",
+    short: "Médoc",
+    icon: { lib: "fa6", name: "pills" },
+  },
+  symptome: {
+    color: "#f59f00",
+    label: "Symptôme",
+    short: "Sympt.",
+    icon: { lib: "fa6", name: "virus" },
+  },
   vaccin: {
     color: "#9C27B0",
     label: "Vaccin",
@@ -148,11 +170,23 @@ const FILTER_CONFIG: Record<
     color: "#28a745",
     eventTypes: ["pompage"],
   },
+  sleep: {
+    label: "Sommeil",
+    icon: "bed",
+    color: "#6f42c1",
+    eventTypes: ["sommeil"],
+  },
   immunos: {
     label: "Santé",
     icon: "prescription-bottle",
     color: "#9C27B0",
-    eventTypes: ["vitamine", "vaccin"],
+    eventTypes: [
+      "vitamine",
+      "vaccin",
+      "temperature",
+      "medicament",
+      "symptome",
+    ],
   },
   diapers: {
     label: "Couches",
@@ -162,7 +196,13 @@ const FILTER_CONFIG: Record<
   },
 };
 
-const ALL_FILTERS: FilterType[] = ["meals", "pumping", "immunos", "diapers"];
+const ALL_FILTERS: FilterType[] = [
+  "meals",
+  "pumping",
+  "sleep",
+  "immunos",
+  "diapers",
+];
 const RANGE_OPTIONS: RangeOption[] = [7, 14, 30];
 const FILTERS_TOP_OFFSET = 20;
 const HEADER_SPACING = 0;
@@ -233,6 +273,14 @@ function buildSections(events: Event[]): TimelineSection[] {
     }));
 }
 
+const formatDuration = (minutes?: number) => {
+  if (!minutes) return "0 min";
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
+};
+
 function buildDetails(event: Event) {
   switch (event.type) {
     case "biberon":
@@ -256,7 +304,40 @@ function buildDetails(event: Event) {
     case "selle":
       return event.consistance || event.couleur;
     case "sommeil":
-      return event.duree ? `${Math.round(event.duree)} min` : undefined;
+      const start = event.heureDebut
+        ? toDate(event.heureDebut)
+        : toDate(event.date);
+      const end = event.heureFin ? toDate(event.heureFin) : null;
+      const duration =
+        event.duree ??
+        (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
+
+      const tag =
+        typeof event.isNap === "boolean" ? (event.isNap ? "Zz" : "Zzz") : null;
+      const parts = [
+        tag,
+        formatDuration(duration),
+        event.location,
+        event.quality,
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : undefined;
+
+    case "temperature": {
+      const value =
+        typeof event.valeur === "number" ? `${event.valeur}°C` : undefined;
+      return [value, event.modePrise].filter(Boolean).join(" · ") || undefined;
+    }
+    case "medicament": {
+      const name = event.nomMedicament || "Médicament";
+      return event.dosage ? `${name} · ${event.dosage}` : name;
+    }
+    case "symptome": {
+      const list = Array.isArray(event.symptomes)
+        ? event.symptomes.join(", ")
+        : undefined;
+      return [list, event.intensite].filter(Boolean).join(" · ") || undefined;
+    }
+
     case "vaccin":
       if (!event.nomVaccin) return event.dosage;
       return event.dosage
@@ -299,9 +380,11 @@ function getEditRoute(event: Event): string | null {
     case "selle":
       return `/baby/diapers?tab=selles&editId=${id}&returnTo=chrono`;
     case "vaccin":
-      return `/baby/immunizations?tab=vaccins&editId=${id}&returnTo=chrono`;
     case "vitamine":
-      return `/baby/immunizations?tab=vitamines&editId=${id}&returnTo=chrono`;
+    case "temperature":
+    case "medicament":
+    case "symptome":
+      return `/baby/soins?editId=${id}&returnTo=chrono`;
     default:
       return null;
   }
@@ -518,6 +601,19 @@ const TimelineCard = React.memo(
     const date = toDate(event.date);
     const details = buildDetails(event);
     const config = EVENT_CONFIG[event.type];
+    const isSleep = event.type === "sommeil";
+    const sleepLabel =
+      isSleep && typeof event.isNap === "boolean"
+        ? event.isNap
+          ? "Sieste"
+          : "Nuit"
+        : config.label;
+    const sleepIconText =
+      isSleep && typeof event.isNap === "boolean"
+        ? event.isNap
+          ? "Zz"
+          : "Zzz"
+        : null;
 
     return (
       <View style={styles.itemRow}>
@@ -536,9 +632,28 @@ const TimelineCard = React.memo(
         >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
-              <EventIcon type={event.type} color={config.color} size={14} />
+              {isSleep && sleepIconText ? (
+                <View
+                // style={[
+                //   styles.sleepInlineIcon,
+                //   { backgroundColor: `${config.color}20` },
+                // ]}
+                >
+                  <Text
+                    style={[
+                      styles.sleepInlineIconText,
+                      { color: config.color },
+                    ]}
+                  >
+                    {sleepIconText}
+                    {/* {sleepIconText === "Zz" ? " " : ""} */}
+                  </Text>
+                </View>
+              ) : (
+                <EventIcon type={event.type} color={config.color} size={14} />
+              )}
               <Text style={[styles.cardTitle, { color: textColor }]}>
-                {config.label}
+                {sleepLabel}
               </Text>
             </View>
             <FontAwesome
@@ -683,6 +798,10 @@ export default function ChronoScreen() {
       selles: false,
       vaccins: false,
       vitamines: false,
+      sommeils: false,
+      temperatures: false,
+      medicaments: false,
+      symptomes: false,
     };
     let teteesData: Event[] = [];
     let biberonsData: Event[] = [];
@@ -691,6 +810,10 @@ export default function ChronoScreen() {
     let sellesData: Event[] = [];
     let vaccinsData: Event[] = [];
     let vitaminesData: Event[] = [];
+    let sommeilsData: Event[] = [];
+    let temperaturesData: Event[] = [];
+    let medicamentsData: Event[] = [];
+    let symptomesData: Event[] = [];
 
     const merge = () => {
       const merged = [
@@ -699,8 +822,12 @@ export default function ChronoScreen() {
         ...pompagesData,
         ...mictionsData,
         ...sellesData,
+        ...temperaturesData,
+        ...medicamentsData,
+        ...symptomesData,
         ...vaccinsData,
         ...vitaminesData,
+        ...sommeilsData,
       ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
       setEvents(merged);
       const allLoaded = Object.values(loaded).every(Boolean);
@@ -779,6 +906,42 @@ export default function ChronoScreen() {
       },
       { depuis: since, waitForServer: true },
     );
+    const unsubscribeSommeils = ecouterSommeilsHybrid(
+      activeChild.id,
+      (data) => {
+        sommeilsData = data;
+        loaded.sommeils = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
+    const unsubscribeTemperatures = ecouterTemperaturesHybrid(
+      activeChild.id,
+      (data) => {
+        temperaturesData = data;
+        loaded.temperatures = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
+    const unsubscribeMedicaments = ecouterMedicamentsHybrid(
+      activeChild.id,
+      (data) => {
+        medicamentsData = data;
+        loaded.medicaments = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
+    const unsubscribeSymptomes = ecouterSymptomesHybrid(
+      activeChild.id,
+      (data) => {
+        symptomesData = data;
+        loaded.symptomes = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
 
     return () => {
       unsubscribeTetees();
@@ -788,6 +951,10 @@ export default function ChronoScreen() {
       unsubscribeSelles();
       unsubscribeVaccins();
       unsubscribeVitamines();
+      unsubscribeSommeils();
+      unsubscribeTemperatures();
+      unsubscribeMedicaments();
+      unsubscribeSymptomes();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChild?.id, maxRange, currentDay]);
@@ -1357,6 +1524,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  sleepInlineIcon: {
+    minWidth: 28,
+    height: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sleepInlineIconText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   cardTitle: {
     fontSize: 15,

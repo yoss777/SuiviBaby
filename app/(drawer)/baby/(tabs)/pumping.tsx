@@ -3,8 +3,8 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
-import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { eventColors } from "@/constants/eventColors";
+import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -38,7 +38,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -1196,8 +1196,10 @@ export default function PumpingScreen() {
   // ============================================
 
   const renderPompageItem = (pompage: Pompage, isLast: boolean = false) => {
-    const totalQty = (pompage.quantiteGauche || 0) + (pompage.quantiteDroite || 0);
-    const leftPercent = totalQty > 0 ? (pompage.quantiteGauche / totalQty) * 100 : 50;
+    const totalQty =
+      (pompage.quantiteGauche || 0) + (pompage.quantiteDroite || 0);
+    const leftPercent =
+      totalQty > 0 ? (pompage.quantiteGauche / totalQty) * 100 : 50;
     const pompageTime = new Date(pompage.date?.seconds * 1000);
 
     return (
@@ -1205,14 +1207,19 @@ export default function PumpingScreen() {
         key={pompage.id}
         style={({ pressed }) => [
           styles.sessionCard,
-          isLast && styles.sessionCardLast,
+          // isLast && styles.sessionCardLast,
           pressed && styles.sessionCardPressed,
         ]}
         onPress={() => openEditModal(pompage)}
       >
         {/* Time badge */}
         <View style={styles.sessionTime}>
-          <Text style={[styles.sessionTimeText, isLast && styles.sessionTimeTextLast]}>
+          <Text
+            style={[
+              styles.sessionTimeText,
+              isLast && styles.sessionTimeTextLast,
+            ]}
+          >
             {pompageTime.toLocaleTimeString("fr-FR", {
               hour: "2-digit",
               minute: "2-digit",
@@ -1243,12 +1250,16 @@ export default function PumpingScreen() {
             <View style={styles.quantityLabelItem}>
               <View style={[styles.quantityDot, styles.quantityDotLeft]} />
               <Text style={styles.quantityLabelText}>G</Text>
-              <Text style={styles.quantityLabelValue}>{pompage.quantiteGauche} ml</Text>
+              <Text style={styles.quantityLabelValue}>
+                {pompage.quantiteGauche} ml
+              </Text>
             </View>
             <View style={styles.quantityLabelItem}>
               <View style={[styles.quantityDot, styles.quantityDotRight]} />
               <Text style={styles.quantityLabelText}>D</Text>
-              <Text style={styles.quantityLabelValue}>{pompage.quantiteDroite} ml</Text>
+              <Text style={styles.quantityLabelValue}>
+                {pompage.quantiteDroite} ml
+              </Text>
             </View>
           </View>
         </View>
@@ -1300,7 +1311,9 @@ export default function PumpingScreen() {
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
               <Text style={styles.dayStatValue}>{item.pompages.length}</Text>
-              <Text style={styles.dayStatLabel}>session{item.pompages.length > 1 ? "s" : ""}</Text>
+              <Text style={styles.dayStatLabel}>
+                session{item.pompages.length > 1 ? "s" : ""}
+              </Text>
             </View>
             <View style={styles.dayStatDivider} />
             <View style={styles.dayStatItem}>
@@ -1315,14 +1328,22 @@ export default function PumpingScreen() {
         {/* Stats breakdown */}
         <View style={styles.statsBreakdown}>
           <View style={styles.statsBreakdownItem}>
-            <View style={[styles.statsBreakdownDot, { backgroundColor: "#10b981" }]} />
+            <View
+              style={[styles.statsBreakdownDot, { backgroundColor: "#10b981" }]}
+            />
             <Text style={styles.statsBreakdownLabel}>Gauche</Text>
-            <Text style={styles.statsBreakdownValue}>{item.totalQuantityLeft} ml</Text>
+            <Text style={styles.statsBreakdownValue}>
+              {item.totalQuantityLeft} ml
+            </Text>
           </View>
           <View style={styles.statsBreakdownItem}>
-            <View style={[styles.statsBreakdownDot, { backgroundColor: "#6366f1" }]} />
+            <View
+              style={[styles.statsBreakdownDot, { backgroundColor: "#6366f1" }]}
+            />
             <Text style={styles.statsBreakdownLabel}>Droite</Text>
-            <Text style={styles.statsBreakdownValue}>{item.totalQuantityRight} ml</Text>
+            <Text style={styles.statsBreakdownValue}>
+              {item.totalQuantityRight} ml
+            </Text>
           </View>
         </View>
 

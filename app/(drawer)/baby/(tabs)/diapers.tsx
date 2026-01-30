@@ -1381,13 +1381,18 @@ export default function DiapersScreen() {
         }
       }
       const detailsText = detailParts.join(" · ");
+      const excretionColorKey: "miction" | "selle" =
+        excretion.type === "miction" ? "miction" : "selle";
 
       return (
         <Pressable
           key={excretion.id}
           style={({ pressed }) => [
             styles.sessionCard,
-            // isLast && { backgroundColor: color + "15" },
+            // isLast && {
+            //   backgroundColor: eventColors[excretionColorKey].light + "40",
+            //   borderBottomWidth: 0,
+            // },
             pressed && styles.sessionCardPressed,
           ]}
           onPress={() => openEditModal(excretion)}
@@ -1553,7 +1558,7 @@ export default function DiapersScreen() {
                   <Text style={styles.expandTriggerText}>
                     {isExpanded
                       ? "Masquer"
-                      : `${item.excretions.length - 1} autre${item.excretions.length > 2 ? "s" : ""}`}
+                      : `${item.excretions.length - 1} autre${item.excretions.length > 2 ? "s" : ""} excrétion${item.excretions.length > 2 ? "s" : ""}`}
                   </Text>
                   <Ionicons
                     name={isExpanded ? "chevron-up" : "chevron-down"}
@@ -1828,6 +1833,10 @@ const styles = StyleSheet.create({
     gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
+  },
+  sessionCardLast: {
+    backgroundColor: eventColors.sommeil.light + "40",
+    borderBottomWidth: 0,
   },
   sessionCardPressed: {
     backgroundColor: "#f9fafb",

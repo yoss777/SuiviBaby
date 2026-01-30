@@ -82,6 +82,12 @@ export default function BabyTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="soins"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="diapers"
         options={{
           href: null,
@@ -89,6 +95,12 @@ export default function BabyTabLayout() {
       />
       <Tabs.Screen
         name="stats"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="sommeil"
         options={{
           href: null,
         }}

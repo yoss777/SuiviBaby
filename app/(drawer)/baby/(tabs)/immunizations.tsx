@@ -1569,13 +1569,17 @@ export default function ImmunizationsScreen() {
       const name = getImmunoName(immuno);
       const typeLabel = getImmunoTypeLabel(immuno.type);
       const immunoDate = new Date(immuno.date?.seconds * 1000);
-
+      const immunoColorKey: "vitamine" | "vaccin" =
+        immuno.type === "vitamine" ? "vitamine" : "vaccin";
       return (
         <Pressable
           key={immuno.id}
           style={({ pressed }) => [
             styles.sessionCard,
-            // isLast && { backgroundColor: color + "15" },
+            // isLast && {
+            //   backgroundColor: eventColors[immunoColorKey].light + "40",
+            //   borderBottomWidth: 0,
+            // },
             pressed && styles.sessionCardPressed,
           ]}
           onPress={() => openEditModal(immuno)}

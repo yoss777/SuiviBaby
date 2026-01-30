@@ -32,10 +32,10 @@ const ITEMS = [
   },
   {
     title: "Santé",
-    subtitle: "Vitamines et vaccins",
+    subtitle: "Température, symptômes, médicaments, vaccins",
     icon: "prescription-bottle",
     color: "#9C27B0",
-    route: "/baby/immunizations",
+    route: "/baby/soins",
   },
   {
     title: "Couches",
@@ -43,6 +43,13 @@ const ITEMS = [
     icon: "toilet",
     color: "#17a2b8",
     route: "/baby/diapers",
+  },
+  {
+    title: "Sommeil",
+    subtitle: "Siestes et nuits",
+    icon: "bed",
+    color: "#6f42c1",
+    route: "/baby/sommeil",
   },
 ];
 

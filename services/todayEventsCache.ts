@@ -6,6 +6,10 @@ export type TodayEventsData = {
   pompages: Event[];
   mictions: Event[];
   selles: Event[];
+  sommeils: Event[];
+  temperatures: Event[];
+  medicaments: Event[];
+  symptomes: Event[];
   vitamines: Event[];
   vaccins: Event[];
 };
@@ -16,6 +20,10 @@ const TODAY_TYPES: EventType[] = [
   "pompage",
   "miction",
   "selle",
+  "sommeil",
+  "temperature",
+  "medicament",
+  "symptome",
   "vaccin",
   "vitamine",
 ];
@@ -40,6 +48,10 @@ export const buildTodayEventsData = (events: Event[]): TodayEventsData => {
     pompages: [],
     mictions: [],
     selles: [],
+    sommeils: [],
+    temperatures: [],
+    medicaments: [],
+    symptomes: [],
     vitamines: [],
     vaccins: [],
   };
@@ -66,6 +78,18 @@ export const buildTodayEventsData = (events: Event[]): TodayEventsData => {
         break;
       case "vaccin":
         data.vaccins.push(event);
+        break;
+      case "sommeil":
+        data.sommeils.push(event);
+        break;
+      case "temperature":
+        data.temperatures.push(event);
+        break;
+      case "medicament":
+        data.medicaments.push(event);
+        break;
+      case "symptome":
+        data.symptomes.push(event);
         break;
       default:
         break;
