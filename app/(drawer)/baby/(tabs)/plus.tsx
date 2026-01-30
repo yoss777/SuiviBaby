@@ -38,6 +38,13 @@ const ITEMS = [
     route: "/baby/soins",
   },
   {
+    title: "Activités",
+    subtitle: "Tummy time, jeux, lecture, promenade...",
+    icon: "play-circle",
+    color: "#10b981",
+    route: "/baby/activities",
+  },
+  {
     title: "Couches",
     subtitle: "Mictions et selles",
     icon: "toilet",

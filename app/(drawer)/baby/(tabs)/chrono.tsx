@@ -6,6 +6,7 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
+  ecouterActivitesHybrid,
   ecouterBainsHybrid,
   ecouterBiberonsHybrid,
   ecouterMedicamentsHybrid,
@@ -53,7 +54,13 @@ import { useHeaderRight } from "../../_layout";
 // ============================================
 
 type RangeOption = 7 | 14 | 30;
-type FilterType = "meals" | "pumping" | "immunos" | "diapers" | "routines";
+type FilterType =
+  | "meals"
+  | "pumping"
+  | "immunos"
+  | "diapers"
+  | "routines"
+  | "activities";
 
 type TimelineSection = {
   title: string;
@@ -67,6 +74,18 @@ type TimelineSection = {
 // ============================================
 
 const STORAGE_KEY = "chrono_filters_v1";
+
+// Activity type labels
+const ACTIVITY_TYPE_LABELS: Record<string, string> = {
+  tummyTime: "Tummy Time",
+  jeux: "Jeux",
+  lecture: "Lecture",
+  promenade: "Promenade",
+  massage: "Massage",
+  musique: "Musique",
+  eveil: "Éveil sensoriel",
+  autre: "Autre",
+};
 
 const EVENT_CONFIG: Record<
   EventType,
@@ -155,6 +174,18 @@ const EVENT_CONFIG: Record<
     short: "Vitamine",
     icon: { lib: "fa6", name: "pills" },
   },
+  activite: {
+    color: "#10b981",
+    label: "Activité",
+    short: "Activité",
+    icon: { lib: "fa6", name: "play-circle" },
+  },
+  croissance: {
+    color: "#8B5CF6",
+    label: "Croissance",
+    short: "Croiss.",
+    icon: { lib: "fa6", name: "ruler" },
+  },
 };
 
 const FILTER_CONFIG: Record<
@@ -196,6 +227,12 @@ const FILTER_CONFIG: Record<
     color: "#17a2b8",
     eventTypes: ["miction", "selle"],
   },
+  activities: {
+    label: "Activités",
+    icon: "play-circle",
+    color: "#10b981",
+    eventTypes: ["activite"],
+  },
 };
 
 const ALL_FILTERS: FilterType[] = [
@@ -204,6 +241,7 @@ const ALL_FILTERS: FilterType[] = [
   "routines",
   "immunos",
   "diapers",
+  "activities",
 ];
 const RANGE_OPTIONS: RangeOption[] = [7, 14, 30];
 const FILTERS_TOP_OFFSET = 20;
@@ -355,6 +393,13 @@ function buildDetails(event: Event) {
       return event.dosage
         ? `${event.nomVitamine} · ${event.dosage}`
         : event.nomVitamine;
+    case "activite": {
+      const parts = [
+        event.duree ? `${event.duree} min` : null,
+        event.description,
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : undefined;
+    }
     default:
       return undefined;
   }
@@ -396,6 +441,8 @@ function getEditRoute(event: Event): string | null {
     case "medicament":
     case "symptome":
       return `/baby/soins?editId=${id}&returnTo=chrono`;
+    case "activite":
+      return `/baby/activities?editId=${id}&returnTo=chrono`;
     default:
       return null;
   }
@@ -615,12 +662,17 @@ const TimelineCard = React.memo(
     const details = buildDetails(event);
     const config = EVENT_CONFIG[event.type];
     const isSleep = event.type === "sommeil";
-    const sleepLabel =
-      isSleep && typeof event.isNap === "boolean"
-        ? event.isNap
-          ? "Sieste"
-          : "Nuit de sommeil"
-        : config.label;
+    const isActivity = event.type === "activite";
+
+    // Determine the label based on event type
+    let displayLabel = config.label;
+    if (isSleep && typeof event.isNap === "boolean") {
+      displayLabel = event.isNap ? "Sieste" : "Nuit de sommeil";
+    } else if (isActivity && event.typeActivite) {
+      displayLabel = ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
+    }
+
+    const sleepLabel = displayLabel;
     const sleepIconName =
       isSleep && typeof event.isNap === "boolean"
         ? event.isNap
@@ -634,7 +686,8 @@ const TimelineCard = React.memo(
       ? Math.max(
           0,
           Math.round(
-            (currentTime.getTime() - toDate(event.heureDebut).getTime()) / 60000,
+            (currentTime.getTime() - toDate(event.heureDebut).getTime()) /
+              60000,
           ),
         )
       : 0;
@@ -648,7 +701,9 @@ const TimelineCard = React.memo(
         <View style={styles.cardTimeLeft}>
           {isSleep && event.heureFin ? (
             <>
-              <Text style={[styles.cardTimeText, { color: secondaryTextColor }]}>
+              <Text
+                style={[styles.cardTimeText, { color: secondaryTextColor }]}
+              >
                 {formatTime(date)}
               </Text>
               <Text
@@ -667,7 +722,9 @@ const TimelineCard = React.memo(
             </>
           ) : isSleep && !event.heureFin ? (
             <>
-              <Text style={[styles.cardTimeText, { color: secondaryTextColor }]}>
+              <Text
+                style={[styles.cardTimeText, { color: secondaryTextColor }]}
+              >
                 {formatTime(date)}
               </Text>
               <Text
@@ -676,7 +733,10 @@ const TimelineCard = React.memo(
                 ↓
               </Text>
               <Text
-                style={[styles.cardTimeOngoing, { color: eventColors.sommeil.dark }]}
+                style={[
+                  styles.cardTimeOngoing,
+                  { color: eventColors.sommeil.dark },
+                ]}
               >
                 en cours
               </Text>
@@ -717,9 +777,9 @@ const TimelineCard = React.memo(
           {(details || isOngoingSleep) && (
             <Text style={[styles.cardDetails, { color: secondaryTextColor }]}>
               {isOngoingSleep
-                ? (details
-                    ? `${formatDuration(elapsedMinutes)} · ${details}`
-                    : formatDuration(elapsedMinutes))
+                ? details
+                  ? `${formatDuration(elapsedMinutes)} · ${details}`
+                  : formatDuration(elapsedMinutes)
                 : details}
             </Text>
           )}
@@ -862,6 +922,7 @@ export default function ChronoScreen() {
       temperatures: false,
       medicaments: false,
       symptomes: false,
+      activites: false,
     };
     let teteesData: Event[] = [];
     let biberonsData: Event[] = [];
@@ -875,6 +936,7 @@ export default function ChronoScreen() {
     let temperaturesData: Event[] = [];
     let medicamentsData: Event[] = [];
     let symptomesData: Event[] = [];
+    let activitesData: Event[] = [];
 
     const merge = () => {
       const merged = [
@@ -890,6 +952,7 @@ export default function ChronoScreen() {
         ...vitaminesData,
         ...sommeilsData,
         ...bainsData,
+        ...activitesData,
       ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
       setEvents(merged);
       const allLoaded = Object.values(loaded).every(Boolean);
@@ -1013,6 +1076,15 @@ export default function ChronoScreen() {
       },
       { depuis: since, waitForServer: true },
     );
+    const unsubscribeActivites = ecouterActivitesHybrid(
+      activeChild.id,
+      (data) => {
+        activitesData = data;
+        loaded.activites = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
 
     return () => {
       unsubscribeTetees();
@@ -1027,6 +1099,7 @@ export default function ChronoScreen() {
       unsubscribeTemperatures();
       unsubscribeMedicaments();
       unsubscribeSymptomes();
+      unsubscribeActivites();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChild?.id, maxRange, currentDay]);

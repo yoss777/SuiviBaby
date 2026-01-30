@@ -57,10 +57,11 @@
 
 - **Soins / Santé**: Température, Symptômes, Médicaments, Vaccins, Vitamines.
 - **Routines**: Sommeil, Bain, Templates rapides.
-- **Éveil / Activités**: Activités (tummy time, jeux) + Jalons.
+- **Éveil / Activités**: Activités (tummy time, jeux, lecture, etc.) + Jalons.
 - **Sorties / Contexte**: Sorties, Notes rapides.
 
 Option retenue (4 écrans):
+
 - **Soins / Santé**
 - **Routines**
 - **Éveil / Activités**

@@ -57,6 +57,7 @@ interface DashboardData {
   symptomes: any[];
   vitamines: any[];
   vaccins: any[];
+  activites: any[];
 }
 
 interface MealsStats {
@@ -150,6 +151,7 @@ export default function HomeDashboard() {
     symptomes: [],
     vitamines: [],
     vaccins: [],
+    activites: [],
   });
 
   const [todayStats, setTodayStats] = useState<TodayStats>({
@@ -185,6 +187,7 @@ export default function HomeDashboard() {
     symptomes: true,
     vitamines: true,
     vaccins: true,
+    activites: true,
   });
 
   const toDate = useCallback((value: any) => {
@@ -287,10 +290,29 @@ export default function HomeDashboard() {
       case "vaccin":
         const name = event.nomVaccin || "Vaccin";
         return event.dosage ? `${name} · ${event.dosage}` : name;
+      case "activite": {
+        const parts = [
+          event.duree ? `${event.duree} min` : null,
+          event.description,
+        ].filter(Boolean);
+        return parts.length > 0 ? parts.join(" · ") : undefined;
+      }
       default:
         return undefined;
     }
   }, []);
+
+  // Activity type labels
+  const ACTIVITY_TYPE_LABELS: Record<string, string> = {
+    tummyTime: "Tummy Time",
+    jeux: "Jeux",
+    lecture: "Lecture",
+    promenade: "Promenade",
+    massage: "Massage",
+    musique: "Musique",
+    eveil: "Éveil sensoriel",
+    autre: "Autre",
+  };
 
   const EVENT_CONFIG: Record<
     string,
@@ -356,6 +378,11 @@ export default function HomeDashboard() {
       icon: { lib: "fa6", name: "syringe" },
       color: "#9C27B0",
     },
+    activite: {
+      label: "Activité",
+      icon: { lib: "fa6", name: "play-circle" },
+      color: "#10b981",
+    },
   };
 
   function getEditRoute(event: any): string | null {
@@ -382,6 +409,8 @@ export default function HomeDashboard() {
         return `/baby/diapers?tab=mictions&editId=${id}&returnTo=home`;
       case "selle":
         return `/baby/diapers?tab=selles&editId=${id}&returnTo=home`;
+      case "activite":
+        return `/baby/activities?editId=${id}&returnTo=home`;
       default:
         return null;
     }
@@ -440,6 +469,7 @@ export default function HomeDashboard() {
       ...data.symptomes,
       ...data.vitamines,
       ...data.vaccins,
+      ...data.activites,
     ].map((event) => ({
       ...event,
       type: event.type,
@@ -463,6 +493,7 @@ export default function HomeDashboard() {
     data.tetees,
     data.vaccins,
     data.vitamines,
+    data.activites,
     currentTime,
     toDate,
   ]);
@@ -806,6 +837,12 @@ export default function HomeDashboard() {
         icon: { type: "fa", name: "bed", color: "#6f42c1" },
         route: "/baby/routines?type=sommeil&openModal=true&returnTo=home",
       },
+      {
+        key: "activite",
+        label: "Activité",
+        icon: { type: "fa", name: "baby", color: "#10b981" },
+        route: "/baby/activities?openModal=true&returnTo=home",
+      },
     ],
     [],
   );
@@ -1014,6 +1051,7 @@ export default function HomeDashboard() {
       symptomes: true,
       vitamines: true,
       vaccins: true,
+      activites: true,
     });
 
     const cached = getTodayEventsCache(activeChild.id);
@@ -1054,6 +1092,7 @@ export default function HomeDashboard() {
           symptomes: false,
           vitamines: false,
           vaccins: false,
+          activites: false,
         });
       },
       { waitForServer: true },
@@ -1865,12 +1904,18 @@ export default function HomeDashboard() {
               color: Colors[colorScheme].tint,
             };
             const isSleep = event.type === "sommeil";
-            const sleepLabel =
-              isSleep && typeof event.isNap === "boolean"
-                ? event.isNap
-                  ? "Sieste"
-                  : "Nuit de sommeil"
-                : config.label;
+            const isActivity = event.type === "activite";
+
+            // Determine the label based on event type
+            let displayLabel = config.label;
+            if (isSleep && typeof event.isNap === "boolean") {
+              displayLabel = event.isNap ? "Sieste" : "Nuit de sommeil";
+            } else if (isActivity && event.typeActivite) {
+              displayLabel =
+                ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
+            }
+
+            const sleepLabel = displayLabel;
             const sleepIconName =
               isSleep && typeof event.isNap === "boolean"
                 ? event.isNap
@@ -1882,12 +1927,14 @@ export default function HomeDashboard() {
             const borderColor = `${Colors[colorScheme].tabIconDefault}30`;
 
             // Calculate elapsed time for ongoing sleep
-            const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
+            const isOngoingSleep =
+              isSleep && !event.heureFin && event.heureDebut;
             const elapsedMinutes = isOngoingSleep
               ? Math.max(
                   0,
                   Math.round(
-                    (currentTime.getTime() - toDate(event.heureDebut).getTime()) /
+                    (currentTime.getTime() -
+                      toDate(event.heureDebut).getTime()) /
                       60000,
                   ),
                 )
@@ -2051,7 +2098,7 @@ export default function HomeDashboard() {
                         style={{ marginLeft: "auto" }}
                       /> */}
                     </View>
-                    {(details || isOngoingSleep) ? (
+                    {details || isOngoingSleep ? (
                       <Text
                         style={[
                           styles.recentDetails,
@@ -2059,9 +2106,9 @@ export default function HomeDashboard() {
                         ]}
                       >
                         {isOngoingSleep
-                          ? (details
-                              ? `${formatDuration(elapsedMinutes)} · ${details}`
-                              : formatDuration(elapsedMinutes))
+                          ? details
+                            ? `${formatDuration(elapsedMinutes)} · ${details}`
+                            : formatDuration(elapsedMinutes)
                           : details}
                       </Text>
                     ) : null}

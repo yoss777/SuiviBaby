@@ -42,7 +42,8 @@ export type EventType =
   | "symptome"
   | "croissance" // Taille, poids, tête
   | "vaccin"
-  | "vitamine";
+  | "vitamine"
+  | "activite"; // Activités d'éveil
 
 export interface BaseEvent {
   id?: string;
@@ -154,6 +155,13 @@ export interface VitamineEvent extends BaseEvent {
   dosage?: string;
 }
 
+export interface ActiviteEvent extends BaseEvent {
+  type: "activite";
+  typeActivite: "tummyTime" | "jeux" | "lecture" | "promenade" | "bain" | "massage" | "eveil" | "autre";
+  duree?: number; // minutes
+  description?: string;
+}
+
 export type Event =
   | BiberonEvent
   | TeteeEvent
@@ -168,7 +176,8 @@ export type Event =
   | SymptomeEvent
   | CroissanceEvent
   | VaccinEvent
-  | VitamineEvent;
+  | VitamineEvent
+  | ActiviteEvent;
 
 // ============================================
 // CRUD UNIFIÉ

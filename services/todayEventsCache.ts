@@ -13,6 +13,7 @@ export type TodayEventsData = {
   symptomes: Event[];
   vitamines: Event[];
   vaccins: Event[];
+  activites: Event[];
 };
 
 const TODAY_TYPES: EventType[] = [
@@ -28,6 +29,7 @@ const TODAY_TYPES: EventType[] = [
   "symptome",
   "vaccin",
   "vitamine",
+  "activite",
 ];
 
 type CacheEntry = {
@@ -57,6 +59,7 @@ export const buildTodayEventsData = (events: Event[]): TodayEventsData => {
     symptomes: [],
     vitamines: [],
     vaccins: [],
+    activites: [],
   };
 
   events.forEach((event) => {
@@ -96,6 +99,9 @@ export const buildTodayEventsData = (events: Event[]): TodayEventsData => {
         break;
       case "symptome":
         data.symptomes.push(event);
+        break;
+      case "activite":
+        data.activites.push(event);
         break;
       default:
         break;

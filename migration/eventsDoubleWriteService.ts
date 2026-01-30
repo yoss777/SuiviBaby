@@ -1400,6 +1400,29 @@ export async function supprimerSymptome(childId: string, id: string) {
   return supprimerEventNouveau(childId, id);
 }
 
+export async function ajouterActivite(childId: string, data: any) {
+  const newEventData = removeUndefined({
+    type: "activite",
+    ...data,
+  });
+  return ajouterEventNouveau(childId, newEventData as any);
+}
+
+export async function modifierActivite(
+  childId: string,
+  id: string,
+  data: any,
+) {
+  const newEventData = removeUndefined({
+    ...data,
+  });
+  return modifierEventNouveau(childId, id, newEventData as any);
+}
+
+export async function supprimerActivite(childId: string, id: string) {
+  return supprimerEventNouveau(childId, id);
+}
+
 // ============================================
 // MONITORING & DEBUG
 // ============================================

@@ -924,6 +924,19 @@ export function ecouterVitaminesHybrid(
   };
 }
 
+export function ecouterActivitesHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
+): () => void {
+  return ecouterEvenements(childId, callback, {
+    type: "activite",
+    waitForServer: options?.waitForServer,
+    depuis: options?.depuis,
+    jusqu: options?.jusqu,
+  });
+}
+
 // ============================================
 // LECTURE HYBRIDE - BIBERONS
 // ============================================
