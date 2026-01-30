@@ -107,13 +107,15 @@ export default function SommeilScreen() {
   const colors = Colors[colorScheme];
   const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
   const { showAlert } = useModal();
-  const { openModal, editId, returnTo } = useLocalSearchParams();
+  const { openModal, editId, returnTo, mode } = useLocalSearchParams();
+  const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const navigation = useNavigation();
 
   const sheetOwnerId = "sommeil";
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
   const returnToRef = useRef<string | null>(null);
   const editIdRef = useRef<string | null>(null);
+  const pendingModeRef = useRef<"nap" | "night" | null>(null);
   const headerOwnerId = useRef(
     `sommeil-${Math.random().toString(36).slice(2)}`,
   );
@@ -163,7 +165,12 @@ export default function SommeilScreen() {
   const stashReturnTo = useCallback(() => {
     const target = normalizeParam(returnTo);
     if (!target) return;
-    if (target === "home" || target === "chrono" || target === "journal") {
+    if (
+      target === "home" ||
+      target === "chrono" ||
+      target === "journal" ||
+      target === "routines"
+    ) {
       returnToRef.current = target;
       return;
     }
@@ -181,6 +188,8 @@ export default function SommeilScreen() {
       router.replace("/baby/home");
     } else if (target === "chrono" || target === "journal") {
       router.replace("/baby/chrono");
+    } else if (target === "routines") {
+      router.replace("/baby/routines");
     }
   }, []);
 
@@ -189,13 +198,16 @@ export default function SommeilScreen() {
       const backButton = (
         <HeaderBackButton
           onPress={() => {
-            const target = normalizeParam(returnTo) ?? returnToRef.current;
-            if (target === "home") {
+            if (returnTargetParam === "home") {
               router.replace("/baby/home");
               return;
             }
-            if (target === "chrono" || target === "journal") {
+            if (returnTargetParam === "chrono" || returnTargetParam === "journal") {
               router.replace("/baby/chrono");
+              return;
+            }
+            if (returnTargetParam === "routines") {
+              router.replace("/baby/routines");
               return;
             }
             router.replace("/baby/plus");
@@ -208,7 +220,7 @@ export default function SommeilScreen() {
       return () => {
         setHeaderLeft(null, "sommeil");
       };
-    }, [colorScheme, returnTo, setHeaderLeft]),
+    }, [colorScheme, returnTargetParam, setHeaderLeft]),
   );
 
   useFocusEffect(
@@ -218,13 +230,16 @@ export default function SommeilScreen() {
           closeSheet();
           return true;
         }
-        const target = normalizeParam(returnTo) ?? returnToRef.current;
-        if (target === "home") {
+        if (returnTargetParam === "home") {
           router.replace("/baby/home");
           return true;
         }
-        if (target === "chrono" || target === "journal") {
+        if (returnTargetParam === "chrono" || returnTargetParam === "journal") {
           router.replace("/baby/chrono");
+          return true;
+        }
+        if (returnTargetParam === "routines") {
+          router.replace("/baby/routines");
           return true;
         }
         router.replace("/baby/plus");
@@ -236,7 +251,7 @@ export default function SommeilScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen, returnTo]),
+    }, [closeSheet, isOpen, returnTargetParam, router]),
   );
 
   useEffect(() => {
@@ -447,13 +462,13 @@ export default function SommeilScreen() {
     return marked;
   }, [sommeils, selectedDate, selectedFilter, colorScheme]);
 
-  const prepareAddModal = useCallback(() => {
+  const prepareAddModal = useCallback((presetMode?: "nap" | "night" | null) => {
     setEditingSommeil(null);
     setIsSubmitting(false);
     setHeureDebut(new Date());
     setHeureFin(null);
     setIsOngoing(false);
-    setIsNap(true);
+    setIsNap(presetMode === "night" ? false : true);
     setLocation(undefined);
     setQuality(undefined);
     setNote("");
@@ -461,7 +476,7 @@ export default function SommeilScreen() {
   }, []);
 
   const openAddModal = useCallback(() => {
-    prepareAddModal();
+    prepareAddModal(null);
     setPendingMode("add");
     setPendingOpen(true);
   }, [prepareAddModal]);
@@ -866,7 +881,7 @@ export default function SommeilScreen() {
   );
 
   function buildSheetProps() {
-    const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
+    const returnTarget = returnTargetParam ?? returnToRef.current;
     return {
       ownerId: sheetOwnerId,
       title: editingSommeil ? "Modifier le sommeil" : "Nouveau sommeil",
@@ -901,7 +916,7 @@ export default function SommeilScreen() {
     location,
     quality,
     note,
-    returnTo,
+    returnTargetParam,
     showDateStart,
     showTimeStart,
     showDateEnd,
@@ -911,9 +926,15 @@ export default function SommeilScreen() {
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
+      const normalizedMode = normalizeParam(mode);
+      if (normalizedMode === "nap" || normalizedMode === "night") {
+        pendingModeRef.current = normalizedMode;
+      } else {
+        pendingModeRef.current = null;
+      }
       setPendingMode("add");
       setPendingOpen(true);
-    }, [openModal]),
+    }, [openModal, mode]),
   );
 
   useEffect(() => {
@@ -921,12 +942,17 @@ export default function SommeilScreen() {
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
       if (pendingMode !== "edit") {
-        prepareAddModal();
+        prepareAddModal(pendingModeRef.current ?? null);
       }
       openSheet(buildSheetProps());
-      navigation.setParams({ openModal: undefined, editId: undefined });
+      navigation.setParams({
+        openModal: undefined,
+        editId: undefined,
+        mode: undefined,
+      });
       setPendingOpen(false);
       setPendingMode(null);
+      pendingModeRef.current = null;
     });
     return () => task.cancel?.();
   }, [
@@ -934,7 +960,7 @@ export default function SommeilScreen() {
     layoutReady,
     pendingMode,
     router,
-    returnTo,
+    returnTargetParam,
     navigation,
     openSheet,
     prepareAddModal,
@@ -949,13 +975,13 @@ export default function SommeilScreen() {
     stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(match);
-    navigation.setParams({ openModal: undefined, editId: undefined });
+    navigation.setParams({ openModal: undefined, editId: undefined, mode: undefined });
   }, [
     editId,
     layoutReady,
     sommeils,
     router,
-    returnTo,
+    returnTargetParam,
     navigation,
     openEditModal,
   ]);

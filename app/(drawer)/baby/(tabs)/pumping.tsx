@@ -129,7 +129,7 @@ export default function PumpingScreen() {
 
   // Récupérer les paramètres de l'URL
   const { openModal, editId, returnTo } = useLocalSearchParams();
-  const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
+  const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -230,15 +230,15 @@ export default function PumpingScreen() {
       const backButton = (
         <HeaderBackButton
           onPress={() => {
-            if (returnTarget === "home") {
+            if (returnTargetParam === "home") {
               router.replace("/baby/home");
               return;
             }
-            if (returnTarget === "chrono") {
+            if (returnTargetParam === "chrono") {
               router.replace("/baby/chrono");
               return;
             }
-            if (returnTarget === "journal") {
+            if (returnTargetParam === "journal") {
               router.replace("/baby/chrono");
               return;
             }
@@ -253,7 +253,7 @@ export default function PumpingScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, returnTarget, setHeaderLeft]),
+    }, [colorScheme, returnTargetParam, setHeaderLeft]),
   );
 
   useFocusEffect(
@@ -263,15 +263,15 @@ export default function PumpingScreen() {
           closeSheet();
           return true;
         }
-        if (returnTarget === "home") {
+        if (returnTargetParam === "home") {
           router.replace("/baby/home");
           return true;
         }
-        if (returnTarget === "chrono") {
+        if (returnTargetParam === "chrono") {
           router.replace("/baby/chrono");
           return true;
         }
-        if (returnTarget === "journal") {
+        if (returnTargetParam === "journal") {
           router.replace("/baby/chrono");
           return true;
         }
@@ -284,7 +284,7 @@ export default function PumpingScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen, returnTarget, router]),
+    }, [closeSheet, isOpen, returnTargetParam, router]),
   );
 
   // ============================================
@@ -1126,7 +1126,7 @@ export default function PumpingScreen() {
   }
 
   function buildSheetProps() {
-    const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
+    const returnTarget = returnTargetParam ?? returnToRef.current;
     return {
       ownerId: sheetOwnerId,
       title: editingPompage ? "Modifier la session" : "Nouvelle session",

@@ -301,6 +301,7 @@ export default function SoinsScreen() {
   const headerOwnerId = useRef(`soins-${Math.random().toString(36).slice(2)}`);
 
   const { openModal, editId, returnTo, type } = useLocalSearchParams();
+  const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const sheetOwnerId = "soins";
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
@@ -419,6 +420,234 @@ export default function SoinsScreen() {
     }
   }, []);
 
+  const getTemplates = useCallback(() => {
+    const keepCombined = includeTemperature && includeSymptome;
+
+    const temperatureItems = [
+      {
+        label: "36.8° axillaire",
+        onPress: () => {
+          setIncludeTemperature(true);
+          setIncludeSymptome(keepCombined ? true : false);
+          setSelectedType("temperature");
+          setTemperatureValue(36.8);
+          setTemperatureMode("axillaire");
+        },
+      },
+      {
+        label: "38.5° rectale",
+        onPress: () => {
+          setIncludeTemperature(true);
+          setIncludeSymptome(keepCombined ? true : false);
+          setSelectedType("temperature");
+          setTemperatureValue(38.5);
+          setTemperatureMode("rectale");
+        },
+      },
+      {
+        label: "37.5° frontale",
+        onPress: () => {
+          setIncludeTemperature(true);
+          setIncludeSymptome(keepCombined ? true : false);
+          setSelectedType("temperature");
+          setTemperatureValue(37.5);
+          setTemperatureMode("frontale");
+        },
+      },
+    ];
+
+    const symptomeItems = [
+      {
+        label: "Fièvre légère",
+        onPress: () => {
+          setIncludeTemperature(keepCombined ? true : false);
+          setIncludeSymptome(true);
+          setSelectedType("symptome");
+          setSymptomes(["fièvre"]);
+          setSymptomeIntensite("léger");
+          setSymptomeAutre("");
+        },
+      },
+      {
+        label: "Rhume léger",
+        onPress: () => {
+          setIncludeTemperature(keepCombined ? true : false);
+          setIncludeSymptome(true);
+          setSelectedType("symptome");
+          setSymptomes(["toux", "nez bouché"]);
+          setSymptomeIntensite("léger");
+          setSymptomeAutre("");
+        },
+      },
+      {
+        label: "Dentition",
+        onPress: () => {
+          setIncludeTemperature(keepCombined ? true : false);
+          setIncludeSymptome(true);
+          setSelectedType("symptome");
+          setSymptomes(["dents"]);
+          setSymptomeIntensite("modéré");
+          setSymptomeAutre("");
+        },
+      },
+    ];
+
+    const medicamentItems = [
+      {
+        label: "Paracétamol 5 ml",
+        onPress: () => {
+          setIncludeTemperature(false);
+          setIncludeSymptome(false);
+          setSelectedType("medicament");
+          setMedicamentName("Paracétamol");
+          setMedicamentDosage("5 ml");
+          setMedicamentVoie("orale");
+        },
+      },
+      {
+        label: "Ibuprofène 2.5 ml",
+        onPress: () => {
+          setIncludeTemperature(false);
+          setIncludeSymptome(false);
+          setSelectedType("medicament");
+          setMedicamentName("Ibuprofène");
+          setMedicamentDosage("2.5 ml");
+          setMedicamentVoie("orale");
+        },
+      },
+      {
+        label: "Sérum physio",
+        onPress: () => {
+          setIncludeTemperature(false);
+          setIncludeSymptome(false);
+          setSelectedType("medicament");
+          setMedicamentName("Sérum physiologique");
+          setMedicamentDosage("");
+          setMedicamentVoie("topique");
+        },
+      },
+    ];
+
+    const vaccinItems = [
+      {
+        label: "Rotavirus 1ère",
+        onPress: () => {
+          setIncludeTemperature(false);
+          setIncludeSymptome(false);
+          setSelectedType("vaccin");
+          setVaccinName("Rotavirus");
+          setVaccinDosage("1ère injection");
+          setVaccinCustomName("");
+        },
+      },
+      {
+        label: "ROR 1ère",
+        onPress: () => {
+          setIncludeTemperature(false);
+          setIncludeSymptome(false);
+          setSelectedType("vaccin");
+          setVaccinName("ROR (Rougeole, Oreillons, Rubéole)");
+          setVaccinDosage("1ère injection");
+          setVaccinCustomName("");
+        },
+      },
+      {
+        label: "Pneumo 1ère",
+        onPress: () => {
+          setIncludeTemperature(false);
+          setIncludeSymptome(false);
+          setSelectedType("vaccin");
+          setVaccinName("Pneumocoque (PCV13)");
+          setVaccinDosage("1ère injection");
+          setVaccinCustomName("");
+        },
+      },
+    ];
+
+    const vitamineItems = [
+      {
+        label: "Vitamine D · 3 gouttes",
+        onPress: () => {
+          setIncludeTemperature(false);
+          setIncludeSymptome(false);
+          setSelectedType("vitamine");
+          setVitamineName("Vitamine D");
+          setVitamineCustomName("");
+          setGouttesCount(3);
+          setVitamineDosage("");
+        },
+      },
+      {
+        label: "Vitamine K · 2 gouttes",
+        onPress: () => {
+          setIncludeTemperature(false);
+          setIncludeSymptome(false);
+          setSelectedType("vitamine");
+          setVitamineName("Vitamine K");
+          setVitamineCustomName("");
+          setGouttesCount(2);
+          setVitamineDosage("");
+        },
+      },
+      {
+        label: "Autre vitamine",
+        onPress: () => {
+          setIncludeTemperature(false);
+          setIncludeSymptome(false);
+          setSelectedType("vitamine");
+          setVitamineName("Autre vitamine");
+          setVitamineCustomName("");
+        },
+      },
+    ];
+
+    if (keepCombined) {
+      return [
+        { title: "Température", items: temperatureItems },
+        { title: "Symptômes", items: symptomeItems },
+      ];
+    }
+
+    if (selectedType === "temperature" && includeTemperature) {
+      return [{ items: temperatureItems }];
+    }
+    if (selectedType === "symptome" && includeSymptome) {
+      return [{ items: symptomeItems }];
+    }
+    if (selectedType === "medicament") {
+      return [{ items: medicamentItems }];
+    }
+    if (selectedType === "vaccin") {
+      return [{ items: vaccinItems }];
+    }
+    if (selectedType === "vitamine") {
+      return [{ items: vitamineItems }];
+    }
+    return [];
+  }, [
+    includeTemperature,
+    includeSymptome,
+    selectedType,
+    setIncludeTemperature,
+    setIncludeSymptome,
+    setSelectedType,
+    setTemperatureValue,
+    setTemperatureMode,
+    setSymptomes,
+    setSymptomeIntensite,
+    setSymptomeAutre,
+    setMedicamentName,
+    setMedicamentDosage,
+    setMedicamentVoie,
+    setVaccinName,
+    setVaccinDosage,
+    setVaccinCustomName,
+    setVitamineName,
+    setVitamineCustomName,
+    setGouttesCount,
+    setVitamineDosage,
+  ]);
+
   const filteredVaccins = useMemo(
     () =>
       VACCINS_LIST.filter((vaccin) =>
@@ -501,12 +730,14 @@ export default function SoinsScreen() {
       const backButton = (
         <HeaderBackButton
           onPress={() => {
-            const target = normalizeParam(returnTo) ?? returnToRef.current;
-            if (target === "home") {
+            if (returnTargetParam === "home") {
               router.replace("/baby/home");
               return;
             }
-            if (target === "chrono" || target === "journal") {
+            if (
+              returnTargetParam === "chrono" ||
+              returnTargetParam === "journal"
+            ) {
               router.replace("/baby/chrono");
               return;
             }
@@ -520,7 +751,7 @@ export default function SoinsScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, returnTo, setHeaderLeft]),
+    }, [colorScheme, returnTargetParam, setHeaderLeft]),
   );
 
   useFocusEffect(
@@ -530,12 +761,11 @@ export default function SoinsScreen() {
           closeSheet();
           return true;
         }
-        const target = normalizeParam(returnTo) ?? returnToRef.current;
-        if (target === "home") {
+        if (returnTargetParam === "home") {
           router.replace("/baby/home");
           return true;
         }
-        if (target === "chrono" || target === "journal") {
+        if (returnTargetParam === "chrono" || returnTargetParam === "journal") {
           router.replace("/baby/chrono");
           return true;
         }
@@ -548,7 +778,7 @@ export default function SoinsScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen, returnTo]),
+    }, [closeSheet, isOpen, returnTargetParam, router]),
   );
 
   // ============================================
@@ -994,7 +1224,7 @@ export default function SoinsScreen() {
   }, []);
 
   function buildSheetProps() {
-    const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
+    const returnTarget = returnTargetParam ?? returnToRef.current;
     return {
       ownerId: sheetOwnerId,
       title: editingEvent ? "Modifier" : "Nouveau",
@@ -1093,6 +1323,7 @@ export default function SoinsScreen() {
     resetForm,
     stashReturnTo,
     openSheet,
+    returnTargetParam,
   ]);
 
   useEffect(() => {
@@ -1105,7 +1336,15 @@ export default function SoinsScreen() {
     editIdRef.current = normalizedId;
     openEditModal(target);
     navigation.setParams({ openModal: undefined, editId: undefined });
-  }, [editId, layoutReady, events, navigation, openEditModal, stashReturnTo]);
+  }, [
+    editId,
+    layoutReady,
+    events,
+    navigation,
+    openEditModal,
+    stashReturnTo,
+    returnTargetParam,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -1506,6 +1745,7 @@ export default function SoinsScreen() {
     }
 
     const isEditing = !!editingEvent;
+    const templates = getTemplates();
     return (
       <View style={styles.sheetContent}>
         <View style={styles.typeRow}>
@@ -1541,19 +1781,29 @@ export default function SoinsScreen() {
                 onPress={() => {
                   if (isEditing) return;
                   if (type === "temperature") {
-                    setIncludeTemperature((prev) => {
-                      if (prev && !includeSymptome) return true;
-                      return !prev;
-                    });
-                    setSelectedType("temperature");
+                    const nextIncludeTemperature =
+                      includeTemperature && !includeSymptome
+                        ? true
+                        : !includeTemperature;
+                    setIncludeTemperature(nextIncludeTemperature);
+                    if (!nextIncludeTemperature && includeSymptome) {
+                      setSelectedType("symptome");
+                    } else {
+                      setSelectedType("temperature");
+                    }
                     return;
                   }
                   if (type === "symptome") {
-                    setIncludeSymptome((prev) => {
-                      if (prev && !includeTemperature) return true;
-                      return !prev;
-                    });
-                    setSelectedType("symptome");
+                    const nextIncludeSymptome =
+                      includeSymptome && !includeTemperature
+                        ? true
+                        : !includeSymptome;
+                    setIncludeSymptome(nextIncludeSymptome);
+                    if (!nextIncludeSymptome && includeTemperature) {
+                      setSelectedType("temperature");
+                    } else {
+                      setSelectedType("symptome");
+                    }
                     return;
                   }
                   setIncludeTemperature(false);
@@ -1587,6 +1837,36 @@ export default function SoinsScreen() {
               Vous pouvez sélectionner Température et Symptôme ensemble
             </Text>
           )}
+
+        {templates.length > 0 && (
+          <View style={styles.templatesSection}>
+            <Text style={styles.templatesTitle}>Templates rapides</Text>
+            {templates.map((section, index) => (
+              <View
+                key={`${section.title ?? "default"}-${index}`}
+                style={styles.templatesGroup}
+              >
+                {section.title && (
+                  <Text style={styles.templatesSubtitle}>{section.title}</Text>
+                )}
+                <View style={styles.templatesRow}>
+                  {section.items.map((template) => (
+                    <TouchableOpacity
+                      key={template.label}
+                      style={styles.templateChip}
+                      onPress={template.onPress}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.templateChipText}>
+                        {template.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         {includeTemperature && (
           <>
@@ -2264,10 +2544,56 @@ export default function SoinsScreen() {
         onLayout={() => setLayoutReady(true)}
       >
         <View>
-          <DateFilterBar
-            selected={selectedFilter}
-            onSelect={handleFilterPress}
-          />
+          <View style={styles.filterRow}>
+            <DateFilterBar
+              selected={selectedFilter}
+              onSelect={handleFilterPress}
+            />
+            <View style={styles.quickActionsRow}>
+              <TouchableOpacity
+                style={styles.quickActionButton}
+                onPress={() => {
+                  pendingTypeRef.current = "temperature";
+                  setPendingMode("add");
+                  setPendingOpen(true);
+                }}
+              >
+                <FontAwesome
+                  name="temperature-half"
+                  size={14}
+                  color={Colors[colorScheme].tint}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickActionButton}
+                onPress={() => {
+                  pendingTypeRef.current = "vitamine";
+                  setPendingMode("add");
+                  setPendingOpen(true);
+                }}
+              >
+                <FontAwesome
+                  name="pills"
+                  size={14}
+                  color={Colors[colorScheme].tint}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickActionButton}
+                onPress={() => {
+                  pendingTypeRef.current = "vaccin";
+                  setPendingMode("add");
+                  setPendingOpen(true);
+                }}
+              >
+                <FontAwesome
+                  name="syringe"
+                  size={14}
+                  color={Colors[colorScheme].tint}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
           {showCalendar && (
             <View style={styles.calendarContainer}>
               <Calendar
@@ -2385,12 +2711,69 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingRight: 16,
+    // paddingVertical: 12,
+  },
+  quickActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginLeft: 8,
+  },
+  quickActionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f0f0f0",
+  },
   flatlistContent: {
     paddingBottom: 8,
   },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
+  },
+  templatesSection: {
+    paddingHorizontal: 4,
+    // paddingTop: 8,
+    paddingBottom: 4,
+  },
+  templatesTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4b5563",
+    marginBottom: 8,
+  },
+  templatesGroup: {
+    marginBottom: 8,
+  },
+  templatesSubtitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6b7280",
+    marginBottom: 6,
+  },
+  templatesRow: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  templateChip: {
+    borderRadius: 999,
+    backgroundColor: "#f0f0f0",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  templateChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4a4f55",
   },
   daySection: {
     marginBottom: 24,

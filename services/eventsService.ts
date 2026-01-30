@@ -36,6 +36,7 @@ export type EventType =
   | "miction" // Pipi
   | "selle" // Popo
   | "sommeil"
+  | "bain"
   | "temperature"
   | "medicament"
   | "symptome"
@@ -107,6 +108,13 @@ export interface SommeilEvent extends BaseEvent {
   isNap: boolean; // Si c'est une sieste (true) ou sommeil nocturne (false)
 }
 
+export interface BainEvent extends BaseEvent {
+  type: "bain";
+  duree?: number; // minutes
+  temperatureEau?: number; // °C
+  produits?: string;
+}
+
 export interface TemperatureEvent extends BaseEvent {
   type: "temperature";
   valeur: number; // °C
@@ -154,6 +162,7 @@ export type Event =
   | MictionEvent
   | SelleEvent
   | SommeilEvent
+  | BainEvent
   | TemperatureEvent
   | MedicamentEvent
   | SymptomeEvent
@@ -767,6 +776,7 @@ export async function obtenirStats24h(childId: string) {
     selles: { count: 0 },
     couches: { count: 0 },
     sommeil: { count: 0, totalMinutes: 0 },
+    bains: { count: 0 },
   };
 
   events.forEach((event) => {
@@ -793,6 +803,9 @@ export async function obtenirStats24h(childId: string) {
       case "sommeil":
         stats.sommeil.count++;
         stats.sommeil.totalMinutes += (event as SommeilEvent).duree || 0;
+        break;
+      case "bain":
+        stats.bains.count++;
         break;
     }
   });

@@ -559,6 +559,19 @@ export function ecouterTemperaturesHybrid(
   });
 }
 
+export function ecouterBainsHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
+): () => void {
+  return ecouterEvenements(childId, callback, {
+    type: "bain",
+    waitForServer: options?.waitForServer,
+    depuis: options?.depuis,
+    jusqu: options?.jusqu,
+  });
+}
+
 export function ecouterMedicamentsHybrid(
   childId: string,
   callback: (events: any[]) => void,

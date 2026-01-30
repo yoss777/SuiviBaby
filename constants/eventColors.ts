@@ -27,6 +27,10 @@ export const eventColors = {
     dark: "#6f42c1", // Purple night
     light: "#f1e9ff",
   },
+  bain: {
+    dark: "#3b82f6", // Blue
+    light: "#e7f0ff",
+  },
   temperature: {
     dark: "#e03131", // Red
     light: "#fff5f5",

@@ -1,5 +1,6 @@
 import { MigrationBanner } from "@/components/migration";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
+import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -48,6 +49,7 @@ interface DashboardData {
   biberons: any[];
   pompages: any[];
   sommeils: any[];
+  bains: any[];
   mictions: any[];
   selles: any[];
   temperatures: any[];
@@ -142,6 +144,7 @@ export default function HomeDashboard() {
     mictions: [],
     selles: [],
     sommeils: [],
+    bains: [],
     temperatures: [],
     medicaments: [],
     symptomes: [],
@@ -174,6 +177,7 @@ export default function HomeDashboard() {
     biberons: true,
     pompages: true,
     sommeils: true,
+    bains: true,
     mictions: true,
     selles: true,
     temperatures: true,
@@ -242,13 +246,24 @@ export default function HomeDashboard() {
           event.duree ??
           (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
 
-        const tag =
-          typeof event.isNap === "boolean" ? (event.isNap ? "Zz" : "Zzz") : null;
         const parts = [
-          tag,
-          formatDuration(duration),
+          end ? formatDuration(duration) : null, // Only show duration if sleep is finished
           event.location,
           event.quality,
+        ].filter(Boolean);
+        return parts.length > 0 ? parts.join(" · ") : undefined;
+      }
+      case "bain": {
+        const parts = [
+          event.duree ? `${event.duree} min` : null,
+          event.temperatureEau ? `${event.temperatureEau}°C` : null,
+        ].filter(Boolean);
+        return parts.length > 0 ? parts.join(" · ") : undefined;
+      }
+      case "bain": {
+        const parts = [
+          event.duree ? `${event.duree} min` : null,
+          event.temperatureEau ? `${event.temperatureEau}°C` : null,
         ].filter(Boolean);
         return parts.length > 0 ? parts.join(" · ") : undefined;
       }
@@ -301,6 +316,11 @@ export default function HomeDashboard() {
       icon: { lib: "fa6", name: "bed" },
       color: "#6f42c1",
     },
+    bain: {
+      label: "Bain",
+      icon: { lib: "fa6", name: "bath" },
+      color: "#3b82f6",
+    },
     temperature: {
       label: "Température",
       icon: { lib: "fa6", name: "temperature-half" },
@@ -349,7 +369,9 @@ export default function HomeDashboard() {
       case "pompage":
         return `/baby/pumping?editId=${id}&returnTo=home`;
       case "sommeil":
-        return `/baby/sommeil?editId=${id}&returnTo=home`;
+        return `/baby/routines?editId=${id}&returnTo=home`;
+      case "bain":
+        return `/baby/routines?editId=${id}&returnTo=home`;
       case "temperature":
       case "medicament":
       case "symptome":
@@ -410,6 +432,7 @@ export default function HomeDashboard() {
       ...data.biberons,
       ...data.pompages,
       ...data.sommeils,
+      ...data.bains,
       ...data.mictions,
       ...data.selles,
       ...data.temperatures,
@@ -432,6 +455,7 @@ export default function HomeDashboard() {
     data.mictions,
     data.pompages,
     data.sommeils,
+    data.bains,
     data.selles,
     data.temperatures,
     data.medicaments,
@@ -486,7 +510,7 @@ export default function HomeDashboard() {
         duree,
       });
       const encodedId = encodeURIComponent(sommeilEnCours.id);
-      router.push(`/baby/sommeil?editId=${encodedId}&returnTo=home` as any);
+      router.push(`/baby/routines?editId=${encodedId}&returnTo=home` as any);
     } catch (error) {
       console.error("Erreur arrêt sommeil:", error);
       showToast("Impossible d'arrêter le sommeil");
@@ -759,6 +783,12 @@ export default function HomeDashboard() {
         route: "/baby/soins?type=symptome&openModal=true&returnTo=home",
       },
       {
+        key: "bain",
+        label: "Bain",
+        icon: { type: "fa", name: "bath", color: "#3b82f6" },
+        route: "/baby/routines?type=bain&openModal=true&returnTo=home",
+      },
+      {
         key: "miction",
         label: "Miction",
         icon: { type: "fa", name: "droplet", color: "#17a2b8" },
@@ -774,7 +804,7 @@ export default function HomeDashboard() {
         key: "sommeil",
         label: "Sommeil",
         icon: { type: "fa", name: "bed", color: "#6f42c1" },
-        route: "/baby/sommeil?openModal=true&returnTo=home",
+        route: "/baby/routines?type=sommeil&openModal=true&returnTo=home",
       },
     ],
     [],
@@ -976,6 +1006,7 @@ export default function HomeDashboard() {
       biberons: true,
       pompages: true,
       sommeils: true,
+      bains: true,
       mictions: true,
       selles: true,
       temperatures: true,
@@ -994,6 +1025,7 @@ export default function HomeDashboard() {
         biberons: false,
         pompages: false,
         sommeils: false,
+        bains: false,
         mictions: false,
         selles: false,
         temperatures: false,
@@ -1014,6 +1046,7 @@ export default function HomeDashboard() {
           biberons: false,
           pompages: false,
           sommeils: false,
+          bains: false,
           mictions: false,
           selles: false,
           temperatures: false,
@@ -1617,7 +1650,9 @@ export default function HomeDashboard() {
               lastActivity={todayStats.sommeil.lastTime}
               lastTimestamp={todayStats.sommeil.lastTimestamp}
               onPress={() =>
-                router.push("/baby/sommeil?openModal=true&returnTo=home" as any)
+                router.push(
+                  "/baby/routines?type=sommeil&openModal=true&returnTo=home" as any,
+                )
               }
               addEvent={true}
             />
@@ -1834,17 +1869,29 @@ export default function HomeDashboard() {
               isSleep && typeof event.isNap === "boolean"
                 ? event.isNap
                   ? "Sieste"
-                  : "Nuit"
+                  : "Nuit de sommeil"
                 : config.label;
-            const sleepIconText =
+            const sleepIconName =
               isSleep && typeof event.isNap === "boolean"
                 ? event.isNap
-                  ? "Zz"
-                  : "Zzz"
+                  ? "bed"
+                  : "moon"
                 : null;
             const date = toDate(event.date);
             const details = buildDetails(event);
             const borderColor = `${Colors[colorScheme].tabIconDefault}30`;
+
+            // Calculate elapsed time for ongoing sleep
+            const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
+            const elapsedMinutes = isOngoingSleep
+              ? Math.max(
+                  0,
+                  Math.round(
+                    (currentTime.getTime() - toDate(event.heureDebut).getTime()) /
+                      60000,
+                  ),
+                )
+              : 0;
 
             // Check if we need to show a day separator
             const currentDayLabel = getDayLabel(date);
@@ -1899,14 +1946,72 @@ export default function HomeDashboard() {
                       ]}
                     />
                   </View>
-                  <Text
-                    style={[
-                      styles.recentTimeLeft,
-                      { color: Colors[colorScheme].tabIconDefault },
-                    ]}
-                  >
-                    {formatTime(date)}
-                  </Text>
+                  <View style={styles.recentTimeLeft}>
+                    {isSleep && event.heureFin ? (
+                      <>
+                        <Text
+                          style={[
+                            styles.recentTimeText,
+                            { color: Colors[colorScheme].tabIconDefault },
+                          ]}
+                        >
+                          {formatTime(date)}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.recentTimeArrow,
+                            { color: Colors[colorScheme].tabIconDefault },
+                          ]}
+                        >
+                          ↓
+                        </Text>
+                        <Text
+                          style={[
+                            styles.recentTimeTextSecondary,
+                            { color: Colors[colorScheme].tabIconDefault },
+                          ]}
+                        >
+                          {formatTime(toDate(event.heureFin))}
+                        </Text>
+                      </>
+                    ) : isSleep && !event.heureFin ? (
+                      <>
+                        <Text
+                          style={[
+                            styles.recentTimeText,
+                            { color: Colors[colorScheme].tabIconDefault },
+                          ]}
+                        >
+                          {formatTime(date)}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.recentTimeArrow,
+                            { color: Colors[colorScheme].tabIconDefault },
+                          ]}
+                        >
+                          ↓
+                        </Text>
+                        <Text
+                          style={[
+                            styles.recentTimeOngoing,
+                            { color: eventColors.sommeil.dark },
+                          ]}
+                        >
+                          en cours
+                        </Text>
+                      </>
+                    ) : (
+                      <Text
+                        style={[
+                          styles.recentTimeText,
+                          { color: Colors[colorScheme].tabIconDefault },
+                        ]}
+                      >
+                        {formatTime(date)}
+                      </Text>
+                    )}
+                  </View>
                   <TouchableOpacity
                     style={[
                       styles.recentCard,
@@ -1922,23 +2027,12 @@ export default function HomeDashboard() {
                     }}
                   >
                     <View style={styles.recentTitleRow}>
-                      {isSleep && sleepIconText ? (
-                        <View
-                        // style={[
-                        //   styles.sleepInlineIcon,
-                        //   { backgroundColor: `${config.color}20` },
-                        // ]}
-                        >
-                          <Text
-                            style={[
-                              styles.sleepInlineIconText,
-                              { color: config.color },
-                            ]}
-                          >
-                            {sleepIconText}
-                            {/* {sleepIconText === "Zz" ? " " : ""} */}
-                          </Text>
-                        </View>
+                      {isSleep && sleepIconName ? (
+                        <FontAwesome
+                          name={sleepIconName as any}
+                          size={12}
+                          color={config.color}
+                        />
                       ) : (
                         renderEventIcon(config.icon, config.color)
                       )}
@@ -1957,14 +2051,18 @@ export default function HomeDashboard() {
                         style={{ marginLeft: "auto" }}
                       /> */}
                     </View>
-                    {details ? (
+                    {(details || isOngoingSleep) ? (
                       <Text
                         style={[
                           styles.recentDetails,
                           { color: Colors[colorScheme].tabIconDefault },
                         ]}
                       >
-                        {details}
+                        {isOngoingSleep
+                          ? (details
+                              ? `${formatDuration(elapsedMinutes)} · ${details}`
+                              : formatDuration(elapsedMinutes))
+                          : details}
                       </Text>
                     ) : null}
                   </TouchableOpacity>
@@ -2216,10 +2314,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sleepInlineIconText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
   recentTitle: {
     fontSize: 15,
     fontWeight: "700",
@@ -2229,10 +2323,25 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   recentTimeLeft: {
-    fontSize: 12,
-    fontWeight: "600",
     width: 42,
     marginTop: 6,
+  },
+  recentTimeText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  recentTimeArrow: {
+    fontSize: 10,
+    lineHeight: 10,
+    fontWeight: "600",
+  },
+  recentTimeTextSecondary: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  recentTimeOngoing: {
+    fontSize: 10,
+    fontWeight: "700",
   },
   recentDetails: {
     marginTop: 6,

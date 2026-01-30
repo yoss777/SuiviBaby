@@ -1,18 +1,20 @@
 import { ThemedView } from "@/components/themed-view";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
+  ecouterBainsHybrid,
   ecouterBiberonsHybrid,
+  ecouterMedicamentsHybrid,
   ecouterMictionsHybrid,
   ecouterPompagesHybrid,
   ecouterSellesHybrid,
   ecouterSommeilsHybrid,
-  ecouterTemperaturesHybrid,
-  ecouterMedicamentsHybrid,
   ecouterSymptomesHybrid,
+  ecouterTemperaturesHybrid,
   ecouterTeteesHybrid,
   ecouterVaccinsHybrid,
   ecouterVitaminesHybrid,
@@ -51,7 +53,7 @@ import { useHeaderRight } from "../../_layout";
 // ============================================
 
 type RangeOption = 7 | 14 | 30;
-type FilterType = "meals" | "pumping" | "immunos" | "diapers" | "sleep";
+type FilterType = "meals" | "pumping" | "immunos" | "diapers" | "routines";
 
 type TimelineSection = {
   title: string;
@@ -117,6 +119,12 @@ const EVENT_CONFIG: Record<
     short: "Sommeil",
     icon: { lib: "fa6", name: "bed" },
   },
+  bain: {
+    color: "#3b82f6",
+    label: "Bain",
+    short: "Bain",
+    icon: { lib: "fa6", name: "bath" },
+  },
   temperature: {
     color: "#e03131",
     label: "Température",
@@ -170,23 +178,17 @@ const FILTER_CONFIG: Record<
     color: "#28a745",
     eventTypes: ["pompage"],
   },
-  sleep: {
-    label: "Sommeil",
-    icon: "bed",
-    color: "#6f42c1",
-    eventTypes: ["sommeil"],
+  routines: {
+    label: "Routines",
+    icon: "bath",
+    color: "#3b82f6",
+    eventTypes: ["sommeil", "bain"],
   },
   immunos: {
     label: "Santé",
     icon: "prescription-bottle",
     color: "#9C27B0",
-    eventTypes: [
-      "vitamine",
-      "vaccin",
-      "temperature",
-      "medicament",
-      "symptome",
-    ],
+    eventTypes: ["vitamine", "vaccin", "temperature", "medicament", "symptome"],
   },
   diapers: {
     label: "Couches",
@@ -199,7 +201,7 @@ const FILTER_CONFIG: Record<
 const ALL_FILTERS: FilterType[] = [
   "meals",
   "pumping",
-  "sleep",
+  "routines",
   "immunos",
   "diapers",
 ];
@@ -312,15 +314,20 @@ function buildDetails(event: Event) {
         event.duree ??
         (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
 
-      const tag =
-        typeof event.isNap === "boolean" ? (event.isNap ? "Zz" : "Zzz") : null;
       const parts = [
-        tag,
-        formatDuration(duration),
+        end ? formatDuration(duration) : null, // Only show duration if sleep is finished
         event.location,
         event.quality,
       ].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;
+
+    case "bain": {
+      const parts = [
+        event.duree ? `${event.duree} min` : null,
+        event.temperatureEau ? `${event.temperatureEau}°C` : null,
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : undefined;
+    }
 
     case "temperature": {
       const value =
@@ -379,6 +386,10 @@ function getEditRoute(event: Event): string | null {
       return `/baby/diapers?tab=mictions&editId=${id}&returnTo=chrono`;
     case "selle":
       return `/baby/diapers?tab=selles&editId=${id}&returnTo=chrono`;
+    case "sommeil":
+      return `/baby/routines?editId=${id}&returnTo=chrono`;
+    case "bain":
+      return `/baby/routines?editId=${id}&returnTo=chrono`;
     case "vaccin":
     case "vitamine":
     case "temperature":
@@ -587,6 +598,7 @@ interface TimelineCardProps {
   textColor: string;
   secondaryTextColor: string;
   onLongPress: () => void;
+  currentTime: Date;
 }
 
 const TimelineCard = React.memo(
@@ -597,6 +609,7 @@ const TimelineCard = React.memo(
     textColor,
     secondaryTextColor,
     onLongPress,
+    currentTime,
   }: TimelineCardProps) => {
     const date = toDate(event.date);
     const details = buildDetails(event);
@@ -606,14 +619,25 @@ const TimelineCard = React.memo(
       isSleep && typeof event.isNap === "boolean"
         ? event.isNap
           ? "Sieste"
-          : "Nuit"
+          : "Nuit de sommeil"
         : config.label;
-    const sleepIconText =
+    const sleepIconName =
       isSleep && typeof event.isNap === "boolean"
         ? event.isNap
-          ? "Zz"
-          : "Zzz"
+          ? "bed"
+          : "moon"
         : null;
+
+    // Calculate elapsed time for ongoing sleep
+    const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
+    const elapsedMinutes = isOngoingSleep
+      ? Math.max(
+          0,
+          Math.round(
+            (currentTime.getTime() - toDate(event.heureDebut).getTime()) / 60000,
+          ),
+        )
+      : 0;
 
     return (
       <View style={styles.itemRow}>
@@ -621,9 +645,48 @@ const TimelineCard = React.memo(
           <View style={[styles.dot, { backgroundColor: config.color }]} />
           <View style={[styles.line, { backgroundColor: borderColor }]} />
         </View>
-        <Text style={[styles.cardTimeLeft, { color: secondaryTextColor }]}>
-          {formatTime(date)}
-        </Text>
+        <View style={styles.cardTimeLeft}>
+          {isSleep && event.heureFin ? (
+            <>
+              <Text style={[styles.cardTimeText, { color: secondaryTextColor }]}>
+                {formatTime(date)}
+              </Text>
+              <Text
+                style={[styles.cardTimeArrow, { color: secondaryTextColor }]}
+              >
+                ↓
+              </Text>
+              <Text
+                style={[
+                  styles.cardTimeTextSecondary,
+                  { color: secondaryTextColor },
+                ]}
+              >
+                {formatTime(toDate(event.heureFin))}
+              </Text>
+            </>
+          ) : isSleep && !event.heureFin ? (
+            <>
+              <Text style={[styles.cardTimeText, { color: secondaryTextColor }]}>
+                {formatTime(date)}
+              </Text>
+              <Text
+                style={[styles.cardTimeArrow, { color: secondaryTextColor }]}
+              >
+                ↓
+              </Text>
+              <Text
+                style={[styles.cardTimeOngoing, { color: eventColors.sommeil.dark }]}
+              >
+                en cours
+              </Text>
+            </>
+          ) : (
+            <Text style={[styles.cardTimeText, { color: secondaryTextColor }]}>
+              {formatTime(date)}
+            </Text>
+          )}
+        </View>
         <TouchableOpacity
           style={[styles.card, { backgroundColor, borderColor }]}
           activeOpacity={0.9}
@@ -632,23 +695,12 @@ const TimelineCard = React.memo(
         >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
-              {isSleep && sleepIconText ? (
-                <View
-                // style={[
-                //   styles.sleepInlineIcon,
-                //   { backgroundColor: `${config.color}20` },
-                // ]}
-                >
-                  <Text
-                    style={[
-                      styles.sleepInlineIconText,
-                      { color: config.color },
-                    ]}
-                  >
-                    {sleepIconText}
-                    {/* {sleepIconText === "Zz" ? " " : ""} */}
-                  </Text>
-                </View>
+              {isSleep && sleepIconName ? (
+                <FontAwesome
+                  name={sleepIconName as any}
+                  size={12}
+                  color={config.color}
+                />
               ) : (
                 <EventIcon type={event.type} color={config.color} size={14} />
               )}
@@ -662,9 +714,13 @@ const TimelineCard = React.memo(
               color={secondaryTextColor}
             />
           </View>
-          {details && (
+          {(details || isOngoingSleep) && (
             <Text style={[styles.cardDetails, { color: secondaryTextColor }]}>
-              {details}
+              {isOngoingSleep
+                ? (details
+                    ? `${formatDuration(elapsedMinutes)} · ${details}`
+                    : formatDuration(elapsedMinutes))
+                : details}
             </Text>
           )}
           {event.note && (
@@ -702,6 +758,7 @@ export default function ChronoScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [currentDay, setCurrentDay] = useState(() => dayKey(new Date()));
+  const [currentTime, setCurrentTime] = useState(new Date());
   const hasLoadedPrefs = useRef(false);
   const hasInitialLoad = useRef(false);
   const hasPrefetchedMore = useRef(false);
@@ -759,8 +816,10 @@ export default function ChronoScreen() {
   );
 
   const updateCurrentDay = useCallback(() => {
-    const next = dayKey(new Date());
+    const now = new Date();
+    const next = dayKey(now);
     setCurrentDay((prev) => (prev === next ? prev : next));
+    setCurrentTime(now);
   }, []);
 
   useEffect(() => {
@@ -799,6 +858,7 @@ export default function ChronoScreen() {
       vaccins: false,
       vitamines: false,
       sommeils: false,
+      bains: false,
       temperatures: false,
       medicaments: false,
       symptomes: false,
@@ -811,6 +871,7 @@ export default function ChronoScreen() {
     let vaccinsData: Event[] = [];
     let vitaminesData: Event[] = [];
     let sommeilsData: Event[] = [];
+    let bainsData: Event[] = [];
     let temperaturesData: Event[] = [];
     let medicamentsData: Event[] = [];
     let symptomesData: Event[] = [];
@@ -828,6 +889,7 @@ export default function ChronoScreen() {
         ...vaccinsData,
         ...vitaminesData,
         ...sommeilsData,
+        ...bainsData,
       ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
       setEvents(merged);
       const allLoaded = Object.values(loaded).every(Boolean);
@@ -915,6 +977,15 @@ export default function ChronoScreen() {
       },
       { depuis: since, waitForServer: true },
     );
+    const unsubscribeBains = ecouterBainsHybrid(
+      activeChild.id,
+      (data) => {
+        bainsData = data;
+        loaded.bains = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
     const unsubscribeTemperatures = ecouterTemperaturesHybrid(
       activeChild.id,
       (data) => {
@@ -952,6 +1023,7 @@ export default function ChronoScreen() {
       unsubscribeVaccins();
       unsubscribeVitamines();
       unsubscribeSommeils();
+      unsubscribeBains();
       unsubscribeTemperatures();
       unsubscribeMedicaments();
       unsubscribeSymptomes();
@@ -1196,9 +1268,10 @@ export default function ChronoScreen() {
         textColor={colors.text}
         secondaryTextColor={colors.secondary}
         onLongPress={() => handleEventLongPress(item)}
+        currentTime={currentTime}
       />
     ),
-    [colors, handleEventLongPress],
+    [colors, handleEventLongPress, currentTime],
   );
 
   // Key extractor
@@ -1532,10 +1605,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sleepInlineIconText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
   cardTitle: {
     fontSize: 15,
     fontWeight: "700",
@@ -1545,10 +1614,25 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   cardTimeLeft: {
-    fontSize: 12,
-    fontWeight: "600",
     width: 42,
     marginTop: 6,
+  },
+  cardTimeText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  cardTimeArrow: {
+    fontSize: 10,
+    lineHeight: 10,
+    fontWeight: "600",
+  },
+  cardTimeTextSecondary: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  cardTimeOngoing: {
+    fontSize: 10,
+    fontWeight: "700",
   },
   cardDetails: {
     marginTop: 6,

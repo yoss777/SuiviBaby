@@ -22,6 +22,14 @@
 - ✅ Home: quick add Soins + redirections edit vers Soins.
 - ✅ Chrono: redirections edit Soins.
 
+## ✅ Fait: Routines (MVP)
+
+- ✅ Service + type: Bain.
+- ✅ Screen Routines (Plus) avec Sommeil + Bain + Templates rapides.
+- ✅ Bottom sheet Bain aligné aux autres écrans (date/heure, notes, actions).
+- ✅ Home: quick add Routines + redirections edit vers Routines.
+- ✅ Chrono: redirections edit Routines.
+
 ## Propositions pour enrichir l'UX (après Sommeil)
 
 - Symptômes / Santé rapide (fièvre, toux, nez bouché, vomi, diarrhée, dents).

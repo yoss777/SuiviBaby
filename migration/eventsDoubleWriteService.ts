@@ -1309,7 +1309,7 @@ export async function supprimerVitamine(childId: string, id: string) {
 }
 
 // ============================================
-// TEMPÉRATURE / MÉDICAMENT / SYMPTÔME (NOUVEAU)
+// TEMPÉRATURE / BAIN / MÉDICAMENT / SYMPTÔME (NOUVEAU)
 // ============================================
 
 export async function ajouterTemperature(childId: string, data: any) {
@@ -1332,6 +1332,25 @@ export async function modifierTemperature(
 }
 
 export async function supprimerTemperature(childId: string, id: string) {
+  return supprimerEventNouveau(childId, id);
+}
+
+export async function ajouterBain(childId: string, data: any) {
+  const newEventData = removeUndefined({
+    type: "bain",
+    ...data,
+  });
+  return ajouterEventNouveau(childId, newEventData as any);
+}
+
+export async function modifierBain(childId: string, id: string, data: any) {
+  const newEventData = removeUndefined({
+    ...data,
+  });
+  return modifierEventNouveau(childId, id, newEventData as any);
+}
+
+export async function supprimerBain(childId: string, id: string) {
   return supprimerEventNouveau(childId, id);
 }
 

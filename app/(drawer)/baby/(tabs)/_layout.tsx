@@ -105,6 +105,12 @@ export default function BabyTabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="routines"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

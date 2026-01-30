@@ -45,11 +45,11 @@ const ITEMS = [
     route: "/baby/diapers",
   },
   {
-    title: "Sommeil",
-    subtitle: "Siestes et nuits",
-    icon: "bed",
-    color: "#6f42c1",
-    route: "/baby/sommeil",
+    title: "Routines",
+    subtitle: "Sommeil, bain et routines rapides",
+    icon: "bath",
+    color: "#3b82f6",
+    route: "/baby/routines",
   },
 ];
 

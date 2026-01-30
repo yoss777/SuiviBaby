@@ -133,7 +133,7 @@ export default function MealsScreen() {
 
   // Récupérer les paramètres de l'URL
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
-  const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
+  const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -269,15 +269,15 @@ export default function MealsScreen() {
       const backButton = (
         <HeaderBackButton
           onPress={() => {
-            if (returnTarget === "home") {
+            if (returnTargetParam === "home") {
               router.replace("/baby/home");
               return;
             }
-            if (returnTarget === "chrono") {
+            if (returnTargetParam === "chrono") {
               router.replace("/baby/chrono");
               return;
             }
-            if (returnTarget === "journal") {
+            if (returnTargetParam === "journal") {
               router.replace("/baby/chrono");
               return;
             }
@@ -292,7 +292,7 @@ export default function MealsScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, returnTarget, setHeaderLeft]),
+    }, [colorScheme, returnTargetParam, setHeaderLeft]),
   );
 
   useFocusEffect(
@@ -302,15 +302,15 @@ export default function MealsScreen() {
           closeSheet();
           return true;
         }
-        if (returnTarget === "home") {
+        if (returnTargetParam === "home") {
           router.replace("/baby/home");
           return true;
         }
-        if (returnTarget === "chrono") {
+        if (returnTargetParam === "chrono") {
           router.replace("/baby/chrono");
           return true;
         }
-        if (returnTarget === "journal") {
+        if (returnTargetParam === "journal") {
           router.replace("/baby/chrono");
           return true;
         }
@@ -323,7 +323,7 @@ export default function MealsScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen, returnTarget, router]),
+    }, [closeSheet, isOpen, returnTargetParam, router]),
   );
 
   // Ouvrir automatiquement le modal si le paramètre openModal est présent
@@ -1168,8 +1168,7 @@ export default function MealsScreen() {
                     <TouchableOpacity
                       style={[
                         styles.chronoControlButton,
-                        leftSeconds === 0 &&
-                          styles.chronoControlButtonDisabled,
+                        leftSeconds === 0 && styles.chronoControlButtonDisabled,
                       ]}
                       onPress={() => resetChrono("left")}
                       disabled={isSubmitting || leftSeconds === 0}
@@ -1215,7 +1214,9 @@ export default function MealsScreen() {
                         isSubmitting && styles.chronoAdjustButtonDisabled,
                       ]}
                       onPressIn={() =>
-                        handlePressIn(() => setRightSeconds((prev) => prev + 60))
+                        handlePressIn(() =>
+                          setRightSeconds((prev) => prev + 60),
+                        )
                       }
                       onPressOut={handlePressOut}
                       disabled={isSubmitting}
@@ -1356,7 +1357,7 @@ export default function MealsScreen() {
   }
 
   function buildSheetProps() {
-    const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
+    const returnTarget = returnTargetParam ?? returnToRef.current;
     return {
       ownerId: sheetOwnerId,
       title: editingMeal ? "Modifier le repas" : "Nouveau repas",
@@ -1617,7 +1618,9 @@ export default function MealsScreen() {
               Biberon{biberonsCount > 1 ? "s" : ""}
             </Text>
             <Text style={styles.statsBreakdownValue}>{biberonsCount}</Text>
-            <Text style={styles.statsBreakdownLabel}>·</Text>
+            {biberonsCount > 0 && (
+              <Text style={styles.statsBreakdownLabel}>·</Text>
+            )}
             <Text
               style={[
                 styles.statsBreakdownLabel,

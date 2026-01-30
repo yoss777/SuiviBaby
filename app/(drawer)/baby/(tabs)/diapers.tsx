@@ -157,7 +157,7 @@ export default function DiapersScreen() {
 
   // Récupérer les paramètres de l'URL
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
-  const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
+  const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -283,15 +283,15 @@ export default function DiapersScreen() {
       const backButton = (
         <HeaderBackButton
           onPress={() => {
-            if (returnTarget === "home") {
+            if (returnTargetParam === "home") {
               router.replace("/baby/home");
               return;
             }
-            if (returnTarget === "chrono") {
+            if (returnTargetParam === "chrono") {
               router.replace("/baby/chrono");
               return;
             }
-            if (returnTarget === "journal") {
+            if (returnTargetParam === "journal") {
               router.replace("/baby/chrono");
               return;
             }
@@ -306,7 +306,7 @@ export default function DiapersScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, returnTarget, setHeaderLeft]),
+    }, [colorScheme, returnTargetParam, setHeaderLeft]),
   );
 
   useFocusEffect(
@@ -316,15 +316,15 @@ export default function DiapersScreen() {
           closeSheet();
           return true;
         }
-        if (returnTarget === "home") {
+        if (returnTargetParam === "home") {
           router.replace("/baby/home");
           return true;
         }
-        if (returnTarget === "chrono") {
+        if (returnTargetParam === "chrono") {
           router.replace("/baby/chrono");
           return true;
         }
-        if (returnTarget === "journal") {
+        if (returnTargetParam === "journal") {
           router.replace("/baby/chrono");
           return true;
         }
@@ -337,7 +337,7 @@ export default function DiapersScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen, returnTarget, router]),
+    }, [closeSheet, isOpen, returnTargetParam, router]),
   );
 
   useFocusEffect(
@@ -1259,7 +1259,7 @@ export default function DiapersScreen() {
   }
 
   function buildSheetProps() {
-    const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
+    const returnTarget = returnTargetParam ?? returnToRef.current;
     return {
       ownerId: sheetOwnerId,
       title: editingExcretion
@@ -1476,67 +1476,52 @@ export default function DiapersScreen() {
           <View style={styles.dayHeader}>
             <Text style={styles.dayLabel}>{formatDayLabel()}</Text>
             <View style={styles.dayStats}>
-              {item.mictionsCount > 0 && (
-                <View style={styles.dayStatItem}>
-                  <Text
-                    style={[
-                      styles.dayStatValue,
-                      { color: eventColors.miction.dark },
-                    ]}
-                  >
-                    {item.mictionsCount}
-                  </Text>
-                  <Text style={styles.dayStatLabel}>
-                    miction{item.mictionsCount > 1 ? "s" : ""}
-                  </Text>
-                </View>
-              )}
-              {item.mictionsCount > 0 && item.sellesCount > 0 && (
-                <View style={styles.dayStatDivider} />
-              )}
-              {item.sellesCount > 0 && (
-                <View style={styles.dayStatItem}>
-                  <Text
-                    style={[
-                      styles.dayStatValue,
-                      { color: eventColors.selle.dark },
-                    ]}
-                  >
-                    {item.sellesCount}
-                  </Text>
-                  <Text style={styles.dayStatLabel}>
-                    selle{item.sellesCount > 1 ? "s" : ""}
-                  </Text>
-                </View>
-              )}
+              <View style={styles.dayStatItem}>
+                <Text style={styles.dayStatValue}>
+                  {item.mictionsCount + item.sellesCount}
+                </Text>
+                <Text style={styles.dayStatLabel}>
+                  excrétion{item.mictionsCount + item.sellesCount > 1 ? "s" : ""}
+                </Text>
+              </View>
             </View>
           </View>
 
           {/* Stats breakdown */}
-          {/* <View style={styles.statsBreakdown}>
-            <View style={styles.statsBreakdownItem}>
-              <View
-                style={[
-                  styles.statsBreakdownDot,
-                  { backgroundColor: eventColors.miction.dark },
-                ]}
-              />
-              <Text style={styles.statsBreakdownLabel}>Mictions</Text>
-              <Text style={styles.statsBreakdownValue}>
-                {item.mictionsCount}
-              </Text>
-            </View>
-            <View style={styles.statsBreakdownItem}>
-              <View
-                style={[
-                  styles.statsBreakdownDot,
-                  { backgroundColor: eventColors.selle.dark },
-                ]}
-              />
-              <Text style={styles.statsBreakdownLabel}>Selles</Text>
-              <Text style={styles.statsBreakdownValue}>{item.sellesCount}</Text>
-            </View>
-          </View> */}
+          <View style={styles.statsBreakdown}>
+            {item.mictionsCount > 0 && (
+              <View style={styles.statsBreakdownItem}>
+                <View
+                  style={[
+                    styles.statsBreakdownDot,
+                    { backgroundColor: eventColors.miction.dark },
+                  ]}
+                />
+                <Text style={styles.statsBreakdownLabel}>
+                  Miction{item.mictionsCount > 1 ? "s" : ""}
+                </Text>
+                <Text style={styles.statsBreakdownValue}>
+                  {item.mictionsCount}
+                </Text>
+              </View>
+            )}
+            {item.sellesCount > 0 && (
+              <View style={styles.statsBreakdownItem}>
+                <View
+                  style={[
+                    styles.statsBreakdownDot,
+                    { backgroundColor: eventColors.selle.dark },
+                  ]}
+                />
+                <Text style={styles.statsBreakdownLabel}>
+                  Selle{item.sellesCount > 1 ? "s" : ""}
+                </Text>
+                <Text style={styles.statsBreakdownValue}>
+                  {item.sellesCount}
+                </Text>
+              </View>
+            )}
+          </View>
 
           {/* Sessions list */}
           <View style={styles.sessionsContainer}>
@@ -1788,7 +1773,8 @@ const styles = StyleSheet.create({
   // Stats breakdown
   statsBreakdown: {
     flexDirection: "row",
-    gap: 16,
+    flexWrap: "wrap",
+    gap: 12,
     marginBottom: 12,
     paddingHorizontal: 4,
   },
