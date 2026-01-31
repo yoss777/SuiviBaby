@@ -2,7 +2,6 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
-import { storage } from "@/config/firebase";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
@@ -29,7 +28,8 @@ import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import * as FileSystem from "expo-file-system";
+import { auth } from "@/config/firebase";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
@@ -147,15 +147,81 @@ const toDate = (value: any) => {
   return new Date(value);
 };
 
-const uploadMilestonePhoto = async (childId: string, uri: string) => {
-  const response = await fetch(uri);
-  const blob = await response.blob();
-  const extension = uri.split(".").pop()?.split("?")[0] || "jpg";
-  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const filePath = `children/${childId}/jalons/${fileName}.${extension}`;
-  const storageRef = ref(storage, filePath);
-  await uploadBytes(storageRef, blob);
-  return getDownloadURL(storageRef);
+const FIREBASE_STORAGE_BUCKET = "samaye-53723.firebasestorage.app";
+
+const uploadMilestonePhoto = async (
+  childId: string,
+  uri: string,
+  onProgress?: (progress: number) => void
+): Promise<string> => {
+  try {
+    console.log("[UPLOAD] Début upload photo pour child:", childId);
+    console.log("[UPLOAD] URI:", uri);
+
+    // Déterminer l'extension du fichier
+    const extension = uri.split(".").pop()?.split("?")[0] || "jpg";
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const filePath = `children/${childId}/jalons/${fileName}.${extension}`;
+    console.log("[UPLOAD] Path cible:", filePath);
+
+    // Lire le fichier en base64 avec expo-file-system
+    console.log("[UPLOAD] Lecture du fichier en base64...");
+    const base64Data = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    console.log("[UPLOAD] Fichier lu, taille base64:", base64Data.length);
+
+    onProgress?.(10);
+
+    // Obtenir le token d'authentification
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error("Utilisateur non connecté");
+    }
+    const token = await user.getIdToken();
+    console.log("[UPLOAD] Token obtenu");
+
+    onProgress?.(20);
+
+    // Upload via l'API REST de Firebase Storage
+    const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o?uploadType=media&name=${encodeURIComponent(filePath)}`;
+
+    console.log("[UPLOAD] Démarrage upload REST API...");
+
+    const response = await FileSystem.uploadAsync(uploadUrl, uri, {
+      httpMethod: "POST",
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "image/jpeg",
+      },
+    });
+
+    console.log("[UPLOAD] Réponse status:", response.status);
+
+    if (response.status !== 200) {
+      console.error("[UPLOAD] Erreur réponse:", response.body);
+      throw new Error(`Upload failed with status ${response.status}`);
+    }
+
+    onProgress?.(80);
+
+    // Parser la réponse pour obtenir le nom du fichier
+    const responseData = JSON.parse(response.body);
+    console.log("[UPLOAD] Upload terminé, fichier:", responseData.name);
+
+    // Construire l'URL de téléchargement
+    const downloadURL = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodeURIComponent(responseData.name)}?alt=media&token=${responseData.downloadTokens}`;
+    console.log("[UPLOAD] URL obtenue:", downloadURL);
+
+    onProgress?.(100);
+    return downloadURL;
+  } catch (error) {
+    console.error("[UPLOAD] Erreur:", error);
+    console.error("[UPLOAD] Code:", (error as any).code);
+    console.error("[UPLOAD] Message:", (error as any).message);
+    throw error;
+  }
 };
 
 // ============================================
@@ -217,6 +283,7 @@ export default function MilestonesScreen() {
   const [mood, setMood] = useState<1 | 2 | 3 | 4 | 5 | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -644,6 +711,8 @@ export default function MilestonesScreen() {
     setDateHeure(new Date());
     setMood(null);
     setPhotoUri(null);
+    setPhotoUploading(false);
+    setUploadProgress(0);
     setShowDate(false);
     setShowTime(false);
     setEditingMilestone(null);
@@ -809,7 +878,9 @@ export default function MilestonesScreen() {
                 </TouchableOpacity>
               ) : null}
               {photoUploading ? (
-                <Text style={styles.photoUploading}>Téléversement...</Text>
+                <Text style={styles.photoUploading}>
+                  Téléversement... {uploadProgress > 0 ? `${uploadProgress}%` : ""}
+                </Text>
               ) : null}
             </View>
           </View>
@@ -920,6 +991,7 @@ export default function MilestonesScreen() {
     note,
     photoUri,
     photoUploading,
+    uploadProgress,
     showDate,
     showTime,
     title,
@@ -944,9 +1016,11 @@ export default function MilestonesScreen() {
 
       if (photoUri && !photoUri.startsWith("http")) {
         setPhotoUploading(true);
+        setUploadProgress(0);
         const uploadedUrl = await uploadMilestonePhoto(
           activeChild.id,
           photoUri,
+          (progress) => setUploadProgress(Math.round(progress))
         );
         photoUrls = [uploadedUrl];
       }
