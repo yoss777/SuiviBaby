@@ -295,7 +295,12 @@ export default function MilestonesScreen() {
   const stashReturnTo = useCallback(() => {
     const target = normalizeParam(returnTo);
     if (!target) return;
-    if (target === "home" || target === "chrono" || target === "journal") {
+    if (
+      target === "home" ||
+      target === "chrono" ||
+      target === "journal" ||
+      target === "moments"
+    ) {
       returnToRef.current = target;
       return;
     }
@@ -311,6 +316,8 @@ export default function MilestonesScreen() {
     returnToRef.current = null;
     if (target === "home") {
       router.replace("/baby/home");
+    } else if (target === "moments") {
+      router.replace("/baby/moments");
     } else if (target === "chrono" || target === "journal") {
       router.replace("/baby/chrono");
     }
@@ -394,6 +401,10 @@ export default function MilestonesScreen() {
               router.replace("/baby/home");
               return;
             }
+            if (returnTarget === "moments") {
+              router.replace("/baby/moments");
+              return;
+            }
             if (returnTarget === "chrono" || returnTarget === "journal") {
               router.replace("/baby/chrono");
               return;
@@ -421,6 +432,10 @@ export default function MilestonesScreen() {
         const returnTarget = returnTargetParam ?? returnToRef.current;
         if (returnTarget === "home") {
           router.replace("/baby/home");
+          return true;
+        }
+        if (returnTarget === "moments") {
+          router.replace("/baby/moments");
           return true;
         }
         if (returnTarget === "chrono" || returnTarget === "journal") {

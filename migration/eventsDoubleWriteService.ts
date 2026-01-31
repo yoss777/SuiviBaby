@@ -6,6 +6,7 @@ import {
   ajouterEvenement as ajouterEventNouveau,
   ecouterEvenements,
   modifierEvenement as modifierEventNouveau,
+  obtenirEvenement,
   obtenirEvenements,
   supprimerEvenement as supprimerEventNouveau,
   type EventType,
@@ -20,6 +21,7 @@ import * as teteesService from "@/services/teteesService";
 import * as vaccinsService from "@/services/vaccinsService";
 import * as vitaminesService from "@/services/vitaminesService";
 import * as sommeilService from "@/services/sommeilService";
+import { auth } from "@/config/firebase";
 
 // ============================================
 // HELPER - Remove undefined
@@ -1549,13 +1551,96 @@ export async function ajouterJalon(childId: string, data: any) {
 }
 
 export async function modifierJalon(childId: string, id: string, data: any) {
+  // Récupérer l'événement existant pour comparer les photos
+  try {
+    const existingEvent = await obtenirEvenement(childId, id);
+    const oldPhotos: string[] = existingEvent?.photos ?? [];
+    const newPhotos: string[] = data.photos ?? [];
+
+    // Trouver les photos qui ont été retirées
+    const removedPhotos = oldPhotos.filter(
+      (oldUrl) =>
+        oldUrl.startsWith("https://firebasestorage.googleapis.com") &&
+        !newPhotos.includes(oldUrl)
+    );
+
+    // Supprimer les photos retirées du Storage
+    for (const photoUrl of removedPhotos) {
+      await deletePhotoFromStorage(photoUrl);
+    }
+  } catch (error) {
+    console.error("[MODIFIER_JALON] Erreur lors de la gestion des photos:", error);
+  }
+
   const newEventData = removeUndefined({
     ...data,
   });
   return modifierEventNouveau(childId, id, newEventData as any);
 }
 
+const FIREBASE_STORAGE_BUCKET = "samaye-53723.firebasestorage.app";
+
+/**
+ * Supprime une photo du Firebase Storage
+ */
+export async function deletePhotoFromStorage(photoUrl: string): Promise<void> {
+  try {
+    // Extraire le chemin du fichier depuis l'URL
+    // Format: https://firebasestorage.googleapis.com/v0/b/BUCKET/o/ENCODED_PATH?alt=media&token=...
+    const match = photoUrl.match(/\/o\/([^?]+)/);
+    if (!match) {
+      console.warn("[DELETE_PHOTO] URL non reconnue:", photoUrl);
+      return;
+    }
+
+    const encodedPath = match[1];
+    const filePath = decodeURIComponent(encodedPath);
+    console.log("[DELETE_PHOTO] Suppression de:", filePath);
+
+    // Obtenir le token d'authentification
+    const user = auth.currentUser;
+    if (!user) {
+      console.warn("[DELETE_PHOTO] Utilisateur non connecté");
+      return;
+    }
+    const token = await user.getIdToken();
+
+    // Supprimer via l'API REST
+    const deleteUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodedPath}`;
+    const response = await fetch(deleteUrl, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.ok || response.status === 404) {
+      console.log("[DELETE_PHOTO] Photo supprimée avec succès");
+    } else {
+      console.error("[DELETE_PHOTO] Erreur:", response.status, await response.text());
+    }
+  } catch (error) {
+    console.error("[DELETE_PHOTO] Erreur:", error);
+  }
+}
+
 export async function supprimerJalon(childId: string, id: string) {
+  // Récupérer l'événement pour obtenir les URLs des photos
+  try {
+    const event = await obtenirEvenement(childId, id);
+    if (event?.photos && Array.isArray(event.photos)) {
+      // Supprimer chaque photo du Storage
+      for (const photoUrl of event.photos) {
+        if (photoUrl && photoUrl.startsWith("https://firebasestorage.googleapis.com")) {
+          await deletePhotoFromStorage(photoUrl);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[SUPPRIMER_JALON] Erreur récupération événement:", error);
+  }
+
+  // Supprimer l'événement de Firestore
   return supprimerEventNouveau(childId, id);
 }
 

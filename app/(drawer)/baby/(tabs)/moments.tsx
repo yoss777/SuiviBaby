@@ -5,8 +5,9 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
 import { JalonEvent } from "@/services/eventsService";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import { HeaderBackButton } from "@react-navigation/elements";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import {
   Canvas,
   Circle,
@@ -18,14 +19,13 @@ import {
   useFont,
   vec,
 } from "@shopify/react-native-skia";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
   Image,
-  Platform,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -38,7 +38,6 @@ import Animated, {
   FadeInDown,
   FadeInUp,
   interpolate,
-  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -48,7 +47,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft } from "../../_layout";
-import { HeaderBackButton } from "@react-navigation/elements";
 
 // ============================================
 // TYPES
@@ -126,7 +124,11 @@ const formatTime = (date: Date) =>
   date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
 const formatDateShort = (date: Date) =>
-  date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  date.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 
 const isToday = (date: Date) => {
   const today = new Date();
@@ -173,31 +175,31 @@ const PulsingAura = ({
     scale1.value = withRepeat(
       withSequence(
         withTiming(1.3, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
       ),
-      -1
+      -1,
     );
     opacity1.value = withRepeat(
       withSequence(
         withTiming(0.2, { duration: 2000 }),
-        withTiming(0.6, { duration: 2000 })
+        withTiming(0.6, { duration: 2000 }),
       ),
-      -1
+      -1,
     );
 
     scale2.value = withRepeat(
       withSequence(
         withTiming(1.5, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) })
+        withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
       ),
-      -1
+      -1,
     );
     opacity2.value = withRepeat(
       withSequence(
         withTiming(0.1, { duration: 2500 }),
-        withTiming(0.4, { duration: 2500 })
+        withTiming(0.4, { duration: 2500 }),
       ),
-      -1
+      -1,
     );
   }, []);
 
@@ -241,15 +243,12 @@ const AnimatedMoodEmoji = ({ mood }: { mood: 1 | 2 | 3 | 4 | 5 }) => {
       withTiming(10, { duration: 150 }),
       withTiming(-10, { duration: 150 }),
       withTiming(5, { duration: 100 }),
-      withTiming(0, { duration: 100 })
+      withTiming(0, { duration: 100 }),
     );
   }, [mood]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: scale.value },
-      { rotate: `${rotation.value}deg` },
-    ],
+    transform: [{ scale: scale.value }, { rotate: `${rotation.value}deg` }],
   }));
 
   return (
@@ -290,7 +289,9 @@ const AnimatedCounter = ({
 
   return (
     <Animated.View style={[styles.statCard, counterStyle]}>
-      <View style={[styles.statIconContainer, { backgroundColor: `${color}20` }]}>
+      <View
+        style={[styles.statIconContainer, { backgroundColor: `${color}20` }]}
+      >
         <FontAwesome6 name={icon} size={18} color={color} />
       </View>
       <Text style={[styles.statValue, { color }]}>{value}</Text>
@@ -306,7 +307,7 @@ const AnimatedCounter = ({
 const MoodGraph = ({ moods }: { moods: MoodEntry[] }) => {
   const font = useFont(
     require("../../../../assets/fonts/SpaceMono-Regular.ttf"),
-    12
+    12,
   );
 
   // Get last 7 days
@@ -341,7 +342,8 @@ const MoodGraph = ({ moods }: { moods: MoodEntry[] }) => {
       if (point.value === null) return;
 
       const x = 20 + (index / (dataPoints.length - 1)) * graphInnerWidth;
-      const y = 20 + graphInnerHeight - ((point.value - 1) / 4) * graphInnerHeight;
+      const y =
+        20 + graphInnerHeight - ((point.value - 1) / 4) * graphInnerHeight;
 
       if (!started) {
         skPath.moveTo(x, y);
@@ -357,7 +359,10 @@ const MoodGraph = ({ moods }: { moods: MoodEntry[] }) => {
   // Animated progress
   const progress = useSharedValue(0);
   useEffect(() => {
-    progress.value = withTiming(1, { duration: 1200, easing: Easing.out(Easing.cubic) });
+    progress.value = withTiming(1, {
+      duration: 1200,
+      easing: Easing.out(Easing.cubic),
+    });
   }, []);
 
   if (!font) return null;
@@ -368,7 +373,8 @@ const MoodGraph = ({ moods }: { moods: MoodEntry[] }) => {
       <Canvas style={{ width: graphWidth, height: GRAPH_HEIGHT }}>
         {/* Background grid */}
         {[1, 2, 3, 4, 5].map((level) => {
-          const y = 20 + graphInnerHeight - ((level - 1) / 4) * graphInnerHeight;
+          const y =
+            20 + graphInnerHeight - ((level - 1) / 4) * graphInnerHeight;
           return (
             <Group key={level}>
               <Path
@@ -407,7 +413,8 @@ const MoodGraph = ({ moods }: { moods: MoodEntry[] }) => {
         {dataPoints.map((point, index) => {
           if (point.value === null) return null;
           const x = 20 + (index / (dataPoints.length - 1)) * graphInnerWidth;
-          const y = 20 + graphInnerHeight - ((point.value - 1) / 4) * graphInnerHeight;
+          const y =
+            20 + graphInnerHeight - ((point.value - 1) / 4) * graphInnerHeight;
           const moodValue = Math.round(point.value) as 1 | 2 | 3 | 4 | 5;
           return (
             <Circle
@@ -425,7 +432,11 @@ const MoodGraph = ({ moods }: { moods: MoodEntry[] }) => {
       <View style={styles.dayLabelsContainer}>
         {days.map((day, index) => (
           <Text key={index} style={styles.dayLabel}>
-            {isToday(day) ? "Auj." : day.toLocaleDateString("fr-FR", { weekday: "short" }).slice(0, 3)}
+            {isToday(day)
+              ? "Auj."
+              : day
+                  .toLocaleDateString("fr-FR", { weekday: "short" })
+                  .slice(0, 3)}
           </Text>
         ))}
       </View>
@@ -440,13 +451,21 @@ const MoodGraph = ({ moods }: { moods: MoodEntry[] }) => {
 const PhotoCarousel = ({
   photos,
   onPhotoPress,
+  onPhotoLongPress,
 }: {
   photos: PhotoMilestone[];
   onPhotoPress: (photo: PhotoMilestone) => void;
+  onPhotoLongPress: (photo: PhotoMilestone) => void;
 }) => {
   const scrollX = useSharedValue(0);
 
-  const renderPhoto = ({ item, index }: { item: PhotoMilestone; index: number }) => {
+  const renderPhoto = ({
+    item,
+    index,
+  }: {
+    item: PhotoMilestone;
+    index: number;
+  }) => {
     const config = JALON_TYPE_ICONS[item.typeJalon] || JALON_TYPE_ICONS.autre;
 
     return (
@@ -456,6 +475,8 @@ const PhotoCarousel = ({
       >
         <Pressable
           onPress={() => onPhotoPress(item)}
+          onLongPress={() => onPhotoLongPress(item)}
+          delayLongPress={400}
           style={({ pressed }) => [
             styles.photoCardInner,
             pressed && styles.photoCardPressed,
@@ -464,11 +485,7 @@ const PhotoCarousel = ({
           <Image source={{ uri: item.photo }} style={styles.photoImage} />
           <View style={styles.photoOverlay}>
             <View style={styles.photoTypeTag}>
-              <FontAwesome6
-                name={config.icon}
-                size={12}
-                color="#fff"
-              />
+              <FontAwesome6 name={config.icon} size={12} color="#fff" />
               <Text style={styles.photoTypeText}>{config.label}</Text>
             </View>
             {item.titre && (
@@ -476,7 +493,9 @@ const PhotoCarousel = ({
                 {item.titre}
               </Text>
             )}
-            <Text style={styles.photoDate}>{formatDateShort(item.date)}</Text>
+            <Text style={styles.photoDate}>
+              {formatDateShort(item.date)} - {formatTime(item.date)}
+            </Text>
           </View>
         </Pressable>
       </Animated.View>
@@ -490,7 +509,9 @@ const PhotoCarousel = ({
         <Text style={styles.emptyPhotosText}>Aucun moment photo</Text>
         <Pressable
           style={styles.addPhotoButton}
-          onPress={() => router.push("/baby/milestones?openModal=true&type=photo")}
+          onPress={() =>
+            router.push("/baby/milestones?openModal=true&type=photo")
+          }
         >
           <FontAwesome6 name="plus" size={14} color="#fff" />
           <Text style={styles.addPhotoButtonText}>Ajouter un moment</Text>
@@ -508,7 +529,11 @@ const PhotoCarousel = ({
           style={styles.seeAllButton}
         >
           <Text style={styles.seeAllText}>Voir tout</Text>
-          <FontAwesome6 name="chevron-right" size={12} color={eventColors.jalon.dark} />
+          <FontAwesome6
+            name="chevron-right"
+            size={12}
+            color={eventColors.jalon.dark}
+          />
         </Pressable>
       </View>
       <FlatList
@@ -545,7 +570,9 @@ const TodayMoodTimeline = ({ moods }: { moods: MoodEntry[] }) => {
         </Text>
         <Pressable
           style={styles.addMoodButton}
-          onPress={() => router.push("/baby/milestones?openModal=true&type=humeur")}
+          onPress={() =>
+            router.push("/baby/milestones?openModal=true&type=humeur")
+          }
         >
           <Text style={styles.addMoodButtonText}>Ajouter l'humeur</Text>
         </Pressable>
@@ -601,7 +628,7 @@ export default function MomentsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const navigation = useNavigation();
   const headerOwnerId = useRef(
-    `moments-${Math.random().toString(36).slice(2)}`
+    `moments-${Math.random().toString(36).slice(2)}`,
   );
 
   const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
@@ -655,7 +682,9 @@ export default function MomentsScreen() {
 
     return {
       moods: moodEntries,
-      photoMilestones: photos.sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 10),
+      photoMilestones: photos
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .slice(0, 10),
       todayStats: { jalons: todayJalons, photos: todayPhotos },
       currentMood: latestMood,
     };
@@ -675,7 +704,7 @@ export default function MomentsScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, setHeaderLeft])
+    }, [colorScheme, setHeaderLeft]),
   );
 
   // Data loading
@@ -695,14 +724,22 @@ export default function MomentsScreen() {
         setEvents(data as MilestoneEventWithId[]);
         setLoaded(true);
       },
-      { waitForServer: true, depuis: startDate, jusqu: endDate }
+      { waitForServer: true, depuis: startDate, jusqu: endDate },
     );
 
     return () => unsubscribe();
   }, [activeChild?.id]);
 
+  const [viewingPhoto, setViewingPhoto] = useState<PhotoMilestone | null>(null);
+
+  // Tap simple = agrandir la photo
   const handlePhotoPress = useCallback((photo: PhotoMilestone) => {
-    router.push(`/baby/milestones?editId=${photo.id}`);
+    setViewingPhoto(photo);
+  }, []);
+
+  // Long press = éditer
+  const handlePhotoLongPress = useCallback((photo: PhotoMilestone) => {
+    router.push(`/baby/milestones?editId=${photo.id}&returnTo=moments`);
   }, []);
 
   // Loading state
@@ -760,7 +797,9 @@ export default function MomentsScreen() {
                     <Pressable
                       style={styles.setMoodButton}
                       onPress={() =>
-                        router.push("/baby/milestones?openModal=true&type=humeur")
+                        router.push(
+                          "/baby/milestones?openModal=true&type=humeur&returnTo=moments",
+                        )
                       }
                     >
                       <Text style={styles.setMoodButtonText}>
@@ -819,6 +858,7 @@ export default function MomentsScreen() {
             <PhotoCarousel
               photos={photoMilestones}
               onPhotoPress={handlePhotoPress}
+              onPhotoLongPress={handlePhotoLongPress}
             />
           </Animated.View>
 
@@ -835,7 +875,9 @@ export default function MomentsScreen() {
                   pressed && styles.quickActionPressed,
                 ]}
                 onPress={() =>
-                  router.push("/baby/milestones?openModal=true&type=humeur")
+                  router.push(
+                    "/baby/milestones?openModal=true&type=humeur&returnTo=moments",
+                  )
                 }
               >
                 <View
@@ -855,7 +897,9 @@ export default function MomentsScreen() {
                   pressed && styles.quickActionPressed,
                 ]}
                 onPress={() =>
-                  router.push("/baby/milestones?openModal=true&type=photo")
+                  router.push(
+                    "/baby/milestones?openModal=true&type=photo&returnTo=moments",
+                  )
                 }
               >
                 <View
@@ -874,7 +918,11 @@ export default function MomentsScreen() {
                   styles.quickActionButton,
                   pressed && styles.quickActionPressed,
                 ]}
-                onPress={() => router.push("/baby/milestones?openModal=true")}
+                onPress={() =>
+                  router.push(
+                    "/baby/milestones?openModal=true&returnTo=moments",
+                  )
+                }
               >
                 <View
                   style={[
@@ -897,6 +945,67 @@ export default function MomentsScreen() {
           <View style={{ height: 100 }} />
         </ScrollView>
       </SafeAreaView>
+
+      {/* Photo Viewer Modal */}
+      <Modal
+        visible={viewingPhoto !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewingPhoto(null)}
+      >
+        <Pressable
+          style={styles.photoViewerOverlay}
+          onPress={() => setViewingPhoto(null)}
+        >
+          <SafeAreaView style={styles.photoViewerContainer}>
+            {viewingPhoto && (
+              <>
+                <View style={styles.photoViewerHeader}>
+                  <Pressable
+                    style={styles.photoViewerClose}
+                    onPress={() => setViewingPhoto(null)}
+                  >
+                    <FontAwesome6 name="xmark" size={24} color="#fff" />
+                  </Pressable>
+                  <Pressable
+                    style={styles.photoViewerEdit}
+                    onPress={() => {
+                      setViewingPhoto(null);
+                      router.push(
+                        `/baby/milestones?editId=${viewingPhoto.id}&returnTo=moments`
+                      );
+                    }}
+                  >
+                    <FontAwesome6 name="pen" size={18} color="#fff" />
+                    <Text style={styles.photoViewerEditText}>Modifier</Text>
+                  </Pressable>
+                </View>
+                <Pressable
+                  style={styles.photoViewerImageContainer}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <Image
+                    source={{ uri: viewingPhoto.photo }}
+                    style={styles.photoViewerImage}
+                    resizeMode="contain"
+                  />
+                </Pressable>
+                <View style={styles.photoViewerInfo}>
+                  {viewingPhoto.titre && (
+                    <Text style={styles.photoViewerTitle}>
+                      {viewingPhoto.titre}
+                    </Text>
+                  )}
+                  <Text style={styles.photoViewerDate}>
+                    {formatDateShort(viewingPhoto.date)} à{" "}
+                    {formatTime(viewingPhoto.date)}
+                  </Text>
+                </View>
+              </>
+            )}
+          </SafeAreaView>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1167,6 +1276,7 @@ const styles = StyleSheet.create({
   carouselContent: {
     paddingLeft: 16,
     paddingRight: 16,
+    paddingBottom: 8,
   },
   photoCard: {
     width: CARD_WIDTH,
@@ -1284,5 +1394,69 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#374151",
+  },
+
+  // Photo Viewer Modal
+  photoViewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.95)",
+  },
+  photoViewerContainer: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  photoViewerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  photoViewerClose: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoViewerEdit: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  photoViewerEditText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  photoViewerImageContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  photoViewerImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
+  },
+  photoViewerInfo: {
+    alignItems: "center",
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+  },
+  photoViewerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  photoViewerDate: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.7)",
   },
 });
