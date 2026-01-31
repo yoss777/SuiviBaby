@@ -1,3 +1,12 @@
+import {
+  AnimatedCounter,
+  AnimatedMoodEmoji,
+  FloatingBlob,
+  FloatingParticle,
+  MoodBackdrop,
+  PulsingAura,
+  SparkleBurst,
+} from "@/components/moments";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
@@ -7,7 +16,7 @@ import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
 import { JalonEvent } from "@/services/eventsService";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   Canvas,
   Circle,
@@ -19,7 +28,8 @@ import {
   useFont,
   vec,
 } from "@shopify/react-native-skia";
-import { router } from "expo-router";
+import { LinearGradient as ExpoLinearGradient } from "expo-linear-gradient";
+import { router, useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -37,12 +47,8 @@ import Animated, {
   FadeIn,
   FadeInDown,
   FadeInUp,
-  interpolate,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
-  withSequence,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -157,147 +163,15 @@ const getAverageForDay = (moods: MoodEntry[], dayDate: Date): number | null => {
 // ANIMATED COMPONENTS
 // ============================================
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const AnimatedGradient = Animated.createAnimatedComponent(ExpoLinearGradient);
 
-const PulsingAura = ({
-  color,
-  size = 120,
-}: {
-  color: string;
-  size?: number;
-}) => {
-  const scale1 = useSharedValue(1);
-  const scale2 = useSharedValue(1);
-  const opacity1 = useSharedValue(0.6);
-  const opacity2 = useSharedValue(0.4);
-
-  useEffect(() => {
-    scale1.value = withRepeat(
-      withSequence(
-        withTiming(1.3, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-    );
-    opacity1.value = withRepeat(
-      withSequence(
-        withTiming(0.2, { duration: 2000 }),
-        withTiming(0.6, { duration: 2000 }),
-      ),
-      -1,
-    );
-
-    scale2.value = withRepeat(
-      withSequence(
-        withTiming(1.5, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-    );
-    opacity2.value = withRepeat(
-      withSequence(
-        withTiming(0.1, { duration: 2500 }),
-        withTiming(0.4, { duration: 2500 }),
-      ),
-      -1,
-    );
-  }, []);
-
-  const auraStyle1 = useAnimatedStyle(() => ({
-    transform: [{ scale: scale1.value }],
-    opacity: opacity1.value,
-  }));
-
-  const auraStyle2 = useAnimatedStyle(() => ({
-    transform: [{ scale: scale2.value }],
-    opacity: opacity2.value,
-  }));
-
-  return (
-    <View style={[styles.auraContainer, { width: size * 2, height: size * 2 }]}>
-      <Animated.View
-        style={[
-          styles.auraCircle,
-          { width: size * 1.5, height: size * 1.5, backgroundColor: color },
-          auraStyle2,
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.auraCircle,
-          { width: size * 1.2, height: size * 1.2, backgroundColor: color },
-          auraStyle1,
-        ]}
-      />
-    </View>
-  );
-};
-
-const AnimatedMoodEmoji = ({ mood }: { mood: 1 | 2 | 3 | 4 | 5 }) => {
-  const scale = useSharedValue(0.5);
-  const rotation = useSharedValue(-10);
-
-  useEffect(() => {
-    scale.value = withSpring(1, { damping: 12, stiffness: 100 });
-    rotation.value = withSequence(
-      withTiming(10, { duration: 150 }),
-      withTiming(-10, { duration: 150 }),
-      withTiming(5, { duration: 100 }),
-      withTiming(0, { duration: 100 }),
-    );
-  }, [mood]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }, { rotate: `${rotation.value}deg` }],
-  }));
-
-  return (
-    <Animated.Text style={[styles.moodEmojiLarge, animatedStyle]}>
-      {MOOD_CONFIG[mood].emoji}
-    </Animated.Text>
-  );
-};
-
-const AnimatedCounter = ({
-  value,
-  label,
-  color,
-  icon,
-  delay = 0,
-}: {
-  value: number;
-  label: string;
-  color: string;
-  icon: string;
-  delay?: number;
-}) => {
-  const displayValue = useSharedValue(0);
-  const opacity = useSharedValue(0);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      opacity.value = withTiming(1, { duration: 300 });
-      displayValue.value = withTiming(value, { duration: 800 });
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-
-  const counterStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateY: interpolate(opacity.value, [0, 1], [20, 0]) }],
-  }));
-
-  return (
-    <Animated.View style={[styles.statCard, counterStyle]}>
-      <View
-        style={[styles.statIconContainer, { backgroundColor: `${color}20` }]}
-      >
-        <FontAwesome6 name={icon} size={18} color={color} />
-      </View>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </Animated.View>
-  );
+const withAlpha = (hex: string, alpha: number) => {
+  const safeHex = hex.replace("#", "");
+  if (safeHex.length !== 6) return hex;
+  const r = parseInt(safeHex.slice(0, 2), 16);
+  const g = parseInt(safeHex.slice(2, 4), 16);
+  const b = parseInt(safeHex.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
 // ============================================
@@ -457,8 +331,6 @@ const PhotoCarousel = ({
   onPhotoPress: (photo: PhotoMilestone) => void;
   onPhotoLongPress: (photo: PhotoMilestone) => void;
 }) => {
-  const scrollX = useSharedValue(0);
-
   const renderPhoto = ({
     item,
     index,
@@ -742,6 +614,53 @@ export default function MomentsScreen() {
     router.push(`/baby/milestones?editId=${photo.id}&returnTo=moments`);
   }, []);
 
+  const moodColor = useMemo(
+    () =>
+      currentMood
+        ? MOOD_CONFIG[currentMood.humeur].auraColor
+        : eventColors.jalon.light,
+    [currentMood],
+  );
+  const moodAccent = useMemo(
+    () =>
+      currentMood
+        ? MOOD_CONFIG[currentMood.humeur].color
+        : eventColors.jalon.dark,
+    [currentMood],
+  );
+
+  // Memoize particle colors to avoid recalculating on every render
+  const particleColors = useMemo(
+    () => ({
+      blob1: withAlpha(moodAccent, 0.18),
+      blob2: withAlpha(moodAccent, 0.16),
+      particle1: withAlpha(moodAccent, 0.45),
+      particle2: withAlpha(moodAccent, 0.35),
+      particle3: withAlpha(moodAccent, 0.4),
+      particle4: withAlpha(moodAccent, 0.3),
+    }),
+    [moodAccent],
+  );
+  const moodProgress = useSharedValue(0);
+  const prevMoodRef = useRef(moodAccent);
+  const lastMoodRef = useRef(moodAccent);
+  const [sparkleSeed, setSparkleSeed] = useState(0);
+
+  useEffect(() => {
+    prevMoodRef.current = lastMoodRef.current;
+    lastMoodRef.current = moodAccent;
+    moodProgress.value = 0;
+    moodProgress.value = withTiming(1, { duration: 900 });
+    setSparkleSeed((prev) => prev + 1);
+  }, [moodAccent, moodProgress]);
+
+  const gradientOldStyle = useAnimatedStyle(() => ({
+    opacity: 1 - moodProgress.value,
+  }));
+  const gradientNewStyle = useAnimatedStyle(() => ({
+    opacity: moodProgress.value,
+  }));
+
   // Loading state
   if (!loaded) {
     return (
@@ -751,10 +670,6 @@ export default function MomentsScreen() {
       </View>
     );
   }
-
-  const moodColor = currentMood
-    ? MOOD_CONFIG[currentMood.humeur].auraColor
-    : eventColors.jalon.light;
 
   return (
     <View style={styles.container}>
@@ -768,6 +683,82 @@ export default function MomentsScreen() {
             entering={FadeIn.duration(600)}
             style={styles.headerSection}
           >
+            <MoodBackdrop primary={moodColor} secondary={moodAccent} />
+            <View style={styles.gradientOverlay} pointerEvents="none">
+              <Animated.View style={[styles.gradientLayer, gradientOldStyle]}>
+                <AnimatedGradient
+                  colors={[
+                    withAlpha(prevMoodRef.current, 0.18),
+                    withAlpha(prevMoodRef.current, 0.08),
+                    "transparent",
+                  ]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.gradientFill}
+                />
+              </Animated.View>
+              <Animated.View style={[styles.gradientLayer, gradientNewStyle]}>
+                <AnimatedGradient
+                  colors={[
+                    withAlpha(moodAccent, 0.2),
+                    withAlpha(moodAccent, 0.08),
+                    "transparent",
+                  ]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.gradientFill}
+                />
+              </Animated.View>
+            </View>
+
+            <View style={styles.particlesLayer} pointerEvents="none">
+              <FloatingBlob
+                size={160}
+                x={SCREEN_WIDTH * 0.05}
+                y={-20}
+                color={particleColors.blob1}
+                delay={400}
+              />
+              <FloatingBlob
+                size={120}
+                x={SCREEN_WIDTH * 0.6}
+                y={20}
+                color={particleColors.blob2}
+                delay={900}
+              />
+              <FloatingParticle
+                size={8}
+                x={SCREEN_WIDTH * 0.15}
+                y={24}
+                color={particleColors.particle1}
+                delay={200}
+                duration={4200}
+              />
+              <FloatingParticle
+                size={6}
+                x={SCREEN_WIDTH * 0.35}
+                y={160}
+                color={particleColors.particle2}
+                delay={800}
+                duration={3600}
+              />
+              <FloatingParticle
+                size={10}
+                x={SCREEN_WIDTH * 0.78}
+                y={70}
+                color={particleColors.particle3}
+                delay={500}
+                duration={4800}
+              />
+              <FloatingParticle
+                size={5}
+                x={SCREEN_WIDTH * 0.62}
+                y={190}
+                color={particleColors.particle4}
+                delay={1200}
+                duration={5200}
+              />
+            </View>
             <View style={styles.moodHeaderContainer}>
               {currentMood && (
                 <View style={styles.auraWrapper}>
@@ -778,6 +769,7 @@ export default function MomentsScreen() {
                   <View style={styles.emojiCentered}>
                     <AnimatedMoodEmoji mood={currentMood.humeur} />
                   </View>
+                  <SparkleBurst key={sparkleSeed} color={moodAccent} />
                 </View>
               )}
               <View style={styles.moodDisplay}>
@@ -972,7 +964,7 @@ export default function MomentsScreen() {
                     onPress={() => {
                       setViewingPhoto(null);
                       router.push(
-                        `/baby/milestones?editId=${viewingPhoto.id}&returnTo=moments`
+                        `/baby/milestones?editId=${viewingPhoto.id}&returnTo=moments`,
                       );
                     }}
                   >
@@ -1042,6 +1034,29 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 24,
     alignItems: "center",
+    position: "relative",
+    overflow: "hidden",
+  },
+  moodBackdropCanvas: {
+    position: "absolute",
+    top: -20,
+    left: 0,
+    width: SCREEN_WIDTH,
+    height: 240,
+  },
+  gradientOverlay: {
+    position: "absolute",
+    top: -10,
+    left: 0,
+    width: SCREEN_WIDTH,
+    height: 240,
+  },
+  gradientLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  gradientFill: {
+    width: "100%",
+    height: "100%",
   },
   moodHeaderContainer: {
     alignItems: "center",
@@ -1059,6 +1074,21 @@ const styles = StyleSheet.create({
     position: "absolute",
     alignItems: "center",
     justifyContent: "center",
+  },
+  particlesLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 240,
+  },
+  particle: {
+    position: "absolute",
+    borderRadius: 999,
+  },
+  floatingBlob: {
+    position: "absolute",
+    borderRadius: 999,
   },
   auraCircle: {
     position: "absolute",
@@ -1106,6 +1136,27 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",
+  },
+  sparkleBurst: {
+    position: "absolute",
+    right: -10,
+    top: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sparkleLine: {
+    height: 3,
+    borderRadius: 999,
+  },
+  sparkleLineAlt: {
+    marginTop: 12,
+    transform: [{ rotate: "45deg" }],
+  },
+  sparkleDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 8,
   },
 
   // Stats Section
