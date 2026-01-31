@@ -3,6 +3,17 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import {
+  ALLERGENES_OPTIONS,
+  BIBERON_TYPE_LABELS,
+  BIBERON_TYPE_OPTIONS,
+  MOMENT_REPAS_LABELS,
+  MOMENT_REPAS_OPTIONS,
+  QUANTITE_SOLIDE_OPTIONS,
+  REACTION_OPTIONS,
+  SOLIDE_TYPE_LABELS,
+  SOLIDE_TYPE_OPTIONS,
+} from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
@@ -13,17 +24,22 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterBiberon,
+  ajouterSolide,
   ajouterTetee,
   modifierBiberon,
+  modifierSolide,
   modifierTetee,
+  supprimerSolide,
   supprimerTetee,
 } from "@/migration/eventsDoubleWriteService";
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
+  ecouterSolidesHybrid as ecouterSolides,
   ecouterTeteesHybrid as ecouterTetees,
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
+import { BiberonEvent, SolideEvent } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -39,7 +55,9 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -50,7 +68,7 @@ import { useHeaderLeft, useHeaderRight } from "../../_layout";
 // ============================================
 // TYPES
 // ============================================
-type MealType = "tetee" | "biberon";
+type MealType = "tetee" | "biberon" | "solide";
 type FilterType = "today" | "past";
 
 interface Meal {
@@ -63,6 +81,17 @@ interface Meal {
   dureeDroite?: number;
   date: { seconds: number };
   createdAt: { seconds: number };
+  // Champs spécifiques aux biberons
+  typeBiberon?: BiberonEvent["typeBiberon"];
+  // Champs spécifiques aux solides
+  typeSolide?: SolideEvent["typeSolide"];
+  momentRepas?: SolideEvent["momentRepas"];
+  ingredients?: string;
+  nouveauAliment?: boolean;
+  nomNouvelAliment?: string;
+  allergenes?: string[];
+  reaction?: SolideEvent["reaction"];
+  aime?: boolean;
 }
 
 interface MealGroup {
@@ -121,11 +150,29 @@ export default function MealsScreen() {
   const [pendingOpen, setPendingOpen] = useState(false);
   const [dateHeure, setDateHeure] = useState<Date>(new Date());
   const [quantite, setQuantite] = useState<number>(100);
+  const [typeBiberon, setTypeBiberon] =
+    useState<BiberonEvent["typeBiberon"]>("lait_maternel");
   const [leftSeconds, setLeftSeconds] = useState(0);
   const [rightSeconds, setRightSeconds] = useState(0);
   const [runningSide, setRunningSide] = useState<"left" | "right" | null>(null);
   const sheetOwnerId = "meals";
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
+
+  // États spécifiques aux solides
+  const [solidesLoaded, setSolidesLoaded] = useState(false);
+  const [typeSolide, setTypeSolide] =
+    useState<SolideEvent["typeSolide"]>("puree");
+  const [momentRepas, setMomentRepas] =
+    useState<SolideEvent["momentRepas"]>("dejeuner");
+  const [ingredients, setIngredients] = useState("");
+  const [quantiteSolide, setQuantiteSolide] =
+    useState<SolideEvent["quantite"]>("moyen");
+  const [nouveauAliment, setNouveauAliment] = useState(false);
+  const [nomNouvelAliment, setNomNouvelAliment] = useState("");
+  const [allergenes, setAllergenes] = useState<string[]>([]);
+  const [reaction, setReaction] = useState<SolideEvent["reaction"]>("aucune");
+  const [aime, setAime] = useState<boolean | undefined>(undefined);
+  const [note, setNote] = useState("");
 
   // États des pickers
   const [showDate, setShowDate] = useState(false);
@@ -175,6 +222,20 @@ export default function MealsScreen() {
       setLeftSeconds(0);
       setRightSeconds(0);
       setRunningSide(null);
+
+      // Reset biberon fields
+      setTypeBiberon("lait_infantile");
+
+      // Reset solide fields
+      setTypeSolide("puree");
+      setMomentRepas("dejeuner");
+      setIngredients("");
+      setQuantiteSolide("moyen");
+      setNouveauAliment(false);
+      setNomNouvelAliment("");
+      setAllergenes([]);
+      setReaction("aucune");
+      setAime(undefined);
 
       if (preferredType === "seins") {
         setMealType("tetee");
@@ -375,7 +436,7 @@ export default function MealsScreen() {
   // EFFECTS - DATA LISTENERS
   // ============================================
 
-  // Écoute en temps réel - Tétées ET Biberons
+  // Écoute en temps réel - Tétées, Biberons ET Solides
   useEffect(() => {
     if (!activeChild?.id) return;
     const versionAtSubscribe = loadMoreVersionRef.current;
@@ -387,9 +448,10 @@ export default function MealsScreen() {
 
     let teteesData: Meal[] = [];
     let biberonsData: Meal[] = [];
+    let solidesData: Meal[] = [];
 
     const mergeAndSortMeals = () => {
-      const merged = [...teteesData, ...biberonsData].sort(
+      const merged = [...teteesData, ...biberonsData, ...solidesData].sort(
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
       setMeals(merged);
@@ -424,9 +486,20 @@ export default function MealsScreen() {
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
+    const unsubscribeSolides = ecouterSolides(
+      activeChild.id,
+      (solides) => {
+        solidesData = solides;
+        setSolidesLoaded(true);
+        mergeAndSortMeals();
+      },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+    );
+
     return () => {
       unsubscribeTetees();
       unsubscribeBiberons();
+      unsubscribeSolides();
     };
   }, [activeChild, daysWindow, rangeEndDate]);
 
@@ -436,6 +509,7 @@ export default function MealsScreen() {
     setGroupedMeals([]);
     setTeteesLoaded(false);
     setBiberonsLoaded(false);
+    setSolidesLoaded(false);
     setEmptyDelayDone(false);
     setDaysWindow(14);
     setRangeEndDate(null);
@@ -448,7 +522,7 @@ export default function MealsScreen() {
     setRunningSide(null);
   }, [activeChild?.id]);
 
-  const isMealsLoading = !(teteesLoaded && biberonsLoaded);
+  const isMealsLoading = !(teteesLoaded && biberonsLoaded && solidesLoaded);
   const mealsLoaded = !isMealsLoading;
 
   useEffect(() => {
@@ -468,7 +542,7 @@ export default function MealsScreen() {
     async (auto = false) => {
       if (!hasMore || !activeChild?.id) return;
       setIsLoadingMore(true);
-      pendingLoadMoreRef.current = 2;
+      pendingLoadMoreRef.current = 3;
       loadMoreVersionRef.current += 1;
 
       if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
@@ -481,7 +555,7 @@ export default function MealsScreen() {
 
         const nextEventDate = await getNextEventDateBeforeHybrid(
           activeChild.id,
-          ["tetee", "biberon"],
+          ["tetee", "biberon", "solide"],
           beforeDate,
         );
 
@@ -566,7 +640,11 @@ export default function MealsScreen() {
 
     // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, ["tetee", "biberon"], beforeDate)
+    hasMoreEventsBeforeHybrid(
+      activeChild.id,
+      ["tetee", "biberon", "solide"],
+      beforeDate,
+    )
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -808,15 +886,34 @@ export default function MealsScreen() {
     const type = meal.type || "tetee";
     setMealType(type);
 
-    // Quantité (avec fallback)
-    const quantity = meal.quantite ?? 100;
-    setQuantite(quantity);
+    if (type === "tetee") {
+      const leftDuration = Math.max(
+        0,
+        Math.round((meal.dureeGauche ?? 0) * 60),
+      );
+      const rightDuration = Math.max(
+        0,
+        Math.round((meal.dureeDroite ?? 0) * 60),
+      );
+      setLeftSeconds(leftDuration);
+      setRightSeconds(rightDuration);
+      setRunningSide(null);
+    } else if (type === "biberon") {
+      const quantity = meal.quantite ?? 100;
+      setQuantite(quantity);
+      setTypeBiberon(meal.typeBiberon || "lait_maternel");
+    } else if (type === "solide") {
+      setTypeSolide(meal.typeSolide || "puree");
+      setMomentRepas(meal.momentRepas || "dejeuner");
+      setIngredients(meal.ingredients || "");
+      setQuantiteSolide((meal.quantite as any) || "moyen");
+      setNouveauAliment(meal.nouveauAliment || false);
+      setNomNouvelAliment(meal.nomNouvelAliment || "");
+      setAllergenes(meal.allergenes || []);
+      setReaction(meal.reaction || "aucune");
+      setAime(meal.aime);
+    }
 
-    const leftDuration = Math.max(0, Math.round((meal.dureeGauche ?? 0) * 60));
-    const rightDuration = Math.max(0, Math.round((meal.dureeDroite ?? 0) * 60));
-    setLeftSeconds(leftDuration);
-    setRightSeconds(rightDuration);
-    setRunningSide(null);
     setPendingOpen(true);
   };
 
@@ -864,32 +961,64 @@ export default function MealsScreen() {
     try {
       setIsSubmitting(true);
 
-      const isTetee = mealType === "tetee";
-      const leftMinutes = Math.round(leftSeconds / 60);
-      const rightMinutes = Math.round(rightSeconds / 60);
-      const dataToSave = {
-        type: mealType,
-        quantite: isTetee ? null : quantite,
-        coteGauche: isTetee ? leftSeconds > 0 : undefined,
-        coteDroit: isTetee ? rightSeconds > 0 : undefined,
-        dureeGauche: isTetee && leftMinutes > 0 ? leftMinutes : undefined,
-        dureeDroite: isTetee && rightMinutes > 0 ? rightMinutes : undefined,
-        date: dateHeure,
-      };
+      if (mealType === "tetee") {
+        const leftMinutes = Math.round(leftSeconds / 60);
+        const rightMinutes = Math.round(rightSeconds / 60);
+        const dataToSave = {
+          type: mealType,
+          quantite: null,
+          coteGauche: leftSeconds > 0,
+          coteDroit: rightSeconds > 0,
+          dureeGauche: leftMinutes > 0 ? leftMinutes : undefined,
+          dureeDroite: rightMinutes > 0 ? rightMinutes : undefined,
+          date: dateHeure,
+        };
 
-      if (editingMeal) {
-        // Modification
-        if (isTetee) {
+        if (editingMeal) {
           await modifierTetee(activeChild.id, editingMeal.id, dataToSave);
         } else {
-          await modifierBiberon(activeChild.id, editingMeal.id, dataToSave);
-        }
-      } else {
-        // Ajout
-        if (isTetee) {
           await ajouterTetee(activeChild.id, dataToSave);
+        }
+      } else if (mealType === "biberon") {
+        const dataToSave = {
+          type: mealType,
+          quantite,
+          typeBiberon,
+          date: dateHeure,
+        };
+
+        if (editingMeal) {
+          await modifierBiberon(activeChild.id, editingMeal.id, dataToSave);
         } else {
           await ajouterBiberon(activeChild.id, dataToSave);
+        }
+      } else if (mealType === "solide") {
+        const dataToSave = {
+          type: mealType,
+          typeSolide,
+          momentRepas,
+          ingredients: ingredients.trim() || undefined,
+          quantite: quantiteSolide,
+          // Données nouvel aliment uniquement si type = autre ET switch activé
+          nouveauAliment: typeSolide === "autre" ? nouveauAliment : false,
+          nomNouvelAliment:
+            typeSolide === "autre" && nouveauAliment && nomNouvelAliment.trim()
+              ? nomNouvelAliment.trim()
+              : undefined,
+          allergenes:
+            typeSolide === "autre" && nouveauAliment && allergenes.length > 0
+              ? allergenes
+              : undefined,
+          reaction:
+            typeSolide === "autre" && nouveauAliment ? reaction : undefined,
+          aime,
+          date: dateHeure,
+        };
+
+        if (editingMeal) {
+          await modifierSolide(activeChild.id, editingMeal.id, dataToSave);
+        } else {
+          await ajouterSolide(activeChild.id, dataToSave);
         }
       }
 
@@ -922,7 +1051,11 @@ export default function MealsScreen() {
 
     try {
       setIsSubmitting(true);
-      await supprimerTetee(activeChild.id, editingMeal.id);
+      if (editingMeal.type === "solide") {
+        await supprimerSolide(activeChild.id, editingMeal.id);
+      } else {
+        await supprimerTetee(activeChild.id, editingMeal.id);
+      }
       if (isOffline) {
         showToast("Suppression en attente de synchronisation");
       }
@@ -1002,27 +1135,27 @@ export default function MealsScreen() {
   function renderSheetContent() {
     const totalSeconds = leftSeconds + rightSeconds;
     return (
-      <>
+      <View style={styles.sheetContent}>
         <Text style={styles.modalCategoryLabel}>Type de repas</Text>
         <View style={styles.typeRow}>
           <TouchableOpacity
             style={[
-              styles.typeButton,
-              mealType === "tetee" && styles.typeButtonActive,
-              isSubmitting && styles.typeButtonDisabled,
+              styles.typeChip,
+              mealType === "tetee" && styles.typeChipActive,
+              isSubmitting && styles.typeChipDisabled,
             ]}
             onPress={() => setMealType("tetee")}
             disabled={isSubmitting}
           >
             <FontAwesome
               name="person-breastfeeding"
-              size={20}
+              size={16}
               color={mealType === "tetee" ? "white" : "#666"}
             />
             <Text
               style={[
-                styles.typeText,
-                mealType === "tetee" && styles.typeTextActive,
+                styles.typeChipText,
+                mealType === "tetee" && styles.typeChipTextActive,
                 isSubmitting && styles.typeTextDisabled,
               ]}
             >
@@ -1032,9 +1165,9 @@ export default function MealsScreen() {
 
           <TouchableOpacity
             style={[
-              styles.typeButton,
-              mealType === "biberon" && styles.typeButtonActive,
-              isSubmitting && styles.typeButtonDisabled,
+              styles.typeChip,
+              mealType === "biberon" && styles.typeChipActive,
+              isSubmitting && styles.typeChipDisabled,
             ]}
             onPress={() => {
               setMealType("biberon");
@@ -1043,25 +1176,80 @@ export default function MealsScreen() {
             }}
             disabled={isSubmitting}
           >
-            <FontAwesome
-              name="jar-wheat"
-              size={20}
+            <MaterialCommunityIcons
+              name="baby-bottle"
+              size={18}
               color={mealType === "biberon" ? "white" : "#666"}
             />
             <Text
               style={[
-                styles.typeText,
-                mealType === "biberon" && styles.typeTextActive,
+                styles.typeChipText,
+                mealType === "biberon" && styles.typeChipTextActive,
                 isSubmitting && styles.typeTextDisabled,
               ]}
             >
               Biberon
             </Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.typeChip,
+              mealType === "solide" && styles.typeChipActive,
+              isSubmitting && styles.typeChipDisabled,
+            ]}
+            onPress={() => {
+              setMealType("solide");
+              setRunningSide(null);
+            }}
+            disabled={isSubmitting}
+          >
+            <FontAwesome
+              name="bowl-food"
+              size={16}
+              color={mealType === "solide" ? "white" : "#666"}
+            />
+            <Text
+              style={[
+                styles.typeChipText,
+                mealType === "solide" && styles.typeChipTextActive,
+                isSubmitting && styles.typeTextDisabled,
+              ]}
+            >
+              Solide
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {isQuantityVisible ? (
+        {mealType === "biberon" && (
           <>
+            <Text style={styles.modalCategoryLabel}>Type de biberon</Text>
+            <View style={styles.biberonTypeGrid}>
+              {BIBERON_TYPE_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.biberonTypeChip,
+                    typeBiberon === option.value &&
+                      styles.biberonTypeChipActive,
+                    isSubmitting && styles.biberonTypeChipDisabled,
+                  ]}
+                  onPress={() => setTypeBiberon(option.value)}
+                  disabled={isSubmitting}
+                >
+                  <Text
+                    style={[
+                      styles.biberonTypeChipText,
+                      typeBiberon === option.value &&
+                        styles.biberonTypeChipTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <Text style={styles.modalCategoryLabel}>Quantité</Text>
             <View style={styles.quantityRow}>
               <TouchableOpacity
@@ -1105,7 +1293,9 @@ export default function MealsScreen() {
               </TouchableOpacity>
             </View>
           </>
-        ) : (
+        )}
+
+        {mealType === "tetee" && (
           <>
             <Text style={styles.modalCategoryLabel}>Chronomètre tétée</Text>
             <View style={styles.chronoContainer}>
@@ -1270,8 +1460,309 @@ export default function MealsScreen() {
           </>
         )}
 
-        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-        <View style={styles.dateTimeContainer}>
+        {mealType === "solide" && (
+          <>
+            {/* Type de solide */}
+            <Text style={styles.modalCategoryLabel}>Type d&apos;aliment</Text>
+            <View style={styles.solideTypeGrid}>
+              {SOLIDE_TYPE_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.solideTypeChip,
+                    typeSolide === option.value && styles.solideTypeChipActive,
+                    isSubmitting && styles.solideTypeChipDisabled,
+                  ]}
+                  onPress={() => setTypeSolide(option.value)}
+                  disabled={isSubmitting}
+                >
+                  <FontAwesome
+                    name={option.icon as any}
+                    size={14}
+                    color={typeSolide === option.value ? "white" : "#666"}
+                  />
+                  <Text
+                    style={[
+                      styles.solideTypeChipText,
+                      typeSolide === option.value &&
+                        styles.solideTypeChipTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Moment du repas */}
+            <Text style={styles.modalCategoryLabel}>Moment du repas</Text>
+            <View style={styles.momentRepasGrid}>
+              {MOMENT_REPAS_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.momentRepasChip,
+                    momentRepas === option.value &&
+                      styles.momentRepasChipActive,
+                    isSubmitting && styles.momentRepasChipDisabled,
+                  ]}
+                  onPress={() => setMomentRepas(option.value)}
+                  disabled={isSubmitting}
+                >
+                  <FontAwesome
+                    name={option.icon as any}
+                    size={12}
+                    color={momentRepas === option.value ? "white" : "#666"}
+                  />
+                  <Text
+                    style={[
+                      styles.momentRepasChipText,
+                      momentRepas === option.value &&
+                        styles.momentRepasChipTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Quantité mangée */}
+            <Text style={styles.modalCategoryLabel}>Quantité mangée</Text>
+            <View style={styles.quantiteSolideRow}>
+              {QUANTITE_SOLIDE_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.quantiteSolideChip,
+                    quantiteSolide === option.value &&
+                      styles.quantiteSolideChipActive,
+                    isSubmitting && styles.quantiteSolideChipDisabled,
+                  ]}
+                  onPress={() => setQuantiteSolide(option.value)}
+                  disabled={isSubmitting}
+                >
+                  <Text
+                    style={[
+                      styles.quantiteSolideChipText,
+                      quantiteSolide === option.value &&
+                        styles.quantiteSolideChipTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.quantiteSolideDesc,
+                      quantiteSolide === option.value &&
+                        styles.quantiteSolideDescActive,
+                    ]}
+                  >
+                    {option.description}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Ingrédients */}
+            <Text style={styles.modalCategoryLabel}>Ingrédients</Text>
+            <TextInput
+              style={[
+                styles.ingredientsInput,
+                isSubmitting && styles.ingredientsInputDisabled,
+              ]}
+              placeholder="Ex: carottes, pommes de terre..."
+              placeholderTextColor="#999"
+              value={ingredients}
+              onChangeText={setIngredients}
+              editable={!isSubmitting}
+              multiline
+            />
+
+            {/* Nouvel aliment (visible uniquement si type = autre) */}
+            {typeSolide === "autre" && (
+              <>
+                <View
+                  style={[
+                    styles.nouveauAlimentRow,
+                    nouveauAliment && styles.nouveauAlimentRowActive,
+                  ]}
+                >
+                  <View style={styles.nouveauAlimentLabel}>
+                    <FontAwesome
+                      name="star"
+                      size={16}
+                      color={nouveauAliment ? eventColors.meal.dark : "#9ca3af"}
+                    />
+                    <Text
+                      style={[
+                        styles.nouveauAlimentText,
+                        nouveauAliment && styles.nouveauAlimentTextActive,
+                      ]}
+                    >
+                      Nouvel aliment ?
+                    </Text>
+                  </View>
+                  <Switch
+                    value={nouveauAliment}
+                    onValueChange={setNouveauAliment}
+                    disabled={isSubmitting}
+                    trackColor={{
+                      false: "#d1d5db",
+                      true: `${eventColors.meal.dark}80`,
+                    }}
+                    thumbColor={
+                      nouveauAliment ? eventColors.meal.dark : "#9ca3af"
+                    }
+                  />
+                </View>
+
+                {/* Nom de l'aliment (visible si nouvel aliment) */}
+                {nouveauAliment && (
+                  <TextInput
+                    style={styles.ingredientsInput}
+                    placeholder="Nom de l'aliment (ex: avocat, fraise...)"
+                    placeholderTextColor="#9ca3af"
+                    value={nomNouvelAliment}
+                    onChangeText={setNomNouvelAliment}
+                    editable={!isSubmitting}
+                  />
+                )}
+
+                {/* Allergènes (visible si nouvel aliment) */}
+                {nouveauAliment && (
+                  <>
+                    <Text style={styles.modalCategoryLabel}>
+                      Allergènes potentiels
+                    </Text>
+                    <View style={styles.allergenesGrid}>
+                      {ALLERGENES_OPTIONS.map((option) => {
+                        const isSelected = allergenes.includes(option.value);
+                        return (
+                          <TouchableOpacity
+                            key={option.value}
+                            style={[
+                              styles.allergeneChip,
+                              isSelected && styles.allergeneChipActive,
+                              isSubmitting && styles.allergeneChipDisabled,
+                            ]}
+                            onPress={() => {
+                              if (isSelected) {
+                                setAllergenes(
+                                  allergenes.filter((a) => a !== option.value),
+                                );
+                              } else {
+                                setAllergenes([...allergenes, option.value]);
+                              }
+                            }}
+                            disabled={isSubmitting}
+                          >
+                            <Text style={styles.allergeneEmoji}>
+                              {option.emoji}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.allergeneText,
+                                isSelected && styles.allergeneTextActive,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {/* Réaction */}
+                    <Text style={styles.modalCategoryLabel}>
+                      Réaction observée
+                    </Text>
+                    <View style={styles.reactionRow}>
+                      {REACTION_OPTIONS.map((option) => (
+                        <TouchableOpacity
+                          key={option.value}
+                          style={[
+                            styles.reactionChip,
+                            reaction === option.value && {
+                              backgroundColor: option.color,
+                              borderColor: option.color,
+                            },
+                            isSubmitting && styles.reactionChipDisabled,
+                          ]}
+                          onPress={() => setReaction(option.value)}
+                          disabled={isSubmitting}
+                        >
+                          <Text
+                            style={[
+                              styles.reactionChipText,
+                              reaction === option.value &&
+                                styles.reactionChipTextActive,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* A aimé ? */}
+            <Text style={styles.modalCategoryLabel}>A aimé ?</Text>
+            <View style={styles.aimeRow}>
+              <TouchableOpacity
+                style={[
+                  styles.aimeButton,
+                  aime === true && styles.aimeButtonActiveYes,
+                  isSubmitting && styles.aimeButtonDisabled,
+                ]}
+                onPress={() => setAime(aime === true ? undefined : true)}
+                disabled={isSubmitting}
+              >
+                <FontAwesome
+                  name="thumbs-up"
+                  size={20}
+                  color={aime === true ? "white" : "#22c55e"}
+                />
+                <Text
+                  style={[
+                    styles.aimeButtonText,
+                    aime === true && styles.aimeButtonTextActive,
+                  ]}
+                >
+                  Oui
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.aimeButton,
+                  aime === false && styles.aimeButtonActiveNo,
+                  isSubmitting && styles.aimeButtonDisabled,
+                ]}
+                onPress={() => setAime(aime === false ? undefined : false)}
+                disabled={isSubmitting}
+              >
+                <FontAwesome
+                  name="thumbs-down"
+                  size={20}
+                  color={aime === false ? "white" : "#ef4444"}
+                />
+                <Text
+                  style={[
+                    styles.aimeButtonText,
+                    aime === false && styles.aimeButtonTextActive,
+                  ]}
+                >
+                  Non
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
+        <View style={styles.dateTimeContainerWithPadding}>
           <TouchableOpacity
             style={[
               styles.dateButton,
@@ -1352,7 +1843,7 @@ export default function MealsScreen() {
             onChange={onChangeTime}
           />
         )}
-      </>
+      </View>
     );
   }
 
@@ -1387,12 +1878,23 @@ export default function MealsScreen() {
     isSubmitting,
     mealType,
     quantite,
+    typeBiberon,
     leftSeconds,
     rightSeconds,
     runningSide,
     dateHeure,
     showDate,
     showTime,
+    // États solides
+    typeSolide,
+    momentRepas,
+    ingredients,
+    quantiteSolide,
+    nouveauAliment,
+    nomNouvelAliment,
+    allergenes,
+    reaction,
+    aime,
   ]);
 
   // ============================================
@@ -1432,17 +1934,49 @@ export default function MealsScreen() {
   const renderMealItem = (meal: Meal, isLast: boolean = false) => {
     const mealTime = new Date(meal.date?.seconds * 1000);
     const isTetee = meal.type === "tetee";
+    const isBiberon = meal.type === "biberon";
+    const isSolide = meal.type === "solide";
     const leftDuration = meal.dureeGauche ?? 0;
     const rightDuration = meal.dureeDroite ?? 0;
     const totalDuration = leftDuration + rightDuration;
     const hasDuration = leftDuration > 0 || rightDuration > 0;
+
+    const getIcon = () => {
+      if (isTetee) {
+        return (
+          <FontAwesome
+            name="person-breastfeeding"
+            size={14}
+            color={eventColors.meal.dark}
+          />
+        );
+      }
+      if (isBiberon) {
+        return (
+          <MaterialCommunityIcons
+            name="baby-bottle"
+            size={16}
+            color={eventColors.meal.dark}
+          />
+        );
+      }
+      return <FontAwesome name="bowl-food" size={14} color="#8BC34A" />;
+    };
+
+    const getTypeLabel = () => {
+      if (isTetee) return "Tétée";
+      if (isBiberon) return "Biberon";
+      if (isSolide && meal.typeSolide) {
+        return SOLIDE_TYPE_LABELS[meal.typeSolide] || "Solide";
+      }
+      return "Solide";
+    };
 
     return (
       <Pressable
         key={meal.id}
         style={({ pressed }) => [
           styles.sessionCard,
-          // isLast && { backgroundColor: eventColors.meal.light + "60" },
           pressed && styles.sessionCardPressed,
         ]}
         onPress={() => openEditModal(meal)}
@@ -1467,72 +2001,99 @@ export default function MealsScreen() {
           <View
             style={[
               styles.sessionIconWrapper,
-              { backgroundColor: eventColors.meal.light },
+              {
+                backgroundColor: isSolide ? "#e8f5e9" : eventColors.meal.light,
+              },
             ]}
           >
-            {isTetee ? (
-              <FontAwesome
-                name="person-breastfeeding"
-                size={14}
-                color={eventColors.meal.dark}
-              />
-            ) : (
-              <MaterialCommunityIcons
-                name="baby-bottle"
-                size={16}
-                color={eventColors.meal.dark}
-              />
-            )}
+            {getIcon()}
           </View>
           <View style={styles.sessionDetails}>
-            <Text style={styles.sessionType}>
-              {isTetee ? "Tétée" : "Biberon"}
-            </Text>
-            {isTetee ? (
+            <Text style={styles.sessionType}>{getTypeLabel()}</Text>
+            {isTetee && hasDuration && (
               <>
-                {hasDuration && (
-                  <>
-                    <View style={styles.durationBar}>
-                      <View
-                        style={[
-                          styles.durationBarLeft,
-                          { flex: leftDuration || 1 },
-                        ]}
-                      />
-                      <View
-                        style={[
-                          styles.durationBarRight,
-                          { flex: rightDuration || 1 },
-                        ]}
-                      />
-                    </View>
-                    <View style={styles.durationLabels}>
-                      <View style={styles.durationLabelItem}>
-                        <View
-                          style={[styles.durationDot, styles.durationDotLeft]}
-                        />
-                        <Text style={styles.durationLabelText}>G</Text>
-                        <Text style={styles.durationLabelValue}>
-                          {leftDuration} min
-                        </Text>
-                      </View>
-                      <View style={styles.durationLabelItem}>
-                        <View
-                          style={[styles.durationDot, styles.durationDotRight]}
-                        />
-                        <Text style={styles.durationLabelText}>D</Text>
-                        <Text style={styles.durationLabelValue}>
-                          {rightDuration} min
-                        </Text>
-                      </View>
-                    </View>
-                  </>
-                )}
+                <View style={styles.durationBar}>
+                  <View
+                    style={[
+                      styles.durationBarLeft,
+                      { flex: leftDuration || 1 },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.durationBarRight,
+                      { flex: rightDuration || 1 },
+                    ]}
+                  />
+                </View>
+                <View style={styles.durationLabels}>
+                  <View style={styles.durationLabelItem}>
+                    <View
+                      style={[styles.durationDot, styles.durationDotLeft]}
+                    />
+                    <Text style={styles.durationLabelText}>G</Text>
+                    <Text style={styles.durationLabelValue}>
+                      {leftDuration} min
+                    </Text>
+                  </View>
+                  <View style={styles.durationLabelItem}>
+                    <View
+                      style={[styles.durationDot, styles.durationDotRight]}
+                    />
+                    <Text style={styles.durationLabelText}>D</Text>
+                    <Text style={styles.durationLabelValue}>
+                      {rightDuration} min
+                    </Text>
+                  </View>
+                </View>
               </>
-            ) : (
-              meal.quantite && (
-                <Text style={styles.sessionDetailText}>{meal.quantite} ml</Text>
-              )
+            )}
+            {isBiberon && (
+              <Text style={styles.sessionDetailText}>
+                {meal.typeBiberon && BIBERON_TYPE_LABELS[meal.typeBiberon]
+                  ? BIBERON_TYPE_LABELS[meal.typeBiberon]
+                  : "lait infantile"}
+                {meal.quantite ? ` · ${meal.quantite} ml` : ""}
+              </Text>
+            )}
+            {isSolide && (
+              <View style={styles.solideDetailsRow}>
+                {meal.momentRepas && (
+                  <Text style={styles.sessionDetailText}>
+                    {MOMENT_REPAS_LABELS[meal.momentRepas]}
+                  </Text>
+                )}
+                {meal.aime !== undefined && (
+                  <FontAwesome
+                    name={meal.aime ? "thumbs-up" : "thumbs-down"}
+                    size={12}
+                    color={meal.aime ? "#22c55e" : "#ef4444"}
+                    style={{ marginLeft: 8 }}
+                  />
+                )}
+                {meal.nouveauAliment && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      marginLeft: 6,
+                    }}
+                  >
+                    <FontAwesome name="star" size={12} color="#f59e0b" />
+                    {meal.nomNouvelAliment && (
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: "#f59e0b",
+                          marginLeft: 3,
+                        }}
+                      >
+                        {meal.nomNouvelAliment}
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </View>
             )}
           </View>
         </View>
@@ -1559,6 +2120,7 @@ export default function MealsScreen() {
     const hasMultipleMeals = item.meals.length > 1;
     const teteesCount = item.meals.filter((m) => m.type === "tetee").length;
     const biberonsCount = item.meals.filter((m) => m.type === "biberon").length;
+    const solidesCount = item.meals.filter((m) => m.type === "solide").length;
 
     // Format date: "Aujourd'hui", "Hier", or "Lun. 23 janv."
     const formatDayLabel = () => {
@@ -1594,38 +2156,57 @@ export default function MealsScreen() {
 
         {/* Stats breakdown */}
         <View style={styles.statsBreakdown}>
-          <View style={styles.statsBreakdownItem}>
-            <View
-              style={[
-                styles.statsBreakdownDot,
-                { backgroundColor: eventColors.meal.dark },
-              ]}
-            />
-            <Text style={styles.statsBreakdownLabel}>
-              Tétée{teteesCount > 1 ? "s" : ""}
-            </Text>
-            <Text style={styles.statsBreakdownValue}>{teteesCount}</Text>
-          </View>
-          <View style={styles.statsBreakdownItem}>
-            <View
-              style={[styles.statsBreakdownDot, { backgroundColor: "#6366f1" }]}
-            />
-            <Text style={styles.statsBreakdownLabel}>
-              Biberon{biberonsCount > 1 ? "s" : ""}
-            </Text>
-            <Text style={styles.statsBreakdownValue}>{biberonsCount}</Text>
-            {biberonsCount > 0 && (
+          {teteesCount > 0 && (
+            <View style={styles.statsBreakdownItem}>
+              <View
+                style={[
+                  styles.statsBreakdownDot,
+                  { backgroundColor: eventColors.meal.dark },
+                ]}
+              />
+              <Text style={styles.statsBreakdownLabel}>
+                Tétée{teteesCount > 1 ? "s" : ""}
+              </Text>
+              <Text style={styles.statsBreakdownValue}>{teteesCount}</Text>
+            </View>
+          )}
+          {biberonsCount > 0 && (
+            <View style={styles.statsBreakdownItem}>
+              <View
+                style={[
+                  styles.statsBreakdownDot,
+                  { backgroundColor: "#6366f1" },
+                ]}
+              />
+              <Text style={styles.statsBreakdownLabel}>
+                Biberon{biberonsCount > 1 ? "s" : ""}
+              </Text>
+              <Text style={styles.statsBreakdownValue}>{biberonsCount}</Text>
               <Text style={styles.statsBreakdownLabel}>·</Text>
-            )}
-            <Text
-              style={[
-                styles.statsBreakdownLabel,
-                { color: eventColors.meal.dark, fontWeight: "600" },
-              ]}
-            >
-              {biberonsCount > 0 ? `${item.totalQuantity} ml` : ""}
-            </Text>
-          </View>
+              <Text
+                style={[
+                  styles.statsBreakdownLabel,
+                  { color: eventColors.meal.dark, fontWeight: "600" },
+                ]}
+              >
+                {item.totalQuantity} ml
+              </Text>
+            </View>
+          )}
+          {solidesCount > 0 && (
+            <View style={styles.statsBreakdownItem}>
+              <View
+                style={[
+                  styles.statsBreakdownDot,
+                  { backgroundColor: "#8BC34A" },
+                ]}
+              />
+              <Text style={styles.statsBreakdownLabel}>
+                Solide{solidesCount > 1 ? "s" : ""}
+              </Text>
+              <Text style={styles.statsBreakdownValue}>{solidesCount}</Text>
+            </View>
+          )}
         </View>
 
         {/* Sessions list */}
@@ -1663,8 +2244,6 @@ export default function MealsScreen() {
   // ============================================
   // RENDER - MAIN
   // ============================================
-
-  const isQuantityVisible = mealType === "biberon";
 
   return (
     <View style={styles.container}>
@@ -2047,12 +2626,15 @@ const styles = StyleSheet.create({
 
   // Modal Content
   modalCategoryLabel: {
-    alignSelf: "center",
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    paddingTop: 20,
-    marginBottom: 10,
+    alignSelf: "flex-start",
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6b7280",
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  sheetContent: {
+    gap: 12,
   },
 
   // Type Selection
@@ -2089,6 +2671,62 @@ const styles = StyleSheet.create({
   },
   typeTextDisabled: {
     color: "#ccc",
+  },
+
+  // Type Chips (3 chips in a row)
+  typeChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 20,
+  },
+  typeChipActive: {
+    backgroundColor: eventColors.meal.dark,
+  },
+  typeChipDisabled: {
+    backgroundColor: "#f8f8f8",
+    opacity: 0.5,
+  },
+  typeChipText: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "600",
+  },
+  typeChipTextActive: {
+    color: "white",
+  },
+
+  // Biberon Type Selection
+  biberonTypeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  biberonTypeChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 16,
+  },
+  biberonTypeChipActive: {
+    backgroundColor: eventColors.meal.dark,
+  },
+  biberonTypeChipDisabled: {
+    opacity: 0.5,
+  },
+  biberonTypeChipText: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "500",
+  },
+  biberonTypeChipTextActive: {
+    color: "white",
   },
 
   // Quantity
@@ -2230,11 +2868,12 @@ const styles = StyleSheet.create({
   },
 
   // Date/Time
-  dateTimeContainer: {
+  dateTimeContainerWithPadding: {
     flexDirection: "row",
     justifyContent: "center",
     gap: 12,
     marginBottom: 10,
+    paddingTop: 20,
   },
   dateButton: {
     flex: 1,
@@ -2279,5 +2918,249 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  // Solide Form Styles
+  solideTypeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  solideTypeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 20,
+  },
+  solideTypeChipActive: {
+    backgroundColor: eventColors.meal.dark,
+  },
+  solideTypeChipDisabled: {
+    opacity: 0.5,
+  },
+  solideTypeChipText: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "600",
+  },
+  solideTypeChipTextActive: {
+    color: "white",
+  },
+
+  momentRepasGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  momentRepasChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 16,
+  },
+  momentRepasChipActive: {
+    backgroundColor: eventColors.meal.dark,
+  },
+  momentRepasChipDisabled: {
+    opacity: 0.5,
+  },
+  momentRepasChipText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "500",
+  },
+  momentRepasChipTextActive: {
+    color: "white",
+  },
+
+  quantiteSolideRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 8,
+  },
+  quantiteSolideChip: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 12,
+  },
+  quantiteSolideChipActive: {
+    backgroundColor: eventColors.meal.dark,
+  },
+  quantiteSolideChipDisabled: {
+    opacity: 0.5,
+  },
+  quantiteSolideChipText: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "600",
+  },
+  quantiteSolideChipTextActive: {
+    color: "white",
+  },
+  quantiteSolideDesc: {
+    fontSize: 10,
+    color: "#999",
+    marginTop: 2,
+  },
+  quantiteSolideDescActive: {
+    color: "rgba(255,255,255,0.8)",
+  },
+
+  ingredientsInput: {
+    backgroundColor: "#f7f7f8",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#333",
+    minHeight: 60,
+    textAlignVertical: "top",
+    marginBottom: 8,
+  },
+  ingredientsInputDisabled: {
+    opacity: 0.5,
+  },
+
+  nouveauAlimentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  nouveauAlimentRowActive: {},
+  nouveauAlimentLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  nouveauAlimentText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  nouveauAlimentTextActive: {
+    color: eventColors.meal.dark,
+  },
+
+  allergenesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  allergeneChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  allergeneChipActive: {
+    backgroundColor: "#fef3c7",
+    borderColor: "#f59e0b",
+  },
+  allergeneChipDisabled: {
+    opacity: 0.5,
+  },
+  allergeneEmoji: {
+    fontSize: 14,
+  },
+  allergeneText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "500",
+  },
+  allergeneTextActive: {
+    color: "#92400e",
+    fontWeight: "600",
+  },
+
+  reactionRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+  },
+  reactionChip: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  reactionChipDisabled: {
+    opacity: 0.5,
+  },
+  reactionChipText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "500",
+  },
+  reactionChipTextActive: {
+    color: "white",
+    fontWeight: "600",
+  },
+
+  aimeRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 8,
+  },
+  aimeButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  aimeButtonActiveYes: {
+    backgroundColor: "#22c55e",
+    borderColor: "#16a34a",
+  },
+  aimeButtonActiveNo: {
+    backgroundColor: "#ef4444",
+    borderColor: "#dc2626",
+  },
+  aimeButtonDisabled: {
+    opacity: 0.5,
+  },
+  aimeButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  aimeButtonTextActive: {
+    color: "white",
+  },
+
+  // Solide list item
+  solideDetailsRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 });

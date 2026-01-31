@@ -130,6 +130,12 @@ const EVENT_CONFIG: Record<
     short: "Tétée",
     icon: { lib: "fa6", name: "person-breastfeeding" },
   },
+  solide: {
+    color: "#8BC34A",
+    label: "Solide",
+    short: "Solide",
+    icon: { lib: "fa6", name: "bowl-food" },
+  },
   pompage: {
     color: "#28a745",
     label: "Pompage",
@@ -229,7 +235,7 @@ const FILTER_CONFIG: Record<
     label: "Repas",
     icon: "baby",
     color: "#4A90E2",
-    eventTypes: ["tetee", "biberon"],
+    eventTypes: ["tetee", "biberon", "solide"],
   },
   pumping: {
     label: "Tire-lait",

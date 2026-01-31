@@ -43,6 +43,16 @@ export default function BabyTabLayout() {
       />
 
       <Tabs.Screen
+        name="moments"
+        options={{
+          title: "Moments",
+          tabBarIcon: ({ color }) => (
+            <FontAwesome size={28} name="heart" color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="chrono"
         options={{
           title: "Journal",

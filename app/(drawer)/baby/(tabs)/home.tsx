@@ -17,7 +17,6 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterJalon,
   ajouterSommeil,
-  modifierJalon,
   modifierSommeil,
 } from "@/migration/eventsDoubleWriteService";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
@@ -459,12 +458,8 @@ export default function HomeDashboard() {
           humeur: value,
           titre: "Humeur du jour",
         };
-        let moodId = todayMoodEvent?.id ?? null;
-        if (moodId) {
-          await modifierJalon(activeChild.id, moodId, dataToSave);
-        } else {
-          moodId = await ajouterJalon(activeChild.id, dataToSave);
-        }
+        // Toujours ajouter une nouvelle entrée (l'enfant peut changer d'humeur plusieurs fois par jour)
+        const moodId = await ajouterJalon(activeChild.id, dataToSave);
 
         if (!moodId) {
           showToast("Impossible d'enregistrer l'humeur.");
@@ -475,7 +470,7 @@ export default function HomeDashboard() {
         setIsMoodSaving(false);
       }
     },
-    [activeChild?.id, isMoodSaving, todayMoodEvent, showToast],
+    [activeChild?.id, isMoodSaving, showToast],
   );
   const sommeilEnCours = useMemo(() => {
     return data.sommeils.find((item) => !item.heureFin && item.heureDebut);

@@ -1049,6 +1049,27 @@ export function ecouterBiberonsHybrid(
 }
 
 // ============================================
+// REPAS SOLIDES (NEW ONLY - pas d'ancien système)
+// ============================================
+
+/**
+ * Listener hybride pour les repas solides
+ * Note: Les solides n'existent que dans le nouveau système
+ */
+export function ecouterSolidesHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean; depuis?: Date; jusqu?: Date }
+): () => void {
+  return ecouterEvenements(childId, callback, {
+    type: "solide",
+    waitForServer: options?.waitForServer,
+    depuis: options?.depuis,
+    jusqu: options?.jusqu,
+  });
+}
+
+// ============================================
 // STATISTIQUES & MONITORING
 // ============================================
 

@@ -520,6 +520,92 @@ export async function supprimerBiberon(childId: string, id: string) {
 }
 
 // ============================================
+// DOUBLE ÉCRITURE - REPAS SOLIDES
+// ============================================
+
+export async function ajouterSolide(childId: string, data: any) {
+  const errors: Error[] = [];
+
+  const newEventData = removeUndefined({
+    type: "solide" as EventType,
+    typeSolide: data.typeSolide,
+    momentRepas: data.momentRepas,
+    ingredients: data.ingredients,
+    quantite: data.quantite,
+    nouveauAliment: data.nouveauAliment,
+    allergenes: data.allergenes,
+    reaction: data.reaction,
+    aime: data.aime,
+    date: data.date || new Date(),
+    note: data.note,
+  });
+
+  // NEW_ONLY pour les solides (pas d'ancien système)
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
+    try {
+      const id = await ajouterEventNouveau(childId, newEventData as any);
+      console.log("✅ Solide ajouté dans NEW:", id);
+      return id;
+    } catch (error) {
+      console.error("❌ Erreur NEW:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (errors.length > 0 && config.failOnError) {
+    throw new Error("Erreurs lors de l'ajout");
+  }
+  return null;
+}
+
+export function ecouterSolides(
+  childId: string,
+  callback: (docs: any[]) => void,
+) {
+  return ecouterEvenements(childId, callback, { type: "solide" });
+}
+
+export async function modifierSolide(childId: string, id: string, data: any) {
+  const errors: Error[] = [];
+  const cleanedData = removeUndefined(data);
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
+    try {
+      await modifierEventNouveau(childId, id, cleanedData);
+      console.log("✅ Solide modifié dans NEW");
+    } catch (error) {
+      console.error("❌ Erreur modification NEW:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (errors.length > 0 && config.failOnError) {
+    throw new Error("Erreurs lors de la modification");
+  }
+}
+
+export async function supprimerSolide(childId: string, id: string) {
+  const errors: Error[] = [];
+
+  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
+    try {
+      await supprimerEventNouveau(childId, id);
+      console.log("✅ Solide supprimé dans NEW");
+    } catch (error) {
+      console.error("❌ Erreur suppression NEW:", error);
+      errors.push(error as Error);
+      if (config.failOnError) throw error;
+    }
+  }
+
+  if (errors.length > 0 && config.failOnError) {
+    throw new Error("Erreurs lors de la suppression");
+  }
+}
+
+// ============================================
 // DOUBLE ÉCRITURE - MICTIONS
 // ============================================
 

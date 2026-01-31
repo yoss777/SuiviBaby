@@ -21,6 +21,11 @@ export const EVENT_CONFIG: Record<string, EventConfigItem> = {
     icon: { lib: "mci", name: "baby-bottle" },
     color: "#FF5722",
   },
+  solide: {
+    label: "Solide",
+    icon: { lib: "fa6", name: "bowl-food" },
+    color: "#8BC34A",
+  },
   pompage: {
     label: "Pompage",
     icon: { lib: "fa6", name: "pump-medical" },
@@ -82,6 +87,86 @@ export const EVENT_CONFIG: Record<string, EventConfigItem> = {
     color: eventColors.jalon.dark,
   },
 };
+
+// ============================================
+// BIBERON CONFIGURATION
+// ============================================
+
+export const BIBERON_TYPE_OPTIONS = [
+  { value: "lait_maternel", label: "Lait maternel", icon: "droplet" },
+  { value: "lait_infantile", label: "Lait infantile", icon: "baby-bottle" },
+  { value: "eau", label: "Eau", icon: "glass-water" },
+  { value: "jus", label: "Jus", icon: "lemon" },
+  { value: "autre", label: "Autre", icon: "mug-hot" },
+] as const;
+
+export const BIBERON_TYPE_LABELS: Record<string, string> = {
+  lait_maternel: "Lait maternel",
+  lait_infantile: "Lait infantile",
+  eau: "Eau",
+  jus: "Jus",
+  autre: "Autre",
+};
+
+// ============================================
+// SOLIDE (REPAS SOLIDES) CONFIGURATION
+// ============================================
+
+export const SOLIDE_TYPE_OPTIONS = [
+  { value: "puree", label: "Purée", icon: "bowl-food" },
+  { value: "compote", label: "Compote", icon: "jar" },
+  { value: "cereales", label: "Céréales", icon: "wheat-awn" },
+  { value: "yaourt", label: "Yaourt", icon: "cheese" },
+  { value: "morceaux", label: "Morceaux / DME", icon: "hand-holding-heart" },
+  { value: "autre", label: "Autre", icon: "utensils" },
+] as const;
+
+export const SOLIDE_TYPE_LABELS: Record<string, string> = {
+  puree: "Purée",
+  compote: "Compote",
+  cereales: "Céréales",
+  yaourt: "Yaourt",
+  morceaux: "Morceaux / DME",
+  autre: "Autre",
+};
+
+export const MOMENT_REPAS_OPTIONS = [
+  { value: "petit_dejeuner", label: "Petit-déjeuner", icon: "sun" },
+  { value: "dejeuner", label: "Déjeuner", icon: "utensils" },
+  { value: "gouter", label: "Goûter", icon: "cookie" },
+  { value: "diner", label: "Dîner", icon: "moon" },
+  { value: "collation", label: "Collation", icon: "clock" },
+] as const;
+
+export const MOMENT_REPAS_LABELS: Record<string, string> = {
+  petit_dejeuner: "Petit-déjeuner",
+  dejeuner: "Déjeuner",
+  gouter: "Goûter",
+  diner: "Dîner",
+  collation: "Collation",
+};
+
+export const QUANTITE_SOLIDE_OPTIONS = [
+  { value: "peu", label: "Peu", description: "Quelques cuillères" },
+  { value: "moyen", label: "Moyen", description: "Une portion normale" },
+  { value: "beaucoup", label: "Beaucoup", description: "A bien mangé" },
+] as const;
+
+export const ALLERGENES_OPTIONS = [
+  { value: "lait", label: "Lait", emoji: "🥛" },
+  { value: "oeuf", label: "Œuf", emoji: "🥚" },
+  { value: "gluten", label: "Gluten", emoji: "🌾" },
+  { value: "arachide", label: "Arachide", emoji: "🥜" },
+  { value: "poisson", label: "Poisson", emoji: "🐟" },
+  { value: "crustaces", label: "Crustacés", emoji: "🦐" },
+  { value: "fruits_coque", label: "Fruits à coque", emoji: "🌰" },
+] as const;
+
+export const REACTION_OPTIONS = [
+  { value: "aucune", label: "Aucune réaction", color: "#22c55e" },
+  { value: "legere", label: "Réaction légère", color: "#f59e0b" },
+  { value: "importante", label: "Réaction importante", color: "#ef4444" },
+] as const;
 
 // ============================================
 // ACTIVITY TYPE LABELS

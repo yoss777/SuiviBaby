@@ -31,6 +31,7 @@ const getUserId = () => {
 export type EventType =
   | "biberon"
   | "tetee"
+  | "solide" // Repas solide (diversification)
   | "pompage"
   | "couche" // Change de couche (sans détail)
   | "miction" // Pipi
@@ -62,6 +63,7 @@ export interface BaseEvent {
 export interface BiberonEvent extends BaseEvent {
   type: "biberon";
   quantite: number; // ml
+  typeBiberon?: "lait_maternel" | "lait_infantile" | "eau" | "jus" | "autre";
 }
 
 export interface TeteeEvent extends BaseEvent {
@@ -70,6 +72,19 @@ export interface TeteeEvent extends BaseEvent {
   coteDroit: boolean;
   dureeGauche?: number; // minutes
   dureeDroite?: number; // minutes
+}
+
+export interface SolideEvent extends BaseEvent {
+  type: "solide";
+  typeSolide: "puree" | "compote" | "cereales" | "yaourt" | "morceaux" | "autre";
+  momentRepas?: "petit_dejeuner" | "dejeuner" | "gouter" | "diner" | "collation";
+  ingredients?: string; // Liste libre des ingrédients
+  quantite?: "peu" | "moyen" | "beaucoup";
+  nouveauAliment?: boolean; // Flag pour premier essai
+  nomNouvelAliment?: string; // Nom de l'aliment introduit (ex: "avocat", "fraise")
+  allergenes?: string[]; // Liste des allergènes présents
+  reaction?: "aucune" | "legere" | "importante"; // Réaction si nouvel aliment
+  aime?: boolean; // Bébé a aimé ou non
 }
 
 export interface PompageEvent extends BaseEvent {
@@ -175,6 +190,7 @@ export interface JalonEvent extends BaseEvent {
 export type Event =
   | BiberonEvent
   | TeteeEvent
+  | SolideEvent
   | PompageEvent
   | CoucheEvent
   | MictionEvent
