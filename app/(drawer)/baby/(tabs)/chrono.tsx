@@ -362,10 +362,24 @@ const formatDuration = (minutes?: number) => {
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
 };
 
+const BIBERON_TYPE_LABELS: Record<string, string> = {
+  lait_maternel: "Lait maternel",
+  lait_infantile: "Lait infantile",
+  eau: "Eau",
+  jus: "Jus",
+  autre: "Autre",
+};
+
 function buildDetails(event: Event) {
   switch (event.type) {
-    case "biberon":
-      return event.quantite ? `${event.quantite} ml` : undefined;
+    case "biberon": {
+      const typeLabel = event.typeBiberon
+        ? BIBERON_TYPE_LABELS[event.typeBiberon]
+        : null;
+      const quantity = event.quantite ? `${event.quantite} ml` : null;
+      const parts = [typeLabel, quantity].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : undefined;
+    }
     case "tetee": {
       const left = event.dureeGauche ? `G ${event.dureeGauche} min` : null;
       const right = event.dureeDroite ? `D ${event.dureeDroite} min` : null;

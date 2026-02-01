@@ -1040,11 +1040,16 @@ export default function MilestonesScreen() {
         photoUrls = [uploadedUrl];
       }
 
+      // Pour "autre", utiliser le titre saisi, sinon utiliser le defaultTitle du type
+      const titreToSave =
+        typeJalon === "autre" && title.trim()
+          ? title.trim()
+          : TYPE_CONFIG[typeJalon].defaultTitle;
+
       const data = {
         date: dateHeure,
         typeJalon,
-        titre:
-          typeJalon === "autre" && title.trim() ? title.trim() : undefined,
+        titre: titreToSave,
         description: description.trim() ? description.trim() : undefined,
         note: note.trim() ? note.trim() : undefined,
         humeur: mood ?? undefined,

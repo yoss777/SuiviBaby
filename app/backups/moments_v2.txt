@@ -1,0 +1,426 @@
+import {
+  FloatingActionButton,
+  HeroMoodCard,
+  PolaroidGallery,
+  VerticalMoodTimeline,
+  WeekMoodOverview,
+} from "@/components/moments";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { eventColors } from "@/constants/eventColors";
+import { Colors } from "@/constants/theme";
+import { useBaby } from "@/contexts/BabyContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
+import { JalonEvent } from "@/services/eventsService";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import { HeaderBackButton } from "@react-navigation/elements";
+import { useFocusEffect } from "@react-navigation/native";
+import { router } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useHeaderLeft } from "../../_layout";
+
+// ============================================
+// TYPES
+// ============================================
+
+type MilestoneEventWithId = JalonEvent & { id: string };
+
+type MoodEntry = {
+  id: string;
+  date: Date;
+  humeur: 1 | 2 | 3 | 4 | 5;
+};
+
+type PhotoMilestone = {
+  id: string;
+  date: Date;
+  photo: string;
+  titre?: string;
+  description?: string;
+  typeJalon: string;
+};
+
+// ============================================
+// HELPERS
+// ============================================
+
+const toDate = (value: any): Date => {
+  if (value?.seconds) return new Date(value.seconds * 1000);
+  if (value?.toDate) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date(value);
+};
+
+const formatTime = (date: Date) =>
+  date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+const formatDateShort = (date: Date) =>
+  date.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+const isToday = (date: Date) => {
+  const today = new Date();
+  return (
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+  );
+};
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
+
+export default function MomentsScreen() {
+  const { activeChild } = useBaby();
+  const { setHeaderLeft } = useHeaderLeft();
+  const colorScheme = useColorScheme() ?? "light";
+  const headerOwnerId = useRef(
+    `moments-${Math.random().toString(36).slice(2)}`
+  );
+
+  const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [viewingPhoto, setViewingPhoto] = useState<PhotoMilestone | null>(null);
+
+  // Data processing
+  const { moods, photoMilestones, currentMood } = useMemo(() => {
+    const moodEntries: MoodEntry[] = [];
+    const photos: PhotoMilestone[] = [];
+    let latestMood: MoodEntry | null = null;
+
+    events.forEach((event) => {
+      const eventDate = toDate(event.date);
+
+      // Moods
+      if (event.typeJalon === "humeur" && event.humeur) {
+        const entry: MoodEntry = {
+          id: event.id,
+          date: eventDate,
+          humeur: event.humeur as 1 | 2 | 3 | 4 | 5,
+        };
+        moodEntries.push(entry);
+        if (!latestMood || eventDate > latestMood.date) {
+          latestMood = entry;
+        }
+      }
+
+      // Photos
+      if (event.photos && event.photos.length > 0) {
+        photos.push({
+          id: event.id,
+          date: eventDate,
+          photo: event.photos[0],
+          titre: event.titre,
+          description: event.description,
+          typeJalon: event.typeJalon,
+        });
+      }
+    });
+
+    return {
+      moods: moodEntries,
+      photoMilestones: photos
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .slice(0, 10),
+      currentMood: latestMood,
+    };
+  }, [events]);
+
+  // Get today's latest mood for hero card
+  const todayMood = useMemo(() => {
+    if (!currentMood) return null;
+    return isToday(currentMood.date) ? currentMood : null;
+  }, [currentMood]);
+
+  // Header setup
+  useFocusEffect(
+    useCallback(() => {
+      const backButton = (
+        <HeaderBackButton
+          onPress={() => router.replace("/baby/plus")}
+          tintColor={Colors[colorScheme].text}
+          labelVisible={false}
+        />
+      );
+      setHeaderLeft(backButton, headerOwnerId.current);
+      return () => {
+        setHeaderLeft(null, headerOwnerId.current);
+      };
+    }, [colorScheme, setHeaderLeft])
+  );
+
+  // Data loading
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    // Load last 30 days of milestones
+    const endDate = new Date();
+    endDate.setHours(23, 59, 59, 999);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    startDate.setHours(0, 0, 0, 0);
+
+    const unsubscribe = ecouterJalonsHybrid(
+      activeChild.id,
+      (data) => {
+        setEvents(data as MilestoneEventWithId[]);
+        setLoaded(true);
+      },
+      { waitForServer: true, depuis: startDate, jusqu: endDate }
+    );
+
+    return () => unsubscribe();
+  }, [activeChild?.id]);
+
+  // Navigation handlers
+  const handleAddMood = useCallback(() => {
+    router.push("/baby/milestones?openModal=true&type=humeur&returnTo=moments");
+  }, []);
+
+  const handleAddPhoto = useCallback(() => {
+    router.push("/baby/milestones?openModal=true&type=photo&returnTo=moments");
+  }, []);
+
+  const handleAddMilestone = useCallback(() => {
+    router.push("/baby/milestones?openModal=true&returnTo=moments");
+  }, []);
+
+  const handlePhotoPress = useCallback((photo: PhotoMilestone) => {
+    setViewingPhoto(photo);
+  }, []);
+
+  const handlePhotoLongPress = useCallback((photo: PhotoMilestone) => {
+    router.push(`/baby/milestones?editId=${photo.id}&returnTo=moments`);
+  }, []);
+
+  // Loading state
+  if (!loaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <IconPulseDots color={eventColors.jalon.dark} />
+        <Text style={styles.loadingText}>Chargement des moments...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {/* Hero Mood Card */}
+          <Animated.View entering={FadeIn.duration(500)}>
+            <HeroMoodCard
+              mood={todayMood?.humeur ?? null}
+              babyName={activeChild?.prenom ?? "Bébé"}
+              time={todayMood ? formatTime(todayMood.date) : undefined}
+              onAddMood={handleAddMood}
+            />
+          </Animated.View>
+
+          {/* Vertical Timeline */}
+          <Animated.View entering={FadeInUp.delay(150).springify()}>
+            <VerticalMoodTimeline moods={moods} onAddMood={handleAddMood} />
+          </Animated.View>
+
+          {/* Week Overview */}
+          <Animated.View entering={FadeInUp.delay(250).springify()}>
+            <WeekMoodOverview moods={moods} />
+          </Animated.View>
+
+          {/* Polaroid Gallery */}
+          <Animated.View entering={FadeInUp.delay(350).springify()}>
+            <PolaroidGallery
+              photos={photoMilestones}
+              onPhotoPress={handlePhotoPress}
+              onPhotoLongPress={handlePhotoLongPress}
+              onAddPhoto={handleAddPhoto}
+            />
+          </Animated.View>
+
+          {/* Bottom padding for FAB */}
+          <View style={{ height: 140 }} />
+        </ScrollView>
+      </SafeAreaView>
+
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onMoodPress={handleAddMood}
+        onPhotoPress={handleAddPhoto}
+        onMilestonePress={handleAddMilestone}
+      />
+
+      {/* Photo Viewer Modal */}
+      <Modal
+        visible={viewingPhoto !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewingPhoto(null)}
+      >
+        <Pressable
+          style={styles.photoViewerOverlay}
+          onPress={() => setViewingPhoto(null)}
+        >
+          <SafeAreaView style={styles.photoViewerContainer}>
+            {viewingPhoto && (
+              <>
+                <View style={styles.photoViewerHeader}>
+                  <Pressable
+                    style={styles.photoViewerClose}
+                    onPress={() => setViewingPhoto(null)}
+                  >
+                    <FontAwesome6 name="xmark" size={24} color="#fff" />
+                  </Pressable>
+                  <Pressable
+                    style={styles.photoViewerEdit}
+                    onPress={() => {
+                      const photoId = viewingPhoto.id;
+                      setViewingPhoto(null);
+                      router.push(
+                        `/baby/milestones?editId=${photoId}&returnTo=moments`
+                      );
+                    }}
+                  >
+                    <FontAwesome6 name="pen" size={18} color="#fff" />
+                    <Text style={styles.photoViewerEditText}>Modifier</Text>
+                  </Pressable>
+                </View>
+                <Pressable
+                  style={styles.photoViewerImageContainer}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <Image
+                    source={{ uri: viewingPhoto.photo }}
+                    style={styles.photoViewerImage}
+                    resizeMode="contain"
+                  />
+                </Pressable>
+                <View style={styles.photoViewerInfo}>
+                  {viewingPhoto.titre && (
+                    <Text style={styles.photoViewerTitle}>
+                      {viewingPhoto.titre}
+                    </Text>
+                  )}
+                  <Text style={styles.photoViewerDate}>
+                    {formatDateShort(viewingPhoto.date)} à{" "}
+                    {formatTime(viewingPhoto.date)}
+                  </Text>
+                </View>
+              </>
+            )}
+          </SafeAreaView>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+// ============================================
+// STYLES
+// ============================================
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#FDF8F3",
+  },
+  safeArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingTop: 16,
+    paddingBottom: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FDF8F3",
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#6b7280",
+  },
+
+  // Photo Viewer Modal
+  photoViewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.95)",
+  },
+  photoViewerContainer: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  photoViewerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  photoViewerClose: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoViewerEdit: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  photoViewerEditText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  photoViewerImageContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  photoViewerImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
+  },
+  photoViewerInfo: {
+    alignItems: "center",
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+  },
+  photoViewerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  photoViewerDate: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.7)",
+  },
+});

@@ -471,7 +471,7 @@ export async function modifierEvenement(
 }
 
 /**
- * Supprime un événement
+ * Supprime un événement et ses interactions sociales associées (likes, commentaires)
  */
 export async function supprimerEvenement(
   childId: string,
@@ -485,8 +485,34 @@ export async function supprimerEvenement(
       throw new Error("Accès refusé");
     }
 
-    await deleteDoc(docRef);
-    console.log("✅ Événement supprimé");
+    // Supprimer les likes associés
+    const likesQuery = query(
+      collection(db, "eventLikes"),
+      where("eventId", "==", id)
+    );
+    const likesSnapshot = await getDocs(likesQuery);
+    const deleteLikesPromises = likesSnapshot.docs.map((d) =>
+      deleteDoc(doc(db, "eventLikes", d.id))
+    );
+
+    // Supprimer les commentaires associés
+    const commentsQuery = query(
+      collection(db, "eventComments"),
+      where("eventId", "==", id)
+    );
+    const commentsSnapshot = await getDocs(commentsQuery);
+    const deleteCommentsPromises = commentsSnapshot.docs.map((d) =>
+      deleteDoc(doc(db, "eventComments", d.id))
+    );
+
+    // Exécuter toutes les suppressions en parallèle
+    await Promise.all([
+      deleteDoc(docRef),
+      ...deleteLikesPromises,
+      ...deleteCommentsPromises,
+    ]);
+
+    console.log("✅ Événement et interactions sociales supprimés");
   } catch (e) {
     console.error("Erreur lors de la suppression :", e);
     throw e;
