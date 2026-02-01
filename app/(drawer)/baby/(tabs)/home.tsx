@@ -528,13 +528,30 @@ export default function HomeDashboard() {
         heureFin: fin,
         duree,
       });
-      const encodedId = encodeURIComponent(sommeilEnCours.id);
-      router.push(`/baby/routines?editId=${encodedId}&returnTo=home` as any);
+      // Open the form sheet to edit the completed sleep
+      openSheet({
+        ownerId: headerOwnerId.current,
+        formType: "routines",
+        routineType: "sommeil",
+        sleepMode: sommeilEnCours.isNap ? "nap" : "night",
+        editData: {
+          id: sommeilEnCours.id,
+          type: "sommeil",
+          date: start,
+          heureDebut: start,
+          heureFin: fin,
+          isNap: sommeilEnCours.isNap,
+          location: sommeilEnCours.lieu,
+          quality: sommeilEnCours.qualite,
+          note: sommeilEnCours.note,
+          duree,
+        },
+      });
     } catch (error) {
       console.error("Erreur arrêt sommeil:", error);
       showToast("Impossible d'arrêter le sommeil");
     }
-  }, [activeChild?.id, sommeilEnCours, showToast, toDate]);
+  }, [activeChild?.id, sommeilEnCours, showToast, toDate, openSheet]);
 
   // ============================================
   // EFFECTS - TIMER
@@ -747,6 +764,136 @@ export default function HomeDashboard() {
 
   const handleQuickAddPress = useCallback(
     (route: string) => {
+      // Special handling for soins types: open form sheet directly without navigation
+      const soinsTypeMatch = route.match(/soins\?type=(\w+)/);
+      if (soinsTypeMatch) {
+        const soinsType = soinsTypeMatch[1] as "temperature" | "medicament" | "symptome" | "vaccin" | "vitamine";
+        openSheet({
+          ownerId: headerOwnerId.current,
+          formType: "soins",
+          soinsType,
+        });
+        return;
+      }
+
+      // Special handling for meals types: open form sheet directly without navigation
+      const mealsTypeMatch = route.match(/meals\?tab=(\w+)/);
+      if (mealsTypeMatch) {
+        const tabName = mealsTypeMatch[1];
+        // Map tab names to meal types
+        const mealTypeMap: Record<string, "tetee" | "biberon" | "solide"> = {
+          seins: "tetee",
+          tetee: "tetee",
+          biberons: "biberon",
+          biberon: "biberon",
+          solide: "solide",
+          solides: "solide",
+        };
+        const mealType = mealTypeMap[tabName];
+        if (mealType) {
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "meals",
+            mealType,
+          });
+          return;
+        }
+      }
+
+      // Special handling for pumping: open form sheet directly without navigation
+      if (route.includes("pumping") && route.includes("openModal=true")) {
+        openSheet({
+          ownerId: headerOwnerId.current,
+          formType: "pumping",
+        });
+        return;
+      }
+
+      // Special handling for activities: open form sheet directly without navigation
+      if (route.includes("activities") && route.includes("openModal=true")) {
+        openSheet({
+          ownerId: headerOwnerId.current,
+          formType: "activities",
+          activiteType: "tummyTime",
+        });
+        return;
+      }
+
+      // Special handling for milestones: open form sheet directly without navigation
+      const milestonesTypeMatch = route.match(/milestones\?type=(\w+)/);
+      if (milestonesTypeMatch) {
+        const jalonType = milestonesTypeMatch[1] as "dent" | "pas" | "sourire" | "mot" | "humeur" | "photo" | "autre";
+        openSheet({
+          ownerId: headerOwnerId.current,
+          formType: "milestones",
+          jalonType,
+        });
+        return;
+      }
+      if (route.includes("milestones") && route.includes("openModal=true")) {
+        openSheet({
+          ownerId: headerOwnerId.current,
+          formType: "milestones",
+          jalonType: "photo",
+        });
+        return;
+      }
+
+      // Special handling for diapers types: open form sheet directly without navigation
+      const diapersTypeMatch = route.match(/diapers\?tab=(\w+)/);
+      if (diapersTypeMatch) {
+        const tabName = diapersTypeMatch[1];
+        const diapersTypeMap: Record<string, "miction" | "selle"> = {
+          mictions: "miction",
+          miction: "miction",
+          selles: "selle",
+          selle: "selle",
+        };
+        const diapersType = diapersTypeMap[tabName];
+        if (diapersType) {
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "diapers",
+            diapersType,
+          });
+          return;
+        }
+      }
+
+      // Special handling for routines: open form sheet directly without navigation
+      if (route.includes("routines") && route.includes("openModal=true")) {
+        const typeMatch = route.match(/type=(\w+)/);
+        const routineType = typeMatch?.[1] as "sommeil" | "bain" | undefined;
+        if (routineType === "sommeil") {
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "routines",
+            routineType: "sommeil",
+            sleepMode: "nap",
+            sommeilEnCours,
+          });
+          return;
+        }
+        if (routineType === "bain") {
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "routines",
+            routineType: "bain",
+          });
+          return;
+        }
+      }
+
+      // Special handling for croissance: open form sheet directly without navigation
+      if (route.includes("croissance") && route.includes("openModal=true")) {
+        openSheet({
+          ownerId: headerOwnerId.current,
+          formType: "croissance",
+        });
+        return;
+      }
+
+      // Default behavior for other routes
       if (isOpen) {
         pendingQuickAddRouteRef.current = route;
         closeSheet();
@@ -754,7 +901,7 @@ export default function HomeDashboard() {
       }
       router.push(route as any);
     },
-    [closeSheet, isOpen],
+    [closeSheet, isOpen, openSheet, sommeilEnCours],
   );
 
   const openQuickAddSheet = useCallback(() => {
@@ -1339,8 +1486,12 @@ export default function HomeDashboard() {
               lastActivity={todayStats.pompages.lastTime}
               lastTimestamp={todayStats.pompages.lastTimestamp}
               onPress={() =>
-                router.push("/baby/pumping?openModal=true&returnTo=home" as any)
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "pumping",
+                })
               }
+              addEvent={true}
               remindersEnabled={remindersEnabled}
               reminderThreshold={reminderThresholds.pompages}
               currentTime={currentTime}
@@ -1361,9 +1512,13 @@ export default function HomeDashboard() {
               lastActivity={todayStats.sommeil.lastTime}
               lastTimestamp={todayStats.sommeil.lastTimestamp}
               onPress={() =>
-                router.push(
-                  "/baby/routines?type=sommeil&openModal=true&returnTo=home" as any,
-                )
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "routines",
+                  routineType: "sommeil",
+                  sleepMode: "nap",
+                  sommeilEnCours,
+                })
               }
               addEvent={true}
             />
@@ -1437,9 +1592,11 @@ export default function HomeDashboard() {
                 lastActivity={todayStats.meals.seins.lastTime}
                 lastTimestamp={todayStats.meals.seins.lastTimestamp}
                 onPress={() =>
-                  router.push(
-                    "/baby/meals?tab=seins&openModal=true&returnTo=home" as any,
-                  )
+                  openSheet({
+                    ownerId: headerOwnerId.current,
+                    formType: "meals",
+                    mealType: "tetee",
+                  })
                 }
                 addEvent={true}
               />
@@ -1452,9 +1609,11 @@ export default function HomeDashboard() {
                 lastActivity={todayStats.meals.biberons.lastTime}
                 lastTimestamp={todayStats.meals.biberons.lastTimestamp}
                 onPress={() =>
-                  router.push(
-                    "/baby/meals?tab=biberons&openModal=true&returnTo=home" as any,
-                  )
+                  openSheet({
+                    ownerId: headerOwnerId.current,
+                    formType: "meals",
+                    mealType: "biberon",
+                  })
                 }
                 addEvent={true}
               />
@@ -1476,9 +1635,11 @@ export default function HomeDashboard() {
               lastActivity={todayStats.vitamines.lastTime}
               lastTimestamp={todayStats.vitamines.lastTimestamp}
               onPress={() =>
-                router.push(
-                  "/baby/soins?type=vitamine&openModal=true&returnTo=home" as any,
-                )
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "soins",
+                  soinsType: "vitamine",
+                })
               }
               addEvent={true}
             />
@@ -1495,9 +1656,11 @@ export default function HomeDashboard() {
               lastActivity={todayStats.vaccins.lastTime}
               lastTimestamp={todayStats.vaccins.lastTimestamp}
               onPress={() =>
-                router.push(
-                  "/baby/soins?type=vaccin&openModal=true&returnTo=home" as any,
-                )
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "soins",
+                  soinsType: "vaccin",
+                })
               }
               addEvent={true}
             />
@@ -1531,9 +1694,11 @@ export default function HomeDashboard() {
               lastActivity={todayStats.mictions.lastTime}
               lastTimestamp={todayStats.mictions.lastTimestamp}
               onPress={() =>
-                router.push(
-                  "/baby/diapers?tab=mictions&openModal=true&returnTo=home" as any,
-                )
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "diapers",
+                  diapersType: "miction",
+                })
               }
               remindersEnabled={remindersEnabled}
               reminderThreshold={reminderThresholds.mictions}
@@ -1552,9 +1717,11 @@ export default function HomeDashboard() {
               lastActivity={todayStats.selles.lastTime}
               lastTimestamp={todayStats.selles.lastTimestamp}
               onPress={() =>
-                router.push(
-                  "/baby/diapers?tab=selles&openModal=true&returnTo=home" as any,
-                )
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "diapers",
+                  diapersType: "selle",
+                })
               }
               remindersEnabled={remindersEnabled}
               reminderThreshold={reminderThresholds.selles}
@@ -1585,6 +1752,261 @@ export default function HomeDashboard() {
         colorScheme={colorScheme}
         currentTime={currentTime}
         onEventLongPress={(event) => {
+          // Special handling for soins types: open form sheet directly
+          if (event.type === "temperature" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "soins",
+              soinsType: "temperature",
+              editData: {
+                id: event.id,
+                type: "temperature",
+                date: toDate(event.date),
+                valeur: event.valeur,
+                modePrise: event.modePrise,
+                note: event.note,
+              },
+            });
+            return;
+          }
+          if (event.type === "medicament" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "soins",
+              soinsType: "medicament",
+              editData: {
+                id: event.id,
+                type: "medicament",
+                date: toDate(event.date),
+                nomMedicament: event.nomMedicament,
+                dosage: event.dosage,
+                voie: event.voie,
+                note: event.note,
+              },
+            });
+            return;
+          }
+          if (event.type === "symptome" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "soins",
+              soinsType: "symptome",
+              editData: {
+                id: event.id,
+                type: "symptome",
+                date: toDate(event.date),
+                symptomes: event.symptomes,
+                intensite: event.intensite,
+                note: event.note,
+              },
+            });
+            return;
+          }
+          if (event.type === "vaccin" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "soins",
+              soinsType: "vaccin",
+              editData: {
+                id: event.id,
+                type: "vaccin",
+                date: toDate(event.date),
+                nomVaccin: event.nomVaccin || event.lib || "",
+                dosage: event.dosage || "",
+                note: event.note,
+              },
+            });
+            return;
+          }
+          if (event.type === "vitamine" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "soins",
+              soinsType: "vitamine",
+              editData: {
+                id: event.id,
+                type: "vitamine",
+                date: toDate(event.date),
+                nomVitamine: event.nomVitamine || "Vitamine D",
+                dosage: event.dosage,
+                note: event.note,
+              },
+            });
+            return;
+          }
+          // Special handling for meals types: open form sheet directly
+          if (event.type === "tetee" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "meals",
+              mealType: "tetee",
+              editData: {
+                id: event.id,
+                type: "tetee",
+                date: toDate(event.date),
+                dureeGauche: event.dureeGauche,
+                dureeDroite: event.dureeDroite,
+              },
+            });
+            return;
+          }
+          if (event.type === "biberon" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "meals",
+              mealType: "biberon",
+              editData: {
+                id: event.id,
+                type: "biberon",
+                date: toDate(event.date),
+                quantite: event.quantite,
+                typeBiberon: event.typeBiberon,
+              },
+            });
+            return;
+          }
+          if (event.type === "solide" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "meals",
+              mealType: "solide",
+              editData: {
+                id: event.id,
+                type: "solide",
+                date: toDate(event.date),
+                typeSolide: event.typeSolide,
+                momentRepas: event.momentRepas,
+                ingredients: event.ingredients,
+                quantiteSolide: event.quantite,
+                nouveauAliment: event.nouveauAliment,
+                nomNouvelAliment: event.nomNouvelAliment,
+                allergenes: event.allergenes,
+                reaction: event.reaction,
+                aime: event.aime,
+              },
+            });
+            return;
+          }
+          // Special handling for pumping: open form sheet directly
+          if (event.type === "pompage" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "pumping",
+              editData: {
+                id: event.id,
+                date: toDate(event.date),
+                quantiteGauche: event.quantiteGauche,
+                quantiteDroite: event.quantiteDroite,
+                duree: event.duree,
+                note: event.note,
+              },
+            });
+            return;
+          }
+          // Special handling for activities: open form sheet directly
+          if (event.type === "activite" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "activities",
+              activiteType: event.typeActivite ?? "tummyTime",
+              editData: {
+                id: event.id,
+                typeActivite: event.typeActivite ?? "tummyTime",
+                duree: event.duree,
+                description: event.description ?? event.note,
+                date: toDate(event.date),
+              },
+            });
+            return;
+          }
+          // Special handling for milestones/jalons: open form sheet directly
+          if (event.type === "jalon" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "milestones",
+              jalonType: event.typeJalon ?? "photo",
+              editData: {
+                id: event.id,
+                typeJalon: event.typeJalon ?? "photo",
+                titre: event.titre,
+                description: event.description,
+                note: event.note,
+                humeur: event.humeur,
+                photos: event.photos,
+                date: toDate(event.date),
+              },
+            });
+            return;
+          }
+          // Special handling for diapers (miction/selle): open form sheet directly
+          if (event.type === "miction" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "diapers",
+              diapersType: "miction",
+              editData: {
+                id: event.id,
+                type: "miction",
+                date: toDate(event.date),
+                couleur: event.couleur,
+              },
+            });
+            return;
+          }
+          if (event.type === "selle" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "diapers",
+              diapersType: "selle",
+              editData: {
+                id: event.id,
+                type: "selle",
+                date: toDate(event.date),
+                consistance: event.consistance,
+                quantite: event.quantite,
+              },
+            });
+            return;
+          }
+          // Special handling for routines (sommeil/bain): open form sheet directly
+          if (event.type === "sommeil" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "routines",
+              routineType: "sommeil",
+              sleepMode: event.isNap ? "nap" : "night",
+              editData: {
+                id: event.id,
+                type: "sommeil",
+                date: toDate(event.heureDebut),
+                heureDebut: toDate(event.heureDebut),
+                heureFin: event.heureFin ? toDate(event.heureFin) : undefined,
+                isNap: event.isNap,
+                location: event.lieu,
+                quality: event.qualite,
+                note: event.note,
+              },
+              sommeilEnCours,
+            });
+            return;
+          }
+          if (event.type === "bain" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "routines",
+              routineType: "bain",
+              editData: {
+                id: event.id,
+                type: "bain",
+                date: toDate(event.date),
+                duree: event.duree,
+                temperatureEau: event.temperature,
+                note: event.note,
+              },
+            });
+            return;
+          }
+          // Default behavior for other event types
           const route = getEditRoute(event);
           if (route) router.push(route as any);
         }}

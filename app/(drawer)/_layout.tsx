@@ -14,7 +14,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { ToastProvider } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 // Importer la configuration AssemblyAI
@@ -159,7 +158,6 @@ export default function DrawerLayout() {
   return (
     <HeaderRightContext.Provider value={{ setHeaderRight }}>
       <HeaderLeftContext.Provider value={{ setHeaderLeft }}>
-        <ToastProvider>
           <View
             style={[
               styles.container,
@@ -224,7 +222,6 @@ export default function DrawerLayout() {
               />
             </Drawer>
           </View>
-        </ToastProvider>
       </HeaderLeftContext.Provider>
     </HeaderRightContext.Provider>
   );

@@ -1,9 +1,12 @@
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import BottomSheet, {
   BottomSheetBackdrop,
+  BottomSheetBackdropProps,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
-import React, { forwardRef, useMemo } from "react";
+import React, { forwardRef, useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -12,8 +15,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Colors } from "@/constants/theme";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ============================================
@@ -59,27 +60,30 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
       onClose,
       snapPoints: customSnapPoints,
     },
-    ref
+    ref,
   ) => {
     const colorScheme = useColorScheme() ?? "light";
     const tintColor = Colors[colorScheme].tint;
     const insets = useSafeAreaInsets();
     const snapPoints = useMemo(
       () => customSnapPoints || ["75%", "90%"],
-      [customSnapPoints]
+      [customSnapPoints],
     );
 
-    const renderBackdrop = (props: any) => (
-      <BottomSheetBackdrop
-        {...props}
-        disappearsOnIndex={-1}
-        appearsOnIndex={0}
-        opacity={0.5}
-      />
+    const renderBackdrop = useCallback(
+      (props: BottomSheetBackdropProps) => (
+        <BottomSheetBackdrop
+          {...props}
+          disappearsOnIndex={-1}
+          appearsOnIndex={0}
+          opacity={0}
+        />
+      ),
+      [],
     );
 
-  return (
-    <BottomSheet
+    return (
+      <BottomSheet
         ref={ref}
         index={-1}
         snapPoints={snapPoints}
@@ -158,7 +162,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         </BottomSheetScrollView>
       </BottomSheet>
     );
-  }
+  },
 );
 
 FormBottomSheet.displayName = "FormBottomSheet";

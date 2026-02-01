@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Portal } from "@gorhom/portal";
 
 type ToastContextValue = {
   showToast: (
@@ -39,9 +40,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ToastContext.Provider value={{ showToast }}>
-      <View style={styles.container}>
-        {children}
-        {message && (
+      {children}
+      {message && (
+        <Portal>
           <View
             pointerEvents="none"
             style={[
@@ -53,16 +54,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           >
             <Text style={styles.toastText}>{message}</Text>
           </View>
-        )}
-      </View>
+        </Portal>
+      )}
     </ToastContext.Provider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   toast: {
     position: "absolute",
     alignSelf: "center",
@@ -71,6 +69,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 999,
     maxWidth: "90%",
+    zIndex: 99999,
+    elevation: 99999,
   },
   toastText: {
     color: "#fff",

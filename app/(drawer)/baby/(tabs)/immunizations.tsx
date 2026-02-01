@@ -26,6 +26,13 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { normalizeQuery } from "@/utils/text";
+
+// Helper to remove undefined values from objects (Firebase doesn't accept undefined)
+function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined)
+  ) as T;
+}
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -1026,7 +1033,7 @@ export default function ImmunizationsScreen() {
       setIsSubmitting(true);
 
       const isVitamine = immunoType === "vitamine";
-      const dataToSave = {
+      const dataToSave = removeUndefined({
         date: dateHeure,
         ...(immunoType === "vitamine" && {
           nomVitamine: selectedVitamine || "Vitamine D",
@@ -1038,7 +1045,7 @@ export default function ImmunizationsScreen() {
           nomVaccin: selectedVaccinName,
           ...(selectedVaccinDosage && { dosage: selectedVaccinDosage }),
         }),
-      };
+      });
 
       if (editingImmuno) {
         // Modification

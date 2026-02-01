@@ -40,6 +40,13 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { BiberonEvent, SolideEvent } from "@/services/eventsService";
+
+// Helper to remove undefined values from objects (Firebase doesn't accept undefined)
+function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined)
+  ) as T;
+}
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -964,7 +971,7 @@ export default function MealsScreen() {
       if (mealType === "tetee") {
         const leftMinutes = Math.round(leftSeconds / 60);
         const rightMinutes = Math.round(rightSeconds / 60);
-        const dataToSave = {
+        const dataToSave = removeUndefined({
           type: mealType,
           quantite: null,
           coteGauche: leftSeconds > 0,
@@ -972,7 +979,7 @@ export default function MealsScreen() {
           dureeGauche: leftMinutes > 0 ? leftMinutes : undefined,
           dureeDroite: rightMinutes > 0 ? rightMinutes : undefined,
           date: dateHeure,
-        };
+        });
 
         if (editingMeal) {
           await modifierTetee(activeChild.id, editingMeal.id, dataToSave);
@@ -980,12 +987,12 @@ export default function MealsScreen() {
           await ajouterTetee(activeChild.id, dataToSave);
         }
       } else if (mealType === "biberon") {
-        const dataToSave = {
+        const dataToSave = removeUndefined({
           type: mealType,
           quantite,
           typeBiberon,
           date: dateHeure,
-        };
+        });
 
         if (editingMeal) {
           await modifierBiberon(activeChild.id, editingMeal.id, dataToSave);
@@ -993,7 +1000,7 @@ export default function MealsScreen() {
           await ajouterBiberon(activeChild.id, dataToSave);
         }
       } else if (mealType === "solide") {
-        const dataToSave = {
+        const dataToSave = removeUndefined({
           type: mealType,
           typeSolide,
           momentRepas,
@@ -1013,7 +1020,7 @@ export default function MealsScreen() {
             typeSolide === "autre" && nouveauAliment ? reaction : undefined,
           aime,
           date: dateHeure,
-        };
+        });
 
         if (editingMeal) {
           await modifierSolide(activeChild.id, editingMeal.id, dataToSave);

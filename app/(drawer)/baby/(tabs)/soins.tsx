@@ -37,6 +37,13 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { normalizeQuery } from "@/utils/text";
+
+// Helper to remove undefined values from objects (Firebase doesn't accept undefined)
+function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined)
+  ) as T;
+}
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -1379,11 +1386,11 @@ export default function SoinsScreen() {
               showAlert("Erreur", "Sélectionnez un mode de prise.");
               return;
             }
-            await modifierTemperature(activeChild.id, editingEvent.id, {
+            await modifierTemperature(activeChild.id, editingEvent.id, removeUndefined({
               ...common,
               valeur,
               modePrise: temperatureMode,
-            });
+            }));
           } else {
             const list = [...symptomes];
             if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
@@ -1391,11 +1398,11 @@ export default function SoinsScreen() {
               showAlert("Erreur", "Sélectionnez au moins un symptôme.");
               return;
             }
-            await modifierSymptome(activeChild.id, editingEvent.id, {
+            await modifierSymptome(activeChild.id, editingEvent.id, removeUndefined({
               ...common,
               symptomes: list,
               intensite: symptomeIntensite,
-            });
+            }));
           }
         } else {
           if (!includeTemperature && !includeSymptome) {
@@ -1415,11 +1422,11 @@ export default function SoinsScreen() {
               showAlert("Erreur", "Sélectionnez un mode de prise.");
               return;
             }
-            await ajouterTemperature(activeChild.id, {
+            await ajouterTemperature(activeChild.id, removeUndefined({
               ...common,
               valeur,
               modePrise: temperatureMode,
-            });
+            }));
           }
           if (includeSymptome) {
             const list = [...symptomes];
@@ -1428,11 +1435,11 @@ export default function SoinsScreen() {
               showAlert("Erreur", "Sélectionnez au moins un symptôme.");
               return;
             }
-            await ajouterSymptome(activeChild.id, {
+            await ajouterSymptome(activeChild.id, removeUndefined({
               ...common,
               symptomes: list,
               intensite: symptomeIntensite,
-            });
+            }));
           }
         }
       } else if (selectedType === "medicament") {
@@ -1441,19 +1448,19 @@ export default function SoinsScreen() {
           return;
         }
         if (editingEvent) {
-          await modifierMedicament(activeChild.id, editingEvent.id, {
+          await modifierMedicament(activeChild.id, editingEvent.id, removeUndefined({
             ...common,
             nomMedicament: medicamentName.trim(),
             dosage: medicamentDosage.trim() || undefined,
             voie: medicamentVoie,
-          });
+          }));
         } else {
-          await ajouterMedicament(activeChild.id, {
+          await ajouterMedicament(activeChild.id, removeUndefined({
             ...common,
             nomMedicament: medicamentName.trim(),
             dosage: medicamentDosage.trim() || undefined,
             voie: medicamentVoie,
-          });
+          }));
         }
       } else if (selectedType === "vaccin") {
         const normalizedVaccinName =
@@ -1467,17 +1474,17 @@ export default function SoinsScreen() {
             ? vaccinDosage.trim() || undefined
             : vaccinDosage.trim() || undefined;
         if (editingEvent) {
-          await modifierVaccin(activeChild.id, editingEvent.id, {
+          await modifierVaccin(activeChild.id, editingEvent.id, removeUndefined({
             ...common,
             nomVaccin: normalizedVaccinName.trim(),
             dosage: finalDosage,
-          });
+          }));
         } else {
-          await ajouterVaccin(activeChild.id, {
+          await ajouterVaccin(activeChild.id, removeUndefined({
             ...common,
             nomVaccin: normalizedVaccinName.trim(),
             dosage: finalDosage,
-          });
+          }));
         }
       } else if (selectedType === "vitamine") {
         const normalizedVitamineName =
@@ -1491,17 +1498,17 @@ export default function SoinsScreen() {
             ? `${gouttesCount} gouttes`
             : vitamineDosage.trim() || undefined;
         if (editingEvent) {
-          await modifierVitamine(activeChild.id, editingEvent.id, {
+          await modifierVitamine(activeChild.id, editingEvent.id, removeUndefined({
             ...common,
             nomVitamine: normalizedVitamineName.trim(),
             dosage: computedDosage,
-          });
+          }));
         } else {
-          await ajouterVitamine(activeChild.id, {
+          await ajouterVitamine(activeChild.id, removeUndefined({
             ...common,
             nomVitamine: normalizedVitamineName.trim(),
             dosage: computedDosage,
-          });
+          }));
         }
       }
 

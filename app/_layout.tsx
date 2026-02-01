@@ -4,6 +4,7 @@ import { BabyProvider } from "@/contexts/BabyContext";
 import { ModalProvider } from "@/contexts/ModalContext";
 import { ThemeProvider as AppThemeProvider } from "@/contexts/ThemeContext";
 import { SheetProvider } from "@/contexts/SheetContext";
+import { ToastProvider } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MigrationProvider } from "@/migration/MigrationProvider";
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from "@react-navigation/native";
@@ -12,6 +13,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { PortalProvider } from "@gorhom/portal";
 import { GlobalSheetManager } from "@/components/ui/GlobalSheetManager";
 import { InvitationListener } from "@/components/ui/InvitationListener";
 
@@ -23,21 +25,25 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ModalProvider>
-          <AuthProvider>
-            <AppThemeProvider>
-              <BabyProvider>
-                <MigrationProvider>
-                  <SheetProvider>
-                    <AppNavigation />
-                    <GlobalSheetManager />
-                    <InvitationListener />
-                  </SheetProvider>
-                </MigrationProvider>
-              </BabyProvider>
-            </AppThemeProvider>
-          </AuthProvider>
-        </ModalProvider>
+        <PortalProvider>
+          <ToastProvider>
+            <ModalProvider>
+              <AuthProvider>
+                <AppThemeProvider>
+                  <BabyProvider>
+                    <MigrationProvider>
+                      <SheetProvider>
+                        <AppNavigation />
+                        <GlobalSheetManager />
+                        <InvitationListener />
+                      </SheetProvider>
+                    </MigrationProvider>
+                  </BabyProvider>
+                </AppThemeProvider>
+              </AuthProvider>
+            </ModalProvider>
+          </ToastProvider>
+        </PortalProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

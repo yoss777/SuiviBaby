@@ -44,6 +44,7 @@ type ModalState =
 
 type ModalContextType = {
   showAlert: (title: string, message?: React.ReactNode, buttons?: AlertButton[]) => void;
+  showConfirm: (title: string, message: React.ReactNode, onConfirm: () => void) => void;
   hide: () => void;
 };
 
@@ -98,6 +99,19 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
 
   const hide = () => setModalState(null);
 
+  const showConfirm = (title: string, message: React.ReactNode, onConfirm: () => void) => {
+    setModalState({
+      type: "confirm",
+      title,
+      message,
+      confirmText: "Supprimer",
+      cancelText: "Annuler",
+      confirmButtonColor: "#dc3545",
+      confirmTextColor: "#fff",
+      onConfirm,
+    });
+  };
+
   useEffect(() => {
     if (!modalState || modalState.type !== "info") return;
     if (modalState.confirmText !== "") return;
@@ -121,9 +135,10 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
   const value = useMemo(
     () => ({
       showAlert,
+      showConfirm,
       hide,
     }),
-    [showAlert],
+    [showAlert, showConfirm],
   );
 
   return (
