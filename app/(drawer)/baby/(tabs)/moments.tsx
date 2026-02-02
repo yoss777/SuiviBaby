@@ -12,6 +12,7 @@ import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ajouterJalon } from "@/migration/eventsDoubleWriteService";
@@ -86,10 +87,12 @@ export default function MomentsScreen() {
   const { userName } = useAuth();
   const { setHeaderRight } = useHeaderRight();
   const { showToast } = useToast();
+  const { openSheet } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
   const headerOwnerId = useRef(
     `moments-${Math.random().toString(36).slice(2)}`,
   );
+  const sheetOwnerId = "moments";
 
   const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -97,12 +100,17 @@ export default function MomentsScreen() {
   const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
   const [isMoodSaving, setIsMoodSaving] = useState(false);
   const [confettiTrigger, setConfettiTrigger] = useState(0);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   // Social interactions state
   const [likesInfo, setLikesInfo] = useState<Record<string, LikeInfo>>({});
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>(
     {},
   );
+
+  const refreshToday = useCallback(() => {
+    setRefreshTick((prev) => prev + 1);
+  }, []);
 
   // Data processing
   const { moods, photoMilestones, currentMood } = useMemo(() => {
@@ -154,6 +162,16 @@ export default function MomentsScreen() {
     return isToday(currentMood.date) ? currentMood : null;
   }, [currentMood]);
 
+  // Navigation handler for header button (must be defined before useFocusEffect)
+  const handleAddMilestone = useCallback(() => {
+    openSheet({
+      ownerId: sheetOwnerId,
+      formType: 'milestones',
+      jalonType: 'autre',
+      onSuccess: refreshToday,
+    });
+  }, [openSheet, refreshToday]);
+
   // Header setup
   useFocusEffect(
     useCallback(() => {
@@ -200,7 +218,7 @@ export default function MomentsScreen() {
     );
 
     return () => unsubscribe();
-  }, [activeChild?.id]);
+  }, [activeChild?.id, refreshTick]);
 
   // Social interactions listener
   useEffect(() => {
@@ -246,21 +264,25 @@ export default function MomentsScreen() {
         }
       } else if (!mood) {
         // Sinon, on ouvre le modal
-        router.push(
-          "/baby/milestones?openModal=true&type=humeur&returnTo=moments",
-        );
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: 'milestones',
+          jalonType: 'humeur',
+          onSuccess: refreshToday,
+        });
       }
     },
-    [activeChild?.id, isMoodSaving, showToast],
+    [activeChild?.id, isMoodSaving, showToast, openSheet, refreshToday],
   );
 
   const handleAddPhoto = useCallback(() => {
-    router.push("/baby/milestones?openModal=true&type=photo&returnTo=moments");
-  }, []);
-
-  const handleAddMilestone = useCallback(() => {
-    router.push("/baby/milestones?openModal=true&returnTo=moments");
-  }, []);
+    openSheet({
+      ownerId: sheetOwnerId,
+      formType: 'milestones',
+      jalonType: 'photo',
+      onSuccess: refreshToday,
+    });
+  }, [openSheet, refreshToday]);
 
   const handlePhotoPress = useCallback(
     (photo: PhotoMilestone) => {
@@ -276,6 +298,32 @@ export default function MomentsScreen() {
     setGalleryInitialIndex(0);
     setGalleryVisible(true);
   }, []);
+
+  // Edit photo handler - finds the full event and opens form sheet
+  const handleEditPhoto = useCallback(
+    (photoId: string) => {
+      const event = events.find((e) => e.id === photoId);
+      if (!event) return;
+
+      openSheet({
+        ownerId: sheetOwnerId,
+        formType: 'milestones',
+        jalonType: event.typeJalon as "dent" | "pas" | "sourire" | "mot" | "humeur" | "photo" | "autre",
+        onSuccess: refreshToday,
+        editData: {
+          id: event.id,
+          typeJalon: event.typeJalon as "dent" | "pas" | "sourire" | "mot" | "humeur" | "photo" | "autre",
+          titre: event.titre,
+          description: event.description,
+          note: event.note,
+          humeur: event.humeur,
+          photos: event.photos,
+          date: toDate(event.date),
+        },
+      });
+    },
+    [events, openSheet, refreshToday],
+  );
 
   // Social handlers
   const handleLike = useCallback(
@@ -409,6 +457,7 @@ export default function MomentsScreen() {
         backgroundColor="rgba(60, 50, 40, 0.97)"
         onClose={handleCloseGallery}
         onAddPhoto={handleAddPhoto}
+        onEdit={handleEditPhoto}
         onLike={handleLike}
         onDownload={handleDownload}
         likesInfo={likesInfo}

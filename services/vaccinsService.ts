@@ -60,7 +60,7 @@ export async function obtenirToutesLesVaccins(childId: string) {
     const q = query(
       collection(db, "vaccins"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc")
+      orderBy("date", "desc")
     );
     const querySnapshot = await getDocs(q);
 
@@ -79,7 +79,7 @@ export async function obtenirVaccinsAvecLimite(childId: string, nombreLimit: num
     const q = query(
       collection(db, "vaccins"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc"),
+      orderBy("date", "desc"),
       limit(nombreLimit)
     );
     const querySnapshot = await getDocs(q);
@@ -98,7 +98,7 @@ export function ecouterVaccins(childId: string, callback: (docs: any[]) => void)
   const q = query(
     collection(db, "vaccins"),
     where("childId", "==", childId),
-    orderBy("createdAt", "desc")
+    orderBy("date", "desc")
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {

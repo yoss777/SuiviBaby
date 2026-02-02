@@ -1,5 +1,5 @@
+import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesForm";
 import { ThemedText } from "@/components/themed-text";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
@@ -7,14 +7,8 @@ import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
-import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import {
-  ajouterActivite,
-  modifierActivite,
-  supprimerActivite,
-} from "@/migration/eventsDoubleWriteService";
 import {
   ecouterActivitesHybrid,
   getNextEventDateBeforeHybrid,
@@ -22,9 +16,7 @@ import {
 } from "@/migration/eventsHybridService";
 import { ActiviteEvent } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -33,11 +25,9 @@ import {
   BackHandler,
   FlatList,
   InteractionManager,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -49,18 +39,7 @@ import { useHeaderLeft, useHeaderRight } from "../../_layout";
 // TYPES
 // ============================================
 
-type ActiviteType =
-  | "tummyTime" // Temps sur le ventre
-  | "jeux" // Jeux d'éveil
-  | "lecture" // Lecture/histoires
-  | "promenade" // Sortie extérieure
-  | "massage" // Massage bébé
-  | "musique" // Éveil musical
-  | "eveil" // Éveil sensoriel
-  | "sortie" // Sortie (médecin, visite, parc, etc.)
-  | "autre"; // Autre activité
-
-type FilterType = "today" | "past";
+type DateFilterValue = "today" | "past";
 
 type ActivityEventWithId = ActiviteEvent & { id: string };
 
@@ -154,9 +133,7 @@ export default function ActivitiesScreen() {
   const { setHeaderRight } = useHeaderRight();
   const { setHeaderLeft } = useHeaderLeft();
   const colorScheme = useColorScheme() ?? "light";
-  const colors = Colors[colorScheme];
-  const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
-  const { showAlert } = useModal();
+  const { openSheet, closeSheet, isOpen } = useSheet();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
     `activities-${Math.random().toString(36).slice(2)}`,
@@ -165,14 +142,14 @@ export default function ActivitiesScreen() {
   const { openModal, editId, returnTo, type } = useLocalSearchParams();
   const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const sheetOwnerId = "activities";
-  const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
   const [showCalendar, setShowCalendar] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState<DateFilterValue>("today");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
-  const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
+  const [pendingEditData, setPendingEditData] = useState<ActivitiesEditData | null>(null);
+  const [pendingActiviteType, setPendingActiviteType] = useState<ActiviteType>("tummyTime");
 
   const [events, setEvents] = useState<ActivityEventWithId[]>([]);
   const [groupedEvents, setGroupedEvents] = useState<ActivityGroup[]>([]);
@@ -188,20 +165,8 @@ export default function ActivitiesScreen() {
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
 
-  const [editingActivite, setEditingActivite] =
-    useState<ActivityEventWithId | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [typeActivite, setTypeActivite] = useState<ActiviteType>("tummyTime");
-  const [duree, setDuree] = useState(15);
-  const [description, setDescription] = useState("");
-  const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
-
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
-  const pendingTypeRef = useRef<ActiviteType | null>(null);
 
   const normalizeParam = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value;
@@ -216,10 +181,6 @@ export default function ActivitiesScreen() {
     returnToRef.current = null;
   }, [returnTo]);
 
-  useEffect(() => {
-    stashReturnTo();
-  }, [stashReturnTo]);
-
   const maybeReturnTo = useCallback((targetOverride?: string | null) => {
     const target = targetOverride ?? returnToRef.current;
     returnToRef.current = null;
@@ -230,6 +191,52 @@ export default function ActivitiesScreen() {
     }
   }, []);
 
+  const ensureTodayInRange = useCallback(() => {
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    setRangeEndDate((prev) => {
+      if (!prev) {
+        setDaysWindow(14);
+        return endOfToday;
+      }
+      if (prev >= endOfToday) return prev;
+      const diffDays = Math.ceil(
+        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
+      );
+      setDaysWindow((window) => window + diffDays);
+      return endOfToday;
+    });
+  }, []);
+
+  // ============================================
+  // BUILD EDIT DATA
+  // ============================================
+  const buildEditData = useCallback((event: ActivityEventWithId): ActivitiesEditData => {
+    return {
+      id: event.id,
+      typeActivite: event.typeActivite as ActiviteType,
+      duree: event.duree,
+      description: event.description,
+      date: toDate(event.date),
+    };
+  }, []);
+
+  // ============================================
+  // OPEN ADD / EDIT MODAL
+  // ============================================
+  const openAddModal = useCallback((activiteType: ActiviteType = "tummyTime") => {
+    setPendingActiviteType(activiteType);
+    setPendingEditData(null);
+    setPendingOpen(true);
+  }, []);
+
+  const openEditModal = useCallback((event: ActivityEventWithId) => {
+    setPendingActiviteType(event.typeActivite as ActiviteType);
+    setPendingEditData(buildEditData(event));
+    setPendingOpen(true);
+  }, [buildEditData]);
+
   // ============================================
   // HEADER
   // ============================================
@@ -239,7 +246,6 @@ export default function ActivitiesScreen() {
       if (nextValue) {
         const today = new Date();
         setSelectedDate(formatDateKey(today));
-        setSelectedFilter(null);
       }
       return nextValue;
     });
@@ -251,12 +257,6 @@ export default function ActivitiesScreen() {
     setSelectedDate(null);
     setShowCalendar(false);
     setExpandedDays(new Set([todayKey]));
-  }, []);
-
-  const handleAddPress = useCallback(() => {
-    pendingTypeRef.current = "tummyTime";
-    setPendingMode("add");
-    setPendingOpen(true);
   }, []);
 
   useFocusEffect(
@@ -279,7 +279,7 @@ export default function ActivitiesScreen() {
               color={Colors[colorScheme].tint}
             />
           </Pressable>
-          <Pressable onPress={handleAddPress} style={styles.headerButton}>
+          <Pressable onPress={() => openAddModal("tummyTime")} style={styles.headerButton}>
             <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
           </Pressable>
         </View>
@@ -290,7 +290,7 @@ export default function ActivitiesScreen() {
       };
     }, [
       handleCalendarPress,
-      handleAddPress,
+      openAddModal,
       showCalendar,
       colorScheme,
       setHeaderRight,
@@ -314,7 +314,6 @@ export default function ActivitiesScreen() {
             router.replace("/baby/plus");
           }}
           tintColor={Colors[colorScheme].text}
-          labelVisible={false}
         />
       );
       setHeaderLeft(backButton, headerOwnerId.current);
@@ -349,7 +348,7 @@ export default function ActivitiesScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen, returnTargetParam, router]),
+    }, [closeSheet, isOpen, returnTargetParam]),
   );
 
   // ============================================
@@ -460,7 +459,7 @@ export default function ActivitiesScreen() {
         selectedTextColor: "#ffffff",
       };
     }
-    if (selectedFilter === "today") {
+    if (selectedFilter === "today" && !selectedDate) {
       const todayKey = formatDateKey(new Date());
       marked[todayKey] = {
         ...marked[todayKey],
@@ -474,12 +473,11 @@ export default function ActivitiesScreen() {
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
-    setSelectedFilter(null);
     setShowCalendar(false);
     setExpandedDays(new Set([day.dateString]));
   };
 
-  const handleFilterPress = (filter: FilterType) => {
+  const handleFilterPress = (filter: DateFilterValue) => {
     if (filter === "today") {
       applyTodayFilter();
       return;
@@ -492,10 +490,10 @@ export default function ActivitiesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!selectedFilter && !selectedDate) {
+      if (!selectedDate) {
         applyTodayFilter();
       }
-    }, [applyTodayFilter, selectedDate, selectedFilter]),
+    }, [applyTodayFilter, selectedDate]),
   );
 
   useEffect(() => {
@@ -541,6 +539,7 @@ export default function ActivitiesScreen() {
           massage: 0,
           musique: 0,
           eveil: 0,
+          sortie: 0,
           autre: 0,
         } as Record<ActiviteType, number>;
         sorted.forEach((item) => {
@@ -640,106 +639,55 @@ export default function ActivitiesScreen() {
   ]);
 
   // ============================================
-  // SHEET LOGIC
+  // SHEET LOGIC - USING FORM TYPE PATTERN
   // ============================================
-  const resetForm = useCallback(() => {
-    setTypeActivite("tummyTime");
-    setDuree(15);
-    setDescription("");
-    setDateHeure(new Date());
-    setEditingActivite(null);
-  }, []);
-
-  const openEditModal = useCallback((item: ActivityEventWithId) => {
-    setEditingActivite(item);
-    setTypeActivite(item.typeActivite as ActiviteType);
-    setDuree(item.duree ?? 15);
-    setDescription(item.description ?? "");
-    setDateHeure(toDate(item.date));
-    setIsSubmitting(false);
-    setPendingMode("edit");
-    setPendingOpen(true);
-  }, []);
-
-  function buildSheetProps() {
-    const returnTarget = returnTargetParam ?? returnToRef.current;
-    return {
-      ownerId: sheetOwnerId,
-      title: editingActivite ? "Modifier l'activité" : "Nouvelle activité",
-      icon: "play-circle",
-      accentColor: eventColors.activite.dark,
-      isEditing: !!editingActivite,
-      isSubmitting,
-      onSubmit: handleSubmit,
-      onDelete: editingActivite ? () => setShowDeleteModal(true) : undefined,
-      children: renderSheetContent(),
-      onDismiss: () => {
-        setIsSubmitting(false);
-        setEditingActivite(null);
-        editIdRef.current = null;
-        maybeReturnTo(returnTarget);
-      },
-    };
-  }
-
-  useEffect(() => {
-    if (!isSheetActive) return;
-    openSheet(buildSheetProps());
-  }, [
-    isSheetActive,
-    openSheet,
-    typeActivite,
-    duree,
-    description,
-    dateHeure,
-    showDate,
-    showTime,
-    editingActivite,
-  ]);
-
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
       const normalizedType = normalizeParam(type);
-      pendingTypeRef.current =
+      const activiteType: ActiviteType =
         normalizedType && Object.keys(TYPE_CONFIG).includes(normalizedType)
           ? (normalizedType as ActiviteType)
           : "tummyTime";
-      setPendingMode("add");
-      setPendingOpen(true);
-    }, [openModal, type]),
+      openAddModal(activiteType);
+    }, [openModal, type, openAddModal]),
   );
 
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
+    const returnTarget = returnTargetParam ?? returnToRef.current;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
-      if (pendingMode !== "edit") {
-        const pendingType = pendingTypeRef.current ?? "tummyTime";
-        resetForm();
-        setTypeActivite(pendingType);
-      }
-      openSheet(buildSheetProps());
+      openSheet({
+        ownerId: sheetOwnerId,
+        formType: "activities",
+        activiteType: pendingActiviteType,
+        editData: pendingEditData ?? undefined,
+        onSuccess: ensureTodayInRange,
+        onDismiss: () => {
+          editIdRef.current = null;
+          maybeReturnTo(returnTarget);
+        },
+      });
       navigation.setParams({
         openModal: undefined,
         editId: undefined,
         type: undefined,
-        mode: undefined,
-      });
+      } as any);
       setPendingOpen(false);
-      setPendingMode(null);
-      pendingTypeRef.current = null;
     });
     return () => task.cancel?.();
   }, [
     pendingOpen,
     layoutReady,
-    pendingMode,
+    pendingActiviteType,
+    pendingEditData,
     navigation,
-    resetForm,
     stashReturnTo,
     openSheet,
     returnTargetParam,
+    maybeReturnTo,
+    ensureTodayInRange,
   ]);
 
   useEffect(() => {
@@ -755,220 +703,8 @@ export default function ActivitiesScreen() {
       openModal: undefined,
       editId: undefined,
       type: undefined,
-      mode: undefined,
-    });
+    } as any);
   }, [editId, layoutReady, events, navigation, openEditModal, stashReturnTo]);
-
-  // ============================================
-  // SUBMIT / DELETE
-  // ============================================
-  const handleSubmit = async () => {
-    if (!activeChild?.id || isSubmitting) return;
-    try {
-      setIsSubmitting(true);
-      const data = {
-        date: dateHeure,
-        typeActivite,
-        duree: duree || undefined,
-        description: description.trim() ? description.trim() : undefined,
-        note: description.trim() ? description.trim() : undefined,
-      };
-
-      if (editingActivite) {
-        await modifierActivite(activeChild.id, editingActivite.id, data);
-      } else {
-        await ajouterActivite(activeChild.id, data);
-      }
-
-      closeSheet();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (!editingActivite || !activeChild?.id || isSubmitting) return;
-    try {
-      setIsSubmitting(true);
-      await supprimerActivite(activeChild.id, editingActivite.id);
-      closeSheet();
-    } catch (error) {
-      console.error("Erreur suppression:", error);
-      showAlert("Erreur", "Impossible de supprimer.");
-    } finally {
-      setIsSubmitting(false);
-      setShowDeleteModal(false);
-    }
-  };
-
-  const renderSheetContent = () => {
-    return (
-      <View style={styles.sheetContent}>
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Type d&apos;activité</Text>
-          <View style={styles.typeRow}>
-            {(Object.keys(TYPE_CONFIG) as ActiviteType[]).map((type) => {
-              const config = TYPE_CONFIG[type];
-              const active = typeActivite === type;
-              return (
-                <TouchableOpacity
-                  key={type}
-                  style={[styles.typeChip, active && styles.typeChipActive]}
-                  onPress={() => setTypeActivite(type)}
-                >
-                  <Text
-                    style={[
-                      styles.typeChipText,
-                      active && styles.typeChipTextActive,
-                    ]}
-                  >
-                    {config.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Durée (minutes)</Text>
-          <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPress={() => setDuree((value) => Math.max(0, value - 5))}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                -
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.quantityPickerValue}>{duree} min</Text>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPress={() => setDuree((value) => value + 5)}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                +
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Description</Text>
-          <TextInput
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Ajouter une description..."
-            style={styles.input}
-            multiline
-          />
-        </View>
-
-        <View style={styles.dateTimeContainerWithPadding}>
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowDate(true)}
-          >
-            <FontAwesome5
-              name="calendar-alt"
-              size={16}
-              color={Colors[colorScheme].tint}
-            />
-            <Text style={styles.dateButtonText}>Date</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowTime(true)}
-          >
-            <FontAwesome5
-              name="clock"
-              size={16}
-              color={Colors[colorScheme].tint}
-            />
-            <Text style={styles.dateButtonText}>Heure</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.selectedDateTime}>
-          <Text style={styles.selectedDate}>
-            {dateHeure.toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
-          <Text style={styles.selectedTime}>
-            {dateHeure.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-
-        {showDate && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, date) => {
-              setShowDate(false);
-              if (date) {
-                setDateHeure((prev) => {
-                  const next = new Date(prev);
-                  next.setFullYear(
-                    date.getFullYear(),
-                    date.getMonth(),
-                    date.getDate(),
-                  );
-                  return next;
-                });
-              }
-            }}
-          />
-        )}
-        {showTime && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="time"
-            is24Hour
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, date) => {
-              setShowTime(false);
-              if (date) {
-                setDateHeure((prev) => {
-                  const next = new Date(prev);
-                  next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                  return next;
-                });
-              }
-            }}
-          />
-        )}
-      </View>
-    );
-  };
 
   // ============================================
   // RENDER HELPERS
@@ -1151,11 +887,7 @@ export default function ActivitiesScreen() {
             <View style={styles.quickActionsRow}>
               <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "tummyTime";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
+                onPress={() => openAddModal("tummyTime")}
               >
                 <FontAwesome
                   name="baby"
@@ -1165,11 +897,7 @@ export default function ActivitiesScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "jeux";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
+                onPress={() => openAddModal("jeux")}
               >
                 <FontAwesome
                   name="puzzle-piece"
@@ -1179,11 +907,7 @@ export default function ActivitiesScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "promenade";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
+                onPress={() => openAddModal("promenade")}
               >
                 <FontAwesome
                   name="person-walking"
@@ -1221,7 +945,11 @@ export default function ActivitiesScreen() {
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <IconPulseDots color={Colors[colorScheme].tint} />
+              <Ionicons
+                name="calendar-outline"
+                size={64}
+                color={Colors[colorScheme].tabIconDefault}
+              />
               <ThemedText style={styles.emptyText}>
                 {events.length === 0
                   ? "Aucune activité enregistrée"
@@ -1237,10 +965,11 @@ export default function ActivitiesScreen() {
               contentContainerStyle={styles.listContent}
               ListFooterComponent={
                 <LoadMoreButton
-                  isLoading={isLoadingMore}
                   hasMore={hasMore}
+                  loading={isLoadingMore}
                   onPress={handleLoadMore}
-                  color={Colors[colorScheme].tint}
+                  text="Voir plus"
+                  accentColor={Colors[colorScheme].tint}
                 />
               }
             />
@@ -1252,22 +981,6 @@ export default function ActivitiesScreen() {
           </View>
         )}
       </SafeAreaView>
-
-      <ConfirmModal
-        visible={showDeleteModal}
-        title="Supprimer"
-        message="Cette activité sera supprimée définitivement."
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
-        confirmButtonColor="#dc3545"
-        confirmTextColor="#fff"
-        cancelButtonColor="#f1f3f5"
-        cancelTextColor="#1f2937"
-        onConfirm={confirmDelete}
-        onCancel={() => setShowDeleteModal(false)}
-      />
     </View>
   );
 }
@@ -1313,33 +1026,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#f0f0f0",
-  },
-  typeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingBottom: 8,
-  },
-  typeChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#f9fafb",
-  },
-  typeChipActive: {
-    backgroundColor: "#fff",
-    borderColor: eventColors.activite.dark,
-  },
-  typeChipText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6b7280",
-  },
-  typeChipTextActive: {
-    color: eventColors.activite.dark,
-    fontWeight: "700",
   },
   listContent: {
     paddingHorizontal: 16,
@@ -1498,94 +1184,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#666",
     marginTop: 16,
-    fontWeight: "600",
-  },
-  sheetContent: {
-    gap: 12,
-  },
-  inputGroup: {
-    gap: 6,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6b7280",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  quantityPickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    marginBottom: 8,
-  },
-  quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quantityButtonDisabled: {
-    opacity: 0.6,
-  },
-  quantityButtonText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-  },
-  quantityButtonTextDisabled: {
-    color: "#999",
-  },
-  quantityPickerValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  dateTimeContainerWithPadding: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-    paddingTop: 20,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#4a4f55",
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  selectedTime: {
-    fontSize: 20,
-    color: "#374151",
     fontWeight: "600",
   },
 });

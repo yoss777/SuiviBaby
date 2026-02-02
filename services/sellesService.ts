@@ -60,7 +60,7 @@ export async function obtenirToutesLesSelles(childId: string) {
     const q = query(
       collection(db, "selles"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc")
+      orderBy("date", "desc")
     );
     const querySnapshot = await getDocs(q);
 
@@ -79,7 +79,7 @@ export async function obtenirSellesAvecLimite(childId: string, nombreLimit: numb
     const q = query(
       collection(db, "selles"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc"),
+      orderBy("date", "desc"),
       limit(nombreLimit)
     );
     const querySnapshot = await getDocs(q);
@@ -98,7 +98,7 @@ export function ecouterSelles(childId: string, callback: (docs: any[]) => void) 
   const q = query(
     collection(db, "selles"),
     where("childId", "==", childId),
-    orderBy("createdAt", "desc")
+    orderBy("date", "desc")
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {

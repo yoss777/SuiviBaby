@@ -60,7 +60,7 @@ export async function obtenirTousLesPompages(childId: string) {
     const q = query(
       collection(db, "pompages"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc")
+      orderBy("date", "desc")
     );
     const querySnapshot = await getDocs(q);
 
@@ -79,7 +79,7 @@ export async function obtenirPompagesAvecLimite(childId: string, nombreLimit: nu
     const q = query(
       collection(db, "pompages"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc"),
+      orderBy("date", "desc"),
       limit(nombreLimit)
     );
     const querySnapshot = await getDocs(q);
@@ -98,7 +98,7 @@ export function ecouterPompages(childId: string, callback: (docs: any[]) => void
   const q = query(
     collection(db, "pompages"),
     where("childId", "==", childId),
-    orderBy("createdAt", "desc")
+    orderBy("date", "desc")
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {

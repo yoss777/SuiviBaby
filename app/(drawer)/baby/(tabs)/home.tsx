@@ -7,7 +7,11 @@ import {
   StatsCardSkeleton,
 } from "@/components/suivibaby/dashboard";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
-import { MOOD_EMOJIS, QUICK_ADD_ACTIONS } from "@/constants/dashboardConfig";
+import {
+  MOMENT_REPAS_LABELS,
+  MOOD_EMOJIS,
+  QUICK_ADD_ACTIONS,
+} from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
@@ -30,13 +34,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   AppState,
@@ -55,7 +53,9 @@ import { useHeaderRight } from "../../_layout";
 interface DashboardData {
   tetees: any[];
   biberons: any[];
+  solides: any[];
   pompages: any[];
+  croissances: any[];
   sommeils: any[];
   bains: any[];
   mictions: any[];
@@ -118,7 +118,7 @@ export default function HomeDashboard() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
-  const { openSheet, closeSheet, isOpen } = useSheet();
+  const { openSheet: openSheetRaw, closeSheet, isOpen } = useSheet();
   const { showToast } = useToast();
   const warningStateRef = useRef<
     Record<string, { miction?: number; selle?: number }>
@@ -145,12 +145,15 @@ export default function HomeDashboard() {
   );
   const scrollYRef = useRef(0);
   const pendingQuickAddRouteRef = useRef<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   // États des données
   const [data, setData] = useState<DashboardData>({
     tetees: [],
     biberons: [],
+    solides: [],
     pompages: [],
+    croissances: [],
     mictions: [],
     selles: [],
     sommeils: [],
@@ -202,6 +205,23 @@ export default function HomeDashboard() {
     jalons: true,
   });
 
+  const triggerRefresh = useCallback(() => {
+    setRefreshTick((prev) => prev + 1);
+  }, []);
+
+  const openSheet = useCallback(
+    (props: Parameters<typeof openSheetRaw>[0]) => {
+      openSheetRaw({
+        ...props,
+        onSuccess: () => {
+          props.onSuccess?.();
+          triggerRefresh();
+        },
+      });
+    },
+    [openSheetRaw, triggerRefresh],
+  );
+
   const toDate = useCallback((value: any) => {
     if (value?.seconds) return new Date(value.seconds * 1000);
     if (value?.toDate) return value.toDate();
@@ -243,6 +263,30 @@ export default function HomeDashboard() {
           const parts = [typeLabel, quantity].filter(Boolean);
           return parts.length > 0 ? parts.join(" · ") : undefined;
         }
+        case "solide": {
+          const momentLabel = event.momentRepas
+            ? MOMENT_REPAS_LABELS[event.momentRepas]
+            : null;
+          const quantity = event.quantiteSolide ?? event.quantite;
+          const line2 =
+            momentLabel || quantity
+              ? `${momentLabel ?? ""}${momentLabel && quantity ? " · " : ""}${quantity ?? ""}`
+              : null;
+          const dishName = event.nomNouvelAliment || event.ingredients || "";
+          const likeLabel =
+            event.aime === undefined
+              ? null
+              : event.aime
+                ? dishName
+                  ? `A aimé ce plat : ${dishName}`
+                  : "A aimé son plat"
+                : dishName
+                  ? `N'a pas aimé ce plat : ${dishName}`
+                  : "N'a pas aimé le plat";
+          const line3 = likeLabel || null;
+          const parts = [line2, line3].filter(Boolean);
+          return parts.length > 0 ? parts.join("\n") : undefined;
+        }
         case "tetee": {
           const left = event.dureeGauche ? `G ${event.dureeGauche} min` : null;
           const right = event.dureeDroite ? `D ${event.dureeDroite} min` : null;
@@ -258,6 +302,14 @@ export default function HomeDashboard() {
             : null;
           const parts = [left, right].filter(Boolean);
           return parts.length > 0 ? parts.join(" • ") : undefined;
+        }
+        case "croissance": {
+          const parts = [
+            event.poidsKg ? `${event.poidsKg} kg` : null,
+            event.tailleCm ? `${event.tailleCm} cm` : null,
+            event.teteCm ? `PC ${event.teteCm} cm` : null,
+          ].filter(Boolean);
+          return parts.length > 0 ? parts.join(" · ") : undefined;
         }
         case "miction":
           return event.volume ? `${event.volume} ml` : event.couleur;
@@ -311,9 +363,10 @@ export default function HomeDashboard() {
           const name = event.nomVaccin || "Vaccin";
           return event.dosage ? `${name} · ${event.dosage}` : name;
         case "activite": {
+          const isOther = event.typeActivite === "autre";
           const parts = [
             event.duree ? `${event.duree} min` : null,
-            event.description,
+            isOther ? null : event.description,
           ].filter(Boolean);
           return parts.length > 0 ? parts.join(" · ") : undefined;
         }
@@ -392,7 +445,9 @@ export default function HomeDashboard() {
     const merged = [
       ...data.tetees,
       ...data.biberons,
+      ...data.solides,
       ...data.pompages,
+      ...data.croissances,
       ...data.sommeils,
       ...data.bains,
       ...data.mictions,
@@ -416,6 +471,8 @@ export default function HomeDashboard() {
       .slice(0, 10);
   }, [
     data.biberons,
+    data.solides,
+    data.croissances,
     data.mictions,
     data.pompages,
     data.sommeils,
@@ -767,7 +824,12 @@ export default function HomeDashboard() {
       // Special handling for soins types: open form sheet directly without navigation
       const soinsTypeMatch = route.match(/soins\?type=(\w+)/);
       if (soinsTypeMatch) {
-        const soinsType = soinsTypeMatch[1] as "temperature" | "medicament" | "symptome" | "vaccin" | "vitamine";
+        const soinsType = soinsTypeMatch[1] as
+          | "temperature"
+          | "medicament"
+          | "symptome"
+          | "vaccin"
+          | "vitamine";
         openSheet({
           ownerId: headerOwnerId.current,
           formType: "soins",
@@ -822,7 +884,14 @@ export default function HomeDashboard() {
       // Special handling for milestones: open form sheet directly without navigation
       const milestonesTypeMatch = route.match(/milestones\?type=(\w+)/);
       if (milestonesTypeMatch) {
-        const jalonType = milestonesTypeMatch[1] as "dent" | "pas" | "sourire" | "mot" | "humeur" | "photo" | "autre";
+        const jalonType = milestonesTypeMatch[1] as
+          | "dent"
+          | "pas"
+          | "sourire"
+          | "mot"
+          | "humeur"
+          | "photo"
+          | "autre";
         openSheet({
           ownerId: headerOwnerId.current,
           formType: "milestones",
@@ -1146,7 +1215,7 @@ export default function HomeDashboard() {
     return () => {
       unsubscribe();
     };
-  }, [activeChild, currentDay]);
+  }, [activeChild, currentDay, refreshTick]);
 
   // ============================================
   // EFFECTS - STATS CALCULATION
@@ -1189,6 +1258,7 @@ export default function HomeDashboard() {
 
     const todayTetees = filterToday(data.tetees);
     const todayBiberons = filterToday(data.biberons);
+    const todaySolides = filterToday(data.solides);
     const todayPompages = filterToday(data.pompages);
     const todaySommeils = filterTodaySleep(data.sommeils);
     const todayMictions = filterToday(data.mictions);
@@ -1229,7 +1299,7 @@ export default function HomeDashboard() {
         : null;
 
     // Calculer les statistiques totales pour tous les repas
-    const allMeals = [...todayTetees, ...todayBiberons];
+    const allMeals = [...todayTetees, ...todayBiberons, ...todaySolides];
     const totalMealsQuantity = biberonsQuantity; // Seuls les biberons ont une quantité mesurable
     const lastMealOverall =
       allMeals.length > 0
@@ -2002,6 +2072,20 @@ export default function HomeDashboard() {
                 duree: event.duree,
                 temperatureEau: event.temperature,
                 note: event.note,
+              },
+            });
+            return;
+          }
+          if (event.type === "croissance" && event.id) {
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "croissance",
+              editData: {
+                id: event.id,
+                date: toDate(event.date),
+                tailleCm: event.tailleCm,
+                poidsKg: event.poidsKg,
+                teteCm: event.teteCm,
               },
             });
             return;

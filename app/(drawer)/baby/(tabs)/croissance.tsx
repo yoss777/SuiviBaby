@@ -1,20 +1,12 @@
 import { ThemedView } from "@/components/themed-view";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
-import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import {
-  ajouterCroissance,
-  modifierCroissance,
-  supprimerCroissance,
-} from "@/migration/eventsDoubleWriteService";
 import { ecouterCroissancesHybrid } from "@/migration/eventsHybridService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import {
   Canvas,
@@ -39,12 +31,10 @@ import {
   Dimensions,
   FlatList,
   InteractionManager,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -166,8 +156,7 @@ export default function CroissanceScreen() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
-  const { openSheet, closeSheet, viewProps } = useSheet();
-  const { showAlert } = useModal();
+  const { openSheet } = useSheet();
   const { openModal, returnTo } = useLocalSearchParams();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
@@ -176,17 +165,7 @@ export default function CroissanceScreen() {
 
   const [entries, setEntries] = useState<CroissanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<CroissanceEntry | null>(
-    null,
-  );
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [tailleCm, setTailleCm] = useState("");
-  const [poidsKg, setPoidsKg] = useState("");
-  const [teteCm, setTeteCm] = useState("");
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
   const [metric, setMetric] = useState<MetricKey>("poids");
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(
     null,
@@ -201,8 +180,11 @@ export default function CroissanceScreen() {
   const autoScrollRef = useRef(false);
 
   const sheetOwnerId = "croissance";
-  const isSheetActive = viewProps?.ownerId === sheetOwnerId;
   const returnToRef = useRef<string | null>(null);
+
+  const refreshToday = useCallback(() => {
+    setRefreshTick((prev) => prev + 1);
+  }, []);
 
   const palette = useMemo(
     () => ({
@@ -287,19 +269,17 @@ export default function CroissanceScreen() {
     }
   }, []);
 
-  const resetForm = useCallback(() => {
-    setDateHeure(new Date());
-    setTailleCm("");
-    setPoidsKg("");
-    setTeteCm("");
-    setIsSubmitting(false);
-  }, []);
-
   const openAddModal = useCallback(() => {
-    setEditingEntry(null);
-    resetForm();
-    openSheet(buildSheetProps());
-  }, [openSheet, resetForm]);
+    openSheet({
+      ownerId: sheetOwnerId,
+      formType: 'croissance',
+      onSuccess: refreshToday,
+      onDismiss: () => {
+        const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
+        maybeReturnTo(returnTarget);
+      },
+    });
+  }, [openSheet, returnTo, maybeReturnTo, refreshToday]);
 
   useFocusEffect(
     useCallback(() => {
@@ -314,15 +294,21 @@ export default function CroissanceScreen() {
 
   const openEditModal = useCallback(
     (entry: CroissanceEntry) => {
-      setEditingEntry(entry);
-      setDateHeure(toDate(entry.date));
-      setTailleCm(entry.tailleCm?.toString() ?? "");
-      setPoidsKg(entry.poidsKg?.toString() ?? "");
-      setTeteCm(entry.teteCm?.toString() ?? "");
-      setIsSubmitting(false);
-      openSheet(buildSheetProps());
+      openSheet({
+        ownerId: sheetOwnerId,
+        formType: 'croissance',
+        onSuccess: refreshToday,
+        editData: {
+          id: entry.id,
+          date: toDate(entry.date),
+          tailleCm: entry.tailleCm,
+          poidsKg: entry.poidsKg,
+          teteCm: entry.teteCm,
+        },
+        onDismiss: () => maybeReturnTo(returnToRef.current),
+      });
     },
-    [openSheet],
+    [openSheet, maybeReturnTo, refreshToday],
   );
 
   useFocusEffect(
@@ -357,222 +343,11 @@ export default function CroissanceScreen() {
       { waitForServer: true },
     );
     return () => unsubscribe();
-  }, [activeChild?.id]);
+  }, [activeChild?.id, refreshTick]);
 
   useEffect(() => {
     setSelectedPointIndex(null);
   }, [metric, entries]);
-
-  useEffect(() => {
-    if (!isSheetActive) return;
-    openSheet(buildSheetProps());
-  }, [
-    isSheetActive,
-    openSheet,
-    editingEntry,
-    isSubmitting,
-    dateHeure,
-    tailleCm,
-    poidsKg,
-    teteCm,
-    showDate,
-    showTime,
-  ]);
-
-  const parseNumber = (value: string) => {
-    const normalized = value.replace(",", ".");
-    const parsed = Number.parseFloat(normalized);
-    return Number.isNaN(parsed) ? undefined : parsed;
-  };
-
-  const handleSubmit = async () => {
-    if (isSubmitting || !activeChild) return;
-
-    const tailleValue = parseNumber(tailleCm);
-    const poidsValue = parseNumber(poidsKg);
-    const teteValue = parseNumber(teteCm);
-
-    if (!tailleValue && !poidsValue && !teteValue) {
-      showAlert("Attention", "Entrez au moins une mesure.");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const dataToSave = {
-        tailleCm: tailleValue,
-        poidsKg: poidsValue,
-        teteCm: teteValue,
-        date: dateHeure,
-      };
-
-      if (editingEntry) {
-        await modifierCroissance(activeChild.id, editingEntry.id, dataToSave);
-      } else {
-        await ajouterCroissance(activeChild.id, dataToSave);
-      }
-      closeSheet();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder la croissance.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDelete = () => {
-    if (!editingEntry || !activeChild) return;
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!editingEntry || !activeChild) return;
-    try {
-      setIsSubmitting(true);
-      await supprimerCroissance(activeChild.id, editingEntry.id);
-      setShowDeleteModal(false);
-      closeSheet();
-    } catch (error) {
-      console.error("Erreur lors de la suppression:", error);
-      showAlert("Erreur", "Impossible de supprimer la mesure.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const onChangeDate = (_event: any, selectedDate?: Date) => {
-    setShowDate(false);
-    if (selectedDate) {
-      setDateHeure((prev) => {
-        const newDate = new Date(prev);
-        newDate.setFullYear(
-          selectedDate.getFullYear(),
-          selectedDate.getMonth(),
-          selectedDate.getDate(),
-        );
-        return newDate;
-      });
-    }
-  };
-
-  const onChangeTime = (_event: any, selectedDate?: Date) => {
-    setShowTime(false);
-    if (selectedDate) {
-      setDateHeure((prev) => {
-        const newDate = new Date(prev);
-        newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-        return newDate;
-      });
-    }
-  };
-
-  function renderSheetContent() {
-    return (
-      <>
-        <Text style={styles.modalCategoryLabel}>Taille (cm)</Text>
-        <TextInput
-          value={tailleCm}
-          onChangeText={setTailleCm}
-          placeholder="ex: 62.5"
-          keyboardType="decimal-pad"
-          style={styles.input}
-        />
-
-        <Text style={styles.modalCategoryLabel}>Poids (kg)</Text>
-        <TextInput
-          value={poidsKg}
-          onChangeText={setPoidsKg}
-          placeholder="ex: 5.8"
-          keyboardType="decimal-pad"
-          style={styles.input}
-        />
-
-        <Text style={styles.modalCategoryLabel}>Tour de tête (cm)</Text>
-        <TextInput
-          value={teteCm}
-          onChangeText={setTeteCm}
-          placeholder="ex: 41"
-          keyboardType="decimal-pad"
-          style={styles.input}
-        />
-
-        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-        <View style={styles.dateTimeContainer}>
-          <Pressable
-            style={[styles.dateButton, isSubmitting && styles.buttonDisabled]}
-            onPress={() => setShowDate(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome name="calendar-alt" size={16} color={colors.tint} />
-            <Text style={styles.dateButtonText}>Date</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.dateButton, isSubmitting && styles.buttonDisabled]}
-            onPress={() => setShowTime(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome name="clock" size={16} color={colors.tint} />
-            <Text style={styles.dateButtonText}>Heure</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.selectedDateTime}>
-          <Text style={styles.selectedDate}>
-            {dateHeure.toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
-          <Text style={styles.selectedTime}>
-            {dateHeure.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-
-        {showDate && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeDate}
-          />
-        )}
-        {showTime && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="time"
-            is24Hour={true}
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeTime}
-          />
-        )}
-      </>
-    );
-  }
-
-  function buildSheetProps() {
-    const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
-    return {
-      ownerId: sheetOwnerId,
-      title: editingEntry ? "Modifier la croissance" : "Nouvelle mesure",
-      icon: "seedling",
-      accentColor: "#8BCF9B",
-      isEditing: !!editingEntry,
-      isSubmitting,
-      onSubmit: handleSubmit,
-      onDelete: editingEntry ? handleDelete : undefined,
-      children: renderSheetContent(),
-      onDismiss: () => {
-        setIsSubmitting(false);
-        setEditingEntry(null);
-        maybeReturnTo(returnTarget);
-      },
-    };
-  }
 
   const getDayLabel = useCallback((date: Date) => {
     const today = new Date();
@@ -1209,19 +984,6 @@ export default function CroissanceScreen() {
           )}
         </GestureHandlerRootView>
       </SafeAreaView>
-
-      <ConfirmModal
-        visible={showDeleteModal}
-        title="Supprimer la mesure"
-        message="Cette mesure de croissance sera supprimée définitivement."
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={colors.background}
-        textColor={colors.text}
-        onConfirm={confirmDelete}
-        onCancel={() => setShowDeleteModal(false)}
-        destructive
-      />
     </ThemedView>
   );
 }
@@ -1506,63 +1268,5 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     padding: 6,
-  },
-  modalCategoryLabel: {
-    alignSelf: "center",
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    paddingTop: 20,
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#d7dbe0",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    backgroundColor: "#fff",
-  },
-  dateTimeContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#4a4f55",
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  selectedTime: {
-    fontSize: 20,
-    color: "#374151",
-    fontWeight: "600",
-  },
-  buttonDisabled: {
-    opacity: 0.6,
   },
 });

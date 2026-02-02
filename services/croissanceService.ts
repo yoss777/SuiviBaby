@@ -58,7 +58,7 @@ export async function obtenirToutesLesCroissances(childId: string) {
     const q = query(
       collection(db, "croissances"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc"),
+      orderBy("date", "desc"),
     );
     const querySnapshot = await getDocs(q);
 
@@ -79,7 +79,7 @@ export function ecouterCroissances(
   const q = query(
     collection(db, "croissances"),
     where("childId", "==", childId),
-    orderBy("createdAt", "desc"),
+    orderBy("date", "desc"),
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {

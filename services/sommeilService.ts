@@ -59,7 +59,7 @@ export async function obtenirTousLesSommeils(childId: string) {
     const q = query(
       collection(db, "sommeils"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc"),
+      orderBy("date", "desc"),
     );
     const querySnapshot = await getDocs(q);
 
@@ -81,7 +81,7 @@ export async function obtenirSommeilsAvecLimite(
     const q = query(
       collection(db, "sommeils"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc"),
+      orderBy("date", "desc"),
       limit(nombreLimit),
     );
     const querySnapshot = await getDocs(q);
@@ -103,7 +103,7 @@ export function ecouterSommeils(
   const q = query(
     collection(db, "sommeils"),
     where("childId", "==", childId),
-    orderBy("createdAt", "desc"),
+    orderBy("date", "desc"),
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {

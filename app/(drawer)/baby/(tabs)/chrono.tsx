@@ -1,19 +1,23 @@
 import { ThemedView } from "@/components/themed-view";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { MOMENT_REPAS_LABELS } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterActivitesHybrid,
   ecouterBainsHybrid,
   ecouterBiberonsHybrid,
+  ecouterCroissancesHybrid,
   ecouterJalonsHybrid,
   ecouterMedicamentsHybrid,
   ecouterMictionsHybrid,
   ecouterPompagesHybrid,
   ecouterSellesHybrid,
+  ecouterSolidesHybrid,
   ecouterSommeilsHybrid,
   ecouterSymptomesHybrid,
   ecouterTemperaturesHybrid,
@@ -27,7 +31,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -63,7 +66,8 @@ type FilterType =
   | "diapers"
   | "routines"
   | "activities"
-  | "milestones";
+  | "milestones"
+  | "growth";
 
 type TimelineSection = {
   title: string;
@@ -132,7 +136,7 @@ const EVENT_CONFIG: Record<
   },
   solide: {
     color: "#8BC34A",
-    label: "Solide",
+    label: "Repas solide",
     short: "Solide",
     icon: { lib: "fa6", name: "bowl-food" },
   },
@@ -215,10 +219,10 @@ const EVENT_CONFIG: Record<
     icon: { lib: "fa6", name: "star" },
   },
   croissance: {
-    color: "#8B5CF6",
+    color: "#8BCF9B",
     label: "Croissance",
     short: "Croiss.",
-    icon: { lib: "fa6", name: "ruler" },
+    icon: { lib: "fa6", name: "seedling" },
   },
 };
 
@@ -267,6 +271,12 @@ const FILTER_CONFIG: Record<
     color: "#10b981",
     eventTypes: ["activite"],
   },
+  growth: {
+    label: "Croissance",
+    icon: "seedling",
+    color: "#8BCF9B",
+    eventTypes: ["croissance"],
+  },
   milestones: {
     label: "Jalons",
     icon: "star",
@@ -282,6 +292,7 @@ const ALL_FILTERS: FilterType[] = [
   "immunos",
   "diapers",
   "activities",
+  "growth",
   "milestones",
 ];
 const RANGE_OPTIONS: RangeOption[] = [7, 14, 30];
@@ -369,6 +380,14 @@ const BIBERON_TYPE_LABELS: Record<string, string> = {
   jus: "Jus",
   autre: "Autre",
 };
+const SOLIDE_TYPE_LABELS: Record<string, string> = {
+  puree: "Purée",
+  compote: "Compote",
+  cereales: "Céréales",
+  yaourt: "Yaourt",
+  morceaux: "Morceaux",
+  autre: "Autre",
+};
 
 function buildDetails(event: Event) {
   switch (event.type) {
@@ -379,6 +398,30 @@ function buildDetails(event: Event) {
       const quantity = event.quantite ? `${event.quantite} ml` : null;
       const parts = [typeLabel, quantity].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;
+    }
+    case "solide": {
+      const momentLabel = event.momentRepas
+        ? MOMENT_REPAS_LABELS[event.momentRepas]
+        : null;
+      const quantity = event.quantiteSolide ?? event.quantite;
+      const line2 =
+        momentLabel || quantity
+          ? `${momentLabel ?? ""}${momentLabel && quantity ? " · " : ""}${quantity ?? ""}`
+          : null;
+      const dishName = event.nomNouvelAliment || event.ingredients || "";
+      const likeLabel =
+        event.aime === undefined
+          ? null
+          : event.aime
+            ? dishName
+              ? `A aimé ce plat : ${dishName}`
+              : "A aimé son plat"
+            : dishName
+              ? `N'a pas aimé ce plat : ${dishName}`
+              : "N'a pas aimé le plat";
+      const line3 = likeLabel || null;
+      const parts = [line2, line3].filter(Boolean);
+      return parts.length > 0 ? parts.join("\n") : undefined;
     }
     case "tetee": {
       const left = event.dureeGauche ? `G ${event.dureeGauche} min` : null;
@@ -393,6 +436,14 @@ function buildDetails(event: Event) {
         : null;
       const parts = [left, right].filter(Boolean);
       return parts.length > 0 ? parts.join(" • ") : undefined;
+    }
+    case "croissance": {
+      const parts = [
+        event.poidsKg ? `${event.poidsKg} kg` : null,
+        event.tailleCm ? `${event.tailleCm} cm` : null,
+        event.teteCm ? `PC ${event.teteCm} cm` : null,
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : undefined;
     }
     case "miction":
       return event.volume ? `${event.volume} ml` : event.couleur;
@@ -449,9 +500,10 @@ function buildDetails(event: Event) {
         ? `${event.nomVitamine} · ${event.dosage}`
         : event.nomVitamine;
     case "activite": {
+      const isOther = event.typeActivite === "autre";
       const parts = [
         event.duree ? `${event.duree} min` : null,
-        event.description,
+        isOther ? null : event.description,
       ].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;
     }
@@ -478,39 +530,6 @@ function buildCounts(events: Event[]) {
 
 function orderCounts(counts: Map<EventType, number>) {
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
-}
-
-function getEditRoute(event: Event): string | null {
-  if (!event.id) return null;
-  const id = encodeURIComponent(event.id);
-  switch (event.type) {
-    case "tetee":
-      return `/baby/meals?tab=seins&editId=${id}&returnTo=chrono`;
-    case "biberon":
-      return `/baby/meals?tab=biberons&editId=${id}&returnTo=chrono`;
-    case "pompage":
-      return `/baby/pumping?editId=${id}&returnTo=chrono`;
-    case "miction":
-      return `/baby/diapers?tab=mictions&editId=${id}&returnTo=chrono`;
-    case "selle":
-      return `/baby/diapers?tab=selles&editId=${id}&returnTo=chrono`;
-    case "sommeil":
-      return `/baby/routines?editId=${id}&returnTo=chrono`;
-    case "bain":
-      return `/baby/routines?editId=${id}&returnTo=chrono`;
-    case "vaccin":
-    case "vitamine":
-    case "temperature":
-    case "medicament":
-    case "symptome":
-      return `/baby/soins?editId=${id}&returnTo=chrono`;
-    case "activite":
-      return `/baby/activities?editId=${id}&returnTo=chrono`;
-    case "jalon":
-      return `/baby/milestones?editId=${id}&returnTo=chrono`;
-    default:
-      return null;
-  }
 }
 
 // ============================================
@@ -729,13 +748,61 @@ const TimelineCard = React.memo(
     const isSleep = event.type === "sommeil";
     const isActivity = event.type === "activite";
     const isJalon = event.type === "jalon";
+    const isSolide = event.type === "solide";
+
+    const solideMomentLabel = isSolide
+      ? event.momentRepas
+        ? MOMENT_REPAS_LABELS[event.momentRepas]
+        : null
+      : null;
+    const solideQuantity = isSolide ? event.quantiteSolide ?? event.quantite : null;
+    const solideLine2 =
+      isSolide && (solideMomentLabel || solideQuantity)
+        ? `${solideMomentLabel ?? ""}${
+            solideMomentLabel && solideQuantity ? " · " : ""
+          }${solideQuantity ?? ""}`
+        : null;
+    const solideDishName = isSolide
+      ? event.nomNouvelAliment || event.ingredients || ""
+      : "";
+    const solideLikeLabel =
+      isSolide && event.aime !== undefined
+        ? event.aime
+          ? solideDishName
+            ? `A aimé ce plat : ${solideDishName}`
+            : "A aimé ce plat"
+          : solideDishName
+            ? `N'a pas aimé ce plat : ${solideDishName}`
+            : "N'a pas aimé ce plat"
+        : null;
+    const solideLikeColor =
+      isSolide && event.aime !== undefined
+        ? event.aime
+          ? "#16a34a"
+          : "#dc2626"
+        : undefined;
 
     // Determine the label based on event type
     let displayLabel = config.label;
     if (isSleep && typeof event.isNap === "boolean") {
       displayLabel = event.isNap ? "Sieste" : "Nuit de sommeil";
     } else if (isActivity && event.typeActivite) {
-      displayLabel = ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
+      if (event.typeActivite === "autre") {
+        const customLabel =
+          typeof event.description === "string"
+            ? event.description.trim()
+            : typeof event.note === "string"
+              ? event.note.trim()
+              : "";
+        if (customLabel) {
+          displayLabel = `Activité : ${customLabel}`;
+        } else {
+          displayLabel =
+            ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
+        }
+      } else {
+        displayLabel = ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
+      }
     } else if (isJalon && event.typeJalon) {
       if (event.typeJalon === "autre") {
         displayLabel = event.titre || JALON_TYPE_LABELS.autre || config.label;
@@ -857,7 +924,7 @@ const TimelineCard = React.memo(
               />
             </View>
           </View>
-          {(details || isOngoingSleep) && (
+          {!isSolide && (details || isOngoingSleep) && (
             <Text style={[styles.cardDetails, { color: secondaryTextColor }]}>
               {isOngoingSleep
                 ? details
@@ -865,6 +932,25 @@ const TimelineCard = React.memo(
                   : formatDuration(elapsedMinutes)
                 : details}
             </Text>
+          )}
+          {isSolide && (solideLine2 || solideLikeLabel) && (
+            <View style={styles.solideDetails}>
+              {solideLine2 && (
+                <Text style={[styles.solideDetailsText, { color: secondaryTextColor }]}>
+                  {solideLine2}
+                </Text>
+              )}
+              {solideLikeLabel && (
+                <Text
+                  style={[
+                    styles.solideDetailsText,
+                    { color: solideLikeColor ?? secondaryTextColor },
+                  ]}
+                >
+                  {solideLikeLabel}
+                </Text>
+              )}
+            </View>
           )}
           {event.type !== "activite" && event.note && (
             <View style={[styles.noteContainer, { borderColor }]}>
@@ -892,7 +978,10 @@ TimelineCard.displayName = "TimelineCard";
 export default function ChronoScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
+  const { openSheet: openSheetRaw } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
+  const sheetOwnerId = "chrono";
+  const [refreshTick, setRefreshTick] = useState(0);
   const [range, setRange] = useState<RangeOption>(14);
   const [maxRange, setMaxRange] = useState<RangeOption>(14);
   const [selectedTypes, setSelectedTypes] = useState<FilterType[]>(ALL_FILTERS);
@@ -913,6 +1002,23 @@ export default function ChronoScreen() {
   const headerScrollState = useSharedValue(0);
   const headerOwnerId = useRef(`chrono-${Math.random().toString(36).slice(2)}`);
   const headerRangeOpacity = useRef(new Animated.Value(0)).current;
+
+  const triggerRefresh = useCallback(() => {
+    setRefreshTick((prev) => prev + 1);
+  }, []);
+
+  const openSheet = useCallback(
+    (props: Parameters<typeof openSheetRaw>[0]) => {
+      openSheetRaw({
+        ...props,
+        onSuccess: () => {
+          props.onSuccess?.();
+          triggerRefresh();
+        },
+      });
+    },
+    [openSheetRaw, triggerRefresh],
+  );
 
   // Fade animation
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -995,7 +1101,9 @@ export default function ChronoScreen() {
     const loaded = {
       tetees: false,
       biberons: false,
+      solides: false,
       pompages: false,
+      croissances: false,
       mictions: false,
       selles: false,
       vaccins: false,
@@ -1010,7 +1118,9 @@ export default function ChronoScreen() {
     };
     let teteesData: Event[] = [];
     let biberonsData: Event[] = [];
+    let solidesData: Event[] = [];
     let pompagesData: Event[] = [];
+    let croissancesData: Event[] = [];
     let mictionsData: Event[] = [];
     let sellesData: Event[] = [];
     let vaccinsData: Event[] = [];
@@ -1027,7 +1137,9 @@ export default function ChronoScreen() {
       const merged = [
         ...teteesData,
         ...biberonsData,
+        ...solidesData,
         ...pompagesData,
+        ...croissancesData,
         ...mictionsData,
         ...sellesData,
         ...temperaturesData,
@@ -1072,11 +1184,29 @@ export default function ChronoScreen() {
       },
       { depuis: since, waitForServer: true },
     );
+    const unsubscribeSolides = ecouterSolidesHybrid(
+      activeChild.id,
+      (data) => {
+        solidesData = data;
+        loaded.solides = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
     const unsubscribePompages = ecouterPompagesHybrid(
       activeChild.id,
       (data) => {
         pompagesData = data;
         loaded.pompages = true;
+        merge();
+      },
+      { depuis: since, waitForServer: true },
+    );
+    const unsubscribeCroissances = ecouterCroissancesHybrid(
+      activeChild.id,
+      (data) => {
+        croissancesData = data;
+        loaded.croissances = true;
         merge();
       },
       { depuis: since, waitForServer: true },
@@ -1184,7 +1314,9 @@ export default function ChronoScreen() {
     return () => {
       unsubscribeTetees();
       unsubscribeBiberons();
+      unsubscribeSolides();
       unsubscribePompages();
+      unsubscribeCroissances();
       unsubscribeMictions();
       unsubscribeSelles();
       unsubscribeVaccins();
@@ -1198,7 +1330,7 @@ export default function ChronoScreen() {
       unsubscribeJalons();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChild?.id, maxRange, currentDay]);
+  }, [activeChild?.id, maxRange, currentDay, refreshTick]);
 
   // Reset on child change
   useEffect(() => {
@@ -1388,14 +1520,243 @@ export default function ChronoScreen() {
     );
   }, []);
 
-  const handleEdit = useCallback((event: Event) => {
-    const route = getEditRoute(event);
-    if (!route) {
+  const handleEdit = useCallback(
+    (event: Event) => {
+      if (!event.id) {
+        setInfoModalMessage("Cet evenement ne peut pas etre modifie ici.");
+        return;
+      }
+
+      const eventDate = toDate(event.date);
+
+      // Handle meals (tetee, biberon, solide)
+      if (
+        event.type === "tetee" ||
+        event.type === "biberon" ||
+        event.type === "solide"
+      ) {
+        const e = event as any;
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "meals",
+          mealType: event.type,
+          editData: {
+            id: event.id,
+            type: event.type,
+            date: eventDate,
+            quantite: e.quantite,
+            dureeGauche: e.dureeGauche,
+            dureeDroite: e.dureeDroite,
+            typeBiberon: e.typeBiberon,
+            typeSolide: e.typeSolide,
+            momentRepas: e.momentRepas,
+            ingredients: e.ingredients,
+            quantiteSolide: e.quantiteSolide,
+            nouveauAliment: e.nouveauAliment,
+            nomNouvelAliment: e.nomNouvelAliment,
+            allergenes: e.allergenes,
+            reaction: e.reaction,
+            aime: e.aime,
+          },
+        });
+        return;
+      }
+
+      // Handle pumping
+      if (event.type === "pompage") {
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "pumping",
+          editData: {
+            id: event.id,
+            date: eventDate,
+            quantiteGauche: event.quantiteGauche,
+            quantiteDroite: event.quantiteDroite,
+            duree: event.duree,
+            note: event.note,
+          },
+        });
+        return;
+      }
+
+      // Handle diapers (miction, selle)
+      if (event.type === "miction") {
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "diapers",
+          diapersType: "miction",
+          editData: {
+            id: event.id,
+            type: "miction",
+            date: eventDate,
+            couleur: event.couleur,
+          },
+        });
+        return;
+      }
+      if (event.type === "selle") {
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "diapers",
+          diapersType: "selle",
+          editData: {
+            id: event.id,
+            type: "selle",
+            date: eventDate,
+            consistance: event.consistance,
+            quantite: event.quantite,
+          },
+        });
+        return;
+      }
+
+      // Handle routines (sommeil, bain)
+      if (event.type === "sommeil") {
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "routines",
+          routineType: "sommeil",
+          sleepMode: event.isNap ? "nap" : "night",
+          editData: {
+            id: event.id,
+            type: "sommeil",
+            date: toDate(event.heureDebut ?? event.date),
+            heureDebut: toDate(event.heureDebut ?? event.date),
+            heureFin: event.heureFin ? toDate(event.heureFin) : undefined,
+            isNap: event.isNap,
+            location: event.location,
+            quality: event.quality,
+            note: event.note,
+          },
+        });
+        return;
+      }
+      if (event.type === "bain") {
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "routines",
+          routineType: "bain",
+          editData: {
+            id: event.id,
+            type: "bain",
+            date: eventDate,
+            duree: event.duree,
+            temperatureEau: event.temperatureEau,
+            note: event.note,
+          },
+        });
+        return;
+      }
+
+      // Handle soins (temperature, medicament, symptome, vaccin, vitamine)
+      if (
+        event.type === "temperature" ||
+        event.type === "medicament" ||
+        event.type === "symptome" ||
+        event.type === "vaccin" ||
+        event.type === "vitamine"
+      ) {
+        const e = event as any;
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "soins",
+          soinsType: event.type,
+          editData: {
+            id: event.id,
+            type: event.type,
+            date: eventDate,
+            valeur: e.valeur,
+            modePrise: e.modePrise,
+            nomMedicament: e.nomMedicament,
+            dosage: e.dosage,
+            symptomes: e.symptomes,
+            intensite: e.intensite,
+            nomVaccin: e.nomVaccin,
+            nomVitamine: e.nomVitamine,
+            note: e.note,
+          },
+        });
+        return;
+      }
+
+      // Handle activities
+      if (event.type === "activite") {
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "activities",
+          activiteType:
+            (event.typeActivite as
+              | "tummyTime"
+              | "jeux"
+              | "lecture"
+              | "promenade"
+              | "massage"
+              | "musique"
+              | "eveil"
+              | "sortie"
+              | "autre") ?? "autre",
+          editData: {
+            id: event.id,
+            typeActivite:
+              (event.typeActivite as
+                | "tummyTime"
+                | "jeux"
+                | "lecture"
+                | "promenade"
+                | "massage"
+                | "musique"
+                | "eveil"
+                | "sortie"
+                | "autre") ?? "autre",
+            date: eventDate,
+            duree: event.duree,
+            description: event.description,
+          },
+        });
+        return;
+      }
+
+      // Handle milestones (jalon)
+      if (event.type === "jalon") {
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "milestones",
+          jalonType:
+            (event.typeJalon as
+              | "dent"
+              | "pas"
+              | "sourire"
+              | "mot"
+              | "humeur"
+              | "photo"
+              | "autre") ?? "autre",
+          editData: {
+            id: event.id,
+            typeJalon:
+              (event.typeJalon as
+                | "dent"
+                | "pas"
+                | "sourire"
+                | "mot"
+                | "humeur"
+                | "photo"
+                | "autre") ?? "autre",
+            titre: event.titre,
+            description: event.description,
+            note: event.note,
+            humeur: event.humeur,
+            photos: event.photos,
+            date: eventDate,
+          },
+        });
+        return;
+      }
+
+      // Fallback for unsupported types
       setInfoModalMessage("Cet evenement ne peut pas etre modifie ici.");
-      return;
-    }
-    router.push(route as any);
-  }, []);
+    },
+    [openSheet],
+  );
 
   const handleEventLongPress = useCallback(
     (event: Event) => {
@@ -1819,6 +2180,12 @@ const styles = StyleSheet.create({
   },
   cardDetails: {
     marginTop: 6,
+    fontSize: 12,
+  },
+  solideDetails: {
+    marginTop: 6,
+  },
+  solideDetailsText: {
     fontSize: 12,
   },
   noteContainer: {

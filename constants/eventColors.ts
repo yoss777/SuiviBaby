@@ -51,6 +51,10 @@ export const eventColors = {
     dark: "#ec4899", // Pink
     light: "#fde7f3",
   },
+  croissance: {
+    dark: "#8BCF9B", // Soft green (seedling)
+    light: "#e8f5eb",
+  },
   default: {
     dark: "#6c757d", // Gray
     light: "#f8f9fa",

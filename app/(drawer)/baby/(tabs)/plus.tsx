@@ -23,6 +23,13 @@ const ITEMS = [
     route: "/baby/stats",
   },
   {
+    title: "Croissance",
+    subtitle: "Poids, taille et tour de tête",
+    icon: "seedling",
+    color: "#8BCF9B",
+    route: "/baby/growth",
+  },
+  {
     title: "Repas",
     subtitle: "Biberons et tétées",
     icon: "baby",

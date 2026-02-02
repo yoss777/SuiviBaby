@@ -1,6 +1,5 @@
 import { eventColors } from "@/constants/eventColors";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -53,6 +52,7 @@ type SwipeGalleryProps = {
   backgroundColor?: string;
   onClose: () => void;
   onAddPhoto: () => void;
+  onEdit?: (photoId: string) => void;
   onLike?: (photoId: string) => void;
   onDownload?: (
     photoId: string,
@@ -147,6 +147,7 @@ export const SwipeGallery = ({
   backgroundColor,
   onClose,
   onAddPhoto,
+  onEdit,
   onLike,
   onDownload,
   likesInfo = {},
@@ -280,9 +281,9 @@ export const SwipeGallery = ({
     const item = galleryItems[currentIndex];
     if (item.type === "photo") {
       onClose();
-      router.push(`/baby/milestones?editId=${item.photo.id}&returnTo=moments`);
+      onEdit?.(item.photo.id);
     }
-  }, [currentIndex, galleryItems, onClose]);
+  }, [currentIndex, galleryItems, onClose, onEdit]);
 
   // Handle add photo
   const handleAddPhoto = useCallback(() => {

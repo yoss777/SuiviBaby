@@ -22,7 +22,7 @@ export const EVENT_CONFIG: Record<string, EventConfigItem> = {
     color: "#FF5722",
   },
   solide: {
-    label: "Solide",
+    label: "Repas solide",
     icon: { lib: "fa6", name: "bowl-food" },
     color: "#8BC34A",
   },
@@ -30,6 +30,11 @@ export const EVENT_CONFIG: Record<string, EventConfigItem> = {
     label: "Pompage",
     icon: { lib: "fa6", name: "pump-medical" },
     color: "#28a745",
+  },
+  croissance: {
+    label: "Croissance",
+    icon: { lib: "fa6", name: "seedling" },
+    color: "#8BCF9B",
   },
   sommeil: {
     label: "Sommeil",

@@ -1,37 +1,18 @@
 import { ThemedText } from "@/components/themed-text";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import {
-  ALLERGENES_OPTIONS,
   BIBERON_TYPE_LABELS,
-  BIBERON_TYPE_OPTIONS,
   MOMENT_REPAS_LABELS,
-  MOMENT_REPAS_OPTIONS,
-  QUANTITE_SOLIDE_OPTIONS,
-  REACTION_OPTIONS,
   SOLIDE_TYPE_LABELS,
-  SOLIDE_TYPE_OPTIONS,
 } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
-import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import {
-  ajouterBiberon,
-  ajouterSolide,
-  ajouterTetee,
-  modifierBiberon,
-  modifierSolide,
-  modifierTetee,
-  supprimerSolide,
-  supprimerTetee,
-} from "@/migration/eventsDoubleWriteService";
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
   ecouterSolidesHybrid as ecouterSolides,
@@ -40,17 +21,8 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { BiberonEvent, SolideEvent } from "@/services/eventsService";
-
-// Helper to remove undefined values from objects (Firebase doesn't accept undefined)
-function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined)
-  ) as T;
-}
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { useNetInfo } from "@react-native-community/netinfo";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -59,13 +31,9 @@ import {
   BackHandler,
   FlatList,
   InteractionManager,
-  Platform,
   Pressable,
   StyleSheet,
-  Switch,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -117,15 +85,11 @@ export default function MealsScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
-  const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
-  const { showAlert } = useModal();
-  const { showToast } = useToast();
+  const { openSheet, closeSheet, isOpen } = useSheet();
   const headerOwnerId = useRef(`meals-${Math.random().toString(36).slice(2)}`);
   const navigation = useNavigation();
   const { setHeaderLeft } = useHeaderLeft();
-  const netInfo = useNetInfo();
-  const isOffline =
-    netInfo.isInternetReachable === false || netInfo.isConnected === false;
+  const sheetOwnerId = "meals";
 
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
@@ -146,44 +110,15 @@ export default function MealsScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
-  const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
 
-  // États du formulaire
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  // États du formulaire (simplifié - le MealsForm gère les détails)
   const [mealType, setMealType] = useState<MealType>("tetee");
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
-  const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [quantite, setQuantite] = useState<number>(100);
-  const [typeBiberon, setTypeBiberon] =
-    useState<BiberonEvent["typeBiberon"]>("lait_maternel");
-  const [leftSeconds, setLeftSeconds] = useState(0);
-  const [rightSeconds, setRightSeconds] = useState(0);
-  const [runningSide, setRunningSide] = useState<"left" | "right" | null>(null);
-  const sheetOwnerId = "meals";
-  const isSheetActive = viewProps?.ownerId === sheetOwnerId;
+  const [pendingEditData, setPendingEditData] = useState<Meal | null>(null);
 
-  // États spécifiques aux solides
+  // États spécifiques aux solides (pour le listener)
   const [solidesLoaded, setSolidesLoaded] = useState(false);
-  const [typeSolide, setTypeSolide] =
-    useState<SolideEvent["typeSolide"]>("puree");
-  const [momentRepas, setMomentRepas] =
-    useState<SolideEvent["momentRepas"]>("dejeuner");
-  const [ingredients, setIngredients] = useState("");
-  const [quantiteSolide, setQuantiteSolide] =
-    useState<SolideEvent["quantite"]>("moyen");
-  const [nouveauAliment, setNouveauAliment] = useState(false);
-  const [nomNouvelAliment, setNomNouvelAliment] = useState("");
-  const [allergenes, setAllergenes] = useState<string[]>([]);
-  const [reaction, setReaction] = useState<SolideEvent["reaction"]>("aucune");
-  const [aime, setAime] = useState<boolean | undefined>(undefined);
-  const [note, setNote] = useState("");
-
-  // États des pickers
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
 
   // Récupérer les paramètres de l'URL
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
@@ -191,11 +126,6 @@ export default function MealsScreen() {
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
-
-  // Ref pour la gestion du picker avec accélération
-  const intervalRef = useRef<number | undefined>(undefined);
-  const timerIntervalRef = useRef<number | undefined>(undefined);
-  const timerTickRef = useRef<number | null>(null);
 
   // ============================================
   // EFFECTS - URL PARAMS
@@ -221,49 +151,17 @@ export default function MealsScreen() {
     });
   }, []);
 
-  const prepareAddModal = useCallback(
-    (preferredType?: "seins" | "biberons") => {
-      setDateHeure(new Date());
-      setEditingMeal(null);
-      setIsSubmitting(false);
-      setLeftSeconds(0);
-      setRightSeconds(0);
-      setRunningSide(null);
-
-      // Reset biberon fields
-      setTypeBiberon("lait_infantile");
-
-      // Reset solide fields
-      setTypeSolide("puree");
-      setMomentRepas("dejeuner");
-      setIngredients("");
-      setQuantiteSolide("moyen");
-      setNouveauAliment(false);
-      setNomNouvelAliment("");
-      setAllergenes([]);
-      setReaction("aucune");
-      setAime(undefined);
-
-      if (preferredType === "seins") {
-        setMealType("tetee");
-      } else if (preferredType === "biberons") {
-        setMealType("biberon");
-        setQuantite(100);
-      } else {
-        setMealType("tetee");
-      }
-    },
-    [],
-  );
-
-  const openAddModal = useCallback(
-    (preferredType?: "seins" | "biberons") => {
-      prepareAddModal(preferredType);
-      setPendingMode("add");
-      setPendingOpen(true);
-    },
-    [prepareAddModal],
-  );
+  const openAddModal = useCallback((preferredType?: "seins" | "biberons") => {
+    const type: MealType =
+      preferredType === "seins"
+        ? "tetee"
+        : preferredType === "biberons"
+          ? "biberon"
+          : "tetee";
+    setMealType(type);
+    setPendingEditData(null);
+    setPendingOpen(true);
+  }, []);
 
   // Définir les boutons du header (calendrier + ajouter)
   useFocusEffect(
@@ -398,33 +296,68 @@ export default function MealsScreen() {
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
-      setPendingMode("add");
+      const type: MealType =
+        tab === "seins" ? "tetee" : tab === "biberons" ? "biberon" : "tetee";
+      setMealType(type);
+      setPendingEditData(null);
       setPendingOpen(true);
-    }, [openModal]),
+    }, [openModal, tab]),
+  );
+
+  // Helper pour construire editData depuis un Meal
+  const buildEditData = useCallback(
+    (meal: Meal) => ({
+      id: meal.id,
+      type: meal.type || ("tetee" as MealType),
+      date: new Date(meal.date.seconds * 1000),
+      dureeGauche: meal.dureeGauche,
+      dureeDroite: meal.dureeDroite,
+      quantite: typeof meal.quantite === "number" ? meal.quantite : undefined,
+      typeBiberon: meal.typeBiberon,
+      typeSolide: meal.typeSolide,
+      momentRepas: meal.momentRepas,
+      ingredients: meal.ingredients,
+      quantiteSolide: meal.quantite as SolideEvent["quantite"],
+      nouveauAliment: meal.nouveauAliment,
+      nomNouvelAliment: meal.nomNouvelAliment,
+      allergenes: meal.allergenes,
+      reaction: meal.reaction,
+      aime: meal.aime,
+    }),
+    [],
   );
 
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
-      if (pendingMode !== "edit") {
-        prepareAddModal(tab as "seins" | "biberons" | undefined);
-      }
-      openSheet(buildSheetProps());
+      const returnTarget = returnTargetParam ?? returnToRef.current;
+
+      openSheet({
+        ownerId: sheetOwnerId,
+        formType: "meals",
+        mealType: pendingEditData?.type || mealType,
+        editData: pendingEditData ? buildEditData(pendingEditData) : undefined,
+        onSuccess: ensureTodayInRange,
+        onDismiss: () => {
+          editIdRef.current = null;
+          maybeReturnTo(returnTarget);
+        },
+      });
       navigation.setParams({ openModal: undefined, editId: undefined });
       setPendingOpen(false);
-      setPendingMode(null);
+      setPendingEditData(null);
     });
     return () => task.cancel?.();
   }, [
     pendingOpen,
     layoutReady,
-    pendingMode,
-    tab,
-    router,
-    returnTo,
+    mealType,
+    pendingEditData,
     openSheet,
-    prepareAddModal,
+    navigation,
+    buildEditData,
+    ensureTodayInRange,
   ]);
 
   useEffect(() => {
@@ -435,9 +368,10 @@ export default function MealsScreen() {
     if (!target) return;
     stashReturnTo();
     editIdRef.current = normalizedId;
-    openEditModal(target);
+    setPendingEditData(target);
+    setPendingOpen(true);
     navigation.setParams({ openModal: undefined, editId: undefined });
-  }, [editId, layoutReady, meals, router, returnTo]);
+  }, [editId, layoutReady, meals, navigation]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -524,9 +458,6 @@ export default function MealsScreen() {
     setHasMore(true);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-    setLeftSeconds(0);
-    setRightSeconds(0);
-    setRunningSide(null);
   }, [activeChild?.id]);
 
   const isMealsLoading = !(teteesLoaded && biberonsLoaded && solidesLoaded);
@@ -700,18 +631,6 @@ export default function MealsScreen() {
     setGroupedMeals(grouped);
   }, [meals, selectedFilter, selectedDate, showCalendar]);
 
-  // Nettoyage de l'intervalle lors du démontage
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-      }
-    };
-  }, []);
-
   // ============================================
   // HELPERS - CALENDAR
   // ============================================
@@ -838,34 +757,6 @@ export default function MealsScreen() {
   };
 
   // ============================================
-  // HELPERS - QUANTITY PICKER
-  // ============================================
-
-  const handlePressIn = (action: () => void) => {
-    action();
-
-    let speed = 200; // Démarre lentement
-
-    const accelerate = () => {
-      action();
-      if (speed > 50) {
-        speed -= 20; // Accélère progressivement
-        clearInterval(intervalRef.current);
-        intervalRef.current = setInterval(accelerate, speed);
-      }
-    };
-
-    intervalRef.current = setInterval(accelerate, speed);
-  };
-
-  const handlePressOut = () => {
-    if (intervalRef.current !== undefined) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = undefined;
-    }
-  };
-
-  // ============================================
   // HELPERS - UI
   // ============================================
 
@@ -884,43 +775,7 @@ export default function MealsScreen() {
   // ============================================
 
   const openEditModal = (meal: Meal) => {
-    setDateHeure(new Date(meal.date.seconds * 1000));
-    setEditingMeal(meal);
-    setIsSubmitting(false);
-    setPendingMode("edit");
-
-    // Déterminer le type (avec fallback pour anciennes données)
-    const type = meal.type || "tetee";
-    setMealType(type);
-
-    if (type === "tetee") {
-      const leftDuration = Math.max(
-        0,
-        Math.round((meal.dureeGauche ?? 0) * 60),
-      );
-      const rightDuration = Math.max(
-        0,
-        Math.round((meal.dureeDroite ?? 0) * 60),
-      );
-      setLeftSeconds(leftDuration);
-      setRightSeconds(rightDuration);
-      setRunningSide(null);
-    } else if (type === "biberon") {
-      const quantity = meal.quantite ?? 100;
-      setQuantite(quantity);
-      setTypeBiberon(meal.typeBiberon || "lait_maternel");
-    } else if (type === "solide") {
-      setTypeSolide(meal.typeSolide || "puree");
-      setMomentRepas(meal.momentRepas || "dejeuner");
-      setIngredients(meal.ingredients || "");
-      setQuantiteSolide((meal.quantite as any) || "moyen");
-      setNouveauAliment(meal.nouveauAliment || false);
-      setNomNouvelAliment(meal.nomNouvelAliment || "");
-      setAllergenes(meal.allergenes || []);
-      setReaction(meal.reaction || "aucune");
-      setAime(meal.aime);
-    }
-
+    setPendingEditData(meal);
     setPendingOpen(true);
   };
 
@@ -941,7 +796,7 @@ export default function MealsScreen() {
     stashReturnTo();
   }, [returnTo]);
 
-  const maybeReturnTo = (targetOverride?: string | null) => {
+  const maybeReturnTo = useCallback((targetOverride?: string | null) => {
     const target = targetOverride ?? returnToRef.current;
     returnToRef.current = null;
     if (target === "home") {
@@ -951,988 +806,25 @@ export default function MealsScreen() {
     } else if (target === "journal") {
       router.replace("/baby/chrono");
     }
-  };
+  }, []);
 
-  const closeModal = () => {
-    setRunningSide(null);
-    closeSheet();
-  };
+  const ensureTodayInRange = useCallback(() => {
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
 
-  // ============================================
-  // HANDLERS - CRUD
-  // ============================================
-
-  const handleSubmit = async () => {
-    if (isSubmitting || !activeChild) return;
-
-    try {
-      setIsSubmitting(true);
-
-      if (mealType === "tetee") {
-        const leftMinutes = Math.round(leftSeconds / 60);
-        const rightMinutes = Math.round(rightSeconds / 60);
-        const dataToSave = removeUndefined({
-          type: mealType,
-          quantite: null,
-          coteGauche: leftSeconds > 0,
-          coteDroit: rightSeconds > 0,
-          dureeGauche: leftMinutes > 0 ? leftMinutes : undefined,
-          dureeDroite: rightMinutes > 0 ? rightMinutes : undefined,
-          date: dateHeure,
-        });
-
-        if (editingMeal) {
-          await modifierTetee(activeChild.id, editingMeal.id, dataToSave);
-        } else {
-          await ajouterTetee(activeChild.id, dataToSave);
-        }
-      } else if (mealType === "biberon") {
-        const dataToSave = removeUndefined({
-          type: mealType,
-          quantite,
-          typeBiberon,
-          date: dateHeure,
-        });
-
-        if (editingMeal) {
-          await modifierBiberon(activeChild.id, editingMeal.id, dataToSave);
-        } else {
-          await ajouterBiberon(activeChild.id, dataToSave);
-        }
-      } else if (mealType === "solide") {
-        const dataToSave = removeUndefined({
-          type: mealType,
-          typeSolide,
-          momentRepas,
-          ingredients: ingredients.trim() || undefined,
-          quantite: quantiteSolide,
-          // Données nouvel aliment uniquement si type = autre ET switch activé
-          nouveauAliment: typeSolide === "autre" ? nouveauAliment : false,
-          nomNouvelAliment:
-            typeSolide === "autre" && nouveauAliment && nomNouvelAliment.trim()
-              ? nomNouvelAliment.trim()
-              : undefined,
-          allergenes:
-            typeSolide === "autre" && nouveauAliment && allergenes.length > 0
-              ? allergenes
-              : undefined,
-          reaction:
-            typeSolide === "autre" && nouveauAliment ? reaction : undefined,
-          aime,
-          date: dateHeure,
-        });
-
-        if (editingMeal) {
-          await modifierSolide(activeChild.id, editingMeal.id, dataToSave);
-        } else {
-          await ajouterSolide(activeChild.id, dataToSave);
-        }
+    setRangeEndDate((prev) => {
+      if (!prev) {
+        setDaysWindow(14);
+        return endOfToday;
       }
-
-      if (isOffline) {
-        showToast(
-          editingMeal
-            ? "Modification en attente de synchronisation"
-            : "Ajout en attente de synchronisation",
-        );
-      }
-      closeModal();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde du repas:", error);
-      showAlert(
-        "Erreur",
-        "Impossible de sauvegarder le repas. Veuillez réessayer.",
+      if (prev >= endOfToday) return prev;
+      const diffDays = Math.ceil(
+        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
       );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDelete = () => {
-    if (isSubmitting || !editingMeal || !activeChild) return;
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    if (isSubmitting || !editingMeal || !activeChild) return;
-
-    try {
-      setIsSubmitting(true);
-      if (editingMeal.type === "solide") {
-        await supprimerSolide(activeChild.id, editingMeal.id);
-      } else {
-        await supprimerTetee(activeChild.id, editingMeal.id);
-      }
-      if (isOffline) {
-        showToast("Suppression en attente de synchronisation");
-      }
-      setShowDeleteModal(false);
-      closeModal();
-    } catch (error) {
-      console.error("Erreur lors de la suppression:", error);
-      showAlert(
-        "Erreur",
-        "Impossible de supprimer le repas. Veuillez réessayer.",
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const formatDuration = (totalSeconds: number) => {
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = Math.max(0, totalSeconds % 60);
-    return `${minutes}:${String(seconds).padStart(2, "0")}`;
-  };
-
-  const toggleChrono = (side: "left" | "right") => {
-    if (isSubmitting || editingMeal) return;
-    setRunningSide((prev) => (prev === side ? null : side));
-  };
-
-  const resetChrono = (side: "left" | "right") => {
-    if (isSubmitting) return;
-    if (side === "left") {
-      setLeftSeconds(0);
-    } else {
-      setRightSeconds(0);
-    }
-    setRunningSide((prev) => (prev === side ? null : prev));
-  };
-
-  useEffect(() => {
-    if (mealType !== "tetee") {
-      setRunningSide(null);
-    }
-  }, [mealType]);
-
-  useEffect(() => {
-    if (!runningSide || mealType !== "tetee" || editingMeal) {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = undefined;
-      }
-      timerTickRef.current = null;
-      return;
-    }
-
-    timerTickRef.current = Date.now();
-    timerIntervalRef.current = setInterval(() => {
-      const now = Date.now();
-      const lastTick = timerTickRef.current ?? now;
-      const deltaSeconds = Math.floor((now - lastTick) / 1000);
-      if (deltaSeconds <= 0) return;
-      timerTickRef.current = lastTick + deltaSeconds * 1000;
-      if (runningSide === "left") {
-        setLeftSeconds((prev) => prev + deltaSeconds);
-      } else {
-        setRightSeconds((prev) => prev + deltaSeconds);
-      }
-    }, 500);
-
-    return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = undefined;
-      }
-      timerTickRef.current = null;
-    };
-  }, [runningSide, mealType, editingMeal]);
-
-  function renderSheetContent() {
-    const totalSeconds = leftSeconds + rightSeconds;
-    return (
-      <View style={styles.sheetContent}>
-        <Text style={styles.modalCategoryLabel}>Type de repas</Text>
-        <View style={styles.typeRow}>
-          <TouchableOpacity
-            style={[
-              styles.typeChip,
-              mealType === "tetee" && styles.typeChipActive,
-              isSubmitting && styles.typeChipDisabled,
-            ]}
-            onPress={() => setMealType("tetee")}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="person-breastfeeding"
-              size={16}
-              color={mealType === "tetee" ? "white" : "#666"}
-            />
-            <Text
-              style={[
-                styles.typeChipText,
-                mealType === "tetee" && styles.typeChipTextActive,
-                isSubmitting && styles.typeTextDisabled,
-              ]}
-            >
-              Tétée
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.typeChip,
-              mealType === "biberon" && styles.typeChipActive,
-              isSubmitting && styles.typeChipDisabled,
-            ]}
-            onPress={() => {
-              setMealType("biberon");
-              setQuantite(100);
-              setRunningSide(null);
-            }}
-            disabled={isSubmitting}
-          >
-            <MaterialCommunityIcons
-              name="baby-bottle"
-              size={18}
-              color={mealType === "biberon" ? "white" : "#666"}
-            />
-            <Text
-              style={[
-                styles.typeChipText,
-                mealType === "biberon" && styles.typeChipTextActive,
-                isSubmitting && styles.typeTextDisabled,
-              ]}
-            >
-              Biberon
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.typeChip,
-              mealType === "solide" && styles.typeChipActive,
-              isSubmitting && styles.typeChipDisabled,
-            ]}
-            onPress={() => {
-              setMealType("solide");
-              setRunningSide(null);
-            }}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="bowl-food"
-              size={16}
-              color={mealType === "solide" ? "white" : "#666"}
-            />
-            <Text
-              style={[
-                styles.typeChipText,
-                mealType === "solide" && styles.typeChipTextActive,
-                isSubmitting && styles.typeTextDisabled,
-              ]}
-            >
-              Solide
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {mealType === "biberon" && (
-          <>
-            <Text style={styles.modalCategoryLabel}>Type de biberon</Text>
-            <View style={styles.biberonTypeGrid}>
-              {BIBERON_TYPE_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.biberonTypeChip,
-                    typeBiberon === option.value &&
-                      styles.biberonTypeChipActive,
-                    isSubmitting && styles.biberonTypeChipDisabled,
-                  ]}
-                  onPress={() => setTypeBiberon(option.value)}
-                  disabled={isSubmitting}
-                >
-                  <Text
-                    style={[
-                      styles.biberonTypeChipText,
-                      typeBiberon === option.value &&
-                        styles.biberonTypeChipTextActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.modalCategoryLabel}>Quantité</Text>
-            <View style={styles.quantityRow}>
-              <TouchableOpacity
-                style={[
-                  styles.quantityButton,
-                  isSubmitting && styles.quantityButtonDisabled,
-                ]}
-                onPressIn={() =>
-                  handlePressIn(() => setQuantite((q) => Math.max(0, q - 5)))
-                }
-                onPressOut={handlePressOut}
-                disabled={isSubmitting}
-              >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
-                    isSubmitting && styles.quantityButtonTextDisabled,
-                  ]}
-                >
-                  -
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.quantityValue}>{quantite} ml</Text>
-              <TouchableOpacity
-                style={[
-                  styles.quantityButton,
-                  isSubmitting && styles.quantityButtonDisabled,
-                ]}
-                onPressIn={() => handlePressIn(() => setQuantite((q) => q + 5))}
-                onPressOut={handlePressOut}
-                disabled={isSubmitting}
-              >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
-                    isSubmitting && styles.quantityButtonTextDisabled,
-                  ]}
-                >
-                  +
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
-        {mealType === "tetee" && (
-          <>
-            <Text style={styles.modalCategoryLabel}>Chronomètre tétée</Text>
-            <View style={styles.chronoContainer}>
-              <View style={styles.chronoCard}>
-                <Text style={styles.chronoLabel}>Gauche</Text>
-                <Text style={styles.chronoTime}>
-                  {formatDuration(leftSeconds)}
-                </Text>
-                {editingMeal ? (
-                  <View style={styles.chronoAdjustRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.chronoAdjustButton,
-                        isSubmitting && styles.chronoAdjustButtonDisabled,
-                      ]}
-                      onPressIn={() =>
-                        handlePressIn(() =>
-                          setLeftSeconds((prev) => Math.max(0, prev - 60)),
-                        )
-                      }
-                      onPressOut={handlePressOut}
-                      disabled={isSubmitting}
-                    >
-                      <Text style={styles.chronoAdjustButtonText}>-</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.chronoAdjustValue}>
-                      {Math.round(leftSeconds / 60)} min
-                    </Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.chronoAdjustButton,
-                        isSubmitting && styles.chronoAdjustButtonDisabled,
-                      ]}
-                      onPressIn={() =>
-                        handlePressIn(() => setLeftSeconds((prev) => prev + 60))
-                      }
-                      onPressOut={handlePressOut}
-                      disabled={isSubmitting}
-                    >
-                      <Text style={styles.chronoAdjustButtonText}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={styles.chronoControlRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.chronoControlButton,
-                        runningSide === "left" &&
-                          styles.chronoControlButtonActive,
-                      ]}
-                      onPress={() => toggleChrono("left")}
-                      disabled={isSubmitting}
-                    >
-                      <Ionicons
-                        name={runningSide === "left" ? "pause" : "play"}
-                        size={16}
-                        color={runningSide === "left" ? "white" : "#333"}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.chronoControlButton,
-                        leftSeconds === 0 && styles.chronoControlButtonDisabled,
-                      ]}
-                      onPress={() => resetChrono("left")}
-                      disabled={isSubmitting || leftSeconds === 0}
-                    >
-                      <Ionicons
-                        name="refresh"
-                        size={16}
-                        color={leftSeconds === 0 ? "#999" : "#333"}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.chronoCard}>
-                <Text style={styles.chronoLabel}>Droit</Text>
-                <Text style={styles.chronoTime}>
-                  {formatDuration(rightSeconds)}
-                </Text>
-                {editingMeal ? (
-                  <View style={styles.chronoAdjustRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.chronoAdjustButton,
-                        isSubmitting && styles.chronoAdjustButtonDisabled,
-                      ]}
-                      onPressIn={() =>
-                        handlePressIn(() =>
-                          setRightSeconds((prev) => Math.max(0, prev - 60)),
-                        )
-                      }
-                      onPressOut={handlePressOut}
-                      disabled={isSubmitting}
-                    >
-                      <Text style={styles.chronoAdjustButtonText}>-</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.chronoAdjustValue}>
-                      {Math.round(rightSeconds / 60)} min
-                    </Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.chronoAdjustButton,
-                        isSubmitting && styles.chronoAdjustButtonDisabled,
-                      ]}
-                      onPressIn={() =>
-                        handlePressIn(() =>
-                          setRightSeconds((prev) => prev + 60),
-                        )
-                      }
-                      onPressOut={handlePressOut}
-                      disabled={isSubmitting}
-                    >
-                      <Text style={styles.chronoAdjustButtonText}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={styles.chronoControlRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.chronoControlButton,
-                        runningSide === "right" &&
-                          styles.chronoControlButtonActive,
-                      ]}
-                      onPress={() => toggleChrono("right")}
-                      disabled={isSubmitting}
-                    >
-                      <Ionicons
-                        name={runningSide === "right" ? "pause" : "play"}
-                        size={16}
-                        color={runningSide === "right" ? "white" : "#333"}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.chronoControlButton,
-                        rightSeconds === 0 &&
-                          styles.chronoControlButtonDisabled,
-                      ]}
-                      onPress={() => resetChrono("right")}
-                      disabled={isSubmitting || rightSeconds === 0}
-                    >
-                      <Ionicons
-                        name="refresh"
-                        size={16}
-                        color={rightSeconds === 0 ? "#999" : "#333"}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.chronoTotalRow}>
-              <Text style={styles.chronoTotalLabel}>Total</Text>
-              <Text style={styles.chronoTotalValue}>
-                {formatDuration(totalSeconds)}
-              </Text>
-            </View>
-          </>
-        )}
-
-        {mealType === "solide" && (
-          <>
-            {/* Type de solide */}
-            <Text style={styles.modalCategoryLabel}>Type d&apos;aliment</Text>
-            <View style={styles.solideTypeGrid}>
-              {SOLIDE_TYPE_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.solideTypeChip,
-                    typeSolide === option.value && styles.solideTypeChipActive,
-                    isSubmitting && styles.solideTypeChipDisabled,
-                  ]}
-                  onPress={() => setTypeSolide(option.value)}
-                  disabled={isSubmitting}
-                >
-                  <FontAwesome
-                    name={option.icon as any}
-                    size={14}
-                    color={typeSolide === option.value ? "white" : "#666"}
-                  />
-                  <Text
-                    style={[
-                      styles.solideTypeChipText,
-                      typeSolide === option.value &&
-                        styles.solideTypeChipTextActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Moment du repas */}
-            <Text style={styles.modalCategoryLabel}>Moment du repas</Text>
-            <View style={styles.momentRepasGrid}>
-              {MOMENT_REPAS_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.momentRepasChip,
-                    momentRepas === option.value &&
-                      styles.momentRepasChipActive,
-                    isSubmitting && styles.momentRepasChipDisabled,
-                  ]}
-                  onPress={() => setMomentRepas(option.value)}
-                  disabled={isSubmitting}
-                >
-                  <FontAwesome
-                    name={option.icon as any}
-                    size={12}
-                    color={momentRepas === option.value ? "white" : "#666"}
-                  />
-                  <Text
-                    style={[
-                      styles.momentRepasChipText,
-                      momentRepas === option.value &&
-                        styles.momentRepasChipTextActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Quantité mangée */}
-            <Text style={styles.modalCategoryLabel}>Quantité mangée</Text>
-            <View style={styles.quantiteSolideRow}>
-              {QUANTITE_SOLIDE_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.quantiteSolideChip,
-                    quantiteSolide === option.value &&
-                      styles.quantiteSolideChipActive,
-                    isSubmitting && styles.quantiteSolideChipDisabled,
-                  ]}
-                  onPress={() => setQuantiteSolide(option.value)}
-                  disabled={isSubmitting}
-                >
-                  <Text
-                    style={[
-                      styles.quantiteSolideChipText,
-                      quantiteSolide === option.value &&
-                        styles.quantiteSolideChipTextActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.quantiteSolideDesc,
-                      quantiteSolide === option.value &&
-                        styles.quantiteSolideDescActive,
-                    ]}
-                  >
-                    {option.description}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Ingrédients */}
-            <Text style={styles.modalCategoryLabel}>Ingrédients</Text>
-            <TextInput
-              style={[
-                styles.ingredientsInput,
-                isSubmitting && styles.ingredientsInputDisabled,
-              ]}
-              placeholder="Ex: carottes, pommes de terre..."
-              placeholderTextColor="#999"
-              value={ingredients}
-              onChangeText={setIngredients}
-              editable={!isSubmitting}
-              multiline
-            />
-
-            {/* Nouvel aliment (visible uniquement si type = autre) */}
-            {typeSolide === "autre" && (
-              <>
-                <View
-                  style={[
-                    styles.nouveauAlimentRow,
-                    nouveauAliment && styles.nouveauAlimentRowActive,
-                  ]}
-                >
-                  <View style={styles.nouveauAlimentLabel}>
-                    <FontAwesome
-                      name="star"
-                      size={16}
-                      color={nouveauAliment ? eventColors.meal.dark : "#9ca3af"}
-                    />
-                    <Text
-                      style={[
-                        styles.nouveauAlimentText,
-                        nouveauAliment && styles.nouveauAlimentTextActive,
-                      ]}
-                    >
-                      Nouvel aliment ?
-                    </Text>
-                  </View>
-                  <Switch
-                    value={nouveauAliment}
-                    onValueChange={setNouveauAliment}
-                    disabled={isSubmitting}
-                    trackColor={{
-                      false: "#d1d5db",
-                      true: `${eventColors.meal.dark}80`,
-                    }}
-                    thumbColor={
-                      nouveauAliment ? eventColors.meal.dark : "#9ca3af"
-                    }
-                  />
-                </View>
-
-                {/* Nom de l'aliment (visible si nouvel aliment) */}
-                {nouveauAliment && (
-                  <TextInput
-                    style={styles.ingredientsInput}
-                    placeholder="Nom de l'aliment (ex: avocat, fraise...)"
-                    placeholderTextColor="#9ca3af"
-                    value={nomNouvelAliment}
-                    onChangeText={setNomNouvelAliment}
-                    editable={!isSubmitting}
-                  />
-                )}
-
-                {/* Allergènes (visible si nouvel aliment) */}
-                {nouveauAliment && (
-                  <>
-                    <Text style={styles.modalCategoryLabel}>
-                      Allergènes potentiels
-                    </Text>
-                    <View style={styles.allergenesGrid}>
-                      {ALLERGENES_OPTIONS.map((option) => {
-                        const isSelected = allergenes.includes(option.value);
-                        return (
-                          <TouchableOpacity
-                            key={option.value}
-                            style={[
-                              styles.allergeneChip,
-                              isSelected && styles.allergeneChipActive,
-                              isSubmitting && styles.allergeneChipDisabled,
-                            ]}
-                            onPress={() => {
-                              if (isSelected) {
-                                setAllergenes(
-                                  allergenes.filter((a) => a !== option.value),
-                                );
-                              } else {
-                                setAllergenes([...allergenes, option.value]);
-                              }
-                            }}
-                            disabled={isSubmitting}
-                          >
-                            <Text style={styles.allergeneEmoji}>
-                              {option.emoji}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.allergeneText,
-                                isSelected && styles.allergeneTextActive,
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    {/* Réaction */}
-                    <Text style={styles.modalCategoryLabel}>
-                      Réaction observée
-                    </Text>
-                    <View style={styles.reactionRow}>
-                      {REACTION_OPTIONS.map((option) => (
-                        <TouchableOpacity
-                          key={option.value}
-                          style={[
-                            styles.reactionChip,
-                            reaction === option.value && {
-                              backgroundColor: option.color,
-                              borderColor: option.color,
-                            },
-                            isSubmitting && styles.reactionChipDisabled,
-                          ]}
-                          onPress={() => setReaction(option.value)}
-                          disabled={isSubmitting}
-                        >
-                          <Text
-                            style={[
-                              styles.reactionChipText,
-                              reaction === option.value &&
-                                styles.reactionChipTextActive,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </>
-                )}
-              </>
-            )}
-
-            {/* A aimé ? */}
-            <Text style={styles.modalCategoryLabel}>A aimé ?</Text>
-            <View style={styles.aimeRow}>
-              <TouchableOpacity
-                style={[
-                  styles.aimeButton,
-                  aime === true && styles.aimeButtonActiveYes,
-                  isSubmitting && styles.aimeButtonDisabled,
-                ]}
-                onPress={() => setAime(aime === true ? undefined : true)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="thumbs-up"
-                  size={20}
-                  color={aime === true ? "white" : "#22c55e"}
-                />
-                <Text
-                  style={[
-                    styles.aimeButtonText,
-                    aime === true && styles.aimeButtonTextActive,
-                  ]}
-                >
-                  Oui
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.aimeButton,
-                  aime === false && styles.aimeButtonActiveNo,
-                  isSubmitting && styles.aimeButtonDisabled,
-                ]}
-                onPress={() => setAime(aime === false ? undefined : false)}
-                disabled={isSubmitting}
-              >
-                <FontAwesome
-                  name="thumbs-down"
-                  size={20}
-                  color={aime === false ? "white" : "#ef4444"}
-                />
-                <Text
-                  style={[
-                    styles.aimeButtonText,
-                    aime === false && styles.aimeButtonTextActive,
-                  ]}
-                >
-                  Non
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
-        <View style={styles.dateTimeContainerWithPadding}>
-          <TouchableOpacity
-            style={[
-              styles.dateButton,
-              isSubmitting && styles.dateButtonDisabled,
-            ]}
-            onPress={() => setShowDate(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="calendar-alt"
-              size={16}
-              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
-            />
-            <Text
-              style={[
-                styles.dateButtonText,
-                isSubmitting && styles.dateButtonTextDisabled,
-              ]}
-            >
-              Date
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.dateButton,
-              isSubmitting && styles.dateButtonDisabled,
-            ]}
-            onPress={() => setShowTime(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="clock"
-              size={16}
-              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
-            />
-            <Text
-              style={[
-                styles.dateButtonText,
-                isSubmitting && styles.dateButtonTextDisabled,
-              ]}
-            >
-              Heure
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.selectedDateTime}>
-          <Text style={styles.selectedDate}>
-            {dateHeure.toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
-          <Text style={styles.selectedTime}>
-            {dateHeure.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-
-        {showDate && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeDate}
-          />
-        )}
-        {showTime && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="time"
-            is24Hour={true}
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeTime}
-          />
-        )}
-      </View>
-    );
-  }
-
-  function buildSheetProps() {
-    const returnTarget = returnTargetParam ?? returnToRef.current;
-    return {
-      ownerId: sheetOwnerId,
-      title: editingMeal ? "Modifier le repas" : "Nouveau repas",
-      icon: "baby",
-      accentColor: eventColors.meal.dark,
-      isEditing: !!editingMeal,
-      isSubmitting,
-      onSubmit: handleSubmit,
-      onDelete: editingMeal ? handleDelete : undefined,
-      children: renderSheetContent(),
-      onDismiss: () => {
-        setIsSubmitting(false);
-        setEditingMeal(null);
-        editIdRef.current = null;
-        maybeReturnTo(returnTarget);
-      },
-    };
-  }
-
-  useEffect(() => {
-    if (!isSheetActive) return;
-    openSheet(buildSheetProps());
-  }, [
-    isSheetActive,
-    openSheet,
-    editingMeal,
-    isSubmitting,
-    mealType,
-    quantite,
-    typeBiberon,
-    leftSeconds,
-    rightSeconds,
-    runningSide,
-    dateHeure,
-    showDate,
-    showTime,
-    // États solides
-    typeSolide,
-    momentRepas,
-    ingredients,
-    quantiteSolide,
-    nouveauAliment,
-    nomNouvelAliment,
-    allergenes,
-    reaction,
-    aime,
-  ]);
-
-  // ============================================
-  // HANDLERS - DATE/TIME PICKERS
-  // ============================================
-
-  const onChangeDate = (event: any, selectedDate?: Date) => {
-    setShowDate(false);
-    if (selectedDate) {
-      setDateHeure((prev) => {
-        const newDate = new Date(prev);
-        newDate.setFullYear(
-          selectedDate.getFullYear(),
-          selectedDate.getMonth(),
-          selectedDate.getDate(),
-        );
-        return newDate;
-      });
-    }
-  };
-
-  const onChangeTime = (event: any, selectedDate?: Date) => {
-    setShowTime(false);
-    if (selectedDate) {
-      setDateHeure((prev) => {
-        const newDate = new Date(prev);
-        newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-        return newDate;
-      });
-    }
-  };
+      setDaysWindow((window) => window + diffDays);
+      return endOfToday;
+    });
+  }, []);
 
   // ============================================
   // RENDER - MEAL ITEM
@@ -2064,38 +956,53 @@ export default function MealsScreen() {
               </Text>
             )}
             {isSolide && (
-              <View style={styles.solideDetailsRow}>
+              <View
+                style={[
+                  styles.solideDetailsRow,
+                  {
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    alignItems: "flex-start",
+                  },
+                ]}
+              >
                 {meal.momentRepas && (
                   <Text style={styles.sessionDetailText}>
                     {MOMENT_REPAS_LABELS[meal.momentRepas]}
+                    {" · "}
+                    {meal.quantiteSolide ?? meal.quantite ?? ""}
                   </Text>
                 )}
-                {meal.aime !== undefined && (
-                  <FontAwesome
-                    name={meal.aime ? "thumbs-up" : "thumbs-down"}
-                    size={12}
-                    color={meal.aime ? "#22c55e" : "#ef4444"}
-                    style={{ marginLeft: 8 }}
-                  />
-                )}
-                {meal.nouveauAliment && (
+                {(meal.aime !== undefined || meal.nouveauAliment) && (
                   <View
                     style={{
                       flexDirection: "row",
                       alignItems: "center",
-                      marginLeft: 6,
+                      gap: 6,
+                      flexWrap: "wrap",
                     }}
                   >
-                    <FontAwesome name="star" size={12} color="#f59e0b" />
-                    {meal.nomNouvelAliment && (
+                    {meal.aime !== undefined && (
                       <Text
-                        style={{
-                          fontSize: 11,
-                          color: "#f59e0b",
-                          marginLeft: 3,
-                        }}
+                        style={[
+                          styles.sessionDetailText,
+                          {
+                            color: meal.aime ? "#16a34a" : "#dc2626",
+                          },
+                        ]}
                       >
-                        {meal.nomNouvelAliment}
+                        {(() => {
+                          const dishName =
+                            meal.nomNouvelAliment || meal.ingredients || "";
+                          if (meal.aime) {
+                            return dishName
+                              ? `A aimé ce plat : ${dishName}`
+                              : "A aimé son plat";
+                          }
+                          return dishName
+                            ? `N'a pas aimé ce plat : ${dishName}`
+                            : "N'a pas aimé le plat";
+                        })()}
                       </Text>
                     )}
                   </View>
@@ -2343,18 +1250,6 @@ export default function MealsScreen() {
             }
           />
         )}
-
-        <ConfirmModal
-          visible={showDeleteModal}
-          title="Suppression"
-          message="Voulez-vous vraiment supprimer ce repas ?"
-          confirmText="Supprimer"
-          cancelText="Annuler"
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
-          onCancel={() => setShowDeleteModal(false)}
-          onConfirm={confirmDelete}
-        />
       </SafeAreaView>
     </View>
   );
@@ -2631,538 +1526,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // Modal Content
-  modalCategoryLabel: {
-    alignSelf: "flex-start",
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6b7280",
-    marginTop: 12,
-    marginBottom: 6,
-  },
-  sheetContent: {
-    gap: 12,
-  },
-
-  // Type Selection
-  typeRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 16,
-    gap: 12,
-  },
-  typeButton: {
-    flex: 1,
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 8,
-    padding: 16,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 12,
-  },
-  typeButtonActive: {
-    backgroundColor: eventColors.meal.dark,
-  },
-  typeButtonDisabled: {
-    backgroundColor: "#f8f8f8",
-    opacity: 0.5,
-  },
-  typeText: {
-    fontSize: 16,
-    color: "#666",
-    fontWeight: "500",
-  },
-  typeTextActive: {
-    color: "white",
-    fontWeight: "bold",
-  },
-  typeTextDisabled: {
-    color: "#ccc",
-  },
-
-  // Type Chips (3 chips in a row)
-  typeChip: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 20,
-  },
-  typeChipActive: {
-    backgroundColor: eventColors.meal.dark,
-  },
-  typeChipDisabled: {
-    backgroundColor: "#f8f8f8",
-    opacity: 0.5,
-  },
-  typeChipText: {
-    fontSize: 13,
-    color: "#666",
-    fontWeight: "600",
-  },
-  typeChipTextActive: {
-    color: "white",
-  },
-
-  // Biberon Type Selection
-  biberonTypeGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 8,
-  },
-  biberonTypeChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 16,
-  },
-  biberonTypeChipActive: {
-    backgroundColor: eventColors.meal.dark,
-  },
-  biberonTypeChipDisabled: {
-    opacity: 0.5,
-  },
-  biberonTypeChipText: {
-    fontSize: 13,
-    color: "#666",
-    fontWeight: "500",
-  },
-  biberonTypeChipTextActive: {
-    color: "white",
-  },
-
-  // Quantity
-  quantityNA: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  quantityNAText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#999",
-  },
-  quantityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    marginBottom: 8,
-  },
-  quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quantityButtonDisabled: {
-    opacity: 0.6,
-  },
-  quantityButtonText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-  },
-  quantityButtonTextDisabled: {
-    color: "#999",
-  },
-  quantityValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-
-  // Chrono (tétée)
-  chronoContainer: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 12,
-  },
-  chronoCard: {
-    flex: 1,
-    backgroundColor: "#f7f7f8",
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  chronoLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6b7280",
-    marginBottom: 6,
-  },
-  chronoTime: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 8,
-  },
-  chronoControlRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  chronoControlButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  chronoControlButtonActive: {
-    backgroundColor: eventColors.meal.dark,
-    borderColor: eventColors.meal.dark,
-  },
-  chronoControlButtonDisabled: {
-    backgroundColor: "#f3f4f6",
-    borderColor: "#e5e7eb",
-  },
-  chronoAdjustRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  chronoAdjustButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  chronoAdjustButtonDisabled: {
-    opacity: 0.6,
-  },
-  chronoAdjustButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#333",
-  },
-  chronoAdjustValue: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  chronoTotalRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginBottom: 16,
-  },
-  chronoTotalLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#6b7280",
-  },
-  chronoTotalValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
-  },
-
-  // Date/Time
-  dateTimeContainerWithPadding: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-    paddingTop: 20,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
-  },
-  dateButtonDisabled: {
-    backgroundColor: "#f5f5f5",
-    opacity: 0.5,
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#4a4f55",
-  },
-  dateButtonTextDisabled: {
-    color: "#ccc",
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  selectedTime: {
-    fontSize: 20,
-    color: "#374151",
-    fontWeight: "600",
-  },
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-  },
-
-  // Solide Form Styles
-  solideTypeGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 8,
-  },
-  solideTypeChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 20,
-  },
-  solideTypeChipActive: {
-    backgroundColor: eventColors.meal.dark,
-  },
-  solideTypeChipDisabled: {
-    opacity: 0.5,
-  },
-  solideTypeChipText: {
-    fontSize: 13,
-    color: "#666",
-    fontWeight: "600",
-  },
-  solideTypeChipTextActive: {
-    color: "white",
-  },
-
-  momentRepasGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 8,
-  },
-  momentRepasChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 16,
-  },
-  momentRepasChipActive: {
-    backgroundColor: eventColors.meal.dark,
-  },
-  momentRepasChipDisabled: {
-    opacity: 0.5,
-  },
-  momentRepasChipText: {
-    fontSize: 12,
-    color: "#666",
-    fontWeight: "500",
-  },
-  momentRepasChipTextActive: {
-    color: "white",
-  },
-
-  quantiteSolideRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 8,
-  },
-  quantiteSolideChip: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 12,
-  },
-  quantiteSolideChipActive: {
-    backgroundColor: eventColors.meal.dark,
-  },
-  quantiteSolideChipDisabled: {
-    opacity: 0.5,
-  },
-  quantiteSolideChipText: {
-    fontSize: 14,
-    color: "#333",
-    fontWeight: "600",
-  },
-  quantiteSolideChipTextActive: {
-    color: "white",
-  },
-  quantiteSolideDesc: {
-    fontSize: 10,
-    color: "#999",
-    marginTop: 2,
-  },
-  quantiteSolideDescActive: {
-    color: "rgba(255,255,255,0.8)",
-  },
-
-  ingredientsInput: {
-    backgroundColor: "#f7f7f8",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: "#333",
-    minHeight: 60,
-    textAlignVertical: "top",
-    marginBottom: 8,
-  },
-  ingredientsInputDisabled: {
-    opacity: 0.5,
-  },
-
-  nouveauAlimentRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    marginBottom: 8,
-  },
-  nouveauAlimentRowActive: {},
-  nouveauAlimentLabel: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  nouveauAlimentText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#666",
-  },
-  nouveauAlimentTextActive: {
-    color: eventColors.meal.dark,
-  },
-
-  allergenesGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 8,
-  },
-  allergeneChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  allergeneChipActive: {
-    backgroundColor: "#fef3c7",
-    borderColor: "#f59e0b",
-  },
-  allergeneChipDisabled: {
-    opacity: 0.5,
-  },
-  allergeneEmoji: {
-    fontSize: 14,
-  },
-  allergeneText: {
-    fontSize: 12,
-    color: "#666",
-    fontWeight: "500",
-  },
-  allergeneTextActive: {
-    color: "#92400e",
-    fontWeight: "600",
-  },
-
-  reactionRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactionChip: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  reactionChipDisabled: {
-    opacity: 0.5,
-  },
-  reactionChipText: {
-    fontSize: 12,
-    color: "#666",
-    fontWeight: "500",
-  },
-  reactionChipTextActive: {
-    color: "white",
-    fontWeight: "600",
-  },
-
-  aimeRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 8,
-  },
-  aimeButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  aimeButtonActiveYes: {
-    backgroundColor: "#22c55e",
-    borderColor: "#16a34a",
-  },
-  aimeButtonActiveNo: {
-    backgroundColor: "#ef4444",
-    borderColor: "#dc2626",
-  },
-  aimeButtonDisabled: {
-    opacity: 0.5,
-  },
-  aimeButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#666",
-  },
-  aimeButtonTextActive: {
-    color: "white",
   },
 
   // Solide list item

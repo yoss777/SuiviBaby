@@ -14,6 +14,7 @@ import {
   EVENT_CONFIG,
   EventConfigItem,
   JALON_TYPE_LABELS,
+  MOMENT_REPAS_LABELS,
 } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
@@ -186,6 +187,17 @@ function RecentEventsListComponent({
       return event.isNap ? "Sieste" : "Nuit de sommeil";
     }
     if (isActivity && event.typeActivite) {
+      if (event.typeActivite === "autre") {
+        const customLabel =
+          typeof event.description === "string"
+            ? event.description.trim()
+            : typeof event.note === "string"
+              ? event.note.trim()
+              : "";
+        if (customLabel) {
+          return `Activité : ${customLabel}`;
+        }
+      }
       return ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
     }
     if (isJalon && event.typeJalon) {
@@ -245,7 +257,39 @@ function RecentEventsListComponent({
               : null;
 
           const date = toDate(event.date);
+          const isSolide = event.type === "solide";
           const details = buildDetails(event);
+          const solideMomentLabel = isSolide
+            ? event.momentRepas
+              ? MOMENT_REPAS_LABELS[event.momentRepas]
+              : null
+            : null;
+          const solideQuantity = isSolide ? event.quantiteSolide ?? event.quantite : null;
+          const solideLine2 =
+            isSolide && (solideMomentLabel || solideQuantity)
+              ? `${solideMomentLabel ?? ""}${
+                  solideMomentLabel && solideQuantity ? " · " : ""
+                }${solideQuantity ?? ""}`
+              : null;
+          const solideDishName = isSolide
+            ? event.nomNouvelAliment || event.ingredients || ""
+            : "";
+          const solideLikeLabel =
+            isSolide && event.aime !== undefined
+              ? event.aime
+                ? solideDishName
+                  ? `A aimé ce plat : ${solideDishName}`
+                  : "A aimé ce plat"
+                : solideDishName
+                  ? `N'a pas aimé ce plat : ${solideDishName}`
+                  : "N'a pas aimé ce plat"
+              : null;
+          const solideLikeColor =
+            isSolide && event.aime !== undefined
+              ? event.aime
+                ? "#16a34a"
+                : "#dc2626"
+              : undefined;
 
           const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
           const elapsedMinutes = isOngoingSleep
@@ -271,7 +315,9 @@ function RecentEventsListComponent({
             ? details
               ? `${formatDuration(elapsedMinutes)} · ${details}`
               : formatDuration(elapsedMinutes)
-            : details;
+            : isSolide
+              ? [solideLine2, solideLikeLabel].filter(Boolean).join("\n")
+              : details;
 
           return (
             <React.Fragment key={event.id ?? `${event.type}-${event.date}`}>
@@ -344,13 +390,32 @@ function RecentEventsListComponent({
                       />
                     )}
                   </View>
-                  {displayDetails && (
+                  {!isSolide && displayDetails && (
                     <Text
                       style={[styles.recentDetails, { color: textColor }]}
                       accessibilityLiveRegion={isOngoingSleep ? "polite" : "none"}
                     >
                       {displayDetails}
                     </Text>
+                  )}
+                  {isSolide && (solideLine2 || solideLikeLabel) && (
+                    <View style={styles.solideDetails}>
+                      {solideLine2 && (
+                        <Text style={[styles.solideDetailsText, { color: textColor }]}>
+                          {solideLine2}
+                        </Text>
+                      )}
+                      {solideLikeLabel && (
+                        <Text
+                          style={[
+                            styles.solideDetailsText,
+                            { color: solideLikeColor ?? textColor },
+                          ]}
+                        >
+                          {solideLikeLabel}
+                        </Text>
+                      )}
+                    </View>
                   )}
                 </TouchableOpacity>
               </View>
@@ -490,6 +555,12 @@ const styles = StyleSheet.create({
   },
   recentDetails: {
     marginTop: 6,
+    fontSize: 12,
+  },
+  solideDetails: {
+    marginTop: 6,
+  },
+  solideDetailsText: {
     fontSize: 12,
   },
   daySeparator: {

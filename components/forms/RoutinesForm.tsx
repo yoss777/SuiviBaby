@@ -1,22 +1,9 @@
 // components/forms/RoutinesForm.tsx
-import React, { useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Platform,
-} from "react-native";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { Colors } from "@/constants/theme";
-import { eventColors } from "@/constants/eventColors";
 import {
   ajouterBain,
   ajouterSommeil,
@@ -25,11 +12,23 @@ import {
   supprimerBain,
   supprimerSommeil,
 } from "@/migration/eventsDoubleWriteService";
+import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import React, { useCallback, useState } from "react";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined)
+    Object.entries(obj).filter(([, v]) => v !== undefined),
   ) as T;
 }
 
@@ -39,7 +38,12 @@ function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
 
 export type RoutineType = "sommeil" | "bain";
 export type SleepMode = "nap" | "night";
-export type SleepLocation = "lit" | "cododo" | "poussette" | "voiture" | "autre";
+export type SleepLocation =
+  | "lit"
+  | "cododo"
+  | "poussette"
+  | "voiture"
+  | "autre";
 export type SleepQuality = "paisible" | "agité" | "mauvais";
 
 export type RoutinesEditData = {
@@ -147,22 +151,22 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
   // Form state
   const [sheetType, setSheetType] = useState<"nap" | "night" | "bain">(
-    getInitialSheetType()
+    getInitialSheetType(),
   );
 
   // Bain state
   const [dateHeure, setDateHeure] = useState<Date>(
-    editData && editData.type === "bain" ? toDate(editData.date) : new Date()
+    editData && editData.type === "bain" ? toDate(editData.date) : new Date(),
   );
   const [dureeBain, setDureeBain] = useState<number>(
-    (editData as any)?.duree ?? 10
+    (editData as any)?.duree ?? 10,
   );
   const [temperatureEau, setTemperatureEau] = useState<number>(
-    editData?.temperatureEau ?? 37
+    editData?.temperatureEau ?? 37,
   );
   const [produits, setProduits] = useState<string>(editData?.produits ?? "");
   const [noteBain, setNoteBain] = useState<string>(
-    editData?.type === "bain" ? editData.note ?? "" : ""
+    editData?.type === "bain" ? (editData.note ?? "") : "",
   );
 
   // Sommeil state
@@ -171,23 +175,23 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       ? toDate(editData.heureDebut)
       : editData?.date
         ? toDate(editData.date)
-        : new Date()
+        : new Date(),
   );
   const [heureFin, setHeureFin] = useState<Date | null>(
-    editData?.heureFin ? toDate(editData.heureFin) : null
+    editData?.heureFin ? toDate(editData.heureFin) : null,
   );
   const [isOngoing, setIsOngoing] = useState<boolean>(
-    editData ? !editData.heureFin : false
+    editData ? !editData.heureFin : false,
   );
   const [isNap, setIsNap] = useState<boolean>(editData?.isNap ?? true);
   const [location, setLocation] = useState<SleepLocation | undefined>(
-    editData?.location ?? undefined
+    editData?.location ?? undefined,
   );
   const [quality, setQuality] = useState<SleepQuality | undefined>(
-    editData?.quality ?? undefined
+    editData?.quality ?? undefined,
   );
   const [noteSommeil, setNoteSommeil] = useState<string>(
-    editData?.type === "sommeil" ? editData.note ?? "" : ""
+    editData?.type === "sommeil" ? (editData.note ?? "") : "",
   );
 
   // Date/Time picker visibility
@@ -203,7 +207,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     (show: boolean) => {
       onFormStepChange?.(show);
     },
-    [onFormStepChange]
+    [onFormStepChange],
   );
 
   const handleShowDate = useCallback(
@@ -211,7 +215,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       setShowDate(show);
       handlePickerChange(show);
     },
-    [handlePickerChange]
+    [handlePickerChange],
   );
 
   const handleShowTime = useCallback(
@@ -219,7 +223,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       setShowTime(show);
       handlePickerChange(show);
     },
-    [handlePickerChange]
+    [handlePickerChange],
   );
 
   const handleShowDateStart = useCallback(
@@ -227,7 +231,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       setShowDateStart(show);
       handlePickerChange(show);
     },
-    [handlePickerChange]
+    [handlePickerChange],
   );
 
   const handleShowTimeStart = useCallback(
@@ -235,7 +239,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       setShowTimeStart(show);
       handlePickerChange(show);
     },
-    [handlePickerChange]
+    [handlePickerChange],
   );
 
   const handleShowDateEnd = useCallback(
@@ -243,7 +247,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       setShowDateEnd(show);
       handlePickerChange(show);
     },
-    [handlePickerChange]
+    [handlePickerChange],
   );
 
   const handleShowTimeEnd = useCallback(
@@ -251,7 +255,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       setShowTimeEnd(show);
       handlePickerChange(show);
     },
-    [handlePickerChange]
+    [handlePickerChange],
   );
 
   // ============================================
@@ -316,10 +320,14 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         }
       } else {
         // Sommeil
-        if (!isOngoing && heureFin && heureFin.getTime() < heureDebut.getTime()) {
+        if (
+          !isOngoing &&
+          heureFin &&
+          heureFin.getTime() < heureDebut.getTime()
+        ) {
           showAlert(
             "Attention",
-            "La date de fin ne peut pas être antérieure à la date de début."
+            "La date de fin ne peut pas être antérieure à la date de début.",
           );
           setIsSubmitting(false);
           return;
@@ -329,7 +337,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         if (isOngoing && !editData && sommeilEnCours) {
           showAlert(
             "Attention",
-            "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau."
+            "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
           );
           setIsSubmitting(false);
           return;
@@ -338,7 +346,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         const fin = isOngoing ? null : (heureFin ?? undefined);
         const duree =
           heureDebut && fin
-            ? Math.max(0, Math.round((fin.getTime() - heureDebut.getTime()) / 60000))
+            ? Math.max(
+                0,
+                Math.round((fin.getTime() - heureDebut.getTime()) / 60000),
+              )
             : undefined;
 
         const data = removeUndefined({
@@ -394,7 +405,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         } finally {
           setIsSubmitting(false);
         }
-      }
+      },
     );
   };
 
@@ -428,10 +439,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             onPress={() => handleSelectType(item.key as any)}
           >
             <Text
-              style={[
-                styles.typeChipText,
-                active && styles.typeChipTextActive,
-              ]}
+              style={[styles.typeChipText, active && styles.typeChipTextActive]}
             >
               {item.label}
             </Text>
@@ -454,7 +462,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             <TouchableOpacity
               key={option}
               style={[styles.chip, location === option && styles.chipActive]}
-              onPress={() => setLocation(location === option ? undefined : option)}
+              onPress={() =>
+                setLocation(location === option ? undefined : option)
+              }
               disabled={isSubmitting}
             >
               <Text
@@ -477,7 +487,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             <TouchableOpacity
               key={option}
               style={[styles.chip, quality === option && styles.chipActive]}
-              onPress={() => setQuality(quality === option ? undefined : option)}
+              onPress={() =>
+                setQuality(quality === option ? undefined : option)
+              }
               disabled={isSubmitting}
             >
               <Text
@@ -580,7 +592,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       </TouchableOpacity>
 
       <View style={styles.sleepSelectedDateTime}>
-        <Text style={styles.sleepSelectedDate}>{formatDateLabel(heureDebut)}</Text>
+        <Text style={styles.sleepSelectedDate}>
+          {formatDateLabel(heureDebut)}
+        </Text>
         <Text style={styles.sleepSelectedTime}>{formatTime(heureDebut)}</Text>
         {!isOngoing && heureFin && (
           <>
@@ -589,7 +603,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
                 {formatDateLabel(heureFin)}
               </Text>
             )}
-            <Text style={styles.sleepSelectedTime}>→ {formatTime(heureFin)}</Text>
+            <Text style={styles.sleepSelectedTime}>
+              → {formatTime(heureFin)}
+            </Text>
           </>
         )}
       </View>
@@ -604,7 +620,11 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             if (date) {
               setHeureDebut((prev) => {
                 const next = new Date(prev);
-                next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                next.setFullYear(
+                  date.getFullYear(),
+                  date.getMonth(),
+                  date.getDate(),
+                );
                 return next;
               });
             }
@@ -640,7 +660,11 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               setHeureFin((prev) => {
                 const base = prev ?? new Date();
                 const next = new Date(base);
-                next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                next.setFullYear(
+                  date.getFullYear(),
+                  date.getMonth(),
+                  date.getDate(),
+                );
                 return next;
               });
             }
@@ -724,7 +748,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               styles.quantityButton,
               isSubmitting && styles.quantityButtonDisabled,
             ]}
-            onPress={() => setTemperatureEau((value) => Math.max(20, value - 1))}
+            onPress={() =>
+              setTemperatureEau((value) => Math.max(35, value - 0.5))
+            }
             disabled={isSubmitting}
           >
             <Text
@@ -736,13 +762,17 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               -
             </Text>
           </TouchableOpacity>
-          <Text style={styles.quantityPickerValue}>{temperatureEau}°C</Text>
+          <Text style={styles.quantityPickerValue}>
+            {temperatureEau.toFixed(1)}°C
+          </Text>
           <TouchableOpacity
             style={[
               styles.quantityButton,
               isSubmitting && styles.quantityButtonDisabled,
             ]}
-            onPress={() => setTemperatureEau((value) => Math.min(45, value + 1))}
+            onPress={() =>
+              setTemperatureEau((value) => Math.min(40, value + 0.5))
+            }
             disabled={isSubmitting}
           >
             <Text
@@ -833,7 +863,11 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             if (date) {
               setDateHeure((prev) => {
                 const next = new Date(prev);
-                next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                next.setFullYear(
+                  date.getFullYear(),
+                  date.getMonth(),
+                  date.getDate(),
+                );
                 return next;
               });
             }

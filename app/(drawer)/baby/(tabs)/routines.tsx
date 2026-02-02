@@ -1,23 +1,14 @@
 import { ThemedText } from "@/components/themed-text";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { DateFilterBar } from "@/components/ui/DateFilterBar";
+import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
-import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import {
-  ajouterBain,
-  ajouterSommeil,
-  modifierBain,
-  modifierSommeil,
-  supprimerBain,
-  supprimerSommeil,
-} from "@/migration/eventsDoubleWriteService";
+import { modifierSommeil } from "@/migration/eventsDoubleWriteService";
 import {
   ecouterBainsHybrid,
   ecouterSommeilsHybrid,
@@ -26,9 +17,7 @@ import {
 } from "@/migration/eventsHybridService";
 import { BainEvent, SommeilEvent } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -37,25 +26,25 @@ import {
   BackHandler,
   FlatList,
   InteractionManager,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+import {
+  RoutineType,
+  RoutinesEditData,
+  SleepMode,
+} from "@/components/forms/RoutinesForm";
+import { useModal } from "@/contexts/ModalContext";
 
 // ============================================
 // TYPES
 // ============================================
-
-type RoutineType = "sommeil" | "bain";
-
-type FilterType = "today" | "past";
 
 type RoutineEvent = (SommeilEvent | BainEvent) & { id: string };
 
@@ -65,19 +54,6 @@ type RoutineGroup = {
   counts: Record<RoutineType, number>;
   lastEvent: RoutineEvent;
 };
-
-const LOCATION_OPTIONS: SommeilEvent["location"][] = [
-  "lit",
-  "cododo",
-  "poussette",
-  "voiture",
-  "autre",
-];
-const QUALITY_OPTIONS: SommeilEvent["quality"][] = [
-  "paisible",
-  "agité",
-  "mauvais",
-];
 
 const TYPE_CONFIG: Record<
   RoutineType,
@@ -102,13 +78,6 @@ const formatDateKey = (date: Date) =>
 
 const formatTime = (date: Date) =>
   date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-
-const formatDateLabel = (date: Date) =>
-  `${date.toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  })} ${date.getFullYear()}`;
 
 const formatDuration = (minutes?: number) => {
   if (!minutes || minutes <= 0) return "0 min";
@@ -135,7 +104,7 @@ export default function RoutinesScreen() {
   const { setHeaderLeft } = useHeaderLeft();
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
-  const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
+  const { openSheet, closeSheet, isOpen } = useSheet();
   const { showAlert } = useModal();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
@@ -145,14 +114,12 @@ export default function RoutinesScreen() {
   const { openModal, editId, returnTo, type, mode } = useLocalSearchParams();
   const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const sheetOwnerId = "routines";
-  const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
   const [showCalendar, setShowCalendar] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState<DateFilterValue | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
-  const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
 
   const [events, setEvents] = useState<RoutineEvent[]>([]);
   const [groupedEvents, setGroupedEvents] = useState<RoutineGroup[]>([]);
@@ -168,43 +135,14 @@ export default function RoutinesScreen() {
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
 
-  const [editingBain, setEditingBain] = useState<
-    (BainEvent & { id: string }) | null
-  >(null);
-  const [editingSommeil, setEditingSommeil] = useState<
-    (SommeilEvent & { id: string }) | null
-  >(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [sheetType, setSheetType] = useState<"nap" | "night" | "bain">("nap");
-  const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
-
-  const [dureeBain, setDureeBain] = useState(10);
-  const [temperatureEau, setTemperatureEau] = useState(37);
-  const [produits, setProduits] = useState("");
-  const [noteBain, setNoteBain] = useState("");
-
-  const [heureDebut, setHeureDebut] = useState<Date>(new Date());
-  const [heureFin, setHeureFin] = useState<Date | null>(null);
-  const [isOngoing, setIsOngoing] = useState(false);
-  const [isNap, setIsNap] = useState(true);
-  const [location, setLocation] = useState<SommeilEvent["location"]>();
-  const [quality, setQuality] = useState<SommeilEvent["quality"]>();
-  const [noteSommeil, setNoteSommeil] = useState("");
-
-  const [showDateStart, setShowDateStart] = useState(false);
-  const [showTimeStart, setShowTimeStart] = useState(false);
-  const [showDateEnd, setShowDateEnd] = useState(false);
-  const [showTimeEnd, setShowTimeEnd] = useState(false);
+  const [pendingEditData, setPendingEditData] = useState<RoutinesEditData | null>(null);
+  const [pendingRoutineType, setPendingRoutineType] = useState<RoutineType>("sommeil");
+  const [pendingSleepMode, setPendingSleepMode] = useState<SleepMode>("nap");
 
   const [now, setNow] = useState(new Date());
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
-  const pendingTypeRef = useRef<RoutineType | null>(null);
-  const pendingSleepModeRef = useRef<"nap" | "night" | null>(null);
 
   const normalizeParam = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value;
@@ -233,6 +171,24 @@ export default function RoutinesScreen() {
     }
   }, []);
 
+  const ensureTodayInRange = useCallback(() => {
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    setRangeEndDate((prev) => {
+      if (!prev) {
+        setDaysWindow(14);
+        return endOfToday;
+      }
+      if (prev >= endOfToday) return prev;
+      const diffDays = Math.ceil(
+        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
+      );
+      setDaysWindow((window) => window + diffDays);
+      return endOfToday;
+    });
+  }, []);
+
   // ============================================
   // HEADER
   // ============================================
@@ -256,12 +212,16 @@ export default function RoutinesScreen() {
     setExpandedDays(new Set([todayKey]));
   }, []);
 
-  const handleAddPress = useCallback(() => {
-    pendingTypeRef.current = "sommeil";
-    pendingSleepModeRef.current = "nap";
-    setPendingMode("add");
+  const openAddModal = useCallback((routineType: RoutineType, sleepMode: SleepMode = "nap") => {
+    setPendingEditData(null);
+    setPendingRoutineType(routineType);
+    setPendingSleepMode(sleepMode);
     setPendingOpen(true);
   }, []);
+
+  const handleAddPress = useCallback(() => {
+    openAddModal("sommeil", "nap");
+  }, [openAddModal]);
 
   useFocusEffect(
     useCallback(() => {
@@ -533,7 +493,7 @@ export default function RoutinesScreen() {
     setExpandedDays(new Set([day.dateString]));
   };
 
-  const handleFilterPress = (filter: FilterType) => {
+  const handleFilterPress = (filter: DateFilterValue) => {
     if (filter === "today") {
       applyTodayFilter();
       return;
@@ -690,164 +650,84 @@ export default function RoutinesScreen() {
   // ============================================
   // SHEET LOGIC
   // ============================================
-  const resetBainForm = useCallback(() => {
-    setDateHeure(new Date());
-    setDureeBain(10);
-    setTemperatureEau(37);
-    setProduits("");
-    setNoteBain("");
-    setEditingBain(null);
-  }, []);
-
-  const resetSleepForm = useCallback((preset?: "nap" | "night") => {
-    setHeureDebut(new Date());
-    setHeureFin(null);
-    setIsOngoing(false);
-    const napMode = preset !== "night";
-    setIsNap(napMode);
-    setLocation(undefined);
-    setQuality(undefined);
-    setNoteSommeil("");
-    setEditingSommeil(null);
-  }, []);
-
-  const openEditModal = useCallback((item: RoutineEvent) => {
-    if (item.type === "sommeil") {
-      const debut = item.heureDebut
-        ? toDate(item.heureDebut)
-        : toDate(item.date);
-      const fin = item.heureFin ? toDate(item.heureFin) : null;
-      setHeureDebut(debut);
-      setHeureFin(fin);
-      setIsOngoing(!fin);
-      setIsNap(item.isNap ?? true);
-      setLocation(item.location);
-      setQuality(item.quality);
-      setNoteSommeil(item.note ?? "");
-      setEditingSommeil(item as any);
-      setEditingBain(null);
-      setSheetType(item.isNap ? "nap" : "night");
-      setIsSubmitting(false);
-      setPendingMode("edit");
-      setPendingOpen(true);
-      return;
+  const buildEditData = useCallback((event: RoutineEvent): RoutinesEditData => {
+    if (event.type === "sommeil") {
+      return {
+        id: event.id,
+        type: "sommeil",
+        date: toDate(event.date),
+        heureDebut: event.heureDebut ? toDate(event.heureDebut) : toDate(event.date),
+        heureFin: event.heureFin ? toDate(event.heureFin) : null,
+        isNap: event.isNap,
+        location: event.location,
+        quality: event.quality,
+        duree: event.duree,
+        note: event.note,
+      };
     }
-    setEditingBain(item as any);
-    setEditingSommeil(null);
-    setSheetType("bain");
-    setDateHeure(toDate(item.date));
-    setDureeBain((item as any).duree ?? 10);
-    setTemperatureEau((item as any).temperatureEau ?? 37);
-    setProduits((item as any).produits ?? "");
-    setNoteBain(item.note ?? "");
-    setIsSubmitting(false);
-
-    setPendingMode("edit");
-    setPendingOpen(true);
+    // Bain
+    const bain = event as BainEvent & { id: string };
+    return {
+      id: bain.id,
+      type: "bain",
+      date: toDate(bain.date),
+      temperatureEau: bain.temperatureEau,
+      produits: bain.produits,
+      duree: bain.duree,
+      note: bain.note,
+    };
   }, []);
 
-  function buildSheetProps() {
-    const returnTarget = returnTargetParam ?? returnToRef.current;
-    const isBainSheet = !!editingBain || sheetType === "bain";
-    return {
-      ownerId: sheetOwnerId,
-      title: editingBain
-        ? "Modifier le bain"
-        : editingSommeil
-          ? "Modifier le sommeil"
-          : isBainSheet
-            ? "Nouveau bain"
-            : "Nouveau sommeil",
-      icon: isBainSheet ? "bath" : "bed",
-      accentColor: isBainSheet
-        ? eventColors.bain.dark
-        : eventColors.sommeil.dark,
-      isEditing: !!editingBain || !!editingSommeil,
-      isSubmitting,
-      onSubmit: handleSubmit,
-      onDelete:
-        editingBain || editingSommeil
-          ? () => setShowDeleteModal(true)
-          : undefined,
-      children: renderSheetContent(),
-      onDismiss: () => {
-        setIsSubmitting(false);
-        setEditingBain(null);
-        setEditingSommeil(null);
-        editIdRef.current = null;
-        maybeReturnTo(returnTarget);
-      },
-    };
-  }
-
-  useEffect(() => {
-    if (!isSheetActive) return;
-    openSheet(buildSheetProps());
-  }, [
-    isSheetActive,
-    openSheet,
-    dateHeure,
-    dureeBain,
-    temperatureEau,
-    produits,
-    noteBain,
-    showDate,
-    showTime,
-    heureDebut,
-    heureFin,
-    isOngoing,
-    isNap,
-    location,
-    quality,
-    noteSommeil,
-    showDateStart,
-    showTimeStart,
-    showDateEnd,
-    showTimeEnd,
-    editingSommeil,
-    editingBain,
-    sheetType,
-  ]);
+  const openEditModal = useCallback((event: RoutineEvent) => {
+    const editData = buildEditData(event);
+    setPendingEditData(editData);
+    setPendingRoutineType(event.type as RoutineType);
+    if (event.type === "sommeil") {
+      setPendingSleepMode(event.isNap ? "nap" : "night");
+    }
+    setPendingOpen(true);
+  }, [buildEditData]);
 
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
       const normalizedType = normalizeParam(type);
       const normalizedMode = normalizeParam(mode);
-      pendingTypeRef.current =
+      const routineType: RoutineType =
         normalizedType && ["bain", "sommeil"].includes(normalizedType)
           ? (normalizedType as RoutineType)
-          : null;
-      if (normalizedType === "sommeil") {
-        pendingSleepModeRef.current =
-          normalizedMode === "night" ? "night" : "nap";
-      } else {
-        pendingSleepModeRef.current = null;
-      }
-      setPendingMode("add");
+          : "sommeil";
+      const sleepMode: SleepMode =
+        normalizedMode === "night" ? "night" : "nap";
+
+      setPendingEditData(null);
+      setPendingRoutineType(routineType);
+      setPendingSleepMode(sleepMode);
       setPendingOpen(true);
     }, [openModal, type, mode]),
   );
 
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
+    const returnTarget = returnTargetParam ?? returnToRef.current;
+
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
-      const pendingType = pendingTypeRef.current;
-      if (pendingMode !== "edit") {
-        if (pendingType === "bain") {
-          resetBainForm();
-          setSheetType("bain");
-          pendingSleepModeRef.current = null;
-        } else {
-          const preset =
-            pendingSleepModeRef.current ??
-            (normalizeParam(mode) === "night" ? "night" : "nap");
-          resetSleepForm(preset);
-          setSheetType(preset);
-        }
-      }
-      openSheet(buildSheetProps());
+
+      openSheet({
+        ownerId: sheetOwnerId,
+        formType: "routines",
+        routineType: pendingRoutineType,
+        sleepMode: pendingSleepMode,
+        editData: pendingEditData ?? undefined,
+        sommeilEnCours: sommeilEnCours ? { id: sommeilEnCours.id } : null,
+        onSuccess: ensureTodayInRange,
+        onDismiss: () => {
+          editIdRef.current = null;
+          maybeReturnTo(returnTarget);
+        },
+      });
+
       navigation.setParams({
         openModal: undefined,
         editId: undefined,
@@ -855,22 +735,21 @@ export default function RoutinesScreen() {
         mode: undefined,
       });
       setPendingOpen(false);
-      setPendingMode(null);
-      pendingTypeRef.current = null;
-      pendingSleepModeRef.current = null;
     });
     return () => task.cancel?.();
   }, [
     pendingOpen,
     layoutReady,
-    pendingMode,
+    pendingEditData,
+    pendingRoutineType,
+    pendingSleepMode,
+    sommeilEnCours,
     navigation,
-    resetBainForm,
-    resetSleepForm,
     stashReturnTo,
     openSheet,
-    mode,
     returnTargetParam,
+    maybeReturnTo,
+    ensureTodayInRange,
   ]);
 
   useEffect(() => {
@@ -891,99 +770,8 @@ export default function RoutinesScreen() {
   }, [editId, layoutReady, events, navigation, openEditModal, stashReturnTo]);
 
   // ============================================
-  // SUBMIT / DELETE
+  // STOP ONGOING SLEEP
   // ============================================
-  const handleSubmit = async () => {
-    if (!activeChild?.id || isSubmitting) return;
-    try {
-      setIsSubmitting(true);
-      if (sheetType === "bain" || editingBain) {
-        const data = {
-          date: dateHeure,
-          note: noteBain.trim() ? noteBain.trim() : undefined,
-          duree: dureeBain || undefined,
-          temperatureEau: temperatureEau || undefined,
-          produits: produits.trim() ? produits.trim() : undefined,
-        };
-
-        if (editingBain) {
-          await modifierBain(activeChild.id, editingBain.id, data);
-        } else {
-          await ajouterBain(activeChild.id, data);
-        }
-      } else {
-        if (!isOngoing && heureFin && heureFin.getTime() < heureDebut.getTime()) {
-          showAlert(
-            "Attention",
-            "La date de fin ne peut pas être antérieure à la date de début.",
-          );
-          setIsSubmitting(false);
-          return;
-        }
-        // Empêcher de créer un sommeil en cours si un autre est déjà en cours
-        if (isOngoing && !editingSommeil && sommeilEnCours) {
-          showAlert(
-            "Attention",
-            "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
-          );
-          setIsSubmitting(false);
-          return;
-        }
-        const fin = isOngoing ? null : (heureFin ?? undefined);
-        const start = heureDebut;
-        const dataToSave = {
-          heureDebut: start,
-          heureFin: fin,
-          duree:
-            start && fin
-              ? Math.max(
-                  0,
-                  Math.round((fin.getTime() - start.getTime()) / 60000),
-                )
-              : undefined,
-          location,
-          quality,
-          isNap,
-          date: start,
-          note: noteSommeil.trim() ? noteSommeil.trim() : undefined,
-        };
-
-        if (editingSommeil) {
-          await modifierSommeil(activeChild.id, editingSommeil.id, dataToSave);
-        } else {
-          await ajouterSommeil(activeChild.id, dataToSave);
-        }
-      }
-
-      closeSheet();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const confirmDelete = async () => {
-    if ((!editingBain && !editingSommeil) || !activeChild?.id || isSubmitting)
-      return;
-    try {
-      setIsSubmitting(true);
-      if (editingBain) {
-        await supprimerBain(activeChild.id, editingBain.id);
-      } else if (editingSommeil) {
-        await supprimerSommeil(activeChild.id, editingSommeil.id);
-      }
-      closeSheet();
-    } catch (error) {
-      console.error("Erreur suppression:", error);
-      showAlert("Erreur", "Impossible de supprimer.");
-    } finally {
-      setIsSubmitting(false);
-      setShowDeleteModal(false);
-    }
-  };
-
   const handleStopSleep = async () => {
     if (!activeChild?.id || !sommeilEnCours) return;
     try {
@@ -1006,502 +794,6 @@ export default function RoutinesScreen() {
       console.error("Erreur arrêt sommeil:", error);
       showAlert("Erreur", "Impossible d'arrêter le sommeil.");
     }
-  };
-
-  const renderSheetContent = () => {
-    const isEditingBain = !!editingBain;
-    const isEditingSommeil = !!editingSommeil;
-
-    const handleSelectType = (next: "nap" | "night" | "bain") => {
-      if (isEditingBain && next !== "bain") return;
-      if (isEditingSommeil && next === "bain") return;
-      if (next === "bain") {
-        if (sheetType !== "bain") {
-          resetBainForm();
-        }
-        setSheetType("bain");
-        setEditingSommeil(null);
-        return;
-      }
-      if (sheetType === "bain") {
-        resetSleepForm(next === "night" ? "night" : "nap");
-      }
-      setSheetType(next);
-      setIsNap(next === "nap");
-      setEditingBain(null);
-    };
-
-    const renderTypePicker = () => (
-      <View style={styles.typeRow}>
-        {[
-          { key: "nap", label: "Sieste" },
-          { key: "night", label: "Nuit" },
-          { key: "bain", label: "Bain" },
-        ].map((item) => {
-          const active = sheetType === item.key;
-          const isDisabled = isEditingBain
-            ? item.key !== "bain"
-            : isEditingSommeil
-              ? item.key === "bain"
-              : false;
-          return (
-            <TouchableOpacity
-              key={item.key}
-              style={[
-                styles.typeChip,
-                active && styles.typeChipActive,
-                isDisabled && styles.typeChipDisabled,
-              ]}
-              disabled={isDisabled}
-              activeOpacity={1}
-              onPress={() => handleSelectType(item.key as any)}
-            >
-              <Text
-                style={[
-                  styles.typeChipText,
-                  active && styles.typeChipTextActive,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    );
-
-    if (sheetType !== "bain") {
-      return (
-        <View style={styles.sheetContent}>
-          {renderTypePicker()}
-
-          <View style={styles.chipSection}>
-            <Text style={styles.chipLabel}>Lieu</Text>
-            <View style={styles.chipRow}>
-              {LOCATION_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.chip,
-                    location === option && styles.chipActive,
-                  ]}
-                  onPress={() => setLocation(option)}
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      location === option && styles.chipTextActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.chipSection}>
-            <Text style={styles.chipLabel}>Qualité</Text>
-            <View style={styles.chipRow}>
-              {QUALITY_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[styles.chip, quality === option && styles.chipActive]}
-                  onPress={() => setQuality(option)}
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      quality === option && styles.chipTextActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Note</Text>
-            <TextInput
-              value={noteSommeil}
-              onChangeText={setNoteSommeil}
-              placeholder="Ajouter une note"
-              style={styles.input}
-            />
-          </View>
-
-          <View style={styles.rowBetween}>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowDateStart(true)}
-            >
-              <FontAwesome5
-                name="calendar-alt"
-                size={16}
-                color={Colors[colorScheme].tint}
-              />
-              <Text style={styles.dateButtonText}>Date début</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowTimeStart(true)}
-            >
-              <FontAwesome5
-                name="clock"
-                size={16}
-                color={Colors[colorScheme].tint}
-              />
-              <Text style={styles.dateButtonText}>Heure début</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.rowBetween}>
-            <TouchableOpacity
-              style={[styles.dateButton, isOngoing && styles.dateButtonDisabled]}
-              onPress={() => {
-                if (!isOngoing) {
-                  setHeureFin((prev) => prev ?? new Date());
-                  setShowDateEnd(true);
-                }
-              }}
-            >
-              <FontAwesome5
-                name="calendar-alt"
-                size={16}
-                color={Colors[colorScheme].tint}
-              />
-              <Text style={styles.dateButtonText}>Date fin</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.dateButton, isOngoing && styles.dateButtonDisabled]}
-              onPress={() => {
-                if (!isOngoing) {
-                  setHeureFin((prev) => prev ?? new Date());
-                  setShowTimeEnd(true);
-                }
-              }}
-            >
-              <FontAwesome5
-                name="clock"
-                size={16}
-                color={Colors[colorScheme].tint}
-              />
-              <Text style={styles.dateButtonText}>Heure fin</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            style={styles.checkboxRow}
-            onPress={() => setIsOngoing((prev) => !prev)}
-          >
-            <View
-              style={[styles.checkbox, isOngoing && styles.checkboxChecked]}
-            >
-              {isOngoing && <FontAwesome name="check" size={12} color="#fff" />}
-            </View>
-            <Text style={styles.checkboxLabel}>Sommeil en cours</Text>
-          </TouchableOpacity>
-
-          <View style={styles.sleepSelectedDateTime}>
-            <Text style={styles.sleepSelectedDate}>
-              {formatDateLabel(heureDebut)}
-            </Text>
-            <Text style={styles.sleepSelectedTime}>
-              {formatTime(heureDebut)}
-            </Text>
-            {!isOngoing && heureFin && (
-              <>
-                {formatDateLabel(heureFin) !== formatDateLabel(heureDebut) && (
-                  <Text style={styles.sleepSelectedDate}>
-                    {formatDateLabel(heureFin)}
-                  </Text>
-                )}
-                <Text style={styles.sleepSelectedTime}>
-                  → {formatTime(heureFin)}
-                </Text>
-              </>
-            )}
-          </View>
-
-          {showDateStart && (
-            <DateTimePicker
-              value={heureDebut}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={(_, date) => {
-                setShowDateStart(false);
-                if (date) {
-                  setHeureDebut((prev) => {
-                    const next = new Date(prev);
-                    next.setFullYear(
-                      date.getFullYear(),
-                      date.getMonth(),
-                      date.getDate(),
-                    );
-                    return next;
-                  });
-                }
-              }}
-            />
-          )}
-          {showTimeStart && (
-            <DateTimePicker
-              value={heureDebut}
-              mode="time"
-              is24Hour
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={(_, date) => {
-                setShowTimeStart(false);
-                if (date) {
-                  setHeureDebut((prev) => {
-                    const next = new Date(prev);
-                    next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                    return next;
-                  });
-                }
-              }}
-            />
-          )}
-          {showDateEnd && heureFin && (
-            <DateTimePicker
-              value={heureFin}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={(_, date) => {
-                setShowDateEnd(false);
-                if (date) {
-                  setHeureFin((prev) => {
-                    const base = prev ?? new Date();
-                    const next = new Date(base);
-                    next.setFullYear(
-                      date.getFullYear(),
-                      date.getMonth(),
-                      date.getDate(),
-                    );
-                    return next;
-                  });
-                }
-              }}
-            />
-          )}
-          {showTimeEnd && heureFin && (
-            <DateTimePicker
-              value={heureFin}
-              mode="time"
-              is24Hour
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={(_, date) => {
-                setShowTimeEnd(false);
-                if (date) {
-                  setHeureFin((prev) => {
-                    const base = prev ?? new Date();
-                    const next = new Date(base);
-                    next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                    return next;
-                  });
-                }
-              }}
-            />
-          )}
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.sheetContent}>
-        {renderTypePicker()}
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Durée (minutes)</Text>
-          <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPress={() => setDureeBain((value) => Math.max(0, value - 5))}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                -
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.quantityPickerValue}>{dureeBain} min</Text>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPress={() => setDureeBain((value) => value + 5)}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                +
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Température de l'eau (°C)</Text>
-          <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPress={() =>
-                setTemperatureEau((value) => Math.max(20, value - 1))
-              }
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                -
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.quantityPickerValue}>{temperatureEau}°C</Text>
-            <TouchableOpacity
-              style={[
-                styles.quantityButton,
-                isSubmitting && styles.quantityButtonDisabled,
-              ]}
-              onPress={() =>
-                setTemperatureEau((value) => Math.min(45, value + 1))
-              }
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
-                ]}
-              >
-                +
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Produits</Text>
-          <TextInput
-            value={produits}
-            onChangeText={setProduits}
-            placeholder="Gel lavant, huile..."
-            style={styles.input}
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Note</Text>
-          <TextInput
-            value={noteBain}
-            onChangeText={setNoteBain}
-            placeholder="Ajouter une note"
-            style={styles.input}
-          />
-        </View>
-
-        <View style={styles.dateTimeContainerWithPadding}>
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowDate(true)}
-          >
-            <FontAwesome5
-              name="calendar-alt"
-              size={16}
-              color={Colors[colorScheme].tint}
-            />
-            <Text style={styles.dateButtonText}>Date</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowTime(true)}
-          >
-            <FontAwesome5
-              name="clock"
-              size={16}
-              color={Colors[colorScheme].tint}
-            />
-            <Text style={styles.dateButtonText}>Heure</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.selectedDateTime}>
-          <Text style={styles.selectedDate}>
-            {dateHeure.toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
-          <Text style={styles.selectedTime}>
-            {dateHeure.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-
-        {showDate && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, date) => {
-              setShowDate(false);
-              if (date) {
-                setDateHeure((prev) => {
-                  const next = new Date(prev);
-                  next.setFullYear(
-                    date.getFullYear(),
-                    date.getMonth(),
-                    date.getDate(),
-                  );
-                  return next;
-                });
-              }
-            }}
-          />
-        )}
-        {showTime && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="time"
-            is24Hour
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, date) => {
-              setShowTime(false);
-              if (date) {
-                setDateHeure((prev) => {
-                  const next = new Date(prev);
-                  next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                  return next;
-                });
-              }
-            }}
-          />
-        )}
-      </View>
-    );
   };
 
   // ============================================
@@ -1577,15 +869,6 @@ export default function RoutinesScreen() {
         key={event.id}
         style={({ pressed }) => [
           styles.sessionCard,
-          // isLast && [
-          //   styles.sessionCardLast,
-          //   {
-          //     backgroundColor:
-          //       (event.type === "sommeil"
-          //         ? eventColors.sommeil.light
-          //         : eventColors.bain.light) + "40",
-          //   },
-          // ],
           pressed && styles.sessionCardPressed,
         ]}
         onPress={() => openEditModal(event)}
@@ -1707,7 +990,6 @@ export default function RoutinesScreen() {
             });
 
     const isExpanded = expandedDays.has(item.date);
-    const sommeilCount = item.counts.sommeil;
     const bainCount = item.counts.bain;
     const napCount = item.events.filter(
       (evt) => evt.type === "sommeil" && evt.isNap,
@@ -1830,12 +1112,7 @@ export default function RoutinesScreen() {
             <View style={styles.quickActionsRow}>
               <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "sommeil";
-                  pendingSleepModeRef.current = "nap";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
+                onPress={() => openAddModal("sommeil", "nap")}
               >
                 <FontAwesome
                   name="bed"
@@ -1845,12 +1122,7 @@ export default function RoutinesScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "sommeil";
-                  pendingSleepModeRef.current = "night";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
+                onPress={() => openAddModal("sommeil", "night")}
               >
                 <FontAwesome
                   name="moon"
@@ -1860,12 +1132,7 @@ export default function RoutinesScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "bain";
-                  pendingSleepModeRef.current = null;
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
+                onPress={() => openAddModal("bain")}
               >
                 <FontAwesome
                   name="bath"
@@ -1923,12 +1190,24 @@ export default function RoutinesScreen() {
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <IconPulseDots color={Colors[colorScheme].tint} />
+              <Ionicons
+                name="calendar-outline"
+                size={64}
+                color={Colors[colorScheme].tabIconDefault}
+              />
               <ThemedText style={styles.emptyText}>
                 {events.length === 0
                   ? "Aucune routine enregistrée"
                   : "Aucune routine pour ce filtre"}
               </ThemedText>
+              {!(selectedFilter === "today" || selectedDate) && (
+                <LoadMoreButton
+                  isLoading={isLoadingMore}
+                  hasMore={hasMore}
+                  onPress={handleLoadMore}
+                  color={Colors[colorScheme].tint}
+                />
+              )}
             </View>
           ) : (
             <FlatList
@@ -1938,12 +1217,14 @@ export default function RoutinesScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listContent}
               ListFooterComponent={
-                <LoadMoreButton
-                  isLoading={isLoadingMore}
-                  hasMore={hasMore}
-                  onPress={handleLoadMore}
-                  color={Colors[colorScheme].tint}
-                />
+                selectedFilter === "today" || selectedDate ? null : (
+                  <LoadMoreButton
+                    isLoading={isLoadingMore}
+                    hasMore={hasMore}
+                    onPress={handleLoadMore}
+                    color={Colors[colorScheme].tint}
+                  />
+                )
               }
             />
           )
@@ -1954,26 +1235,6 @@ export default function RoutinesScreen() {
           </View>
         )}
       </SafeAreaView>
-
-      <ConfirmModal
-        visible={showDeleteModal}
-        title="Supprimer"
-        message={
-          editingSommeil
-            ? "Cette entrée de sommeil sera supprimée définitivement."
-            : "Cette entrée de bain sera supprimée définitivement."
-        }
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
-        confirmButtonColor="#dc3545"
-        confirmTextColor="#fff"
-        cancelButtonColor="#f1f3f5"
-        cancelTextColor="#1f2937"
-        onConfirm={confirmDelete}
-        onCancel={() => setShowDeleteModal(false)}
-      />
     </View>
   );
 }
@@ -2052,36 +1313,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#f0f0f0",
-  },
-  typeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingBottom: 8,
-  },
-  typeChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#f9fafb",
-  },
-  typeChipActive: {
-    backgroundColor: "#fff",
-    borderColor: "#6f42c1",
-  },
-  typeChipText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6b7280",
-  },
-  typeChipTextActive: {
-    color: "#4c2c79",
-    fontWeight: "700",
-  },
-  typeChipDisabled: {
-    opacity: 0.5,
   },
   listContent: {
     paddingHorizontal: 16,
@@ -2166,10 +1397,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
   },
-  sessionCardLast: {
-    backgroundColor: "#f8f9fa",
-    borderBottomWidth: 0,
-  },
   sessionCardPressed: {
     backgroundColor: "#f9fafb",
   },
@@ -2226,10 +1453,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6b7280",
   },
-  sessionDetailMuted: {
-    fontSize: 12,
-    color: "#9ca3af",
-  },
   sessionTotal: {
     flexDirection: "row",
     alignItems: "baseline",
@@ -2275,173 +1498,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#666",
     marginTop: 16,
-    fontWeight: "600",
-  },
-  sheetContent: {
-    gap: 12,
-  },
-  inputGroup: {
-    gap: 6,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6b7280",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  quantityPickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    marginBottom: 8,
-  },
-  quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quantityButtonDisabled: {
-    opacity: 0.6,
-  },
-  quantityButtonText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-  },
-  quantityButtonTextDisabled: {
-    color: "#999",
-  },
-  quantityPickerValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  dateTimeContainerWithPadding: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-    paddingTop: 20,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
-  },
-  rowBetween: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  dateButtonDisabled: {
-    opacity: 0.5,
-  },
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkboxChecked: {
-    backgroundColor: "#6f42c1",
-    borderColor: "#6f42c1",
-  },
-  checkboxLabel: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "600",
-  },
-  chipSection: {
-    gap: 8,
-  },
-  chipLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6b7280",
-  },
-  chipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  chip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#f9fafb",
-  },
-  chipActive: {
-    borderColor: "#6f42c1",
-    backgroundColor: "#ede7f6",
-  },
-  chipText: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "600",
-  },
-  chipTextActive: {
-    color: "#4c2c79",
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#4a4f55",
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  sleepSelectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  sleepSelectedDate: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "600",
-    marginBottom: 4,
-    textTransform: "capitalize",
-  },
-  selectedTime: {
-    fontSize: 20,
-    color: "#374151",
-    fontWeight: "600",
-  },
-  sleepSelectedTime: {
-    fontSize: 20,
-    color: "#374151",
     fontWeight: "600",
   },
 });

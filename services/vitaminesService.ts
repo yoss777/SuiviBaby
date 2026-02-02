@@ -60,7 +60,7 @@ export async function obtenirToutesLesVitamines(childId: string) {
     const q = query(
       collection(db, "vitamines"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc")
+      orderBy("date", "desc")
     );
     const querySnapshot = await getDocs(q);
 
@@ -79,7 +79,7 @@ export async function obtenirVitaminesAvecLimite(childId: string, nombreLimit: n
     const q = query(
       collection(db, "vitamines"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc"),
+      orderBy("date", "desc"),
       limit(nombreLimit)
     );
     const querySnapshot = await getDocs(q);
@@ -98,7 +98,7 @@ export function ecouterVitamines(childId: string, callback: (docs: any[]) => voi
   const q = query(
     collection(db, "vitamines"),
     where("childId", "==", childId),
-    orderBy("createdAt", "desc")
+    orderBy("date", "desc")
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {

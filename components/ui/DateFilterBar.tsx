@@ -12,7 +12,7 @@ import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
-type DateFilterValue = "today" | "past";
+export type DateFilterValue = "today" | "past";
 
 type DateFilterBarProps = PropsWithChildren<{
   selected: DateFilterValue;

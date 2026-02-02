@@ -133,6 +133,12 @@ export default function BabyTabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="growth"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

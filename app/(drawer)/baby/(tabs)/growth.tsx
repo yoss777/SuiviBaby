@@ -1,10 +1,8 @@
-import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
+import { CroissanceEditData } from "@/components/forms/CroissanceForm";
+import { ThemedText } from "@/components/themed-text";
+import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
-import {
-  JalonType,
-  MilestonesEditData,
-} from "@/components/forms/MilestonesForm";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
@@ -12,11 +10,11 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ecouterJalonsHybrid,
+  ecouterCroissancesHybrid,
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
-import { JalonEvent } from "@/services/eventsService";
+import { CroissanceEvent } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -26,12 +24,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   FlatList,
-  Image,
   InteractionManager,
   Pressable,
   StyleSheet,
   Text,
-  View,
+  View
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -41,78 +38,19 @@ import { useHeaderLeft, useHeaderRight } from "../../_layout";
 // TYPES
 // ============================================
 
-type MilestoneEventWithId = JalonEvent & { id: string };
+type DateFilterValue = "today" | "past";
 
-type MilestoneGroup = {
+type GrowthEventWithId = CroissanceEvent & { id: string };
+
+type GrowthGroup = {
   date: string;
-  events: MilestoneEventWithId[];
-  counts: Record<JalonType, number>;
-  lastEvent: MilestoneEventWithId;
+  events: GrowthEventWithId[];
+  lastEvent: GrowthEventWithId;
 };
-
-const TYPE_CONFIG: Record<
-  JalonType,
-  { label: string; color: string; icon: string; defaultTitle: string }
-> = {
-  dent: {
-    label: "Première dent",
-    color: eventColors.jalon.dark,
-    icon: "tooth",
-    defaultTitle: "Première dent",
-  },
-  pas: {
-    label: "Premiers pas",
-    color: eventColors.jalon.dark,
-    icon: "shoe-prints",
-    defaultTitle: "Premiers pas",
-  },
-  sourire: {
-    label: "Premier sourire",
-    color: eventColors.jalon.dark,
-    icon: "face-smile",
-    defaultTitle: "Premier sourire",
-  },
-  mot: {
-    label: "Premiers mots",
-    color: eventColors.jalon.dark,
-    icon: "comment-dots",
-    defaultTitle: "Premiers mots",
-  },
-  humeur: {
-    label: "Humeur",
-    color: eventColors.jalon.dark,
-    icon: "heart",
-    defaultTitle: "Humeur du jour",
-  },
-  photo: {
-    label: "Moment photo",
-    color: eventColors.jalon.dark,
-    icon: "camera",
-    defaultTitle: "Un beau moment",
-  },
-  autre: {
-    label: "Autre moment",
-    color: eventColors.jalon.dark,
-    icon: "star",
-    defaultTitle: "Moment important",
-  },
-};
-
-const MOOD_OPTIONS: {
-  value: 1 | 2 | 3 | 4 | 5;
-  emoji: string;
-  label: string;
-}[] = [
-  { value: 1, emoji: "😢", label: "Difficile" },
-  { value: 2, emoji: "😐", label: "Mitigé" },
-  { value: 3, emoji: "🙂", label: "OK" },
-  { value: 4, emoji: "😄", label: "Content" },
-  { value: 5, emoji: "🥰", label: "Rayonnant" },
-];
 
 const formatDateKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
+    date.getDate(),
   ).padStart(2, "0")}`;
 
 const formatTime = (date: Date) =>
@@ -129,31 +67,32 @@ const toDate = (value: any) => {
 // COMPONENT
 // ============================================
 
-export default function MilestonesScreen() {
+export default function GrowthScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const { setHeaderLeft } = useHeaderLeft();
   const colorScheme = useColorScheme() ?? "light";
   const { openSheet, closeSheet, isOpen } = useSheet();
   const navigation = useNavigation();
-  const headerOwnerId = useRef(
-    `milestones-${Math.random().toString(36).slice(2)}`
-  );
+  const headerOwnerId = useRef(`growth-${Math.random().toString(36).slice(2)}`);
 
-  const { openModal, editId, returnTo, type } = useLocalSearchParams();
+  const { openModal, editId, returnTo } = useLocalSearchParams();
   const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
-  const sheetOwnerId = "milestones";
+  const sheetOwnerId = "growth";
 
   const [showCalendar, setShowCalendar] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<DateFilterValue>("today");
+  const [selectedFilter, setSelectedFilter] =
+    useState<DateFilterValue>("today");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
+  const [pendingEditData, setPendingEditData] =
+    useState<CroissanceEditData | null>(null);
 
-  const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
-  const [groupedEvents, setGroupedEvents] = useState<MilestoneGroup[]>([]);
+  const [events, setEvents] = useState<GrowthEventWithId[]>([]);
+  const [groupedEvents, setGroupedEvents] = useState<GrowthGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [loaded, setLoaded] = useState({ jalons: false });
+  const [loaded, setLoaded] = useState({ croissance: false });
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
@@ -164,11 +103,6 @@ export default function MilestonesScreen() {
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
 
-  // Form pattern states
-  const [pendingEditData, setPendingEditData] =
-    useState<MilestonesEditData | null>(null);
-  const [pendingJalonType, setPendingJalonType] = useState<JalonType>("dent");
-
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
 
@@ -178,29 +112,18 @@ export default function MilestonesScreen() {
   const stashReturnTo = useCallback(() => {
     const target = normalizeParam(returnTo);
     if (!target) return;
-    if (
-      target === "home" ||
-      target === "chrono" ||
-      target === "journal" ||
-      target === "moments"
-    ) {
+    if (target === "home" || target === "chrono" || target === "journal") {
       returnToRef.current = target;
       return;
     }
     returnToRef.current = null;
   }, [returnTo]);
 
-  useEffect(() => {
-    stashReturnTo();
-  }, [stashReturnTo]);
-
   const maybeReturnTo = useCallback((targetOverride?: string | null) => {
     const target = targetOverride ?? returnToRef.current;
     returnToRef.current = null;
     if (target === "home") {
       router.replace("/baby/home");
-    } else if (target === "moments") {
-      router.replace("/baby/moments");
     } else if (target === "chrono" || target === "journal") {
       router.replace("/baby/chrono");
     }
@@ -225,36 +148,35 @@ export default function MilestonesScreen() {
   }, []);
 
   // ============================================
-  // FORM HELPERS
+  // BUILD EDIT DATA
   // ============================================
   const buildEditData = useCallback(
-    (event: MilestoneEventWithId): MilestonesEditData => ({
-      id: event.id,
-      typeJalon: event.typeJalon,
-      titre: event.titre,
-      description: event.description,
-      note: event.note,
-      humeur: event.humeur,
-      photos: event.photos,
-      date: toDate(event.date),
-    }),
-    []
+    (event: GrowthEventWithId): CroissanceEditData => {
+      return {
+        id: event.id,
+        date: toDate(event.date),
+        tailleCm: event.tailleCm,
+        poidsKg: event.poidsKg,
+        teteCm: event.teteCm,
+      };
+    },
+    [],
   );
 
-  const openAddModal = useCallback((jalonType: JalonType) => {
-    setPendingJalonType(jalonType);
+  // ============================================
+  // OPEN ADD / EDIT MODAL
+  // ============================================
+  const openAddModal = useCallback(() => {
     setPendingEditData(null);
     setPendingOpen(true);
   }, []);
 
   const openEditModal = useCallback(
-    (event: MilestoneEventWithId) => {
-      setPendingJalonType(event.typeJalon);
+    (event: GrowthEventWithId) => {
       setPendingEditData(buildEditData(event));
-      setShowCalendar(false);
       setPendingOpen(true);
     },
-    [buildEditData]
+    [buildEditData],
   );
 
   // ============================================
@@ -266,7 +188,6 @@ export default function MilestonesScreen() {
       if (nextValue) {
         const today = new Date();
         setSelectedDate(formatDateKey(today));
-        setExpandedDays(new Set([formatDateKey(today)]));
       }
       return nextValue;
     });
@@ -279,10 +200,6 @@ export default function MilestonesScreen() {
     setShowCalendar(false);
     setExpandedDays(new Set([todayKey]));
   }, []);
-
-  const handleAddPress = useCallback(() => {
-    openAddModal("dent");
-  }, [openAddModal]);
 
   useFocusEffect(
     useCallback(() => {
@@ -304,7 +221,7 @@ export default function MilestonesScreen() {
               color={Colors[colorScheme].tint}
             />
           </Pressable>
-          <Pressable onPress={handleAddPress} style={styles.headerButton}>
+          <Pressable onPress={openAddModal} style={styles.headerButton}>
             <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
           </Pressable>
         </View>
@@ -315,11 +232,11 @@ export default function MilestonesScreen() {
       };
     }, [
       handleCalendarPress,
-      handleAddPress,
+      openAddModal,
       showCalendar,
       colorScheme,
       setHeaderRight,
-    ])
+    ]),
   );
 
   useFocusEffect(
@@ -330,10 +247,6 @@ export default function MilestonesScreen() {
           onPress={() => {
             if (returnTarget === "home") {
               router.replace("/baby/home");
-              return;
-            }
-            if (returnTarget === "moments") {
-              router.replace("/baby/moments");
               return;
             }
             if (returnTarget === "chrono" || returnTarget === "journal") {
@@ -349,7 +262,7 @@ export default function MilestonesScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, returnTargetParam, setHeaderLeft])
+    }, [colorScheme, returnTargetParam, setHeaderLeft]),
   );
 
   useFocusEffect(
@@ -364,10 +277,6 @@ export default function MilestonesScreen() {
           router.replace("/baby/home");
           return true;
         }
-        if (returnTarget === "moments") {
-          router.replace("/baby/moments");
-          return true;
-        }
         if (returnTarget === "chrono" || returnTarget === "journal") {
           router.replace("/baby/chrono");
           return true;
@@ -378,10 +287,10 @@ export default function MilestonesScreen() {
 
       const subscription = BackHandler.addEventListener(
         "hardwareBackPress",
-        onBackPress
+        onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen, returnTargetParam])
+    }, [closeSheet, isOpen, returnTargetParam]),
   );
 
   // ============================================
@@ -389,7 +298,6 @@ export default function MilestonesScreen() {
   // ============================================
   useEffect(() => {
     if (!activeChild?.id) return;
-
     const versionAtSubscribe = loadMoreVersionRef.current;
     const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
     endOfRange.setHours(23, 59, 59, 999);
@@ -397,32 +305,45 @@ export default function MilestonesScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
-    const unsubscribe = ecouterJalonsHybrid(
-      activeChild.id,
-      (data) => {
-        setEvents(data as MilestoneEventWithId[]);
-        setLoaded({ jalons: true });
+    let croissanceData: GrowthEventWithId[] = [];
 
-        if (
-          pendingLoadMoreRef.current > 0 &&
-          versionAtSubscribe === loadMoreVersionRef.current
-        ) {
-          pendingLoadMoreRef.current = 0;
+    const merge = () => {
+      const merged = [...croissanceData].sort(
+        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+      );
+      setEvents(merged);
+
+      if (
+        pendingLoadMoreRef.current > 0 &&
+        versionAtSubscribe === loadMoreVersionRef.current
+      ) {
+        pendingLoadMoreRef.current -= 1;
+        if (pendingLoadMoreRef.current <= 0) {
           setIsLoadingMore(false);
         }
+      }
+    };
+
+    const unsubscribe = ecouterCroissancesHybrid(
+      activeChild.id,
+      (data) => {
+        croissanceData = data as GrowthEventWithId[];
+        setLoaded({ croissance: true });
+        merge();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+    };
   }, [activeChild?.id, daysWindow, rangeEndDate]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
-
     setEvents([]);
     setGroupedEvents([]);
-    setLoaded({ jalons: false });
+    setLoaded({ croissance: false });
     setEmptyDelayDone(false);
     setDaysWindow(14);
     setRangeEndDate(null);
@@ -434,7 +355,30 @@ export default function MilestonesScreen() {
   }, [activeChild?.id]);
 
   useEffect(() => {
-    if (!loaded.jalons) {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    getNextEventDateBeforeHybrid(activeChild.id, "croissance", endOfToday)
+      .then((nextDate) => {
+        if (cancelled) return;
+        setDaysWindow(14);
+        setRangeEndDate(nextDate ?? endOfToday);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDaysWindow(14);
+        setRangeEndDate(endOfToday);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChild?.id]);
+
+  useEffect(() => {
+    if (!Object.values(loaded).every(Boolean)) {
       setEmptyDelayDone(false);
       return;
     }
@@ -444,97 +388,8 @@ export default function MilestonesScreen() {
     }
     const timer = setTimeout(() => setEmptyDelayDone(true), 300);
     return () => clearTimeout(timer);
-  }, [loaded.jalons, groupedEvents.length]);
+  }, [loaded, groupedEvents.length]);
 
-  // ============================================
-  // FILTERS
-  // ============================================
-  useFocusEffect(
-    useCallback(() => {
-      if (!selectedDate) {
-        applyTodayFilter();
-      }
-    }, [applyTodayFilter, selectedDate])
-  );
-
-  const handleFilterPress = (filter: DateFilterValue) => {
-    if (filter === "today") {
-      applyTodayFilter();
-      return;
-    }
-    setSelectedFilter(filter);
-    setSelectedDate(null);
-    setShowCalendar(false);
-    setExpandedDays(new Set());
-  };
-
-  const handleDateSelect = (day: DateData) => {
-    setSelectedDate(day.dateString);
-    setShowCalendar(false);
-    setExpandedDays(new Set([day.dateString]));
-  };
-
-  const filteredEvents = useMemo(() => {
-    if (!selectedFilter && !selectedDate) return events;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
-    return events.filter((item) => {
-      const date = toDate(item.date);
-      date.setHours(0, 0, 0, 0);
-      const time = date.getTime();
-      if (selectedFilter === "today") return time === todayTime;
-      if (selectedFilter === "past") return time < todayTime;
-      if (selectedDate) return formatDateKey(date) === selectedDate;
-      return true;
-    });
-  }, [events, selectedFilter, selectedDate]);
-
-  useEffect(() => {
-    const groups: Record<string, MilestoneGroup> = {};
-    filteredEvents.forEach((event) => {
-      const key = formatDateKey(toDate(event.date));
-      if (!groups[key]) {
-        groups[key] = {
-          date: key,
-          events: [],
-          counts: {
-            dent: 0,
-            pas: 0,
-            sourire: 0,
-            mot: 0,
-            humeur: 0,
-            photo: 0,
-            autre: 0,
-          },
-          lastEvent: event,
-        };
-      }
-      groups[key].events.push(event);
-      groups[key].counts[event.typeJalon] += 1;
-      if (toDate(event.date) > toDate(groups[key].lastEvent.date)) {
-        groups[key].lastEvent = event;
-      }
-    });
-
-    const sorted = Object.values(groups).sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-
-    sorted.forEach((group) => {
-      group.events.sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime()
-      );
-    });
-
-    setGroupedEvents(sorted);
-  }, [filteredEvents]);
-
-  // ============================================
-  // LOAD MORE
-  // ============================================
   useEffect(() => {
     if (!activeChild?.id) return;
     let cancelled = false;
@@ -546,7 +401,7 @@ export default function MilestonesScreen() {
     const beforeDate = new Date(startOfRange.getTime() - 1);
 
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, ["jalon"], beforeDate)
+    hasMoreEventsBeforeHybrid(activeChild.id, "croissance", beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -559,6 +414,111 @@ export default function MilestonesScreen() {
     };
   }, [activeChild?.id, daysWindow, rangeEndDate]);
 
+  // ============================================
+  // FILTERS + GROUPING
+  // ============================================
+  const markedDates = useMemo(() => {
+    const marked: Record<string, any> = {};
+    events.forEach((item) => {
+      const date = toDate(item.date);
+      const key = formatDateKey(date);
+      marked[key] = {
+        ...(marked[key] || {}),
+        marked: true,
+        dotColor: eventColors.croissance.dark,
+      };
+    });
+    if (selectedDate) {
+      marked[selectedDate] = {
+        ...marked[selectedDate],
+        selected: true,
+        selectedColor: Colors[colorScheme].tint,
+        selectedTextColor: "#ffffff",
+      };
+    }
+    if (selectedFilter === "today" && !selectedDate) {
+      const todayKey = formatDateKey(new Date());
+      marked[todayKey] = {
+        ...marked[todayKey],
+        selected: true,
+        selectedColor: Colors[colorScheme].tint,
+        selectedTextColor: "#ffffff",
+      };
+    }
+    return marked;
+  }, [events, selectedDate, selectedFilter, colorScheme]);
+
+  const handleDateSelect = (day: DateData) => {
+    setSelectedDate(day.dateString);
+    setShowCalendar(false);
+    setExpandedDays(new Set([day.dateString]));
+  };
+
+  const handleFilterPress = (filter: DateFilterValue) => {
+    if (filter === "today") {
+      applyTodayFilter();
+      return;
+    }
+    setSelectedFilter(filter);
+    setSelectedDate(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set());
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedDate) {
+        applyTodayFilter();
+      }
+    }, [applyTodayFilter, selectedDate]),
+  );
+
+  useEffect(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    const filtered = events.filter((item) => {
+      const date = toDate(item.date);
+      date.setHours(0, 0, 0, 0);
+      const time = date.getTime();
+
+      if (selectedDate) {
+        const [year, month, day] = selectedDate.split("-").map(Number);
+        const selected = new Date(year, month - 1, day);
+        selected.setHours(0, 0, 0, 0);
+        return time === selected.getTime();
+      }
+
+      if (selectedFilter === "today") return time === todayTime;
+      if (selectedFilter === "past") return time < todayTime;
+      return true;
+    });
+
+    const groups: Record<string, GrowthEventWithId[]> = {};
+    filtered.forEach((item) => {
+      const date = toDate(item.date);
+      const key = formatDateKey(date);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    const grouped = Object.entries(groups)
+      .map(([date, items]) => {
+        const sorted = items.sort(
+          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        );
+        return {
+          date,
+          events: sorted,
+          lastEvent: sorted[0],
+        };
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    setGroupedEvents(grouped);
+  }, [events, selectedFilter, selectedDate, showCalendar]);
+
   const loadMoreStep = useCallback(
     async (auto = false) => {
       if (!hasMore || !activeChild?.id) return;
@@ -566,30 +526,32 @@ export default function MilestonesScreen() {
       pendingLoadMoreRef.current = 1;
       loadMoreVersionRef.current += 1;
 
-      if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
-        const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
-        endOfRange.setHours(23, 59, 59, 999);
-        const startOfRange = new Date(endOfRange);
-        startOfRange.setHours(0, 0, 0, 0);
-        startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-        const beforeDate = new Date(startOfRange.getTime() - 1);
-        const nextEventDate = await getNextEventDateBeforeHybrid(
-          activeChild.id,
-          ["jalon"],
-          beforeDate
-        );
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      const beforeDate = new Date(startOfRange.getTime() - 1);
+      const nextEventDate = await getNextEventDateBeforeHybrid(
+        activeChild.id,
+        "croissance",
+        beforeDate,
+      );
 
-        if (nextEventDate) {
-          setDaysWindow(14);
-          setRangeEndDate(nextEventDate);
-        } else {
-          setHasMore(false);
-          pendingLoadMoreRef.current = 0;
-          setIsLoadingMore(false);
-          setAutoLoadMore(false);
-        }
+      if (nextEventDate) {
+        const startOfNext = new Date(nextEventDate);
+        startOfNext.setHours(0, 0, 0, 0);
+        const diffDays =
+          Math.floor(
+            (endOfRange.getTime() - startOfNext.getTime()) /
+              (24 * 60 * 60 * 1000),
+          ) + 1;
+        setDaysWindow((prev) => Math.max(prev, diffDays));
       } else {
-        setDaysWindow((prev) => prev + 14);
+        setHasMore(false);
+        pendingLoadMoreRef.current = 0;
+        setIsLoadingMore(false);
+        setAutoLoadMore(false);
       }
 
       if (!auto) {
@@ -597,7 +559,7 @@ export default function MilestonesScreen() {
         setAutoLoadMoreAttempts(0);
       }
     },
-    [hasMore, activeChild?.id, autoLoadMoreAttempts, daysWindow, rangeEndDate]
+    [hasMore, activeChild?.id, daysWindow, rangeEndDate],
   );
 
   const handleLoadMore = useCallback(() => {
@@ -606,21 +568,19 @@ export default function MilestonesScreen() {
 
   useEffect(() => {
     if (selectedFilter === "today" || selectedDate) return;
-    if (loaded.jalons && groupedEvents.length === 0 && hasMore) {
+    if (
+      Object.values(loaded).every(Boolean) &&
+      groupedEvents.length === 0 &&
+      hasMore
+    ) {
       setAutoLoadMore(true);
       setAutoLoadMoreAttempts(0);
     }
-  }, [
-    loaded.jalons,
-    groupedEvents.length,
-    hasMore,
-    selectedFilter,
-    selectedDate,
-  ]);
+  }, [loaded, groupedEvents.length, hasMore, selectedFilter, selectedDate]);
 
   useEffect(() => {
     if (!autoLoadMore) return;
-    if (!loaded.jalons || isLoadingMore) return;
+    if (!Object.values(loaded).every(Boolean) || isLoadingMore) return;
     if (groupedEvents.length > 0 || !hasMore) {
       setAutoLoadMore(false);
       setAutoLoadMoreAttempts(0);
@@ -634,7 +594,7 @@ export default function MilestonesScreen() {
     loadMoreStep(true);
   }, [
     autoLoadMore,
-    loaded.jalons,
+    loaded,
     isLoadingMore,
     groupedEvents.length,
     hasMore,
@@ -643,18 +603,13 @@ export default function MilestonesScreen() {
   ]);
 
   // ============================================
-  // SHEET OPEN EFFECT
+  // SHEET LOGIC - USING FORM TYPE PATTERN
   // ============================================
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
-      const normalizedType = normalizeParam(type);
-      const jalonType =
-        normalizedType && Object.keys(TYPE_CONFIG).includes(normalizedType)
-          ? (normalizedType as JalonType)
-          : "dent";
-      openAddModal(jalonType);
-    }, [openModal, type, openAddModal])
+      openAddModal();
+    }, [openModal, openAddModal]),
   );
 
   useEffect(() => {
@@ -664,8 +619,7 @@ export default function MilestonesScreen() {
       stashReturnTo();
       openSheet({
         ownerId: sheetOwnerId,
-        formType: "milestones",
-        jalonType: pendingJalonType,
+        formType: "croissance",
         editData: pendingEditData ?? undefined,
         onSuccess: ensureTodayInRange,
         onDismiss: () => {
@@ -673,19 +627,16 @@ export default function MilestonesScreen() {
           maybeReturnTo(returnTarget);
         },
       });
-      (navigation as any).setParams({
+      navigation.setParams({
         openModal: undefined,
         editId: undefined,
-        type: undefined,
-        mode: undefined,
-      });
+      } as any);
       setPendingOpen(false);
     });
     return () => task.cancel?.();
   }, [
     pendingOpen,
     layoutReady,
-    pendingJalonType,
     pendingEditData,
     navigation,
     stashReturnTo,
@@ -704,57 +655,37 @@ export default function MilestonesScreen() {
     stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(target);
-    (navigation as any).setParams({
+    navigation.setParams({
       openModal: undefined,
       editId: undefined,
-      type: undefined,
-      mode: undefined,
-    });
+    } as any);
   }, [editId, layoutReady, events, navigation, openEditModal, stashReturnTo]);
-
-  const markedDates = useMemo(() => {
-    const marked: Record<string, any> = {};
-    events.forEach((item) => {
-      const dateKey = formatDateKey(toDate(item.date));
-      marked[dateKey] = {
-        marked: true,
-        dotColor: eventColors.jalon.dark,
-      };
-    });
-    if (selectedDate) {
-      marked[selectedDate] = {
-        ...marked[selectedDate],
-        selected: true,
-        selectedColor: Colors[colorScheme].tint,
-        selectedTextColor: "#ffffff",
-      };
-    }
-    if (selectedFilter === "today") {
-      const todayKey = formatDateKey(new Date());
-      marked[todayKey] = {
-        ...marked[todayKey],
-        selected: true,
-        selectedColor: Colors[colorScheme].tint,
-        selectedTextColor: "#ffffff",
-      };
-    }
-    return marked;
-  }, [events, selectedDate, selectedFilter, colorScheme]);
 
   // ============================================
   // RENDER HELPERS
   // ============================================
-  const renderEventItem = (event: MilestoneEventWithId, isLast = false) => {
-    const config = TYPE_CONFIG[event.typeJalon];
-    const date = toDate(event.date);
-    const moodEmoji =
-      typeof event.humeur === "number"
-        ? MOOD_OPTIONS.find((m) => m.value === event.humeur)?.emoji
-        : null;
-    const titleText =
-      event.typeJalon === "autre"
-        ? event.titre ?? TYPE_CONFIG.autre.label
-        : TYPE_CONFIG[event.typeJalon].label;
+  const buildDetails = (event: GrowthEventWithId) => {
+    const parts = [];
+    if (event.poidsKg) parts.push(`${event.poidsKg} kg`);
+    if (event.tailleCm) parts.push(`${event.tailleCm} cm`);
+    if (event.teteCm) parts.push(`PC ${event.teteCm} cm`);
+    return parts.length > 0 ? parts.join(" · ") : undefined;
+  };
+
+  const toggleExpand = useCallback((date: string) => {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) {
+        next.delete(date);
+      } else {
+        next.add(date);
+      }
+      return next;
+    });
+  }, []);
+
+  const renderEventItem = (event: GrowthEventWithId, isLast = false) => {
+    const time = toDate(event.date);
     return (
       <Pressable
         key={event.id}
@@ -771,58 +702,37 @@ export default function MilestonesScreen() {
               isLast && styles.sessionTimeTextLast,
             ]}
           >
-            {formatTime(date)}
+            {formatTime(time)}
           </Text>
         </View>
         <View
           style={[
             styles.sessionIconWrapper,
-            { backgroundColor: `${config.color}20` },
+            { backgroundColor: `${eventColors.croissance.dark}20` },
           ]}
         >
           <FontAwesome
-            name={config.icon as any}
+            name="seedling"
             size={14}
-            color={config.color}
+            color={eventColors.croissance.dark}
           />
         </View>
         <View style={styles.sessionContent}>
           <View style={styles.sessionDetails}>
-            {titleText ? (
-              <Text style={styles.sessionType}>{titleText}</Text>
-            ) : null}
-            {event.description ? (
-              <Text style={styles.sessionDetailText}>{event.description}</Text>
-            ) : null}
-            {event.typeJalon === "humeur" && moodEmoji ? (
-              <Text style={styles.sessionMood}>{moodEmoji}</Text>
-            ) : null}
+            <Text style={styles.sessionType}>Mesure</Text>
+            {buildDetails(event) && (
+              <Text style={styles.sessionDetailText}>
+                {buildDetails(event)}
+              </Text>
+            )}
           </View>
-          {event.photos?.[0] ? (
-            <Image
-              source={{ uri: event.photos[0] }}
-              style={styles.sessionPhoto}
-            />
-          ) : null}
         </View>
         <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
       </Pressable>
     );
   };
 
-  const toggleExpand = (dateKey: string) => {
-    setExpandedDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(dateKey)) {
-        next.delete(dateKey);
-      } else {
-        next.add(dateKey);
-      }
-      return next;
-    });
-  };
-
-  const renderDayGroup = ({ item }: { item: MilestoneGroup }) => {
+  const renderDayGroup = ({ item }: { item: GrowthGroup }) => {
     const [year, month, day] = item.date.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     const today = new Date();
@@ -841,6 +751,7 @@ export default function MilestonesScreen() {
             });
 
     const isExpanded = expandedDays.has(item.date);
+
     return (
       <View style={styles.dayGroup}>
         <View style={styles.dayHeader}>
@@ -849,34 +760,11 @@ export default function MilestonesScreen() {
             <View style={styles.dayStatItem}>
               <Text style={styles.dayStatValue}>{item.events.length}</Text>
               <Text style={styles.dayStatLabel}>
-                jalon{item.events.length > 1 ? "s" : ""}
+                mesure{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
           </View>
         </View>
-
-        <View style={styles.statsBreakdown}>
-          {(Object.keys(TYPE_CONFIG) as JalonType[])
-            .filter((type) => item.counts[type] > 0)
-            .map((type) => (
-              <View key={type} style={styles.statsBreakdownItem}>
-                <View
-                  style={[
-                    styles.statsBreakdownDot,
-                    { backgroundColor: TYPE_CONFIG[type].color },
-                  ]}
-                />
-                <Text style={styles.statsBreakdownLabel}>
-                  {TYPE_CONFIG[type].label}
-                  {item.counts[type] > 1 ? "s" : ""}
-                </Text>
-                <Text style={styles.statsBreakdownValue}>
-                  {item.counts[type]}
-                </Text>
-              </View>
-            ))}
-        </View>
-
         <View style={styles.dayContent}>
           <View style={styles.sessionsContainer}>
             {renderEventItem(item.lastEvent, true)}
@@ -900,7 +788,7 @@ export default function MilestonesScreen() {
                     ? "Masquer"
                     : `${item.events.length - 1} autre${
                         item.events.length > 2 ? "s" : ""
-                      } jalon${item.events.length > 2 ? "s" : ""}`}
+                      } mesure${item.events.length > 2 ? "s" : ""}`}
                 </Text>
                 <Ionicons
                   name={isExpanded ? "chevron-up" : "chevron-down"}
@@ -921,19 +809,32 @@ export default function MilestonesScreen() {
   return (
     <View style={styles.container}>
       <SafeAreaView
-        style={styles.safeArea}
+        style={{ flex: 1 }}
         edges={["bottom"]}
         onLayout={() => setLayoutReady(true)}
       >
         <View>
-          <DateFilterBar
-            selected={selectedFilter}
-            onSelect={handleFilterPress}
-          />
+          <View style={styles.filterRow}>
+            <DateFilterBar
+              selected={selectedFilter}
+              onSelect={handleFilterPress}
+            />
+            {/* <View style={styles.quickActionsRow}>
+              <TouchableOpacity
+                style={styles.quickActionButton}
+                onPress={openAddModal}
+              >
+                <FontAwesome
+                  name="seedling"
+                  size={14}
+                  color={Colors[colorScheme].tint}
+                />
+              </TouchableOpacity>
+            </View> */}
+          </View>
           {showCalendar && (
             <View style={styles.calendarContainer}>
               <Calendar
-                current={selectedDate || undefined}
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
                 theme={{
@@ -956,7 +857,7 @@ export default function MilestonesScreen() {
           )}
         </View>
 
-        {loaded.jalons && emptyDelayDone ? (
+        {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons
@@ -964,16 +865,17 @@ export default function MilestonesScreen() {
                 size={64}
                 color={Colors[colorScheme].tabIconDefault}
               />
-              <Text style={styles.emptyText}>
+              <ThemedText style={styles.emptyText}>
                 {events.length === 0
-                  ? "Aucun jalon enregistré"
-                  : "Aucun jalon pour ce filtre"}
-              </Text>
+                  ? "Aucune mesure enregistrée"
+                  : "Aucune mesure pour ce filtre"}
+              </ThemedText>
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
-                  loading={isLoadingMore || autoLoadMore}
                   hasMore={hasMore}
+                  loading={isLoadingMore}
                   onPress={handleLoadMore}
+                  text="Voir plus"
                   accentColor={Colors[colorScheme].tint}
                 />
               )}
@@ -988,9 +890,10 @@ export default function MilestonesScreen() {
               ListFooterComponent={
                 selectedFilter === "today" || selectedDate ? null : (
                   <LoadMoreButton
-                    loading={isLoadingMore || autoLoadMore}
                     hasMore={hasMore}
+                    loading={isLoadingMore}
                     onPress={handleLoadMore}
+                    text="Voir plus"
                     accentColor={Colors[colorScheme].tint}
                   />
                 )
@@ -1000,7 +903,7 @@ export default function MilestonesScreen() {
         ) : (
           <View style={styles.loadingContainer}>
             <IconPulseDots color={Colors[colorScheme].tint} />
-            <Text style={styles.loadingText}>Chargement des jalons…</Text>
+            <Text style={styles.loadingText}>Chargement des mesures…</Text>
           </View>
         )}
       </SafeAreaView>
@@ -1008,17 +911,10 @@ export default function MilestonesScreen() {
   );
 }
 
-// ============================================
-// STYLES
-// ============================================
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
-  },
-  safeArea: {
-    flex: 1,
   },
   headerButtons: {
     flexDirection: "row",
@@ -1037,31 +933,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingRight: 16,
+  },
+  quickActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginLeft: 8,
+  },
+  quickActionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f0f0f0",
+  },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 40,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 24,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyText: {
-    fontSize: 18,
-    color: "#666",
-    marginTop: 16,
-    fontWeight: "600",
   },
   dayGroup: {
     marginBottom: 24,
@@ -1093,32 +987,6 @@ const styles = StyleSheet.create({
   dayStatLabel: {
     fontSize: 11,
     color: "#9ca3af",
-  },
-  statsBreakdown: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  statsBreakdownItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  statsBreakdownDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statsBreakdownLabel: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  statsBreakdownValue: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#374151",
   },
   dayContent: {
     gap: 10,
@@ -1196,13 +1064,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
   },
-  sessionMood: {
-    fontSize: 16,
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 24,
   },
-  sessionPhoto: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: "#f3f4f6",
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#6b7280",
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    fontSize: 18,
+    color: "#666",
+    marginTop: 16,
+    fontWeight: "600",
   },
 });

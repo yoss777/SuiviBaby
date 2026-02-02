@@ -148,13 +148,22 @@ export function MealsForm({
   const [quantiteSolide, setQuantiteSolide] = useState<SolideEvent["quantite"]>(
     editData?.quantiteSolide ?? "moyen"
   );
-  const [nouveauAliment, setNouveauAliment] = useState(editData?.nouveauAliment ?? false);
+  const hasDishName = Boolean(editData?.nomNouvelAliment?.trim());
+  const [nouveauAliment, setNouveauAliment] = useState(
+    (editData?.nouveauAliment ?? false) && hasDishName
+  );
   const [nomNouvelAliment, setNomNouvelAliment] = useState(editData?.nomNouvelAliment ?? "");
   const [allergenes, setAllergenes] = useState<string[]>(editData?.allergenes ?? []);
   const [reaction, setReaction] = useState<SolideEvent["reaction"]>(
     editData?.reaction ?? "aucune"
   );
   const [aime, setAime] = useState<boolean | undefined>(editData?.aime);
+
+  useEffect(() => {
+    if (!nouveauAliment && nomNouvelAliment) {
+      setNomNouvelAliment("");
+    }
+  }, [nouveauAliment, nomNouvelAliment]);
 
   // Long press acceleration refs
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -323,7 +332,7 @@ export function MealsForm({
           nomNouvelAliment:
             typeSolide === "autre" && nouveauAliment && nomNouvelAliment.trim()
               ? nomNouvelAliment.trim()
-              : undefined,
+              : "",
           allergenes:
             typeSolide === "autre" && nouveauAliment && allergenes.length > 0
               ? allergenes

@@ -1,5 +1,5 @@
+import { SoinsEditData, SoinsType } from "@/components/forms/SoinsForm";
 import { ThemedText } from "@/components/themed-text";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
@@ -7,26 +7,8 @@ import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
-import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import {
-  ajouterMedicament,
-  ajouterSymptome,
-  ajouterTemperature,
-  ajouterVaccin,
-  ajouterVitamine,
-  modifierMedicament,
-  modifierSymptome,
-  modifierTemperature,
-  modifierVaccin,
-  modifierVitamine,
-  supprimerMedicament,
-  supprimerSymptome,
-  supprimerTemperature,
-  supprimerVaccin,
-  supprimerVitamine,
-} from "@/migration/eventsDoubleWriteService";
 import {
   ecouterMedicamentsHybrid,
   ecouterSymptomesHybrid,
@@ -36,18 +18,8 @@ import {
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
-import { normalizeQuery } from "@/utils/text";
-
-// Helper to remove undefined values from objects (Firebase doesn't accept undefined)
-function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined)
-  ) as T;
-}
 import { Ionicons } from "@expo/vector-icons";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -56,11 +28,9 @@ import {
   BackHandler,
   FlatList,
   InteractionManager,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -71,14 +41,8 @@ import { useHeaderLeft, useHeaderRight } from "../../_layout";
 // ============================================
 // TYPES
 // ============================================
-type HealthType =
-  | "temperature"
-  | "medicament"
-  | "symptome"
-  | "vaccin"
-  | "vitamine";
-type FilterType = "today" | "past";
-type SheetStep = "form" | "vaccinPicker" | "vitaminePicker";
+type HealthType = SoinsType;
+type DateFilterValue = "today" | "past";
 
 type HealthEvent = {
   id: string;
@@ -141,127 +105,6 @@ const TYPE_CONFIG: Record<
   },
 };
 
-const VACCINS_LIST = [
-  {
-    nomVaccin: "BCG (Tuberculose)",
-    dosage: null,
-  },
-  {
-    nomVaccin: "Bronchiolite",
-    dosage: null,
-  },
-  {
-    nomVaccin: "DTCaP",
-    dosage: "rappel",
-  },
-  {
-    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
-    dosage: "1ère injection",
-  },
-  {
-    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
-    dosage: "2ème injection",
-  },
-  {
-    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
-    dosage: "3ème injection",
-  },
-  {
-    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
-    dosage: "rappel",
-  },
-  {
-    nomVaccin: "Grippe saisonnière",
-    dosage: "",
-  },
-  {
-    nomVaccin: "Hépatite B",
-    dosage: "",
-  },
-  {
-    nomVaccin: "Méningocoque A,C,W,Y",
-    dosage: "1ère injection",
-  },
-  {
-    nomVaccin: "Méningocoque A,C,W,Y",
-    dosage: "rappel",
-  },
-  {
-    nomVaccin: "Méningocoque B",
-    dosage: "1ère injection",
-  },
-  {
-    nomVaccin: "Méningocoque B",
-    dosage: "rappel",
-  },
-  {
-    nomVaccin: "Pneumocoque (PCV13)",
-    dosage: "1ère injection",
-  },
-  {
-    nomVaccin: "Pneumocoque (PCV13)",
-    dosage: "2ème injection",
-  },
-  {
-    nomVaccin: "Pneumocoque (PCV13)",
-    dosage: "3ème injection",
-  },
-  {
-    nomVaccin: "Pneumocoque (PCV13)",
-    dosage: "rappel",
-  },
-  {
-    nomVaccin: "ROR (Rougeole, Oreillons, Rubéole)",
-    dosage: "1ère injection",
-  },
-  {
-    nomVaccin: "ROR (Rougeole, Oreillons, Rubéole)",
-    dosage: "2ème injection",
-  },
-  {
-    nomVaccin: "Rotavirus",
-    dosage: "1ère injection",
-  },
-  {
-    nomVaccin: "Rotavirus",
-    dosage: "2ème injection",
-  },
-  {
-    nomVaccin: "Rotavirus",
-    dosage: "3ème injection",
-  },
-  {
-    nomVaccin: "Varicelle",
-    dosage: "",
-  },
-  {
-    nomVaccin: "Autre vaccin",
-    dosage: "",
-  },
-];
-
-const VITAMINES_LIST = ["Vitamine D", "Vitamine K", "Autre vitamine"];
-
-const MODE_TEMPERATURE = [
-  "axillaire",
-  "auriculaire",
-  "buccale",
-  "frontale",
-  "rectale",
-  "autre",
-];
-const VOIES_MEDICAMENT = ["orale", "topique", "inhalation", "autre"];
-const INTENSITES = ["léger", "modéré", "fort"];
-const SYMPTOMES_OPTIONS = [
-  "fièvre",
-  "toux",
-  "nez bouché",
-  "vomis",
-  "diarrhée",
-  "dents",
-  "autre",
-];
-
 // ============================================
 // HELPERS
 // ============================================
@@ -276,21 +119,11 @@ const toDate = (value: any): Date => {
 const formatDateKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
-const formatDayLabel = (date: Date) =>
-  date.toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-
 const formatTime = (date: Date) =>
   date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
 const formatTemperature = (value?: number) =>
   typeof value === "number" ? `${value}°C` : "";
-
-const getVaccinDisplay = (nomVaccin: string, dosage?: string | null) =>
-  dosage ? `${nomVaccin} - ${dosage}` : nomVaccin;
 
 // ============================================
 // COMPONENT
@@ -301,26 +134,21 @@ export default function SoinsScreen() {
   const { setHeaderRight } = useHeaderRight();
   const { setHeaderLeft } = useHeaderLeft();
   const colorScheme = useColorScheme() ?? "light";
-  const colors = Colors[colorScheme];
-  const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
-  const { showAlert } = useModal();
+  const { openSheet, closeSheet, isOpen } = useSheet();
   const navigation = useNavigation();
   const headerOwnerId = useRef(`soins-${Math.random().toString(36).slice(2)}`);
 
   const { openModal, editId, returnTo, type } = useLocalSearchParams();
   const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const sheetOwnerId = "soins";
-  const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
   const [showCalendar, setShowCalendar] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState<DateFilterValue>("today");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState<HealthType>("temperature");
-  const [sheetStep, setSheetStep] = useState<SheetStep>("form");
-  const [searchQuery, setSearchQuery] = useState("");
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
-  const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
+  const [pendingEditData, setPendingEditData] = useState<SoinsEditData | null>(null);
+  const [pendingSoinsType, setPendingSoinsType] = useState<SoinsType>("temperature");
 
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [groupedEvents, setGroupedEvents] = useState<HealthGroup[]>([]);
@@ -342,38 +170,8 @@ export default function SoinsScreen() {
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
 
-  const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
-
-  const [temperatureValue, setTemperatureValue] = useState(36.8);
-  const [temperatureMode, setTemperatureMode] =
-    useState<HealthEvent["modePrise"]>("axillaire");
-  const [includeTemperature, setIncludeTemperature] = useState(true);
-  const [medicamentName, setMedicamentName] = useState("");
-  const [medicamentDosage, setMedicamentDosage] = useState("");
-  const [medicamentVoie, setMedicamentVoie] = useState<HealthEvent["voie"]>();
-  const [symptomes, setSymptomes] = useState<string[]>([]);
-  const [symptomeAutre, setSymptomeAutre] = useState("");
-  const [symptomeIntensite, setSymptomeIntensite] =
-    useState<HealthEvent["intensite"]>();
-  const [includeSymptome, setIncludeSymptome] = useState(false);
-  const [vaccinName, setVaccinName] = useState("");
-  const [vaccinDosage, setVaccinDosage] = useState("");
-  const [vaccinCustomName, setVaccinCustomName] = useState("");
-  const [vitamineName, setVitamineName] = useState("Vitamine D");
-  const [vitamineDosage, setVitamineDosage] = useState("");
-  const [vitamineCustomName, setVitamineCustomName] = useState("");
-  const [gouttesCount, setGouttesCount] = useState(3);
-  const [note, setNote] = useState("");
-
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
-  const intervalRef = useRef<number | undefined>(undefined);
-  const pendingTypeRef = useRef<HealthType | null>(null);
 
   const normalizeParam = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value;
@@ -398,278 +196,59 @@ export default function SoinsScreen() {
     }
   }, []);
 
-  const handlePressIn = useCallback((action: () => void) => {
-    if (intervalRef.current !== undefined) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = undefined;
-    }
-    action();
+  const ensureTodayInRange = useCallback(() => {
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
 
-    let speed = 200;
-    const accelerate = () => {
-      action();
-      if (speed > 50) {
-        speed -= 20;
-        if (intervalRef.current !== undefined) {
-          clearInterval(intervalRef.current);
-        }
-        intervalRef.current = setInterval(accelerate, speed);
+    setRangeEndDate((prev) => {
+      if (!prev) {
+        setDaysWindow(14);
+        return endOfToday;
       }
+      if (prev >= endOfToday) return prev;
+      const diffDays = Math.ceil(
+        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
+      );
+      setDaysWindow((window) => window + diffDays);
+      return endOfToday;
+    });
+  }, []);
+
+  // ============================================
+  // BUILD EDIT DATA
+  // ============================================
+  const buildEditData = useCallback((event: HealthEvent): SoinsEditData => {
+    return {
+      id: event.id,
+      type: event.type,
+      date: toDate(event.date),
+      note: event.note,
+      valeur: event.valeur,
+      modePrise: event.modePrise,
+      nomMedicament: event.nomMedicament,
+      dosage: event.dosage,
+      voie: event.voie,
+      symptomes: event.symptomes,
+      intensite: event.intensite,
+      nomVaccin: event.nomVaccin,
+      nomVitamine: event.nomVitamine,
     };
-
-    intervalRef.current = setInterval(accelerate, speed);
   }, []);
 
-  const handlePressOut = useCallback(() => {
-    if (intervalRef.current !== undefined) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = undefined;
-    }
+  // ============================================
+  // OPEN ADD / EDIT MODAL
+  // ============================================
+  const openAddModal = useCallback((soinsType: SoinsType = "temperature") => {
+    setPendingSoinsType(soinsType);
+    setPendingEditData(null);
+    setPendingOpen(true);
   }, []);
 
-  const getTemplates = useCallback(() => {
-    const keepCombined = includeTemperature && includeSymptome;
-
-    const temperatureItems = [
-      {
-        label: "36.8° axillaire",
-        onPress: () => {
-          setIncludeTemperature(true);
-          setIncludeSymptome(keepCombined ? true : false);
-          setSelectedType("temperature");
-          setTemperatureValue(36.8);
-          setTemperatureMode("axillaire");
-        },
-      },
-      {
-        label: "38.5° rectale",
-        onPress: () => {
-          setIncludeTemperature(true);
-          setIncludeSymptome(keepCombined ? true : false);
-          setSelectedType("temperature");
-          setTemperatureValue(38.5);
-          setTemperatureMode("rectale");
-        },
-      },
-      {
-        label: "37.5° frontale",
-        onPress: () => {
-          setIncludeTemperature(true);
-          setIncludeSymptome(keepCombined ? true : false);
-          setSelectedType("temperature");
-          setTemperatureValue(37.5);
-          setTemperatureMode("frontale");
-        },
-      },
-    ];
-
-    const symptomeItems = [
-      {
-        label: "Fièvre légère",
-        onPress: () => {
-          setIncludeTemperature(keepCombined ? true : false);
-          setIncludeSymptome(true);
-          setSelectedType("symptome");
-          setSymptomes(["fièvre"]);
-          setSymptomeIntensite("léger");
-          setSymptomeAutre("");
-        },
-      },
-      {
-        label: "Rhume léger",
-        onPress: () => {
-          setIncludeTemperature(keepCombined ? true : false);
-          setIncludeSymptome(true);
-          setSelectedType("symptome");
-          setSymptomes(["toux", "nez bouché"]);
-          setSymptomeIntensite("léger");
-          setSymptomeAutre("");
-        },
-      },
-      {
-        label: "Dentition",
-        onPress: () => {
-          setIncludeTemperature(keepCombined ? true : false);
-          setIncludeSymptome(true);
-          setSelectedType("symptome");
-          setSymptomes(["dents"]);
-          setSymptomeIntensite("modéré");
-          setSymptomeAutre("");
-        },
-      },
-    ];
-
-    const medicamentItems = [
-      {
-        label: "Paracétamol 5 ml",
-        onPress: () => {
-          setIncludeTemperature(false);
-          setIncludeSymptome(false);
-          setSelectedType("medicament");
-          setMedicamentName("Paracétamol");
-          setMedicamentDosage("5 ml");
-          setMedicamentVoie("orale");
-        },
-      },
-      {
-        label: "Ibuprofène 2.5 ml",
-        onPress: () => {
-          setIncludeTemperature(false);
-          setIncludeSymptome(false);
-          setSelectedType("medicament");
-          setMedicamentName("Ibuprofène");
-          setMedicamentDosage("2.5 ml");
-          setMedicamentVoie("orale");
-        },
-      },
-      {
-        label: "Sérum physio",
-        onPress: () => {
-          setIncludeTemperature(false);
-          setIncludeSymptome(false);
-          setSelectedType("medicament");
-          setMedicamentName("Sérum physiologique");
-          setMedicamentDosage("");
-          setMedicamentVoie("topique");
-        },
-      },
-    ];
-
-    const vaccinItems = [
-      {
-        label: "Rotavirus 1ère",
-        onPress: () => {
-          setIncludeTemperature(false);
-          setIncludeSymptome(false);
-          setSelectedType("vaccin");
-          setVaccinName("Rotavirus");
-          setVaccinDosage("1ère injection");
-          setVaccinCustomName("");
-        },
-      },
-      {
-        label: "ROR 1ère",
-        onPress: () => {
-          setIncludeTemperature(false);
-          setIncludeSymptome(false);
-          setSelectedType("vaccin");
-          setVaccinName("ROR (Rougeole, Oreillons, Rubéole)");
-          setVaccinDosage("1ère injection");
-          setVaccinCustomName("");
-        },
-      },
-      {
-        label: "Pneumo 1ère",
-        onPress: () => {
-          setIncludeTemperature(false);
-          setIncludeSymptome(false);
-          setSelectedType("vaccin");
-          setVaccinName("Pneumocoque (PCV13)");
-          setVaccinDosage("1ère injection");
-          setVaccinCustomName("");
-        },
-      },
-    ];
-
-    const vitamineItems = [
-      {
-        label: "Vitamine D · 3 gouttes",
-        onPress: () => {
-          setIncludeTemperature(false);
-          setIncludeSymptome(false);
-          setSelectedType("vitamine");
-          setVitamineName("Vitamine D");
-          setVitamineCustomName("");
-          setGouttesCount(3);
-          setVitamineDosage("");
-        },
-      },
-      {
-        label: "Vitamine K · 2 gouttes",
-        onPress: () => {
-          setIncludeTemperature(false);
-          setIncludeSymptome(false);
-          setSelectedType("vitamine");
-          setVitamineName("Vitamine K");
-          setVitamineCustomName("");
-          setGouttesCount(2);
-          setVitamineDosage("");
-        },
-      },
-      {
-        label: "Autre vitamine",
-        onPress: () => {
-          setIncludeTemperature(false);
-          setIncludeSymptome(false);
-          setSelectedType("vitamine");
-          setVitamineName("Autre vitamine");
-          setVitamineCustomName("");
-        },
-      },
-    ];
-
-    if (keepCombined) {
-      return [
-        { title: "Température", items: temperatureItems },
-        { title: "Symptômes", items: symptomeItems },
-      ];
-    }
-
-    if (selectedType === "temperature" && includeTemperature) {
-      return [{ items: temperatureItems }];
-    }
-    if (selectedType === "symptome" && includeSymptome) {
-      return [{ items: symptomeItems }];
-    }
-    if (selectedType === "medicament") {
-      return [{ items: medicamentItems }];
-    }
-    if (selectedType === "vaccin") {
-      return [{ items: vaccinItems }];
-    }
-    if (selectedType === "vitamine") {
-      return [{ items: vitamineItems }];
-    }
-    return [];
-  }, [
-    includeTemperature,
-    includeSymptome,
-    selectedType,
-    setIncludeTemperature,
-    setIncludeSymptome,
-    setSelectedType,
-    setTemperatureValue,
-    setTemperatureMode,
-    setSymptomes,
-    setSymptomeIntensite,
-    setSymptomeAutre,
-    setMedicamentName,
-    setMedicamentDosage,
-    setMedicamentVoie,
-    setVaccinName,
-    setVaccinDosage,
-    setVaccinCustomName,
-    setVitamineName,
-    setVitamineCustomName,
-    setGouttesCount,
-    setVitamineDosage,
-  ]);
-
-  const filteredVaccins = useMemo(
-    () =>
-      VACCINS_LIST.filter((vaccin) =>
-        normalizeQuery(vaccin.nomVaccin).includes(normalizeQuery(searchQuery)),
-      ),
-    [searchQuery],
-  );
-
-  const filteredVitamines = useMemo(
-    () =>
-      VITAMINES_LIST.filter((vitamine) =>
-        normalizeQuery(vitamine).includes(normalizeQuery(searchQuery)),
-      ),
-    [searchQuery],
-  );
+  const openEditModal = useCallback((event: HealthEvent) => {
+    setPendingSoinsType(event.type);
+    setPendingEditData(buildEditData(event));
+    setPendingOpen(true);
+  }, [buildEditData]);
 
   // ============================================
   // HEADER
@@ -680,7 +259,6 @@ export default function SoinsScreen() {
       if (nextValue) {
         const today = new Date();
         setSelectedDate(formatDateKey(today));
-        setSelectedFilter(null);
       }
       return nextValue;
     });
@@ -715,10 +293,7 @@ export default function SoinsScreen() {
             />
           </Pressable>
           <Pressable
-            onPress={() => {
-              setPendingMode("add");
-              setPendingOpen(true);
-            }}
+            onPress={() => openAddModal("temperature")}
             style={styles.headerButton}
           >
             <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
@@ -729,7 +304,7 @@ export default function SoinsScreen() {
       return () => {
         setHeaderRight(null, headerOwnerId.current);
       };
-    }, [handleCalendarPress, showCalendar, colorScheme, setHeaderRight]),
+    }, [handleCalendarPress, showCalendar, colorScheme, setHeaderRight, openAddModal]),
   );
 
   useFocusEffect(
@@ -751,7 +326,6 @@ export default function SoinsScreen() {
             router.replace("/baby/plus");
           }}
           tintColor={Colors[colorScheme].text}
-          labelVisible={false}
         />
       );
       setHeaderLeft(backButton, headerOwnerId.current);
@@ -785,7 +359,7 @@ export default function SoinsScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen, returnTargetParam, router]),
+    }, [closeSheet, isOpen, returnTargetParam]),
   );
 
   // ============================================
@@ -973,12 +547,11 @@ export default function SoinsScreen() {
 
   const handleDateSelect = (day: DateData) => {
     setSelectedDate(day.dateString);
-    setSelectedFilter(null);
     setShowCalendar(false);
     setExpandedDays(new Set([day.dateString]));
   };
 
-  const handleFilterPress = (filter: FilterType) => {
+  const handleFilterPress = (filter: DateFilterValue) => {
     if (filter === "today") {
       applyTodayFilter();
       return;
@@ -991,10 +564,10 @@ export default function SoinsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!selectedFilter && !selectedDate) {
+      if (!selectedDate) {
         applyTodayFilter();
       }
-    }, [applyTodayFilter, selectedDate, selectedFilter]),
+    }, [applyTodayFilter, selectedDate]),
   );
 
   useEffect(() => {
@@ -1143,194 +716,52 @@ export default function SoinsScreen() {
   ]);
 
   // ============================================
-  // SHEET LOGIC
+  // SHEET LOGIC - USING FORM TYPE PATTERN
   // ============================================
-  const resetForm = useCallback((nextType: HealthType = "temperature") => {
-    setSelectedType(nextType);
-    setSheetStep("form");
-    setSearchQuery("");
-    setDateHeure(new Date());
-    setTemperatureValue(36.8);
-    setTemperatureMode("axillaire");
-    setIncludeTemperature(nextType === "temperature");
-    setMedicamentName("");
-    setMedicamentDosage("");
-    setMedicamentVoie(undefined);
-    setSymptomes([]);
-    setSymptomeAutre("");
-    setSymptomeIntensite(undefined);
-    setIncludeSymptome(nextType === "symptome");
-    setVaccinName("");
-    setVaccinDosage("");
-    setVaccinCustomName("");
-    setVitamineName(nextType === "vitamine" ? "Vitamine D" : "");
-    setVitamineDosage("");
-    setVitamineCustomName("");
-    setGouttesCount(3);
-    setNote("");
-    setEditingEvent(null);
-  }, []);
-
-  const openEditModal = useCallback((item: HealthEvent) => {
-    setEditingEvent(item);
-    setSelectedType(item.type);
-    setIncludeTemperature(item.type === "temperature");
-    setIncludeSymptome(item.type === "symptome");
-    setSheetStep("form");
-    setSearchQuery("");
-    setDateHeure(toDate(item.date));
-    setNote(item.note ?? "");
-    setIsSubmitting(false);
-
-    if (item.type === "temperature") {
-      setTemperatureValue(typeof item.valeur === "number" ? item.valeur : 36.8);
-      setTemperatureMode(item.modePrise ?? "axillaire");
-    }
-    if (item.type === "medicament") {
-      setMedicamentName(item.nomMedicament ?? "");
-      setMedicamentDosage(item.dosage ?? "");
-      setMedicamentVoie(item.voie);
-    }
-    if (item.type === "symptome") {
-      setSymptomes(Array.isArray(item.symptomes) ? item.symptomes : []);
-      setSymptomeIntensite(item.intensite);
-    }
-    if (item.type === "vaccin") {
-      const vaccinLabel = item.nomVaccin ?? "";
-      const isKnownVaccin = VACCINS_LIST.some(
-        (vaccin) => vaccin.nomVaccin === vaccinLabel,
-      );
-      if (vaccinLabel && !isKnownVaccin) {
-        setVaccinName("Autre vaccin");
-        setVaccinCustomName(vaccinLabel);
-      } else {
-        setVaccinName(vaccinLabel);
-        setVaccinCustomName("");
-      }
-      setVaccinDosage(item.dosage ?? "");
-    }
-    if (item.type === "vitamine") {
-      const vitamineLabel = item.nomVitamine ?? "";
-      const isKnownVitamine = VITAMINES_LIST.includes(vitamineLabel);
-      if (vitamineLabel && !isKnownVitamine) {
-        setVitamineName("Autre vitamine");
-        setVitamineCustomName(vitamineLabel);
-      } else {
-        setVitamineName(vitamineLabel);
-        setVitamineCustomName("");
-      }
-      setVitamineDosage(item.dosage ?? "");
-      const match = item.dosage?.match(/(\d+)\s*gouttes?/i);
-      if (match) {
-        setGouttesCount(parseInt(match[1], 10));
-      }
-    }
-
-    setPendingMode("edit");
-    setPendingOpen(true);
-  }, []);
-
-  function buildSheetProps() {
-    const returnTarget = returnTargetParam ?? returnToRef.current;
-    return {
-      ownerId: sheetOwnerId,
-      title: editingEvent ? "Modifier" : "Nouveau",
-      icon: "prescription-bottle",
-      accentColor: Colors[colorScheme].tint,
-      isEditing: !!editingEvent,
-      isSubmitting,
-      showActions: sheetStep === "form",
-      enablePanDownToClose: sheetStep === "form",
-      enableOverDrag: sheetStep === "form",
-      onSubmit: handleSubmit,
-      onDelete: editingEvent ? () => setShowDeleteModal(true) : undefined,
-      children: renderSheetContent(),
-      onDismiss: () => {
-        setIsSubmitting(false);
-        setEditingEvent(null);
-        editIdRef.current = null;
-        setSheetStep("form");
-        setSearchQuery("");
-        maybeReturnTo(returnTarget);
-      },
-    };
-  }
-
-  useEffect(() => {
-    if (!isSheetActive) return;
-    openSheet(buildSheetProps());
-  }, [
-    isSheetActive,
-    openSheet,
-    dateHeure,
-    selectedType,
-    temperatureValue,
-    temperatureMode,
-    includeTemperature,
-    medicamentName,
-    medicamentDosage,
-    medicamentVoie,
-    symptomes,
-    symptomeAutre,
-    symptomeIntensite,
-    includeSymptome,
-    vaccinName,
-    vaccinDosage,
-    vaccinCustomName,
-    vitamineName,
-    vitamineDosage,
-    vitamineCustomName,
-    gouttesCount,
-    note,
-    showDate,
-    showTime,
-    sheetStep,
-    searchQuery,
-  ]);
-
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
       const normalizedType = normalizeParam(type);
-      pendingTypeRef.current =
+      const soinsType: SoinsType =
         normalizedType &&
-        [
-          "temperature",
-          "medicament",
-          "symptome",
-          "vaccin",
-          "vitamine",
-        ].includes(normalizedType)
-          ? (normalizedType as HealthType)
-          : null;
-      setPendingMode("add");
-      setPendingOpen(true);
-    }, [openModal, type]),
+        ["temperature", "medicament", "symptome", "vaccin", "vitamine"].includes(normalizedType)
+          ? (normalizedType as SoinsType)
+          : "temperature";
+      openAddModal(soinsType);
+    }, [openModal, type, openAddModal]),
   );
 
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
+    const returnTarget = returnTargetParam ?? returnToRef.current;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
-      if (pendingMode !== "edit") {
-        resetForm(pendingTypeRef.current ?? "temperature");
-      }
-      openSheet(buildSheetProps());
-      navigation.setParams({ openModal: undefined, editId: undefined });
+      openSheet({
+        ownerId: sheetOwnerId,
+        formType: "soins",
+        soinsType: pendingSoinsType,
+        editData: pendingEditData ?? undefined,
+        onSuccess: ensureTodayInRange,
+        onDismiss: () => {
+          editIdRef.current = null;
+          maybeReturnTo(returnTarget);
+        },
+      });
+      navigation.setParams({ openModal: undefined, editId: undefined } as any);
       setPendingOpen(false);
-      setPendingMode(null);
-      pendingTypeRef.current = null;
     });
     return () => task.cancel?.();
   }, [
     pendingOpen,
     layoutReady,
-    pendingMode,
+    pendingSoinsType,
+    pendingEditData,
     navigation,
-    resetForm,
     stashReturnTo,
     openSheet,
     returnTargetParam,
+    maybeReturnTo,
+    ensureTodayInRange,
   ]);
 
   useEffect(() => {
@@ -1342,7 +773,7 @@ export default function SoinsScreen() {
     stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(target);
-    navigation.setParams({ openModal: undefined, editId: undefined });
+    navigation.setParams({ openModal: undefined, editId: undefined } as any);
   }, [
     editId,
     layoutReady,
@@ -1350,1020 +781,7 @@ export default function SoinsScreen() {
     navigation,
     openEditModal,
     stashReturnTo,
-    returnTargetParam,
   ]);
-
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current !== undefined) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = undefined;
-      }
-    };
-  }, []);
-
-  // ============================================
-  // SUBMIT / DELETE
-  // ============================================
-  const handleSubmit = async () => {
-    if (!activeChild?.id || isSubmitting) return;
-    try {
-      setIsSubmitting(true);
-      const common = {
-        date: dateHeure,
-        note: note.trim() ? note.trim() : undefined,
-      };
-
-      if (selectedType === "temperature" || selectedType === "symptome") {
-        if (editingEvent) {
-          if (selectedType === "temperature") {
-            const valeur = Number(temperatureValue);
-            if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
-              showAlert("Erreur", "Indiquez une température valide.");
-              return;
-            }
-            if (!temperatureMode) {
-              showAlert("Erreur", "Sélectionnez un mode de prise.");
-              return;
-            }
-            await modifierTemperature(activeChild.id, editingEvent.id, removeUndefined({
-              ...common,
-              valeur,
-              modePrise: temperatureMode,
-            }));
-          } else {
-            const list = [...symptomes];
-            if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
-            if (list.length === 0) {
-              showAlert("Erreur", "Sélectionnez au moins un symptôme.");
-              return;
-            }
-            await modifierSymptome(activeChild.id, editingEvent.id, removeUndefined({
-              ...common,
-              symptomes: list,
-              intensite: symptomeIntensite,
-            }));
-          }
-        } else {
-          if (!includeTemperature && !includeSymptome) {
-            showAlert(
-              "Erreur",
-              "Sélectionnez au moins Température ou Symptôme.",
-            );
-            return;
-          }
-          if (includeTemperature) {
-            const valeur = Number(temperatureValue);
-            if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
-              showAlert("Erreur", "Indiquez une température valide.");
-              return;
-            }
-            if (!temperatureMode) {
-              showAlert("Erreur", "Sélectionnez un mode de prise.");
-              return;
-            }
-            await ajouterTemperature(activeChild.id, removeUndefined({
-              ...common,
-              valeur,
-              modePrise: temperatureMode,
-            }));
-          }
-          if (includeSymptome) {
-            const list = [...symptomes];
-            if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
-            if (list.length === 0) {
-              showAlert("Erreur", "Sélectionnez au moins un symptôme.");
-              return;
-            }
-            await ajouterSymptome(activeChild.id, removeUndefined({
-              ...common,
-              symptomes: list,
-              intensite: symptomeIntensite,
-            }));
-          }
-        }
-      } else if (selectedType === "medicament") {
-        if (!medicamentName.trim()) {
-          showAlert("Erreur", "Indiquez un médicament.");
-          return;
-        }
-        if (editingEvent) {
-          await modifierMedicament(activeChild.id, editingEvent.id, removeUndefined({
-            ...common,
-            nomMedicament: medicamentName.trim(),
-            dosage: medicamentDosage.trim() || undefined,
-            voie: medicamentVoie,
-          }));
-        } else {
-          await ajouterMedicament(activeChild.id, removeUndefined({
-            ...common,
-            nomMedicament: medicamentName.trim(),
-            dosage: medicamentDosage.trim() || undefined,
-            voie: medicamentVoie,
-          }));
-        }
-      } else if (selectedType === "vaccin") {
-        const normalizedVaccinName =
-          vaccinName === "Autre vaccin" ? vaccinCustomName : vaccinName;
-        if (!normalizedVaccinName.trim()) {
-          showAlert("Erreur", "Indiquez un vaccin.");
-          return;
-        }
-        const finalDosage =
-          vaccinName === "Autre vaccin"
-            ? vaccinDosage.trim() || undefined
-            : vaccinDosage.trim() || undefined;
-        if (editingEvent) {
-          await modifierVaccin(activeChild.id, editingEvent.id, removeUndefined({
-            ...common,
-            nomVaccin: normalizedVaccinName.trim(),
-            dosage: finalDosage,
-          }));
-        } else {
-          await ajouterVaccin(activeChild.id, removeUndefined({
-            ...common,
-            nomVaccin: normalizedVaccinName.trim(),
-            dosage: finalDosage,
-          }));
-        }
-      } else if (selectedType === "vitamine") {
-        const normalizedVitamineName =
-          vitamineName === "Autre vitamine" ? vitamineCustomName : vitamineName;
-        if (!normalizedVitamineName.trim()) {
-          showAlert("Erreur", "Indiquez une vitamine.");
-          return;
-        }
-        const computedDosage =
-          vitamineName === "Vitamine D" || vitamineName === "Vitamine K"
-            ? `${gouttesCount} gouttes`
-            : vitamineDosage.trim() || undefined;
-        if (editingEvent) {
-          await modifierVitamine(activeChild.id, editingEvent.id, removeUndefined({
-            ...common,
-            nomVitamine: normalizedVitamineName.trim(),
-            dosage: computedDosage,
-          }));
-        } else {
-          await ajouterVitamine(activeChild.id, removeUndefined({
-            ...common,
-            nomVitamine: normalizedVitamineName.trim(),
-            dosage: computedDosage,
-          }));
-        }
-      }
-
-      closeSheet();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (!editingEvent || !activeChild?.id || isSubmitting) return;
-    try {
-      setIsSubmitting(true);
-      if (editingEvent.type === "temperature") {
-        await supprimerTemperature(activeChild.id, editingEvent.id);
-      } else if (editingEvent.type === "medicament") {
-        await supprimerMedicament(activeChild.id, editingEvent.id);
-      } else if (editingEvent.type === "symptome") {
-        await supprimerSymptome(activeChild.id, editingEvent.id);
-      } else if (editingEvent.type === "vaccin") {
-        await supprimerVaccin(activeChild.id, editingEvent.id);
-      } else if (editingEvent.type === "vitamine") {
-        await supprimerVitamine(activeChild.id, editingEvent.id);
-      }
-      closeSheet();
-    } catch (error) {
-      console.error("Erreur suppression:", error);
-      showAlert("Erreur", "Impossible de supprimer.");
-    } finally {
-      setIsSubmitting(false);
-      setShowDeleteModal(false);
-    }
-  };
-
-  const renderSheetContent = () => {
-    if (sheetStep === "vaccinPicker") {
-      return (
-        <>
-          <View style={styles.sheetBreadcrumb}>
-            <Pressable
-              style={styles.sheetBackButton}
-              onPress={() => setSheetStep("form")}
-            >
-              <FontAwesome5 name="chevron-left" size={14} color="#666" />
-              <Text style={styles.sheetBackText}>Retour</Text>
-            </Pressable>
-            <Text style={styles.sheetBreadcrumbText}>
-              Soins / Vaccins / Choisir
-            </Text>
-          </View>
-          <View style={styles.searchContainer}>
-            <FontAwesome5
-              name="search"
-              size={16}
-              color="#999"
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Rechercher un vaccin..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus={true}
-            />
-            {searchQuery && (
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={() => setSearchQuery("")}
-              >
-                <FontAwesome5 name="times-circle" size={16} color="#999" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <View style={styles.vaccinList}>
-            {filteredVaccins.length > 0 ? (
-              filteredVaccins.map((vaccin, index) => {
-                const vaccinNameDisplay = getVaccinDisplay(
-                  vaccin.nomVaccin,
-                  vaccin.dosage,
-                );
-                const isSelected =
-                  vaccinName === vaccin.nomVaccin &&
-                  (vaccinDosage || "") === (vaccin.dosage ?? "");
-                return (
-                  <TouchableOpacity
-                    key={`${vaccin.nomVaccin}-${index}`}
-                    style={[
-                      styles.vaccinListItem,
-                      isSelected && {
-                        backgroundColor: Colors[colorScheme].tint + "20",
-                      },
-                    ]}
-                    onPress={() => {
-                      setVaccinName(vaccin.nomVaccin);
-                      setVaccinDosage(vaccin.dosage ?? "");
-                      if (vaccin.nomVaccin !== "Autre vaccin") {
-                        setVaccinCustomName("");
-                      }
-                      setSheetStep("form");
-                      setSearchQuery("");
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <FontAwesome5
-                      name="syringe"
-                      size={16}
-                      color={isSelected ? Colors[colorScheme].tint : "#666"}
-                      style={styles.vaccinListItemIcon}
-                    />
-                    <View style={styles.vaccinListItemTextWrap}>
-                      <Text
-                        style={[
-                          styles.vaccinListItemText,
-                          isSelected && { color: "#000000" },
-                          isSelected && styles.vaccinListItemTextSelected,
-                        ]}
-                      >
-                        {vaccin.nomVaccin}
-                      </Text>
-                      {!!vaccin.dosage && (
-                        <Text style={styles.vaccinListItemSubtext}>
-                          Dose : {vaccin.dosage}
-                        </Text>
-                      )}
-                    </View>
-                    {isSelected && (
-                      <FontAwesome5
-                        name="check"
-                        size={16}
-                        color={Colors[colorScheme].tint}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })
-            ) : (
-              <Text style={styles.noResultsText}>Aucun vaccin trouvé</Text>
-            )}
-          </View>
-        </>
-      );
-    }
-
-    if (sheetStep === "vitaminePicker") {
-      return (
-        <>
-          <View style={styles.sheetBreadcrumb}>
-            <Pressable
-              style={styles.sheetBackButton}
-              onPress={() => setSheetStep("form")}
-            >
-              <FontAwesome5 name="chevron-left" size={14} color="#666" />
-              <Text style={styles.sheetBackText}>Retour</Text>
-            </Pressable>
-            <Text style={styles.sheetBreadcrumbText}>
-              Soins / Vitamines / Choisir
-            </Text>
-          </View>
-          <View style={styles.searchContainer}>
-            <FontAwesome5
-              name="search"
-              size={16}
-              color="#999"
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Rechercher une vitamine..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus={true}
-            />
-            {searchQuery && (
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={() => setSearchQuery("")}
-              >
-                <FontAwesome5 name="times-circle" size={16} color="#999" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <View style={styles.vaccinList}>
-            {filteredVitamines.length > 0 ? (
-              filteredVitamines.map((vitamine) => (
-                <TouchableOpacity
-                  key={vitamine}
-                  style={[
-                    styles.vaccinListItem,
-                    vitamineName === vitamine && {
-                      backgroundColor: Colors[colorScheme].tint + "20",
-                    },
-                  ]}
-                  onPress={() => {
-                    setVitamineName(vitamine);
-                    if (vitamine !== "Autre vitamine") {
-                      setVitamineCustomName("");
-                    }
-                    setSheetStep("form");
-                    setSearchQuery("");
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <FontAwesome5
-                    name="pills"
-                    size={16}
-                    color={
-                      vitamineName === vitamine
-                        ? Colors[colorScheme].tint
-                        : "#666"
-                    }
-                    style={styles.vaccinListItemIcon}
-                  />
-                  <Text
-                    style={[
-                      styles.vaccinListItemText,
-                      vitamineName === vitamine && { color: "#000000" },
-                      vitamineName === vitamine &&
-                        styles.vaccinListItemTextSelected,
-                    ]}
-                  >
-                    {vitamine}
-                  </Text>
-                  {vitamineName === vitamine && (
-                    <FontAwesome5
-                      name="check"
-                      size={16}
-                      color={Colors[colorScheme].tint}
-                    />
-                  )}
-                </TouchableOpacity>
-              ))
-            ) : (
-              <Text style={styles.noResultsText}>Aucune vitamine trouvée</Text>
-            )}
-          </View>
-        </>
-      );
-    }
-
-    const isEditing = !!editingEvent;
-    const templates = getTemplates();
-    return (
-      <View style={styles.sheetContent}>
-        <View style={styles.typeRow}>
-          {(
-            [
-              "temperature",
-              "symptome",
-              "medicament",
-              "vaccin",
-              "vitamine",
-            ] as HealthType[]
-          ).map((type) => {
-            const isTempSymptome =
-              type === "temperature" || type === "symptome";
-            const active = isEditing
-              ? selectedType === type
-              : isTempSymptome
-                ? type === "temperature"
-                  ? includeTemperature
-                  : includeSymptome
-                : selectedType === type;
-            const isDisabled = isEditing && !active;
-            return (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.typeChip,
-                  active && styles.typeChipActive,
-                  isDisabled && styles.typeChipDisabled,
-                ]}
-                disabled={isDisabled}
-                activeOpacity={1}
-                onPress={() => {
-                  if (isEditing) return;
-                  if (type === "temperature") {
-                    const nextIncludeTemperature =
-                      includeTemperature && !includeSymptome
-                        ? true
-                        : !includeTemperature;
-                    setIncludeTemperature(nextIncludeTemperature);
-                    if (!nextIncludeTemperature && includeSymptome) {
-                      setSelectedType("symptome");
-                    } else {
-                      setSelectedType("temperature");
-                    }
-                    return;
-                  }
-                  if (type === "symptome") {
-                    const nextIncludeSymptome =
-                      includeSymptome && !includeTemperature
-                        ? true
-                        : !includeSymptome;
-                    setIncludeSymptome(nextIncludeSymptome);
-                    if (!nextIncludeSymptome && includeTemperature) {
-                      setSelectedType("temperature");
-                    } else {
-                      setSelectedType("symptome");
-                    }
-                    return;
-                  }
-                  setIncludeTemperature(false);
-                  setIncludeSymptome(false);
-                  setSelectedType(type);
-                  setSheetStep("form");
-                  setSearchQuery("");
-                  if (type === "vitamine" && !vitamineName) {
-                    setVitamineName("Vitamine D");
-                  }
-                }}
-              >
-                <Text
-                  style={[
-                    styles.typeChipText,
-                    active && styles.typeChipTextActive,
-                  ]}
-                >
-                  {TYPE_CONFIG[type].label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        {!isEditing &&
-          (includeTemperature || includeSymptome) &&
-          includeTemperature !== includeSymptome && (
-            <Text
-              style={[styles.toggleHint, { color: Colors[colorScheme].tint }]}
-            >
-              Vous pouvez sélectionner Température et Symptôme ensemble
-            </Text>
-          )}
-
-        {templates.length > 0 && (
-          <View style={styles.templatesSection}>
-            <Text style={styles.templatesTitle}>Templates rapides</Text>
-            {templates.map((section, index) => (
-              <View
-                key={`${section.title ?? "default"}-${index}`}
-                style={styles.templatesGroup}
-              >
-                {section.title && (
-                  <Text style={styles.templatesSubtitle}>{section.title}</Text>
-                )}
-                <View style={styles.templatesRow}>
-                  {section.items.map((template) => (
-                    <TouchableOpacity
-                      key={template.label}
-                      style={styles.templateChip}
-                      onPress={template.onPress}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.templateChipText}>
-                        {template.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {includeTemperature && (
-          <>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Température (°C)</Text>
-              <View style={styles.quantityPickerRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.quantityButton,
-                    isSubmitting && styles.quantityButtonDisabled,
-                  ]}
-                  onPressIn={() =>
-                    handlePressIn(() =>
-                      setTemperatureValue((value) =>
-                        Math.max(34, Math.round((value - 0.1) * 10) / 10),
-                      ),
-                    )
-                  }
-                  onPressOut={handlePressOut}
-                  disabled={isSubmitting || temperatureValue <= 34}
-                >
-                  <Text
-                    style={[
-                      styles.quantityButtonText,
-                      isSubmitting && styles.quantityButtonTextDisabled,
-                    ]}
-                  >
-                    -
-                  </Text>
-                </TouchableOpacity>
-                <Text style={styles.quantityPickerValue}>
-                  {temperatureValue.toFixed(1)}°C
-                </Text>
-                <TouchableOpacity
-                  style={[
-                    styles.quantityButton,
-                    isSubmitting && styles.quantityButtonDisabled,
-                  ]}
-                  onPressIn={() =>
-                    handlePressIn(() =>
-                      setTemperatureValue((value) =>
-                        Math.min(45, Math.round((value + 0.1) * 10) / 10),
-                      ),
-                    )
-                  }
-                  onPressOut={handlePressOut}
-                  disabled={isSubmitting || temperatureValue >= 45}
-                >
-                  <Text
-                    style={[
-                      styles.quantityButtonText,
-                      isSubmitting && styles.quantityButtonTextDisabled,
-                    ]}
-                  >
-                    +
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={styles.chipSection}>
-              <Text style={styles.chipLabel}>Mode de prise</Text>
-              <View style={styles.chipRow}>
-                {MODE_TEMPERATURE.map((mode) => (
-                  <TouchableOpacity
-                    key={mode}
-                    style={[
-                      styles.chip,
-                      temperatureMode === mode && styles.chipActive,
-                    ]}
-                    onPress={() => setTemperatureMode(mode as any)}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        temperatureMode === mode && styles.chipTextActive,
-                      ]}
-                    >
-                      {mode}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </>
-        )}
-
-        {selectedType === "medicament" && (
-          <>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Médicament</Text>
-              <TextInput
-                value={medicamentName}
-                onChangeText={setMedicamentName}
-                placeholder="Paracétamol"
-                style={styles.input}
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Dosage</Text>
-              <TextInput
-                value={medicamentDosage}
-                onChangeText={setMedicamentDosage}
-                placeholder="5 ml"
-                style={styles.input}
-              />
-            </View>
-            <View style={styles.chipSection}>
-              <Text style={styles.chipLabel}>Voie</Text>
-              <View style={styles.chipRow}>
-                {VOIES_MEDICAMENT.map((voie) => (
-                  <TouchableOpacity
-                    key={voie}
-                    style={[
-                      styles.chip,
-                      medicamentVoie === voie && styles.chipActive,
-                    ]}
-                    onPress={() =>
-                      setMedicamentVoie(
-                        medicamentVoie === voie ? undefined : (voie as any),
-                      )
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        medicamentVoie === voie && styles.chipTextActive,
-                      ]}
-                    >
-                      {voie}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </>
-        )}
-
-        {includeSymptome && (
-          <>
-            <View style={[styles.chipSection, { marginTop: 6 }]}>
-              <Text style={styles.chipLabel}>Symptômes</Text>
-              <View style={styles.chipRow}>
-                {SYMPTOMES_OPTIONS.map((symptome) => {
-                  const active = symptomes.includes(symptome);
-                  return (
-                    <TouchableOpacity
-                      key={symptome}
-                      style={[styles.chip, active && styles.chipActive]}
-                      onPress={() => {
-                        setSymptomes((prev) => {
-                          const next = prev.includes(symptome)
-                            ? prev.filter((item) => item !== symptome)
-                            : [...prev, symptome];
-                          if (next.length === 0) {
-                            setSymptomeIntensite(undefined);
-                          }
-                          return next;
-                        });
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          active && styles.chipTextActive,
-                        ]}
-                      >
-                        {symptome}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-            {symptomes.includes("autre") && (
-              <View style={[styles.inputGroup, { marginTop: 6 }]}>
-                <Text style={styles.inputLabel}>Autre(s) symptôme(s)</Text>
-                <TextInput
-                  value={symptomeAutre}
-                  onChangeText={setSymptomeAutre}
-                  placeholder="Préciser"
-                  style={styles.input}
-                />
-              </View>
-            )}
-            <View style={[styles.chipSection, { marginTop: 6 }]}>
-              <Text style={styles.chipLabel}>Intensité</Text>
-              <View style={styles.chipRow}>
-                {INTENSITES.map((item) => (
-                  <TouchableOpacity
-                    key={item}
-                    style={[
-                      styles.chip,
-                      symptomeIntensite === item && styles.chipActive,
-                    ]}
-                    onPress={() =>
-                      setSymptomeIntensite(
-                        symptomes.length === 0
-                          ? undefined
-                          : symptomeIntensite === item
-                            ? undefined
-                            : (item as any),
-                      )
-                    }
-                    disabled={symptomes.length === 0}
-                    activeOpacity={symptomes.length === 0 ? 1 : 0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        symptomeIntensite === item && styles.chipTextActive,
-                        symptomes.length === 0 && styles.chipTextDisabled,
-                      ]}
-                    >
-                      {item}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </>
-        )}
-
-        {selectedType === "vaccin" && (
-          <>
-            <TouchableOpacity
-              style={[
-                styles.vaccinSelector,
-                isSubmitting && styles.vaccinSelectorDisabled,
-              ]}
-              onPress={() => {
-                if (isSubmitting) return;
-                setSearchQuery("");
-                setSheetStep("vaccinPicker");
-              }}
-              activeOpacity={0.7}
-            >
-              <FontAwesome5
-                name="syringe"
-                size={16}
-                color="#666"
-                style={styles.vaccinListItemIcon}
-              />
-              <Text
-                style={[
-                  styles.vaccinSelectorText,
-                  vaccinName && styles.vaccinSelectorTextSelected,
-                  isSubmitting && styles.vaccinSelectorTextDisabled,
-                ]}
-              >
-                {vaccinName ? vaccinName : "Sélectionner un vaccin"}
-              </Text>
-              <FontAwesome5 name="chevron-right" size={14} color="#999" />
-            </TouchableOpacity>
-            {vaccinName === "Autre vaccin" && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Nom du vaccin</Text>
-                <TextInput
-                  value={vaccinCustomName}
-                  onChangeText={setVaccinCustomName}
-                  placeholder="Nom du vaccin"
-                  style={styles.input}
-                />
-              </View>
-            )}
-            {vaccinName ? (
-              vaccinName === "Autre vaccin" ? (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Dose</Text>
-                  <TextInput
-                    value={vaccinDosage}
-                    onChangeText={setVaccinDosage}
-                    placeholder="1ère injection"
-                    style={styles.input}
-                  />
-                </View>
-              ) : (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Dose</Text>
-                  <Text style={styles.readOnlyValue}>
-                    {vaccinDosage || "—"}
-                  </Text>
-                </View>
-              )
-            ) : null}
-          </>
-        )}
-
-        {selectedType === "vitamine" && (
-          <>
-            <TouchableOpacity
-              style={[
-                styles.vaccinSelector,
-                isSubmitting && styles.vaccinSelectorDisabled,
-              ]}
-              onPress={() => {
-                if (isSubmitting) return;
-                setSearchQuery("");
-                setSheetStep("vitaminePicker");
-              }}
-              activeOpacity={0.7}
-            >
-              <FontAwesome5
-                name="pills"
-                size={16}
-                color="#666"
-                style={styles.vaccinListItemIcon}
-              />
-              <Text
-                style={[
-                  styles.vaccinSelectorText,
-                  vitamineName && styles.vaccinSelectorTextSelected,
-                  isSubmitting && styles.vaccinSelectorTextDisabled,
-                ]}
-              >
-                {vitamineName ? vitamineName : "Sélectionner une vitamine"}
-              </Text>
-              <FontAwesome5 name="chevron-right" size={14} color="#999" />
-            </TouchableOpacity>
-            {vitamineName === "Autre vitamine" && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Nom de la vitamine</Text>
-                <TextInput
-                  value={vitamineCustomName}
-                  onChangeText={setVitamineCustomName}
-                  placeholder="Nom de la vitamine"
-                  style={styles.input}
-                />
-              </View>
-            )}
-            {(vitamineName === "Vitamine D" ||
-              vitamineName === "Vitamine K") && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Quantité</Text>
-                <View style={styles.quantityPickerRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.quantityButton,
-                      isSubmitting && styles.quantityButtonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() =>
-                        setGouttesCount((value) => Math.max(0, value - 1)),
-                      )
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.quantityButtonText,
-                        isSubmitting && styles.quantityButtonTextDisabled,
-                      ]}
-                    >
-                      -
-                    </Text>
-                  </TouchableOpacity>
-                  <Text style={styles.quantityPickerValue}>
-                    {gouttesCount} gouttes
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.quantityButton,
-                      isSubmitting && styles.quantityButtonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() => setGouttesCount((value) => value + 1))
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.quantityButtonText,
-                        isSubmitting && styles.quantityButtonTextDisabled,
-                      ]}
-                    >
-                      +
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-            {vitamineName !== "Vitamine D" && vitamineName !== "Vitamine K" && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Dosage</Text>
-                <TextInput
-                  value={vitamineDosage}
-                  onChangeText={setVitamineDosage}
-                  placeholder="1 goutte"
-                  style={styles.input}
-                />
-              </View>
-            )}
-          </>
-        )}
-
-        <View style={[styles.inputGroup, { marginTop: 12 }]}>
-          <Text style={styles.inputLabel}>Note</Text>
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="Ajouter une note"
-            style={styles.input}
-          />
-        </View>
-
-        <View style={styles.dateTimeContainerWithPadding}>
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowDate(true)}
-          >
-            <FontAwesome5
-              name="calendar-alt"
-              size={16}
-              color={Colors[colorScheme].tint}
-            />
-            <Text style={styles.dateButtonText}>Date</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowTime(true)}
-          >
-            <FontAwesome5
-              name="clock"
-              size={16}
-              color={Colors[colorScheme].tint}
-            />
-            <Text style={styles.dateButtonText}>Heure</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.selectedDateTime}>
-          <Text style={styles.selectedDate}>
-            {dateHeure.toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
-          <Text style={styles.selectedTime}>
-            {dateHeure.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-
-        {showDate && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, date) => {
-              setShowDate(false);
-              if (date) {
-                setDateHeure((prev) => {
-                  const next = new Date(prev);
-                  next.setFullYear(
-                    date.getFullYear(),
-                    date.getMonth(),
-                    date.getDate(),
-                  );
-                  return next;
-                });
-              }
-            }}
-          />
-        )}
-        {showTime && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="time"
-            is24Hour
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, date) => {
-              setShowTime(false);
-              if (date) {
-                setDateHeure((prev) => {
-                  const next = new Date(prev);
-                  next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                  return next;
-                });
-              }
-            }}
-          />
-        )}
-      </View>
-    );
-  };
 
   // ============================================
   // RENDER HELPERS
@@ -2412,7 +830,6 @@ export default function SoinsScreen() {
         key={event.id}
         style={({ pressed }) => [
           styles.sessionCard,
-          // isLast && styles.sessionCardLast,
           pressed && styles.sessionCardPressed,
         ]}
         onPress={() => openEditModal(event)}
@@ -2559,11 +976,7 @@ export default function SoinsScreen() {
             <View style={styles.quickActionsRow}>
               <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "temperature";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
+                onPress={() => openAddModal("temperature")}
               >
                 <FontAwesome
                   name="temperature-half"
@@ -2573,11 +986,7 @@ export default function SoinsScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "vitamine";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
+                onPress={() => openAddModal("vitamine")}
               >
                 <FontAwesome
                   name="pills"
@@ -2587,11 +996,7 @@ export default function SoinsScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => {
-                  pendingTypeRef.current = "vaccin";
-                  setPendingMode("add");
-                  setPendingOpen(true);
-                }}
+                onPress={() => openAddModal("vaccin")}
               >
                 <FontAwesome
                   name="syringe"
@@ -2676,22 +1081,6 @@ export default function SoinsScreen() {
           </View>
         )}
       </SafeAreaView>
-
-      <ConfirmModal
-        visible={showDeleteModal}
-        title="Supprimer"
-        message="Cet événement sera supprimé définitivement."
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        confirmButtonColor="#dc3545"
-        confirmTextColor="#fff"
-        cancelButtonColor="#f1f3f5"
-        cancelTextColor="#1f2937"
-        backgroundColor={colors.background}
-        textColor={colors.text}
-        onCancel={() => setShowDeleteModal(false)}
-        onConfirm={confirmDelete}
-      />
     </View>
   );
 }
@@ -2723,7 +1112,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingRight: 16,
-    // paddingVertical: 12,
   },
   quickActionsRow: {
     flexDirection: "row",
@@ -2745,42 +1133,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
-  },
-  templatesSection: {
-    paddingHorizontal: 4,
-    // paddingTop: 8,
-    paddingBottom: 4,
-  },
-  templatesTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#4b5563",
-    marginBottom: 8,
-  },
-  templatesGroup: {
-    marginBottom: 8,
-  },
-  templatesSubtitle: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6b7280",
-    marginBottom: 6,
-  },
-  templatesRow: {
-    flexDirection: "row",
-    gap: 10,
-    flexWrap: "wrap",
-  },
-  templateChip: {
-    borderRadius: 999,
-    backgroundColor: "#f0f0f0",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  templateChipText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#4a4f55",
   },
   daySection: {
     marginBottom: 24,
@@ -2858,10 +1210,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
   },
-  sessionCardLast: {
-    backgroundColor: "#f8f9fa",
-    borderBottomWidth: 0,
-  },
   sessionCardPressed: {
     backgroundColor: "#f9fafb",
   },
@@ -2920,293 +1268,5 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 16,
     fontWeight: "600",
-  },
-  sheetContent: {
-    gap: 12,
-  },
-  typeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingBottom: 8,
-  },
-  typeChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#f9fafb",
-  },
-  typeChipActive: {
-    backgroundColor: "#fff",
-    borderColor: "#6f42c1",
-  },
-  typeChipDisabled: {
-    opacity: 0.4,
-  },
-  typeChipText: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "600",
-  },
-  typeChipTextActive: {
-    color: "#4c2c79",
-    fontWeight: "700",
-  },
-  dateTimeContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-  },
-  dateTimeContainerWithPadding: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-    paddingTop: 20,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#4a4f55",
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 4,
-  },
-  selectedTime: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  vaccinSelector: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-    marginBottom: 8,
-  },
-  vaccinSelectorDisabled: {
-    backgroundColor: "#f5f5f5",
-    opacity: 0.5,
-  },
-  vaccinSelectorText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#999",
-  },
-  vaccinSelectorTextSelected: {
-    color: "#333",
-    fontWeight: "500",
-  },
-  vaccinSelectorTextDisabled: {
-    color: "#ccc",
-  },
-  sheetBreadcrumb: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  sheetBackButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-  },
-  sheetBackText: {
-    fontSize: 14,
-    color: "#666",
-    fontWeight: "600",
-  },
-  sheetBreadcrumbText: {
-    fontSize: 12,
-    color: "#999",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  vaccinList: {
-    paddingBottom: 8,
-  },
-  vaccinListItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-    borderRadius: 12,
-  },
-  vaccinListItemIcon: {
-    width: 18,
-    textAlign: "center",
-  },
-  vaccinListItemSelected: {
-    backgroundColor: "transparent",
-  },
-  vaccinListItemText: {
-    fontSize: 16,
-    color: "#333",
-  },
-  vaccinListItemTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  vaccinListItemSubtext: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  vaccinListItemTextSelected: {
-    fontWeight: "600",
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginVertical: 12,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: "#333",
-    paddingVertical: 10,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  clearButton: {
-    padding: 8,
-  },
-  noResultsText: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    padding: 20,
-  },
-  inputGroup: {
-    gap: 6,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6b7280",
-  },
-  quantityPickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    marginBottom: 8,
-  },
-  quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quantityButtonDisabled: {
-    opacity: 0.6,
-  },
-  quantityButtonText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-  },
-  quantityButtonTextDisabled: {
-    color: "#999",
-  },
-  quantityPickerValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  readOnlyValue: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: "#4b5563",
-    backgroundColor: "#f9fafb",
-  },
-  chipSection: {
-    gap: 8,
-  },
-  chipLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6b7280",
-  },
-  chipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  chip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#f9fafb",
-  },
-  chipActive: {
-    borderColor: "#6f42c1",
-    backgroundColor: "#ede7f6",
-  },
-  chipText: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "600",
-  },
-  chipTextDisabled: {
-    color: "#c4c4c4",
-  },
-  chipTextActive: {
-    color: "#4c2c79",
-  },
-  toggleHint: {
-    fontSize: 13,
-    color: "#999",
-    textAlign: "center",
-    marginBottom: 12,
   },
 });

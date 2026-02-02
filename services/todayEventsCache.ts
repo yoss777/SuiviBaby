@@ -3,7 +3,9 @@ import type { Event, EventType } from "@/services/eventsService";
 export type TodayEventsData = {
   tetees: Event[];
   biberons: Event[];
+  solides: Event[];
   pompages: Event[];
+  croissances: Event[];
   mictions: Event[];
   selles: Event[];
   sommeils: Event[];
@@ -20,7 +22,9 @@ export type TodayEventsData = {
 const TODAY_TYPES: EventType[] = [
   "biberon",
   "tetee",
+  "solide",
   "pompage",
+  "croissance",
   "miction",
   "selle",
   "sommeil",
@@ -51,7 +55,9 @@ export const buildTodayEventsData = (events: Event[]): TodayEventsData => {
   const data: TodayEventsData = {
     tetees: [],
     biberons: [],
+    solides: [],
     pompages: [],
+    croissances: [],
     mictions: [],
     selles: [],
     sommeils: [],
@@ -73,8 +79,14 @@ export const buildTodayEventsData = (events: Event[]): TodayEventsData => {
       case "biberon":
         data.biberons.push(event);
         break;
+      case "solide":
+        data.solides.push(event);
+        break;
       case "pompage":
         data.pompages.push(event);
+        break;
+      case "croissance":
+        data.croissances.push(event);
         break;
       case "miction":
         data.mictions.push(event);

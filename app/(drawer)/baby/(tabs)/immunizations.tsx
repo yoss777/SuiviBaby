@@ -1012,6 +1012,24 @@ export default function ImmunizationsScreen() {
     }
   };
 
+  const ensureTodayInRange = useCallback(() => {
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    setRangeEndDate((prev) => {
+      if (!prev) {
+        setDaysWindow(14);
+        return endOfToday;
+      }
+      if (prev >= endOfToday) return prev;
+      const diffDays = Math.ceil(
+        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
+      );
+      setDaysWindow((window) => window + diffDays);
+      return endOfToday;
+    });
+  }, []);
+
   const closeModal = () => {
     closeSheet();
   };
@@ -1070,6 +1088,7 @@ export default function ImmunizationsScreen() {
             : "Ajout en attente de synchronisation",
         );
       }
+      ensureTodayInRange();
       closeModal();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde:", error);

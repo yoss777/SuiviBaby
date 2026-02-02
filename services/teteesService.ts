@@ -62,7 +62,7 @@ export async function obtenirToutesLesTetees(childId: string) {
     const q = query(
       collection(db, "tetees"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc")
+      orderBy("date", "desc")
     );
     const querySnapshot = await getDocs(q);
 
@@ -81,7 +81,7 @@ export async function obtenirTeteesAvecLimite(childId: string, nombreLimit: numb
     const q = query(
       collection(db, "tetees"),
       where("childId", "==", childId),
-      orderBy("createdAt", "desc"),
+      orderBy("date", "desc"),
       limit(nombreLimit)
     );
     const querySnapshot = await getDocs(q);
@@ -100,7 +100,7 @@ export function ecouterTetees(childId: string, callback: (docs: any[]) => void) 
   const q = query(
     collection(db, "tetees"),
     where("childId", "==", childId),
-    orderBy("createdAt", "desc")
+    orderBy("date", "desc")
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {

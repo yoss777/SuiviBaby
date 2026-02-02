@@ -1,5 +1,99 @@
 # CHANGELOG
 
+## 2026-02-02 — Growth Screen & Forms Navigation Refactoring
+
+### Résumé
+
+Ajout du nouvel écran Croissance (Growth) dans Plus, refactoring global de la navigation des formulaires via FormBottomSheet avec SheetContext, et amélioration de l'écran Moments avec intégration des forms.
+
+### Summary
+
+Added new Growth screen in Plus, global refactoring of form navigation via FormBottomSheet with SheetContext, and improved Moments screen with forms integration.
+
+### Nouvel écran Growth
+
+- Nouvel écran Growth accessible via Plus (Croissance: poids, taille, tour de tête).
+- Pattern aligné avec les autres écrans: filtres today/past, calendrier, pagination "Voir plus", sheet global.
+- Icône seedling avec couleur #8BCF9B cohérente avec croissance.tsx.
+- Service `ecouterCroissancesHybrid` avec support date filtering pour pagination.
+- Fichiers: app/(drawer)/baby/(tabs)/growth.tsx, app/(drawer)/baby/(tabs)/plus.tsx, constants/eventColors.ts
+
+### New Growth Screen (EN)
+
+- New Growth screen accessible via Plus (Growth: weight, height, head circumference).
+- Pattern aligned with other screens: today/past filters, calendar, "Voir plus" pagination, global sheet.
+- Seedling icon with #8BCF9B color consistent with croissance.tsx.
+- `ecouterCroissancesHybrid` service with date filtering support for pagination.
+- Files: app/(drawer)/baby/(tabs)/growth.tsx, app/(drawer)/baby/(tabs)/plus.tsx, constants/eventColors.ts
+
+### Refactoring Navigation Forms
+
+- GlobalSheetManager supporte désormais tous les types de formulaires via `formType` discriminé.
+- Écrans refactorisés pour utiliser `openSheet({ formType: 'xxx', ... })`: meals, pumping, diapers, routines, activities, milestones, soins, croissance.
+- Ajout de `onSuccess` callback pour rafraîchir les données après création/modification.
+- Ajout de `ensureTodayInRange()` pour s'assurer que les événements créés aujourd'hui sont visibles.
+- FormBottomSheet: backdrop cliquable (pressBehavior="close"), opacité 0.5, swipe-down activé par défaut.
+- Fichiers: components/ui/GlobalSheetManager.tsx, components/ui/FormBottomSheet.tsx, contexts/SheetContext.tsx
+
+### Forms Navigation Refactoring (EN)
+
+- GlobalSheetManager now supports all form types via discriminated `formType`.
+- Screens refactored to use `openSheet({ formType: 'xxx', ... })`: meals, pumping, diapers, routines, activities, milestones, soins, croissance.
+- Added `onSuccess` callback to refresh data after create/edit.
+- Added `ensureTodayInRange()` to ensure today's events are visible after creation.
+- FormBottomSheet: clickable backdrop (pressBehavior="close"), 0.5 opacity, swipe-down enabled by default.
+- Files: components/ui/GlobalSheetManager.tsx, components/ui/FormBottomSheet.tsx, contexts/SheetContext.tsx
+
+### Améliorations Moments
+
+- Écran Moments utilise désormais le SheetContext pour ouvrir les formulaires (humeur, photo, milestone).
+- Handlers `handleAddMood`, `handleAddPhoto`, `handleAddMilestone`, `handleEditPhoto` via openSheet.
+- Fichier: app/(drawer)/baby/(tabs)/moments.tsx
+
+### Moments Improvements (EN)
+
+- Moments screen now uses SheetContext to open forms (mood, photo, milestone).
+- Handlers `handleAddMood`, `handleAddPhoto`, `handleAddMilestone`, `handleEditPhoto` via openSheet.
+- File: app/(drawer)/baby/(tabs)/moments.tsx
+
+### SwipeGallery & Interactions Sociales
+
+- Nouveau composant SwipeGallery pour navigation swipe entre photos avec PagerView animé.
+- Cards animées avec scale/opacity pendant le swipe, carte "Ajouter" en première position.
+- Barre sociale sous chaque photo: like (cœur animé), commentaires, téléchargement.
+- Système de likes optimiste: mise à jour UI immédiate avant confirmation serveur.
+- Affichage des likes: "Aimé par Papa et Mamie", "Aimé par Papa, Mamie et 3 autres".
+- CommentsBottomSheet: bottom sheet pour commentaires en temps réel via Firebase.
+- Commentaires: écoute temps réel, ajout, suppression (long press sur ses propres commentaires).
+- Toast local dans la modal pour feedback (téléchargement réussi, etc.).
+- Overlay temporaire (tap) avec titre et date de la photo.
+- Indicateurs de navigation: dots (≤10 photos), hints "Plus récent" / "Plus ancien".
+- Fichiers: components/moments/SwipeGallery.tsx, components/moments/CommentsBottomSheet.tsx
+
+### SwipeGallery & Social Interactions (EN)
+
+- New SwipeGallery component for swipe navigation between photos with animated PagerView.
+- Animated cards with scale/opacity during swipe, "Add" card in first position.
+- Social bar below each photo: like (animated heart), comments, download.
+- Optimistic likes system: immediate UI update before server confirmation.
+- Likes display: "Liked by Papa and Mamie", "Liked by Papa, Mamie and 3 others".
+- CommentsBottomSheet: bottom sheet for real-time comments via Firebase.
+- Comments: real-time listener, add, delete (long press on own comments).
+- Local toast in modal for feedback (download success, etc.).
+- Temporary overlay (tap) with photo title and date.
+- Navigation indicators: dots (≤10 photos), hints "More recent" / "Older".
+- Files: components/moments/SwipeGallery.tsx, components/moments/CommentsBottomSheet.tsx
+
+### Corrections
+
+- croissanceService.ts: orderBy `date` au lieu de `createdAt` pour cohérence avec le nouveau système.
+- FormBottomSheet: fermeture possible via swipe-down et clic sur backdrop (était désactivé).
+
+### Fixes (EN)
+
+- croissanceService.ts: orderBy `date` instead of `createdAt` for consistency with new system.
+- FormBottomSheet: close via swipe-down and backdrop click now enabled (was disabled).
+
 ## 2026-01-30 — Routines / Jalons / Activités (MVP)
 
 ### Résumé

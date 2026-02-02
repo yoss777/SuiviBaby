@@ -1,5 +1,5 @@
+import { PumpingEditData } from "@/components/forms/PumpingForm";
 import { ThemedText } from "@/components/themed-text";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
@@ -7,24 +7,14 @@ import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
-import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import {
-  ajouterPompage,
-  modifierPompage,
-  supprimerPompage,
-} from "@/migration/eventsDoubleWriteService";
 import {
   ecouterPompagesHybrid as ecouterPompages,
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { useNetInfo } from "@react-native-community/netinfo";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -33,11 +23,9 @@ import {
   BackHandler,
   FlatList,
   InteractionManager,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -75,26 +63,20 @@ export default function PumpingScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
-  const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
-  const { showAlert } = useModal();
+  const { openSheet, closeSheet, isOpen } = useSheet();
   const headerOwnerId = useRef(
     `pumping-${Math.random().toString(36).slice(2)}`,
   );
   const navigation = useNavigation();
   const { setHeaderLeft } = useHeaderLeft();
-  const { showToast } = useToast();
-  const netInfo = useNetInfo();
-  const isOffline =
-    netInfo.isInternetReachable === false || netInfo.isConnected === false;
+  const sheetOwnerId = "pumping";
 
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
-  const [pendingMode, setPendingMode] = useState<"add" | "edit" | null>(null);
-  const sheetOwnerId = "pumping";
-  const isSheetActive = viewProps?.ownerId === sheetOwnerId;
+  const [pendingEditData, setPendingEditData] = useState<PumpingEditData | null>(null);
 
   // États des données
   const [pompages, setPompages] = useState<Pompage[]>([]);
@@ -111,31 +93,12 @@ export default function PumpingScreen() {
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
 
-  // États du formulaire
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [editingPompage, setEditingPompage] = useState<Pompage | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [dateHeure, setDateHeure] = useState<Date>(new Date());
-  const [quantiteGauche, setQuantiteGauche] = useState<number>(100);
-  const [quantiteDroite, setQuantiteDroite] = useState<number>(100);
-  const [useLeftBreast, setUseLeftBreast] = useState(true);
-  const [useRightBreast, setUseRightBreast] = useState(true);
-  const lastLeftQuantityRef = useRef<number>(100);
-  const lastRightQuantityRef = useRef<number>(100);
-
-  // États des pickers
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
-
   // Récupérer les paramètres de l'URL
   const { openModal, editId, returnTo } = useLocalSearchParams();
   const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
-
-  // Ref pour la gestion du picker avec accélération
-  const intervalRef = useRef<number | undefined>(undefined);
 
   // ============================================
   // EFFECTS - HEADER
@@ -159,23 +122,10 @@ export default function PumpingScreen() {
     });
   }, []);
 
-  const prepareAddModal = useCallback(() => {
-    setDateHeure(new Date());
-    setEditingPompage(null);
-    setIsSubmitting(false);
-    setQuantiteGauche(100);
-    setQuantiteDroite(100);
-    setUseLeftBreast(true);
-    setUseRightBreast(true);
-    lastLeftQuantityRef.current = 100;
-    lastRightQuantityRef.current = 100;
-  }, []);
-
   const openAddModal = useCallback(() => {
-    prepareAddModal();
-    setPendingMode("add");
+    setPendingEditData(null);
     setPendingOpen(true);
-  }, [prepareAddModal]);
+  }, []);
 
   // Définir les boutons du header (calendrier + ajouter)
   useFocusEffect(
@@ -295,32 +245,46 @@ export default function PumpingScreen() {
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
-      setPendingMode("add");
+      setPendingEditData(null);
       setPendingOpen(true);
     }, [openModal]),
   );
 
+  // Helper to build edit data from a Pompage
+  const buildEditData = useCallback((pompage: Pompage): PumpingEditData => ({
+    id: pompage.id,
+    date: new Date(pompage.date.seconds * 1000),
+    quantiteGauche: pompage.quantiteGauche,
+    quantiteDroite: pompage.quantiteDroite,
+  }), []);
+
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
+    const returnTarget = returnTargetParam ?? returnToRef.current;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
-      if (pendingMode !== "edit") {
-        prepareAddModal();
-      }
-      openSheet(buildSheetProps());
+      openSheet({
+        ownerId: sheetOwnerId,
+        formType: "pumping",
+        editData: pendingEditData ?? undefined,
+        onSuccess: ensureTodayInRange,
+        onDismiss: () => {
+          editIdRef.current = null;
+          maybeReturnTo(returnTarget);
+        },
+      });
       navigation.setParams({ openModal: undefined, editId: undefined });
       setPendingOpen(false);
-      setPendingMode(null);
+      setPendingEditData(null);
     });
     return () => task.cancel?.();
   }, [
     pendingOpen,
     layoutReady,
-    pendingMode,
-    router,
-    returnTo,
-    prepareAddModal,
+    pendingEditData,
+    returnTargetParam,
     openSheet,
+    ensureTodayInRange,
   ]);
 
   useEffect(() => {
@@ -331,9 +295,10 @@ export default function PumpingScreen() {
     if (!target) return;
     stashReturnTo();
     editIdRef.current = normalizedId;
-    openEditModal(target);
+    setPendingEditData(buildEditData(target));
+    setPendingOpen(true);
     navigation.setParams({ openModal: undefined, editId: undefined });
-  }, [editId, layoutReady, pompages, router, returnTo]);
+  }, [editId, layoutReady, pompages, buildEditData]);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -545,15 +510,6 @@ export default function PumpingScreen() {
     setGroupedPompages(grouped);
   }, [pompages, selectedFilter, selectedDate, showCalendar]);
 
-  // Nettoyage de l'intervalle lors du démontage
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
-
   // ============================================
   // HELPERS - CALENDAR
   // ============================================
@@ -680,34 +636,6 @@ export default function PumpingScreen() {
   };
 
   // ============================================
-  // HELPERS - QUANTITY PICKER
-  // ============================================
-
-  const handlePressIn = (action: () => void) => {
-    action();
-
-    let speed = 200;
-
-    const accelerate = () => {
-      action();
-      if (speed > 50) {
-        speed -= 20;
-        clearInterval(intervalRef.current);
-        intervalRef.current = setInterval(accelerate, speed);
-      }
-    };
-
-    intervalRef.current = setInterval(accelerate, speed);
-  };
-
-  const handlePressOut = () => {
-    if (intervalRef.current !== undefined) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = undefined;
-    }
-  };
-
-  // ============================================
   // HELPERS - UI
   // ============================================
 
@@ -725,26 +653,10 @@ export default function PumpingScreen() {
   // HANDLERS - MODAL
   // ============================================
 
-  const openEditModal = (pompage: Pompage) => {
-    setDateHeure(new Date(pompage.date.seconds * 1000));
-    setQuantiteGauche(pompage.quantiteGauche);
-    setQuantiteDroite(pompage.quantiteDroite);
-    lastLeftQuantityRef.current = pompage.quantiteGauche ?? 0;
-    lastRightQuantityRef.current = pompage.quantiteDroite ?? 0;
-    const hasLeft = (pompage.quantiteGauche ?? 0) > 0;
-    const hasRight = (pompage.quantiteDroite ?? 0) > 0;
-    if (!hasLeft && !hasRight) {
-      setUseLeftBreast(true);
-      setUseRightBreast(true);
-    } else {
-      setUseLeftBreast(hasLeft);
-      setUseRightBreast(hasRight);
-    }
-    setEditingPompage(pompage);
-    setIsSubmitting(false);
-    setPendingMode("edit");
+  const openEditModal = useCallback((pompage: Pompage) => {
+    setPendingEditData(buildEditData(pompage));
     setPendingOpen(true);
-  };
+  }, [buildEditData]);
 
   const normalizeParam = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value;
@@ -775,421 +687,23 @@ export default function PumpingScreen() {
     }
   };
 
-  const closeModal = () => {
-    closeSheet();
-  };
+  const ensureTodayInRange = useCallback(() => {
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
 
-  // ============================================
-  // HANDLERS - CRUD
-  // ============================================
-
-  const handleSubmit = async () => {
-    if (isSubmitting || !activeChild) return;
-    if (!useLeftBreast && !useRightBreast) {
-      showAlert("Attention", "Sélectionnez au moins un sein.");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-
-      const dataToSave = {
-        quantiteGauche: useLeftBreast ? quantiteGauche : 0,
-        quantiteDroite: useRightBreast ? quantiteDroite : 0,
-        date: dateHeure,
-      };
-
-      if (editingPompage) {
-        await modifierPompage(activeChild.id, editingPompage.id, dataToSave);
-      } else {
-        await ajouterPompage(activeChild.id, dataToSave);
+    setRangeEndDate((prev) => {
+      if (!prev) {
+        setDaysWindow(14);
+        return endOfToday;
       }
-
-      if (isOffline) {
-        showToast(
-          editingPompage
-            ? "Modification en attente de synchronisation"
-            : "Ajout en attente de synchronisation",
-        );
-      }
-      closeModal();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde du pompage:", error);
-      showAlert(
-        "Erreur",
-        "Impossible de sauvegarder le pompage. Veuillez réessayer.",
+      if (prev >= endOfToday) return prev;
+      const diffDays = Math.ceil(
+        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
       );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDelete = () => {
-    if (isSubmitting || !editingPompage || !activeChild) return;
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    if (isSubmitting || !editingPompage || !activeChild) return;
-
-    try {
-      setIsSubmitting(true);
-      await supprimerPompage(activeChild.id, editingPompage.id);
-      if (isOffline) {
-        showToast("Suppression en attente de synchronisation");
-      }
-      setShowDeleteModal(false);
-      closeModal();
-    } catch (error) {
-      console.error("Erreur lors de la suppression:", error);
-      showAlert(
-        "Erreur",
-        "Impossible de supprimer le pompage. Veuillez réessayer.",
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  function renderSheetContent() {
-    const toggleLeftBreast = () => {
-      if (isSubmitting) return;
-      setUseLeftBreast((prev) => {
-        if (prev && !useRightBreast) return prev;
-        const next = !prev;
-        setQuantiteGauche((q) => {
-          if (next) {
-            return lastLeftQuantityRef.current > 0
-              ? lastLeftQuantityRef.current
-              : 100;
-          }
-          lastLeftQuantityRef.current = q;
-          return 0;
-        });
-        return next;
-      });
-    };
-    const toggleRightBreast = () => {
-      if (isSubmitting) return;
-      setUseRightBreast((prev) => {
-        if (prev && !useLeftBreast) return prev;
-        const next = !prev;
-        setQuantiteDroite((q) => {
-          if (next) {
-            return lastRightQuantityRef.current > 0
-              ? lastRightQuantityRef.current
-              : 100;
-          }
-          lastRightQuantityRef.current = q;
-          return 0;
-        });
-        return next;
-      });
-    };
-
-    return (
-      <>
-        <Text style={styles.modalCategoryLabel}>Seins</Text>
-        <View style={styles.breastToggleRow}>
-          <TouchableOpacity
-            style={[
-              styles.breastToggleButton,
-              useLeftBreast && {
-                backgroundColor: Colors[colorScheme].tint,
-                borderColor: Colors[colorScheme].tint,
-              },
-            ]}
-            onPress={toggleLeftBreast}
-            disabled={isSubmitting}
-          >
-            <Text
-              style={[
-                styles.breastToggleText,
-                useLeftBreast && styles.breastToggleTextActive,
-              ]}
-            >
-              Gauche
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.breastToggleButton,
-              useRightBreast && {
-                backgroundColor: Colors[colorScheme].tint,
-                borderColor: Colors[colorScheme].tint,
-              },
-            ]}
-            onPress={toggleRightBreast}
-            disabled={isSubmitting}
-          >
-            <Text
-              style={[
-                styles.breastToggleText,
-                useRightBreast && styles.breastToggleTextActive,
-              ]}
-            >
-              Droit
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {useLeftBreast && (
-          <>
-            <Text style={styles.modalCategoryLabel}>Quantité Sein Gauche</Text>
-            <View style={styles.quantityPickerRow}>
-              <TouchableOpacity
-                style={[
-                  styles.quantityButton,
-                  isSubmitting && styles.quantityButtonDisabled,
-                ]}
-                onPressIn={() =>
-                  handlePressIn(() =>
-                    setQuantiteGauche((q) => Math.max(0, q - 5)),
-                  )
-                }
-                onPressOut={handlePressOut}
-                disabled={isSubmitting}
-              >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
-                    isSubmitting && styles.quantityButtonTextDisabled,
-                  ]}
-                >
-                  -
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.quantityPickerValue}>
-                {quantiteGauche} ml
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.quantityButton,
-                  isSubmitting && styles.quantityButtonDisabled,
-                ]}
-                onPressIn={() =>
-                  handlePressIn(() => setQuantiteGauche((q) => q + 5))
-                }
-                onPressOut={handlePressOut}
-                disabled={isSubmitting}
-              >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
-                    isSubmitting && styles.quantityButtonTextDisabled,
-                  ]}
-                >
-                  +
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
-        {useRightBreast && (
-          <>
-            <Text style={styles.modalCategoryLabel}>Quantité Sein Droit</Text>
-            <View style={styles.quantityPickerRow}>
-              <TouchableOpacity
-                style={[
-                  styles.quantityButton,
-                  isSubmitting && styles.quantityButtonDisabled,
-                ]}
-                onPressIn={() =>
-                  handlePressIn(() =>
-                    setQuantiteDroite((q) => Math.max(0, q - 5)),
-                  )
-                }
-                onPressOut={handlePressOut}
-                disabled={isSubmitting}
-              >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
-                    isSubmitting && styles.quantityButtonTextDisabled,
-                  ]}
-                >
-                  -
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.quantityPickerValue}>
-                {quantiteDroite} ml
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.quantityButton,
-                  isSubmitting && styles.quantityButtonDisabled,
-                ]}
-                onPressIn={() =>
-                  handlePressIn(() => setQuantiteDroite((q) => q + 5))
-                }
-                onPressOut={handlePressOut}
-                disabled={isSubmitting}
-              >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
-                    isSubmitting && styles.quantityButtonTextDisabled,
-                  ]}
-                >
-                  +
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
-        <Text style={styles.modalCategoryLabel}>Date & Heure</Text>
-        <View style={styles.dateTimeContainer}>
-          <TouchableOpacity
-            style={[
-              styles.dateButton,
-              isSubmitting && styles.dateButtonDisabled,
-            ]}
-            onPress={() => setShowDate(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="calendar-alt"
-              size={16}
-              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
-            />
-            <Text
-              style={[
-                styles.dateButtonText,
-                isSubmitting && styles.dateButtonTextDisabled,
-              ]}
-            >
-              Date
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.dateButton,
-              isSubmitting && styles.dateButtonDisabled,
-            ]}
-            onPress={() => setShowTime(true)}
-            disabled={isSubmitting}
-          >
-            <FontAwesome
-              name="clock"
-              size={16}
-              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
-            />
-            <Text
-              style={[
-                styles.dateButtonText,
-                isSubmitting && styles.dateButtonTextDisabled,
-              ]}
-            >
-              Heure
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.selectedDateTime}>
-          <Text style={styles.selectedDate}>
-            {dateHeure.toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
-          <Text style={styles.selectedTime}>
-            {dateHeure.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-
-        {showDate && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeDate}
-          />
-        )}
-        {showTime && (
-          <DateTimePicker
-            value={dateHeure}
-            mode="time"
-            is24Hour={true}
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={onChangeTime}
-          />
-        )}
-      </>
-    );
-  }
-
-  function buildSheetProps() {
-    const returnTarget = returnTargetParam ?? returnToRef.current;
-    return {
-      ownerId: sheetOwnerId,
-      title: editingPompage ? "Modifier la session" : "Nouvelle session",
-      icon: "pump-medical",
-      accentColor: eventColors.pumping.dark,
-      isEditing: !!editingPompage,
-      isSubmitting,
-      onSubmit: handleSubmit,
-      onDelete: editingPompage ? handleDelete : undefined,
-      children: renderSheetContent(),
-      onDismiss: () => {
-        setIsSubmitting(false);
-        setEditingPompage(null);
-        editIdRef.current = null;
-        maybeReturnTo(returnTarget);
-      },
-    };
-  }
-
-  useEffect(() => {
-    if (!isSheetActive) return;
-    openSheet(buildSheetProps());
-  }, [
-    isSheetActive,
-    openSheet,
-    editingPompage,
-    isSubmitting,
-    quantiteGauche,
-    quantiteDroite,
-    dateHeure,
-    showDate,
-    showTime,
-  ]);
-
-  // ============================================
-  // HANDLERS - DATE/TIME PICKERS
-  // ============================================
-
-  const onChangeDate = (event: any, selectedDate?: Date) => {
-    setShowDate(false);
-    if (selectedDate) {
-      setDateHeure((prev) => {
-        const newDate = new Date(prev);
-        newDate.setFullYear(
-          selectedDate.getFullYear(),
-          selectedDate.getMonth(),
-          selectedDate.getDate(),
-        );
-        return newDate;
-      });
-    }
-  };
-
-  const onChangeTime = (event: any, selectedDate?: Date) => {
-    setShowTime(false);
-    if (selectedDate) {
-      setDateHeure((prev) => {
-        const newDate = new Date(prev);
-        newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-        return newDate;
-      });
-    }
-  };
+      setDaysWindow((window) => window + diffDays);
+      return endOfToday;
+    });
+  }, []);
 
   // ============================================
   // RENDER - POMPAGE ITEM
@@ -1477,17 +991,6 @@ export default function PumpingScreen() {
             <IconPulseDots color={Colors[colorScheme].tint} />
           </View>
         )}
-        <ConfirmModal
-          visible={showDeleteModal}
-          title="Suppression"
-          message="Voulez-vous vraiment supprimer ce pompage ?"
-          confirmText="Supprimer"
-          cancelText="Annuler"
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
-          onCancel={() => setShowDeleteModal(false)}
-          onConfirm={confirmDelete}
-        />
       </SafeAreaView>
     </View>
   );
@@ -1719,115 +1222,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#666",
     marginTop: 16,
-    fontWeight: "600",
-  },
-  // Modal Content
-  modalCategoryLabel: {
-    alignSelf: "center",
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    paddingTop: 20,
-    marginBottom: 10,
-  },
-  // Quantity Picker
-  quantityPickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    marginBottom: 8,
-  },
-  quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quantityButtonDisabled: {
-    opacity: 0.6,
-  },
-  quantityButtonText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-  },
-  quantityButtonTextDisabled: {
-    color: "#999",
-  },
-  quantityPickerValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  breastToggleRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 12,
-  },
-  breastToggleButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
-  },
-  breastToggleText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#666",
-  },
-  breastToggleTextActive: {
-    color: "#fff",
-  },
-  // Date/Time
-  dateTimeContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
-  },
-  dateButtonDisabled: {
-    backgroundColor: "#f5f5f5",
-    opacity: 0.5,
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#4a4f55",
-  },
-  dateButtonTextDisabled: {
-    color: "#ccc",
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  selectedTime: {
-    fontSize: 20,
-    color: "#374151",
     fontWeight: "600",
   },
 });
