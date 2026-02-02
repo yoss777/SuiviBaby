@@ -1,14 +1,3 @@
-import React, { memo } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   ACTIVITY_TYPE_LABELS,
   EVENT_CONFIG,
@@ -18,6 +7,17 @@ import {
 } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import React, { memo } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 // ============================================
 // TYPES
@@ -82,7 +82,11 @@ const EventIcon = memo(function EventIcon({
   }
 
   return (
-    <FontAwesome name={config.icon.name as any} size={14} color={config.color} />
+    <FontAwesome
+      name={config.icon.name as any}
+      size={14}
+      color={config.color}
+    />
   );
 });
 
@@ -97,11 +101,15 @@ const DaySeparator = memo(function DaySeparator({
 }) {
   return (
     <View style={styles.daySeparator} accessibilityRole="header">
-      <View style={[styles.daySeparatorLine, { backgroundColor: borderColor }]} />
+      <View
+        style={[styles.daySeparatorLine, { backgroundColor: borderColor }]}
+      />
       <Text style={[styles.daySeparatorText, { color: textColor }]}>
         {label}
       </Text>
-      <View style={[styles.daySeparatorLine, { backgroundColor: borderColor }]} />
+      <View
+        style={[styles.daySeparatorLine, { backgroundColor: borderColor }]}
+      />
     </View>
   );
 });
@@ -141,7 +149,10 @@ const TimeDisplay = memo(function TimeDisplay({
         </Text>
         <Text style={[styles.recentTimeArrow, { color: textColor }]}>↓</Text>
         <Text
-          style={[styles.recentTimeOngoing, { color: eventColors.sommeil.dark }]}
+          style={[
+            styles.recentTimeOngoing,
+            { color: eventColors.sommeil.dark },
+          ]}
           accessibilityLiveRegion="polite"
         >
           en cours
@@ -227,7 +238,7 @@ function RecentEventsListComponent({
 
       {showHint && events.length > 0 && (
         <Text style={styles.recentHint}>
-          Maintenir un événement pour le modifier
+          Appuyez sur un événement pour le modifier
         </Text>
       )}
 
@@ -237,7 +248,9 @@ function RecentEventsListComponent({
           <Text style={styles.recentLoadingText}>Chargement...</Text>
         </View>
       ) : events.length === 0 ? (
-        <Text style={styles.recentEmpty}>Aucun événement aujourd&apos;hui.</Text>
+        <Text style={styles.recentEmpty}>
+          Aucun événement aujourd&apos;hui.
+        </Text>
       ) : (
         events.map((event, index) => {
           const config = EVENT_CONFIG[event.type] || {
@@ -264,7 +277,9 @@ function RecentEventsListComponent({
               ? MOMENT_REPAS_LABELS[event.momentRepas]
               : null
             : null;
-          const solideQuantity = isSolide ? event.quantiteSolide ?? event.quantite : null;
+          const solideQuantity = isSolide
+            ? (event.quantiteSolide ?? event.quantite)
+            : null;
           const solideLine2 =
             isSolide && (solideMomentLabel || solideQuantity)
               ? `${solideMomentLabel ?? ""}${
@@ -297,8 +312,8 @@ function RecentEventsListComponent({
                 0,
                 Math.round(
                   (currentTime.getTime() - toDate(event.heureDebut).getTime()) /
-                    60000
-                )
+                    60000,
+                ),
               )
             : 0;
 
@@ -331,7 +346,10 @@ function RecentEventsListComponent({
               <View style={styles.recentRow}>
                 <View style={styles.recentTimelineColumn}>
                   <View
-                    style={[styles.recentDot, { backgroundColor: config.color }]}
+                    style={[
+                      styles.recentDot,
+                      { backgroundColor: config.color },
+                    ]}
                   />
                   <View
                     style={[
@@ -363,10 +381,10 @@ function RecentEventsListComponent({
                     },
                   ]}
                   activeOpacity={0.85}
-                  onLongPress={() => onEventLongPress(event)}
+                  onPress={() => onEventLongPress(event)}
                   accessibilityRole="button"
                   accessibilityLabel={`${displayLabel}${displayDetails ? `, ${displayDetails}` : ""}`}
-                  accessibilityHint="Maintenir pour modifier"
+                  accessibilityHint="Appuyez pour modifier"
                 >
                   <View style={styles.recentTitleRow}>
                     <EventIcon
@@ -393,7 +411,9 @@ function RecentEventsListComponent({
                   {!isSolide && displayDetails && (
                     <Text
                       style={[styles.recentDetails, { color: textColor }]}
-                      accessibilityLiveRegion={isOngoingSleep ? "polite" : "none"}
+                      accessibilityLiveRegion={
+                        isOngoingSleep ? "polite" : "none"
+                      }
                     >
                       {displayDetails}
                     </Text>
@@ -401,7 +421,12 @@ function RecentEventsListComponent({
                   {isSolide && (solideLine2 || solideLikeLabel) && (
                     <View style={styles.solideDetails}>
                       {solideLine2 && (
-                        <Text style={[styles.solideDetailsText, { color: textColor }]}>
+                        <Text
+                          style={[
+                            styles.solideDetailsText,
+                            { color: textColor },
+                          ]}
+                        >
                           {solideLine2}
                         </Text>
                       )}

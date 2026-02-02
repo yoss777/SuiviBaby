@@ -1,5 +1,6 @@
 import React, { memo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 
 // ============================================
 // TYPES
@@ -38,6 +39,9 @@ export const SleepWidget = memo(function SleepWidget({
   onStartSleep,
   onStopSleep,
 }: SleepWidgetProps) {
+  const hour = new Date().getHours();
+  const preferNight = hour >= 20 || hour < 6;
+
   if (isActive) {
     return (
       <View
@@ -46,9 +50,16 @@ export const SleepWidget = memo(function SleepWidget({
         accessibilityLabel={`${isNap ? "Sieste" : "Nuit"} en cours depuis ${formatDuration(elapsedMinutes)}`}
       >
         <View style={styles.sleepWidgetHeader}>
-          <Text style={styles.sleepWidgetTitle}>
-            {isNap ? "Sieste" : "Nuit"} en cours
-          </Text>
+          <View style={styles.sleepWidgetHeaderRow}>
+            <FontAwesome
+              name={isNap ? "bed" : "moon"}
+              size={14}
+              color={styles.sleepWidgetTitle.color}
+            />
+            <Text style={styles.sleepWidgetTitle}>
+              {isNap ? "Sieste" : "Nuit"} en cours
+            </Text>
+          </View>
         </View>
         <Text
           style={styles.sleepWidgetValue}
@@ -74,24 +85,38 @@ export const SleepWidget = memo(function SleepWidget({
       style={[styles.statsCard, styles.sleepWidget]}
       accessibilityRole="none"
     >
-      <Text style={styles.sleepWidgetTitle}>Nouvelle session</Text>
+      <Text style={styles.sleepWidgetTitle}>C'est l'heure des beaux rêves ?</Text>
       <Text style={styles.sleepWidgetSubtitle}>Tap pour démarrer</Text>
       <View style={styles.sleepWidgetButtons}>
         <TouchableOpacity
-          style={styles.sleepWidgetPrimary}
+          style={preferNight ? styles.sleepWidgetSecondary : styles.sleepWidgetPrimary}
           onPress={() => onStartSleep(true)}
           accessibilityRole="button"
           accessibilityLabel="Démarrer une sieste"
         >
-          <Text style={styles.sleepWidgetPrimaryText}>Sieste</Text>
+          <FontAwesome
+            name="bed"
+            size={12}
+            color={preferNight ? styles.sleepWidgetSecondaryText.color : styles.sleepWidgetPrimaryText.color}
+          />
+          <Text style={preferNight ? styles.sleepWidgetSecondaryText : styles.sleepWidgetPrimaryText}>
+            Sieste
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.sleepWidgetSecondary}
+          style={preferNight ? styles.sleepWidgetPrimary : styles.sleepWidgetSecondary}
           onPress={() => onStartSleep(false)}
           accessibilityRole="button"
           accessibilityLabel="Démarrer une nuit de sommeil"
         >
-          <Text style={styles.sleepWidgetSecondaryText}>Nuit</Text>
+          <FontAwesome
+            name="moon"
+            size={12}
+            color={preferNight ? styles.sleepWidgetPrimaryText.color : styles.sleepWidgetSecondaryText.color}
+          />
+          <Text style={preferNight ? styles.sleepWidgetPrimaryText : styles.sleepWidgetSecondaryText}>
+            Nuit
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -124,6 +149,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  sleepWidgetHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   sleepWidgetTitle: {
     fontSize: 14,
     fontWeight: "700",
@@ -151,6 +181,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
   },
   sleepWidgetPrimaryText: {
     color: "#fff",
@@ -162,6 +195,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
   },
   sleepWidgetSecondaryText: {
     color: "#6f42c1",

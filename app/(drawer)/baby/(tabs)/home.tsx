@@ -1,10 +1,10 @@
 import { MigrationBanner } from "@/components/migration";
 import {
-  MoodCard,
   RecentEventsList,
   SleepWidget,
-  StatsCard,
   StatsCardSkeleton,
+  StatsGroup,
+  type StatItem,
 } from "@/components/suivibaby/dashboard";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import {
@@ -191,7 +191,9 @@ export default function HomeDashboard() {
   const [loading, setLoading] = useState({
     tetees: true,
     biberons: true,
+    solides: true,
     pompages: true,
+    croissances: true,
     sommeils: true,
     bains: true,
     mictions: true,
@@ -468,7 +470,7 @@ export default function HomeDashboard() {
     return merged
       .filter((event) => toDate(event.date) >= cutoff)
       .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime())
-      .slice(0, 10);
+      .slice(0, 7);
   }, [
     data.biberons,
     data.solides,
@@ -506,15 +508,6 @@ export default function HomeDashboard() {
       .filter((item) => item.typeJalon === "humeur")
       .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
     return moods[0] ?? null;
-  }, [todayJalons, toDate]);
-
-  const lastJalon = useMemo(() => {
-    if (todayJalons.length === 0) return null;
-    return todayJalons.reduce((latest, current) =>
-      toDate(current.date).getTime() > toDate(latest.date).getTime()
-        ? current
-        : latest,
-    );
   }, [todayJalons, toDate]);
 
   const handleSetMood = useCallback(
@@ -555,6 +548,243 @@ export default function HomeDashboard() {
       Math.round((currentTime.getTime() - start.getTime()) / 60000),
     );
   }, [sommeilEnCours, currentTime, toDate]);
+
+  // ============================================
+  // STATS GROUPS DATA
+  // ============================================
+
+  const getTimeSince = useCallback(
+    (timestamp?: number): string | undefined => {
+      if (!timestamp || isNaN(timestamp)) return undefined;
+      const diffMinutes = Math.floor(
+        (currentTime.getTime() - timestamp) / (1000 * 60),
+      );
+      if (diffMinutes < 0) return undefined;
+      if (diffMinutes === 0) return "à l'instant";
+      const diffHours = Math.floor(diffMinutes / 60);
+      const remainingMinutes = diffMinutes % 60;
+      if (diffHours > 0) {
+        return `il y a ${diffHours}h${remainingMinutes > 0 ? `${remainingMinutes}` : ""}`;
+      }
+      return `il y a ${diffMinutes}min`;
+    },
+    [currentTime],
+  );
+
+  // Alimentation Group
+  const alimentationGroup = useMemo((): {
+    summary: string;
+    timeSince?: string;
+    lastTime?: string;
+    items: StatItem[];
+  } => {
+    const totalCount = todayStats.meals.total.count;
+    const biberonQty = todayStats.meals.biberons.quantity;
+    const pompageQty = todayStats.pompages.quantity;
+
+    // Find most recent timestamp across all feeding types
+    const timestamps = [
+      todayStats.meals.total.lastTimestamp,
+      todayStats.pompages.lastTimestamp,
+    ].filter((t): t is number => !!t);
+    const mostRecent =
+      timestamps.length > 0 ? Math.max(...timestamps) : undefined;
+    const lastTime =
+      mostRecent !== undefined ? formatTime(new Date(mostRecent)) : undefined;
+
+    const summaryParts = [`${totalCount} repas`];
+    if (biberonQty > 0) summaryParts.push(`${biberonQty}ml bib.`);
+    if (pompageQty > 0) summaryParts.push(`${pompageQty}ml tiré`);
+
+    return {
+      summary: summaryParts.join(" • "),
+      timeSince: getTimeSince(mostRecent),
+      lastTime,
+      items: [
+        {
+          key: "seins",
+          label: "Tétées",
+          value: todayStats.meals.seins.count,
+          unit: "fois",
+          icon: "person-breastfeeding",
+          color: "#E91E63",
+          lastTimestamp: todayStats.meals.seins.lastTimestamp,
+          onPress: () =>
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "meals",
+              mealType: "tetee",
+            }),
+        },
+        {
+          key: "biberons",
+          label: "Biberons",
+          value:
+            todayStats.meals.biberons.count > 0
+              ? `${todayStats.meals.biberons.count} • ${todayStats.meals.biberons.quantity}ml`
+              : "0",
+          icon: "baby-bottle",
+          iconType: "mc" as const,
+          color: "#FF5722",
+          lastTimestamp: todayStats.meals.biberons.lastTimestamp,
+          onPress: () =>
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "meals",
+              mealType: "biberon",
+            }),
+        },
+        {
+          key: "pompages",
+          label: "Tire-lait",
+          value:
+            todayStats.pompages.count > 0
+              ? `${todayStats.pompages.count} • ${todayStats.pompages.quantity}ml`
+              : "0",
+          icon: "pump-medical",
+          color: "#28a745",
+          lastTimestamp: todayStats.pompages.lastTimestamp,
+          onPress: () =>
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "pumping",
+            }),
+        },
+      ],
+    };
+  }, [todayStats, getTimeSince, openSheet, formatTime]);
+
+  // Santé Group (Couches + Vitamines + Vaccins)
+  const santeGroup = useMemo((): {
+    summary: string;
+    timeSince?: string;
+    lastTime?: string;
+    isWarning: boolean;
+    items: StatItem[];
+  } => {
+    const mictionCount = todayStats.mictions.count;
+    const selleCount = todayStats.selles.count;
+    const vitamineCount = todayStats.vitamines.count;
+    const vaccinCount = todayStats.vaccins.count;
+
+    // Check for warnings
+    const mictionThresholdMs =
+      remindersEnabled && reminderThresholds.mictions > 0
+        ? reminderThresholds.mictions * 60 * 60 * 1000
+        : null;
+    const selleThresholdMs =
+      remindersEnabled && reminderThresholds.selles > 0
+        ? reminderThresholds.selles * 60 * 60 * 1000
+        : null;
+
+    const now = currentTime.getTime();
+    const mictionWarning =
+      mictionThresholdMs !== null &&
+      todayStats.mictions.lastTimestamp &&
+      now - todayStats.mictions.lastTimestamp > mictionThresholdMs;
+    const selleWarning =
+      selleThresholdMs !== null &&
+      todayStats.selles.lastTimestamp &&
+      now - todayStats.selles.lastTimestamp > selleThresholdMs;
+
+    const isWarning = !!(mictionWarning || selleWarning);
+
+    // Find most recent timestamp
+    const timestamps = [
+      todayStats.mictions.lastTimestamp,
+      todayStats.selles.lastTimestamp,
+      todayStats.vitamines.lastTimestamp,
+      todayStats.vaccins.lastTimestamp,
+    ].filter((t): t is number => !!t);
+    const mostRecent =
+      timestamps.length > 0 ? Math.max(...timestamps) : undefined;
+    const lastTime =
+      mostRecent !== undefined ? formatTime(new Date(mostRecent)) : undefined;
+
+    const summaryParts = [
+      `${mictionCount + selleCount} change${mictionCount + selleCount > 1 ? "s" : ""}`,
+    ];
+    if (vitamineCount > 0) summaryParts.push(`${vitamineCount} vit.`);
+    if (vaccinCount > 0) summaryParts.push(`${vaccinCount} vacc.`);
+
+    return {
+      summary: summaryParts.join(" • "),
+      timeSince: getTimeSince(mostRecent),
+      lastTime,
+      isWarning,
+      items: [
+        {
+          key: "mictions",
+          label: "Pipis",
+          value: mictionCount,
+          unit: "fois",
+          icon: "droplet",
+          color: "#17a2b8",
+          lastTimestamp: todayStats.mictions.lastTimestamp,
+          onPress: () =>
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "diapers",
+              diapersType: "miction",
+            }),
+        },
+        {
+          key: "selles",
+          label: "Selles",
+          value: selleCount,
+          unit: "fois",
+          icon: "poop",
+          color: "#dc3545",
+          lastTimestamp: todayStats.selles.lastTimestamp,
+          onPress: () =>
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "diapers",
+              diapersType: "selle",
+            }),
+        },
+        {
+          key: "vitamines",
+          label: "Vitamines",
+          value: vitamineCount,
+          unit: vitamineCount > 1 ? "prises" : "prise",
+          icon: "pills",
+          color: "#FF9800",
+          lastTimestamp: todayStats.vitamines.lastTimestamp,
+          onPress: () =>
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "soins",
+              soinsType: "vitamine",
+            }),
+        },
+        {
+          key: "vaccins",
+          label: "Vaccins",
+          value: vaccinCount,
+          unit: vaccinCount > 1 ? "reçus" : "reçu",
+          icon: "syringe",
+          color: "#9C27B0",
+          lastTimestamp: todayStats.vaccins.lastTimestamp,
+          onPress: () =>
+            openSheet({
+              ownerId: headerOwnerId.current,
+              formType: "soins",
+              soinsType: "vaccin",
+            }),
+        },
+      ],
+    };
+  }, [
+    todayStats,
+    getTimeSince,
+    openSheet,
+    formatTime,
+    remindersEnabled,
+    reminderThresholds.mictions,
+    reminderThresholds.selles,
+    currentTime,
+  ]);
 
   const handleStartSleep = useCallback(
     async (isNap: boolean) => {
@@ -1151,7 +1381,9 @@ export default function HomeDashboard() {
     setLoading({
       tetees: true,
       biberons: true,
+      solides: true,
       pompages: true,
+      croissances: true,
       sommeils: true,
       bains: true,
       mictions: true,
@@ -1172,7 +1404,9 @@ export default function HomeDashboard() {
         ...prev,
         tetees: false,
         biberons: false,
+        solides: false,
         pompages: false,
+        croissances: false,
         sommeils: false,
         bains: false,
         mictions: false,
@@ -1195,7 +1429,9 @@ export default function HomeDashboard() {
         setLoading({
           tetees: false,
           biberons: false,
+          solides: false,
           pompages: false,
+          croissances: false,
           sommeils: false,
           bains: false,
           mictions: false,
@@ -1522,77 +1758,75 @@ export default function HomeDashboard() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
 
-        {/* Repas & Pompages - Vue d'ensemble */}
-        <View style={styles.statsGrid}>
-          {loading.tetees ? (
-            <StatsCardSkeleton />
-          ) : (
-            <StatsCard
-              title="Alimentation"
-              value={todayStats.meals.total.count}
-              unit="repas"
-              icon="baby"
-              color="#4A90E2"
-              lastActivity={todayStats.meals.total.lastTime}
-              lastTimestamp={todayStats.meals.total.lastTimestamp}
-              onPress={() =>
-                router.push("/baby/stats?tab=tetees&returnTo=home" as any)
-              }
-              remindersEnabled={remindersEnabled}
-              reminderThreshold={reminderThresholds.repas}
-              currentTime={currentTime}
-            />
-          )}
-
-          {loading.pompages ? (
-            <StatsCardSkeleton />
-          ) : (
-            <StatsCard
-              title="Tire-lait"
-              value={`${todayStats.pompages.count} • ${todayStats.pompages.quantity}`}
-              unit="ml"
-              icon="pump-medical"
-              color="#28a745"
-              lastActivity={todayStats.pompages.lastTime}
-              lastTimestamp={todayStats.pompages.lastTimestamp}
-              onPress={() =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "pumping",
-                })
-              }
-              addEvent={true}
-              remindersEnabled={remindersEnabled}
-              reminderThreshold={reminderThresholds.pompages}
-              currentTime={currentTime}
-            />
-          )}
+        {/* Alimentation Group */}
+        <View style={styles.statsGroupContainer}>
+          <StatsGroup
+            title="Alimentation"
+            icon="utensils"
+            color="#4A90E2"
+            summary={alimentationGroup.summary}
+            lastActivity={alimentationGroup.lastTime}
+            timeSince={alimentationGroup.timeSince}
+            items={alimentationGroup.items}
+            currentTime={currentTime}
+            isLoading={loading.tetees || loading.biberons || loading.pompages}
+            onAddPress={() =>
+              openSheet({
+                ownerId: headerOwnerId.current,
+                formType: "meals",
+                mealType: "tetee",
+              })
+            }
+            onHeaderPress={() =>
+              router.push("/baby/stats?tab=tetees&returnTo=home" as any)
+            }
+          />
         </View>
 
-        <View style={styles.statsGrid}>
-          {loading.sommeils ? (
-            <StatsCardSkeleton />
-          ) : (
-            <StatsCard
-              title="Sommeil"
-              value={formatDuration(todayStats.sommeil.totalMinutes)}
-              unit=""
-              icon="bed"
-              color="#6f42c1"
-              lastActivity={todayStats.sommeil.lastTime}
-              lastTimestamp={todayStats.sommeil.lastTimestamp}
-              onPress={() =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "routines",
-                  routineType: "sommeil",
-                  sleepMode: "nap",
-                  sommeilEnCours,
-                })
-              }
-              addEvent={true}
-            />
-          )}
+        {/* Santé Group (Couches + Vitamines + Vaccins) */}
+        <View
+          style={styles.statsGroupContainer}
+          onLayout={(event) => {
+            const { y, height } = event.nativeEvent.layout;
+            activitiesLayoutRef.current = { y, height };
+            updateHeaderControls(
+              scrollYRef.current,
+              headerRowLayoutRef.current,
+              {
+                y,
+                height,
+              },
+            );
+          }}
+        >
+          <StatsGroup
+            title="Santé & Hygiène"
+            icon="heart-pulse"
+            color="#17a2b8"
+            summary={santeGroup.summary}
+            lastActivity={santeGroup.lastTime}
+            timeSince={santeGroup.timeSince}
+            isWarning={santeGroup.isWarning}
+            items={santeGroup.items}
+            currentTime={currentTime}
+            isLoading={
+              loading.mictions ||
+              loading.selles ||
+              loading.vitamines ||
+              loading.vaccins
+            }
+            onAddPress={() =>
+              openSheet({
+                ownerId: headerOwnerId.current,
+                formType: "diapers",
+                diapersType: "miction",
+              })
+            }
+          />
+        </View>
+
+        {/* Sommeil Section */}
+        <View style={styles.statsGroupContainer}>
           {loading.sommeils ? (
             <StatsCardSkeleton />
           ) : (
@@ -1611,193 +1845,71 @@ export default function HomeDashboard() {
           )}
         </View>
 
-        <View style={styles.statsGrid}>
-          {loading.jalons ? (
-            <StatsCardSkeleton />
-          ) : (
-            <MoodCard
-              currentMood={todayMoodEvent?.humeur ?? null}
-              onSelectMood={handleSetMood}
-              isLoading={isMoodSaving}
-            />
-          )}
-          {loading.jalons ? (
-            <StatsCardSkeleton />
-          ) : (
-            <StatsCard
-              title="Jalons"
-              value={todayJalons.length}
-              unit={todayJalons.length > 1 ? "moments" : "moment"}
-              icon="star"
-              color={eventColors.jalon.dark}
-              lastActivity={
-                lastJalon ? formatTime(toDate(lastJalon.date)) : undefined
-              }
-              lastTimestamp={
-                lastJalon ? toDate(lastJalon.date).getTime() : undefined
-              }
-              onPress={() =>
-                router.push("/baby/milestones?returnTo=home" as any)
-              }
-              addEvent={true}
-            />
-          )}
-        </View>
+        {/* Humeur & Jalons - Bloc unifié 2 colonnes */}
+        <View style={styles.statsGroupContainer}>
+          <View style={styles.moodJalonsCard}>
+            {/* Section Humeur */}
+            <View style={styles.moodJalonsSection}>
+              <Text style={styles.moodJalonsLabel}>Humeur du jour</Text>
+              <View style={styles.moodEmojisRow}>
+                {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
+                  const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[
+                        styles.moodEmojiButton,
+                        todayMoodEvent?.humeur === moodValue &&
+                          styles.moodEmojiSelected,
+                      ]}
+                      onPress={() => handleSetMood(moodValue)}
+                      disabled={isMoodSaving}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.moodEmojiText}>{emoji}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
 
-        {/* Repas - Détail par type */}
-        <View style={styles.statsGrid}>
-          {loading.tetees || loading.biberons ? (
-            <>
-              <StatsCardSkeleton />
-              <StatsCardSkeleton />
-            </>
-          ) : (
-            <>
-              <StatsCard
-                title="Seins"
-                value={todayStats.meals.seins.count}
-                unit={todayStats.meals.seins.count > 1 ? "fois" : "fois"}
-                icon="person-breastfeeding"
-                color="#E91E63"
-                lastActivity={todayStats.meals.seins.lastTime}
-                lastTimestamp={todayStats.meals.seins.lastTimestamp}
-                onPress={() =>
-                  openSheet({
-                    ownerId: headerOwnerId.current,
-                    formType: "meals",
-                    mealType: "tetee",
-                  })
-                }
-                addEvent={true}
-              />
-              <StatsCard
-                title="Biberons"
-                value={`${todayStats.meals.biberons.count} • ${todayStats.meals.biberons.quantity}ml`}
-                unit=""
-                icon="jar-wheat"
-                color="#FF5722"
-                lastActivity={todayStats.meals.biberons.lastTime}
-                lastTimestamp={todayStats.meals.biberons.lastTimestamp}
-                onPress={() =>
-                  openSheet({
-                    ownerId: headerOwnerId.current,
-                    formType: "meals",
-                    mealType: "biberon",
-                  })
-                }
-                addEvent={true}
-              />
-            </>
-          )}
-        </View>
+            {/* Séparateur vertical */}
+            <View style={styles.moodJalonsDivider} />
 
-        {/* Immunité et soins */}
-        <View style={styles.statsGrid}>
-          {loading.vitamines ? (
-            <StatsCardSkeleton />
-          ) : (
-            <StatsCard
-              title="Vitamines"
-              value={todayStats.vitamines.count}
-              unit={todayStats.vitamines.count > 1 ? "prises" : "prise"}
-              icon="pills"
-              color="#FF9800"
-              lastActivity={todayStats.vitamines.lastTime}
-              lastTimestamp={todayStats.vitamines.lastTimestamp}
-              onPress={() =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "soins",
-                  soinsType: "vitamine",
-                })
-              }
-              addEvent={true}
-            />
-          )}
-          {loading.vaccins ? (
-            <StatsCardSkeleton />
-          ) : (
-            <StatsCard
-              title="Vaccins"
-              value={todayStats.vaccins.count}
-              unit={todayStats.vaccins.count > 1 ? "reçus" : "reçu"}
-              icon="syringe"
-              color="#9C27B0"
-              lastActivity={todayStats.vaccins.lastTime}
-              lastTimestamp={todayStats.vaccins.lastTimestamp}
-              onPress={() =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "soins",
-                  soinsType: "vaccin",
-                })
-              }
-              addEvent={true}
-            />
-          )}
-        </View>
-      </View>
-
-      {/* Activités physiologiques */}
-      <View
-        style={styles.section}
-        onLayout={(event) => {
-          const { y, height } = event.nativeEvent.layout;
-          activitiesLayoutRef.current = { y, height };
-          updateHeaderControls(scrollYRef.current, headerRowLayoutRef.current, {
-            y,
-            height,
-          });
-        }}
-      >
-        <Text style={styles.sectionTitle}>Activités physiologiques</Text>
-        <View style={styles.statsGrid}>
-          {loading.mictions ? (
-            <StatsCardSkeleton />
-          ) : (
-            <StatsCard
-              title="Mictions"
-              value={todayStats.mictions.count}
-              unit="fois"
-              icon="water"
-              color="#17a2b8"
-              lastActivity={todayStats.mictions.lastTime}
-              lastTimestamp={todayStats.mictions.lastTimestamp}
-              onPress={() =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "diapers",
-                  diapersType: "miction",
-                })
-              }
-              remindersEnabled={remindersEnabled}
-              reminderThreshold={reminderThresholds.mictions}
-              currentTime={currentTime}
-            />
-          )}
-          {loading.selles ? (
-            <StatsCardSkeleton />
-          ) : (
-            <StatsCard
-              title="Selles"
-              value={todayStats.selles.count}
-              unit="fois"
-              icon="poop"
-              color="#dc3545"
-              lastActivity={todayStats.selles.lastTime}
-              lastTimestamp={todayStats.selles.lastTimestamp}
-              onPress={() =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "diapers",
-                  diapersType: "selle",
-                })
-              }
-              remindersEnabled={remindersEnabled}
-              reminderThreshold={reminderThresholds.selles}
-              currentTime={currentTime}
-            />
-          )}
+            {/* Section Jalons */}
+            <TouchableOpacity
+              style={[styles.jalonsSection, { flexDirection: "row" }]}
+              onPress={() => router.push("/baby/moments" as any)}
+              activeOpacity={0.7}
+            >
+              <View>
+                <Text style={styles.jalonsLabel}>Jalons</Text>
+                <View style={[styles.jalonsContent, { marginTop: 10 }]}>
+                  <Text
+                    style={[
+                      styles.jalonsCount,
+                      { color: eventColors.jalon.dark },
+                    ]}
+                  >
+                    {todayJalons.length}
+                  </Text>
+                  <Text style={styles.jalonsSummary}>
+                    accompli{todayJalons.length > 1 ? "s" : ""}
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={{
+                  alignItems: "flex-end",
+                  flex: 1,
+                  justifyContent: "center",
+                  padding: 8,
+                }}
+              >
+                <FontAwesome name="chevron-right" size={14} color="#9ca3af" />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -2179,6 +2291,10 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
+  statsGroupContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
   statsButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -2198,5 +2314,86 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#495057",
     fontWeight: "500",
+  },
+  // Mood & Jalons unified card styles
+  moodJalonsCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  moodJalonsSection: {
+    flex: 5.8,
+    paddingVertical: 2,
+    paddingRight: 10,
+  },
+  moodJalonsDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "#e9ecef",
+  },
+  moodJalonsLabel: {
+    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6b7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  moodEmojisRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  moodEmojiButton: {
+    flex: 1,
+    height: 36,
+    maxWidth: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    backgroundColor: "#f8f9fa",
+  },
+  moodEmojiSelected: {
+    backgroundColor: "#e3f2fd",
+    borderWidth: 2,
+    borderColor: "#4A90E2",
+  },
+  moodEmojiText: {
+    fontSize: 22,
+  },
+  jalonsSection: {
+    flex: 4.2,
+    paddingVertical: 2,
+    paddingLeft: 12,
+  },
+  jalonsLabel: {
+    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6b7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  jalonsContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  jalonsCount: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  jalonsSummary: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1f2937",
   },
 });
