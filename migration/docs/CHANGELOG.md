@@ -1,5 +1,63 @@
 # CHANGELOG
 
+## 2026-02-02 — Home Dashboard UI/UX Refactoring
+
+### Résumé
+
+Refonte de l'écran Home avec nouveau composant StatsGroup collapsible, optimisation du layout Humeur/Jalons, et amélioration de la timeline des événements récents.
+
+### Summary
+
+Home screen refactoring with new collapsible StatsGroup component, optimized Mood/Milestones layout, and improved recent events timeline.
+
+### StatsGroup Component
+
+- Nouveau composant StatsGroup collapsible pour regrouper les statistiques (Alimentation, Santé & Hygiène).
+- Header avec icône, titre, résumé, indicateur "il y a X temps", bouton + pour ajout rapide.
+- Expand/collapse avec animation LayoutAnimation, chevron indicateur.
+- Items détaillés avec icône, label, valeur, unité, et "il y a X temps" par item.
+- État warning pour alertes (ex: pas de couche depuis longtemps).
+- Fichiers: components/suivibaby/dashboard/StatsGroup.tsx, components/suivibaby/dashboard/index.ts
+
+### StatsGroup Component (EN)
+
+- New collapsible StatsGroup component to group statistics (Alimentation, Santé & Hygiène).
+- Header with icon, title, summary, "X time ago" indicator, + button for quick add.
+- Expand/collapse with LayoutAnimation, chevron indicator.
+- Detailed items with icon, label, value, unit, and "X time ago" per item.
+- Warning state for alerts (e.g., no diaper change for too long).
+- Files: components/suivibaby/dashboard/StatsGroup.tsx, components/suivibaby/dashboard/index.ts
+
+### Layout Humeur & Jalons
+
+- Bloc unifié Humeur/Jalons en 2 colonnes avec séparateur vertical.
+- Humeur occupe 58% de la largeur pour meilleure visibilité des emojis.
+- Jalons occupe 42% avec compteur et chevron de navigation vers Moments.
+- Titre "Humeur du jour" pour clarifier le contexte.
+- Fichier: app/(drawer)/baby/(tabs)/home.tsx
+
+### Mood & Milestones Layout (EN)
+
+- Unified Mood/Milestones block in 2 columns with vertical separator.
+- Mood takes 58% width for better emoji visibility.
+- Milestones takes 42% with counter and navigation chevron to Moments.
+- Title "Humeur du jour" to clarify context.
+- File: app/(drawer)/baby/(tabs)/home.tsx
+
+### Timeline Événements Récents
+
+- Tap sur un événement ouvre directement l'édition (remplace le long press).
+- Hint mis à jour: "Appuyez sur un événement pour le modifier".
+- Fichier: components/suivibaby/dashboard/RecentEventsList.tsx
+
+### Recent Events Timeline (EN)
+
+- Tap on an event directly opens edit (replaces long press).
+- Hint updated: "Appuyez sur un événement pour le modifier".
+- File: components/suivibaby/dashboard/RecentEventsList.tsx
+
+---
+
 ## 2026-02-02 — Growth Screen & Forms Navigation Refactoring
 
 ### Résumé

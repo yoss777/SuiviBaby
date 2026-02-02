@@ -2,17 +2,21 @@ import { MigrationBanner } from "@/components/migration";
 import {
   RecentEventsList,
   SleepWidget,
-  StatsCardSkeleton,
   StatsGroup,
   type StatItem,
 } from "@/components/suivibaby/dashboard";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
+import {
+  categoryColors,
+  itemColors,
+  neutralColors,
+} from "@/constants/dashboardColors";
 import {
   MOMENT_REPAS_LABELS,
   MOOD_EMOJIS,
   QUICK_ADD_ACTIONS,
 } from "@/constants/dashboardConfig";
-import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -36,6 +40,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   AppState,
   ScrollView,
@@ -44,7 +49,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { useHeaderRight } from "../../_layout";
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+const RECENT_EVENTS_CUTOFF_HOURS = 24;
+const RECENT_EVENTS_MAX = 7;
 
 // ============================================
 // TYPES
@@ -107,6 +120,301 @@ interface TodayStats {
   selles: { count: number; lastTime?: string; lastTimestamp?: number };
   vitamines: { count: number; lastTime?: string; lastTimestamp?: number };
   vaccins: { count: number; lastTime?: string; lastTimestamp?: number };
+}
+
+// ============================================
+// HOOKS
+// ============================================
+
+function useEventEditHandler(
+  openSheet: (props: any) => void,
+  toDate: (value: any) => Date,
+  headerOwnerId: React.MutableRefObject<string>,
+  sommeilEnCours: any,
+) {
+  return useCallback(
+    (event: any) => {
+      if (!event.id) {
+        const route = getEditRoute(event);
+        if (route) router.push(route as any);
+        return;
+      }
+
+      const handlers: Record<string, () => void> = {
+        temperature: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "soins",
+            soinsType: "temperature",
+            editData: {
+              id: event.id,
+              type: "temperature",
+              date: toDate(event.date),
+              valeur: event.valeur,
+              modePrise: event.modePrise,
+              note: event.note,
+            },
+          }),
+        medicament: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "soins",
+            soinsType: "medicament",
+            editData: {
+              id: event.id,
+              type: "medicament",
+              date: toDate(event.date),
+              nomMedicament: event.nomMedicament,
+              dosage: event.dosage,
+              voie: event.voie,
+              note: event.note,
+            },
+          }),
+        symptome: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "soins",
+            soinsType: "symptome",
+            editData: {
+              id: event.id,
+              type: "symptome",
+              date: toDate(event.date),
+              symptomes: event.symptomes,
+              intensite: event.intensite,
+              note: event.note,
+            },
+          }),
+        vaccin: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "soins",
+            soinsType: "vaccin",
+            editData: {
+              id: event.id,
+              type: "vaccin",
+              date: toDate(event.date),
+              nomVaccin: event.nomVaccin || event.lib || "",
+              dosage: event.dosage || "",
+              note: event.note,
+            },
+          }),
+        vitamine: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "soins",
+            soinsType: "vitamine",
+            editData: {
+              id: event.id,
+              type: "vitamine",
+              date: toDate(event.date),
+              nomVitamine: event.nomVitamine || "Vitamine D",
+              dosage: event.dosage,
+              note: event.note,
+            },
+          }),
+        tetee: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "meals",
+            mealType: "tetee",
+            editData: {
+              id: event.id,
+              type: "tetee",
+              date: toDate(event.date),
+              dureeGauche: event.dureeGauche,
+              dureeDroite: event.dureeDroite,
+            },
+          }),
+        biberon: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "meals",
+            mealType: "biberon",
+            editData: {
+              id: event.id,
+              type: "biberon",
+              date: toDate(event.date),
+              quantite: event.quantite,
+              typeBiberon: event.typeBiberon,
+            },
+          }),
+        solide: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "meals",
+            mealType: "solide",
+            editData: {
+              id: event.id,
+              type: "solide",
+              date: toDate(event.date),
+              typeSolide: event.typeSolide,
+              momentRepas: event.momentRepas,
+              ingredients: event.ingredients,
+              quantiteSolide: event.quantite,
+              nouveauAliment: event.nouveauAliment,
+              nomNouvelAliment: event.nomNouvelAliment,
+              allergenes: event.allergenes,
+              reaction: event.reaction,
+              aime: event.aime,
+            },
+          }),
+        pompage: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "pumping",
+            editData: {
+              id: event.id,
+              date: toDate(event.date),
+              quantiteGauche: event.quantiteGauche,
+              quantiteDroite: event.quantiteDroite,
+              duree: event.duree,
+              note: event.note,
+            },
+          }),
+        activite: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "activities",
+            activiteType: event.typeActivite ?? "tummyTime",
+            editData: {
+              id: event.id,
+              typeActivite: event.typeActivite ?? "tummyTime",
+              duree: event.duree,
+              description: event.description ?? event.note,
+              date: toDate(event.date),
+            },
+          }),
+        jalon: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "milestones",
+            jalonType: event.typeJalon ?? "photo",
+            editData: {
+              id: event.id,
+              typeJalon: event.typeJalon ?? "photo",
+              titre: event.titre,
+              description: event.description,
+              note: event.note,
+              humeur: event.humeur,
+              photos: event.photos,
+              date: toDate(event.date),
+            },
+          }),
+        miction: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "diapers",
+            diapersType: "miction",
+            editData: {
+              id: event.id,
+              type: "miction",
+              date: toDate(event.date),
+              couleur: event.couleur,
+            },
+          }),
+        selle: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "diapers",
+            diapersType: "selle",
+            editData: {
+              id: event.id,
+              type: "selle",
+              date: toDate(event.date),
+              consistance: event.consistance,
+              quantite: event.quantite,
+            },
+          }),
+        sommeil: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "routines",
+            routineType: "sommeil",
+            sleepMode: event.isNap ? "nap" : "night",
+            editData: {
+              id: event.id,
+              type: "sommeil",
+              date: toDate(event.heureDebut),
+              heureDebut: toDate(event.heureDebut),
+              heureFin: event.heureFin ? toDate(event.heureFin) : undefined,
+              isNap: event.isNap,
+              location: event.lieu,
+              quality: event.qualite,
+              note: event.note,
+            },
+            sommeilEnCours,
+          }),
+        bain: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "routines",
+            routineType: "bain",
+            editData: {
+              id: event.id,
+              type: "bain",
+              date: toDate(event.date),
+              duree: event.duree,
+              temperatureEau: event.temperature,
+              note: event.note,
+            },
+          }),
+        croissance: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "croissance",
+            editData: {
+              id: event.id,
+              date: toDate(event.date),
+              tailleCm: event.tailleCm,
+              poidsKg: event.poidsKg,
+              teteCm: event.teteCm,
+            },
+          }),
+      };
+
+      const handler = handlers[event.type];
+      if (handler) {
+        handler();
+      } else {
+        const route = getEditRoute(event);
+        if (route) router.push(route as any);
+      }
+    },
+    [openSheet, toDate, headerOwnerId, sommeilEnCours],
+  );
+}
+
+function getEditRoute(event: any): string | null {
+  if (!event.id) return null;
+  const id = encodeURIComponent(event.id);
+  switch (event.type) {
+    case "tetee":
+      return `/baby/meals?tab=seins&editId=${id}&returnTo=home`;
+    case "biberon":
+      return `/baby/meals?tab=biberons&editId=${id}&returnTo=home`;
+    case "pompage":
+      return `/baby/pumping?editId=${id}&returnTo=home`;
+    case "sommeil":
+      return `/baby/routines?editId=${id}&returnTo=home`;
+    case "bain":
+      return `/baby/routines?editId=${id}&returnTo=home`;
+    case "temperature":
+    case "medicament":
+    case "symptome":
+    case "vaccin":
+    case "vitamine":
+      return `/baby/soins?editId=${id}&returnTo=home`;
+    case "miction":
+      return `/baby/diapers?tab=mictions&editId=${id}&returnTo=home`;
+    case "selle":
+      return `/baby/diapers?tab=selles&editId=${id}&returnTo=home`;
+    case "activite":
+      return `/baby/activities?editId=${id}&returnTo=home`;
+    case "jalon":
+      return `/baby/milestones?editId=${id}&returnTo=home`;
+    default:
+      return null;
+  }
 }
 
 // ============================================
@@ -206,6 +514,21 @@ export default function HomeDashboard() {
     activites: true,
     jalons: true,
   });
+
+  // Global loaded state for entrance animations
+  const isDataLoaded = useMemo(() => {
+    return (
+      !loading.tetees &&
+      !loading.biberons &&
+      !loading.pompages &&
+      !loading.mictions &&
+      !loading.selles &&
+      !loading.vitamines &&
+      !loading.vaccins &&
+      !loading.sommeils &&
+      !loading.jalons
+    );
+  }, [loading]);
 
   const triggerRefresh = useCallback(() => {
     setRefreshTick((prev) => prev + 1);
@@ -387,39 +710,6 @@ export default function HomeDashboard() {
     [formatDuration, toDate],
   );
 
-  function getEditRoute(event: any): string | null {
-    if (!event.id) return null;
-    const id = encodeURIComponent(event.id);
-    switch (event.type) {
-      case "tetee":
-        return `/baby/meals?tab=seins&editId=${id}&returnTo=home`;
-      case "biberon":
-        return `/baby/meals?tab=biberons&editId=${id}&returnTo=home`;
-      case "pompage":
-        return `/baby/pumping?editId=${id}&returnTo=home`;
-      case "sommeil":
-        return `/baby/routines?editId=${id}&returnTo=home`;
-      case "bain":
-        return `/baby/routines?editId=${id}&returnTo=home`;
-      case "temperature":
-      case "medicament":
-      case "symptome":
-      case "vaccin":
-      case "vitamine":
-        return `/baby/soins?editId=${id}&returnTo=home`;
-      case "miction":
-        return `/baby/diapers?tab=mictions&editId=${id}&returnTo=home`;
-      case "selle":
-        return `/baby/diapers?tab=selles&editId=${id}&returnTo=home`;
-      case "activite":
-        return `/baby/activities?editId=${id}&returnTo=home`;
-      case "jalon":
-        return `/baby/milestones?editId=${id}&returnTo=home`;
-      default:
-        return null;
-    }
-  }
-
   const getDayLabel = useCallback((date: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -443,7 +733,9 @@ export default function HomeDashboard() {
   }, []);
 
   const recentEvents = useMemo(() => {
-    const cutoff = new Date(currentTime.getTime() - 24 * 60 * 60 * 1000);
+    const cutoff = new Date(
+      currentTime.getTime() - RECENT_EVENTS_CUTOFF_HOURS * 60 * 60 * 1000,
+    );
     const merged = [
       ...data.tetees,
       ...data.biberons,
@@ -470,7 +762,7 @@ export default function HomeDashboard() {
     return merged
       .filter((event) => toDate(event.date) >= cutoff)
       .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime())
-      .slice(0, 7);
+      .slice(0, RECENT_EVENTS_MAX);
   }, [
     data.biberons,
     data.solides,
@@ -513,6 +805,8 @@ export default function HomeDashboard() {
   const handleSetMood = useCallback(
     async (value: 1 | 2 | 3 | 4 | 5) => {
       if (!activeChild?.id || isMoodSaving) return;
+      // Haptic feedback on selection
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       try {
         setIsMoodSaving(true);
         const now = new Date();
@@ -539,6 +833,13 @@ export default function HomeDashboard() {
   const sommeilEnCours = useMemo(() => {
     return data.sommeils.find((item) => !item.heureFin && item.heureDebut);
   }, [data.sommeils]);
+
+  const handleEventEdit = useEventEditHandler(
+    openSheet,
+    toDate,
+    headerOwnerId,
+    sommeilEnCours,
+  );
 
   const elapsedSleepMinutes = useMemo(() => {
     if (!sommeilEnCours?.heureDebut) return 0;
@@ -607,7 +908,7 @@ export default function HomeDashboard() {
           value: todayStats.meals.seins.count,
           unit: "fois",
           icon: "person-breastfeeding",
-          color: "#E91E63",
+          color: itemColors.tetee,
           lastTimestamp: todayStats.meals.seins.lastTimestamp,
           onPress: () =>
             openSheet({
@@ -625,7 +926,7 @@ export default function HomeDashboard() {
               : "0",
           icon: "baby-bottle",
           iconType: "mc" as const,
-          color: "#FF5722",
+          color: itemColors.biberon,
           lastTimestamp: todayStats.meals.biberons.lastTimestamp,
           onPress: () =>
             openSheet({
@@ -642,7 +943,7 @@ export default function HomeDashboard() {
               ? `${todayStats.pompages.count} • ${todayStats.pompages.quantity}ml`
               : "0",
           icon: "pump-medical",
-          color: "#28a745",
+          color: itemColors.pompage,
           lastTimestamp: todayStats.pompages.lastTimestamp,
           onPress: () =>
             openSheet({
@@ -719,7 +1020,7 @@ export default function HomeDashboard() {
           value: mictionCount,
           unit: "fois",
           icon: "droplet",
-          color: "#17a2b8",
+          color: itemColors.miction,
           lastTimestamp: todayStats.mictions.lastTimestamp,
           onPress: () =>
             openSheet({
@@ -734,7 +1035,7 @@ export default function HomeDashboard() {
           value: selleCount,
           unit: "fois",
           icon: "poop",
-          color: "#dc3545",
+          color: itemColors.selle,
           lastTimestamp: todayStats.selles.lastTimestamp,
           onPress: () =>
             openSheet({
@@ -749,7 +1050,7 @@ export default function HomeDashboard() {
           value: vitamineCount,
           unit: vitamineCount > 1 ? "prises" : "prise",
           icon: "pills",
-          color: "#FF9800",
+          color: itemColors.vitamine,
           lastTimestamp: todayStats.vitamines.lastTimestamp,
           onPress: () =>
             openSheet({
@@ -764,7 +1065,7 @@ export default function HomeDashboard() {
           value: vaccinCount,
           unit: vaccinCount > 1 ? "reçus" : "reçu",
           icon: "syringe",
-          color: "#9C27B0",
+          color: itemColors.vaccin,
           lastTimestamp: todayStats.vaccins.lastTimestamp,
           onPress: () =>
             openSheet({
@@ -1706,6 +2007,16 @@ export default function HomeDashboard() {
   // RENDER
   // ============================================
 
+  // Loading state - show spinner until data is ready
+  if (!isDataLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <IconPulseDots color={categoryColors.alimentation.primary} />
+        <Text style={styles.loadingText}>Chargement...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       style={styles.container}
@@ -1756,20 +2067,23 @@ export default function HomeDashboard() {
 
       {/* Résumé du jour */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
+        <View>
+          <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
+        </View>
 
         {/* Alimentation Group */}
         <View style={styles.statsGroupContainer}>
           <StatsGroup
             title="Alimentation"
             icon="utensils"
-            color="#4A90E2"
+            color={categoryColors.alimentation.primary}
+            backgroundColor={categoryColors.alimentation.background}
+            borderColor={categoryColors.alimentation.border}
             summary={alimentationGroup.summary}
             lastActivity={alimentationGroup.lastTime}
             timeSince={alimentationGroup.timeSince}
             items={alimentationGroup.items}
             currentTime={currentTime}
-            isLoading={loading.tetees || loading.biberons || loading.pompages}
             onAddPress={() =>
               openSheet({
                 ownerId: headerOwnerId.current,
@@ -1802,19 +2116,15 @@ export default function HomeDashboard() {
           <StatsGroup
             title="Santé & Hygiène"
             icon="heart-pulse"
-            color="#17a2b8"
+            color={categoryColors.sante.primary}
+            backgroundColor={categoryColors.sante.background}
+            borderColor={categoryColors.sante.border}
             summary={santeGroup.summary}
             lastActivity={santeGroup.lastTime}
             timeSince={santeGroup.timeSince}
             isWarning={santeGroup.isWarning}
             items={santeGroup.items}
             currentTime={currentTime}
-            isLoading={
-              loading.mictions ||
-              loading.selles ||
-              loading.vitamines ||
-              loading.vaccins
-            }
             onAddPress={() =>
               openSheet({
                 ownerId: headerOwnerId.current,
@@ -1827,22 +2137,18 @@ export default function HomeDashboard() {
 
         {/* Sommeil Section */}
         <View style={styles.statsGroupContainer}>
-          {loading.sommeils ? (
-            <StatsCardSkeleton />
-          ) : (
-            <SleepWidget
-              isActive={!!sommeilEnCours}
-              isNap={sommeilEnCours?.isNap}
-              elapsedMinutes={elapsedSleepMinutes}
-              startTime={
-                sommeilEnCours?.heureDebut
-                  ? formatTime(toDate(sommeilEnCours.heureDebut))
-                  : undefined
-              }
-              onStartSleep={handleStartSleep}
-              onStopSleep={handleStopSleep}
-            />
-          )}
+          <SleepWidget
+            isActive={!!sommeilEnCours}
+            isNap={sommeilEnCours?.isNap}
+            elapsedMinutes={elapsedSleepMinutes}
+            startTime={
+              sommeilEnCours?.heureDebut
+                ? formatTime(toDate(sommeilEnCours.heureDebut))
+                : undefined
+            }
+            onStartSleep={handleStartSleep}
+            onStopSleep={handleStopSleep}
+          />
         </View>
 
         {/* Humeur & Jalons - Bloc unifié 2 colonnes */}
@@ -1854,19 +2160,29 @@ export default function HomeDashboard() {
               <View style={styles.moodEmojisRow}>
                 {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
                   const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
+                  const isSelected = todayMoodEvent?.humeur === moodValue;
+                  const isCurrentlySaving = isMoodSaving && isSelected;
                   return (
                     <TouchableOpacity
                       key={key}
                       style={[
                         styles.moodEmojiButton,
-                        todayMoodEvent?.humeur === moodValue &&
-                          styles.moodEmojiSelected,
+                        isSelected && styles.moodEmojiSelected,
                       ]}
                       onPress={() => handleSetMood(moodValue)}
                       disabled={isMoodSaving}
                       activeOpacity={0.7}
+                      accessibilityLabel={`Humeur ${moodValue} sur 5`}
+                      accessibilityState={{ selected: isSelected }}
                     >
-                      <Text style={styles.moodEmojiText}>{emoji}</Text>
+                      {isCurrentlySaving ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={categoryColors.moments.primary}
+                        />
+                      ) : (
+                        <Text style={styles.moodEmojiText}>{emoji}</Text>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -1878,35 +2194,30 @@ export default function HomeDashboard() {
 
             {/* Section Jalons */}
             <TouchableOpacity
-              style={[styles.jalonsSection, { flexDirection: "row" }]}
+              style={styles.jalonsSection}
               onPress={() => router.push("/baby/moments" as any)}
               activeOpacity={0.7}
             >
-              <View>
-                <Text style={styles.jalonsLabel}>Jalons</Text>
-                <View style={[styles.jalonsContent, { marginTop: 10 }]}>
-                  <Text
-                    style={[
-                      styles.jalonsCount,
-                      { color: eventColors.jalon.dark },
-                    ]}
-                  >
-                    {todayJalons.length}
-                  </Text>
-                  <Text style={styles.jalonsSummary}>
-                    accompli{todayJalons.length > 1 ? "s" : ""}
-                  </Text>
-                </View>
-              </View>
-              <View
-                style={{
-                  alignItems: "flex-end",
-                  flex: 1,
-                  justifyContent: "center",
-                  padding: 8,
-                }}
-              >
-                <FontAwesome name="chevron-right" size={14} color="#9ca3af" />
+              <Text style={styles.jalonsLabel}>Jalons</Text>
+              <View style={styles.jalonsValueRow}>
+                {todayJalons.length > 0 ? (
+                  <Text style={styles.jalonsSummary}>{todayJalons.length}</Text>
+                ) : (
+                  <>
+                    <FontAwesome
+                      name="star"
+                      size={16}
+                      color={categoryColors.moments.primary}
+                    />
+                    <Text style={styles.jalonsEmptyText}>Ajouter</Text>
+                  </>
+                )}
+                <FontAwesome
+                  name="chevron-right"
+                  size={12}
+                  color={neutralColors.textMuted}
+                  style={styles.jalonsChevron}
+                />
               </View>
             </TouchableOpacity>
           </View>
@@ -1914,305 +2225,21 @@ export default function HomeDashboard() {
       </View>
 
       {/* Chronologie récente */}
-      <RecentEventsList
-        events={recentEvents}
-        loading={
-          loading.tetees &&
-          loading.biberons &&
-          loading.pompages &&
-          loading.mictions &&
-          loading.selles &&
-          loading.vitamines &&
-          loading.vaccins &&
-          loading.sommeils &&
-          loading.temperatures &&
-          loading.medicaments &&
-          loading.symptomes &&
-          loading.jalons
-        }
-        showHint={showRecentHint}
-        colorScheme={colorScheme}
-        currentTime={currentTime}
-        onEventLongPress={(event) => {
-          // Special handling for soins types: open form sheet directly
-          if (event.type === "temperature" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "soins",
-              soinsType: "temperature",
-              editData: {
-                id: event.id,
-                type: "temperature",
-                date: toDate(event.date),
-                valeur: event.valeur,
-                modePrise: event.modePrise,
-                note: event.note,
-              },
-            });
-            return;
-          }
-          if (event.type === "medicament" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "soins",
-              soinsType: "medicament",
-              editData: {
-                id: event.id,
-                type: "medicament",
-                date: toDate(event.date),
-                nomMedicament: event.nomMedicament,
-                dosage: event.dosage,
-                voie: event.voie,
-                note: event.note,
-              },
-            });
-            return;
-          }
-          if (event.type === "symptome" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "soins",
-              soinsType: "symptome",
-              editData: {
-                id: event.id,
-                type: "symptome",
-                date: toDate(event.date),
-                symptomes: event.symptomes,
-                intensite: event.intensite,
-                note: event.note,
-              },
-            });
-            return;
-          }
-          if (event.type === "vaccin" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "soins",
-              soinsType: "vaccin",
-              editData: {
-                id: event.id,
-                type: "vaccin",
-                date: toDate(event.date),
-                nomVaccin: event.nomVaccin || event.lib || "",
-                dosage: event.dosage || "",
-                note: event.note,
-              },
-            });
-            return;
-          }
-          if (event.type === "vitamine" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "soins",
-              soinsType: "vitamine",
-              editData: {
-                id: event.id,
-                type: "vitamine",
-                date: toDate(event.date),
-                nomVitamine: event.nomVitamine || "Vitamine D",
-                dosage: event.dosage,
-                note: event.note,
-              },
-            });
-            return;
-          }
-          // Special handling for meals types: open form sheet directly
-          if (event.type === "tetee" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "meals",
-              mealType: "tetee",
-              editData: {
-                id: event.id,
-                type: "tetee",
-                date: toDate(event.date),
-                dureeGauche: event.dureeGauche,
-                dureeDroite: event.dureeDroite,
-              },
-            });
-            return;
-          }
-          if (event.type === "biberon" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "meals",
-              mealType: "biberon",
-              editData: {
-                id: event.id,
-                type: "biberon",
-                date: toDate(event.date),
-                quantite: event.quantite,
-                typeBiberon: event.typeBiberon,
-              },
-            });
-            return;
-          }
-          if (event.type === "solide" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "meals",
-              mealType: "solide",
-              editData: {
-                id: event.id,
-                type: "solide",
-                date: toDate(event.date),
-                typeSolide: event.typeSolide,
-                momentRepas: event.momentRepas,
-                ingredients: event.ingredients,
-                quantiteSolide: event.quantite,
-                nouveauAliment: event.nouveauAliment,
-                nomNouvelAliment: event.nomNouvelAliment,
-                allergenes: event.allergenes,
-                reaction: event.reaction,
-                aime: event.aime,
-              },
-            });
-            return;
-          }
-          // Special handling for pumping: open form sheet directly
-          if (event.type === "pompage" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "pumping",
-              editData: {
-                id: event.id,
-                date: toDate(event.date),
-                quantiteGauche: event.quantiteGauche,
-                quantiteDroite: event.quantiteDroite,
-                duree: event.duree,
-                note: event.note,
-              },
-            });
-            return;
-          }
-          // Special handling for activities: open form sheet directly
-          if (event.type === "activite" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "activities",
-              activiteType: event.typeActivite ?? "tummyTime",
-              editData: {
-                id: event.id,
-                typeActivite: event.typeActivite ?? "tummyTime",
-                duree: event.duree,
-                description: event.description ?? event.note,
-                date: toDate(event.date),
-              },
-            });
-            return;
-          }
-          // Special handling for milestones/jalons: open form sheet directly
-          if (event.type === "jalon" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "milestones",
-              jalonType: event.typeJalon ?? "photo",
-              editData: {
-                id: event.id,
-                typeJalon: event.typeJalon ?? "photo",
-                titre: event.titre,
-                description: event.description,
-                note: event.note,
-                humeur: event.humeur,
-                photos: event.photos,
-                date: toDate(event.date),
-              },
-            });
-            return;
-          }
-          // Special handling for diapers (miction/selle): open form sheet directly
-          if (event.type === "miction" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "diapers",
-              diapersType: "miction",
-              editData: {
-                id: event.id,
-                type: "miction",
-                date: toDate(event.date),
-                couleur: event.couleur,
-              },
-            });
-            return;
-          }
-          if (event.type === "selle" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "diapers",
-              diapersType: "selle",
-              editData: {
-                id: event.id,
-                type: "selle",
-                date: toDate(event.date),
-                consistance: event.consistance,
-                quantite: event.quantite,
-              },
-            });
-            return;
-          }
-          // Special handling for routines (sommeil/bain): open form sheet directly
-          if (event.type === "sommeil" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "routines",
-              routineType: "sommeil",
-              sleepMode: event.isNap ? "nap" : "night",
-              editData: {
-                id: event.id,
-                type: "sommeil",
-                date: toDate(event.heureDebut),
-                heureDebut: toDate(event.heureDebut),
-                heureFin: event.heureFin ? toDate(event.heureFin) : undefined,
-                isNap: event.isNap,
-                location: event.lieu,
-                quality: event.qualite,
-                note: event.note,
-              },
-              sommeilEnCours,
-            });
-            return;
-          }
-          if (event.type === "bain" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "routines",
-              routineType: "bain",
-              editData: {
-                id: event.id,
-                type: "bain",
-                date: toDate(event.date),
-                duree: event.duree,
-                temperatureEau: event.temperature,
-                note: event.note,
-              },
-            });
-            return;
-          }
-          if (event.type === "croissance" && event.id) {
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "croissance",
-              editData: {
-                id: event.id,
-                date: toDate(event.date),
-                tailleCm: event.tailleCm,
-                poidsKg: event.poidsKg,
-                teteCm: event.teteCm,
-              },
-            });
-            return;
-          }
-          // Default behavior for other event types
-          const route = getEditRoute(event);
-          if (route) router.push(route as any);
-        }}
-        onViewAllPress={() => router.push("/baby/chrono" as any)}
-        toDate={toDate}
-        formatTime={formatTime}
-        formatDuration={formatDuration}
-        buildDetails={buildDetails}
-        getDayLabel={getDayLabel}
-      />
+      <View>
+        <RecentEventsList
+          events={recentEvents}
+          showHint={showRecentHint}
+          colorScheme={colorScheme}
+          currentTime={currentTime}
+          onEventLongPress={handleEventEdit}
+          onViewAllPress={() => router.push("/baby/chrono" as any)}
+          toDate={toDate}
+          formatTime={formatTime}
+          formatDuration={formatDuration}
+          buildDetails={buildDetails}
+          getDayLabel={getDayLabel}
+        />
+      </View>
     </ScrollView>
   );
 }
@@ -2224,7 +2251,18 @@ export default function HomeDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: neutralColors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: neutralColors.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: neutralColors.textLight,
   },
   header: {
     padding: 20,
@@ -2236,12 +2274,12 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#212529",
+    color: neutralColors.textStrong,
     marginBottom: 4,
   },
   date: {
     fontSize: 16,
-    color: "#6c757d",
+    color: neutralColors.textLight,
     textTransform: "capitalize",
   },
   section: {
@@ -2250,7 +2288,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#212529",
+    color: neutralColors.textStrong,
     marginHorizontal: 20,
     marginBottom: 16,
   },
@@ -2269,9 +2307,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: "#f5f6f8",
+    backgroundColor: neutralColors.backgroundPressed,
     borderWidth: 1,
-    borderColor: "#e4e7eb",
+    borderColor: neutralColors.border,
   },
   quickSheetIcon: {
     width: 28,
@@ -2279,7 +2317,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: neutralColors.backgroundCard,
   },
   quickSheetLabel: {
     fontSize: 15,
@@ -2298,7 +2336,7 @@ const styles = StyleSheet.create({
   statsButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "white",
+    backgroundColor: neutralColors.backgroundCard,
     marginHorizontal: 20,
     padding: 16,
     borderRadius: 12,
@@ -2312,88 +2350,95 @@ const styles = StyleSheet.create({
   statsButtonText: {
     flex: 1,
     fontSize: 16,
-    color: "#495057",
+    color: neutralColors.textNormal,
     fontWeight: "500",
   },
   // Mood & Jalons unified card styles
   moodJalonsCard: {
-    backgroundColor: "white",
-    borderRadius: 12,
+    backgroundColor: categoryColors.moments.background,
+    borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: categoryColors.moments.border,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
     flexDirection: "row",
     alignItems: "flex-start",
   },
   moodJalonsSection: {
-    flex: 5.8,
+    flex: 7,
     paddingVertical: 2,
     paddingRight: 10,
   },
   moodJalonsDivider: {
     width: 1,
     alignSelf: "stretch",
-    backgroundColor: "#e9ecef",
+    backgroundColor: categoryColors.moments.border,
   },
   moodJalonsLabel: {
     marginBottom: 6,
     fontSize: 13,
     fontWeight: "600",
-    color: "#6b7280",
+    color: neutralColors.textLight,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   moodEmojisRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 6,
+    gap: 4,
   },
   moodEmojiButton: {
     flex: 1,
-    height: 36,
-    maxWidth: 36,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 10,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: neutralColors.backgroundCard,
   },
   moodEmojiSelected: {
-    backgroundColor: "#e3f2fd",
+    backgroundColor: `${categoryColors.moments.primary}20`,
     borderWidth: 2,
-    borderColor: "#4A90E2",
+    borderColor: categoryColors.moments.primary,
   },
   moodEmojiText: {
     fontSize: 22,
   },
   jalonsSection: {
-    flex: 4.2,
+    flex: 3,
     paddingVertical: 2,
-    paddingLeft: 12,
+    paddingHorizontal: 12,
+    alignItems: "center",
   },
   jalonsLabel: {
     marginBottom: 6,
     fontSize: 13,
     fontWeight: "600",
-    color: "#6b7280",
+    color: neutralColors.textLight,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  jalonsContent: {
-    flexDirection: "row",
+  jalonsValueRow: {
+    flex: 1,
     alignItems: "center",
-    gap: 6,
-  },
-  jalonsCount: {
-    fontSize: 18,
-    fontWeight: "700",
+    justifyContent: "center",
   },
   jalonsSummary: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1f2937",
+    color: neutralColors.textStrong,
+  },
+  jalonsEmptyText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: categoryColors.moments.primary,
+    marginTop: 4,
+  },
+  jalonsChevron: {
+    marginTop: 4,
   },
 });

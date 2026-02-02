@@ -1,7 +1,9 @@
+import { neutralColors } from "@/constants/dashboardColors";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
+  Animated,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -40,6 +42,10 @@ export interface StatsGroupProps {
   icon: string;
   iconType?: "fa" | "mc";
   color: string;
+  /** Background color for the card (pastel tint) */
+  backgroundColor?: string;
+  /** Border color for the card */
+  borderColor?: string;
   /** Summary displayed when collapsed (e.g., "5 repas • 120ml") */
   summary: string;
   /** Optional last activity time (e.g., "00:30") */
@@ -97,6 +103,8 @@ export const StatsGroup = memo(function StatsGroup({
   icon,
   iconType = "fa",
   color,
+  backgroundColor,
+  borderColor,
   summary,
   lastActivity,
   timeSince,
@@ -141,17 +149,71 @@ export const StatsGroup = memo(function StatsGroup({
     return <FontAwesome name={iconName as any} size={size} color={iconColor} />;
   };
 
+  // Shimmer animation for skeleton
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isLoading) {
+      const shimmer = Animated.loop(
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      );
+      shimmer.start();
+      return () => shimmer.stop();
+    }
+  }, [isLoading, shimmerAnim]);
+
   if (isLoading) {
+    const shimmerTranslate = shimmerAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [-200, 200],
+    });
+
     return (
       <View style={styles.container}>
-        <View style={styles.skeletonHeader} />
-        <View style={styles.skeletonSummary} />
+        <View style={styles.skeletonRow}>
+          <View style={styles.skeletonIcon}>
+            <Animated.View
+              style={[
+                styles.shimmerOverlay,
+                { transform: [{ translateX: shimmerTranslate }] },
+              ]}
+            />
+          </View>
+          <View style={styles.skeletonContent}>
+            <View style={styles.skeletonTitle}>
+              <Animated.View
+                style={[
+                  styles.shimmerOverlay,
+                  { transform: [{ translateX: shimmerTranslate }] },
+                ]}
+              />
+            </View>
+            <View style={styles.skeletonSummary}>
+              <Animated.View
+                style={[
+                  styles.shimmerOverlay,
+                  { transform: [{ translateX: shimmerTranslate }] },
+                ]}
+              />
+            </View>
+          </View>
+        </View>
       </View>
     );
   }
 
+  const containerStyle = [
+    styles.container,
+    backgroundColor && { backgroundColor },
+    borderColor && { borderWidth: 1, borderColor },
+  ];
+
   return (
-    <View style={styles.container}>
+    <View style={containerStyle}>
       {/* Header Row */}
       <Pressable
         style={({ pressed }) => [
@@ -280,7 +342,7 @@ export const StatsGroup = memo(function StatsGroup({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "white",
+    backgroundColor: neutralColors.backgroundCard,
     borderRadius: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -296,7 +358,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerPressed: {
-    backgroundColor: "#f8f9fa",
+    backgroundColor: neutralColors.backgroundPressed,
   },
   iconContainer: {
     width: 48,
@@ -312,37 +374,37 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#6b7280",
+    color: neutralColors.textLight,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   summary: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1f2937",
+    color: neutralColors.textStrong,
   },
   summaryWarning: {
-    color: "#dc3545",
+    color: neutralColors.error,
   },
   timeSince: {
     fontSize: 12,
-    color: "#28a745",
+    color: neutralColors.textMuted,
     fontWeight: "500",
   },
   lastActivity: {
     fontSize: 12,
-    color: "#6b7280",
+    color: neutralColors.textLight,
     marginTop: 4,
   },
   timeSinceLabel: {
     fontSize: 11,
-    color: "#9ca3af",
+    color: neutralColors.textMuted,
     marginTop: 6,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   timeSinceWarning: {
-    color: "#dc3545",
+    color: neutralColors.error,
   },
   headerActions: {
     flexDirection: "row",
@@ -364,7 +426,7 @@ const styles = StyleSheet.create({
   },
   itemsContainer: {
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
+    borderTopColor: neutralColors.borderLight,
   },
   item: {
     flexDirection: "row",
@@ -375,10 +437,10 @@ const styles = StyleSheet.create({
   },
   itemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: neutralColors.borderLight,
   },
   itemPressed: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: neutralColors.background,
   },
   itemIcon: {
     width: 36,
@@ -393,11 +455,11 @@ const styles = StyleSheet.create({
   itemLabel: {
     fontSize: 15,
     fontWeight: "500",
-    color: "#374151",
+    color: neutralColors.textNormal,
   },
   itemTimeSince: {
     fontSize: 12,
-    color: "#9ca3af",
+    color: neutralColors.textMuted,
     marginTop: 1,
   },
   itemValue: {
@@ -409,22 +471,48 @@ const styles = StyleSheet.create({
   },
   itemUnit: {
     fontSize: 12,
-    color: "#9ca3af",
+    color: neutralColors.textMuted,
     marginTop: 1,
   },
-  // Skeleton
-  skeletonHeader: {
+  // Skeleton with shimmer
+  skeletonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    gap: 12,
+  },
+  skeletonIcon: {
+    width: 48,
     height: 48,
-    backgroundColor: "#f3f4f6",
-    margin: 16,
-    borderRadius: 12,
+    borderRadius: 14,
+    backgroundColor: neutralColors.borderLight,
+    overflow: "hidden",
+  },
+  skeletonContent: {
+    flex: 1,
+    gap: 8,
+  },
+  skeletonTitle: {
+    height: 14,
+    width: "40%",
+    borderRadius: 6,
+    backgroundColor: neutralColors.borderLight,
+    overflow: "hidden",
   },
   skeletonSummary: {
     height: 20,
-    backgroundColor: "#f3f4f6",
-    marginHorizontal: 16,
-    marginBottom: 16,
+    width: "70%",
     borderRadius: 8,
-    width: "60%",
+    backgroundColor: neutralColors.borderLight,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+    width: 100,
   },
 });

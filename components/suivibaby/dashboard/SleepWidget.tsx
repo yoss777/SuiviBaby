@@ -1,6 +1,17 @@
-import React, { memo } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  categoryColors,
+  neutralColors,
+} from "@/constants/dashboardColors";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import React, { memo, useEffect, useRef } from "react";
+import {
+  Animated,
+  Easing,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 // ============================================
 // TYPES
@@ -27,6 +38,16 @@ const formatDuration = (minutes?: number): string => {
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
 };
 
+// Sleep color palette (derived from categoryColors.sommeil)
+const sleepColors = {
+  primary: categoryColors.sommeil.primary, // #7C6BA4
+  background: categoryColors.sommeil.background, // #F5F3F8
+  border: categoryColors.sommeil.border, // #EBE7F0
+  textDark: "#4A3D6B", // Darker variant for text
+  textMuted: "#7A6B9A", // Muted variant for subtitles
+  buttonSecondaryBg: "#EDE9F4", // Secondary button background
+};
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -42,10 +63,43 @@ export const SleepWidget = memo(function SleepWidget({
   const hour = new Date().getHours();
   const preferNight = hour >= 20 || hour < 6;
 
+  // Pulse animation for active sleep
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (isActive) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.02,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      pulse.start();
+      return () => pulse.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isActive, pulseAnim]);
+
   if (isActive) {
     return (
-      <View
-        style={[styles.statsCard, styles.sleepWidget]}
+      <Animated.View
+        style={[
+          styles.statsCard,
+          styles.sleepWidget,
+          styles.sleepWidgetActive,
+          { transform: [{ scale: pulseAnim }] },
+        ]}
         accessibilityRole="timer"
         accessibilityLabel={`${isNap ? "Sieste" : "Nuit"} en cours depuis ${formatDuration(elapsedMinutes)}`}
       >
@@ -54,7 +108,7 @@ export const SleepWidget = memo(function SleepWidget({
             <FontAwesome
               name={isNap ? "bed" : "moon"}
               size={14}
-              color={styles.sleepWidgetTitle.color}
+              color={sleepColors.textDark}
             />
             <Text style={styles.sleepWidgetTitle}>
               {isNap ? "Sieste" : "Nuit"} en cours
@@ -76,7 +130,7 @@ export const SleepWidget = memo(function SleepWidget({
         >
           <Text style={styles.sleepWidgetStopText}>Terminer</Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     );
   }
 
@@ -85,11 +139,15 @@ export const SleepWidget = memo(function SleepWidget({
       style={[styles.statsCard, styles.sleepWidget]}
       accessibilityRole="none"
     >
-      <Text style={styles.sleepWidgetTitle}>C'est l'heure des beaux rêves ?</Text>
+      <Text style={styles.sleepWidgetTitle}>
+        C'est l'heure des beaux rêves ?
+      </Text>
       <Text style={styles.sleepWidgetSubtitle}>Tap pour démarrer</Text>
       <View style={styles.sleepWidgetButtons}>
         <TouchableOpacity
-          style={preferNight ? styles.sleepWidgetSecondary : styles.sleepWidgetPrimary}
+          style={
+            preferNight ? styles.sleepWidgetSecondary : styles.sleepWidgetPrimary
+          }
           onPress={() => onStartSleep(true)}
           accessibilityRole="button"
           accessibilityLabel="Démarrer une sieste"
@@ -97,14 +155,26 @@ export const SleepWidget = memo(function SleepWidget({
           <FontAwesome
             name="bed"
             size={12}
-            color={preferNight ? styles.sleepWidgetSecondaryText.color : styles.sleepWidgetPrimaryText.color}
+            color={
+              preferNight
+                ? sleepColors.primary
+                : neutralColors.backgroundCard
+            }
           />
-          <Text style={preferNight ? styles.sleepWidgetSecondaryText : styles.sleepWidgetPrimaryText}>
+          <Text
+            style={
+              preferNight
+                ? styles.sleepWidgetSecondaryText
+                : styles.sleepWidgetPrimaryText
+            }
+          >
             Sieste
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={preferNight ? styles.sleepWidgetPrimary : styles.sleepWidgetSecondary}
+          style={
+            preferNight ? styles.sleepWidgetPrimary : styles.sleepWidgetSecondary
+          }
           onPress={() => onStartSleep(false)}
           accessibilityRole="button"
           accessibilityLabel="Démarrer une nuit de sommeil"
@@ -112,9 +182,19 @@ export const SleepWidget = memo(function SleepWidget({
           <FontAwesome
             name="moon"
             size={12}
-            color={preferNight ? styles.sleepWidgetPrimaryText.color : styles.sleepWidgetSecondaryText.color}
+            color={
+              preferNight
+                ? neutralColors.backgroundCard
+                : sleepColors.primary
+            }
           />
-          <Text style={preferNight ? styles.sleepWidgetPrimaryText : styles.sleepWidgetSecondaryText}>
+          <Text
+            style={
+              preferNight
+                ? styles.sleepWidgetPrimaryText
+                : styles.sleepWidgetSecondaryText
+            }
+          >
             Nuit
           </Text>
         </TouchableOpacity>
@@ -130,19 +210,26 @@ export const SleepWidget = memo(function SleepWidget({
 const styles = StyleSheet.create({
   statsCard: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: neutralColors.backgroundCard,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
   },
   sleepWidget: {
-    backgroundColor: "#f5f0ff",
+    backgroundColor: sleepColors.background,
     borderWidth: 1,
-    borderColor: "#ede7f6",
+    borderColor: sleepColors.border,
+  },
+  sleepWidgetActive: {
+    borderColor: sleepColors.primary,
+    borderWidth: 2,
+    shadowColor: sleepColors.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
   },
   sleepWidgetHeader: {
     flexDirection: "row",
@@ -157,18 +244,18 @@ const styles = StyleSheet.create({
   sleepWidgetTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#4c2c79",
+    color: sleepColors.textDark,
   },
   sleepWidgetValue: {
     marginTop: 6,
     fontSize: 26,
     fontWeight: "700",
-    color: "#4c2c79",
+    color: sleepColors.textDark,
   },
   sleepWidgetSubtitle: {
     marginTop: 4,
     fontSize: 12,
-    color: "#6b5c85",
+    color: sleepColors.textMuted,
   },
   sleepWidgetButtons: {
     flexDirection: "row",
@@ -177,7 +264,7 @@ const styles = StyleSheet.create({
   },
   sleepWidgetPrimary: {
     flex: 1,
-    backgroundColor: "#6f42c1",
+    backgroundColor: sleepColors.primary,
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: "center",
@@ -186,12 +273,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sleepWidgetPrimaryText: {
-    color: "#fff",
+    color: neutralColors.backgroundCard,
     fontWeight: "700",
   },
   sleepWidgetSecondary: {
     flex: 1,
-    backgroundColor: "#efe7ff",
+    backgroundColor: sleepColors.buttonSecondaryBg,
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: "center",
@@ -200,18 +287,18 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sleepWidgetSecondaryText: {
-    color: "#6f42c1",
+    color: sleepColors.primary,
     fontWeight: "700",
   },
   sleepWidgetStop: {
     marginTop: 10,
-    backgroundColor: "#6f42c1",
+    backgroundColor: sleepColors.primary,
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: "center",
   },
   sleepWidgetStopText: {
-    color: "#fff",
+    color: neutralColors.backgroundCard,
     fontWeight: "700",
   },
 });
