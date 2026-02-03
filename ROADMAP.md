@@ -32,6 +32,19 @@
 - [ ] **Suivi médecin** - Historique des consultations et ordonnances
 - [ ] **Export médical** - PDF formaté pour le pédiatre
 
+### Commande vocale
+- [ ] **Améliorer le module vocal existant** - Ajouter les nouveaux types d'événements (activités, jalons, croissance, etc.)
+  - Court terme : étendre les patterns regex existants
+  - Complexité : faible
+- [ ] **IA externe pour compréhension naturelle** - Utiliser un LLM (OpenAI/Claude) pour interpréter les commandes vocales
+  - Avantages : comprend les variations de formulation, multilingue
+  - Inconvénients : coût par requête (~0.01€), latence réseau, données envoyées
+  - Options : OpenAI Whisper + GPT, Google Dialogflow, Claude API
+  - Complexité : moyenne
+- [ ] **Approche hybride** - Speech-to-text local + LLM seulement pour cas ambigus
+  - Limite les appels API et donc les coûts
+  - Complexité : moyenne
+
 ### Technique
 - [ ] **Mode hors-ligne** - Synchronisation différée quand pas de réseau
 - [ ] **Widget iOS/Android** - Accès rapide depuis l'écran d'accueil

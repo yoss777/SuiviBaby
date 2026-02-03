@@ -10,6 +10,11 @@ import {
   Text,
   View,
 } from "react-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
 import PagerView, {
   PagerViewOnPageScrollEventData,
   PagerViewOnPageSelectedEventData,
@@ -18,10 +23,12 @@ import Animated, {
   FadeIn,
   FadeOut,
   interpolate,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSequence,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CommentsBottomSheet } from "./CommentsBottomSheet";
@@ -160,17 +167,23 @@ export const SwipeGallery = ({
   const scrollOffset = useSharedValue(0);
   const currentPage = useSharedValue(1);
 
+  // Vertical swipe animation values
+  const translateY = useSharedValue(0);
+  const SWIPE_THRESHOLD = 80; // Minimum distance to trigger action
+
   // Local optimistic state for likes (merges with props)
   const [optimisticLikes, setOptimisticLikes] = useState<
     Record<string, { likedByMe: boolean; countDelta: number }>
   >({});
 
-  // Reset optimistic state when gallery closes or likesInfo changes from parent
+  // Reset optimistic state and translateY when gallery closes/opens
   useEffect(() => {
     if (!visible) {
       setOptimisticLikes({});
     }
-  }, [visible]);
+    // Reset translateY when gallery opens or closes
+    translateY.value = 0;
+  }, [visible, translateY]);
 
   // Sort photos: most recent first
   const sortedPhotos = useMemo(() => {
@@ -378,6 +391,47 @@ export const SwipeGallery = ({
     setCommentsVisible(false);
   }, []);
 
+  // Open comments for current photo via swipe up
+  const openCurrentPhotoComments = useCallback(() => {
+    const item = galleryItems[currentIndex];
+    if (item?.type === "photo") {
+      handleComment(item.photo.id, item.photo.titre);
+    }
+  }, [currentIndex, galleryItems, handleComment]);
+
+  // Vertical pan gesture for swipe up (comments) and swipe down (close)
+  const verticalPanGesture = Gesture.Pan()
+    .activeOffsetY([-20, 20]) // Only activate for vertical movement
+    .failOffsetX([-20, 20]) // Fail if horizontal (let PagerView handle it)
+    .onUpdate((event) => {
+      // Only apply visual feedback for swipe DOWN (positive Y), not swipe up
+      if (event.translationY > 0) {
+        translateY.value = event.translationY * 0.5;
+      }
+    })
+    .onEnd((event) => {
+      const { translationY, velocityY } = event;
+
+      // Swipe down to close (positive Y)
+      if (translationY > SWIPE_THRESHOLD || velocityY > 500) {
+        translateY.value = withTiming(SCREEN_HEIGHT, { duration: 200 });
+        runOnJS(onClose)();
+      }
+      // Swipe up to open comments (negative Y) - only on photos, no visual feedback
+      else if (translationY < -SWIPE_THRESHOLD || velocityY < -500) {
+        runOnJS(openCurrentPhotoComments)();
+      }
+      // Reset if threshold not met
+      else {
+        translateY.value = withSpring(0);
+      }
+    });
+
+  // Animated style for vertical drag feedback
+  const containerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
   // Show local toast inside the modal
   const showLocalToast = useCallback((message: string) => {
     if (toastTimeoutRef.current) {
@@ -552,10 +606,18 @@ export const SwipeGallery = ({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={[styles.container, backgroundColor && { backgroundColor }]}>
-        <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
-          {/* Header */}
-          <View style={styles.header}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <GestureDetector gesture={verticalPanGesture}>
+          <Animated.View
+            style={[
+              styles.container,
+              backgroundColor && { backgroundColor },
+              containerAnimatedStyle,
+            ]}
+          >
+            <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+              {/* Header */}
+              <View style={styles.header}>
             <Pressable style={styles.closeButton} onPress={onClose}>
               <FontAwesome6 name="xmark" size={20} color="#fff" />
             </Pressable>
@@ -656,6 +718,20 @@ export const SwipeGallery = ({
               </View>
             )}
           </View>
+
+          {/* Vertical swipe hints */}
+          <View style={styles.verticalHintsContainer}>
+            {currentItem.type === "photo" && (
+              <View style={styles.verticalHint}>
+                <FontAwesome6
+                  name="chevron-up"
+                  size={10}
+                  color="rgba(255,255,255,0.4)"
+                />
+                <Text style={styles.verticalHintText}>Commentaires</Text>
+              </View>
+            )}
+          </View>
         </SafeAreaView>
 
         {/* Comments Bottom Sheet */}
@@ -669,17 +745,19 @@ export const SwipeGallery = ({
           />
         )}
 
-        {/* Local Toast */}
-        {localToast && (
-          <Animated.View
-            entering={FadeIn.duration(200)}
-            exiting={FadeOut.duration(200)}
-            style={styles.localToast}
-          >
-            <Text style={styles.localToastText}>{localToast}</Text>
+            {/* Local Toast */}
+            {localToast && (
+              <Animated.View
+                entering={FadeIn.duration(200)}
+                exiting={FadeOut.duration(200)}
+                style={styles.localToast}
+              >
+                <Text style={styles.localToastText}>{localToast}</Text>
+              </Animated.View>
+            )}
           </Animated.View>
-        )}
-      </View>
+        </GestureDetector>
+      </GestureHandlerRootView>
     </Modal>
   );
 };
@@ -947,5 +1025,18 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 13,
     fontWeight: "600",
+  },
+  verticalHintsContainer: {
+    alignItems: "center",
+    paddingBottom: 8,
+  },
+  verticalHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  verticalHintText: {
+    fontSize: 11,
+    color: "rgba(255, 255, 255, 0.4)",
   },
 });

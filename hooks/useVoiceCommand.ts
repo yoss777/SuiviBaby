@@ -1,15 +1,61 @@
 // hooks/useVoiceCommand.ts
 import {
+  ajouterActivite,
+  ajouterBain,
   ajouterBiberon,
+  ajouterCroissance,
+  ajouterJalon,
+  ajouterMedicament,
   ajouterMiction,
   ajouterPompage,
   ajouterSelle,
+  ajouterSolide,
+  ajouterSommeil,
+  ajouterSymptome,
+  ajouterTemperature,
   ajouterTetee,
+  ajouterVaccin,
   ajouterVitamine,
+  modifierBiberon,
+  modifierTetee,
+  modifierPompage,
+  modifierMiction,
+  modifierSelle,
+  modifierVitamine,
+  modifierSommeil,
+  modifierActivite,
+  modifierJalon,
+  modifierCroissance,
+  modifierSolide,
+  modifierBain,
+  modifierTemperature,
+  modifierMedicament,
+  modifierSymptome,
+  modifierVaccin,
+  supprimerBiberon,
+  supprimerTetee,
+  supprimerPompage,
+  supprimerMiction,
+  supprimerSelle,
+  supprimerVitamine,
+  supprimerSommeil,
+  supprimerActivite,
+  supprimerJalon,
+  supprimerCroissance,
+  supprimerSolide,
+  supprimerBain,
+  supprimerTemperature,
+  supprimerMedicament,
+  supprimerSymptome,
+  supprimerVaccin,
 } from "@/migration/eventsDoubleWriteService";
+import { obtenirEvenements, Event, EventType } from "@/services/eventsService";
 import VoiceCommandService, {
+  CommandAction,
   CommandType,
-  ParsedCommand,
+  ParsedCommandResult,
+  EventIdentifier,
+  commandTypeToEventType,
 } from "@/services/voiceCommandService";
 import { useRef, useState } from "react";
 // Décommentez quand vous aurez créé ces services :
@@ -24,7 +70,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   const [testMode, setTestMode] = useState(useTestMode);
   const [testPromptVisible, setTestPromptVisible] = useState(false);
   const [testPromptText, setTestPromptText] = useState("");
-  const [pendingCommand, setPendingCommand] = useState<ParsedCommand | null>(null);
+  const [pendingCommand, setPendingCommand] = useState<ParsedCommandResult | null>(null);
   const [diaperChoice, setDiaperChoiceState] = useState(true);
   const diaperChoiceRef = useRef(true);
   const [excretionSelection, setExcretionSelectionState] = useState({
@@ -45,6 +91,90 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   });
   const [permissionModal, setPermissionModal] = useState(false);
   const [transcriptionErrorModal, setTranscriptionErrorModal] = useState(false);
+  const [foundEvent, setFoundEvent] = useState<Event | null>(null);
+
+  /**
+   * Recherche un événement existant basé sur l'identifiant
+   */
+  const findEventByIdentifier = async (
+    identifier: EventIdentifier,
+    childIdToSearch: string
+  ): Promise<Event | null> => {
+    try {
+      const eventType = commandTypeToEventType(identifier.type) as EventType;
+
+      // Si "le dernier", on récupère le plus récent
+      if (identifier.isLast) {
+        const events = await obtenirEvenements(childIdToSearch, {
+          type: eventType,
+          limite: 1,
+        });
+        return events.length > 0 ? events[0] : null;
+      }
+
+      // Si une heure cible est spécifiée (ex: "de 15h20")
+      if (identifier.targetTime) {
+        const targetDate = identifier.targetTime;
+        // Rechercher les événements de la journée
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(targetDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const events = await obtenirEvenements(childIdToSearch, {
+          type: eventType,
+          depuis: startOfDay,
+          jusqu: endOfDay,
+        });
+
+        // Trouver l'événement le plus proche de l'heure cible (tolérance de 30 min)
+        const targetMinutes = targetDate.getHours() * 60 + targetDate.getMinutes();
+        let closestEvent: Event | null = null;
+        let minDiff = Infinity;
+
+        for (const event of events) {
+          const eventDate = event.date instanceof Date
+            ? event.date
+            : (event.date as any).toDate?.() || new Date((event.date as any).seconds * 1000);
+          const eventMinutes = eventDate.getHours() * 60 + eventDate.getMinutes();
+          const diff = Math.abs(eventMinutes - targetMinutes);
+
+          if (diff < minDiff && diff <= 30) { // Tolérance de 30 minutes
+            minDiff = diff;
+            closestEvent = event;
+          }
+        }
+        return closestEvent;
+      }
+
+      // Si un temps relatif est spécifié (ex: "il y a 30 min")
+      if (identifier.relativeTime) {
+        const now = new Date();
+        const targetTime = new Date(now.getTime() - identifier.relativeTime * 60 * 1000);
+
+        // Fenêtre de recherche : target ± 15 min
+        const depuis = new Date(targetTime.getTime() - 15 * 60 * 1000);
+        const jusqu = new Date(targetTime.getTime() + 15 * 60 * 1000);
+
+        const events = await obtenirEvenements(childIdToSearch, {
+          type: eventType,
+          depuis,
+          jusqu,
+        });
+
+        // Retourner le plus proche
+        if (events.length > 0) {
+          return events[0]; // Déjà trié par date desc
+        }
+        return null;
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Erreur recherche événement:", error);
+      return null;
+    }
+  };
 
   /**
    * Démarre l'enregistrement vocal
@@ -178,39 +308,159 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   };
 
   /**
+   * Traite plusieurs événements détectés dans une seule phrase
+   * Ex: "Il a bu 150ml, fait un pipi et on est allés au parc"
+   */
+  const processMultipleCommands = async (commands: ParsedCommandResult[]) => {
+    // Générer le message de confirmation listant tous les événements
+    const eventDescriptions = commands.map((cmd, index) => {
+      const desc = formatConfirmationMessage(cmd);
+      return `${index + 1}. ${desc}`;
+    }).join("\n");
+
+    const confirmMessage = `${commands.length} événements détectés:\n\n${eventDescriptions}`;
+
+    setConfirmModal({
+      visible: true,
+      title: "Confirmer les ajouts",
+      message: confirmMessage,
+      onConfirm: async () => {
+        // Exécuter toutes les commandes en séquence
+        let successCount = 0;
+        const errors: string[] = [];
+
+        for (const cmd of commands) {
+          try {
+            await executeCommand(cmd, childId, true, { pipi: cmd.pipi || false, popo: cmd.popo || false });
+            successCount++;
+          } catch (error) {
+            console.error(`Erreur ajout ${cmd.type}:`, error);
+            errors.push(cmd.type);
+          }
+        }
+
+        // Afficher le résultat
+        if (errors.length === 0) {
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: `${successCount} événement(s) ajouté(s) avec succès`,
+          });
+        } else {
+          setInfoModal({
+            visible: true,
+            title: "Résultat partiel",
+            message: `${successCount} événement(s) ajouté(s)\n${errors.length} erreur(s): ${errors.join(", ")}`,
+          });
+        }
+
+        setIsProcessing(false);
+      },
+    });
+  };
+
+  /**
    * Traite la commande vocale transcrite
+   * Supporte maintenant les phrases composées avec plusieurs événements
    */
   const processVoiceCommand = async (text: string) => {
     try {
       setTranscription(text);
       console.log("🔍 Analyse de la commande:", text);
 
-      // Parser la commande
-      const command = VoiceCommandService.parseCommand(text);
+      // Parser TOUTES les commandes détectées dans le texte
+      const commands = VoiceCommandService.parseMultipleCommands(text);
 
-      if (!command) {
+      if (commands.length === 0) {
         setInfoModal({
           visible: true,
           title: "Commande non reconnue",
           message:
             `Je n'ai pas compris: "${text}"\n\n` +
             `Exemples de commandes:\n\n` +
-            `🍼 "Ajoute un biberon de 150ml"\n` +
-            `🤱 "Ajoute une tétée gauche"\n` +
-            `🤱‍🍼 "Ajoute un pompage de 100ml droit et 120ml gauche"\n` +
-            `🚼 "Ajoute un pipi popo"\n` +
-            `😴 "Ajoute un sommeil"\n` +
-            `⏰ "...il y a 15 minutes" (optionnel)`,
+            `➕ AJOUTER:\n` +
+            `🍼 "Biberon de 150ml"\n` +
+            `🤱 "Tétée gauche 15 min"\n` +
+            `🥣 "Purée au déjeuner"\n` +
+            `🚼 "Pipi popo" ou "Selle liquide"\n` +
+            `😴 "Dodo" ou "Sieste"\n` +
+            `📏 "Poids 5.2kg taille 62cm"\n\n` +
+            `✏️ MODIFIER:\n` +
+            `"Modifie le dernier biberon pour 180ml"\n` +
+            `"Corrige la selle de 15h20, c'était liquide"\n\n` +
+            `🗑️ SUPPRIMER:\n` +
+            `"Supprime le dernier pipi"\n` +
+            `"Efface le biberon de 14h"\n\n` +
+            `⏰ TEMPS:\n` +
+            `"...il y a 15 min" ou "dans 30 min"\n\n` +
+            `📝 PHRASES COMPOSÉES:\n` +
+            `"Il a bu 150ml et fait un pipi"`,
         });
         setIsProcessing(false);
         return;
       }
 
-      const commandWithChildId = { ...command, childId };
+      // Ajouter childId à toutes les commandes
+      const commandsWithChildId = commands.map(cmd => ({ ...cmd, childId }));
+      console.log(`✅ ${commandsWithChildId.length} événement(s) détecté(s):`, commandsWithChildId.map(c => c.type));
+
+      // Si plusieurs événements, utiliser le flow multi-événements
+      if (commandsWithChildId.length > 1) {
+        await processMultipleCommands(commandsWithChildId);
+        return;
+      }
+
+      // Sinon, continuer avec le flow single-event existant
+      const commandWithChildId = commandsWithChildId[0];
       console.log("✅ Commande analysée:", commandWithChildId);
 
-      // Confirmation avant ajout
-      const confirmMessage = formatConfirmationMessage(commandWithChildId);
+      // Déterminer le titre et l'action selon le type de commande
+      const action = commandWithChildId.action || "add";
+      let confirmTitle = "Confirmer l'ajout";
+
+      if (action === "modify") {
+        confirmTitle = "Confirmer la modification";
+      } else if (action === "delete") {
+        confirmTitle = "Confirmer la suppression";
+      }
+
+      // Pour modification/suppression, rechercher l'événement cible
+      let targetEvent: Event | null = null;
+      if ((action === "modify" || action === "delete") && commandWithChildId.eventIdentifier) {
+        console.log("🔍 Recherche de l'événement cible...");
+        targetEvent = await findEventByIdentifier(commandWithChildId.eventIdentifier, childId);
+
+        if (!targetEvent) {
+          setInfoModal({
+            visible: true,
+            title: "Événement non trouvé",
+            message: `Impossible de trouver ${commandWithChildId.eventIdentifier.isLast
+              ? "le dernier " + commandWithChildId.type
+              : commandWithChildId.eventIdentifier.targetTime
+                ? `le ${commandWithChildId.type} de ${commandWithChildId.eventIdentifier.targetTime.getHours()}h${commandWithChildId.eventIdentifier.targetTime.getMinutes().toString().padStart(2, "0")}`
+                : `le ${commandWithChildId.type}`
+            }.\n\nVérifiez que l'événement existe.`,
+          });
+          setIsProcessing(false);
+          return;
+        }
+
+        console.log("✅ Événement trouvé:", targetEvent.id);
+        setFoundEvent(targetEvent);
+      }
+
+      // Confirmation avant action - inclure les détails de l'événement existant pour modify/delete
+      let confirmMessage = formatConfirmationMessage(commandWithChildId);
+
+      // Pour modify/delete, ajouter les détails de l'événement trouvé
+      if (targetEvent && (action === "modify" || action === "delete")) {
+        const eventDetails = formatEventDetails(targetEvent);
+        if (action === "delete") {
+          confirmMessage = `${confirmMessage}\n\n📋 Détails de l'événement à supprimer:\n${eventDetails}`;
+        } else {
+          confirmMessage = `${confirmMessage}\n\n📋 Valeurs actuelles:\n${eventDetails}`;
+        }
+      }
 
       setPendingCommand(commandWithChildId);
       if (
@@ -232,18 +482,23 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         excretionSelectionRef.current = nextSelection;
       }
 
+      // Capturer targetEvent pour la closure
+      const eventToTarget = targetEvent;
+
       setConfirmModal({
         visible: true,
-        title: "Confirmer l'ajout",
+        title: confirmTitle,
         message: confirmMessage,
         onConfirm: async () => {
           await executeCommand(
             commandWithChildId,
             childId,
             diaperChoiceRef.current,
-            excretionSelectionRef.current
+            excretionSelectionRef.current,
+            eventToTarget
           );
           setIsProcessing(false);
+          setFoundEvent(null);
         },
       });
     } catch (error) {
@@ -260,7 +515,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   /**
    * Formate le message de confirmation
    */
-  const formatConfirmationMessage = (command: ParsedCommand): string => {
+  const formatConfirmationMessage = (command: ParsedCommandResult): string => {
     const emojis: Record<CommandType, string> = {
       biberon: "🍼",
       tetee: "🤱",
@@ -270,22 +525,58 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       vitamine: "💊",
       sommeil: "😴",
       pompage: "🤱‍🍼",
+      activite: "🎯",
+      jalon: "⭐",
+      croissance: "📏",
+      solide: "🥣",
+      bain: "🛁",
+      temperature: "🌡️",
+      medicament: "💊",
+      symptome: "🤒",
+      vaccin: "💉",
       autre: "📝",
     };
 
-    const emoji = emojis[command.type] || "📝";
+    const emoji = emojis[command.type as CommandType] || "📝";
     const typeDisplay =
       command.type === "couche"
         ? "Change de couche"
         : command.type.charAt(0).toUpperCase() + command.type.slice(1);
 
-    let message = `${emoji} ${typeDisplay}\n\n`;
+    // Préfixe selon l'action
+    const action = command.action || "add";
+    let actionPrefix = "";
+    if (action === "modify") {
+      actionPrefix = "✏️ Modifier ";
+    } else if (action === "delete") {
+      actionPrefix = "🗑️ Supprimer ";
+    }
+
+    let message = `${actionPrefix}${emoji} ${typeDisplay}\n\n`;
+
+    // Pour modification/suppression, indiquer l'événement cible
+    if (action !== "add" && command.eventIdentifier) {
+      if (command.eventIdentifier.isLast) {
+        message += `🎯 Le dernier enregistré\n`;
+      } else if (command.eventIdentifier.targetTime) {
+        const time = command.eventIdentifier.targetTime;
+        message += `🎯 Celui de ${time.getHours()}h${time.getMinutes().toString().padStart(2, "0")}\n`;
+      } else if (command.eventIdentifier.relativeTime) {
+        message += `🎯 Celui d'il y a ${command.eventIdentifier.relativeTime} min\n`;
+      }
+    }
 
     // Heure
     if (command.timeOffset && command.timeOffset > 0) {
-      message += `⏰ Il y a ${command.timeOffset} minute${
-        command.timeOffset > 1 ? "s" : ""
-      }\n`;
+      if (command.isFuture) {
+        message += `⏰ Dans ${command.timeOffset} minute${
+          command.timeOffset > 1 ? "s" : ""
+        }\n`;
+      } else {
+        message += `⏰ Il y a ${command.timeOffset} minute${
+          command.timeOffset > 1 ? "s" : ""
+        }\n`;
+      }
     } else {
       message += `⏰ Maintenant\n`;
     }
@@ -358,23 +649,456 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           message += `⏱️ Début du sommeil`;
         }
         break;
+
+      case "activite":
+        const activiteLabels: Record<string, string> = {
+          tummyTime: "Tummy Time",
+          jeux: "Jeux",
+          lecture: "Lecture",
+          promenade: "Promenade",
+          massage: "Massage",
+          musique: "Musique",
+          eveil: "Éveil sensoriel",
+          sortie: "Sortie",
+          autre: "Autre",
+        };
+        message += `🎯 Type: ${activiteLabels[command.typeActivite || "autre"] || "Autre"}`;
+        if (command.duree) {
+          message += `\n⏱️ Durée: ${command.duree} min`;
+        }
+        break;
+
+      case "jalon":
+        const jalonLabels: Record<string, string> = {
+          dent: "Première dent",
+          pas: "Premiers pas",
+          sourire: "Premier sourire",
+          mot: "Premiers mots",
+          humeur: "Humeur du jour",
+          autre: "Autre moment",
+        };
+        message += `⭐ ${jalonLabels[command.typeJalon || "autre"] || "Moment spécial"}`;
+        if (command.humeur) {
+          const humeurEmojis = ["", "😢", "😐", "🙂", "😄", "🥰"];
+          message += `\n${humeurEmojis[command.humeur]} Humeur: ${command.humeur}/5`;
+        }
+        break;
+
+      case "croissance":
+        if (command.poids) {
+          message += `⚖️ Poids: ${command.poids} kg\n`;
+        }
+        if (command.taille) {
+          message += `📏 Taille: ${command.taille} cm\n`;
+        }
+        if (command.perimetreCranien) {
+          message += `🧠 Périmètre crânien: ${command.perimetreCranien} cm`;
+        }
+        if (!command.poids && !command.taille && !command.perimetreCranien) {
+          message += `📏 Mesures à compléter`;
+        }
+        break;
+
+      case "solide":
+        const solideLabels: Record<string, string> = {
+          puree: "Purée",
+          compote: "Compote",
+          cereales: "Céréales",
+          yaourt: "Yaourt",
+          morceaux: "Morceaux / DME",
+          autre: "Autre",
+        };
+        const momentLabels: Record<string, string> = {
+          petit_dejeuner: "Petit-déjeuner",
+          dejeuner: "Déjeuner",
+          gouter: "Goûter",
+          diner: "Dîner",
+          collation: "Collation",
+        };
+        message += `🥣 Type: ${solideLabels[command.typeSolide || "autre"] || "Autre"}`;
+        if (command.momentRepas) {
+          message += `\n🕐 ${momentLabels[command.momentRepas]}`;
+        }
+        if (command.quantiteSolide) {
+          message += `\n📊 Quantité: ${command.quantiteSolide}`;
+        }
+        break;
+
+      case "bain":
+        message += `🛁 Bain`;
+        if (command.duree) {
+          message += `\n⏱️ Durée: ${command.duree} min`;
+        }
+        break;
+
+      case "temperature":
+        if (command.valeurTemperature) {
+          message += `🌡️ Température: ${command.valeurTemperature}°C`;
+        } else {
+          message += `🌡️ Température à compléter`;
+        }
+        break;
+
+      case "medicament":
+        message += `💊 ${command.nomMedicament || "Médicament"}`;
+        if (command.dosage) {
+          message += `\n📊 Dosage: ${command.dosage}`;
+        }
+        break;
+
+      case "symptome":
+        message += `🤒 ${command.descriptionSymptome || "Symptôme"}`;
+        break;
+
+      case "vaccin":
+        message += `💉 ${command.nomVaccin || "Vaccin"}`;
+        break;
     }
 
     return message;
   };
 
   /**
+   * Formate les détails d'un événement existant pour l'affichage
+   */
+  const formatEventDetails = (event: Event): string => {
+    const lines: string[] = [];
+
+    // Date/heure de l'événement
+    const eventDate = event.date instanceof Date
+      ? event.date
+      : (event.date as any).toDate?.() || new Date((event.date as any).seconds * 1000);
+    const timeStr = `${eventDate.getHours()}h${eventDate.getMinutes().toString().padStart(2, "0")}`;
+    lines.push(`⏰ ${timeStr}`);
+
+    // Détails selon le type
+    switch (event.type) {
+      case "biberon":
+        const biberonEvent = event as any;
+        if (biberonEvent.quantite) {
+          lines.push(`📊 Quantité: ${biberonEvent.quantite} ml`);
+        }
+        if (biberonEvent.typeBiberon) {
+          lines.push(`🍼 Type: ${biberonEvent.typeBiberon}`);
+        }
+        break;
+
+      case "tetee":
+        const teteeEvent = event as any;
+        const cotes = [];
+        if (teteeEvent.coteGauche || teteeEvent.dureeGauche) cotes.push("Gauche");
+        if (teteeEvent.coteDroit || teteeEvent.dureeDroite) cotes.push("Droit");
+        if (cotes.length > 0) {
+          lines.push(`📍 Côté: ${cotes.join(" + ")}`);
+        }
+        if (teteeEvent.dureeGauche || teteeEvent.dureeDroite) {
+          const dureeTotal = (teteeEvent.dureeGauche || 0) + (teteeEvent.dureeDroite || 0);
+          lines.push(`⏱️ Durée: ${dureeTotal} min`);
+        }
+        break;
+
+      case "pompage":
+        const pompageEvent = event as any;
+        if (pompageEvent.quantiteGauche) {
+          lines.push(`⬅️ Gauche: ${pompageEvent.quantiteGauche} ml`);
+        }
+        if (pompageEvent.quantiteDroite) {
+          lines.push(`➡️ Droite: ${pompageEvent.quantiteDroite} ml`);
+        }
+        break;
+
+      case "selle":
+        const selleEvent = event as any;
+        if (selleEvent.consistance) {
+          lines.push(`📊 Consistance: ${selleEvent.consistance}`);
+        }
+        if (selleEvent.couleur) {
+          lines.push(`🎨 Couleur: ${selleEvent.couleur}`);
+        }
+        if (selleEvent.quantite) {
+          lines.push(`📏 Quantité: ${selleEvent.quantite}`);
+        }
+        break;
+
+      case "sommeil":
+        const sommeilEvent = event as any;
+        if (sommeilEvent.duree) {
+          const heures = Math.floor(sommeilEvent.duree / 60);
+          const minutes = sommeilEvent.duree % 60;
+          lines.push(`⏱️ Durée: ${heures > 0 ? heures + "h" : ""}${minutes > 0 ? minutes + "min" : ""}`);
+        }
+        if (sommeilEvent.isNap !== undefined) {
+          lines.push(`💤 Type: ${sommeilEvent.isNap ? "Sieste" : "Nuit"}`);
+        }
+        break;
+
+      case "temperature":
+        const tempEvent = event as any;
+        if (tempEvent.valeur) {
+          lines.push(`🌡️ ${tempEvent.valeur}°C`);
+        }
+        break;
+
+      case "medicament":
+        const medEvent = event as any;
+        if (medEvent.nomMedicament) {
+          lines.push(`💊 ${medEvent.nomMedicament}`);
+        }
+        if (medEvent.dosage) {
+          lines.push(`📊 Dosage: ${medEvent.dosage}`);
+        }
+        break;
+
+      case "croissance":
+        const croissanceEvent = event as any;
+        if (croissanceEvent.poids) {
+          lines.push(`⚖️ Poids: ${croissanceEvent.poids} kg`);
+        }
+        if (croissanceEvent.taille) {
+          lines.push(`📏 Taille: ${croissanceEvent.taille} cm`);
+        }
+        if (croissanceEvent.perimetreCranien) {
+          lines.push(`🧠 PC: ${croissanceEvent.perimetreCranien} cm`);
+        }
+        break;
+
+      case "solide":
+        const solideEvent = event as any;
+        if (solideEvent.typeSolide) {
+          lines.push(`🥣 Type: ${solideEvent.typeSolide}`);
+        }
+        if (solideEvent.momentRepas) {
+          lines.push(`🕐 Repas: ${solideEvent.momentRepas}`);
+        }
+        if (solideEvent.quantite) {
+          lines.push(`📊 Quantité: ${solideEvent.quantite}`);
+        }
+        break;
+
+      case "activite":
+        const activiteEvent = event as any;
+        if (activiteEvent.typeActivite) {
+          lines.push(`🎯 Type: ${activiteEvent.typeActivite}`);
+        }
+        if (activiteEvent.duree) {
+          lines.push(`⏱️ Durée: ${activiteEvent.duree} min`);
+        }
+        break;
+
+      case "symptome":
+        const symptomeEvent = event as any;
+        if (symptomeEvent.description) {
+          lines.push(`🤒 ${symptomeEvent.description}`);
+        }
+        break;
+
+      case "jalon":
+        const jalonEvent = event as any;
+        if (jalonEvent.typeJalon) {
+          lines.push(`⭐ Type: ${jalonEvent.typeJalon}`);
+        }
+        if (jalonEvent.titre) {
+          lines.push(`📝 ${jalonEvent.titre}`);
+        }
+        break;
+    }
+
+    // Note si présente
+    if ((event as any).note && !(event as any).note.includes("commande vocale")) {
+      const note = (event as any).note;
+      if (note.length > 50) {
+        lines.push(`📝 ${note.substring(0, 47)}...`);
+      } else {
+        lines.push(`📝 ${note}`);
+      }
+    }
+
+    return lines.join("\n");
+  };
+
+  /**
+   * Exécute une suppression d'événement
+   */
+  const executeDelete = async (type: string, childId: string, eventId: string) => {
+    try {
+      const deleteMap: Record<string, (childId: string, id: string) => Promise<void>> = {
+        biberon: supprimerBiberon,
+        tetee: supprimerTetee,
+        pompage: supprimerPompage,
+        miction: supprimerMiction,
+        selle: supprimerSelle,
+        vitamine: supprimerVitamine,
+        sommeil: supprimerSommeil,
+        activite: supprimerActivite,
+        jalon: supprimerJalon,
+        croissance: supprimerCroissance,
+        solide: supprimerSolide,
+        bain: supprimerBain,
+        temperature: supprimerTemperature,
+        medicament: supprimerMedicament,
+        symptome: supprimerSymptome,
+        vaccin: supprimerVaccin,
+      };
+
+      const deleteFn = deleteMap[type];
+      if (deleteFn) {
+        await deleteFn(childId, eventId);
+        setInfoModal({
+          visible: true,
+          title: "Succès",
+          message: `${type.charAt(0).toUpperCase() + type.slice(1)} supprimé avec succès`,
+        });
+      } else {
+        setInfoModal({
+          visible: true,
+          title: "Erreur",
+          message: `La suppression du type "${type}" n'est pas encore implémentée`,
+        });
+      }
+    } catch (error) {
+      console.error("❌ Erreur suppression:", error);
+      setInfoModal({
+        visible: true,
+        title: "Erreur",
+        message: `Impossible de supprimer:\n${error instanceof Error ? error.message : "Erreur inconnue"}`,
+      });
+    }
+  };
+
+  /**
+   * Exécute une modification d'événement
+   */
+  const executeModify = async (
+    type: string,
+    childId: string,
+    eventId: string,
+    modifications: Partial<ParsedCommandResult>
+  ) => {
+    try {
+      const modifyMap: Record<string, (childId: string, id: string, data: any) => Promise<void>> = {
+        biberon: modifierBiberon,
+        tetee: modifierTetee,
+        pompage: modifierPompage,
+        miction: modifierMiction,
+        selle: modifierSelle,
+        vitamine: modifierVitamine,
+        sommeil: modifierSommeil,
+        activite: modifierActivite,
+        jalon: modifierJalon,
+        croissance: modifierCroissance,
+        solide: modifierSolide,
+        bain: modifierBain,
+        temperature: modifierTemperature,
+        medicament: modifierMedicament,
+        symptome: modifierSymptome,
+        vaccin: modifierVaccin,
+      };
+
+      // Convertir les modifications au format Firebase
+      const dataToUpdate: Record<string, any> = {};
+
+      if (modifications.quantite !== undefined) {
+        dataToUpdate.quantite = modifications.quantite;
+      }
+      if (modifications.quantiteGauche !== undefined) {
+        dataToUpdate.quantiteGauche = modifications.quantiteGauche;
+      }
+      if (modifications.quantiteDroite !== undefined) {
+        dataToUpdate.quantiteDroite = modifications.quantiteDroite;
+      }
+      if (modifications.consistance !== undefined) {
+        dataToUpdate.consistance = modifications.consistance;
+      }
+      if (modifications.couleur !== undefined) {
+        dataToUpdate.couleur = modifications.couleur;
+      }
+      if (modifications.typeBiberon !== undefined) {
+        dataToUpdate.typeBiberon = modifications.typeBiberon;
+      }
+      if (modifications.duree !== undefined) {
+        dataToUpdate.duree = modifications.duree;
+      }
+      if (modifications.valeurTemperature !== undefined) {
+        dataToUpdate.valeur = modifications.valeurTemperature;
+      }
+      if (modifications.dosage !== undefined) {
+        dataToUpdate.dosage = modifications.dosage;
+      }
+
+      dataToUpdate.updatedAt = new Date();
+      dataToUpdate.note = `Modifié par commande vocale`;
+
+      const modifyFn = modifyMap[type];
+      if (modifyFn) {
+        await modifyFn(childId, eventId, dataToUpdate);
+        setInfoModal({
+          visible: true,
+          title: "Succès",
+          message: `${type.charAt(0).toUpperCase() + type.slice(1)} modifié avec succès`,
+        });
+      } else {
+        setInfoModal({
+          visible: true,
+          title: "Erreur",
+          message: `La modification du type "${type}" n'est pas encore implémentée`,
+        });
+      }
+    } catch (error) {
+      console.error("❌ Erreur modification:", error);
+      setInfoModal({
+        visible: true,
+        title: "Erreur",
+        message: `Impossible de modifier:\n${error instanceof Error ? error.message : "Erreur inconnue"}`,
+      });
+    }
+  };
+
+  /**
    * Execute la commande dans Firebase
    */
   const executeCommand = async (
-    command: ParsedCommand,
+    command: ParsedCommandResult,
     childId: string,
     avecCouche?: boolean,
-    excretionSelection?: { pipi: boolean; popo: boolean }
+    excretionSelection?: { pipi: boolean; popo: boolean },
+    targetEvent?: Event | null
   ) => {
     try {
-      const data = VoiceCommandService.formatDataForFirebase(command);
+      const action = command.action || "add";
 
+      // ==== SUPPRESSION ====
+      if (action === "delete") {
+        if (!targetEvent?.id) {
+          setInfoModal({
+            visible: true,
+            title: "Erreur",
+            message: "Aucun événement trouvé à supprimer",
+          });
+          return;
+        }
+
+        await executeDelete(command.type, childId, targetEvent.id);
+        return;
+      }
+
+      // ==== MODIFICATION ====
+      if (action === "modify") {
+        if (!targetEvent?.id) {
+          setInfoModal({
+            visible: true,
+            title: "Erreur",
+            message: "Aucun événement trouvé à modifier",
+          });
+          return;
+        }
+
+        const modifications = command.modifications || {};
+        await executeModify(command.type, childId, targetEvent.id, modifications);
+        return;
+      }
+
+      // ==== AJOUT (action === "add") ====
+      const data = VoiceCommandService.formatDataForFirebase(command);
       console.log("💾 Ajout dans Firebase:", { type: command.type, data });
 
       switch (command.type) {
@@ -514,12 +1238,92 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "sommeil":
-          // await ajouterSommeil(childId, data);
+          await ajouterSommeil(childId, data);
           setInfoModal({
             visible: true,
-            title: "En développement",
-            message:
-              "Le service sommeil n'est pas encore activé.\nDécommentez l'import dans useVoiceCommand.ts",
+            title: "Succès",
+            message: "Sommeil ajouté avec succès",
+          });
+          break;
+
+        case "activite":
+          await ajouterActivite(childId, data);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Activité ajoutée avec succès",
+          });
+          break;
+
+        case "jalon":
+          await ajouterJalon(childId, data);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Jalon ajouté avec succès",
+          });
+          break;
+
+        case "croissance":
+          await ajouterCroissance(childId, data);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Croissance ajoutée avec succès",
+          });
+          break;
+
+        case "solide":
+          await ajouterSolide(childId, data);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Repas solide ajouté avec succès",
+          });
+          break;
+
+        case "bain":
+          await ajouterBain(childId, data);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Bain ajouté avec succès",
+          });
+          break;
+
+        case "temperature":
+          await ajouterTemperature(childId, data);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Température ajoutée avec succès",
+          });
+          break;
+
+        case "medicament":
+          await ajouterMedicament(childId, data);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Médicament ajouté avec succès",
+          });
+          break;
+
+        case "symptome":
+          await ajouterSymptome(childId, data);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Symptôme ajouté avec succès",
+          });
+          break;
+
+        case "vaccin":
+          await ajouterVaccin(childId, data);
+          setInfoModal({
+            visible: true,
+            title: "Succès",
+            message: "Vaccin ajouté avec succès",
           });
           break;
 
@@ -579,6 +1383,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
 
   const clearPendingCommand = () => {
     setPendingCommand(null);
+    setFoundEvent(null);
     setDiaperChoiceState(true);
     diaperChoiceRef.current = true;
     setExcretionSelectionState({ pipi: false, popo: false });
