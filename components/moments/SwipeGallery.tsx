@@ -20,6 +20,8 @@ import Animated, {
   interpolate,
   useAnimatedStyle,
   useSharedValue,
+  withSequence,
+  withSpring,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CommentsBottomSheet } from "./CommentsBottomSheet";
@@ -52,7 +54,7 @@ type SwipeGalleryProps = {
   backgroundColor?: string;
   onClose: () => void;
   onAddPhoto: () => void;
-  onEdit?: (photoId: string) => void;
+  onEdit?: (photoId: string, photoIndex: number) => void;
   onLike?: (photoId: string) => void;
   onDownload?: (
     photoId: string,
@@ -186,8 +188,6 @@ export const SwipeGallery = ({
 
   // Current index in the gallery
   const [currentIndex, setCurrentIndex] = useState(1);
-  const [showOverlay, setShowOverlay] = useState(false);
-  const overlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Comments bottom sheet state
   const [commentsVisible, setCommentsVisible] = useState(false);
@@ -199,6 +199,12 @@ export const SwipeGallery = ({
   // Local toast state (to show inside the modal)
   const [localToast, setLocalToast] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Double tap heart animation state
+  const [doubleTapHeartId, setDoubleTapHeartId] = useState<string | null>(null);
+  const heartScale = useSharedValue(0);
+  const lastTapTimeRef = useRef<number>(0);
+  const DOUBLE_TAP_DELAY = 300; // ms
 
   // Track if initial position has been set for this gallery session
   const initialPositionSetRef = useRef(false);
@@ -234,28 +240,6 @@ export const SwipeGallery = ({
     }
   }, [visible, initialIndex, photos, sortedPhotos, currentPage]);
 
-  // Clear overlay timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (overlayTimeoutRef.current) {
-        clearTimeout(overlayTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Handle tap to show overlay
-  const handleTap = useCallback(() => {
-    setShowOverlay(true);
-
-    if (overlayTimeoutRef.current) {
-      clearTimeout(overlayTimeoutRef.current);
-    }
-
-    overlayTimeoutRef.current = setTimeout(() => {
-      setShowOverlay(false);
-    }, 2000);
-  }, []);
-
   // Handle page scroll for animations
   const onPageScroll = useCallback(
     (e: { nativeEvent: PagerViewOnPageScrollEventData }) => {
@@ -271,7 +255,6 @@ export const SwipeGallery = ({
     (e: { nativeEvent: PagerViewOnPageSelectedEventData }) => {
       const newIndex = e.nativeEvent.position;
       setCurrentIndex(newIndex);
-      setShowOverlay(false);
     },
     [],
   );
@@ -280,8 +263,10 @@ export const SwipeGallery = ({
   const handleEdit = useCallback(() => {
     const item = galleryItems[currentIndex];
     if (item.type === "photo") {
+      // Find the index in sortedPhotos (currentIndex - 1 because index 0 is "Add" card)
+      const photoIndex = currentIndex - 1;
       onClose();
-      onEdit?.(item.photo.id);
+      onEdit?.(item.photo.id, photoIndex);
     }
   }, [currentIndex, galleryItems, onClose, onEdit]);
 
@@ -353,6 +338,34 @@ export const SwipeGallery = ({
     [onLike, likesInfo, optimisticLikes],
   );
 
+  // Handle double tap to like
+  const handleDoubleTap = useCallback(
+    (photoId: string) => {
+      // Show heart animation
+      setDoubleTapHeartId(photoId);
+      heartScale.value = withSequence(
+        withSpring(1.2, { damping: 8, stiffness: 400 }),
+        withSpring(1, { damping: 10, stiffness: 300 }),
+      );
+
+      // Hide heart after animation
+      setTimeout(() => {
+        setDoubleTapHeartId(null);
+        heartScale.value = 0;
+      }, 800);
+
+      // Toggle like
+      handleLike(photoId);
+    },
+    [handleLike, heartScale],
+  );
+
+  // Animated style for double tap heart
+  const heartAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartScale.value }],
+    opacity: heartScale.value > 0 ? 1 : 0,
+  }));
+
   // Handle comment - open bottom sheet
   const handleComment = useCallback((photoId: string, title?: string) => {
     setCommentsPhotoId(photoId);
@@ -423,6 +436,21 @@ export const SwipeGallery = ({
     [likesInfo, optimisticLikes],
   );
 
+  // Handle tap on image - detect double tap manually
+  const handleImageTap = useCallback(
+    (photoId: string) => {
+      const now = Date.now();
+      if (now - lastTapTimeRef.current < DOUBLE_TAP_DELAY) {
+        // Double tap detected
+        handleDoubleTap(photoId);
+        lastTapTimeRef.current = 0; // Reset to prevent triple tap
+      } else {
+        lastTapTimeRef.current = now;
+      }
+    },
+    [handleDoubleTap],
+  );
+
   // Render photo card
   const renderPhotoCard = (
     item: GalleryItem & { type: "photo" },
@@ -439,30 +467,22 @@ export const SwipeGallery = ({
           currentPage={currentPage}
         >
           <View style={styles.cardWithSocial}>
-            <Pressable style={styles.card} onPress={handleTap}>
+            <Pressable
+              style={styles.card}
+              onPress={() => handleImageTap(item.photo.id)}
+            >
               <Image
                 source={{ uri: item.photo.uri }}
                 style={styles.cardImage}
-                resizeMode="cover"
+                resizeMode="contain"
               />
 
-              {/* Overlay with info */}
-              {showOverlay && currentIndex === index && (
+              {/* Double tap heart animation */}
+              {doubleTapHeartId === item.photo.id && (
                 <Animated.View
-                  entering={FadeIn.duration(200)}
-                  exiting={FadeOut.duration(300)}
-                  style={styles.overlay}
+                  style={[styles.doubleTapHeart, heartAnimatedStyle]}
                 >
-                  <View style={styles.overlayContent}>
-                    {item.photo.titre && (
-                      <Text style={styles.overlayTitle}>
-                        {item.photo.titre}
-                      </Text>
-                    )}
-                    <Text style={styles.overlayDate}>
-                      {formatDate(item.photo.date)}
-                    </Text>
-                  </View>
+                  <FontAwesome6 name="heart" size={80} color="#ef4444" solid />
                 </Animated.View>
               )}
             </Pressable>
@@ -490,7 +510,9 @@ export const SwipeGallery = ({
                       styles.socialBarButton,
                       pressed && styles.socialBarButtonPressed,
                     ]}
-                    onPress={() => handleComment(item.photo.id, item.photo.titre)}
+                    onPress={() =>
+                      handleComment(item.photo.id, item.photo.titre)
+                    }
                   >
                     <FontAwesome6 name="comment" size={22} color="#fff" />
                     {commentCount > 0 && <View style={styles.commentDot} />}
@@ -548,7 +570,7 @@ export const SwipeGallery = ({
 
             {currentItem.type === "photo" ? (
               <View style={styles.headerActions}>
-                {/* <Pressable
+                <Pressable
                   style={({ pressed }) => [
                     styles.headerButton,
                     pressed && styles.headerButtonPressed,
@@ -556,7 +578,7 @@ export const SwipeGallery = ({
                   onPress={handleEdit}
                 >
                   <FontAwesome6 name="pen" size={16} color="#fff" />
-                </Pressable> */}
+                </Pressable>
                 <Pressable
                   style={({ pressed }) => [
                     styles.headerButton,
@@ -760,6 +782,17 @@ const styles = StyleSheet.create({
   cardImage: {
     width: "100%",
     height: "100%",
+  },
+  doubleTapHeart: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginTop: -40,
+    marginLeft: -40,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   overlay: {
     position: "absolute",

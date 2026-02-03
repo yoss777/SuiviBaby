@@ -81,6 +81,7 @@ export type MilestonesFormSheetProps = {
   formType: 'milestones';
   jalonType: JalonType;
   onSuccess?: () => void;
+  onCancel?: () => void;
   onDismiss?: () => void;
   editData?: MilestonesEditData;
 };

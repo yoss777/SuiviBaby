@@ -4,6 +4,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -459,10 +460,15 @@ export async function modifierEvenement(
       throw new Error("Accès refusé");
     }
 
-    await updateDoc(docRef, {
-      ...data,
-      updatedAt: Timestamp.now(),
-    });
+    // Handle null values as field deletions
+    const updateData: any = { ...data, updatedAt: Timestamp.now() };
+    for (const key of Object.keys(data)) {
+      if ((data as any)[key] === null) {
+        updateData[key] = deleteField();
+      }
+    }
+
+    await updateDoc(docRef, updateData);
     console.log("✅ Événement modifié");
   } catch (e) {
     console.error("Erreur lors de la modification :", e);

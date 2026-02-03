@@ -978,6 +978,7 @@ export function ecouterSommeils(
 
 export async function modifierSommeil(childId: string, id: string, data: any) {
   const errors: Error[] = [];
+  // Keep null values for field deletion, only remove undefined
   const cleanedData = removeUndefined(data);
 
   // Protection : empêcher de transformer un sommeil terminé en sommeil "en cours"
@@ -998,6 +999,7 @@ export async function modifierSommeil(childId: string, id: string, data: any) {
 
   if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
     try {
+      // Pass data with null values for field deletion
       await modifierEventNouveau(childId, id, cleanedData);
       console.log("✅ Sommeil modifié dans NEW");
     } catch (error) {
@@ -1009,6 +1011,7 @@ export async function modifierSommeil(childId: string, id: string, data: any) {
 
   if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
     try {
+      // Pass data with null values for field deletion
       await sommeilService.modifierSommeil(childId, id, cleanedData);
       console.log("✅ Sommeil modifié dans OLD");
     } catch (error) {

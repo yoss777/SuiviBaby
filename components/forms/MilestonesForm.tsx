@@ -13,6 +13,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system";
 import { auth } from "@/config/firebase";
 import { useBaby } from "@/contexts/BabyContext";
@@ -144,6 +145,18 @@ const toDate = (value: any): Date => {
   if (value?.toDate) return value.toDate();
   if (value instanceof Date) return value;
   return new Date(value);
+};
+
+const MAX_IMAGE_WIDTH = 1500;
+const IMAGE_QUALITY = 0.8;
+
+const compressImage = async (uri: string): Promise<string> => {
+  const result = await ImageManipulator.manipulateAsync(
+    uri,
+    [{ resize: { width: MAX_IMAGE_WIDTH } }],
+    { compress: IMAGE_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
+  );
+  return result.uri;
 };
 
 const uploadMilestonePhoto = async (
@@ -282,13 +295,14 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
-        allowsEditing: true,
-        aspect: [4, 3],
+        quality: 1, // Full quality, compression done by ImageManipulator
+        allowsEditing: true, // User can optionally crop (no forced ratio)
       });
 
       if (!result.canceled && result.assets?.[0]?.uri) {
-        setPhotoUri(result.assets[0].uri);
+        // Compress image before storing
+        const compressedUri = await compressImage(result.assets[0].uri);
+        setPhotoUri(compressedUri);
       }
     } catch (error) {
       console.error("Erreur sélection photo:", error);

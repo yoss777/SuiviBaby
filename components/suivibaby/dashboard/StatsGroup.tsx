@@ -52,6 +52,8 @@ export interface StatsGroupProps {
   lastActivity?: string;
   /** Optional secondary text (e.g., "il y a 2h") */
   timeSince?: string;
+  /** Optional label for timeSince (e.g., "Dernier repas") */
+  timeSinceLabel?: string;
   /** Individual stats to show when expanded */
   items: StatItem[];
   /** If true, shows warning style */
@@ -108,6 +110,7 @@ export const StatsGroup = memo(function StatsGroup({
   summary,
   lastActivity,
   timeSince,
+  timeSinceLabel,
   items,
   isWarning = false,
   onHeaderPress,
@@ -248,7 +251,7 @@ export const StatsGroup = memo(function StatsGroup({
                     isWarning && styles.timeSinceWarning,
                   ]}
                 >
-                  {timeSince}
+                  {timeSinceLabel ? `${timeSinceLabel}, ${timeSince}` : timeSince}
                 </Text>
               )}
             </>

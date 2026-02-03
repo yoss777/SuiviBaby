@@ -3,6 +3,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -130,10 +131,16 @@ export async function modifierSommeil(
       throw new Error("Accès refusé");
     }
 
-    await updateDoc(docRef, {
-      ...nouvellesDonnees,
-      updatedAt: new Date(),
-    });
+    // Handle null values as field deletions
+    const updateData: any = { ...nouvellesDonnees, updatedAt: new Date() };
+    if (nouvellesDonnees.heureFin === null) {
+      updateData.heureFin = deleteField();
+    }
+    if (nouvellesDonnees.duree === null) {
+      updateData.duree = deleteField();
+    }
+
+    await updateDoc(docRef, updateData);
     console.log("Sommeil modifié avec succès");
     return true;
   } catch (e) {

@@ -333,8 +333,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           return;
         }
 
-        // Prevent creating ongoing sleep if one already exists
-        if (isOngoing && !editData && sommeilEnCours) {
+        // Prevent creating ongoing sleep if one already exists (unless editing the same sleep)
+        const isEditingSameOngoingSleep = editData && sommeilEnCours && editData.id === sommeilEnCours.id;
+        if (isOngoing && sommeilEnCours && !isEditingSameOngoingSleep) {
           showAlert(
             "Attention",
             "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
@@ -352,21 +353,36 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               )
             : undefined;
 
-        const data = removeUndefined({
-          date: heureDebut,
-          heureDebut: heureDebut,
-          heureFin: fin ?? undefined,
-          duree,
-          isNap: sheetType === "nap",
-          location: location ?? undefined,
-          quality: quality ?? undefined,
-          note: noteSommeil.trim() ? noteSommeil.trim() : undefined,
-        });
-
         if (editData && editData.type === "sommeil") {
-          await modifierSommeil(activeChild.id, editData.id, data);
+          // For editing, we need to explicitly send null to delete fields
+          const editDataToSend: any = {
+            date: heureDebut,
+            heureDebut: heureDebut,
+            heureFin: isOngoing ? null : fin, // null will trigger deleteField() in service
+            duree: isOngoing ? null : duree, // null will trigger deleteField() in service
+            isNap: sheetType === "nap",
+            location: location ?? undefined,
+            quality: quality ?? undefined,
+            note: noteSommeil.trim() ? noteSommeil.trim() : undefined,
+          };
+          // Remove undefined but keep null values
+          const cleanedEditData = Object.fromEntries(
+            Object.entries(editDataToSend).filter(([, v]) => v !== undefined),
+          );
+          await modifierSommeil(activeChild.id, editData.id, cleanedEditData);
           showToast("Sommeil modifié");
         } else {
+          // For new entries, just remove undefined values
+          const data = removeUndefined({
+            date: heureDebut,
+            heureDebut: heureDebut,
+            heureFin: fin ?? undefined,
+            duree,
+            isNap: sheetType === "nap",
+            location: location ?? undefined,
+            quality: quality ?? undefined,
+            note: noteSommeil.trim() ? noteSommeil.trim() : undefined,
+          });
           await ajouterSommeil(activeChild.id, data);
           showToast("Sommeil ajouté");
         }

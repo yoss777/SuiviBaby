@@ -46,8 +46,13 @@ export default function BabyTabLayout() {
         name="moments"
         options={{
           title: "Moments",
-          tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="heart" color={color} />
+          tabBarIcon: ({ focused, color }) => (
+            <FontAwesome
+              size={28}
+              name="heart"
+              color={focused ? "#e63946" : color}
+              solid={focused}
+            />
           ),
         }}
       />

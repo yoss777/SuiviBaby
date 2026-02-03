@@ -7,24 +7,7 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import {
-  ecouterActivitesHybrid,
-  ecouterBainsHybrid,
-  ecouterBiberonsHybrid,
-  ecouterCroissancesHybrid,
-  ecouterJalonsHybrid,
-  ecouterMedicamentsHybrid,
-  ecouterMictionsHybrid,
-  ecouterPompagesHybrid,
-  ecouterSellesHybrid,
-  ecouterSolidesHybrid,
-  ecouterSommeilsHybrid,
-  ecouterSymptomesHybrid,
-  ecouterTemperaturesHybrid,
-  ecouterTeteesHybrid,
-  ecouterVaccinsHybrid,
-  ecouterVitaminesHybrid,
-} from "@/migration/eventsHybridService";
+import { ecouterEvenementsHybrid } from "@/migration/eventsHybridService";
 import type { Event, EventType } from "@/services/eventsService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -1084,7 +1067,27 @@ export default function ChronoScreen() {
     };
   }, [updateCurrentDay]);
 
-  // Load events
+  // All event types for the timeline
+  const ALL_EVENT_TYPES: EventType[] = [
+    "tetee",
+    "biberon",
+    "solide",
+    "pompage",
+    "croissance",
+    "miction",
+    "selle",
+    "vaccin",
+    "vitamine",
+    "sommeil",
+    "bain",
+    "temperature",
+    "medicament",
+    "symptome",
+    "activite",
+    "jalon",
+  ];
+
+  // Load events with unified listener
   useEffect(() => {
     if (!activeChild?.id) return;
 
@@ -1098,63 +1101,13 @@ export default function ChronoScreen() {
     const since = startOfDay(new Date());
     since.setDate(since.getDate() - (maxRange - 1));
 
-    const loaded = {
-      tetees: false,
-      biberons: false,
-      solides: false,
-      pompages: false,
-      croissances: false,
-      mictions: false,
-      selles: false,
-      vaccins: false,
-      vitamines: false,
-      sommeils: false,
-      bains: false,
-      temperatures: false,
-      medicaments: false,
-      symptomes: false,
-      activites: false,
-      jalons: false,
-    };
-    let teteesData: Event[] = [];
-    let biberonsData: Event[] = [];
-    let solidesData: Event[] = [];
-    let pompagesData: Event[] = [];
-    let croissancesData: Event[] = [];
-    let mictionsData: Event[] = [];
-    let sellesData: Event[] = [];
-    let vaccinsData: Event[] = [];
-    let vitaminesData: Event[] = [];
-    let sommeilsData: Event[] = [];
-    let bainsData: Event[] = [];
-    let temperaturesData: Event[] = [];
-    let medicamentsData: Event[] = [];
-    let symptomesData: Event[] = [];
-    let activitesData: Event[] = [];
-    let jalonsData: Event[] = [];
-
-    const merge = () => {
-      const merged = [
-        ...teteesData,
-        ...biberonsData,
-        ...solidesData,
-        ...pompagesData,
-        ...croissancesData,
-        ...mictionsData,
-        ...sellesData,
-        ...temperaturesData,
-        ...medicamentsData,
-        ...symptomesData,
-        ...vaccinsData,
-        ...vitaminesData,
-        ...sommeilsData,
-        ...bainsData,
-        ...activitesData,
-        ...jalonsData,
-      ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
-      setEvents(merged);
-      const allLoaded = Object.values(loaded).every(Boolean);
-      if (allLoaded) {
+    const unsubscribe = ecouterEvenementsHybrid(
+      activeChild.id,
+      (data) => {
+        const sorted = data.sort(
+          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        );
+        setEvents(sorted);
         hasInitialLoad.current = true;
         setLoading(false);
         setIsRefreshing(false);
@@ -1163,173 +1116,15 @@ export default function ChronoScreen() {
           duration: 300,
           useNativeDriver: true,
         }).start();
-      }
-    };
-
-    const unsubscribeTetees = ecouterTeteesHybrid(
-      activeChild.id,
-      (data) => {
-        teteesData = data;
-        loaded.tetees = true;
-        merge();
       },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeBiberons = ecouterBiberonsHybrid(
-      activeChild.id,
-      (data) => {
-        biberonsData = data;
-        loaded.biberons = true;
-        merge();
+      {
+        types: ALL_EVENT_TYPES,
+        depuis: since,
+        waitForServer: true,
       },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeSolides = ecouterSolidesHybrid(
-      activeChild.id,
-      (data) => {
-        solidesData = data;
-        loaded.solides = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribePompages = ecouterPompagesHybrid(
-      activeChild.id,
-      (data) => {
-        pompagesData = data;
-        loaded.pompages = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeCroissances = ecouterCroissancesHybrid(
-      activeChild.id,
-      (data) => {
-        croissancesData = data;
-        loaded.croissances = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeMictions = ecouterMictionsHybrid(
-      activeChild.id,
-      (data) => {
-        mictionsData = data;
-        loaded.mictions = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeSelles = ecouterSellesHybrid(
-      activeChild.id,
-      (data) => {
-        sellesData = data;
-        loaded.selles = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeVaccins = ecouterVaccinsHybrid(
-      activeChild.id,
-      (data) => {
-        vaccinsData = data;
-        loaded.vaccins = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeVitamines = ecouterVitaminesHybrid(
-      activeChild.id,
-      (data) => {
-        vitaminesData = data;
-        loaded.vitamines = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeSommeils = ecouterSommeilsHybrid(
-      activeChild.id,
-      (data) => {
-        sommeilsData = data;
-        loaded.sommeils = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeBains = ecouterBainsHybrid(
-      activeChild.id,
-      (data) => {
-        bainsData = data;
-        loaded.bains = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeTemperatures = ecouterTemperaturesHybrid(
-      activeChild.id,
-      (data) => {
-        temperaturesData = data;
-        loaded.temperatures = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeMedicaments = ecouterMedicamentsHybrid(
-      activeChild.id,
-      (data) => {
-        medicamentsData = data;
-        loaded.medicaments = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeSymptomes = ecouterSymptomesHybrid(
-      activeChild.id,
-      (data) => {
-        symptomesData = data;
-        loaded.symptomes = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeActivites = ecouterActivitesHybrid(
-      activeChild.id,
-      (data) => {
-        activitesData = data;
-        loaded.activites = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
-    );
-    const unsubscribeJalons = ecouterJalonsHybrid(
-      activeChild.id,
-      (data) => {
-        jalonsData = data;
-        loaded.jalons = true;
-        merge();
-      },
-      { depuis: since, waitForServer: true },
     );
 
-    return () => {
-      unsubscribeTetees();
-      unsubscribeBiberons();
-      unsubscribeSolides();
-      unsubscribePompages();
-      unsubscribeCroissances();
-      unsubscribeMictions();
-      unsubscribeSelles();
-      unsubscribeVaccins();
-      unsubscribeVitamines();
-      unsubscribeSommeils();
-      unsubscribeBains();
-      unsubscribeTemperatures();
-      unsubscribeMedicaments();
-      unsubscribeSymptomes();
-      unsubscribeActivites();
-      unsubscribeJalons();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return unsubscribe;
   }, [activeChild?.id, maxRange, currentDay, refreshTick]);
 
   // Reset on child change

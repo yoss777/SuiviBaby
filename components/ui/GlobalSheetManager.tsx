@@ -227,9 +227,14 @@ export const GlobalSheetManager = () => {
 
     // Handle milestones form
     if (isMilestonesFormProps(viewProps)) {
-      const { jalonType, editData } = viewProps;
+      const { jalonType, editData, onCancel } = viewProps;
       const isEditing = !!editData;
       const title = isEditing ? 'Modifier le jalon' : 'Nouveau jalon';
+
+      const handleCancel = () => {
+        closeSheet();
+        onCancel?.();
+      };
 
       return (
         <FormBottomSheet
@@ -240,14 +245,14 @@ export const GlobalSheetManager = () => {
           showActions={false}
           enablePanDownToClose={!isInPicker}
           onSubmit={() => {}}
-          onCancel={closeSheet}
-          onClose={closeSheet}
+          onCancel={handleCancel}
+          onClose={handleCancel}
         >
           <MilestonesForm
             key={formKey}
             initialType={jalonType}
             onSuccess={handleSuccess}
-            onCancel={closeSheet}
+            onCancel={handleCancel}
             isSubmitting={isSubmitting}
             setIsSubmitting={setIsSubmitting}
             onFormStepChange={handleFormStepChange}

@@ -113,48 +113,52 @@ export default function MomentsScreen() {
   }, []);
 
   // Data processing
-  const { moods, photoMilestones, currentMood } = useMemo(() => {
-    const moodEntries: MoodEntry[] = [];
-    const photos: PhotoMilestone[] = [];
-    let latestMood: MoodEntry | null = null;
+  const { moods, allPhotoMilestones, displayedPhotoMilestones, currentMood } =
+    useMemo(() => {
+      const moodEntries: MoodEntry[] = [];
+      const photos: PhotoMilestone[] = [];
+      let latestMood: MoodEntry | null = null;
 
-    events.forEach((event) => {
-      const eventDate = toDate(event.date);
+      events.forEach((event) => {
+        const eventDate = toDate(event.date);
 
-      // Moods
-      if (event.typeJalon === "humeur" && event.humeur) {
-        const entry: MoodEntry = {
-          id: event.id,
-          date: eventDate,
-          humeur: event.humeur as 1 | 2 | 3 | 4 | 5,
-        };
-        moodEntries.push(entry);
-        if (!latestMood || eventDate > latestMood.date) {
-          latestMood = entry;
+        // Moods
+        if (event.typeJalon === "humeur" && event.humeur) {
+          const entry: MoodEntry = {
+            id: event.id,
+            date: eventDate,
+            humeur: event.humeur as 1 | 2 | 3 | 4 | 5,
+          };
+          moodEntries.push(entry);
+          if (!latestMood || eventDate > latestMood.date) {
+            latestMood = entry;
+          }
         }
-      }
 
-      // Photos
-      if (event.photos && event.photos.length > 0) {
-        photos.push({
-          id: event.id,
-          date: eventDate,
-          photo: event.photos[0],
-          titre: event.titre,
-          description: event.description,
-          typeJalon: event.typeJalon,
-        });
-      }
-    });
+        // Photos
+        if (event.photos && event.photos.length > 0) {
+          photos.push({
+            id: event.id,
+            date: eventDate,
+            photo: event.photos[0],
+            titre: event.titre,
+            description: event.description,
+            typeJalon: event.typeJalon,
+          });
+        }
+      });
 
-    return {
-      moods: moodEntries,
-      photoMilestones: photos
-        .sort((a, b) => b.date.getTime() - a.date.getTime())
-        .slice(0, 3),
-      currentMood: latestMood,
-    };
-  }, [events]);
+      const sortedPhotos = photos.sort(
+        (a, b) => b.date.getTime() - a.date.getTime(),
+      );
+
+      return {
+        moods: moodEntries,
+        allPhotoMilestones: sortedPhotos,
+        displayedPhotoMilestones: sortedPhotos.slice(0, 3),
+        currentMood: latestMood,
+      };
+    }, [events]);
 
   // Get today's latest mood for hero card
   const todayMood = useMemo(() => {
@@ -166,8 +170,8 @@ export default function MomentsScreen() {
   const handleAddMilestone = useCallback(() => {
     openSheet({
       ownerId: sheetOwnerId,
-      formType: 'milestones',
-      jalonType: 'autre',
+      formType: "milestones",
+      jalonType: "autre",
       onSuccess: refreshToday,
     });
   }, [openSheet, refreshToday]);
@@ -197,16 +201,9 @@ export default function MomentsScreen() {
     }, [colorScheme, setHeaderRight, handleAddMilestone]),
   );
 
-  // Data loading
+  // Data loading - load all milestones (no date limit) to ensure we always have 3 photos
   useEffect(() => {
     if (!activeChild?.id) return;
-
-    // Load last 30 days of milestones
-    const endDate = new Date();
-    endDate.setHours(23, 59, 59, 999);
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
-    startDate.setHours(0, 0, 0, 0);
 
     const unsubscribe = ecouterJalonsHybrid(
       activeChild.id,
@@ -214,7 +211,7 @@ export default function MomentsScreen() {
         setEvents(data as MilestoneEventWithId[]);
         setLoaded(true);
       },
-      { waitForServer: true, depuis: startDate, jusqu: endDate },
+      { waitForServer: true },
     );
 
     return () => unsubscribe();
@@ -222,9 +219,9 @@ export default function MomentsScreen() {
 
   // Social interactions listener
   useEffect(() => {
-    if (!activeChild?.id || photoMilestones.length === 0) return;
+    if (!activeChild?.id || allPhotoMilestones.length === 0) return;
 
-    const eventIds = photoMilestones.map((p) => p.id);
+    const eventIds = allPhotoMilestones.map((p) => p.id);
 
     const unsubscribe = ecouterInteractionsSociales(
       activeChild.id,
@@ -234,7 +231,7 @@ export default function MomentsScreen() {
     );
 
     return () => unsubscribe();
-  }, [activeChild?.id, photoMilestones]);
+  }, [activeChild?.id, allPhotoMilestones]);
 
   // Navigation handlers
   const handleAddMood = useCallback(
@@ -266,8 +263,8 @@ export default function MomentsScreen() {
         // Sinon, on ouvre le modal
         openSheet({
           ownerId: sheetOwnerId,
-          formType: 'milestones',
-          jalonType: 'humeur',
+          formType: "milestones",
+          jalonType: "humeur",
           onSuccess: refreshToday,
         });
       }
@@ -278,41 +275,61 @@ export default function MomentsScreen() {
   const handleAddPhoto = useCallback(() => {
     openSheet({
       ownerId: sheetOwnerId,
-      formType: 'milestones',
-      jalonType: 'photo',
+      formType: "milestones",
+      jalonType: "photo",
       onSuccess: refreshToday,
     });
   }, [openSheet, refreshToday]);
 
   const handlePhotoPress = useCallback(
     (photo: PhotoMilestone) => {
-      const index = photoMilestones.findIndex((p) => p.id === photo.id);
+      const index = allPhotoMilestones.findIndex((p) => p.id === photo.id);
       setGalleryInitialIndex(index >= 0 ? index : 0);
       setGalleryVisible(true);
     },
-    [photoMilestones],
+    [allPhotoMilestones],
   );
 
   const handleSeeAll = useCallback(() => {
-    // Open gallery on the most recent photo (index 0)
-    setGalleryInitialIndex(0);
-    setGalleryVisible(true);
+    // Navigate to the gallery screen
+    router.push("/baby/gallery");
   }, []);
 
   // Edit photo handler - finds the full event and opens form sheet
   const handleEditPhoto = useCallback(
-    (photoId: string) => {
+    (photoId: string, photoIndex: number) => {
       const event = events.find((e) => e.id === photoId);
       if (!event) return;
 
+      // Callback to reopen gallery at the same position when user cancels
+      const reopenGallery = () => {
+        setGalleryInitialIndex(photoIndex);
+        setGalleryVisible(true);
+      };
+
       openSheet({
         ownerId: sheetOwnerId,
-        formType: 'milestones',
-        jalonType: event.typeJalon as "dent" | "pas" | "sourire" | "mot" | "humeur" | "photo" | "autre",
+        formType: "milestones",
+        jalonType: event.typeJalon as
+          | "dent"
+          | "pas"
+          | "sourire"
+          | "mot"
+          | "humeur"
+          | "photo"
+          | "autre",
         onSuccess: refreshToday,
+        onCancel: reopenGallery,
         editData: {
           id: event.id,
-          typeJalon: event.typeJalon as "dent" | "pas" | "sourire" | "mot" | "humeur" | "photo" | "autre",
+          typeJalon: event.typeJalon as
+            | "dent"
+            | "pas"
+            | "sourire"
+            | "mot"
+            | "humeur"
+            | "photo"
+            | "autre",
           titre: event.titre,
           description: event.description,
           note: event.note,
@@ -338,14 +355,19 @@ export default function MomentsScreen() {
     [activeChild?.id, userName, showToast],
   );
 
-
   const handleDownload = useCallback(
-    async (photoId: string, uri: string): Promise<{ success: boolean; message: string }> => {
+    async (
+      photoId: string,
+      uri: string,
+    ): Promise<{ success: boolean; message: string }> => {
       try {
         // Demander la permission d'accès à la galerie (addOnly pour iOS)
         const { status } = await MediaLibrary.requestPermissionsAsync(false);
         if (status !== "granted") {
-          return { success: false, message: "Permission refusée pour accéder à la galerie" };
+          return {
+            success: false,
+            message: "Permission refusée pour accéder à la galerie",
+          };
         }
 
         // Télécharger l'image localement
@@ -359,15 +381,23 @@ export default function MomentsScreen() {
           await MediaLibrary.createAssetAsync(downloadResult.uri);
 
           // Nettoyer le fichier temporaire
-          await FileSystem.deleteAsync(downloadResult.uri, { idempotent: true });
+          await FileSystem.deleteAsync(downloadResult.uri, {
+            idempotent: true,
+          });
 
-          return { success: true, message: "Photo enregistrée dans la galerie" };
+          return {
+            success: true,
+            message: "Photo enregistrée dans la galerie",
+          };
         } else {
           return { success: false, message: "Échec du téléchargement" };
         }
       } catch (error) {
         console.error("Erreur lors du téléchargement:", error);
-        return { success: false, message: "Impossible de télécharger la photo" };
+        return {
+          success: false,
+          message: "Impossible de télécharger la photo",
+        };
       }
     },
     [],
@@ -422,11 +452,12 @@ export default function MomentsScreen() {
           {/* Polaroid Gallery */}
           <Animated.View entering={FadeInUp.delay(350).springify()}>
             <PolaroidGallery
-              photos={photoMilestones}
+              photos={displayedPhotoMilestones}
               onPhotoPress={handlePhotoPress}
               onAddPhoto={handleAddPhoto}
               onSeeAll={handleSeeAll}
               likesInfo={likesInfo}
+              commentCounts={commentCounts}
             />
           </Animated.View>
 
@@ -445,7 +476,7 @@ export default function MomentsScreen() {
 
       {/* Swipe Gallery */}
       <SwipeGallery
-        photos={photoMilestones.map((p) => ({
+        photos={allPhotoMilestones.map((p) => ({
           id: p.id,
           uri: p.photo,
           date: p.date,
@@ -483,6 +514,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 16,
     paddingBottom: 20,
+    paddingHorizontal: 4,
   },
   loadingContainer: {
     flex: 1,

@@ -1,10 +1,8 @@
 import { eventColors } from "@/constants/eventColors";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { router } from "expo-router";
 import { useEffect, useMemo } from "react";
 import {
   Dimensions,
-  FlatList,
   Image,
   Pressable,
   StyleSheet,
@@ -44,6 +42,7 @@ type PolaroidGalleryProps = {
   onAddPhoto: () => void;
   onSeeAll?: () => void;
   likesInfo?: Record<string, LikeInfo>;
+  commentCounts?: Record<string, number>;
 };
 
 const formatDateShort = (date: Date) =>
@@ -60,12 +59,14 @@ const PolaroidCard = ({
   onPress,
   onLongPress,
   isLikedByMe,
+  hasComments,
 }: {
   photo: PhotoMilestone;
   index: number;
   onPress: () => void;
   onLongPress: () => void;
   isLikedByMe?: boolean;
+  hasComments?: boolean;
 }) => {
   // Random rotation for each card
   const rotation = useMemo(() => {
@@ -83,10 +84,7 @@ const PolaroidCard = ({
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    transform: [
-      { scale: scale.value },
-      { rotate: `${rotation}deg` },
-    ],
+    transform: [{ scale: scale.value }, { rotate: `${rotation}deg` }],
   }));
 
   return (
@@ -102,9 +100,23 @@ const PolaroidCard = ({
       >
         <View style={styles.polaroidImageContainer}>
           <Image source={{ uri: photo.photo }} style={styles.polaroidImage} />
-          {isLikedByMe && (
-            <View style={styles.likeOverlay}>
-              <FontAwesome6 name="heart" size={14} color="#ef4444" solid />
+          {(isLikedByMe || hasComments) && (
+            <View style={styles.overlayContainer}>
+              {hasComments && (
+                <View style={styles.iconOverlay}>
+                  <FontAwesome6
+                    name="comment"
+                    size={12}
+                    color="#0a7ea4"
+                    solid
+                  />
+                </View>
+              )}
+              {isLikedByMe && (
+                <View style={styles.iconOverlay}>
+                  <FontAwesome6 name="heart" size={12} color="#ef4444" solid />
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -155,6 +167,7 @@ export const PolaroidGallery = ({
   onAddPhoto,
   onSeeAll,
   likesInfo = {},
+  commentCounts = {},
 }: PolaroidGalleryProps) => {
   // Show max 3 photos + add button at the end (4 items total)
   const displayPhotos = photos.slice(0, 3);
@@ -164,10 +177,7 @@ export const PolaroidGallery = ({
       <View style={styles.header}>
         <Text style={styles.title}>Souvenirs</Text>
         {photos.length > 0 && onSeeAll && (
-          <Pressable
-            onPress={onSeeAll}
-            style={styles.seeAllButton}
-          >
+          <Pressable onPress={onSeeAll} style={styles.seeAllButton}>
             <Text style={styles.seeAllText}>Voir tout</Text>
             <FontAwesome6
               name="chevron-right"
@@ -185,7 +195,12 @@ export const PolaroidGallery = ({
             <EmptyPolaroid onPress={onAddPhoto} />
             <View style={[styles.polaroidWrapper, { opacity: 0.3 }]}>
               <View style={[styles.polaroid, styles.emptyPolaroid]}>
-                <View style={[styles.polaroidImageContainer, styles.emptyImageContainer]}>
+                <View
+                  style={[
+                    styles.polaroidImageContainer,
+                    styles.emptyImageContainer,
+                  ]}
+                >
                   <FontAwesome6 name="images" size={24} color="#e5e7eb" />
                 </View>
                 <View style={styles.polaroidCaption}>
@@ -206,6 +221,7 @@ export const PolaroidGallery = ({
                 onPress={() => onPhotoPress(photo)}
                 onLongPress={() => onPhotoLongPress?.(photo)}
                 isLikedByMe={likesInfo[photo.id]?.likedByMe}
+                hasComments={(commentCounts[photo.id] ?? 0) > 0}
               />
             ))}
             {/* Add button always at the end */}
@@ -292,13 +308,17 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  likeOverlay: {
+  overlayContainer: {
     position: "absolute",
     top: 6,
     right: 6,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    flexDirection: "row",
+    gap: 4,
+  },
+  iconOverlay: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: "rgba(255, 255, 255, 0.9)",
     alignItems: "center",
     justifyContent: "center",

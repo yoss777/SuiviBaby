@@ -135,6 +135,29 @@ export function ecouterEvenementsDuJourHybrid(
   });
 }
 
+/**
+ * Listener hybride unifié pour tous les types d'événements avec plage de dates configurable.
+ * Remplace les 16 listeners individuels par un seul listener.
+ * Utilisé par chrono.tsx pour la timeline.
+ */
+export function ecouterEvenementsHybrid(
+  childId: string,
+  callback: (events: any[]) => void,
+  options: {
+    types: EventType[];
+    depuis: Date;
+    jusqu?: Date;
+    waitForServer?: boolean;
+  }
+): () => void {
+  return ecouterEvenements(childId, callback, {
+    type: options.types,
+    depuis: options.depuis,
+    jusqu: options.jusqu,
+    waitForServer: options.waitForServer,
+  });
+}
+
 // ============================================
 // DÉTECTION DE DOUBLONS
 // ============================================

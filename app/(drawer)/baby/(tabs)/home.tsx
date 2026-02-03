@@ -5,8 +5,8 @@ import {
   StatsGroup,
   type StatItem,
 } from "@/components/suivibaby/dashboard";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import {
   categoryColors,
   itemColors,
@@ -37,6 +37,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
+import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -49,7 +50,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { useHeaderRight } from "../../_layout";
 
 // ============================================
@@ -100,6 +100,8 @@ interface MealsStats {
     lastTime?: string;
     lastTimestamp?: number;
   };
+  /** Last meal timestamp across all days (not just today) */
+  lastAbsoluteTimestamp?: number;
 }
 
 interface TodayStats {
@@ -116,8 +118,18 @@ interface TodayStats {
     lastTime?: string;
     lastTimestamp?: number;
   };
-  mictions: { count: number; lastTime?: string; lastTimestamp?: number };
-  selles: { count: number; lastTime?: string; lastTimestamp?: number };
+  mictions: {
+    count: number;
+    lastTime?: string;
+    lastTimestamp?: number;
+    lastAbsoluteTimestamp?: number;
+  };
+  selles: {
+    count: number;
+    lastTime?: string;
+    lastTimestamp?: number;
+    lastAbsoluteTimestamp?: number;
+  };
   vitamines: { count: number; lastTime?: string; lastTimestamp?: number };
   vaccins: { count: number; lastTime?: string; lastTimestamp?: number };
 }
@@ -876,6 +888,7 @@ export default function HomeDashboard() {
   const alimentationGroup = useMemo((): {
     summary: string;
     timeSince?: string;
+    timeSinceLabel?: string;
     lastTime?: string;
     items: StatItem[];
   } => {
@@ -883,15 +896,14 @@ export default function HomeDashboard() {
     const biberonQty = todayStats.meals.biberons.quantity;
     const pompageQty = todayStats.pompages.quantity;
 
-    // Find most recent timestamp across all feeding types
-    const timestamps = [
-      todayStats.meals.total.lastTimestamp,
-      todayStats.pompages.lastTimestamp,
-    ].filter((t): t is number => !!t);
-    const mostRecent =
-      timestamps.length > 0 ? Math.max(...timestamps) : undefined;
+    // Use only meals timestamp (not pompages) for "il y a" display
+    const mealsTimestampToday = todayStats.meals.total.lastTimestamp;
+    const displayTimestamp =
+      mealsTimestampToday ?? todayStats.meals.lastAbsoluteTimestamp;
     const lastTime =
-      mostRecent !== undefined ? formatTime(new Date(mostRecent)) : undefined;
+      displayTimestamp !== undefined
+        ? formatTime(new Date(displayTimestamp))
+        : undefined;
 
     const summaryParts = [`${totalCount} repas`];
     if (biberonQty > 0) summaryParts.push(`${biberonQty}ml bib.`);
@@ -899,7 +911,7 @@ export default function HomeDashboard() {
 
     return {
       summary: summaryParts.join(" • "),
-      timeSince: getTimeSince(mostRecent),
+      timeSince: getTimeSince(displayTimestamp),
       lastTime,
       items: [
         {
@@ -959,6 +971,7 @@ export default function HomeDashboard() {
   const santeGroup = useMemo((): {
     summary: string;
     timeSince?: string;
+    timeSinceLabel?: string;
     lastTime?: string;
     isWarning: boolean;
     items: StatItem[];
@@ -990,17 +1003,29 @@ export default function HomeDashboard() {
 
     const isWarning = !!(mictionWarning || selleWarning);
 
-    // Find most recent timestamp
-    const timestamps = [
+    // Use only changes (mictions/selles) timestamp for "il y a" display (not vitamines/vaccins)
+    const changesTimestampsToday = [
       todayStats.mictions.lastTimestamp,
       todayStats.selles.lastTimestamp,
-      todayStats.vitamines.lastTimestamp,
-      todayStats.vaccins.lastTimestamp,
     ].filter((t): t is number => !!t);
-    const mostRecent =
-      timestamps.length > 0 ? Math.max(...timestamps) : undefined;
+    const mostRecentChangeToday =
+      changesTimestampsToday.length > 0 ? Math.max(...changesTimestampsToday) : undefined;
+
+    // Use absolute timestamp for mictions/selles if no activity today
+    const absoluteTimestamps = [
+      todayStats.mictions.lastAbsoluteTimestamp,
+      todayStats.selles.lastAbsoluteTimestamp,
+    ].filter((t): t is number => !!t);
+    const mostRecentAbsolute =
+      absoluteTimestamps.length > 0
+        ? Math.max(...absoluteTimestamps)
+        : undefined;
+
+    const displayTimestamp = mostRecentChangeToday ?? mostRecentAbsolute;
     const lastTime =
-      mostRecent !== undefined ? formatTime(new Date(mostRecent)) : undefined;
+      displayTimestamp !== undefined
+        ? formatTime(new Date(displayTimestamp))
+        : undefined;
 
     const summaryParts = [
       `${mictionCount + selleCount} change${mictionCount + selleCount > 1 ? "s" : ""}`,
@@ -1010,16 +1035,16 @@ export default function HomeDashboard() {
 
     return {
       summary: summaryParts.join(" • "),
-      timeSince: getTimeSince(mostRecent),
+      timeSince: getTimeSince(displayTimestamp),
       lastTime,
       isWarning,
       items: [
         {
           key: "mictions",
-          label: "Pipis",
+          label: "Mictions",
           value: mictionCount,
           unit: "fois",
-          icon: "droplet",
+          icon: "water",
           color: itemColors.miction,
           lastTimestamp: todayStats.mictions.lastTimestamp,
           onPress: () =>
@@ -1885,7 +1910,7 @@ export default function HomeDashboard() {
           )
         : null;
 
-    // Calculer les dernières activités
+    // Calculer les dernières activités (aujourd'hui)
     const lastMiction =
       todayMictions.length > 0
         ? todayMictions.reduce((latest, current) =>
@@ -1898,6 +1923,39 @@ export default function HomeDashboard() {
     const lastSelle =
       todaySelles.length > 0
         ? todaySelles.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest,
+          )
+        : null;
+
+    // Calculer le dernier événement absolu (tous jours confondus) pour alimentation et santé
+    const allMealsAbsolute = [
+      ...data.tetees,
+      ...data.biberons,
+      ...data.solides,
+    ];
+    const lastMealAbsolute =
+      allMealsAbsolute.length > 0
+        ? allMealsAbsolute.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest,
+          )
+        : null;
+
+    const lastMictionAbsolute =
+      data.mictions.length > 0
+        ? data.mictions.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest,
+          )
+        : null;
+
+    const lastSelleAbsolute =
+      data.selles.length > 0
+        ? data.selles.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
               : latest,
@@ -1956,6 +2014,7 @@ export default function HomeDashboard() {
           lastTime: formatTime(lastBiberons),
           lastTimestamp: getTimestamp(lastBiberons),
         },
+        lastAbsoluteTimestamp: getTimestamp(lastMealAbsolute),
       },
       pompages: {
         count: todayPompages.length,
@@ -1973,11 +2032,13 @@ export default function HomeDashboard() {
         count: todayMictions.length,
         lastTime: formatTime(lastMiction),
         lastTimestamp: getTimestamp(lastMiction),
+        lastAbsoluteTimestamp: getTimestamp(lastMictionAbsolute),
       },
       selles: {
         count: todaySelles.length,
         lastTime: formatTime(lastSelle),
         lastTimestamp: getTimestamp(lastSelle),
+        lastAbsoluteTimestamp: getTimestamp(lastSelleAbsolute),
       },
       vitamines: {
         count: todayVitamines.length,
@@ -2082,6 +2143,7 @@ export default function HomeDashboard() {
             summary={alimentationGroup.summary}
             lastActivity={alimentationGroup.lastTime}
             timeSince={alimentationGroup.timeSince}
+            timeSinceLabel={alimentationGroup.timeSinceLabel}
             items={alimentationGroup.items}
             currentTime={currentTime}
             onAddPress={() =>
@@ -2122,6 +2184,7 @@ export default function HomeDashboard() {
             summary={santeGroup.summary}
             lastActivity={santeGroup.lastTime}
             timeSince={santeGroup.timeSince}
+            timeSinceLabel={santeGroup.timeSinceLabel}
             isWarning={santeGroup.isWarning}
             items={santeGroup.items}
             currentTime={currentTime}
@@ -2228,6 +2291,7 @@ export default function HomeDashboard() {
       <View>
         <RecentEventsList
           events={recentEvents}
+          loading={!isDataLoaded}
           showHint={showRecentHint}
           colorScheme={colorScheme}
           currentTime={currentTime}
