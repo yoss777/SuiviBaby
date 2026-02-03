@@ -51,6 +51,12 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderRight } from "../../_layout";
+import {
+  OMS_MAX_DAY,
+  OMS_PERCENTILES,
+  OMSMetric,
+  OMSSex,
+} from "@/constants/omsPercentiles";
 
 type CroissanceEntry = {
   id: string;
@@ -151,6 +157,35 @@ function createFillPath(points: { x: number; y: number }[]) {
   return path;
 }
 
+function createBandPath(
+  upper: { x: number; y: number }[],
+  lower: { x: number; y: number }[],
+) {
+  if (upper.length === 0 || lower.length === 0) return "";
+  const path = Skia.Path.Make();
+  path.moveTo(upper[0].x, upper[0].y);
+  for (let i = 1; i < upper.length; i += 1) {
+    path.lineTo(upper[i].x, upper[i].y);
+  }
+  for (let i = lower.length - 1; i >= 0; i -= 1) {
+    path.lineTo(lower[i].x, lower[i].y);
+  }
+  path.close();
+  return path;
+}
+
+function parseBirthDate(value?: string | null): Date | null {
+  if (!value) return null;
+  const [day, month, year] = value.split("/").map((part) => Number(part));
+  if (!day || !month || !year) return null;
+  return new Date(year, month - 1, day);
+}
+
+function getAgeInDays(birthDate: Date, target: Date) {
+  const ms = target.getTime() - birthDate.getTime();
+  return Math.round(ms / 86_400_000);
+}
+
 export default function CroissanceScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
@@ -204,6 +239,24 @@ export default function CroissanceScreen() {
       violetSoft: "#f1eaff",
       amber: "#f59e0b",
       amberSoft: "#fff3cd",
+    }),
+    [colorScheme],
+  );
+
+  const omsPalette = useMemo(
+    () => ({
+      bandOuter:
+        colorScheme === "dark"
+          ? "rgba(255, 255, 255, 0.05)"
+          : "rgba(15, 23, 42, 0.05)",
+      bandInner:
+        colorScheme === "dark"
+          ? "rgba(255, 255, 255, 0.08)"
+          : "rgba(15, 23, 42, 0.08)",
+      line:
+        colorScheme === "dark"
+          ? "rgba(255, 255, 255, 0.24)"
+          : "rgba(15, 23, 42, 0.22)",
     }),
     [colorScheme],
   );
@@ -531,6 +584,12 @@ export default function CroissanceScreen() {
       .sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [entries, metric]);
 
+  const birthDate = useMemo(
+    () => parseBirthDate(activeChild?.birthDate),
+    [activeChild?.birthDate],
+  );
+  const omsSex = activeChild?.gender ?? null;
+
   const labels = metricEntries.map((entry) =>
     entry.date.toLocaleDateString("fr-FR", {
       day: "2-digit",
@@ -562,19 +621,62 @@ export default function CroissanceScreen() {
     );
   }, [chartWidth, labels.length]);
 
-  const { chartPoints, yAxisLabels, maxValue } = useMemo(() => {
+  const { chartPoints, yAxisLabels, maxValue, oms } = useMemo(() => {
     if (!hasData || plotWidth <= 0) {
       return {
         chartPoints: [] as ChartPoint[],
         yAxisLabels: [] as { value: number; y: number }[],
         maxValue: 0,
+        oms: null as null | {
+          lines: Record<
+            "p3" | "p15" | "p50" | "p85" | "p97",
+            { x: number; y: number }[]
+          >;
+          bands: { upper: { x: number; y: number }[]; lower: { x: number; y: number }[] }[];
+        },
       };
     }
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-    const range = Math.max(max - min, 1);
-    const paddedMin = Math.max(0, min - range * 0.15);
-    const paddedMax = max + range * 0.15;
+    const ageDays =
+      birthDate && omsSex
+        ? metricEntries.map((entry) => getAgeInDays(birthDate, entry.date))
+        : null;
+    const omsAvailable =
+      ageDays &&
+      ageDays.length === values.length &&
+      ageDays.every((day) => day >= 0 && day <= OMS_MAX_DAY);
+    const omsSource =
+      omsAvailable && omsSex
+        ? OMS_PERCENTILES[omsSex as OMSSex][metric as OMSMetric]
+        : null;
+    const omsValues = omsSource
+      ? {
+          p3: ageDays!.map((day) => omsSource.p3[day]),
+          p15: ageDays!.map((day) => omsSource.p15[day]),
+          p50: ageDays!.map((day) => omsSource.p50[day]),
+          p85: ageDays!.map((day) => omsSource.p85[day]),
+          p97: ageDays!.map((day) => omsSource.p97[day]),
+        }
+      : null;
+
+    const rangeValues = [
+      ...values,
+      ...(omsValues
+        ? [
+            ...omsValues.p3,
+            ...omsValues.p15,
+            ...omsValues.p50,
+            ...omsValues.p85,
+            ...omsValues.p97,
+          ]
+        : []),
+    ];
+
+    const rangeMax = Math.max(...rangeValues);
+    const rangeMin = Math.min(...rangeValues);
+    const babyMax = Math.max(...values);
+    const range = Math.max(rangeMax - rangeMin, 1);
+    const paddedMin = Math.max(0, rangeMin - range * 0.15);
+    const paddedMax = rangeMax + range * 0.15;
     const chartAreaHeight =
       CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
     const spacing =
@@ -595,13 +697,62 @@ export default function CroissanceScreen() {
       labelFull: labelsFull[index] ?? "",
     }));
 
+    const omsLines = omsValues
+      ? {
+          p3: omsValues.p3.map((value, index) => ({
+            x: CHART_PADDING.left + spacing * index,
+            y: toY(value),
+          })),
+          p15: omsValues.p15.map((value, index) => ({
+            x: CHART_PADDING.left + spacing * index,
+            y: toY(value),
+          })),
+          p50: omsValues.p50.map((value, index) => ({
+            x: CHART_PADDING.left + spacing * index,
+            y: toY(value),
+          })),
+          p85: omsValues.p85.map((value, index) => ({
+            x: CHART_PADDING.left + spacing * index,
+            y: toY(value),
+          })),
+          p97: omsValues.p97.map((value, index) => ({
+            x: CHART_PADDING.left + spacing * index,
+            y: toY(value),
+          })),
+        }
+      : null;
+
+    const omsBands = omsLines
+      ? [
+          { upper: omsLines.p15, lower: omsLines.p3 },
+          { upper: omsLines.p50, lower: omsLines.p15 },
+          { upper: omsLines.p85, lower: omsLines.p50 },
+          { upper: omsLines.p97, lower: omsLines.p85 },
+        ]
+      : [];
+
     const yLabels = Array.from({ length: 4 }, (_, i) => {
       const val = paddedMin + ((paddedMax - paddedMin) / 3) * i;
       return { value: Number.parseFloat(val.toFixed(1)), y: toY(val) };
     }).reverse();
 
-    return { chartPoints: points, yAxisLabels: yLabels, maxValue: max };
-  }, [hasData, labels, labelsFull, plotWidth, values]);
+    return {
+      chartPoints: points,
+      yAxisLabels: yLabels,
+      maxValue: babyMax,
+      oms: omsLines ? { lines: omsLines, bands: omsBands } : null,
+    };
+  }, [
+    birthDate,
+    hasData,
+    labels,
+    labelsFull,
+    metric,
+    metricEntries,
+    omsSex,
+    plotWidth,
+    values,
+  ]);
 
   const linePath = useMemo(() => createSmoothPath(chartPoints), [chartPoints]);
   const fillPath = useMemo(() => createFillPath(chartPoints), [chartPoints]);
@@ -849,6 +1000,18 @@ export default function CroissanceScreen() {
                               />
                             </RoundedRect>
 
+                            {oms?.bands.map((band, index) => (
+                              <Path
+                                key={`oms-band-${index}`}
+                                path={createBandPath(band.upper, band.lower)}
+                                color={
+                                  index === 0 || index === 3
+                                    ? omsPalette.bandOuter
+                                    : omsPalette.bandInner
+                                }
+                              />
+                            ))}
+
                             {yAxisLabels.map((label, index) => (
                               <SkiaLine
                                 key={`grid-${index}`}
@@ -861,6 +1024,22 @@ export default function CroissanceScreen() {
                                 strokeWidth={1}
                               />
                             ))}
+
+                            {oms ? (
+                              <>
+                                {(["p3", "p15", "p50", "p85", "p97"] as const).map(
+                                  (key) => (
+                                    <Path
+                                      key={`oms-line-${key}`}
+                                      path={createSmoothPath(oms.lines[key])}
+                                      style="stroke"
+                                      strokeWidth={1.5}
+                                      color={omsPalette.line}
+                                    />
+                                  ),
+                                )}
+                              </>
+                            ) : null}
 
                             <Path path={fillPath}>
                               <LinearGradient
