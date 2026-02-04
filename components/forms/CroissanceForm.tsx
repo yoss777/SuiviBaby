@@ -13,6 +13,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
@@ -85,6 +86,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
+  const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
 
   const isEditing = !!editData;
@@ -151,9 +153,11 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
       if (editData) {
         await modifierCroissance(activeChild.id, editData.id, data);
         showToast("Mesure modifiée");
+        showSuccess("growth", "Mesure modifiée");
       } else {
         await ajouterCroissance(activeChild.id, data);
         showToast("Mesure ajoutée");
+        showSuccess("growth", "Mesure ajoutée");
       }
 
       onSuccess?.();
@@ -176,6 +180,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
           setIsSubmitting(true);
           await supprimerCroissance(activeChild.id, editData.id);
           showToast("Mesure supprimée");
+          showSuccess("growth", "Mesure supprimée");
           onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);

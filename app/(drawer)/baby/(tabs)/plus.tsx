@@ -67,7 +67,7 @@ const ITEMS = [
   {
     title: "Couches",
     subtitle: "Mictions et selles",
-    icon: "baby",
+    icon: "toilet",
     color: "#17a2b8",
     route: "/baby/diapers",
   },

@@ -2,6 +2,7 @@ import { Colors } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -189,6 +190,7 @@ export function SoinsForm({
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
+  const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
 
   const isEditing = !!editData;
@@ -560,6 +562,7 @@ export function SoinsForm({
               modePrise: temperatureMode,
             }));
             showToast("Température modifiée");
+            showSuccess("temperature", "Température modifiée");
           } else {
             const list = [...symptomes];
             if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
@@ -574,6 +577,7 @@ export function SoinsForm({
               intensite: symptomeIntensite,
             }));
             showToast("Symptôme modifié");
+            showSuccess("symptome", "Symptôme modifié");
           }
         } else {
           if (!includeTemperature && !includeSymptome) {
@@ -599,6 +603,7 @@ export function SoinsForm({
               modePrise: temperatureMode,
             }));
             showToast("Température enregistrée");
+            showSuccess("temperature", "Température enregistrée");
           }
           if (includeSymptome) {
             const list = [...symptomes];
@@ -614,6 +619,7 @@ export function SoinsForm({
               intensite: symptomeIntensite,
             }));
             showToast("Symptôme enregistré");
+            showSuccess("symptome", "Symptôme enregistré");
           }
         }
       } else if (selectedType === "medicament") {
@@ -630,6 +636,7 @@ export function SoinsForm({
             voie: medicamentVoie,
           }));
           showToast("Médicament modifié");
+          showSuccess("medicament", "Médicament modifié");
         } else {
           await ajouterMedicament(activeChild.id, removeUndefined({
             ...common,
@@ -638,6 +645,7 @@ export function SoinsForm({
             voie: medicamentVoie,
           }));
           showToast("Médicament enregistré");
+          showSuccess("medicament", "Médicament enregistré");
         }
       } else if (selectedType === "vaccin") {
         const normalizedVaccinName =
@@ -655,6 +663,7 @@ export function SoinsForm({
             dosage: finalDosage,
           }));
           showToast("Vaccin modifié");
+          showSuccess("vaccine", "Vaccin modifié");
         } else {
           await ajouterVaccin(activeChild.id, removeUndefined({
             ...common,
@@ -662,6 +671,7 @@ export function SoinsForm({
             dosage: finalDosage,
           }));
           showToast("Vaccin enregistré");
+          showSuccess("vaccine", "Vaccin enregistré");
         }
       } else if (selectedType === "vitamine") {
         const normalizedVitamineName =
@@ -682,6 +692,7 @@ export function SoinsForm({
             dosage: computedDosage,
           }));
           showToast("Vitamine modifiée");
+          showSuccess("vitamin", "Vitamine modifiée");
         } else {
           await ajouterVitamine(activeChild.id, removeUndefined({
             ...common,
@@ -689,6 +700,7 @@ export function SoinsForm({
             dosage: computedDosage,
           }));
           showToast("Vitamine enregistrée");
+          showSuccess("vitamin", "Vitamine enregistrée");
         }
       }
 
@@ -713,18 +725,23 @@ export function SoinsForm({
           if (editData.type === "temperature") {
             await supprimerTemperature(activeChild.id, editData.id);
             showToast("Température supprimée");
+            showSuccess("temperature", "Température supprimée");
           } else if (editData.type === "medicament") {
             await supprimerMedicament(activeChild.id, editData.id);
             showToast("Médicament supprimé");
+            showSuccess("medicament", "Médicament supprimé");
           } else if (editData.type === "symptome") {
             await supprimerSymptome(activeChild.id, editData.id);
             showToast("Symptôme supprimé");
+            showSuccess("symptome", "Symptôme supprimé");
           } else if (editData.type === "vaccin") {
             await supprimerVaccin(activeChild.id, editData.id);
             showToast("Vaccin supprimé");
+            showSuccess("vaccine", "Vaccin supprimé");
           } else if (editData.type === "vitamine") {
             await supprimerVitamine(activeChild.id, editData.id);
             showToast("Vitamine supprimée");
+            showSuccess("vitamin", "Vitamine supprimée");
           }
           onDelete?.();
         } catch (error) {

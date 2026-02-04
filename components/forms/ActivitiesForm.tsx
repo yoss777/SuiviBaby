@@ -13,6 +13,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
@@ -147,6 +148,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
+  const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
 
   const isEditing = !!editData;
@@ -201,9 +203,11 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       if (editData) {
         await modifierActivite(activeChild.id, editData.id, data);
         showToast("Activité modifiée");
+        showSuccess("activity", "Activité modifiée");
       } else {
         await ajouterActivite(activeChild.id, data);
         showToast("Activité ajoutée");
+        showSuccess("activity", "Activité ajoutée");
       }
 
       onSuccess?.();
@@ -224,9 +228,10 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerActivite(activeChild.id, editData.id);
-          showToast("Activité supprimée");
-          onDelete?.();
+        await supprimerActivite(activeChild.id, editData.id);
+        showToast("Activité supprimée");
+        showSuccess("activity", "Activité supprimée");
+        onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);
           showAlert("Erreur", "Impossible de supprimer.");

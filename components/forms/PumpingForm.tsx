@@ -2,6 +2,7 @@ import { Colors } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -61,6 +62,7 @@ export function PumpingForm({
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
+  const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
 
   const isEditing = !!editData;
@@ -193,9 +195,11 @@ export function PumpingForm({
       if (isEditing && editData) {
         await modifierPompage(activeChild.id, editData.id, data);
         showToast("Session modifiée");
+        showSuccess("pumping", "Session modifiée");
       } else {
         await ajouterPompage(activeChild.id, data);
         showToast("Session enregistrée");
+        showSuccess("pumping", "Session enregistrée");
       }
 
       onSuccess();
@@ -219,6 +223,7 @@ export function PumpingForm({
           setIsSubmitting(true);
           await supprimerPompage(activeChild.id, editData.id);
           showToast("Session supprimée");
+          showSuccess("pumping", "Session supprimée");
           onDelete?.();
         } catch (error) {
           console.error("Erreur lors de la suppression:", error);

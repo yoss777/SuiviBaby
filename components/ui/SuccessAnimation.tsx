@@ -59,7 +59,9 @@ export function SuccessAnimation({
       // Auto-dismiss après 1.5s avec fade out
       const dismissTimer = setTimeout(() => {
         blurOpacity.value = withTiming(0, { duration: 300 });
-        opacity.value = withTiming(0, { duration: 300 }, (finished) => {
+        scale.value = withTiming(0, { duration: 250 });
+        checkScale.value = withTiming(0, { duration: 200 });
+        opacity.value = withTiming(0, { duration: 250 }, (finished) => {
           if (finished && onComplete) {
             runOnJS(onComplete)();
           }
@@ -86,6 +88,9 @@ export function SuccessAnimation({
     opacity: blurOpacity.value,
   }));
 
+  const messageBackground = hexToRgba(color, 0.32);
+  const messageBorder = hexToRgba(color, 0.5);
+
   if (!visible) return null;
 
   return (
@@ -108,7 +113,15 @@ export function SuccessAnimation({
             </Animated.View>
           </View>
           {message && (
-            <View style={styles.messageContainer}>
+            <View
+              style={[
+                styles.messageContainer,
+                { backgroundColor: messageBackground, borderColor: messageBorder },
+              ]}
+            >
+              {Platform.OS === 'ios' && (
+                <BlurView intensity={20} style={styles.messageBlur} />
+              )}
               <Text style={styles.messageText}>{message}</Text>
             </View>
           )}
@@ -155,9 +168,10 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    borderRadius: 12,
+    borderRadius: 14,
+    borderWidth: 1,
     maxWidth: 280,
+    overflow: 'hidden',
   },
   messageText: {
     color: '#fff',
@@ -165,4 +179,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  messageBlur: {
+    ...StyleSheet.absoluteFillObject,
+  },
 });
+
+function hexToRgba(hex: string, alpha: number) {
+  const normalized = hex.replace('#', '');
+  if (normalized.length !== 6) {
+    return `rgba(0, 0, 0, ${alpha})`;
+  }
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

@@ -2,6 +2,7 @@
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -133,6 +134,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
+  const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
 
   const isEditing = !!editData;
@@ -314,9 +316,11 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         if (editData && editData.type === "bain") {
           await modifierBain(activeChild.id, editData.id, data);
           showToast("Bain modifié");
+          showSuccess("bath", "Bain modifié");
         } else {
           await ajouterBain(activeChild.id, data);
           showToast("Bain ajouté");
+          showSuccess("bath", "Bain ajouté");
         }
       } else {
         // Sommeil
@@ -371,6 +375,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           );
           await modifierSommeil(activeChild.id, editData.id, cleanedEditData);
           showToast("Sommeil modifié");
+          showSuccess("sleep", "Sommeil modifié");
         } else {
           // For new entries, just remove undefined values
           const data = removeUndefined({
@@ -385,6 +390,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           });
           await ajouterSommeil(activeChild.id, data);
           showToast("Sommeil ajouté");
+          showSuccess("sleep", "Sommeil ajouté");
         }
       }
 
@@ -410,9 +416,11 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           if (editData.type === "bain") {
             await supprimerBain(activeChild.id, editData.id);
             showToast("Bain supprimé");
+            showSuccess("bath", "Bain supprimé");
           } else {
             await supprimerSommeil(activeChild.id, editData.id);
             showToast("Sommeil supprimé");
+            showSuccess("sleep", "Sommeil supprimé");
           }
           onDelete?.();
         } catch (error) {

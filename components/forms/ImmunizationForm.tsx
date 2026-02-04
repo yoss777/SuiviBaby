@@ -2,6 +2,7 @@ import { Colors } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -125,6 +126,7 @@ export function ImmunizationForm({
   const { activeChild } = useBaby();
   const { showAlert } = useModal();
   const { showToast } = useToast();
+  const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
 
   const isEditing = !!editData;
@@ -214,9 +216,11 @@ export function ImmunizationForm({
         if (isEditing && editData?.id) {
           await modifierVaccin(activeChild.id, editData.id, vaccinData);
           showToast("Vaccin modifié");
+          showSuccess("vaccine", "Vaccin modifié");
         } else {
           await ajouterVaccin(activeChild.id, vaccinData);
           showToast("Vaccin enregistré");
+          showSuccess("vaccine", "Vaccin enregistré");
         }
       } else {
         const normalizedVitamineName =
@@ -239,9 +243,11 @@ export function ImmunizationForm({
         if (isEditing && editData?.id) {
           await modifierVitamine(activeChild.id, editData.id, vitamineData);
           showToast("Vitamine modifiée");
+          showSuccess("vitamin", "Vitamine modifiée");
         } else {
           await ajouterVitamine(activeChild.id, vitamineData);
           showToast("Vitamine enregistrée");
+          showSuccess("vitamin", "Vitamine enregistrée");
         }
       }
 
@@ -262,9 +268,11 @@ export function ImmunizationForm({
       if (type === "vaccin") {
         await supprimerVaccin(activeChild.id, editData.id);
         showToast("Vaccin supprimé");
+        showSuccess("vaccine", "Vaccin supprimé");
       } else {
         await supprimerVitamine(activeChild.id, editData.id);
         showToast("Vitamine supprimée");
+        showSuccess("vitamin", "Vitamine supprimée");
       }
       onDelete?.();
     } catch (error) {

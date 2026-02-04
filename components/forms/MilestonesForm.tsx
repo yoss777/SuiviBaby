@@ -18,6 +18,7 @@ import * as FileSystem from "expo-file-system";
 import { auth } from "@/config/firebase";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
@@ -224,6 +225,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
+  const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
 
@@ -356,9 +358,11 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       if (editData) {
         await modifierJalon(activeChild.id, editData.id, data);
         showToast("Jalon modifié");
+        showSuccess("milestone", "Jalon modifié");
       } else {
         await ajouterJalon(activeChild.id, data);
         showToast("Jalon ajouté");
+        showSuccess("milestone", "Jalon ajouté");
       }
 
       onSuccess?.();
@@ -382,6 +386,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           setIsSubmitting(true);
           await supprimerJalon(activeChild.id, editData.id);
           showToast("Jalon supprimé");
+          showSuccess("milestone", "Jalon supprimé");
           onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);
