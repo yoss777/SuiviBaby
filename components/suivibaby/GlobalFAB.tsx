@@ -4,7 +4,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
@@ -83,28 +83,29 @@ const ActionButton = ({
   labelTextColor: string;
   labelBackgroundColor: string;
 }) => {
-  const translateY = useSharedValue(0);
+  const offset = useSharedValue(0);
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.5);
 
   useEffect(() => {
     if (isOpen) {
       const delay = index * 50;
-      translateY.value = withDelay(
+      offset.value = withDelay(
         delay,
-        withSpring(-(index + 1) * 76, { damping: 12 }),
+        withSpring((index + 1) * 76, { damping: 12 }),
       );
       opacity.value = withDelay(delay, withTiming(1, { duration: 200 }));
       scale.value = withDelay(delay, withSpring(1, { damping: 10 }));
     } else {
-      translateY.value = withSpring(0);
+      offset.value = withSpring(0);
       opacity.value = withTiming(0, { duration: 150 });
       scale.value = withTiming(0.5, { duration: 150 });
     }
   }, [isOpen]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }, { scale: scale.value }],
+    bottom: offset.value,
+    transform: [{ scale: scale.value }],
     opacity: opacity.value,
   }));
 
@@ -215,7 +216,6 @@ export const GlobalFAB = ({
   const rotation = useSharedValue(0);
   const pulseScale = useSharedValue(1);
   const backdropOpacity = useSharedValue(0);
-  const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Subtle pulse animation when closed
   useEffect(() => {
@@ -240,14 +240,6 @@ export const GlobalFAB = ({
     backdropOpacity.value = withTiming(isOpen ? 1 : 0, { duration: 200 });
   }, [isOpen]);
 
-  useEffect(() => {
-    return () => {
-      if (actionTimeoutRef.current) {
-        clearTimeout(actionTimeoutRef.current);
-      }
-    };
-  }, []);
-
   const mainButtonStyle = useAnimatedStyle(() => ({
     transform: [
       { rotate: `${rotation.value}deg` },
@@ -261,36 +253,31 @@ export const GlobalFAB = ({
 
   const handleActionPress = (action: (typeof ACTIONS)[0]) => {
     setIsOpen(false);
-    if (actionTimeoutRef.current) {
-      clearTimeout(actionTimeoutRef.current);
+    if (action.formType === "meals") {
+      openSheet({
+        ownerId: "global-fab",
+        formType: "meals",
+        mealType: action.mealType,
+      });
+    } else if (action.formType === "diapers") {
+      openSheet({
+        ownerId: "global-fab",
+        formType: "diapers",
+        diapersType: action.diapersType,
+      });
+    } else if (action.formType === "routines") {
+      openSheet({
+        ownerId: "global-fab",
+        formType: "routines",
+        routineType: action.routineType,
+      });
+    } else if (action.formType === "milestones") {
+      openSheet({
+        ownerId: "global-fab",
+        formType: "milestones",
+        jalonType: action.jalonType,
+      });
     }
-    actionTimeoutRef.current = setTimeout(() => {
-      if (action.formType === "meals") {
-        openSheet({
-          ownerId: "global-fab",
-          formType: "meals",
-          mealType: action.mealType,
-        });
-      } else if (action.formType === "diapers") {
-        openSheet({
-          ownerId: "global-fab",
-          formType: "diapers",
-          diapersType: action.diapersType,
-        });
-      } else if (action.formType === "routines") {
-        openSheet({
-          ownerId: "global-fab",
-          formType: "routines",
-          routineType: action.routineType,
-        });
-      } else if (action.formType === "milestones") {
-        openSheet({
-          ownerId: "global-fab",
-          formType: "milestones",
-          jalonType: action.jalonType,
-        });
-      }
-    }, 150);
   };
 
   const actions = includeVoiceAction
@@ -311,7 +298,7 @@ export const GlobalFAB = ({
       </Animated.View>
 
       {/* FAB Container */}
-      <View style={styles.fabContainer} pointerEvents="box-none">
+      <View style={styles.fabContainer}>
         {/* Action buttons */}
         {actions.map((action, index) => (
           <ActionButton
