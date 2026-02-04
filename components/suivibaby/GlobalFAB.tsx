@@ -29,6 +29,15 @@ const ACTIONS = [
   },
   // Position 4 (très accessible)
   {
+    key: "pumping",
+    icon: { lib: "fa6" as const, name: "pump-medical" },
+    label: "Tire-lait",
+    color: "#28a745",
+    bgColor: "#f0f8f4",
+    formType: "pumping" as const,
+  },
+  // Position 4 (très accessible)
+  {
     key: "diaper",
     icon: { lib: "fa6" as const, name: "toilet" },
     label: "Change",
@@ -276,6 +285,11 @@ export const GlobalFAB = ({
         ownerId: "global-fab",
         formType: "milestones",
         jalonType: action.jalonType,
+      });
+    } else if (action.formType === "pumping") {
+      openSheet({
+        ownerId: "global-fab",
+        formType: "pumping",
       });
     }
   };
