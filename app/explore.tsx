@@ -21,7 +21,8 @@ import {
   type ShareInvitation,
 } from '@/services/childSharingService';
 import { afficherEnfant, obtenirPreferences } from '@/services/userPreferencesService';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
+import { getAccessibleChildIds } from '@/utils/permissions';
 
 const { width } = Dimensions.get('window');
 const CARD_SIZE = Math.min(width * 0.85, 320);
@@ -142,16 +143,16 @@ export default function Explore() {
         if (!user?.uid) return;
         
         const prefs = await obtenirPreferences();
-        const q = query(
-          collection(db, 'children'),
-          where('parentIds', 'array-contains', user.uid)
+        const childIds = await getAccessibleChildIds(user.uid);
+        const childDocs = await Promise.all(
+          childIds.map((id) => getDoc(doc(db, 'children', id)))
         );
-        const snapshot = await getDocs(q);
-        
-        const allChildren: Child[] = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data() as Omit<Child, 'id'>
-        }));
+        const allChildren: Child[] = childDocs
+          .filter((snap) => snap.exists())
+          .map((snap) => ({
+            id: snap.id,
+            ...(snap.data() as Omit<Child, 'id'>),
+          }));
         
         const masked = allChildren.filter(child => 
           prefs.hiddenChildrenIds.includes(child.id)

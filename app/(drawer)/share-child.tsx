@@ -10,9 +10,9 @@ import {
   listenToActiveShareCode,
 } from "@/services/childSharingService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Clipboard,
@@ -27,13 +27,20 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useHeaderLeft } from "./_layout";
+import { HeaderBackButton } from "@react-navigation/elements";
 
 export default function ShareChildScreen() {
   const colorScheme = useColorScheme();
   const { showAlert } = useModal();
   const { user } = useAuth();
+  const router = useRouter();
+  const { setHeaderLeft } = useHeaderLeft();
   const params = useLocalSearchParams();
   const childId = params.childId as string;
+  const returnTo = Array.isArray(params.returnTo)
+    ? params.returnTo[0]
+    : (params.returnTo as string | undefined);
 
   const [childName, setChildName] = useState("");
   const [shareCode, setShareCode] = useState<string | null>(null);
@@ -55,6 +62,24 @@ export default function ShareChildScreen() {
       unsubscribe();
     };
   }, [childId, user?.uid]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!returnTo) {
+        setHeaderLeft(null, childId);
+        return () => setHeaderLeft(null, childId);
+      }
+
+      const backButton = (
+        <HeaderBackButton
+          onPress={() => router.replace(returnTo as any)}
+          tintColor={Colors[colorScheme ?? "light"].text}
+        />
+      );
+      setHeaderLeft(backButton, childId);
+      return () => setHeaderLeft(null, childId);
+    }, [childId, colorScheme, returnTo, router, setHeaderLeft])
+  );
 
   const loadChildInfo = async () => {
     try {

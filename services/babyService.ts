@@ -1,6 +1,6 @@
 // Service pour gérer les enfants (children)
 // Note: Garde le nom babyService pour compatibilité avec le code existant
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import type { Timestamp } from 'firebase/firestore';
 
@@ -43,17 +43,26 @@ export const babyService = {
    */
   async getByParentId(parentId: string): Promise<Baby[]> {
     try {
-      const q = query(
-        collection(db, 'children'),
-        where('parentIds', 'array-contains', parentId),
-        orderBy('createdAt', 'desc')
+      const accessQuery = query(
+        collection(db, 'user_child_access'),
+        where('userId', '==', parentId)
       );
-      const snapshot = await getDocs(q);
+      const accessSnap = await getDocs(accessQuery);
+      const childIds = new Set<string>();
+      accessSnap.docs.forEach((docSnap) => {
+        const data = docSnap.data() as { childId?: string };
+        if (data.childId) childIds.add(data.childId);
+      });
 
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Baby[];
+      const childDocs = await Promise.all(
+        Array.from(childIds.values()).map((childId) =>
+          getDoc(doc(db, 'children', childId))
+        )
+      );
+
+      return childDocs
+        .filter((snap) => snap.exists())
+        .map((snap) => ({ id: snap.id, ...snap.data() })) as Baby[];
     } catch (error) {
       console.error('Erreur chargement enfants du parent:', error);
       // Fallback: filtrer en local

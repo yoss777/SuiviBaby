@@ -218,6 +218,9 @@ export default function DrawerLayout() {
                 options={{
                   title: "Partage",
                   drawerItemStyle: { display: "none" },
+                  headerLeft: headerLeftState.component
+                    ? () => headerLeftState.component
+                    : undefined,
                 }}
               />
             </Drawer>

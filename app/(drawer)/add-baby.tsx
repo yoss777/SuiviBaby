@@ -7,6 +7,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { router } from "expo-router";
 import { addDoc, collection } from 'firebase/firestore';
+import { createOwnerAccess } from '@/utils/permissions';
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -98,12 +99,14 @@ export default function AddBabyScreen() {
         name: name.trim(),
         birthDate: birthDate,
         gender: gender,
+        ownerId: user.uid,
         parentIds: [user.uid],
         parentEmails: parentEmail ? [parentEmail] : [],
         photoUri: "",
       };
 
-      await addDoc(collection(db, 'children'), childData);
+      const childRef = await addDoc(collection(db, 'children'), childData);
+      await createOwnerAccess(childRef.id, user.uid);
 
       showAlert(
         'Succès',

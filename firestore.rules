@@ -1,0 +1,346 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Récupère le document d'accès de l'utilisateur pour cet enfant
+    function getAccessDoc(childId) {
+      return get(/databases/$(database)/documents/children/$(childId)/access/$(request.auth.uid));
+    }
+
+    // Vérifie si l'utilisateur a un accès (quel qu'il soit) à l'enfant
+    function hasAccess(childId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/children/$(childId)/access/$(request.auth.uid));
+    }
+
+    // Vérifie si le document enfant existe
+    function childExists(childId) {
+      return exists(/databases/$(database)/documents/children/$(childId));
+    }
+
+    // Vérifie si l'utilisateur est owner selon le document enfant (bootstrap)
+    function isChildOwner(childId) {
+      return isSignedIn() &&
+        childExists(childId) &&
+        get(/databases/$(database)/documents/children/$(childId)).data.ownerId == request.auth.uid;
+    }
+
+    // Vérifie si l'utilisateur est owner de l'enfant
+    function isOwner(childId) {
+      return hasAccess(childId) &&
+        getAccessDoc(childId).data.role == 'owner';
+    }
+
+    function invitationDoc(invitationId) {
+      return get(/databases/$(database)/documents/shareInvitations/$(invitationId));
+    }
+
+    function shareCodeDoc(code) {
+      return get(/databases/$(database)/documents/shareCodes/$(code));
+    }
+
+    function isValidInvitation(childId) {
+      return request.resource.data.invitationId is string &&
+        exists(/databases/$(database)/documents/shareInvitations/$(request.resource.data.invitationId)) &&
+        invitationDoc(request.resource.data.invitationId).data.childId == childId &&
+        invitationDoc(request.resource.data.invitationId).data.status in ['pending', 'accepted'] &&
+        (invitationDoc(request.resource.data.invitationId).data.invitedUserId == request.auth.uid ||
+         invitationDoc(request.resource.data.invitationId).data.invitedEmail == request.auth.token.email);
+    }
+
+    function isValidShareCode(childId) {
+      return request.resource.data.invitationId is string &&
+        exists(/databases/$(database)/documents/shareCodes/$(request.resource.data.invitationId)) &&
+        shareCodeDoc(request.resource.data.invitationId).data.childId == childId &&
+        shareCodeDoc(request.resource.data.invitationId).data.used == true &&
+        shareCodeDoc(request.resource.data.invitationId).data.usedBy == request.auth.uid;
+    }
+
+    // Vérifie si l'utilisateur peut écrire des events (owner ou admin)
+    function canWriteEvents(childId) {
+      return hasAccess(childId) &&
+        (getAccessDoc(childId).data.role in ['owner', 'admin'] ||
+         getAccessDoc(childId).data.get('canWriteEvents', false) == true);
+    }
+
+    // Vérifie si l'utilisateur peut écrire des likes
+    function canWriteLikes(childId) {
+      return hasAccess(childId) &&
+        (getAccessDoc(childId).data.role in ['owner', 'admin', 'contributor'] ||
+         getAccessDoc(childId).data.get('canWriteLikes', false) == true);
+    }
+
+    // Vérifie si l'utilisateur peut écrire des commentaires
+    function canWriteComments(childId) {
+      return hasAccess(childId) &&
+        (getAccessDoc(childId).data.role in ['owner', 'admin', 'contributor'] ||
+         getAccessDoc(childId).data.get('canWriteComments', false) == true);
+    }
+
+    // ============================================
+    // COLLECTIONS PRINCIPALES
+    // ============================================
+
+    // Enfants - document principal
+    match /children/{childId} {
+      // Lecture d'un document spécifique (get)
+      allow get: if hasAccess(childId) ||
+        (isSignedIn() &&
+         exists(/databases/$(database)/documents/children/$(childId)) &&
+         get(/databases/$(database)/documents/children/$(childId)).data.parentIds.hasAny([request.auth.uid]));
+
+      // Liste/requêtes (list) - pour la migration, autoriser les requêtes avec parentIds
+      allow list: if isSignedIn() &&
+        request.query.limit <= 100;
+
+      // Création : l'utilisateur doit définir son propre UID comme ownerId
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid;
+
+      // Modification/Suppression : uniquement le owner (ou via parentIds en fallback)
+      allow update, delete: if isOwner(childId) ||
+        (isSignedIn() &&
+         exists(/databases/$(database)/documents/children/$(childId)) &&
+         get(/databases/$(database)/documents/children/$(childId)).data.ownerId == request.auth.uid);
+
+      // Sous-collection access : gestion des permissions
+      match /access/{uid} {
+        // Lecture : accès à son propre doc (id ou champ userId), ou owner pour voir les autres
+        allow get: if isSignedIn() && (
+          request.auth.uid == uid ||
+          resource.data.userId == request.auth.uid ||
+          isOwner(childId)
+        );
+
+        // Liste : owner peut lister, sinon uniquement via query userId == uid
+        allow list: if isOwner(childId) ||
+          (isSignedIn() && request.query.where('userId', '==', request.auth.uid));
+
+        // Création/Modification :
+        // 1. Owner peut tout gérer
+        // 2. Bootstrap owner (via ownerId dans document enfant)
+        // 3. Auto-migration (si dans parentIds, peut créer son propre accès)
+        // 4. Invitation/ShareCode valide
+        allow create, update: if (isOwner(childId) ||
+          (uid == request.auth.uid && isChildOwner(childId) && request.resource.data.role == 'owner') ||
+          (uid == request.auth.uid &&
+           exists(/databases/$(database)/documents/children/$(childId)) &&
+           get(/databases/$(database)/documents/children/$(childId)).data.parentIds.hasAny([request.auth.uid]) &&
+           request.resource.data.grantedBy is string) ||
+          (uid == request.auth.uid && isValidInvitation(childId) &&
+            request.resource.data.grantedBy == invitationDoc(request.resource.data.invitationId).data.inviterId) ||
+          (uid == request.auth.uid && isValidShareCode(childId) &&
+            request.resource.data.grantedBy == shareCodeDoc(request.resource.data.invitationId).data.createdBy)
+          ) &&
+          // Vérifications de cohérence
+          request.resource.data.role in ['owner', 'admin', 'contributor', 'viewer'] &&
+          (request.method == 'create'
+            ? (request.resource.data.grantedBy is string)
+            : request.resource.data.grantedBy == resource.data.grantedBy) &&
+          request.resource.data.userId == uid &&
+          (request.method == 'create' || request.resource.data.userId == resource.data.userId);
+
+        // Suppression : uniquement le owner (sauf son propre accès)
+        allow delete: if isOwner(childId) && uid != request.auth.uid;
+      }
+    }
+
+    // Events (incluant pumping, tétées, couches, etc.)
+    match /events/{eventId} {
+      // Lecture : tous ceux qui ont accès à l'enfant
+      allow read: if hasAccess(resource.data.childId);
+
+      // Création : owner/admin + vérifier que userId est bien l'uid de l'utilisateur
+      allow create: if canWriteEvents(request.resource.data.childId) &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Modification : owner/admin uniquement
+      allow update: if canWriteEvents(resource.data.childId) &&
+        // Empêcher la modification du userId et childId
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.childId == resource.data.childId;
+
+      // Suppression : owner/admin uniquement
+      allow delete: if canWriteEvents(resource.data.childId);
+    }
+
+    // Likes sur les events
+    match /eventLikes/{likeId} {
+      // Lecture : tous ceux qui ont accès à l'enfant
+      allow read: if hasAccess(resource.data.childId);
+
+      // Liste : requêtes limitées (filtrage côté client)
+      allow list: if isSignedIn() && request.query.limit <= 10000;
+
+      // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
+      allow create: if canWriteLikes(request.resource.data.childId) &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Suppression : uniquement son propre like
+      allow delete: if hasAccess(resource.data.childId) &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // Commentaires sur les events
+    match /eventComments/{commentId} {
+      // Lecture : tous ceux qui ont accès à l'enfant
+      allow read: if hasAccess(resource.data.childId);
+
+      // Liste : requêtes limitées (filtrage côté client)
+      allow list: if isSignedIn() && request.query.limit <= 10000;
+
+      // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
+      allow create: if canWriteComments(request.resource.data.childId) &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Modification : uniquement son propre commentaire
+      allow update: if canWriteComments(resource.data.childId) &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Suppression : son propre commentaire OU owner de l'enfant
+      allow delete: if (hasAccess(resource.data.childId) &&
+        resource.data.userId == request.auth.uid) ||
+        isOwner(resource.data.childId);
+    }
+
+    // ============================================
+    // INVITATIONS & PARTAGE
+    // ============================================
+
+    match /shareInvitations/{inviteId} {
+      allow read: if isSignedIn() && (
+        (resource.data.invitedEmail is string &&
+         request.auth.token.email == resource.data.invitedEmail) ||
+        request.auth.uid == resource.data.inviterId ||
+        (resource.data.inviterEmail is string &&
+         request.auth.token.email == resource.data.inviterEmail)
+      );
+
+      // Autoriser les listes limitées (filtrage côté client)
+      allow list: if isSignedIn() &&
+        request.query.limit <= 200;
+
+      // Création : vérifier que inviterId est bien l'uid de l'utilisateur ET qu'il est owner
+      allow create: if isSignedIn() &&
+        request.resource.data.inviterId == request.auth.uid &&
+        isOwner(request.resource.data.childId);
+
+      // Mise à jour : l'invité peut accepter/refuser
+      allow update: if isSignedIn() &&
+        request.auth.token.email == resource.data.invitedEmail;
+    }
+
+    match /shareCodes/{code} {
+      // Lecture : uniquement si on a créé le code OU si on a accès à l'enfant
+      allow read: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        hasAccess(resource.data.childId) ||
+        (resource.data.used == false && resource.data.expiresAt > request.time)
+      );
+
+      // Création : uniquement si on est owner de l'enfant
+      allow create: if isSignedIn() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        isOwner(request.resource.data.childId);
+
+      // Mise à jour : marquer le code comme utilisé (champ used uniquement)
+      allow update: if isSignedIn() &&
+        resource.data.used == false &&
+        request.resource.data.used == true &&
+        request.resource.data.usedBy == request.auth.uid &&
+        request.resource.data.usedByEmail == request.auth.token.email &&
+        request.resource.data.usedAt is timestamp &&
+        request.resource.data.childId == resource.data.childId &&
+        request.resource.data.childName == resource.data.childName &&
+        request.resource.data.code == resource.data.code &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.expiresAt == resource.data.expiresAt;
+
+      // Suppression : uniquement le créateur ou owner de l'enfant
+      allow delete: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        isOwner(resource.data.childId)
+      );
+    }
+
+    // ============================================
+    // INDEX D'ACCES UTILISATEUR -> ENFANT
+    // ============================================
+
+    match /user_child_access/{docId} {
+      // Lecture : uniquement l'utilisateur concerné
+      allow get: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+
+      // Liste : autoriser requêtes limitées (filtrage côté client)
+      allow list: if isSignedIn() &&
+        request.query.limit <= 200;
+
+      // Création/Mise à jour : owner ou via invitation/code pour soi
+      allow create, update: if isSignedIn() &&
+        request.resource.data.userId is string &&
+        request.resource.data.childId is string &&
+        (isOwner(request.resource.data.childId) ||
+          (request.auth.uid == request.resource.data.userId &&
+            (isValidInvitation(request.resource.data.childId) ||
+             isValidShareCode(request.resource.data.childId))));
+
+      // Suppression : owner ou l'utilisateur lui-même
+      allow delete: if isSignedIn() &&
+        (isOwner(resource.data.childId) ||
+         resource.data.userId == request.auth.uid);
+    }
+
+    // ============================================
+    // DONNÉES UTILISATEUR
+    // ============================================
+
+    match /users/{userId} {
+      // Chaque utilisateur peut uniquement lire/écrire son propre document
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users_public/{userId} {
+      // Données publiques minimales (nom/email)
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /user_preferences/{userId} {
+      // Chaque utilisateur peut uniquement lire/écrire ses propres préférences
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ============================================
+    // COLLECTION GROUP QUERIES
+    // ============================================
+
+    // Permet aux utilisateurs de requêter leurs propres accès via collectionGroup
+    match /{path=**}/access/{docId} {
+      // Un utilisateur peut lire ses propres documents d'accès
+      // Soit via l'ID du document, soit via le champ userId
+      allow read: if isSignedIn() && (
+        request.auth.uid == docId ||
+        resource.data.userId == request.auth.uid
+      );
+    }
+
+    // ============================================
+    // RÈGLE PAR DÉFAUT
+    // ============================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

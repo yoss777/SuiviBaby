@@ -348,7 +348,8 @@ export default function MomentsScreen() {
       if (!activeChild?.id) return;
       try {
         await toggleLike(photoId, activeChild.id, userName ?? "Moi");
-      } catch {
+      } catch (error) {
+        console.error("[Moments] Erreur like:", error);
         showToast("Impossible d'enregistrer le like");
       }
     },

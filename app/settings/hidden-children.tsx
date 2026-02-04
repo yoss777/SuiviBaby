@@ -25,7 +25,8 @@ import {
   afficherEnfant,
   obtenirPreferences,
 } from "@/services/userPreferencesService";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
+import { getAccessibleChildIds } from "@/utils/permissions";
 
 const { width } = Dimensions.get("window");
 
@@ -65,17 +66,17 @@ export default function HiddenChildrenScreen() {
         return;
       }
 
-      // Récupérer tous les enfants de l'utilisateur
-      const q = query(
-        collection(db, "children"),
-        where("parentIds", "array-contains", user.uid),
+      // Récupérer tous les enfants accessibles par l'utilisateur
+      const childIds = await getAccessibleChildIds(user.uid);
+      const childDocs = await Promise.all(
+        childIds.map((id) => getDoc(doc(db, "children", id)))
       );
-
-      const snapshot = await getDocs(q);
-      const allChildren: Child[] = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<Child, "id">),
-      }));
+      const allChildren: Child[] = childDocs
+        .filter((snap) => snap.exists())
+        .map((snap) => ({
+          id: snap.id,
+          ...(snap.data() as Omit<Child, "id">),
+        }));
 
       // Filtrer uniquement les enfants masqués
       const hidden = allChildren.filter((child) =>

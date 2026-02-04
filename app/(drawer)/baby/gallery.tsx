@@ -417,7 +417,8 @@ export default function GalleryScreen() {
       if (!activeChild?.id) return;
       try {
         await toggleLike(photoId, activeChild.id, userName ?? "Moi");
-      } catch {
+      } catch (error) {
+        console.error("[Gallery] Erreur like:", error);
         showToast("Impossible d'enregistrer le like");
       }
     },

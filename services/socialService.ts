@@ -7,6 +7,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -36,19 +37,23 @@ const getUserId = () => {
 // Cache pour les noms d'utilisateurs (évite les requêtes répétées)
 const userNameCache = new Map<string, { name: string; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const ENABLE_USER_PROFILE_LOOKUP = true;
 
 /**
  * Récupérer le nom d'un utilisateur depuis son profil
  * Utilise un cache pour éviter les requêtes répétées
  */
 const getUserName = async (userId: string): Promise<string> => {
+  if (!ENABLE_USER_PROFILE_LOOKUP) {
+    return "Utilisateur";
+  }
   const cached = userNameCache.get(userId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.name;
   }
 
   try {
-    const userDoc = await getDoc(doc(db, "users", userId));
+    const userDoc = await getDoc(doc(db, "users_public", userId));
     if (userDoc.exists()) {
       const userName = userDoc.data().userName || "Utilisateur";
       userNameCache.set(userId, { name: userName, timestamp: Date.now() });
@@ -80,8 +85,8 @@ const getUserNames = async (
     }
   });
 
-  // Fetch les utilisateurs manquants
-  if (toFetch.length > 0) {
+  // Fetch les utilisateurs manquants (désactivé si lookup interdit)
+  if (ENABLE_USER_PROFILE_LOOKUP && toFetch.length > 0) {
     const promises = toFetch.map(async (userId) => {
       const name = await getUserName(userId);
       result.set(userId, name);
@@ -120,8 +125,13 @@ export const ajouterLike = async (
     createdAt: Timestamp.now(),
   };
 
-  const docRef = await addDoc(collection(db, "eventLikes"), like);
-  return docRef.id;
+  try {
+    const docRef = await addDoc(collection(db, "eventLikes"), like);
+    return docRef.id;
+  } catch (error) {
+    console.error("[Like] Erreur ajout like:", error);
+    throw error;
+  }
 };
 
 /**
@@ -133,14 +143,20 @@ export const supprimerLike = async (eventId: string): Promise<void> => {
   const q = query(
     collection(db, "eventLikes"),
     where("eventId", "==", eventId),
-    where("userId", "==", userId)
+    where("userId", "==", userId),
+    limit(10000)
   );
 
   const snapshot = await getDocs(q);
   const deletePromises = snapshot.docs.map((d) =>
     deleteDoc(doc(db, "eventLikes", d.id))
   );
-  await Promise.all(deletePromises);
+  try {
+    await Promise.all(deletePromises);
+  } catch (error) {
+    console.error("[Like] Erreur suppression like:", error);
+    throw error;
+  }
 };
 
 /**
@@ -151,13 +167,29 @@ export const toggleLike = async (
   childId: string,
   userName: string
 ): Promise<boolean> => {
-  const existingLike = await obtenirMonLike(eventId);
+  let existingLike: EventLike | null = null;
+  try {
+    existingLike = await obtenirMonLike(eventId);
+  } catch (error) {
+    console.error("[Like] Erreur toggle (get):", error);
+    throw error;
+  }
 
   if (existingLike) {
-    await supprimerLike(eventId);
+    try {
+      await supprimerLike(eventId);
+    } catch (error) {
+      console.error("[Like] Erreur toggle (delete):", error);
+      throw error;
+    }
     return false; // N'est plus liké
   } else {
-    await ajouterLike(eventId, childId, userName);
+    try {
+      await ajouterLike(eventId, childId, userName);
+    } catch (error) {
+      console.error("[Like] Erreur toggle (add):", error);
+      throw error;
+    }
     return true; // Est maintenant liké
   }
 };
@@ -173,10 +205,17 @@ export const obtenirMonLike = async (
   const q = query(
     collection(db, "eventLikes"),
     where("eventId", "==", eventId),
-    where("userId", "==", userId)
+    where("userId", "==", userId),
+    limit(1)
   );
 
-  const snapshot = await getDocs(q);
+  let snapshot;
+  try {
+    snapshot = await getDocs(q);
+  } catch (error) {
+    console.error("[Like] Erreur obtenirMonLike:", error);
+    throw error;
+  }
   if (snapshot.empty) return null;
 
   const docData = snapshot.docs[0];
@@ -190,7 +229,8 @@ export const obtenirLikes = async (eventId: string): Promise<EventLike[]> => {
   const q = query(
     collection(db, "eventLikes"),
     where("eventId", "==", eventId),
-    orderBy("createdAt", "desc")
+    orderBy("createdAt", "desc"),
+    limit(10000)
   );
 
   const snapshot = await getDocs(q);
@@ -256,7 +296,8 @@ export const obtenirLikesInfoBatch = async (
 
     const q = query(
       collection(db, "eventLikes"),
-      where("eventId", "in", batch)
+      where("eventId", "in", batch),
+      limit(10000)
     );
 
     const snapshot = await getDocs(q);
@@ -300,7 +341,8 @@ export const ecouterLikes = (
   const q = query(
     collection(db, "eventLikes"),
     where("eventId", "==", eventId),
-    orderBy("createdAt", "desc")
+    orderBy("createdAt", "desc"),
+    limit(10000)
   );
 
   return onSnapshot(q, async (snapshot) => {
@@ -413,7 +455,8 @@ export const obtenirCommentaires = async (
   const q = query(
     collection(db, "eventComments"),
     where("eventId", "==", eventId),
-    orderBy("createdAt", "asc")
+    orderBy("createdAt", "asc"),
+    limit(10000)
   );
 
   const snapshot = await getDocs(q);
@@ -458,7 +501,8 @@ export const obtenirCommentCountsBatch = async (
 
     const q = query(
       collection(db, "eventComments"),
-      where("eventId", "in", batch)
+      where("eventId", "in", batch),
+      limit(10000)
     );
 
     const snapshot = await getDocs(q);
@@ -482,7 +526,8 @@ export const ecouterCommentaires = (
   const q = query(
     collection(db, "eventComments"),
     where("eventId", "==", eventId),
-    orderBy("createdAt", "asc")
+    orderBy("createdAt", "asc"),
+    limit(10000)
   );
 
   return onSnapshot(q, (snapshot) => {
@@ -517,7 +562,8 @@ export const ecouterInteractionsSociales = (
   // Listener pour les likes
   const likesQuery = query(
     collection(db, "eventLikes"),
-    where("childId", "==", childId)
+    where("childId", "==", childId),
+    limit(10000)
   );
 
   const unsubLikes = onSnapshot(likesQuery, async (snapshot) => {
@@ -564,7 +610,8 @@ export const ecouterInteractionsSociales = (
   // Listener pour les commentaires
   const commentsQuery = query(
     collection(db, "eventComments"),
-    where("childId", "==", childId)
+    where("childId", "==", childId),
+    limit(10000)
   );
 
   const unsubComments = onSnapshot(commentsQuery, async (snapshot) => {

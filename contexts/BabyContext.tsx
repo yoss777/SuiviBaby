@@ -1,6 +1,6 @@
 import { db } from '@/config/firebase';
 import { obtenirPreferences } from '@/services/userPreferencesService';
-import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, query, where } from 'firebase/firestore';
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { obtenirEvenementsDuJourHybrid } from '@/migration/eventsHybridService';
@@ -37,6 +37,9 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   const [hiddenChildrenIds, setHiddenChildrenIds] = useState<string[]>([]);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const preloadInFlight = useRef<Set<string>>(new Set());
+  const childListenersRef = useRef<Map<string, () => void>>(new Map());
+  const childDataRef = useRef<Map<string, Child>>(new Map());
+  const currentChildIdsRef = useRef<Set<string>>(new Set());
 
   // Écouter les changements des préférences utilisateur en temps réel
   useEffect(() => {
@@ -99,58 +102,115 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       return;
     }
 
-    console.log('[BabyContext] Chargement des enfants pour user.uid:', user.uid);
+    console.log('[BabyContext] Chargement des enfants (access) pour user.uid:', user.uid);
     setLoading(true);
     setChildrenLoaded(false);
 
-    const q = query(
-      collection(db, 'children'),
-      where('parentIds', 'array-contains', user.uid)
+    const accessQuery = query(
+      collection(db, 'user_child_access'),
+      where('userId', '==', user.uid),
+      limit(200)
     );
+    console.log('[BabyContext] Query user_child_access where userId ==', user.uid);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log('[BabyContext] Snapshot reçu, nombre de docs:', snapshot.docs.length);
+    const unsubscribeAccess = onSnapshot(accessQuery, (snapshot) => {
+      const currentChildIds = new Set<string>();
+      snapshot.docs.forEach((docSnap) => {
+        const data = docSnap.data() as { childId?: string; userId?: string };
+        if (data.userId !== user.uid) return;
+        if (data.childId) currentChildIds.add(data.childId);
+      });
+      currentChildIdsRef.current = currentChildIds;
 
-      const childrenData: Child[] = snapshot.docs.map(doc => {
-        const data = doc.data();
-        console.log('[BabyContext] Enfant trouvé:', doc.id, data.name);
-        return {
-          id: doc.id,
-          ...data as Omit<Child, 'id'>
-        };
+      // Ajouter listeners pour les nouveaux enfants
+      currentChildIds.forEach((childId) => {
+        if (childListenersRef.current.has(childId)) return;
+
+        const unsub = onSnapshot(
+          doc(db, 'children', childId),
+          (childSnap) => {
+            if (!childSnap.exists()) {
+              childDataRef.current.delete(childId);
+            } else {
+              const data = childSnap.data() as Omit<Child, 'id'>;
+              childDataRef.current.set(childId, { id: childId, ...data });
+            }
+
+            const allChildren = Array.from(childDataRef.current.values());
+            const visibleChildren = allChildren.filter(
+              (child) => !hiddenChildrenIds.includes(child.id)
+            );
+            visibleChildren.sort((a, b) => a.name.localeCompare(b.name));
+            setChildren(visibleChildren);
+
+            setActiveChildState((prev) => {
+              if (!prev && visibleChildren.length > 0) {
+                return visibleChildren[0];
+              }
+              if (prev && hiddenChildrenIds.includes(prev.id)) {
+                return visibleChildren[0] || null;
+              }
+              return prev;
+            });
+
+            if (childDataRef.current.size >= currentChildIdsRef.current.size) {
+              setLoading(false);
+              setChildrenLoaded(true);
+            }
+          },
+          (error) => {
+            console.error('[BabyContext] Erreur listener child:', error);
+          }
+        );
+
+        childListenersRef.current.set(childId, unsub);
       });
 
-      // Filtrer les enfants masqués
-      console.log('[BabyContext] hiddenChildrenIds:', hiddenChildrenIds);
-      const visibleChildren = childrenData.filter(
-        child => !hiddenChildrenIds.includes(child.id)
+      // Retirer listeners pour les enfants supprimés
+      childListenersRef.current.forEach((unsub, childId) => {
+        if (!currentChildIds.has(childId)) {
+          unsub();
+          childListenersRef.current.delete(childId);
+          childDataRef.current.delete(childId);
+        }
+      });
+
+      const allChildren = Array.from(childDataRef.current.values());
+      const visibleChildren = allChildren.filter(
+        (child) => !hiddenChildrenIds.includes(child.id)
       );
-
-      console.log('[BabyContext] Enfants visibles après filtrage:', visibleChildren.length);
-      visibleChildren.forEach(child => console.log('  -', child.name, child.id));
-
-      // Trier par ordre alphabétique
       visibleChildren.sort((a, b) => a.name.localeCompare(b.name));
-
       setChildren(visibleChildren);
 
-      // Si aucun enfant actif n'est sélectionné, sélectionner le premier
-      setActiveChildState(prev => {
+      setActiveChildState((prev) => {
         if (!prev && visibleChildren.length > 0) {
           return visibleChildren[0];
         }
-        // Si l'enfant actif a été masqué, sélectionner le premier visible
         if (prev && hiddenChildrenIds.includes(prev.id)) {
           return visibleChildren[0] || null;
         }
         return prev;
       });
 
+      if (currentChildIds.size === 0) {
+        setLoading(false);
+        setChildrenLoaded(true);
+      } else {
+        setLoading(true);
+        setChildrenLoaded(false);
+      }
+    }, (error) => {
+      console.error('[BabyContext] Erreur lors de l\'écoute des accès:', error);
       setLoading(false);
-      setChildrenLoaded(true);
+      setChildrenLoaded(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAccess();
+      childListenersRef.current.forEach((unsub) => unsub());
+      childListenersRef.current.clear();
+      childDataRef.current.clear();
+    };
   }, [user, hiddenChildrenIds, preferencesLoaded, authLoading]);
 
   useEffect(() => {

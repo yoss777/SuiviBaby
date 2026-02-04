@@ -1,7 +1,7 @@
 // config/firebase.ts
 import { initializeApp } from "firebase/app";
 import { indexedDBLocalPersistence, initializeAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { Platform } from "react-native";
 
@@ -33,4 +33,11 @@ export const auth = Platform.OS === 'web'
     })();
 
 export const db = getFirestore(app);
+
+// Optionnel: connecter l'émulateur Firestore en dev
+const emulatorHost = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_HOST;
+if (emulatorHost) {
+  const [host, port] = emulatorHost.split(":");
+  connectFirestoreEmulator(db, host, Number(port));
+}
 export const storage = getStorage(app);

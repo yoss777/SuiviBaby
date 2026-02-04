@@ -1,7 +1,11 @@
 // contexts/AuthContext.tsx
 import { auth, db } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
-import { canUserAccessApp, updateLastLogin } from "@/services/userService";
+import {
+  canUserAccessApp,
+  createPatientUser,
+  updateLastLogin,
+} from "@/services/userService";
 import type { User, UserType } from "@/types/user";
 import {
   User as FirebaseUser,
@@ -52,6 +56,30 @@ export function AuthProvider({
     try {
       const userDoc = await getDoc(doc(db, "users", fbUser.uid));
       if (!userDoc.exists()) {
+        const appType =
+          process.env.EXPO_PUBLIC_APP_TYPE === "professional"
+            ? "professional"
+            : "patient";
+
+        if (appType === "patient" && fbUser.email) {
+          const fallbackName =
+            fbUser.displayName || fbUser.email.split("@")[0];
+          const createdUser = await createPatientUser(
+            fbUser.uid,
+            fbUser.email,
+            fallbackName
+          );
+          console.log("[AuthContext] User created in Firestore:", fbUser.uid);
+
+          setUser(createdUser);
+          setUserName(createdUser.userName || null);
+          setEmail(createdUser.email || null);
+          setUserType(createdUser.userType);
+          setFirebaseUser(fbUser);
+          setLoading(false);
+          return;
+        }
+
         console.error("Utilisateur non trouvé dans Firestore");
         await firebaseSignOut(auth);
         return;

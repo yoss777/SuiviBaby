@@ -2,13 +2,12 @@
 import { auth, db } from "@/config/firebase";
 import {
   addDoc,
-  arrayRemove,
-  arrayUnion,
   collection,
   doc,
   getDoc,
   getDocFromServer,
   getDocs,
+  limit,
   onSnapshot,
   query,
   setDoc,
@@ -18,6 +17,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { getUserByEmail } from "./usersService";
+import { grantChildAccess, revokeChildAccess } from "@/utils/permissions";
 
 export interface ShareCode {
   code: string;
@@ -27,12 +27,16 @@ export interface ShareCode {
   createdAt: Timestamp;
   expiresAt: Timestamp;
   used: boolean;
+  usedBy?: string;
+  usedByEmail?: string;
+  usedAt?: Timestamp;
 }
 
 export interface ShareInvitation {
   id?: string;
   childId: string;
   childName: string;
+  inviterId: string;
   inviterEmail: string;
   invitedEmail: string;
   invitedUserId?: string;
@@ -134,25 +138,29 @@ export async function useShareCode(
       throw new Error("Enfant introuvable");
     }
 
-    const childData = childDoc.data() as {
-      parentIds?: string[];
-      parentEmails?: string[];
-    };
-    if (childData.parentIds?.includes(user.uid)) {
+    const accessDoc = await getDoc(
+      doc(db, "children", shareCode.childId, "access", user.uid)
+    );
+    if (accessDoc.exists()) {
       throw new Error("Vous avez déjà accès à cet enfant");
     }
-
-    // Ajouter l'utilisateur aux parents de l'enfant
-    const userEmail = user.email?.toLowerCase();
-    await updateDoc(doc(db, "children", shareCode.childId), {
-      parentIds: arrayUnion(user.uid),
-      ...(userEmail ? { parentEmails: arrayUnion(userEmail) } : {}),
-    });
 
     // Marquer le code comme utilisé
     await updateDoc(doc(db, "shareCodes", code.toUpperCase()), {
       used: true,
+      usedBy: user.uid,
+      usedByEmail: user.email ?? null,
+      usedAt: Timestamp.now(),
     });
+
+    // Créer l'accès pour l'utilisateur invité (contributor par défaut)
+    await grantChildAccess(
+      shareCode.childId,
+      user.uid,
+      "contributor",
+      shareCode.createdBy,
+      { invitationId: code.toUpperCase() }
+    );
 
     return {
       childId: shareCode.childId,
@@ -214,18 +222,19 @@ export async function createEmailInvitation(
       throw new Error("Enfant introuvable");
     }
 
-    const childData = childDoc.data() as {
-      parentIds?: string[];
-    };
-
     // Étape 4: Vérifier si l'utilisateur invité est déjà parent de l'enfant
-    if (invitedUserId && childData.parentIds?.includes(invitedUserId)) {
+    if (invitedUserId) {
+      const accessDoc = await getDoc(
+        doc(db, "children", childId, "access", invitedUserId)
+      );
+      if (accessDoc.exists()) {
       const error: Error & { code?: string; email?: string } = new Error(
         "Cet enfant est déjà lié à ce destinataire.",
       );
       error.code = "already-linked";
       error.email = invitedEmail;
       throw error;
+      }
     }
 
     // Étape 5: Vérifier s'il n'y a pas déjà une invitation en cours
@@ -250,6 +259,7 @@ export async function createEmailInvitation(
     const invitationData: Omit<ShareInvitation, "id"> = {
       childId,
       childName,
+      inviterId: user.uid,
       inviterEmail: user.email,
       invitedEmail: invitedEmailLower,
       invitedUserId,
@@ -343,12 +353,14 @@ export function listenToPendingInvitations(
     collection(db, "shareInvitations"),
     where("invitedEmail", "==", user.email.toLowerCase()),
     where("status", "==", "pending"),
+    limit(200)
   );
 
   const userIdQuery = query(
     collection(db, "shareInvitations"),
     where("invitedUserId", "==", user.uid),
     where("status", "==", "pending"),
+    limit(200)
   );
 
   let emailInvites: ShareInvitation[] = [];
@@ -365,21 +377,35 @@ export function listenToPendingInvitations(
     callback(Array.from(invitesById.values()));
   };
 
-  const unsubscribeEmail = onSnapshot(emailQuery, (snapshot) => {
-    emailInvites = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as ShareInvitation[];
-    mergeAndEmit();
-  });
+  const unsubscribeEmail = onSnapshot(
+    emailQuery,
+    (snapshot) => {
+      emailInvites = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as ShareInvitation[];
+      mergeAndEmit();
+    },
+    (error) => {
+      console.error("Erreur écoute invitations (email):", error);
+      callback([]);
+    }
+  );
 
-  const unsubscribeUserId = onSnapshot(userIdQuery, (snapshot) => {
-    userInvites = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as ShareInvitation[];
-    mergeAndEmit();
-  });
+  const unsubscribeUserId = onSnapshot(
+    userIdQuery,
+    (snapshot) => {
+      userInvites = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as ShareInvitation[];
+      mergeAndEmit();
+    },
+    (error) => {
+      console.error("Erreur écoute invitations (uid):", error);
+      callback([]);
+    }
+  );
 
   return () => {
     unsubscribeEmail();
@@ -466,16 +492,10 @@ export async function cleanupAlreadyLinkedInvitations(
       const data = docSnap.data() as ShareInvitation;
       const childDoc = await getDoc(doc(db, "children", data.childId));
       if (!childDoc.exists()) return;
-      const childData = childDoc.data() as {
-        parentIds?: string[];
-        parentEmails?: string[];
-      };
-      if (
-        childData.parentIds?.includes(user.uid) ||
-        childData.parentEmails?.some(
-          (parentEmail) => parentEmail?.toLowerCase() === email,
-        )
-      ) {
+      const accessDoc = await getDoc(
+        doc(db, "children", data.childId, "access", user.uid)
+      );
+      if (accessDoc.exists()) {
         batch.delete(docSnap.ref);
         deletedCount += 1;
       }
@@ -515,11 +535,14 @@ export async function acceptInvitation(invitationId: string): Promise<void> {
       throw new Error("Enfant introuvable");
     }
 
-    // Ajouter l'utilisateur aux parents de l'enfant
-    await updateDoc(doc(db, "children", invitation.childId), {
-      parentIds: arrayUnion(user.uid),
-      parentEmails: arrayUnion(invitation.invitedEmail.toLowerCase()),
-    });
+    // Créer l'accès pour l'utilisateur invité (contributor par défaut)
+    await grantChildAccess(
+      invitation.childId,
+      user.uid,
+      "contributor",
+      invitation.inviterId,
+      { invitationId }
+    );
 
     // Marquer l'invitation comme acceptée
     await updateDoc(doc(db, "shareInvitations", invitationId), {
@@ -666,26 +689,18 @@ export async function removeParentAccess(
     const user = auth.currentUser;
     if (!user) throw new Error("Utilisateur non connecté");
 
-    // Vérifier que l'utilisateur a accès à cet enfant
-    const childDoc = await getDoc(doc(db, "children", childId));
-    if (!childDoc.exists()) {
-      throw new Error("Enfant introuvable");
+    const myAccess = await getDoc(
+      doc(db, "children", childId, "access", user.uid)
+    );
+    if (!myAccess.exists() || myAccess.data().role !== "owner") {
+      throw new Error("Vous n'avez pas la permission de retirer cet accès");
     }
 
-    const childData = childDoc.data();
-    if (!childData.parentIds?.includes(user.uid)) {
-      throw new Error("Vous n'avez pas accès à cet enfant");
+    if (parentUid === user.uid) {
+      throw new Error("Impossible de retirer votre propre accès owner");
     }
 
-    // Ne pas permettre de retirer le dernier parent
-    if (childData.parentIds.length <= 1) {
-      throw new Error("Impossible de retirer le dernier parent");
-    }
-
-    // Retirer le parent
-    await updateDoc(doc(db, "children", childId), {
-      parentIds: arrayRemove(parentUid),
-    });
+    await revokeChildAccess(childId, parentUid);
   } catch (error) {
     console.error("Erreur lors du retrait de l'accès:", error);
     throw error;

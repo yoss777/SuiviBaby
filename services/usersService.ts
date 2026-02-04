@@ -39,7 +39,7 @@ export async function getUserByEmail(
   email: string,
 ): Promise<UserProfile | null> {
   const emailQuery = query(
-    collection(db, "users"),
+    collection(db, "users_public"),
     where("email", "==", email.toLowerCase()),
   );
   const snapshot = await getDocs(emailQuery);
@@ -60,11 +60,21 @@ export async function creerOuMettreAJourProfil(data: {
   try {
     const userId = getUserId();
     const userRef = doc(db, "users", userId);
+    const publicRef = doc(db, "users_public", userId);
 
     await setDoc(
       userRef,
       {
         ...data,
+        updatedAt: new Date(),
+      },
+      { merge: true },
+    );
+    await setDoc(
+      publicRef,
+      {
+        userName: data.userName,
+        ...(data.email ? { email: data.email.toLowerCase() } : {}),
         updatedAt: new Date(),
       },
       { merge: true },
@@ -118,8 +128,13 @@ export async function modifierNomUtilisateur(nouveauNom: string) {
   try {
     const userId = getUserId();
     const userRef = doc(db, "users", userId);
+    const publicRef = doc(db, "users_public", userId);
 
     await updateDoc(userRef, {
+      userName: nouveauNom.trim(),
+      updatedAt: new Date(),
+    });
+    await updateDoc(publicRef, {
       userName: nouveauNom.trim(),
       updatedAt: new Date(),
     });

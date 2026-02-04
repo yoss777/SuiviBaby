@@ -1,6 +1,9 @@
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useChildPermissions } from "@/hooks/useChildPermissions";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
@@ -15,6 +18,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const ITEMS = [
+  {
+    title: "Gestion des accès",
+    subtitle: "Gérer les permissions des parents",
+    icon: "user-gear",
+    color: "#f59e0b",
+    route: "/baby/manage-access",
+    ownerOnly: true,
+  },
   {
     title: "Statistiques",
     subtitle: "Alimentation et expression du lait",
@@ -86,20 +97,43 @@ export default function PlusScreen() {
   const borderColor = `${colors.tabIconDefault}30`;
   const navLockRef = useRef(false);
 
+  // Récupérer l'enfant actif et les permissions
+  const { activeChild } = useBaby();
+  const { firebaseUser } = useAuth();
+  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+
   useFocusEffect(
     useCallback(() => {
       navLockRef.current = false;
     }, []),
   );
 
-  const handleNavigate = useCallback((route: string) => {
-    if (navLockRef.current) {
-      return;
-    }
+  const handleNavigate = useCallback(
+    (route: string) => {
+      if (navLockRef.current) {
+        return;
+      }
 
-    navLockRef.current = true;
-    router.push(route as any);
-  }, []);
+      navLockRef.current = true;
+
+      // Si c'est la route de gestion des accès, ajouter le childId
+      if (route === "/baby/manage-access" && activeChild?.id) {
+        router.push(`${route}?childId=${activeChild.id}` as any);
+      } else {
+        router.push(route as any);
+      }
+    },
+    [activeChild?.id],
+  );
+
+  // Filtrer les items selon les permissions
+  const visibleItems = ITEMS.filter((item) => {
+    // Si l'item nécessite d'être owner
+    if ("ownerOnly" in item && item.ownerOnly) {
+      return permissions.canManageAccess;
+    }
+    return true;
+  });
 
   return (
     <ThemedView style={styles.screen}>
@@ -116,7 +150,7 @@ export default function PlusScreen() {
           </View>
 
           <View style={styles.list}>
-            {ITEMS.map((item) => (
+            {visibleItems.map((item) => (
               <TouchableOpacity
                 key={item.title}
                 style={[

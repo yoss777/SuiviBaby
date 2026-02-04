@@ -5,13 +5,13 @@ import {
   reauthenticateWithCredential,
 } from "firebase/auth";
 import {
-  arrayRemove,
   collection,
   deleteDoc,
   doc,
   getDocs,
   limit,
   query,
+  Timestamp,
   updateDoc,
   where,
   writeBatch,
@@ -74,21 +74,47 @@ export async function deleteAccountAndData(password: string) {
   const userId = user.uid;
   const email = user.email.toLowerCase();
 
-  const childrenQuery = query(
-    collection(db, "children"),
-    where("parentIds", "array-contains", userId)
+  const accessQuery = query(
+    collection(db, "user_child_access"),
+    where("userId", "==", userId)
   );
-  const childrenSnapshot = await getDocs(childrenQuery);
+  const accessSnapshot = await getDocs(accessQuery);
 
-  for (const childDoc of childrenSnapshot.docs) {
-    const childData = childDoc.data() as { parentIds?: string[] };
-    const parentIds = childData.parentIds || [];
-    if (parentIds.length > 1) {
-      await updateDoc(childDoc.ref, { parentIds: arrayRemove(userId) });
-    } else {
-      await deleteChildData(childDoc.id);
-      await deleteDoc(childDoc.ref);
+  for (const accessDoc of accessSnapshot.docs) {
+    const accessDataIndex = accessDoc.data() as { childId?: string };
+    const childId = accessDataIndex.childId;
+    if (!childId) continue;
+
+    const accessData = accessDoc.data() as { role?: string };
+    const childAccessSnap = await getDocs(
+      collection(db, "children", childId, "access")
+    );
+
+    if (childAccessSnap.size <= 1) {
+      await deleteChildData(childId);
+      await deleteDoc(doc(db, "children", childId));
+      continue;
     }
+
+    if (accessData.role === "owner") {
+      const newOwnerDoc = childAccessSnap.docs.find((d) => d.id !== userId);
+      if (newOwnerDoc) {
+        await updateDoc(doc(db, "children", childId), {
+          ownerId: newOwnerDoc.id,
+        });
+        await updateDoc(newOwnerDoc.ref, {
+          role: "owner",
+          canWriteEvents: true,
+          canWriteLikes: true,
+          canWriteComments: true,
+          grantedBy: newOwnerDoc.id,
+          grantedAt: Timestamp.now(),
+        });
+      }
+    }
+
+    await deleteDoc(doc(db, "children", childId, "access", userId));
+    await deleteDoc(doc(db, "user_child_access", `${userId}_${childId}`));
   }
 
   await Promise.all([
