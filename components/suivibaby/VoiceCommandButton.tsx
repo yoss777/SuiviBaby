@@ -14,12 +14,14 @@ interface VoiceCommandButtonProps {
   size?: number;
   color?: string;
   showTestToggle?: boolean; // Afficher le bouton de bascule test/prod
+  accessibilityLabel?: string;
 }
 
 export function VoiceCommandButton({ 
   size = 18, 
   color = "#4A90E2",
   showTestToggle = false,
+  accessibilityLabel = "Commande vocale",
 }: VoiceCommandButtonProps) {
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
@@ -107,6 +109,8 @@ export function VoiceCommandButton({
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
         style={[
           styles.mainButton,
           isRecording && styles.recording

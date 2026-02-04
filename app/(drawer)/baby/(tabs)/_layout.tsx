@@ -2,26 +2,27 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { Tabs } from "expo-router";
-import { Platform } from "react-native";
+import { Platform, View } from "react-native";
 
 export default function BabyTabLayout() {
   const colorScheme = useColorScheme() ?? "light";
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        tabBarInactiveTintColor: Colors[colorScheme].tabIconDefault,
-        headerShown: false,
-        freezeOnBlur: true,
-        tabBarStyle: Platform.select({
-          ios: {
-            position: "absolute",
-          },
-          default: {},
-        }),
-      }}
-    >
+    <View style={{ flex: 1 }}>
+      <Tabs
+        screenOptions={{
+          tabBarActiveTintColor: Colors[colorScheme].tint,
+          tabBarInactiveTintColor: Colors[colorScheme].tabIconDefault,
+          headerShown: false,
+          freezeOnBlur: true,
+          tabBarStyle: Platform.select({
+            ios: {
+              position: "absolute",
+            },
+            default: {},
+          }),
+        }}
+      >
       <Tabs.Screen
         name="home"
         options={{
@@ -144,6 +145,8 @@ export default function BabyTabLayout() {
           href: null,
         }}
       />
-    </Tabs>
+      </Tabs>
+
+    </View>
   );
 }

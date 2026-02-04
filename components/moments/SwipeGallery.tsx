@@ -735,15 +735,13 @@ export const SwipeGallery = ({
         </SafeAreaView>
 
         {/* Comments Bottom Sheet */}
-        {commentsPhotoId && (
-          <CommentsBottomSheet
-            visible={commentsVisible}
-            eventId={commentsPhotoId}
-            childId={childId}
-            photoTitle={commentsPhotoTitle}
-            onClose={handleCloseComments}
-          />
-        )}
+        <CommentsBottomSheet
+          visible={commentsVisible}
+          eventId={commentsPhotoId || ""}
+          childId={childId}
+          photoTitle={commentsPhotoTitle}
+          onClose={handleCloseComments}
+        />
 
             {/* Local Toast */}
             {localToast && (

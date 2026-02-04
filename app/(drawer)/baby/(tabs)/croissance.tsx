@@ -18,6 +18,8 @@ import {
   Skia,
   Line as SkiaLine,
   vec,
+  Text as SkiaText,
+  matchFont,
 } from "@shopify/react-native-skia";
 import { router, useLocalSearchParams } from "expo-router";
 import React, {
@@ -124,39 +126,6 @@ function createSmoothPath(points: { x: number; y: number }[]) {
   return path;
 }
 
-function createFillPath(points: { x: number; y: number }[]) {
-  if (points.length === 0) return "";
-
-  const path = Skia.Path.Make();
-  const baseY = CHART_HEIGHT - CHART_PADDING.bottom;
-
-  path.moveTo(points[0].x, baseY);
-  path.lineTo(points[0].x, points[0].y);
-
-  if (points.length > 1) {
-    for (let i = 0; i < points.length - 1; i += 1) {
-      const p0 = i > 0 ? points[i - 1] : points[i];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const p3 = i + 2 < points.length ? points[i + 2] : p2;
-
-      const cp1x = p1.x + (p2.x - p0.x) / 6;
-      const cp1y = p1.y + (p2.y - p0.y) / 6;
-      const cp2x = p2.x - (p3.x - p1.x) / 6;
-      const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-      path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-    }
-  }
-
-  const last = points[points.length - 1];
-  path.lineTo(last.x, last.y);
-  path.lineTo(last.x, baseY);
-  path.close();
-
-  return path;
-}
-
 function createBandPath(
   upper: { x: number; y: number }[],
   lower: { x: number; y: number }[],
@@ -245,18 +214,23 @@ export default function CroissanceScreen() {
 
   const omsPalette = useMemo(
     () => ({
-      bandOuter:
-        colorScheme === "dark"
-          ? "rgba(255, 255, 255, 0.05)"
-          : "rgba(15, 23, 42, 0.05)",
-      bandInner:
-        colorScheme === "dark"
-          ? "rgba(255, 255, 255, 0.08)"
-          : "rgba(15, 23, 42, 0.08)",
-      line:
-        colorScheme === "dark"
-          ? "rgba(255, 255, 255, 0.24)"
-          : "rgba(15, 23, 42, 0.22)",
+      // Bandes colorées pour les zones de percentiles
+      bandExtreme: colorScheme === "dark"
+        ? "rgba(251, 146, 60, 0.12)"  // orange très pâle
+        : "rgba(251, 146, 60, 0.08)",
+      bandLimit: colorScheme === "dark"
+        ? "rgba(252, 211, 77, 0.15)"  // jaune pâle
+        : "rgba(252, 211, 77, 0.10)",
+      bandNormal: colorScheme === "dark"
+        ? "rgba(134, 239, 172, 0.18)"  // vert pâle
+        : "rgba(134, 239, 172, 0.12)",
+      // Lignes des percentiles
+      lineP50: colorScheme === "dark"
+        ? "rgba(34, 197, 94, 0.6)"    // vert médian bien visible
+        : "rgba(34, 197, 94, 0.5)",
+      lineOther: colorScheme === "dark"
+        ? "rgba(148, 163, 184, 0.35)"  // gris pour autres percentiles
+        : "rgba(148, 163, 184, 0.30)",
     }),
     [colorScheme],
   );
@@ -755,7 +729,6 @@ export default function CroissanceScreen() {
   ]);
 
   const linePath = useMemo(() => createSmoothPath(chartPoints), [chartPoints]);
-  const fillPath = useMemo(() => createFillPath(chartPoints), [chartPoints]);
 
   useEffect(() => {
     if (!hasData || chartWidth <= 0) return;
@@ -1000,17 +973,21 @@ export default function CroissanceScreen() {
                               />
                             </RoundedRect>
 
-                            {oms?.bands.map((band, index) => (
-                              <Path
-                                key={`oms-band-${index}`}
-                                path={createBandPath(band.upper, band.lower)}
-                                color={
-                                  index === 0 || index === 3
-                                    ? omsPalette.bandOuter
-                                    : omsPalette.bandInner
-                                }
-                              />
-                            ))}
+                            {oms?.bands.map((band, index) => {
+                              // index 0: p3-p15 (extrême bas), index 1: p15-p50 (limite bas/normal),
+                              // index 2: p50-p85 (normal/limite haut), index 3: p85-p97 (extrême haut)
+                              const bandColor =
+                                index === 0 || index === 3 ? omsPalette.bandExtreme :
+                                index === 1 || index === 2 ? omsPalette.bandLimit :
+                                omsPalette.bandNormal;
+                              return (
+                                <Path
+                                  key={`oms-band-${index}`}
+                                  path={createBandPath(band.upper, band.lower)}
+                                  color={bandColor}
+                                />
+                              );
+                            })}
 
                             {yAxisLabels.map((label, index) => (
                               <SkiaLine
@@ -1028,44 +1005,48 @@ export default function CroissanceScreen() {
                             {oms ? (
                               <>
                                 {(["p3", "p15", "p50", "p85", "p97"] as const).map(
-                                  (key) => (
-                                    <Path
-                                      key={`oms-line-${key}`}
-                                      path={createSmoothPath(oms.lines[key])}
-                                      style="stroke"
-                                      strokeWidth={1.5}
-                                      color={omsPalette.line}
-                                    />
-                                  ),
+                                  (key) => {
+                                    const line = oms.lines[key];
+                                    const lastPoint = line[line.length - 1];
+                                    const fontFamily = "System";
+                                    const fontSize = 9;
+                                    const font = matchFont({ fontFamily, fontSize, fontWeight: "600" });
+
+                                    return (
+                                      <React.Fragment key={`oms-${key}`}>
+                                        <Path
+                                          path={createSmoothPath(line)}
+                                          style="stroke"
+                                          strokeWidth={key === "p50" ? 2 : 1.2}
+                                          color={key === "p50" ? omsPalette.lineP50 : omsPalette.lineOther}
+                                        />
+                                        {lastPoint && (
+                                          <SkiaText
+                                            x={lastPoint.x + 8}
+                                            y={lastPoint.y + 3}
+                                            text={key.toUpperCase()}
+                                            font={font}
+                                            color={key === "p50" ? omsPalette.lineP50 : omsPalette.lineOther}
+                                          />
+                                        )}
+                                      </React.Fragment>
+                                    );
+                                  },
                                 )}
                               </>
                             ) : null}
 
-                            <Path path={fillPath}>
-                              <LinearGradient
-                                start={vec(0, CHART_PADDING.top)}
-                                end={vec(
-                                  0,
-                                  CHART_HEIGHT - CHART_PADDING.bottom,
-                                )}
-                                colors={[
-                                  `rgba(${metricStyle.rgb}, 0.22)`,
-                                  `rgba(${metricStyle.rgb}, 0.02)`,
-                                ]}
-                              />
-                            </Path>
-
                             <Path
                               path={linePath}
                               style="stroke"
-                              strokeWidth={3}
+                              strokeWidth={3.5}
                               color={metricStyle.color}
                             >
                               <Shadow
                                 dx={0}
-                                dy={2}
-                                blur={4}
-                                color={`rgba(${metricStyle.rgb}, 0.35)`}
+                                dy={3}
+                                blur={6}
+                                color={`rgba(${metricStyle.rgb}, 0.45)`}
                               />
                             </Path>
 
@@ -1140,6 +1121,34 @@ export default function CroissanceScreen() {
                         />
                       </Animated.View>
                     ) : null}
+                  </View>
+                )}
+
+                {hasData && oms && (
+                  <View style={styles.omsLegend}>
+                    <Text style={[styles.omsLegendTitle, { color: palette.muted }]}>
+                      Référence OMS
+                    </Text>
+                    <View style={styles.omsLegendRow}>
+                      <View style={styles.omsLegendItem}>
+                        <View style={[styles.omsLegendDot, { backgroundColor: omsPalette.lineP50 }]} />
+                        <Text style={[styles.omsLegendText, { color: palette.muted }]}>
+                          Médiane
+                        </Text>
+                      </View>
+                      <View style={styles.omsLegendItem}>
+                        <View style={[styles.omsLegendBox, { backgroundColor: omsPalette.bandLimit }]} />
+                        <Text style={[styles.omsLegendText, { color: palette.muted }]}>
+                          Normal
+                        </Text>
+                      </View>
+                      <View style={styles.omsLegendItem}>
+                        <View style={[styles.omsLegendBox, { backgroundColor: omsPalette.bandExtreme }]} />
+                        <Text style={[styles.omsLegendText, { color: palette.muted }]}>
+                          Extrême
+                        </Text>
+                      </View>
+                    </View>
                   </View>
                 )}
               </View>
@@ -1447,5 +1456,47 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     padding: 6,
+  },
+  omsLegend: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+  omsLegendTitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  omsLegendRow: {
+    flexDirection: "row",
+    gap: 16,
+    flexWrap: "wrap",
+  },
+  omsLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  omsLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  omsLegendLine: {
+    width: 16,
+    height: 2,
+    borderRadius: 1,
+  },
+  omsLegendBox: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+  },
+  omsLegendText: {
+    fontSize: 11,
+    fontWeight: "500",
   },
 });

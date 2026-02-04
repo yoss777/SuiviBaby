@@ -5,6 +5,7 @@ import {
   StatsGroup,
   type StatItem,
 } from "@/components/suivibaby/dashboard";
+import { GlobalFAB } from "@/components/suivibaby/GlobalFAB";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import {
@@ -2079,14 +2080,15 @@ export default function HomeDashboard() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      showsVerticalScrollIndicator={false}
-      onScroll={handleScroll}
-      scrollEventThrottle={16}
-    >
-      {/* Bannière de migration */}
-      {activeChild?.id && <MigrationBanner childId={activeChild.id} />}
+    <View style={styles.screen}>
+      <ScrollView
+        style={styles.container}
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
+        {/* Bannière de migration */}
+        {activeChild?.id && <MigrationBanner childId={activeChild.id} />}
 
       {/* En-tête avec salutation */}
       <View
@@ -2304,7 +2306,9 @@ export default function HomeDashboard() {
           getDayLabel={getDayLabel}
         />
       </View>
-    </ScrollView>
+      </ScrollView>
+      <GlobalFAB includeVoiceAction={false} />
+    </View>
   );
 }
 
@@ -2313,6 +2317,9 @@ export default function HomeDashboard() {
 // ============================================
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: neutralColors.background,
