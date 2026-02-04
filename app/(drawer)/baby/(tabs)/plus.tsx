@@ -32,7 +32,7 @@ const ITEMS = [
   {
     title: "Repas",
     subtitle: "Biberons et tétées",
-    icon: "baby",
+    icon: "utensils",
     color: "#4A90E2",
     route: "/baby/meals",
   },
@@ -67,7 +67,7 @@ const ITEMS = [
   {
     title: "Couches",
     subtitle: "Mictions et selles",
-    icon: "toilet",
+    icon: "baby",
     color: "#17a2b8",
     route: "/baby/diapers",
   },

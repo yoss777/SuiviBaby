@@ -30,7 +30,7 @@ const ACTIONS = [
   // Position 4 (très accessible)
   {
     key: "diaper",
-    icon: { lib: "fa6" as const, name: "toilet" },
+    icon: { lib: "fa6" as const, name: "baby" },
     label: "Change",
     color: "#17a2b8",
     bgColor: "#d1ecf1",

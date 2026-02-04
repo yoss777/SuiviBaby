@@ -4,6 +4,7 @@ import { BabyProvider } from "@/contexts/BabyContext";
 import { ModalProvider } from "@/contexts/ModalContext";
 import { ThemeProvider as AppThemeProvider } from "@/contexts/ThemeContext";
 import { SheetProvider } from "@/contexts/SheetContext";
+import { SuccessAnimationProvider } from "@/contexts/SuccessAnimationContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MigrationProvider } from "@/migration/MigrationProvider";
@@ -33,9 +34,11 @@ export default function RootLayout() {
                   <BabyProvider>
                     <MigrationProvider>
                       <SheetProvider>
-                        <AppNavigation />
-                        <GlobalSheetManager />
-                        <InvitationListener />
+                        <SuccessAnimationProvider>
+                          <AppNavigation />
+                          <GlobalSheetManager />
+                          <InvitationListener />
+                        </SuccessAnimationProvider>
                       </SheetProvider>
                     </MigrationProvider>
                   </BabyProvider>

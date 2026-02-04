@@ -10,6 +10,7 @@ import {
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -112,6 +113,7 @@ export function MealsForm({
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
+  const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
 
   const isEditing = !!editData;
@@ -299,13 +301,17 @@ export function MealsForm({
           date: dateHeure,
         });
 
+        let successMessage = "";
         if (isEditing && editData?.id) {
           await modifierTetee(activeChild.id, editData.id, dataToSave);
-          showToast("Tétée modifiée");
+          successMessage = "Tétée modifiée";
+          showToast(successMessage);
         } else {
           await ajouterTetee(activeChild.id, dataToSave);
-          showToast("Tétée enregistrée");
+          successMessage = "Tétée enregistrée";
+          showToast(successMessage);
         }
+        showSuccess('meal', successMessage);
       } else if (mealType === "biberon") {
         const dataToSave = removeUndefined({
           type: mealType,
@@ -314,13 +320,17 @@ export function MealsForm({
           date: dateHeure,
         });
 
+        let successMessage = "";
         if (isEditing && editData?.id) {
           await modifierBiberon(activeChild.id, editData.id, dataToSave);
-          showToast("Biberon modifié");
+          successMessage = "Biberon modifié";
+          showToast(successMessage);
         } else {
           await ajouterBiberon(activeChild.id, dataToSave);
-          showToast("Biberon enregistré");
+          successMessage = "Biberon enregistré";
+          showToast(successMessage);
         }
+        showSuccess('meal', successMessage);
       } else if (mealType === "solide") {
         const dataToSave = removeUndefined({
           type: mealType,
@@ -343,13 +353,17 @@ export function MealsForm({
           date: dateHeure,
         });
 
+        let successMessage = "";
         if (isEditing && editData?.id) {
           await modifierSolide(activeChild.id, editData.id, dataToSave);
-          showToast("Repas solide modifié");
+          successMessage = "Repas solide modifié";
+          showToast(successMessage);
         } else {
           await ajouterSolide(activeChild.id, dataToSave);
-          showToast("Repas solide enregistré");
+          successMessage = "Repas solide enregistré";
+          showToast(successMessage);
         }
+        showSuccess('meal', successMessage);
       }
 
       onSuccess();

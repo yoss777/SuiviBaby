@@ -12,6 +12,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
@@ -91,6 +92,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
+  const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
 
   const isEditing = !!editData;
@@ -157,6 +159,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
     try {
       setIsSubmitting(true);
 
+      let successMessage = "";
       if (editData) {
         // Edit mode: modify existing excretion
         const isMiction = editData.type === "miction";
@@ -166,7 +169,8 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             couleur: mictionCouleur ?? undefined,
           });
           await modifierMiction(activeChild.id, editData.id, mictionData);
-          showToast("Miction modifiée");
+          successMessage = "Miction modifiée";
+          showToast(successMessage);
         } else {
           const selleData = removeUndefined({
             date: dateHeure,
@@ -174,7 +178,8 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             quantite: selleQuantite ?? undefined,
           });
           await modifierSelle(activeChild.id, editData.id, selleData);
-          showToast("Selle modifiée");
+          successMessage = "Selle modifiée";
+          showToast(successMessage);
         }
       } else {
         // Add mode: add one or two excretions
@@ -193,14 +198,16 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           });
           await ajouterSelle(activeChild.id, selleData);
         }
-        showToast(
-          includeMiction && includeSelle
-            ? "Miction et selle ajoutées"
-            : includeMiction
-              ? "Miction ajoutée"
-              : "Selle ajoutée"
-        );
+        successMessage = includeMiction && includeSelle
+          ? "Miction et selle ajoutées"
+          : includeMiction
+            ? "Miction ajoutée"
+            : "Selle ajoutée";
+        showToast(successMessage);
       }
+
+      // Afficher l'animation de succès avant de fermer le formulaire
+      showSuccess('diaper', successMessage);
 
       onSuccess?.();
     } catch (error) {
