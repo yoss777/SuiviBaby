@@ -101,6 +101,8 @@ export default function PlusScreen() {
   const { activeChild } = useBaby();
   const { firebaseUser } = useAuth();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+  const canManageContent =
+    permissions.role === "owner" || permissions.role === "admin";
 
   useFocusEffect(
     useCallback(() => {

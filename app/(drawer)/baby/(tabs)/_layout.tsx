@@ -1,4 +1,7 @@
 import { Colors } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { useBaby } from "@/contexts/BabyContext";
+import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { Tabs } from "expo-router";
@@ -6,6 +9,14 @@ import { Platform, View } from "react-native";
 
 export default function BabyTabLayout() {
   const colorScheme = useColorScheme() ?? "light";
+  const { firebaseUser } = useAuth();
+  const { activeChild } = useBaby();
+  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+  const canManageContent =
+    permissions.role === "owner" || permissions.role === "admin";
+
+  const showPlusTab = canManageContent;
+  const showStatsTab = !canManageContent;
 
   return (
     <View style={{ flex: 1 }}>
@@ -72,6 +83,7 @@ export default function BabyTabLayout() {
         name="plus"
         options={{
           title: "Plus",
+          href: showPlusTab ? undefined : null,
           tabBarIcon: ({ color }) => (
             <FontAwesome size={28} name="ellipsis-h" color={color} />
           ),
@@ -112,7 +124,11 @@ export default function BabyTabLayout() {
       <Tabs.Screen
         name="stats"
         options={{
-          href: null,
+          title: "Stats",
+          href: showStatsTab ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <FontAwesome size={28} name="chart-bar" color={color} />
+          ),
         }}
       />
       <Tabs.Screen

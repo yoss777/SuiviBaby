@@ -43,7 +43,7 @@ export interface RecentEventsListProps {
   showHint: boolean;
   colorScheme: "light" | "dark";
   currentTime: Date;
-  onEventLongPress: (event: RecentEvent) => void;
+  onEventLongPress?: (event: RecentEvent) => void;
   onViewAllPress: () => void;
   toDate: (value: any) => Date;
   formatTime: (date: Date) => string;
@@ -381,10 +381,15 @@ function RecentEventsListComponent({
                     },
                   ]}
                   activeOpacity={0.85}
-                  onPress={() => onEventLongPress(event)}
+                  onPress={
+                    onEventLongPress ? () => onEventLongPress(event) : undefined
+                  }
+                  disabled={!onEventLongPress}
                   accessibilityRole="button"
                   accessibilityLabel={`${displayLabel}${displayDetails ? `, ${displayDetails}` : ""}`}
-                  accessibilityHint="Appuyez pour modifier"
+                  accessibilityHint={
+                    onEventLongPress ? "Appuyez pour modifier" : undefined
+                  }
                 >
                   <View style={styles.recentTitleRow}>
                     <EventIcon

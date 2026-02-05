@@ -5,8 +5,10 @@ import { MOMENT_REPAS_LABELS } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { ecouterEvenementsHybrid } from "@/migration/eventsHybridService";
 import type { Event, EventType } from "@/services/eventsService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -711,7 +713,7 @@ interface TimelineCardProps {
   backgroundColor: string;
   textColor: string;
   secondaryTextColor: string;
-  onLongPress: () => void;
+  onLongPress?: () => void;
   currentTime: Date;
 }
 
@@ -874,6 +876,7 @@ const TimelineCard = React.memo(
           activeOpacity={0.9}
           delayLongPress={250}
           onLongPress={onLongPress}
+          disabled={!onLongPress}
         >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
@@ -900,11 +903,13 @@ const TimelineCard = React.memo(
                   style={styles.cardThumb}
                 />
               ) : null}
-              <FontAwesome
-                name="pen-to-square"
-                size={14}
-                color={secondaryTextColor}
-              />
+              {onLongPress && (
+                <FontAwesome
+                  name="pen-to-square"
+                  size={14}
+                  color={secondaryTextColor}
+                />
+              )}
             </View>
           </View>
           {!isSolide && (details || isOngoingSleep) && (
@@ -960,6 +965,7 @@ TimelineCard.displayName = "TimelineCard";
 
 export default function ChronoScreen() {
   const { activeChild } = useBaby();
+  const { firebaseUser } = useAuth();
   const { setHeaderRight } = useHeaderRight();
   const { openSheet: openSheetRaw } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
@@ -985,6 +991,9 @@ export default function ChronoScreen() {
   const headerScrollState = useSharedValue(0);
   const headerOwnerId = useRef(`chrono-${Math.random().toString(36).slice(2)}`);
   const headerRangeOpacity = useRef(new Animated.Value(0)).current;
+  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+  const canManageContent =
+    permissions.role === "owner" || permissions.role === "admin";
 
   const triggerRefresh = useCallback(() => {
     setRefreshTick((prev) => prev + 1);
@@ -1592,11 +1601,11 @@ export default function ChronoScreen() {
         backgroundColor={colors.background}
         textColor={colors.text}
         secondaryTextColor={colors.secondary}
-        onLongPress={() => handleEventLongPress(item)}
+        onLongPress={canManageContent ? () => handleEventLongPress(item) : undefined}
         currentTime={currentTime}
       />
     ),
-    [colors, handleEventLongPress, currentTime],
+    [canManageContent, colors, handleEventLongPress, currentTime],
   );
 
   // Key extractor

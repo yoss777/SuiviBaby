@@ -295,6 +295,7 @@ export const StatsGroup = memo(function StatsGroup({
             const itemTimeSince = item.lastTimestamp
               ? getTimeSinceLastActivity(item.lastTimestamp, currentTime)
               : null;
+            const isItemDisabled = !item.onPress;
 
             return (
               <Pressable
@@ -302,9 +303,10 @@ export const StatsGroup = memo(function StatsGroup({
                 style={({ pressed }) => [
                   styles.item,
                   index < items.length - 1 && styles.itemBorder,
-                  pressed && styles.itemPressed,
+                  pressed && !isItemDisabled && styles.itemPressed,
                 ]}
                 onPress={item.onPress}
+                disabled={isItemDisabled}
                 accessibilityRole="button"
                 accessibilityLabel={`${item.label}: ${item.value} ${item.unit || ""}`}
               >

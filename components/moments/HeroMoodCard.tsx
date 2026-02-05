@@ -33,6 +33,7 @@ type HeroMoodCardProps = {
   babyName?: string;
   time?: string;
   onAddMood: (mood?: MoodLevel) => void;
+  canEditMood?: boolean;
 };
 
 const MOOD_DATA: Record<
@@ -161,6 +162,7 @@ export const HeroMoodCard = ({
   babyName = "Bébé",
   time,
   onAddMood,
+  canEditMood = true,
 }: HeroMoodCardProps) => {
   const cardScale = useSharedValue(0.95);
   const cardOpacity = useSharedValue(0);
@@ -204,29 +206,33 @@ export const HeroMoodCard = ({
         >
           <Text style={styles.heroEmojiEmpty}>🌤️</Text>
           <Text style={styles.heroTitle}>Comment va {babyName} ?</Text>
-          <Text style={styles.heroSubtitle}>
-            Touchez une humeur pour commencer
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.emojiRow}
-          >
-            {([1, 2, 3, 4, 5] as MoodLevel[]).map((level) => (
-              <Pressable
-                key={level}
-                style={({ pressed }) => [
-                  styles.emojiButton,
-                  pressed && styles.emojiButtonPressed,
-                ]}
-                onPress={() => onAddMood(level)}
+          {canEditMood && (
+            <>
+              <Text style={styles.heroSubtitle}>
+                Touchez une humeur pour commencer
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.emojiRow}
               >
-                <Text style={styles.emojiButtonText}>
-                  {MOOD_DATA[level].emoji}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+                {([1, 2, 3, 4, 5] as MoodLevel[]).map((level) => (
+                  <Pressable
+                    key={level}
+                    style={({ pressed }) => [
+                      styles.emojiButton,
+                      pressed && styles.emojiButtonPressed,
+                    ]}
+                    onPress={() => onAddMood(level)}
+                  >
+                    <Text style={styles.emojiButtonText}>
+                      {MOOD_DATA[level].emoji}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          )}
         </LinearGradient>
       </Animated.View>
     );
@@ -257,27 +263,29 @@ export const HeroMoodCard = ({
 
         {time && <Text style={styles.heroTime}>à {time}</Text>}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.emojiRowSmall}
-        >
-          {([1, 2, 3, 4, 5] as MoodLevel[]).map((level) => (
-            <Pressable
-              key={level}
-              style={({ pressed }) => [
-                styles.emojiButtonSmall,
-                level === mood && styles.emojiButtonActive,
-                pressed && styles.emojiButtonPressed,
-              ]}
-              onPress={() => onAddMood(level)}
-            >
-              <Text style={styles.emojiButtonTextSmall}>
-                {MOOD_DATA[level].emoji}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+        {canEditMood && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.emojiRowSmall}
+          >
+            {([1, 2, 3, 4, 5] as MoodLevel[]).map((level) => (
+              <Pressable
+                key={level}
+                style={({ pressed }) => [
+                  styles.emojiButtonSmall,
+                  level === mood && styles.emojiButtonActive,
+                  pressed && styles.emojiButtonPressed,
+                ]}
+                onPress={() => onAddMood(level)}
+              >
+                <Text style={styles.emojiButtonTextSmall}>
+                  {MOOD_DATA[level].emoji}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
       </LinearGradient>
     </Animated.View>
   );

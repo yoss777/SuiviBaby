@@ -19,6 +19,7 @@ import { InfoModal } from "@/components/ui/InfoModal";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
+import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { masquerEnfant } from "@/services/userPreferencesService";
 
@@ -29,7 +30,7 @@ export function CustomDrawerContent(props: any) {
   const pathname = usePathname();
   const colorScheme = useColorScheme() ?? "light";
   const { activeChild, children, childrenLoaded, setActiveChild } = useBaby();
-  const { signOut, user, userName, email } = useAuth();
+  const { signOut, user, userName, email, firebaseUser } = useAuth();
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showHideModal, setShowHideModal] = useState(false);
@@ -41,6 +42,11 @@ export function CustomDrawerContent(props: any) {
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
   const inputRef = useRef<TextInput>(null);
+  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+  const canShareChild =
+    permissions.role === "owner" || permissions.role === "admin";
+  const canAddChild =
+    permissions.role === "owner" || permissions.role === "admin";
 
   const isActive = (routeName: string) => pathname.includes(routeName);
 
@@ -198,17 +204,19 @@ export function CustomDrawerContent(props: any) {
 
               {/* Actions sur l'enfant */}
               <View style={styles.childActions}>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() =>
-                    router.push(
-                      `/(drawer)/share-child?childId=${child.id}` as any,
-                    )
-                  }
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <FontAwesome name="share-alt" size={16} color="#4A90E2" />
-                </TouchableOpacity>
+                {canShareChild && (
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() =>
+                      router.push(
+                        `/(drawer)/share-child?childId=${child.id}` as any,
+                      )
+                    }
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <FontAwesome name="share-alt" size={16} color="#4A90E2" />
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                   style={styles.actionButton}
@@ -228,7 +236,13 @@ export function CustomDrawerContent(props: any) {
             styles.addBabyButton,
             { borderColor: Colors[colorScheme].tint },
           ]}
-          onPress={() => setShowAddChildModal(true)}
+          onPress={() => {
+            if (canAddChild) {
+              setShowAddChildModal(true);
+              return;
+            }
+            router.push("/settings/join-child" as any);
+          }}
         >
           <Text
             style={[styles.addBabyText, { color: Colors[colorScheme].tint }]}

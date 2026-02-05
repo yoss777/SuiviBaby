@@ -24,6 +24,7 @@ export interface SleepWidgetProps {
   startTime?: string;
   onStartSleep: (isNap: boolean) => void;
   onStopSleep: () => void;
+  showStopButton?: boolean;
 }
 
 // ============================================
@@ -59,6 +60,7 @@ export const SleepWidget = memo(function SleepWidget({
   startTime,
   onStartSleep,
   onStopSleep,
+  showStopButton = true,
 }: SleepWidgetProps) {
   const hour = new Date().getHours();
   const preferNight = hour >= 20 || hour < 6;
@@ -122,14 +124,16 @@ export const SleepWidget = memo(function SleepWidget({
           {formatDuration(elapsedMinutes)}
         </Text>
         <Text style={styles.sleepWidgetSubtitle}>Début {startTime}</Text>
-        <TouchableOpacity
-          style={styles.sleepWidgetStop}
-          onPress={onStopSleep}
-          accessibilityRole="button"
-          accessibilityLabel="Terminer le sommeil"
-        >
-          <Text style={styles.sleepWidgetStopText}>Terminer</Text>
-        </TouchableOpacity>
+        {showStopButton && (
+          <TouchableOpacity
+            style={styles.sleepWidgetStop}
+            onPress={onStopSleep}
+            accessibilityRole="button"
+            accessibilityLabel="Terminer le sommeil"
+          >
+            <Text style={styles.sleepWidgetStopText}>Terminer</Text>
+          </TouchableOpacity>
+        )}
       </Animated.View>
     );
   }

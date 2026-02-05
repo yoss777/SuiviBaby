@@ -2,8 +2,10 @@ import { ThemedView } from "@/components/themed-view";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { ecouterCroissancesHybrid } from "@/migration/eventsHybridService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -157,6 +159,7 @@ function getAgeInDays(birthDate: Date, target: Date) {
 
 export default function CroissanceScreen() {
   const { activeChild } = useBaby();
+  const { firebaseUser } = useAuth();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
@@ -166,6 +169,9 @@ export default function CroissanceScreen() {
   const headerOwnerId = useRef(
     `croissance-${Math.random().toString(36).slice(2)}`,
   );
+  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+  const canManageContent =
+    permissions.role === "owner" || permissions.role === "admin";
 
   const [entries, setEntries] = useState<CroissanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -340,6 +346,10 @@ export default function CroissanceScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (!canManageContent) {
+        setHeaderRight(null, headerOwnerId.current);
+        return () => setHeaderRight(null, headerOwnerId.current);
+      }
       const headerButtons = (
         <View style={styles.headerActions}>
           <Pressable onPress={openAddModal} style={styles.headerButton}>
@@ -349,7 +359,7 @@ export default function CroissanceScreen() {
       );
       setHeaderRight(headerButtons, headerOwnerId.current);
       return () => setHeaderRight(null, headerOwnerId.current);
-    }, [colors.tint, openAddModal, setHeaderRight]),
+    }, [canManageContent, colors.tint, openAddModal, setHeaderRight]),
   );
 
   useEffect(() => {
@@ -445,15 +455,16 @@ export default function CroissanceScreen() {
             })}
           </Text>
           <Pressable
-            onLongPress={() => openEditModal(item)}
+            onLongPress={canManageContent ? () => openEditModal(item) : undefined}
             delayLongPress={250}
+            disabled={!canManageContent}
             style={({ pressed }) => [
               styles.card,
               {
                 borderColor: palette.border,
                 backgroundColor: palette.surface,
               },
-              pressed && { opacity: 0.9 },
+              pressed && canManageContent && { opacity: 0.9 },
             ]}
           >
             <View style={styles.cardHeader}>
@@ -463,11 +474,13 @@ export default function CroissanceScreen() {
                   Croissance
                 </Text>
               </View>
-              <FontAwesome
-                name="pen-to-square"
-                size={12}
-                color={palette.muted}
-              />
+              {canManageContent && (
+                <FontAwesome
+                  name="pen-to-square"
+                  size={12}
+                  color={palette.muted}
+                />
+              )}
             </View>
             <View style={styles.metricPillRow}>
               {item.tailleCm ? (

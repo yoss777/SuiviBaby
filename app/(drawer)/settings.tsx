@@ -13,6 +13,7 @@ import { IconPulseDots } from '@/components/ui/IconPulseDtos';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBaby } from '@/contexts/BabyContext';
 import { useThemePreference } from '@/contexts/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { deleteAccountAndData } from '@/services/accountDeletionService';
@@ -33,6 +34,7 @@ interface SettingItem {
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const { user, signOut } = useAuth();
+  const { activeChild } = useBaby();
   const { preference: themePreference } = useThemePreference();
   const router = useRouter();
   const { delete: deleteParam } = useLocalSearchParams();

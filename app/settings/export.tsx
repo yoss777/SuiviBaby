@@ -14,6 +14,15 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  where,
+} from "firebase/firestore";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -24,8 +33,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { Child } from "@/contexts/BabyContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { Event, EventType, obtenirEvenements } from "@/services/eventsService";
+import { db } from "@/config/firebase";
+import { Event, EventType } from "@/services/eventsService";
 import { obtenirPreferences } from "@/services/userPreferencesService";
+import type { ChildRole } from "@/types/permissions";
+import type { EventComment, EventLike } from "@/types/social";
 
 interface ExportFormat {
   id: string;
@@ -38,11 +50,14 @@ interface ExportFormat {
 interface ExportChild {
   child: Child;
   events: Event[];
+  likes: EventLike[];
+  comments: EventComment[];
+  role: ChildRole | null;
   selected: boolean;
 }
 
 interface ExportSummaryRow {
-  type: EventType;
+  type: EventType | InteractionType;
   label: string;
   selected: number;
   total: number;
@@ -53,25 +68,57 @@ interface ExportSummary {
   rows: ExportSummaryRow[];
 }
 
-const EVENT_TYPES: {
-  id: EventType;
+type InteractionType = "likes" | "comments";
+
+type ExportTypeItem = {
+  id: EventType | InteractionType;
   label: string;
-  icon: keyof typeof FontAwesome.glyphMap;
-}[] = [
-  { id: "biberon", label: "Biberon", icon: "jar-wheat" },
-  { id: "tetee", label: "Tetee", icon: "person-breastfeeding" },
-  { id: "pompage", label: "Pompage", icon: "pump-medical" },
-  { id: "couche", label: "Couche", icon: "baby-carriage" },
-  { id: "miction", label: "Miction", icon: "water" },
-  { id: "selle", label: "Selle", icon: "poop" },
-  { id: "sommeil", label: "Sommeil", icon: "moon" },
-  { id: "vaccin", label: "Vaccin", icon: "syringe" },
-  { id: "vitamine", label: "Vitamine", icon: "pills" },
+  icon: {
+    lib: "FontAwesome" | "MaterialCommunityIcons" | "Ionicons";
+    name: string;
+  };
+};
+
+const BASE_EVENT_TYPES: ExportTypeItem[] = [
+  { id: "biberon", label: "Biberon", icon: { lib: "MaterialCommunityIcons", name: "baby-bottle" } },
+  { id: "tetee", label: "Tetee", icon: { lib: "FontAwesome", name: "person-breastfeeding" } },
+  { id: "pompage", label: "Pompage", icon: { lib: "FontAwesome", name: "pump-medical" } },
+  { id: "couche", label: "Couche", icon: { lib: "MaterialCommunityIcons", name: "human-baby-changing-table" } },
+  { id: "miction", label: "Miction", icon: { lib: "FontAwesome", name: "water" } },
+  { id: "selle", label: "Selle", icon: { lib: "FontAwesome", name: "poop" } },
+  { id: "sommeil", label: "Sommeil", icon: { lib: "FontAwesome", name: "moon" } },
+  { id: "vaccin", label: "Vaccin", icon: { lib: "FontAwesome", name: "syringe" } },
+  { id: "vitamine", label: "Vitamine", icon: { lib: "FontAwesome", name: "pills" } },
+];
+
+const EXTRA_EVENT_TYPES: ExportTypeItem[] = [
+  { id: "solide", label: "Solide", icon: { lib: "FontAwesome", name: "utensils" } },
+  { id: "bain", label: "Bain", icon: { lib: "MaterialCommunityIcons", name: "bathtub" } },
+  { id: "temperature", label: "Temperature", icon: { lib: "MaterialCommunityIcons", name: "thermometer" } },
+  { id: "medicament", label: "Medicament", icon: { lib: "MaterialCommunityIcons", name: "pill" } },
+  { id: "symptome", label: "Symptome", icon: { lib: "MaterialCommunityIcons", name: "alert-circle-outline" } },
+  { id: "croissance", label: "Croissance", icon: { lib: "MaterialCommunityIcons", name: "chart-line" } },
+  { id: "activite", label: "Activite", icon: { lib: "MaterialCommunityIcons", name: "run-fast" } },
+  { id: "jalon", label: "Jalon", icon: { lib: "MaterialCommunityIcons", name: "star-outline" } },
+];
+
+const INTERACTION_TYPES: ExportTypeItem[] = [
+  { id: "likes", label: "Likes", icon: { lib: "Ionicons", name: "heart" } },
+  { id: "comments", label: "Commentaires", icon: { lib: "Ionicons", name: "chatbubble" } },
+];
+
+const ALL_EVENT_TYPE_IDS = new Set<EventType>(
+  [...BASE_EVENT_TYPES, ...EXTRA_EVENT_TYPES].map((item) => item.id as EventType)
+);
+
+const getEventTypes = (hideExtra: boolean) => [
+  ...BASE_EVENT_TYPES,
+  ...(hideExtra ? [] : EXTRA_EVENT_TYPES),
 ];
 
 export default function ExportScreen() {
   const colorScheme = useColorScheme() ?? "light";
-  const { userName, email } = useAuth();
+  const { userName, email, user } = useAuth();
   const { afterDelete } = useLocalSearchParams();
   const router = useRouter();
   const isAutoDeleteFlow = afterDelete === "1";
@@ -79,9 +126,17 @@ export default function ExportScreen() {
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [children, setChildren] = useState<ExportChild[]>([]);
-  const [selectedTypes, setSelectedTypes] = useState<Set<EventType>>(
-    () => new Set(EVENT_TYPES.map((item) => item.id))
+  const [isContributorOnly, setIsContributorOnly] = useState(false);
+  const eventTypes = useMemo(
+    () => getEventTypes(isContributorOnly),
+    [isContributorOnly]
   );
+  const [selectedEventTypes, setSelectedEventTypes] = useState<Set<EventType>>(
+    () => new Set(getEventTypes(false).map((item) => item.id as EventType))
+  );
+  const [selectedInteractionTypes, setSelectedInteractionTypes] = useState<
+    Set<InteractionType>
+  >(() => new Set(INTERACTION_TYPES.map((item) => item.id as InteractionType)));
   const [modalConfig, setModalConfig] = useState<{
     visible: boolean;
     title: string;
@@ -127,8 +182,62 @@ export default function ExportScreen() {
           obtenirPreferences().catch(() => null),
           Promise.all(
             visibleChildren.map(async (child) => {
-              const events = await obtenirEvenements(child.id);
-              return { child, events, selected: true };
+              const [eventsSnapshot, likesSnapshot, commentsSnapshot, accessDoc] = await Promise.all([
+                user?.uid
+                  ? getDocs(
+                      query(
+                        collection(db, "events"),
+                        where("childId", "==", child.id),
+                        where("userId", "==", user.uid),
+                        limit(10000)
+                      )
+                    )
+                  : Promise.resolve({ docs: [] } as any),
+                user?.uid
+                  ? getDocs(
+                      query(
+                        collection(db, "eventLikes"),
+                        where("childId", "==", child.id),
+                        where("userId", "==", user.uid),
+                        limit(10000)
+                      )
+                    )
+                  : Promise.resolve({ docs: [] } as any),
+                user?.uid
+                  ? getDocs(
+                      query(
+                        collection(db, "eventComments"),
+                        where("childId", "==", child.id),
+                        where("userId", "==", user.uid),
+                        limit(10000)
+                      )
+                    )
+                  : Promise.resolve({ docs: [] } as any),
+                user?.uid
+                  ? getDoc(doc(db, "children", child.id, "access", user.uid))
+                  : Promise.resolve(null),
+              ]);
+
+              const events = eventsSnapshot.docs.map(
+                (d) => ({ id: d.id, ...d.data() }) as Event
+              );
+
+              const role = accessDoc && accessDoc.exists()
+                ? ((accessDoc.data()?.role ?? null) as ChildRole | null)
+                : null;
+
+              return {
+                child,
+                events,
+                likes: likesSnapshot.docs.map(
+                  (d) => ({ id: d.id, ...d.data() }) as EventLike
+                ),
+                comments: commentsSnapshot.docs.map(
+                  (d) => ({ id: d.id, ...d.data() }) as EventComment
+                ),
+                role,
+                selected: true,
+              };
             })
           ),
         ]);
@@ -142,6 +251,16 @@ export default function ExportScreen() {
         }
 
         if (isMounted) {
+          const roles = childrenWithEvents.map((item) => item.role).filter(Boolean);
+          const hasElevatedRole = roles.some(
+            (role) => role === "owner" || role === "admin"
+          );
+          const hasContributorRole = roles.some((role) => role === "contributor");
+          const contributorOnly =
+            !hasElevatedRole && (hasContributorRole || roles.length === 0);
+
+          console.log("[Export] roles:", roles, "contributorOnly:", contributorOnly);
+          setIsContributorOnly(contributorOnly);
           setChildren((prev) => {
             const selectionMap = new Map(
               prev.map((item) => [item.child.id, item.selected])
@@ -153,7 +272,14 @@ export default function ExportScreen() {
           });
 
           if (isAutoDeleteFlow) {
-            setSelectedTypes(new Set(EVENT_TYPES.map((item) => item.id)));
+            setSelectedEventTypes(
+              contributorOnly
+                ? new Set()
+                : new Set(getEventTypes(contributorOnly).map((item) => item.id as EventType))
+            );
+            setSelectedInteractionTypes(
+              new Set(INTERACTION_TYPES.map((item) => item.id as InteractionType))
+            );
           }
         }
       } catch (error) {
@@ -174,7 +300,15 @@ export default function ExportScreen() {
     return () => {
       isMounted = false;
     };
-  }, [childrenLoading, visibleChildren, isAutoDeleteFlow]);
+  }, [childrenLoading, visibleChildren, isAutoDeleteFlow, user?.uid]);
+
+  useEffect(() => {
+    if (isContributorOnly) {
+      setSelectedEventTypes(new Set());
+      return;
+    }
+    setSelectedEventTypes(new Set(eventTypes.map((item) => item.id as EventType)));
+  }, [eventTypes, isContributorOnly]);
 
   const closeModal = () => {
     setModalConfig((prev) => ({
@@ -209,9 +343,38 @@ export default function ExportScreen() {
     [children]
   );
 
-  const selectedTypesArray = useMemo(
-    () => Array.from(selectedTypes),
-    [selectedTypes]
+  const selectedEventsCount = useMemo(
+    () => selectedChildren.reduce((sum, item) => sum + item.events.length, 0),
+    [selectedChildren]
+  );
+
+  const selectedInteractionsCount = useMemo(
+    () =>
+      selectedChildren.reduce(
+        (sum, item) => sum + item.likes.length + item.comments.length,
+        0
+      ),
+    [selectedChildren]
+  );
+
+  const selectedCanExportEvents = useMemo(
+    () =>
+      selectedChildren.some(
+        (child) =>
+          child.role === "owner" ||
+          child.role === "admin" ||
+          child.events.length > 0
+      ),
+    [selectedChildren]
+  );
+
+  const selectedEventTypesArray = useMemo(
+    () => Array.from(selectedEventTypes),
+    [selectedEventTypes]
+  );
+  const selectedInteractionTypesArray = useMemo(
+    () => Array.from(selectedInteractionTypes),
+    [selectedInteractionTypes]
   );
 
   useEffect(() => {
@@ -222,6 +385,12 @@ export default function ExportScreen() {
     handleExport(true);
   }, [isAutoDeleteFlow, childrenLoading, isLoading, isExporting]);
 
+  useEffect(() => {
+    if (!selectedCanExportEvents) {
+      setSelectedEventTypes(new Set());
+    }
+  }, [selectedCanExportEvents]);
+
   const toggleChild = (childId: string) => {
     setChildren((prev) =>
       prev.map((item) =>
@@ -230,8 +399,9 @@ export default function ExportScreen() {
     );
   };
 
-  const toggleType = (type: EventType) => {
-    setSelectedTypes((prev) => {
+  const toggleEventType = (type: EventType) => {
+    if (!selectedCanExportEvents) return;
+    setSelectedEventTypes((prev) => {
       const next = new Set(prev);
       if (next.has(type)) {
         next.delete(type);
@@ -242,12 +412,34 @@ export default function ExportScreen() {
     });
   };
 
-  const toggleAllTypes = () => {
-    setSelectedTypes((prev) => {
-      if (prev.size === EVENT_TYPES.length) {
+  const toggleAllEventTypes = () => {
+    if (!selectedCanExportEvents) return;
+    setSelectedEventTypes((prev) => {
+      if (prev.size === eventTypes.length) {
         return new Set();
       }
-      return new Set(EVENT_TYPES.map((item) => item.id));
+      return new Set(eventTypes.map((item) => item.id as EventType));
+    });
+  };
+
+  const toggleInteractionType = (type: InteractionType) => {
+    setSelectedInteractionTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllInteractionTypes = () => {
+    setSelectedInteractionTypes((prev) => {
+      if (prev.size === INTERACTION_TYPES.length) {
+        return new Set();
+      }
+      return new Set(INTERACTION_TYPES.map((item) => item.id as InteractionType));
     });
   };
 
@@ -258,35 +450,42 @@ export default function ExportScreen() {
     });
   };
 
-  const getCounts = (events: Event[]) => {
-    const counts: Record<EventType, number> = {
-      biberon: 0,
-      tetee: 0,
-      pompage: 0,
-      couche: 0,
-      miction: 0,
-      selle: 0,
-      sommeil: 0,
-      vaccin: 0,
-      vitamine: 0,
-    };
-    events.forEach((event) => {
+  const getCounts = (item: ExportChild) => {
+    const counts: Record<EventType | InteractionType, number> = {
+      likes: item.likes.length,
+      comments: item.comments.length,
+    } as Record<EventType | InteractionType, number>;
+
+    ALL_EVENT_TYPE_IDS.forEach((type) => {
+      counts[type] = 0;
+    });
+
+    item.events.forEach((event) => {
+      if (!ALL_EVENT_TYPE_IDS.has(event.type)) return;
       counts[event.type] += 1;
     });
+
     return counts;
   };
 
   const buildSummary = () => {
     return selectedChildren.map((item) => {
-      const counts = getCounts(item.events);
-      const rows = EVENT_TYPES.filter((type) => counts[type.id] > 0).map(
-        (type) => ({
+      const counts = getCounts(item);
+      const rows = [...eventTypes, ...INTERACTION_TYPES]
+        .filter((type) => counts[type.id] > 0)
+        .map((type) => ({
           type: type.id,
           label: type.label,
           total: counts[type.id],
-          selected: selectedTypes.has(type.id) ? counts[type.id] : 0,
-        })
-      );
+          selected:
+            type.id === "likes" || type.id === "comments"
+              ? selectedInteractionTypes.has(type.id as InteractionType)
+                ? counts[type.id]
+                : 0
+              : selectedEventTypes.has(type.id as EventType)
+                ? counts[type.id]
+                : 0,
+        }));
 
       return {
         childName: item.child.name,
@@ -425,9 +624,17 @@ export default function ExportScreen() {
   };
 
   const hasSelectedChildren = selectedChildren.length > 0;
-  const hasSelectedTypes = selectedTypesArray.length > 0;
+  const hasSelectedTypes =
+    selectedEventTypesArray.length > 0 || selectedInteractionTypesArray.length > 0;
+  const hasSelectedData =
+    (selectedEventsCount > 0 && selectedEventTypesArray.length > 0) ||
+    (selectedInteractionsCount > 0 && selectedInteractionTypesArray.length > 0);
   const isExportDisabled =
-    isExporting || isLoading || !hasSelectedChildren || !hasSelectedTypes;
+    isExporting ||
+    isLoading ||
+    !hasSelectedChildren ||
+    !hasSelectedTypes ||
+    !hasSelectedData;
 
   const handleExport = async (force = false) => {
     if (Platform.OS === "web") {
@@ -450,7 +657,7 @@ export default function ExportScreen() {
       return;
     }
 
-    if (!force && selectedTypesArray.length === 0) {
+    if (!force && !hasSelectedTypes) {
       setModalConfig({
         visible: true,
         title: "Sélection requise",
@@ -462,37 +669,49 @@ export default function ExportScreen() {
 
     try {
       setIsExporting(true);
-      const effectiveTypes = force
-        ? EVENT_TYPES.map((item) => item.id)
-        : selectedTypesArray;
+      const effectiveEventTypes = force
+        ? eventTypes.map((item) => item.id as EventType)
+        : selectedEventTypesArray;
+      const effectiveInteractionTypes = force
+        ? INTERACTION_TYPES.map((item) => item.id as InteractionType)
+        : selectedInteractionTypesArray;
       const effectiveChildren = force ? children : selectedChildren;
+      const includeLikes = effectiveInteractionTypes.includes("likes");
+      const includeComments = effectiveInteractionTypes.includes("comments");
 
       const exportData = {
         exportDate: new Date().toISOString(),
         exportBy: {
-          email: email ?? user.email ?? null,
+          email: email ?? user?.email ?? null,
           pseudo: userName ?? null,
         },
         format: "json",
         filters: {
-          eventTypes: effectiveTypes,
+          eventTypes: effectiveEventTypes,
+          interactionTypes: effectiveInteractionTypes,
         },
         data: {
           account: {
-            email: email ?? user.email ?? null,
+            email: email ?? user?.email ?? null,
             pseudo: userName ?? null,
           },
           preferences,
           children: effectiveChildren.map((item) => {
-            const filteredEvents = item.events.filter((event) =>
-              effectiveTypes.includes(event.type)
-            );
+            const canExportEventsForChild =
+              item.role === "owner" || item.role === "admin" || item.events.length > 0;
+            const filteredEvents = canExportEventsForChild
+              ? item.events.filter((event) =>
+                  effectiveEventTypes.includes(event.type)
+                )
+              : [];
             return {
               childName: item.child.name,
               birthDate: item.child.birthDate ?? null,
               gender: item.child.gender ?? null,
               photoUri: item.child.photoUri ?? null,
               events: filteredEvents.map(serializeValue),
+              likes: includeLikes ? item.likes.map(serializeValue) : [],
+              comments: includeComments ? item.comments.map(serializeValue) : [],
             };
           }),
         },
@@ -597,10 +816,14 @@ export default function ExportScreen() {
   );
 
   const renderChildRow = (item: ExportChild) => {
-    const counts = getCounts(item.events);
+    const counts = getCounts(item);
     const totalEvents = item.events.length;
-    const selectedEvents = EVENT_TYPES.reduce((sum, type) => {
-      if (!selectedTypes.has(type.id)) return sum;
+    const totalInteractions = item.likes.length + item.comments.length;
+    const canExportEventsForChild =
+      item.role === "owner" || item.role === "admin" || item.events.length > 0;
+    const selectedEvents = eventTypes.reduce((sum, type) => {
+      if (!canExportEventsForChild) return sum;
+      if (!selectedEventTypes.has(type.id as EventType)) return sum;
       return sum + counts[type.id];
     }, 0);
 
@@ -642,8 +865,18 @@ export default function ExportScreen() {
                 ]}
               >
                 {totalEvents === 0
-                  ? "Aucun evenement"
-                  : `${selectedEvents}/${totalEvents} evenements`}
+                  ? "Aucun evenement (mes donnees)"
+                  : `${selectedEvents}/${totalEvents} evenements (mes donnees)`}
+              </Text>
+              <Text
+                style={[
+                  styles.childSubtitle,
+                  { color: Colors[colorScheme].tabIconDefault },
+                ]}
+              >
+                {totalInteractions === 0
+                  ? "Aucune interaction (mes donnees)"
+                  : `${totalInteractions} interactions (mes donnees)`}
               </Text>
             </View>
           </View>
@@ -669,29 +902,11 @@ export default function ExportScreen() {
     );
   };
 
-  const getTypeIcon = (type?: EventType) => {
-    switch (type) {
-      case "biberon":
-        return {
-          lib: "MaterialCommunityIcons",
-          name: "baby-bottle",
-        };
-      case "tetee":
-        return {
-          lib: "FontAwesome",
-          name: "person-breastfeeding",
-        };
-      default:
-        return {
-          lib: "FontAwesome",
-          name: "utensils",
-        };
-    }
-  };
-
-  const renderTypeRow = (type: (typeof EVENT_TYPES)[number]) => {
-    const isSelected = selectedTypes.has(type.id);
-    const icon = getTypeIcon(type.id);
+  const renderTypeRow = (
+    type: ExportTypeItem,
+    isSelected: boolean,
+    onToggle: () => void
+  ) => {
 
     return (
       <TouchableOpacity
@@ -700,7 +915,7 @@ export default function ExportScreen() {
           styles.typeOption,
           { borderBottomColor: Colors[colorScheme].tabIconDefault + "20" },
         ]}
-        onPress={() => toggleType(type.id)}
+        onPress={onToggle}
         activeOpacity={0.7}
         disabled={isLoading || isExporting}
       >
@@ -711,26 +926,25 @@ export default function ExportScreen() {
               { backgroundColor: Colors[colorScheme].tint + "15" },
             ]}
           >
-            {type.id === "biberon" ? (
-            <MaterialCommunityIcons
-              name="baby-bottle"
-              size={20}
-              color={Colors[colorScheme].tint}
-            />
-          ) : ( type.id === "couche" ? (
-            <MaterialCommunityIcons
-              name="human-baby-changing-table"
-              size={20}
-              color={Colors[colorScheme].tint}
-            />
-          ) :
-            
-            <FontAwesome
-              name={type.icon}
-              size={20}
-              color={Colors[colorScheme].tint}
-            />
-          )}
+            {type.icon.lib === "MaterialCommunityIcons" ? (
+              <MaterialCommunityIcons
+                name={type.icon.name as any}
+                size={20}
+                color={Colors[colorScheme].tint}
+              />
+            ) : type.icon.lib === "Ionicons" ? (
+              <Ionicons
+                name={type.icon.name as any}
+                size={20}
+                color={Colors[colorScheme].tint}
+              />
+            ) : (
+              <FontAwesome
+                name={type.icon.name as any}
+                size={20}
+                color={Colors[colorScheme].tint}
+              />
+            )}
           </View>
           <ThemedText style={styles.typeName}>{type.label}</ThemedText>
         </View>
@@ -858,37 +1072,98 @@ export default function ExportScreen() {
             </View>
           </ThemedView>
 
-          <ThemedView style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <ThemedText
+          {selectedEventsCount > 0 && (
+            <ThemedView style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <ThemedText
+                  style={[
+                    styles.sectionTitle,
+                    { color: Colors[colorScheme].tabIconDefault },
+                  ]}
+                >
+                  Types d'evenements
+                </ThemedText>
+                <TouchableOpacity
+                  onPress={toggleAllEventTypes}
+                  disabled={isLoading || isExporting || !selectedCanExportEvents}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.toggleAllText,
+                      { color: Colors[colorScheme].tint },
+                    ]}
+                  >
+                    {selectedEventTypes.size === eventTypes.length
+                      ? "Tout décocher"
+                      : "Tout cocher"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.typesContainer}>
+                {eventTypes.map((type) =>
+                  renderTypeRow(
+                    type,
+                    selectedEventTypes.has(type.id as EventType),
+                    () => toggleEventType(type.id as EventType)
+                  )
+                )}
+              </View>
+            </ThemedView>
+          )}
+
+          {selectedInteractionsCount > 0 && (
+            <ThemedView style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <ThemedText
+                  style={[
+                    styles.sectionTitle,
+                    { color: Colors[colorScheme].tabIconDefault },
+                  ]}
+                >
+                  Types d'interactions
+                </ThemedText>
+                <TouchableOpacity
+                  onPress={toggleAllInteractionTypes}
+                  disabled={isLoading || isExporting}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.toggleAllText,
+                      { color: Colors[colorScheme].tint },
+                    ]}
+                  >
+                    {selectedInteractionTypes.size === INTERACTION_TYPES.length
+                      ? "Tout décocher"
+                      : "Tout cocher"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.typesContainer}>
+                {INTERACTION_TYPES.map((type) =>
+                  renderTypeRow(
+                    type,
+                    selectedInteractionTypes.has(type.id as InteractionType),
+                    () => toggleInteractionType(type.id as InteractionType)
+                  )
+                )}
+              </View>
+            </ThemedView>
+          )}
+
+          {selectedEventsCount === 0 && selectedInteractionsCount === 0 && (
+            <ThemedView style={styles.section}>
+              <Text
                 style={[
-                  styles.sectionTitle,
+                  styles.childSubtitle,
                   { color: Colors[colorScheme].tabIconDefault },
                 ]}
               >
-                Types d'evenements
-              </ThemedText>
-              <TouchableOpacity
-                onPress={toggleAllTypes}
-                disabled={isLoading || isExporting}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.toggleAllText,
-                    { color: Colors[colorScheme].tint },
-                  ]}
-                >
-                  {selectedTypes.size === EVENT_TYPES.length
-                    ? "Tout décocher"
-                    : "Tout cocher"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.typesContainer}>
-              {EVENT_TYPES.map(renderTypeRow)}
-            </View>
-          </ThemedView>
+                Aucune donnee à exporter.
+              </Text>
+            </ThemedView>
+          )}
 
           <ThemedView style={styles.infoBox}>
             <Ionicons

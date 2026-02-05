@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ajouterJalon } from "@/migration/eventsDoubleWriteService";
 import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
@@ -84,7 +85,7 @@ const isToday = (date: Date) => {
 
 export default function MomentsScreen() {
   const { activeChild } = useBaby();
-  const { userName } = useAuth();
+  const { userName, firebaseUser } = useAuth();
   const { setHeaderRight } = useHeaderRight();
   const { showToast } = useToast();
   const { openSheet } = useSheet();
@@ -93,6 +94,9 @@ export default function MomentsScreen() {
     `moments-${Math.random().toString(36).slice(2)}`,
   );
   const sheetOwnerId = "moments";
+  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+  const canManageContent =
+    permissions.role === "owner" || permissions.role === "admin";
 
   const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -168,17 +172,24 @@ export default function MomentsScreen() {
 
   // Navigation handler for header button (must be defined before useFocusEffect)
   const handleAddMilestone = useCallback(() => {
+    if (!canManageContent) return;
     openSheet({
       ownerId: sheetOwnerId,
       formType: "milestones",
       jalonType: "autre",
       onSuccess: refreshToday,
     });
-  }, [openSheet, refreshToday]);
+  }, [canManageContent, openSheet, refreshToday]);
 
   // Header setup
   useFocusEffect(
     useCallback(() => {
+      if (!canManageContent) {
+        setHeaderRight(null, headerOwnerId.current);
+        return () => {
+          setHeaderRight(null, headerOwnerId.current);
+        };
+      }
       const addButton = (
         <View
           style={{
@@ -198,7 +209,7 @@ export default function MomentsScreen() {
       return () => {
         setHeaderRight(null, headerOwnerId.current);
       };
-    }, [colorScheme, setHeaderRight, handleAddMilestone]),
+    }, [canManageContent, colorScheme, setHeaderRight, handleAddMilestone]),
   );
 
   // Data loading - load all milestones (no date limit) to ensure we always have 3 photos
@@ -433,6 +444,7 @@ export default function MomentsScreen() {
                 babyName={activeChild?.prenom ?? "Bébé"}
                 time={todayMood ? formatTime(todayMood.date) : undefined}
                 onAddMood={handleAddMood}
+                canEditMood={canManageContent}
               />
               <View style={styles.confettiContainer}>
                 <ConfettiBurst trigger={confettiTrigger} />
@@ -488,8 +500,8 @@ export default function MomentsScreen() {
         childId={activeChild?.id ?? ""}
         backgroundColor="rgba(60, 50, 40, 0.97)"
         onClose={handleCloseGallery}
-        onAddPhoto={handleAddPhoto}
-        onEdit={handleEditPhoto}
+        onAddPhoto={canManageContent ? handleAddPhoto : undefined}
+        onEdit={canManageContent ? handleEditPhoto : undefined}
         onLike={handleLike}
         onDownload={handleDownload}
         likesInfo={likesInfo}

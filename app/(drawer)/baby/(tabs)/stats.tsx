@@ -67,6 +67,12 @@ export default function StatsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (!returnTarget) {
+        setHeaderLeft(null, "stats");
+        return () => {
+          setHeaderLeft(null, "stats");
+        };
+      }
       const backButton = (
         <HeaderBackButton
           onPress={() => {
@@ -98,6 +104,9 @@ export default function StatsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (!returnTarget) {
+        return;
+      }
       const onBackPress = () => {
         if (returnTarget === "home") {
           router.replace("/baby/home");

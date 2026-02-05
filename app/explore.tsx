@@ -127,12 +127,17 @@ export default function Explore() {
   }, [children.length, loading]);
 
   React.useEffect(() => {
+    if (!user?.uid || !user.email) {
+      setPendingInvitations([]);
+      return;
+    }
+
     const unsubscribe = listenToPendingInvitations((invitations) => {
       setPendingInvitations(invitations);
     });
 
     return unsubscribe;
-  }, []);
+  }, [user?.uid, user?.email]);
 
   const handleCategoryPress = async (category: MedicalCategory) => {
     if (!category.enabled || !category.route) return;

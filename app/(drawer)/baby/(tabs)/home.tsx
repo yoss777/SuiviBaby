@@ -19,10 +19,12 @@ import {
   QUICK_ADD_ACTIONS,
 } from "@/constants/dashboardConfig";
 import { Colors } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useChildPermissions } from "@/hooks/useChildPermissions";
 import {
   ajouterJalon,
   ajouterSommeil,
@@ -436,6 +438,7 @@ function getEditRoute(event: any): string | null {
 
 export default function HomeDashboard() {
   const { activeChild } = useBaby();
+  const { firebaseUser } = useAuth();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
@@ -467,6 +470,9 @@ export default function HomeDashboard() {
   const scrollYRef = useRef(0);
   const pendingQuickAddRouteRef = useRef<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+  const canManageContent =
+    permissions.role === "owner" || permissions.role === "admin";
 
   // États des données
   const [data, setData] = useState<DashboardData>({
@@ -923,12 +929,14 @@ export default function HomeDashboard() {
           icon: "person-breastfeeding",
           color: itemColors.tetee,
           lastTimestamp: todayStats.meals.seins.lastTimestamp,
-          onPress: () =>
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "meals",
-              mealType: "tetee",
-            }),
+          onPress: canManageContent
+            ? () =>
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "meals",
+                  mealType: "tetee",
+                })
+            : undefined,
         },
         {
           key: "biberons",
@@ -941,12 +949,14 @@ export default function HomeDashboard() {
           iconType: "mc" as const,
           color: itemColors.biberon,
           lastTimestamp: todayStats.meals.biberons.lastTimestamp,
-          onPress: () =>
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "meals",
-              mealType: "biberon",
-            }),
+          onPress: canManageContent
+            ? () =>
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "meals",
+                  mealType: "biberon",
+                })
+            : undefined,
         },
         {
           key: "pompages",
@@ -958,15 +968,17 @@ export default function HomeDashboard() {
           icon: "pump-medical",
           color: itemColors.pompage,
           lastTimestamp: todayStats.pompages.lastTimestamp,
-          onPress: () =>
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "pumping",
-            }),
+          onPress: canManageContent
+            ? () =>
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "pumping",
+                })
+            : undefined,
         },
       ],
     };
-  }, [todayStats, getTimeSince, openSheet, formatTime]);
+  }, [todayStats, getTimeSince, openSheet, formatTime, canManageContent]);
 
   // Santé Group (Couches + Vitamines + Vaccins)
   const santeGroup = useMemo((): {
@@ -1048,12 +1060,14 @@ export default function HomeDashboard() {
           icon: "water",
           color: itemColors.miction,
           lastTimestamp: todayStats.mictions.lastTimestamp,
-          onPress: () =>
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "diapers",
-              diapersType: "miction",
-            }),
+          onPress: canManageContent
+            ? () =>
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "diapers",
+                  diapersType: "miction",
+                })
+            : undefined,
         },
         {
           key: "selles",
@@ -1063,12 +1077,14 @@ export default function HomeDashboard() {
           icon: "poop",
           color: itemColors.selle,
           lastTimestamp: todayStats.selles.lastTimestamp,
-          onPress: () =>
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "diapers",
-              diapersType: "selle",
-            }),
+          onPress: canManageContent
+            ? () =>
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "diapers",
+                  diapersType: "selle",
+                })
+            : undefined,
         },
         {
           key: "vitamines",
@@ -1078,12 +1094,14 @@ export default function HomeDashboard() {
           icon: "pills",
           color: itemColors.vitamine,
           lastTimestamp: todayStats.vitamines.lastTimestamp,
-          onPress: () =>
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "soins",
-              soinsType: "vitamine",
-            }),
+          onPress: canManageContent
+            ? () =>
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "soins",
+                  soinsType: "vitamine",
+                })
+            : undefined,
         },
         {
           key: "vaccins",
@@ -1093,12 +1111,14 @@ export default function HomeDashboard() {
           icon: "syringe",
           color: itemColors.vaccin,
           lastTimestamp: todayStats.vaccins.lastTimestamp,
-          onPress: () =>
-            openSheet({
-              ownerId: headerOwnerId.current,
-              formType: "soins",
-              soinsType: "vaccin",
-            }),
+          onPress: canManageContent
+            ? () =>
+                openSheet({
+                  ownerId: headerOwnerId.current,
+                  formType: "soins",
+                  soinsType: "vaccin",
+                })
+            : undefined,
         },
       ],
     };
@@ -1111,6 +1131,7 @@ export default function HomeDashboard() {
     reminderThresholds.mictions,
     reminderThresholds.selles,
     currentTime,
+    canManageContent,
   ]);
 
   const handleStartSleep = useCallback(
@@ -1378,6 +1399,7 @@ export default function HomeDashboard() {
 
   const handleQuickAddPress = useCallback(
     (route: string) => {
+      if (!canManageContent) return;
       // Special handling for soins types: open form sheet directly without navigation
       const soinsTypeMatch = route.match(/soins\?type=(\w+)/);
       if (soinsTypeMatch) {
@@ -1527,10 +1549,11 @@ export default function HomeDashboard() {
       }
       router.push(route as any);
     },
-    [closeSheet, isOpen, openSheet, sommeilEnCours],
+    [closeSheet, isOpen, openSheet, sommeilEnCours, canManageContent],
   );
 
   const openQuickAddSheet = useCallback(() => {
+    if (!canManageContent) return;
     openSheet({
       ownerId: "home-quick-add",
       title: "Ajouter un evenement",
@@ -1578,10 +1601,16 @@ export default function HomeDashboard() {
         </View>
       ),
     });
-  }, [colorScheme, handleQuickAddPress, openSheet]);
+  }, [colorScheme, handleQuickAddPress, openSheet, canManageContent]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!canManageContent) {
+        setHeaderRight(null, headerOwnerId.current);
+        return () => {
+          setHeaderRight(null, headerOwnerId.current);
+        };
+      }
       const headerButtons = (
         <Animated.View
           style={{
@@ -1638,6 +1667,7 @@ export default function HomeDashboard() {
       headerMicVisible,
       openQuickAddSheet,
       setHeaderRight,
+      canManageContent,
     ]),
   );
 
@@ -2119,13 +2149,15 @@ export default function HomeDashboard() {
             })}
           </Text>
         </View>
-        <Animated.View style={{ paddingTop: 10, opacity: inlineMicOpacity }}>
-          <VoiceCommandButton
-            size={40}
-            color={Colors[colorScheme].tint}
-            showTestToggle={false}
-          />
-        </Animated.View>
+        {canManageContent && (
+          <Animated.View style={{ paddingTop: 10, opacity: inlineMicOpacity }}>
+            <VoiceCommandButton
+              size={40}
+              color={Colors[colorScheme].tint}
+              showTestToggle={false}
+            />
+          </Animated.View>
+        )}
       </View>
 
       {/* Résumé du jour */}
@@ -2148,15 +2180,20 @@ export default function HomeDashboard() {
             timeSinceLabel={alimentationGroup.timeSinceLabel}
             items={alimentationGroup.items}
             currentTime={currentTime}
-            onAddPress={() =>
-              openSheet({
-                ownerId: headerOwnerId.current,
-                formType: "meals",
-                mealType: "tetee",
-              })
+            onAddPress={
+              canManageContent
+                ? () =>
+                    openSheet({
+                      ownerId: headerOwnerId.current,
+                      formType: "meals",
+                      mealType: "tetee",
+                    })
+                : undefined
             }
-            onHeaderPress={() =>
-              router.push("/baby/stats?tab=tetees&returnTo=home" as any)
+            onHeaderPress={
+              canManageContent
+                ? () => router.push("/baby/stats?tab=tetees&returnTo=home" as any)
+                : undefined
             }
           />
         </View>
@@ -2190,103 +2227,111 @@ export default function HomeDashboard() {
             isWarning={santeGroup.isWarning}
             items={santeGroup.items}
             currentTime={currentTime}
-            onAddPress={() =>
-              openSheet({
-                ownerId: headerOwnerId.current,
-                formType: "diapers",
-                diapersType: "miction",
-              })
+            onAddPress={
+              canManageContent
+                ? () =>
+                    openSheet({
+                      ownerId: headerOwnerId.current,
+                      formType: "diapers",
+                      diapersType: "miction",
+                    })
+                : undefined
             }
           />
         </View>
 
         {/* Sommeil Section */}
-        <View style={styles.statsGroupContainer}>
-          <SleepWidget
-            isActive={!!sommeilEnCours}
-            isNap={sommeilEnCours?.isNap}
-            elapsedMinutes={elapsedSleepMinutes}
-            startTime={
-              sommeilEnCours?.heureDebut
-                ? formatTime(toDate(sommeilEnCours.heureDebut))
-                : undefined
-            }
-            onStartSleep={handleStartSleep}
-            onStopSleep={handleStopSleep}
-          />
-        </View>
+        {(canManageContent || !!sommeilEnCours) && (
+          <View style={styles.statsGroupContainer}>
+            <SleepWidget
+              isActive={!!sommeilEnCours}
+              isNap={sommeilEnCours?.isNap}
+              elapsedMinutes={elapsedSleepMinutes}
+              startTime={
+                sommeilEnCours?.heureDebut
+                  ? formatTime(toDate(sommeilEnCours.heureDebut))
+                  : undefined
+              }
+              onStartSleep={handleStartSleep}
+              onStopSleep={handleStopSleep}
+              showStopButton={canManageContent}
+            />
+          </View>
+        )}
 
         {/* Humeur & Jalons - Bloc unifié 2 colonnes */}
-        <View style={styles.statsGroupContainer}>
-          <View style={styles.moodJalonsCard}>
-            {/* Section Humeur */}
-            <View style={styles.moodJalonsSection}>
-              <Text style={styles.moodJalonsLabel}>Humeur du jour</Text>
-              <View style={styles.moodEmojisRow}>
-                {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
-                  const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
-                  const isSelected = todayMoodEvent?.humeur === moodValue;
-                  const isCurrentlySaving = isMoodSaving && isSelected;
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      style={[
-                        styles.moodEmojiButton,
-                        isSelected && styles.moodEmojiSelected,
-                      ]}
-                      onPress={() => handleSetMood(moodValue)}
-                      disabled={isMoodSaving}
-                      activeOpacity={0.7}
-                      accessibilityLabel={`Humeur ${moodValue} sur 5`}
-                      accessibilityState={{ selected: isSelected }}
-                    >
-                      {isCurrentlySaving ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={categoryColors.moments.primary}
-                        />
-                      ) : (
-                        <Text style={styles.moodEmojiText}>{emoji}</Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
+        {canManageContent && (
+          <View style={styles.statsGroupContainer}>
+            <View style={styles.moodJalonsCard}>
+              {/* Section Humeur */}
+              <View style={styles.moodJalonsSection}>
+                <Text style={styles.moodJalonsLabel}>Humeur du jour</Text>
+                <View style={styles.moodEmojisRow}>
+                  {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
+                    const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
+                    const isSelected = todayMoodEvent?.humeur === moodValue;
+                    const isCurrentlySaving = isMoodSaving && isSelected;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={[
+                          styles.moodEmojiButton,
+                          isSelected && styles.moodEmojiSelected,
+                        ]}
+                        onPress={() => handleSetMood(moodValue)}
+                        disabled={isMoodSaving}
+                        activeOpacity={0.7}
+                        accessibilityLabel={`Humeur ${moodValue} sur 5`}
+                        accessibilityState={{ selected: isSelected }}
+                      >
+                        {isCurrentlySaving ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={categoryColors.moments.primary}
+                          />
+                        ) : (
+                          <Text style={styles.moodEmojiText}>{emoji}</Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
+
+              {/* Séparateur vertical */}
+              <View style={styles.moodJalonsDivider} />
+
+              {/* Section Jalons */}
+              <TouchableOpacity
+                style={styles.jalonsSection}
+                onPress={() => router.push("/baby/moments" as any)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.jalonsLabel}>Jalons</Text>
+                <View style={styles.jalonsValueRow}>
+                  {todayJalons.length > 0 ? (
+                    <Text style={styles.jalonsSummary}>{todayJalons.length}</Text>
+                  ) : (
+                    <>
+                      <FontAwesome
+                        name="star"
+                        size={16}
+                        color={categoryColors.moments.primary}
+                      />
+                      <Text style={styles.jalonsEmptyText}>Ajouter</Text>
+                    </>
+                  )}
+                  <FontAwesome
+                    name="chevron-right"
+                    size={12}
+                    color={neutralColors.textMuted}
+                    style={styles.jalonsChevron}
+                  />
+                </View>
+              </TouchableOpacity>
             </View>
-
-            {/* Séparateur vertical */}
-            <View style={styles.moodJalonsDivider} />
-
-            {/* Section Jalons */}
-            <TouchableOpacity
-              style={styles.jalonsSection}
-              onPress={() => router.push("/baby/moments" as any)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.jalonsLabel}>Jalons</Text>
-              <View style={styles.jalonsValueRow}>
-                {todayJalons.length > 0 ? (
-                  <Text style={styles.jalonsSummary}>{todayJalons.length}</Text>
-                ) : (
-                  <>
-                    <FontAwesome
-                      name="star"
-                      size={16}
-                      color={categoryColors.moments.primary}
-                    />
-                    <Text style={styles.jalonsEmptyText}>Ajouter</Text>
-                  </>
-                )}
-                <FontAwesome
-                  name="chevron-right"
-                  size={12}
-                  color={neutralColors.textMuted}
-                  style={styles.jalonsChevron}
-                />
-              </View>
-            </TouchableOpacity>
           </View>
-        </View>
+        )}
       </View>
 
       {/* Chronologie récente */}
@@ -2297,7 +2342,7 @@ export default function HomeDashboard() {
           showHint={showRecentHint}
           colorScheme={colorScheme}
           currentTime={currentTime}
-          onEventLongPress={handleEventEdit}
+          onEventLongPress={canManageContent ? handleEventEdit : undefined}
           onViewAllPress={() => router.push("/baby/chrono" as any)}
           toDate={toDate}
           formatTime={formatTime}
@@ -2307,7 +2352,7 @@ export default function HomeDashboard() {
         />
       </View>
       </ScrollView>
-      <GlobalFAB includeVoiceAction={false} />
+      {canManageContent && <GlobalFAB includeVoiceAction={false} />}
     </View>
   );
 }

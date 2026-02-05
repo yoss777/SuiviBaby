@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
 import { JalonEvent } from "@/services/eventsService";
@@ -113,7 +114,7 @@ const PolaroidCard = ({
   photo: PhotoMilestone;
   index: number;
   onPress: () => void;
-  onLongPress: () => void;
+  onLongPress?: () => void;
   isLikedByMe?: boolean;
   hasComments?: boolean;
 }) => {
@@ -189,7 +190,7 @@ const PolaroidCard = ({
 
 export default function GalleryScreen() {
   const { activeChild } = useBaby();
-  const { userName } = useAuth();
+  const { userName, firebaseUser } = useAuth();
   const { showToast } = useToast();
   const { openSheet, closeSheet, isOpen } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
@@ -199,6 +200,9 @@ export default function GalleryScreen() {
     `gallery-${Math.random().toString(36).slice(2)}`,
   );
   const sheetOwnerId = "gallery";
+  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+  const canManageContent =
+    permissions.role === "owner" || permissions.role === "admin";
 
   const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -218,13 +222,14 @@ export default function GalleryScreen() {
 
   // Navigation handlers
   const handleAddPhoto = useCallback(() => {
+    if (!canManageContent) return;
     openSheet({
       ownerId: sheetOwnerId,
       formType: "milestones",
       jalonType: "photo",
       onSuccess: refreshData,
     });
-  }, [openSheet, refreshData]);
+  }, [canManageContent, openSheet, refreshData]);
 
   // Header left - back button
   useFocusEffect(
@@ -246,6 +251,12 @@ export default function GalleryScreen() {
   // Header right - add button
   useFocusEffect(
     useCallback(() => {
+      if (!canManageContent) {
+        setHeaderRight(null, headerOwnerId.current);
+        return () => {
+          setHeaderRight(null, headerOwnerId.current);
+        };
+      }
       const headerButtons = (
         <View style={styles.headerActions}>
           <Pressable onPress={handleAddPhoto} style={styles.headerButton}>
@@ -263,7 +274,7 @@ export default function GalleryScreen() {
       return () => {
         setHeaderRight(null, headerOwnerId.current);
       };
-    }, [colorScheme, setHeaderRight, handleAddPhoto]),
+    }, [canManageContent, colorScheme, setHeaderRight, handleAddPhoto]),
   );
 
   // Handle hardware back button
@@ -374,6 +385,7 @@ export default function GalleryScreen() {
 
   const handleEditPhoto = useCallback(
     (photoId: string) => {
+      if (!canManageContent) return;
       const event = events.find((e) => e.id === photoId);
       if (!event) return;
 
@@ -408,7 +420,7 @@ export default function GalleryScreen() {
         },
       });
     },
-    [events, openSheet, refreshData],
+    [events, openSheet, refreshData, canManageContent],
   );
 
   // Social handlers
@@ -495,7 +507,9 @@ export default function GalleryScreen() {
             photo={photo}
             index={index}
             onPress={() => handlePhotoPress(photo)}
-            onLongPress={() => handleEditPhoto(photo.id)}
+            onLongPress={
+              canManageContent ? () => handleEditPhoto(photo.id) : undefined
+            }
             isLikedByMe={likesInfo[photo.id]?.likedByMe}
             hasComments={(commentCounts[photo.id] ?? 0) > 0}
           />
@@ -565,8 +579,8 @@ export default function GalleryScreen() {
         childId={activeChild?.id ?? ""}
         backgroundColor="rgba(60, 50, 40, 0.97)"
         onClose={handleCloseGallery}
-        onAddPhoto={handleAddPhoto}
-        onEdit={handleEditPhoto}
+        onAddPhoto={canManageContent ? handleAddPhoto : undefined}
+        onEdit={canManageContent ? handleEditPhoto : undefined}
         onLike={handleLike}
         onDownload={handleDownload}
         likesInfo={likesInfo}

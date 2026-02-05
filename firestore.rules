@@ -39,6 +39,11 @@ service cloud.firestore {
         getAccessDoc(childId).data.role == 'owner';
     }
 
+    function isAdmin(childId) {
+      return hasAccess(childId) &&
+        getAccessDoc(childId).data.role == 'admin';
+    }
+
     function invitationDoc(invitationId) {
       return get(/databases/$(database)/documents/shareInvitations/$(invitationId));
     }
@@ -220,6 +225,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         (resource.data.invitedEmail is string &&
          request.auth.token.email == resource.data.invitedEmail) ||
+        request.auth.uid == resource.data.invitedUserId ||
         request.auth.uid == resource.data.inviterId ||
         (resource.data.inviterEmail is string &&
          request.auth.token.email == resource.data.inviterEmail)
@@ -229,14 +235,18 @@ service cloud.firestore {
       allow list: if isSignedIn() &&
         request.query.limit <= 200;
 
-      // Création : vérifier que inviterId est bien l'uid de l'utilisateur ET qu'il est owner
+      // Création : inviterId = uid et owner/admin (fallback via ownerId si access manquant)
       allow create: if isSignedIn() &&
         request.resource.data.inviterId == request.auth.uid &&
-        isOwner(request.resource.data.childId);
+        (isOwner(request.resource.data.childId) ||
+         isAdmin(request.resource.data.childId) ||
+         isChildOwner(request.resource.data.childId));
 
       // Mise à jour : l'invité peut accepter/refuser
-      allow update: if isSignedIn() &&
-        request.auth.token.email == resource.data.invitedEmail;
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.invitedUserId ||
+        request.auth.token.email == resource.data.invitedEmail
+      );
     }
 
     match /shareCodes/{code} {
@@ -247,10 +257,12 @@ service cloud.firestore {
         (resource.data.used == false && resource.data.expiresAt > request.time)
       );
 
-      // Création : uniquement si on est owner de l'enfant
+      // Création : owner/admin (fallback via ownerId si access manquant)
       allow create: if isSignedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
-        isOwner(request.resource.data.childId);
+        (isOwner(request.resource.data.childId) ||
+         isAdmin(request.resource.data.childId) ||
+         isChildOwner(request.resource.data.childId));
 
       // Mise à jour : marquer le code comme utilisé (champ used uniquement)
       allow update: if isSignedIn() &&

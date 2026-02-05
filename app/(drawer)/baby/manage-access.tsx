@@ -68,6 +68,7 @@ function AccessListItem({ item }: { item: [string, ChildAccessDocument] }) {
               >
                 <Text style={styles.roleChoiceLabel}>
                   {getRoleIcon(role)} {ROLE_LABELS[role]}
+                  {isCurrent ? " (actuel)" : ""}
                 </Text>
                 <Text style={styles.roleChoiceDescription}>
                   {ROLE_DESCRIPTIONS[role]}
@@ -86,7 +87,11 @@ function AccessListItem({ item }: { item: [string, ChildAccessDocument] }) {
 
     try {
       await updateChildAccess(childId, userId, { role: newRole });
-      showAlert('✅ Succès', `Rôle mis à jour vers ${ROLE_LABELS[newRole]}`);
+      showAlert(
+        '✅ Succès',
+        `Rôle mis à jour vers ${ROLE_LABELS[newRole]}`,
+        [{ text: '' }],
+      );
     } catch (error) {
       console.error('Erreur lors de la mise à jour du rôle:', error);
       showAlert('❌ Erreur', 'Impossible de mettre à jour le rôle');
@@ -108,7 +113,7 @@ function AccessListItem({ item }: { item: [string, ChildAccessDocument] }) {
             if (!childId) return;
             try {
               await revokeChildAccess(childId, userId);
-              showAlert('✅ Succès', 'Accès révoqué');
+              showAlert('✅ Succès', 'Accès révoqué', [{ text: '' }]);
             } catch (error) {
               console.error('Erreur lors de la révocation:', error);
               showAlert('❌ Erreur', 'Impossible de révoquer l\'accès');

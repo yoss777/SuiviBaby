@@ -144,6 +144,12 @@ export default function ShareChildScreen() {
     isSendingInviteRef.current = true;
     setIsLoadingInvite(true);
     try {
+      console.log("[Invitation] handleSendInvitation", {
+        childId,
+        childName,
+        inviterId: user?.uid ?? null,
+        invitedEmail: trimmedEmail,
+      });
       await createEmailInvitation(childId, childName, trimmedEmail);
       showAlert(
         "Invitation envoyée",

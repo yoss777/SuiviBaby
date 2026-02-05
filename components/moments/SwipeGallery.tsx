@@ -60,7 +60,7 @@ type SwipeGalleryProps = {
   childId: string;
   backgroundColor?: string;
   onClose: () => void;
-  onAddPhoto: () => void;
+  onAddPhoto?: () => void;
   onEdit?: (photoId: string, photoIndex: number) => void;
   onLike?: (photoId: string) => void;
   onDownload?: (
@@ -190,17 +190,21 @@ export const SwipeGallery = ({
     return [...photos].sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [photos]);
 
-  // Build gallery items: [Add Card, ...photos]
+  // Build gallery items: [Add Card?, ...photos]
   const galleryItems: GalleryItem[] = useMemo(() => {
-    const items: GalleryItem[] = [{ type: "add", id: "add-card" }];
-    sortedPhotos.forEach((photo) => {
-      items.push({ type: "photo", id: photo.id, photo });
-    });
+    const items: GalleryItem[] = sortedPhotos.map((photo) => ({
+      type: "photo",
+      id: photo.id,
+      photo,
+    }));
+    if (onAddPhoto) {
+      items.unshift({ type: "add", id: "add-card" });
+    }
     return items;
-  }, [sortedPhotos]);
+  }, [sortedPhotos, onAddPhoto]);
 
   // Current index in the gallery
-  const [currentIndex, setCurrentIndex] = useState(1);
+  const [currentIndex, setCurrentIndex] = useState(onAddPhoto ? 1 : 0);
 
   // Comments bottom sheet state
   const [commentsVisible, setCommentsVisible] = useState(false);
@@ -241,8 +245,8 @@ export const SwipeGallery = ({
       const sortedIndex = sortedPhotos.findIndex(
         (p) => p.id === clickedPhoto?.id,
       );
-      // +1 because index 0 is the "Add" card
-      const targetIndex = sortedIndex >= 0 ? sortedIndex + 1 : 1;
+      const baseIndex = onAddPhoto ? 1 : 0;
+      const targetIndex = sortedIndex >= 0 ? sortedIndex + baseIndex : baseIndex;
       setCurrentIndex(targetIndex);
       currentPage.value = targetIndex;
       initialPositionSetRef.current = true;
@@ -251,7 +255,7 @@ export const SwipeGallery = ({
         pagerRef.current?.setPageWithoutAnimation(targetIndex);
       }, 50);
     }
-  }, [visible, initialIndex, photos, sortedPhotos, currentPage]);
+  }, [visible, initialIndex, photos, sortedPhotos, currentPage, onAddPhoto]);
 
   // Handle page scroll for animations
   const onPageScroll = useCallback(
@@ -275,16 +279,17 @@ export const SwipeGallery = ({
   // Edit current photo
   const handleEdit = useCallback(() => {
     const item = galleryItems[currentIndex];
-    if (item.type === "photo") {
-      // Find the index in sortedPhotos (currentIndex - 1 because index 0 is "Add" card)
-      const photoIndex = currentIndex - 1;
+    if (item.type === "photo" && onEdit) {
+      const offset = onAddPhoto ? 1 : 0;
+      const photoIndex = currentIndex - offset;
       onClose();
-      onEdit?.(item.photo.id, photoIndex);
+      onEdit(item.photo.id, photoIndex);
     }
-  }, [currentIndex, galleryItems, onClose, onEdit]);
+  }, [currentIndex, galleryItems, onClose, onEdit, onAddPhoto]);
 
   // Handle add photo
   const handleAddPhoto = useCallback(() => {
+    if (!onAddPhoto) return;
     onClose();
     onAddPhoto();
   }, [onClose, onAddPhoto]);
@@ -632,15 +637,17 @@ export const SwipeGallery = ({
 
             {currentItem.type === "photo" ? (
               <View style={styles.headerActions}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.headerButton,
-                    pressed && styles.headerButtonPressed,
-                  ]}
-                  onPress={handleEdit}
-                >
-                  <FontAwesome6 name="pen" size={16} color="#fff" />
-                </Pressable>
+                {onEdit && (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.headerButton,
+                      pressed && styles.headerButtonPressed,
+                    ]}
+                    onPress={handleEdit}
+                  >
+                    <FontAwesome6 name="pen" size={16} color="#fff" />
+                  </Pressable>
+                )}
                 <Pressable
                   style={({ pressed }) => [
                     styles.headerButton,

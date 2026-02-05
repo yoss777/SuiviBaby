@@ -67,37 +67,35 @@ export async function createShareCode(
     const user = auth.currentUser;
     if (!user) throw new Error("Utilisateur non connecté");
 
-    let code = "";
-    let attempts = 0;
     const maxAttempts = 5;
-    while (attempts < maxAttempts) {
-      const candidate = generateShareCode();
-      const existing = await getDoc(doc(db, "shareCodes", candidate));
-      if (!existing.exists()) {
-        code = candidate;
-        break;
+    for (let attempts = 0; attempts < maxAttempts; attempts += 1) {
+      const code = generateShareCode();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // Expire dans 7 jours
+
+      const shareCodeData: ShareCode = {
+        code,
+        childId,
+        childName,
+        createdBy: user.uid,
+        createdAt: Timestamp.now(),
+        expiresAt: Timestamp.fromDate(expiresAt),
+        used: false,
+      };
+
+      try {
+        await setDoc(doc(db, "shareCodes", code), shareCodeData);
+        return code;
+      } catch (error: any) {
+        if (error?.code === "permission-denied") {
+          // Possible collision with an existing (used/expired) code.
+          continue;
+        }
+        throw error;
       }
-      attempts += 1;
     }
-    if (!code) {
-      throw new Error("Impossible de générer un code unique");
-    }
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // Expire dans 7 jours
 
-    const shareCodeData: ShareCode = {
-      code,
-      childId,
-      childName,
-      createdBy: user.uid,
-      createdAt: Timestamp.now(),
-      expiresAt: Timestamp.fromDate(expiresAt),
-      used: false,
-    };
-
-    await setDoc(doc(db, "shareCodes", code), shareCodeData);
-
-    return code;
+    throw new Error("Impossible de générer un code unique");
   } catch (error) {
     console.error("Erreur lors de la création du code de partage:", error);
     throw error;
@@ -132,12 +130,6 @@ export async function useShareCode(
       throw new Error("Ce code a expiré");
     }
 
-    // Vérifier que l'utilisateur n'est pas déjà parent de cet enfant
-    const childDoc = await getDoc(doc(db, "children", shareCode.childId));
-    if (!childDoc.exists()) {
-      throw new Error("Enfant introuvable");
-    }
-
     const accessDoc = await getDoc(
       doc(db, "children", shareCode.childId, "access", user.uid)
     );
@@ -145,7 +137,8 @@ export async function useShareCode(
       throw new Error("Vous avez déjà accès à cet enfant");
     }
 
-    // Marquer le code comme utilisé
+    // IMPORTANT: Marquer le code comme utilisé AVANT de créer l'accès
+    // Car les règles Firestore vérifient que used == true ET usedBy == request.auth.uid
     await updateDoc(doc(db, "shareCodes", code.toUpperCase()), {
       used: true,
       usedBy: user.uid,
@@ -153,7 +146,7 @@ export async function useShareCode(
       usedAt: Timestamp.now(),
     });
 
-    // Créer l'accès pour l'utilisateur invité (contributor par défaut)
+    // Créer l'accès pour l'utilisateur invité APRÈS avoir marqué le code comme utilisé
     await grantChildAccess(
       shareCode.childId,
       user.uid,
@@ -192,6 +185,14 @@ export async function createEmailInvitation(
   try {
     const user = auth.currentUser;
     if (!user || !user.email) throw new Error("Utilisateur non connecté");
+    if (!childId) {
+      console.error("Invitation: childId manquant", {
+        childId,
+        childName,
+        inviterId: user.uid,
+      });
+      throw new Error("Enfant introuvable");
+    }
 
     const invitedEmailLower = invitedEmail.trim().toLowerCase();
 
@@ -242,6 +243,7 @@ export async function createEmailInvitation(
       collection(db, "shareInvitations"),
       where("childId", "==", childId),
       where("invitedEmail", "==", invitedEmailLower),
+      where("inviterId", "==", user.uid),
       where("status", "==", "pending"),
     );
     const existingInvites = await getDocs(pendingInvitesQuery);
@@ -266,6 +268,12 @@ export async function createEmailInvitation(
       status: "pending",
       createdAt: Timestamp.now(),
     };
+    console.log("[Invitation] payload", {
+      childId,
+      inviterId: user.uid,
+      invitedEmail: invitedEmailLower,
+      invitedUserId,
+    });
 
     const docRef = await addDoc(
       collection(db, "shareInvitations"),
@@ -427,6 +435,7 @@ export async function cleanupDuplicatePendingInvitations(
     collection(db, "shareInvitations"),
     where("invitedEmail", "==", email),
     where("status", "==", "pending"),
+    limit(200)
   );
 
   const snapshot = await getDocs(q);
@@ -442,7 +451,7 @@ export async function cleanupDuplicatePendingInvitations(
   });
 
   const batch = writeBatch(db);
-  let deletedCount = 0;
+  let updatedCount = 0;
 
   byChildId.forEach((docs) => {
     if (docs.length <= 1) return;
@@ -453,16 +462,16 @@ export async function cleanupDuplicatePendingInvitations(
     });
     const duplicates = sorted.slice(1);
     duplicates.forEach((dup) => {
-      batch.delete(dup.ref);
-      deletedCount += 1;
+      batch.update(dup.ref, { status: "rejected" });
+      updatedCount += 1;
     });
   });
 
-  if (deletedCount > 0) {
+  if (updatedCount > 0) {
     await batch.commit();
   }
 
-  return deletedCount;
+  return updatedCount;
 }
 
 /**
@@ -479,34 +488,33 @@ export async function cleanupAlreadyLinkedInvitations(
     collection(db, "shareInvitations"),
     where("invitedEmail", "==", email),
     where("status", "==", "pending"),
+    limit(200)
   );
 
   const snapshot = await getDocs(q);
   if (snapshot.empty) return 0;
 
   const batch = writeBatch(db);
-  let deletedCount = 0;
+  let updatedCount = 0;
 
   await Promise.all(
     snapshot.docs.map(async (docSnap) => {
       const data = docSnap.data() as ShareInvitation;
-      const childDoc = await getDoc(doc(db, "children", data.childId));
-      if (!childDoc.exists()) return;
       const accessDoc = await getDoc(
         doc(db, "children", data.childId, "access", user.uid)
       );
       if (accessDoc.exists()) {
-        batch.delete(docSnap.ref);
-        deletedCount += 1;
+        batch.update(docSnap.ref, { status: "rejected" });
+        updatedCount += 1;
       }
     }),
   );
 
-  if (deletedCount > 0) {
+  if (updatedCount > 0) {
     await batch.commit();
   }
 
-  return deletedCount;
+  return updatedCount;
 }
 
 /**
@@ -525,17 +533,33 @@ export async function acceptInvitation(invitationId: string): Promise<void> {
     const invitation = inviteDoc.data() as ShareInvitation;
 
     // Vérifier que l'utilisateur est bien le destinataire
-    if (invitation.invitedEmail !== user.email?.toLowerCase()) {
+    const userEmail = user.email?.toLowerCase() ?? "";
+    if (
+      invitation.invitedUserId !== user.uid &&
+      invitation.invitedEmail !== userEmail
+    ) {
       throw new Error("Cette invitation ne vous est pas destinée");
     }
 
-    // Vérifier que l'enfant existe encore
-    const childDoc = await getDoc(doc(db, "children", invitation.childId));
-    if (!childDoc.exists()) {
-      throw new Error("Enfant introuvable");
+    // Vérifier que l'invitation est encore en attente
+    if (invitation.status !== "pending") {
+      throw new Error("Cette invitation a déjà été traitée");
     }
 
-    // Créer l'accès pour l'utilisateur invité (contributor par défaut)
+    // Vérifier que l'utilisateur n'a pas déjà accès
+    const existingAccess = await getDoc(
+      doc(db, "children", invitation.childId, "access", user.uid)
+    );
+    if (existingAccess.exists()) {
+      // Marquer quand même l'invitation comme acceptée si l'accès existe déjà
+      await updateDoc(doc(db, "shareInvitations", invitationId), {
+        status: "accepted",
+      });
+      return; // Sortir sans erreur
+    }
+
+    // IMPORTANT: Créer l'accès AVANT de marquer l'invitation comme acceptée
+    // Car les règles Firestore vérifient que status == 'pending' ou 'accepted'
     await grantChildAccess(
       invitation.childId,
       user.uid,
@@ -544,7 +568,7 @@ export async function acceptInvitation(invitationId: string): Promise<void> {
       { invitationId }
     );
 
-    // Marquer l'invitation comme acceptée
+    // Marquer l'invitation comme acceptée APRÈS avoir créé l'accès
     await updateDoc(doc(db, "shareInvitations", invitationId), {
       status: "accepted",
     });
