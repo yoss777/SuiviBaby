@@ -67,10 +67,21 @@ export default function HiddenChildrenScreen() {
       }
 
       // Récupérer tous les enfants accessibles par l'utilisateur
-      const childIds = await getAccessibleChildIds(user.uid);
-      const childDocs = await Promise.all(
-        childIds.map((id) => getDoc(doc(db, "children", id)))
-      );
+      let childIds: string[] = [];
+      try {
+        childIds = await getAccessibleChildIds(user.uid);
+      } catch (error) {
+        throw error;
+      }
+
+      let childDocs;
+      try {
+        childDocs = await Promise.all(
+          childIds.map((id) => getDoc(doc(db, "children", id)))
+        );
+      } catch (error) {
+        throw error;
+      }
       const allChildren: Child[] = childDocs
         .filter((snap) => snap.exists())
         .map((snap) => ({

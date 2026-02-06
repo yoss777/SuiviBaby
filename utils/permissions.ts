@@ -1,33 +1,33 @@
+import { db } from "@/config/firebase";
 import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  Timestamp,
-  collection,
-  collectionGroup,
-  getDocs,
-  query,
-  where,
-} from 'firebase/firestore';
-import { db } from '@/config/firebase';
-import {
-  ChildRole,
   ChildAccessDocument,
   ChildPermissions,
+  ChildRole,
   DEFAULT_ROLE_PERMISSIONS,
-} from '@/types/permissions';
+} from "@/types/permissions";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  where
+} from "firebase/firestore";
 
 /**
  * Récupère les permissions d'un utilisateur pour un enfant
  */
 export async function getUserChildAccess(
   childId: string,
-  userId: string
+  userId: string,
 ): Promise<ChildAccessDocument | null> {
   try {
-    const accessRef = doc(db, 'children', childId, 'access', userId);
+    const accessRef = doc(db, "children", childId, "access", userId);
     const accessSnap = await getDoc(accessRef);
 
     if (!accessSnap.exists()) {
@@ -36,7 +36,7 @@ export async function getUserChildAccess(
 
     return accessSnap.data() as ChildAccessDocument;
   } catch (error) {
-    console.error('Error fetching child access:', error);
+    console.error("Error fetching child access:", error);
     throw error;
   }
 }
@@ -45,7 +45,7 @@ export async function getUserChildAccess(
  * Calcule les permissions effectives à partir d'un document d'accès
  */
 export function calculatePermissions(
-  accessDoc: ChildAccessDocument | null
+  accessDoc: ChildAccessDocument | null,
 ): ChildPermissions {
   if (!accessDoc) {
     return {
@@ -69,7 +69,7 @@ export function calculatePermissions(
     canWriteEvents,
     canWriteLikes,
     canWriteComments,
-    canManageAccess: role === 'owner',
+    canManageAccess: role === "owner",
     loading: false,
   };
 }
@@ -84,12 +84,17 @@ export async function grantChildAccess(
   grantedBy: string,
   options?: {
     invitationId?: string;
-    customPermissions?: Partial<Pick<ChildAccessDocument, 'canWriteEvents' | 'canWriteLikes' | 'canWriteComments'>>;
-  }
+    customPermissions?: Partial<
+      Pick<
+        ChildAccessDocument,
+        "canWriteEvents" | "canWriteLikes" | "canWriteComments"
+      >
+    >;
+  },
 ): Promise<void> {
   try {
-    const accessRef = doc(db, 'children', childId, 'access', userId);
-    const indexRef = doc(db, 'user_child_access', `${userId}_${childId}`);
+    const accessRef = doc(db, "children", childId, "access", userId);
+    const indexRef = doc(db, "user_child_access", `${userId}_${childId}`);
 
     // Permissions par défaut selon le rôle
     const defaultPermissions = DEFAULT_ROLE_PERMISSIONS[role];
@@ -97,24 +102,34 @@ export async function grantChildAccess(
     const accessDoc: ChildAccessDocument = {
       userId,
       role,
-      canWriteEvents: options?.customPermissions?.canWriteEvents ?? defaultPermissions.canWriteEvents,
-      canWriteLikes: options?.customPermissions?.canWriteLikes ?? defaultPermissions.canWriteLikes,
-      canWriteComments: options?.customPermissions?.canWriteComments ?? defaultPermissions.canWriteComments,
+      canWriteEvents:
+        options?.customPermissions?.canWriteEvents ??
+        defaultPermissions.canWriteEvents,
+      canWriteLikes:
+        options?.customPermissions?.canWriteLikes ??
+        defaultPermissions.canWriteLikes,
+      canWriteComments:
+        options?.customPermissions?.canWriteComments ??
+        defaultPermissions.canWriteComments,
       grantedBy,
       grantedAt: Timestamp.now(),
       ...(options?.invitationId && { invitationId: options.invitationId }),
     };
 
     await setDoc(accessRef, accessDoc);
-    await setDoc(indexRef, {
-      userId,
-      childId,
-      invitationId: options?.invitationId ?? null,
-      grantedBy,
-      grantedAt: Timestamp.now(),
-    }, { merge: true });
+    await setDoc(
+      indexRef,
+      {
+        userId,
+        childId,
+        invitationId: options?.invitationId ?? null,
+        grantedBy,
+        grantedAt: Timestamp.now(),
+      },
+      { merge: true },
+    );
   } catch (error) {
-    console.error('Error granting child access:', error);
+    console.error("Error granting child access:", error);
     throw error;
   }
 }
@@ -125,13 +140,13 @@ export async function grantChildAccess(
 export async function updateChildAccess(
   childId: string,
   userId: string,
-  updates: Partial<ChildAccessDocument>
+  updates: Partial<ChildAccessDocument>,
 ): Promise<void> {
   try {
-    const accessRef = doc(db, 'children', childId, 'access', userId);
+    const accessRef = doc(db, "children", childId, "access", userId);
     await updateDoc(accessRef, updates);
   } catch (error) {
-    console.error('Error updating child access:', error);
+    console.error("Error updating child access:", error);
     throw error;
   }
 }
@@ -141,15 +156,15 @@ export async function updateChildAccess(
  */
 export async function revokeChildAccess(
   childId: string,
-  userId: string
+  userId: string,
 ): Promise<void> {
   try {
-    const accessRef = doc(db, 'children', childId, 'access', userId);
-    const indexRef = doc(db, 'user_child_access', `${userId}_${childId}`);
+    const accessRef = doc(db, "children", childId, "access", userId);
+    const indexRef = doc(db, "user_child_access", `${userId}_${childId}`);
     await deleteDoc(accessRef);
     await deleteDoc(indexRef);
   } catch (error) {
-    console.error('Error revoking child access:', error);
+    console.error("Error revoking child access:", error);
     throw error;
   }
 }
@@ -158,10 +173,10 @@ export async function revokeChildAccess(
  * Récupère tous les accès pour un enfant
  */
 export async function getAllChildAccess(
-  childId: string
+  childId: string,
 ): Promise<Record<string, ChildAccessDocument>> {
   try {
-    const accessCollectionRef = collection(db, 'children', childId, 'access');
+    const accessCollectionRef = collection(db, "children", childId, "access");
     const accessSnap = await getDocs(accessCollectionRef);
 
     const accesses: Record<string, ChildAccessDocument> = {};
@@ -171,7 +186,7 @@ export async function getAllChildAccess(
 
     return accesses;
   } catch (error) {
-    console.error('Error fetching all child access:', error);
+    console.error("Error fetching all child access:", error);
     throw error;
   }
 }
@@ -181,7 +196,10 @@ export async function getAllChildAccess(
  */
 export function hasPermission(
   permissions: ChildPermissions,
-  permission: keyof Omit<ChildPermissions, 'hasAccess' | 'role' | 'loading' | 'error'>
+  permission: keyof Omit<
+    ChildPermissions,
+    "hasAccess" | "role" | "loading" | "error"
+  >,
 ): boolean {
   return permissions[permission] === true;
 }
@@ -191,9 +209,9 @@ export function hasPermission(
  */
 export async function createOwnerAccess(
   childId: string,
-  ownerId: string
+  ownerId: string,
 ): Promise<void> {
-  await grantChildAccess(childId, ownerId, 'owner', ownerId);
+  await grantChildAccess(childId, ownerId, "owner", ownerId);
 }
 
 /**
@@ -201,8 +219,9 @@ export async function createOwnerAccess(
  */
 export async function getAccessibleChildIds(userId: string): Promise<string[]> {
   const q = query(
-    collection(db, 'user_child_access'),
-    where('userId', '==', userId)
+    collection(db, "user_child_access"),
+    where("userId", "==", userId),
+    limit(200),
   );
   const snapshot = await getDocs(q);
 

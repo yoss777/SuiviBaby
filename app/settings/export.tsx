@@ -259,7 +259,6 @@ export default function ExportScreen() {
           const contributorOnly =
             !hasElevatedRole && (hasContributorRole || roles.length === 0);
 
-          console.log("[Export] roles:", roles, "contributorOnly:", contributorOnly);
           setIsContributorOnly(contributorOnly);
           setChildren((prev) => {
             const selectionMap = new Map(

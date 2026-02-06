@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { doc, getDoc } from "firebase/firestore";
 
 import { AddChildModal } from "@/components/suivibaby/AddChildModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -22,6 +23,8 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { masquerEnfant } from "@/services/userPreferencesService";
+import { db } from "@/config/firebase";
+import type { ChildRole } from "@/types/permissions";
 
 const { width } = Dimensions.get("window");
 
@@ -41,6 +44,7 @@ export function CustomDrawerContent(props: any) {
   const [showAddChildModal, setShowAddChildModal] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
+  const [childRoles, setChildRoles] = useState<Record<string, ChildRole | null>>({});
   const inputRef = useRef<TextInput>(null);
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canShareChild =
@@ -55,6 +59,39 @@ export function CustomDrawerContent(props: any) {
     setIsSearchActive(false);
     setSearchQuery("");
   }, [pathname]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadRoles = async () => {
+      if (!firebaseUser?.uid || children.length === 0) {
+        if (isMounted) setChildRoles({});
+        return;
+      }
+      try {
+        const entries = await Promise.all(
+          children.map(async (child) => {
+            const accessSnap = await getDoc(
+              doc(db, "children", child.id, "access", firebaseUser.uid)
+            );
+            const role = accessSnap.exists()
+              ? ((accessSnap.data()?.role ?? null) as ChildRole | null)
+              : null;
+            return [child.id, role] as const;
+          })
+        );
+        if (isMounted) {
+          setChildRoles(Object.fromEntries(entries));
+        }
+      } catch (error) {
+        console.error("[CustomDrawer] Erreur chargement roles:", error);
+      }
+    };
+
+    loadRoles();
+    return () => {
+      isMounted = false;
+    };
+  }, [children, firebaseUser?.uid]);
 
   // Rediriger vers explore si tous les enfants sont masqués
   useEffect(() => {
@@ -161,11 +198,13 @@ export function CustomDrawerContent(props: any) {
         {/* Liste des enfants */}
         {children.map((child) => {
           const ageText = calculateAge(child.birthDate);
-          const isActive =
-            child.id === activeChild?.id && pathname.includes("/baby");
+          const isActive = child.id === activeChild?.id;
           const itemColor = isActive
             ? Colors[colorScheme].tint
             : Colors[colorScheme].text;
+          const childRole = childRoles[child.id] ?? permissions.role;
+          const canShareThisChild =
+            childRole === "owner" || childRole === "admin";
 
           return (
             <View key={child.id} style={styles.childItemContainer}>
@@ -204,7 +243,7 @@ export function CustomDrawerContent(props: any) {
 
               {/* Actions sur l'enfant */}
               <View style={styles.childActions}>
-                {canShareChild && (
+                {canShareThisChild && (
                   <TouchableOpacity
                     style={styles.actionButton}
                     onPress={() =>

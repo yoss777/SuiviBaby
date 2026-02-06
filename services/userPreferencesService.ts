@@ -59,7 +59,16 @@ const defaultLanguagePreference: LanguagePreference = 'fr';
  */
 export async function obtenirPreferences(): Promise<UserPreferences> {
   try {
-    const userId = getUserId();
+    const user = auth.currentUser;
+    if (!user) {
+      return {
+        hiddenChildrenIds: [],
+        notifications: defaultNotificationPreferences,
+        theme: defaultThemePreference,
+        language: defaultLanguagePreference,
+      };
+    }
+    const userId = user.uid;
     const docRef = doc(db, "user_preferences", userId);
     const docSnap = await getDoc(docRef);
 

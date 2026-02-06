@@ -5,6 +5,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { useCallback, useRef } from "react";
@@ -78,7 +79,7 @@ const ITEMS = [
   {
     title: "Couches",
     subtitle: "Mictions et selles",
-    icon: "toilet",
+    icon: { lib: "mci", name: "human-baby-changing-table" },
     color: "#17a2b8",
     route: "/baby/diapers",
   },
@@ -168,11 +169,19 @@ export default function PlusScreen() {
                     { backgroundColor: `${item.color}1A` },
                   ]}
                 >
-                  <FontAwesome
-                    name={item.icon as any}
-                    size={18}
-                    color={item.color}
-                  />
+                  {typeof item.icon === "string" ? (
+                    <FontAwesome
+                      name={item.icon as any}
+                      size={18}
+                      color={item.color}
+                    />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name={item.icon.name as any}
+                      size={18}
+                      color={item.color}
+                    />
+                  )}
                 </View>
                 <View style={styles.textBlock}>
                   <Text style={[styles.rowTitle, { color: colors.text }]}>

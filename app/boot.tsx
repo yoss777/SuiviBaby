@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
@@ -23,6 +23,7 @@ export default function BootScreen() {
   const { children, loading: babyLoading, setActiveChild } = useBaby();
   const [delayDone, setDelayDone] = useState(false);
   const [unauthDelayDone, setUnauthDelayDone] = useState(false);
+  const [videoDone, setVideoDone] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDelayDone(true), 1500);
@@ -38,6 +39,11 @@ export default function BootScreen() {
     const timer = setTimeout(() => setUnauthDelayDone(true), 1500);
     return () => clearTimeout(timer);
   }, [authLoading, user]);
+
+  useEffect(() => {
+    const fallback = setTimeout(() => setVideoDone(true), 3000);
+    return () => clearTimeout(fallback);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,7 +79,7 @@ export default function BootScreen() {
       // Étape 2 : Si pas d'utilisateur, rediriger vers login
       if (!user) {
         console.log("[BOOT] Pas de user, redirection vers login");
-        if (!unauthDelayDone) {
+        if (!unauthDelayDone || !videoDone) {
           return;
         }
         router.replace("/(auth)/login");
@@ -87,7 +93,7 @@ export default function BootScreen() {
         return;
       }
 
-      if (!delayDone) {
+      if (!delayDone || !videoDone) {
         console.log("[BOOT] Attente du délai minimum...");
         return;
       }
@@ -135,6 +141,7 @@ export default function BootScreen() {
     babyLoading,
     delayDone,
     unauthDelayDone,
+    videoDone,
     user,
     children,
     setActiveChild,
@@ -143,10 +150,27 @@ export default function BootScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: Colors[colorScheme].background }}>
       <BackgroundImage />
+      {/* <AppBackground /> */}
       <SafeAreaView
         style={{ flex: 1, backgroundColor: "transparent" }}
         edges={["top", "bottom"]}
       >
+        {/* {!videoDone ? (
+          <Video
+            source={require("@/assets/bootsplash2.mp4")}
+            style={styles.fullscreenVideo}
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay
+            isLooping={false}
+            isMuted
+            onPlaybackStatusUpdate={(status) => {
+              if (!status.isLoaded) return;
+              if (status.didJustFinish) {
+                setVideoDone(true);
+              }
+            }}
+          />
+        ) : ( */}
         <View
           style={{
             flex: 1,
@@ -173,7 +197,14 @@ export default function BootScreen() {
             Préparation de votre espace...
           </ThemedText>
         </View>
+        {/* )} */}
       </SafeAreaView>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  fullscreenVideo: {
+    ...StyleSheet.absoluteFillObject,
+  },
+});

@@ -1,22 +1,28 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { doc, onSnapshot } from "firebase/firestore";
+import { useEffect, useRef, useState } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ThemedView } from '@/components/themed-view';
-import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { InfoModal } from '@/components/ui/InfoModal';
-import { PromptModal } from '@/components/ui/PromptModal';
-import { IconPulseDots } from '@/components/ui/IconPulseDtos';
-import { db } from '@/config/firebase';
-import { Colors } from '@/constants/theme';
-import { useAuth } from '@/contexts/AuthContext';
-import { useBaby } from '@/contexts/BabyContext';
-import { useThemePreference } from '@/contexts/ThemeContext';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { deleteAccountAndData } from '@/services/accountDeletionService';
+import { ThemedView } from "@/components/themed-view";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { InfoModal } from "@/components/ui/InfoModal";
+import { PromptModal } from "@/components/ui/PromptModal";
+import { db } from "@/config/firebase";
+import { Colors } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { useBaby } from "@/contexts/BabyContext";
+// import { useThemePreference } from '@/contexts/ThemeContext';
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { deleteAccountAndData } from "@/services/accountDeletionService";
 
 interface SettingItem {
   id: string;
@@ -32,23 +38,23 @@ interface SettingItem {
 }
 
 export default function SettingsScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  const colorScheme = useColorScheme() ?? "light";
   const { user, signOut } = useAuth();
   const { activeChild } = useBaby();
-  const { preference: themePreference } = useThemePreference();
+  // const { preference: themePreference } = useThemePreference();
   const router = useRouter();
   const { delete: deleteParam } = useLocalSearchParams();
   const [hasHiddenChildren, setHasHiddenChildren] = useState(false);
   const [hiddenChildrenCount, setHiddenChildrenCount] = useState(0);
-  const [languagePreference, setLanguagePreference] = useState('fr');
+  const [languagePreference, setLanguagePreference] = useState("fr");
   const [modalConfig, setModalConfig] = useState({
     visible: false,
-    title: '',
-    message: '',
+    title: "",
+    message: "",
   });
   const [showDeleteExportModal, setShowDeleteExportModal] = useState(false);
   const [showDeletePasswordModal, setShowDeletePasswordModal] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
+  const [deletePassword, setDeletePassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const deleteParamHandledRef = useRef(false);
 
@@ -59,32 +65,36 @@ export default function SettingsScreen() {
       return;
     }
 
-    const userPrefsRef = doc(db, 'user_preferences', user.uid);
+    const userPrefsRef = doc(db, "user_preferences", user.uid);
 
-    const unsubscribe = onSnapshot(userPrefsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        const hiddenIds = data.hiddenChildrenIds || [];
-        setHasHiddenChildren(hiddenIds.length > 0);
-        setHiddenChildrenCount(hiddenIds.length);
-        setLanguagePreference(data.language || 'fr');
-      } else {
+    const unsubscribe = onSnapshot(
+      userPrefsRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          const hiddenIds = data.hiddenChildrenIds || [];
+          setHasHiddenChildren(hiddenIds.length > 0);
+          setHiddenChildrenCount(hiddenIds.length);
+          setLanguagePreference(data.language || "fr");
+        } else {
+          setHasHiddenChildren(false);
+          setHiddenChildrenCount(0);
+          setLanguagePreference("fr");
+        }
+      },
+      (error) => {
+        console.error("Erreur lors de l'écoute des enfants masqués:", error);
         setHasHiddenChildren(false);
         setHiddenChildrenCount(0);
-        setLanguagePreference('fr');
-      }
-    }, (error) => {
-      console.error('Erreur lors de l\'écoute des enfants masqués:', error);
-      setHasHiddenChildren(false);
-      setHiddenChildrenCount(0);
-      setLanguagePreference('fr');
-    });
+        setLanguagePreference("fr");
+      },
+    );
 
     return () => unsubscribe();
   }, [user]);
 
   useEffect(() => {
-    if (deleteParam === '1' && !deleteParamHandledRef.current) {
+    if (deleteParam === "1" && !deleteParamHandledRef.current) {
       deleteParamHandledRef.current = true;
       setShowDeletePasswordModal(true);
       router.setParams({ delete: undefined });
@@ -93,71 +103,73 @@ export default function SettingsScreen() {
 
   const accountSettings: SettingItem[] = [
     {
-      id: 'profile',
-      icon: 'person-outline',
-      label: 'Profil',
-      description: 'Modifier vos informations personnelles',
+      id: "profile",
+      icon: "person-outline",
+      label: "Profil",
+      description: "Modifier vos informations personnelles",
       onPress: () => {
-        router.push('/settings/profile');
+        router.push("/settings/profile");
       },
     },
     {
-      id: 'password',
-      icon: 'lock-closed-outline',
-      label: 'Mot de passe',
-      description: 'Changer votre mot de passe',
+      id: "password",
+      icon: "lock-closed-outline",
+      label: "Mot de passe",
+      description: "Changer votre mot de passe",
       onPress: () => {
-        router.push('/settings/password');
+        router.push("/settings/password");
       },
     },
   ];
 
   const appSettings: SettingItem[] = [
     {
-      id: 'hidden-children',
-      icon: 'eye-off-outline',
-      label: 'Enfants masqués',
+      id: "hidden-children",
+      icon: "eye-off-outline",
+      label: "Enfants masqués",
       value: `${hiddenChildrenCount}`,
-      description: hasHiddenChildren ? 'Gérer les enfants masqués' : 'Aucun enfant masqué',
+      description: hasHiddenChildren
+        ? "Gérer les enfants masqués"
+        : "Aucun enfant masqué",
       disabled: !hasHiddenChildren,
       onPress: () => {
         if (hasHiddenChildren) {
-          router.push('/settings/hidden-children');
+          router.push("/settings/hidden-children");
         }
       },
     },
     {
-      id: 'join-child',
-      icon: 'person-add-outline',
-      label: 'Ajouter un enfant',
-      description: 'Entrer un code ou accepter une invitation',
+      id: "join-child",
+      icon: "person-add-outline",
+      label: "Ajouter un enfant",
+      description: "Entrer un code ou accepter une invitation",
       onPress: () => {
-        router.push('/settings/join-child');
+        router.push("/settings/join-child");
       },
     },
     {
-      id: 'notifications',
-      icon: 'notifications-outline',
-      label: 'Notifications',
-      description: 'Gérer les notifications',
+      id: "notifications",
+      icon: "notifications-outline",
+      label: "Notifications",
+      description: "Gérer les notifications",
       onPress: () => {
-        router.push('/settings/notifications');
+        router.push("/settings/notifications");
       },
     },
-    {
-      id: 'theme',
-      icon: 'moon-outline',
-      label: 'Thème',
-      value:
-        themePreference === 'auto'
-          ? 'Automatique'
-          : themePreference === 'dark'
-          ? 'Sombre'
-          : 'Clair',
-      onPress: () => {
-        router.push('/settings/theme');
-      },
-    },
+    // {
+    //   id: 'theme',
+    //   icon: 'moon-outline',
+    //   label: 'Thème',
+    //   value:
+    //     themePreference === 'auto'
+    //       ? 'Automatique'
+    //       : themePreference === 'dark'
+    //       ? 'Sombre'
+    //       : 'Clair',
+    //   onPress: () => {
+    //     router.push('/settings/theme');
+    //   },
+    // },
     // {
     //   id: 'language',
     //   icon: 'language-outline',
@@ -190,12 +202,12 @@ export default function SettingsScreen() {
     //   },
     // },
     {
-      id: 'export',
-      icon: 'cloud-download-outline',
-      label: 'Export',
-      description: 'Télécharger vos données',
+      id: "export",
+      icon: "cloud-download-outline",
+      label: "Export",
+      description: "Télécharger vos données",
       onPress: () => {
-        router.push('/settings/export');
+        router.push("/settings/export");
       },
     },
     // {
@@ -211,66 +223,67 @@ export default function SettingsScreen() {
 
   const otherSettings: SettingItem[] = [
     {
-      id: 'privacy',
-      icon: 'shield-outline',
-      label: 'Confidentialité',
-      description: 'Politique de confidentialité',
+      id: "privacy",
+      icon: "shield-outline",
+      label: "Confidentialité",
+      description: "Politique de confidentialité",
       onPress: () => {
-        router.push('/settings/privacy');
+        router.push("/settings/privacy");
       },
     },
     {
-      id: 'terms',
-      icon: 'document-text-outline',
-      label: 'Conditions d\'utilisation',
+      id: "terms",
+      icon: "document-text-outline",
+      label: "Conditions d'utilisation",
       onPress: () => {
-        router.push('/settings/terms');
+        router.push("/settings/terms");
       },
     },
     {
-      id: 'about',
-      icon: 'information-circle-outline',
-      label: 'À propos',
-      value: 'Version 1.0.0',
+      id: "about",
+      icon: "information-circle-outline",
+      label: "À propos",
+      value: "Version 1.0.0",
       onPress: () => {
         setModalConfig({
           visible: true,
-          title: 'SuiviBaby',
-          message: 'Version 1.0.0\n\nSystème de suivi d\'événements bébé pour les parents.',
+          title: "SuiviBaby",
+          message:
+            "Version 1.0.0\n\nSystème de suivi d'événements bébé pour les parents.",
         });
       },
     },
     {
-      id: 'help',
-      icon: 'help-circle-outline',
-      label: 'Aide & Support',
+      id: "help",
+      icon: "help-circle-outline",
+      label: "Aide & Support",
       onPress: () => {
-        router.push('/settings/help');
+        router.push("/settings/help");
       },
     },
   ];
 
   const dangerSettings: SettingItem[] = [
     {
-      id: 'delete',
-      icon: 'trash-outline',
-      label: 'Supprimer le compte',
-      description: 'Cette action est irréversible',
+      id: "delete",
+      icon: "trash-outline",
+      label: "Supprimer le compte",
+      description: "Cette action est irréversible",
       onPress: () => setShowDeleteExportModal(true),
-      color: '#dc3545',
+      color: "#dc3545",
     },
   ];
 
   const renderSettingItem = (item: SettingItem) => {
     const isDisabled = !!item.disabled;
-    const showChevron = item.showChevron ?? (!isDisabled);
+    const showChevron = item.showChevron ?? !isDisabled;
 
     return (
       <TouchableOpacity
         key={item.id}
         style={[
           styles.settingItem,
-          { borderBottomColor: Colors[colorScheme].tabIconDefault + '20' },
+          { borderBottomColor: Colors[colorScheme].tabIconDefault + "20" },
         ]}
         onPress={item.onPress}
         activeOpacity={isDisabled ? 1 : 0.7}
@@ -282,7 +295,10 @@ export default function SettingsScreen() {
           <View
             style={[
               styles.iconContainer,
-              { backgroundColor: (item.color || Colors[colorScheme].tint) + '15' },
+              {
+                backgroundColor:
+                  (item.color || Colors[colorScheme].tint) + "15",
+              },
               isDisabled && { opacity: 0.35 },
             ]}
           >
@@ -293,19 +309,23 @@ export default function SettingsScreen() {
             />
           </View>
           <View style={styles.settingTextContainer}>
-            <Text style={[
-              styles.settingLabel,
-              { color: item.color || Colors[colorScheme].text },
-              isDisabled && { opacity: 0.35 },
-            ]}>
+            <Text
+              style={[
+                styles.settingLabel,
+                { color: item.color || Colors[colorScheme].text },
+                isDisabled && { opacity: 0.35 },
+              ]}
+            >
               {item.label}
             </Text>
             {item.description && (
-              <Text style={[
-                styles.settingDescription,
-                { color: Colors[colorScheme].tabIconDefault },
-                isDisabled && { opacity: 0.35 },
-              ]}>
+              <Text
+                style={[
+                  styles.settingDescription,
+                  { color: Colors[colorScheme].tabIconDefault },
+                  isDisabled && { opacity: 0.35 },
+                ]}
+              >
                 {item.description}
               </Text>
             )}
@@ -344,7 +364,12 @@ export default function SettingsScreen() {
 
   const renderSection = (title: string, items: SettingItem[]) => (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: Colors[colorScheme].tabIconDefault }]}>
+      <Text
+        style={[
+          styles.sectionTitle,
+          { color: Colors[colorScheme].tabIconDefault },
+        ]}
+      >
         {title}
       </Text>
       <ThemedView style={styles.sectionContent}>
@@ -354,19 +379,30 @@ export default function SettingsScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={[
+        styles.container,
+        { backgroundColor: Colors[colorScheme].background },
+      ]}
+      edges={["top", "bottom"]}
+    >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {renderSection('Compte', accountSettings)}
-        {renderSection('Application', appSettings)}
-        {renderSection('Donnees', dataSettings)}
-        {renderSection('Autres', otherSettings)}
-        {renderSection('Zone dangereuse', dangerSettings)}
+        {renderSection("Compte", accountSettings)}
+        {renderSection("Application", appSettings)}
+        {renderSection("Donnees", dataSettings)}
+        {renderSection("Autres", otherSettings)}
+        {renderSection("Zone dangereuse", dangerSettings)}
 
         <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: Colors[colorScheme].tabIconDefault }]}>
+          <Text
+            style={[
+              styles.footerText,
+              { color: Colors[colorScheme].tabIconDefault },
+            ]}
+          >
             SuiviBaby © 2026
           </Text>
         </View>
@@ -390,7 +426,7 @@ export default function SettingsScreen() {
         confirmButtonColor={Colors[colorScheme].tint}
         onConfirm={() => {
           setShowDeleteExportModal(false);
-          router.push('/settings/export?afterDelete=1');
+          router.push("/settings/export?afterDelete=1");
         }}
         onCancel={() => {
           setShowDeleteExportModal(false);
@@ -404,7 +440,12 @@ export default function SettingsScreen() {
           isDeleting ? (
             <View style={styles.deleteLoader}>
               <IconPulseDots />
-              <Text style={[styles.deleteLoaderText, { color: Colors[colorScheme].text }]}>
+              <Text
+                style={[
+                  styles.deleteLoaderText,
+                  { color: Colors[colorScheme].text },
+                ]}
+              >
                 Suppression en cours...
               </Text>
             </View>
@@ -432,8 +473,8 @@ export default function SettingsScreen() {
           if (!deletePassword.trim()) {
             setModalConfig({
               visible: true,
-              title: 'Erreur',
-              message: 'Veuillez saisir votre mot de passe.',
+              title: "Erreur",
+              message: "Veuillez saisir votre mot de passe.",
             });
             return;
           }
@@ -442,20 +483,20 @@ export default function SettingsScreen() {
             setIsDeleting(true);
             await deleteAccountAndData(deletePassword);
             setShowDeletePasswordModal(false);
-            setDeletePassword('');
+            setDeletePassword("");
             await signOut();
-            router.replace('/(auth)/login');
+            router.replace("/(auth)/login");
           } catch (error: any) {
-            const code = error?.code || '';
+            const code = error?.code || "";
             const message =
-              code === 'auth/wrong-password'
-                ? 'Mot de passe incorrect.'
-                : code === 'auth/requires-recent-login'
-                  ? 'Veuillez vous reconnecter puis réessayer.'
-                  : 'Impossible de supprimer le compte.';
+              code === "auth/wrong-password"
+                ? "Mot de passe incorrect."
+                : code === "auth/requires-recent-login"
+                  ? "Veuillez vous reconnecter puis réessayer."
+                  : "Impossible de supprimer le compte.";
             setModalConfig({
               visible: true,
-              title: 'Erreur',
+              title: "Erreur",
               message,
             });
           } finally {
@@ -465,7 +506,7 @@ export default function SettingsScreen() {
         onCancel={() => {
           if (isDeleting) return;
           setShowDeletePasswordModal(false);
-          setDeletePassword('');
+          setDeletePassword("");
         }}
       />
     </SafeAreaView>
@@ -484,34 +525,34 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     paddingHorizontal: 20,
     marginBottom: 8,
   },
   sectionContent: {
     borderRadius: 12,
     marginHorizontal: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
   },
   settingItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   iconContainer: {
     width: 40,
     height: 40,
     borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 12,
   },
   settingTextContainer: {
@@ -519,15 +560,15 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   settingDescription: {
     fontSize: 13,
     marginTop: 2,
   },
   settingItemRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     maxWidth: 160,
   },
@@ -535,28 +576,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   deleteLoader: {
-    alignItems: 'center',
+    alignItems: "center",
     gap: 12,
     paddingVertical: 4,
   },
   deleteLoaderText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   tag: {
-    backgroundColor: '#f2f2f2',
+    backgroundColor: "#f2f2f2",
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   tagText: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#555',
-    textTransform: 'uppercase',
+    fontWeight: "600",
+    color: "#555",
+    textTransform: "uppercase",
   },
   footer: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 24,
   },
   footerText: {

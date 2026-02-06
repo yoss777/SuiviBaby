@@ -39,8 +39,8 @@ const ACTIONS = [
   // Position 4 (très accessible)
   {
     key: "diaper",
-    icon: { lib: "fa6" as const, name: "toilet" },
-    label: "Change",
+    icon: { lib: "mci" as const, name: "human-baby-changing-table" },
+    label: "Couche",
     color: "#17a2b8",
     bgColor: "#d1ecf1",
     formType: "diapers" as const,
