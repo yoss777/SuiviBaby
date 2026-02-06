@@ -77,8 +77,19 @@ export interface TeteeEvent extends BaseEvent {
 
 export interface SolideEvent extends BaseEvent {
   type: "solide";
-  typeSolide: "puree" | "compote" | "cereales" | "yaourt" | "morceaux" | "autre";
-  momentRepas?: "petit_dejeuner" | "dejeuner" | "gouter" | "diner" | "collation";
+  typeSolide:
+    | "puree"
+    | "compote"
+    | "cereales"
+    | "yaourt"
+    | "morceaux"
+    | "autre";
+  momentRepas?:
+    | "petit_dejeuner"
+    | "dejeuner"
+    | "gouter"
+    | "diner"
+    | "collation";
   ingredients?: string; // Liste libre des ingrédients
   quantite?: "peu" | "moyen" | "beaucoup";
   nouveauAliment?: boolean; // Flag pour premier essai
@@ -174,7 +185,16 @@ export interface VitamineEvent extends BaseEvent {
 
 export interface ActiviteEvent extends BaseEvent {
   type: "activite";
-  typeActivite: "tummyTime" | "jeux" | "lecture" | "promenade" | "massage" | "musique" | "eveil" | "sortie" | "autre";
+  typeActivite:
+    | "tummyTime"
+    | "jeux"
+    | "lecture"
+    | "promenade"
+    | "massage"
+    | "musique"
+    | "eveil"
+    | "sortie"
+    | "autre";
   duree?: number; // minutes
   description?: string;
 }
@@ -494,21 +514,23 @@ export async function supprimerEvenement(
     // Supprimer les likes associés
     const likesQuery = query(
       collection(db, "eventLikes"),
-      where("eventId", "==", id)
+      where("eventId", "==", id),
+      limit(10000),
     );
     const likesSnapshot = await getDocs(likesQuery);
     const deleteLikesPromises = likesSnapshot.docs.map((d) =>
-      deleteDoc(doc(db, "eventLikes", d.id))
+      deleteDoc(doc(db, "eventLikes", d.id)),
     );
 
     // Supprimer les commentaires associés
     const commentsQuery = query(
       collection(db, "eventComments"),
-      where("eventId", "==", id)
+      where("eventId", "==", id),
+      limit(10000),
     );
     const commentsSnapshot = await getDocs(commentsQuery);
     const deleteCommentsPromises = commentsSnapshot.docs.map((d) =>
-      deleteDoc(doc(db, "eventComments", d.id))
+      deleteDoc(doc(db, "eventComments", d.id)),
     );
 
     // Exécuter toutes les suppressions en parallèle

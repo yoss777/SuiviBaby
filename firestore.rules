@@ -189,9 +189,11 @@ service cloud.firestore {
       allow create: if canWriteLikes(request.resource.data.childId) &&
         request.resource.data.userId == request.auth.uid;
 
-      // Suppression : uniquement son propre like
-      allow delete: if hasAccess(resource.data.childId) &&
-        resource.data.userId == request.auth.uid;
+      // Suppression : son propre like OU owner/admin de l'enfant
+      allow delete: if hasAccess(resource.data.childId) && (
+        resource.data.userId == request.auth.uid ||
+        canWriteEvents(resource.data.childId)
+      );
     }
 
     // Commentaires sur les events
@@ -211,10 +213,10 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid &&
         request.resource.data.userId == request.auth.uid;
 
-      // Suppression : son propre commentaire OU owner de l'enfant
+      // Suppression : son propre commentaire OU owner/admin de l'enfant
       allow delete: if (hasAccess(resource.data.childId) &&
         resource.data.userId == request.auth.uid) ||
-        isOwner(resource.data.childId);
+        canWriteEvents(resource.data.childId);
     }
 
     // ============================================
