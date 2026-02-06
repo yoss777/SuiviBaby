@@ -1,8 +1,10 @@
+import { TabBarBadge } from "@/components/ui/TabBarBadge";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
-import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useMomentsNotification } from "@/contexts/MomentsNotificationContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useChildPermissions } from "@/hooks/useChildPermissions";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { Tabs } from "expo-router";
 import { Platform, View } from "react-native";
@@ -11,6 +13,7 @@ export default function BabyTabLayout() {
   const colorScheme = useColorScheme() ?? "light";
   const { firebaseUser } = useAuth();
   const { activeChild } = useBaby();
+  const { hasNewMoments } = useMomentsNotification();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
@@ -34,135 +37,136 @@ export default function BabyTabLayout() {
           }),
         }}
       >
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: "Accueil",
-          tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="home" color={color} />
-          ),
-        }}
-      />
+        <Tabs.Screen
+          name="home"
+          options={{
+            title: "Accueil",
+            tabBarIcon: ({ color }) => (
+              <FontAwesome size={28} name="home" color={color} />
+            ),
+          }}
+        />
 
-      <Tabs.Screen
-        name="croissance"
-        options={{
-          title: "Croissance",
-          tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="seedling" color={color} />
-          ),
-        }}
-      />
+        <Tabs.Screen
+          name="croissance"
+          options={{
+            title: "Croissance",
+            tabBarIcon: ({ color }) => (
+              <FontAwesome size={28} name="seedling" color={color} />
+            ),
+          }}
+        />
 
-      <Tabs.Screen
-        name="moments"
-        options={{
-          title: "Moments",
-          tabBarIcon: ({ focused, color }) => (
-            <FontAwesome
-              size={28}
-              name="heart"
-              color={focused ? "#e63946" : color}
-              solid={focused}
-            />
-          ),
-        }}
-      />
+        <Tabs.Screen
+          name="moments"
+          options={{
+            title: "Moments",
+            tabBarIcon: ({ focused, color }) => (
+              <TabBarBadge visible={hasNewMoments} type="dot" color="#e63946">
+                <FontAwesome
+                  size={28}
+                  name="heart"
+                  color={focused ? "#e63946" : color}
+                  solid={focused}
+                />
+              </TabBarBadge>
+            ),
+          }}
+        />
 
-      <Tabs.Screen
-        name="chrono"
-        options={{
-          title: "Journal",
-          tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="clock" color={color} />
-          ),
-        }}
-      />
+        <Tabs.Screen
+          name="chrono"
+          options={{
+            title: "Journal",
+            tabBarIcon: ({ color }) => (
+              <FontAwesome size={28} name="clock" color={color} />
+            ),
+          }}
+        />
 
-      <Tabs.Screen
-        name="plus"
-        options={{
-          title: "Plus",
-          href: showPlusTab ? undefined : null,
-          tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="ellipsis-h" color={color} />
-          ),
-        }}
-      />
+        <Tabs.Screen
+          name="plus"
+          options={{
+            title: "Plus",
+            href: showPlusTab ? undefined : null,
+            tabBarIcon: ({ color }) => (
+              <FontAwesome size={28} name="ellipsis-h" color={color} />
+            ),
+          }}
+        />
 
-      {/* Sous-écrans de Plus - cachés de la tab bar mais persistants */}
-      <Tabs.Screen
-        name="meals"
-        options={{
-          href: null, // Caché de la tab bar
-        }}
-      />
-      <Tabs.Screen
-        name="pumping"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="immunizations"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="soins"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="diapers"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="stats"
-        options={{
-          title: "Stats",
-          href: showStatsTab ? undefined : null,
-          tabBarIcon: ({ color }) => (
-            <FontAwesome size={28} name="chart-bar" color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="sommeil"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="routines"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="activities"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="milestones"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="growth"
-        options={{
-          href: null,
-        }}
-      />
+        {/* Sous-écrans de Plus - cachés de la tab bar mais persistants */}
+        <Tabs.Screen
+          name="meals"
+          options={{
+            href: null, // Caché de la tab bar
+          }}
+        />
+        <Tabs.Screen
+          name="pumping"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="immunizations"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="soins"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="diapers"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="stats"
+          options={{
+            title: "Stats",
+            href: showStatsTab ? undefined : null,
+            tabBarIcon: ({ color }) => (
+              <FontAwesome size={28} name="chart-bar" color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="sommeil"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="routines"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="activities"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="milestones"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="growth"
+          options={{
+            href: null,
+          }}
+        />
       </Tabs>
-
     </View>
   );
 }

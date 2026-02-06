@@ -13,6 +13,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useMomentsNotification } from "@/contexts/MomentsNotificationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -89,6 +90,7 @@ export default function MomentsScreen() {
   const { setHeaderRight } = useHeaderRight();
   const { showToast } = useToast();
   const { openSheet } = useSheet();
+  const { newEventIds } = useMomentsNotification();
   const colorScheme = useColorScheme() ?? "light";
   const headerOwnerId = useRef(
     `moments-${Math.random().toString(36).slice(2)}`,
@@ -141,11 +143,18 @@ export default function MomentsScreen() {
 
         // Photos
         if (event.photos && event.photos.length > 0) {
+          // Pour les jalons de type "photo", utiliser la description comme titre si elle existe
+          // Pour "autre" et autres types, garder le titre original
+          const photoTitre =
+            event.typeJalon === "photo" && event.description
+              ? event.description
+              : event.titre;
+
           photos.push({
             id: event.id,
             date: eventDate,
             photo: event.photos[0],
-            titre: event.titre,
+            titre: photoTitre,
             description: event.description,
             typeJalon: event.typeJalon,
           });
@@ -180,6 +189,7 @@ export default function MomentsScreen() {
       onSuccess: refreshToday,
     });
   }, [canManageContent, openSheet, refreshToday]);
+
 
   // Header setup
   useFocusEffect(
@@ -471,6 +481,7 @@ export default function MomentsScreen() {
               onSeeAll={handleSeeAll}
               likesInfo={likesInfo}
               commentCounts={commentCounts}
+              newEventIds={newEventIds}
             />
           </Animated.View>
 

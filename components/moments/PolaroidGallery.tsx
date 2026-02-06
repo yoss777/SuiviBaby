@@ -43,6 +43,7 @@ type PolaroidGalleryProps = {
   onSeeAll?: () => void;
   likesInfo?: Record<string, LikeInfo>;
   commentCounts?: Record<string, number>;
+  newEventIds?: Set<string>;
 };
 
 const formatDateShort = (date: Date) =>
@@ -58,16 +59,21 @@ const PolaroidCard = ({
   index,
   onPress,
   onLongPress,
+  likeCount,
   isLikedByMe,
   hasComments,
+  hasNewInteraction,
 }: {
   photo: PhotoMilestone;
   index: number;
   onPress: () => void;
   onLongPress: () => void;
+  likeCount?: number;
   isLikedByMe?: boolean;
   hasComments?: boolean;
+  hasNewInteraction?: boolean;
 }) => {
+  const hasLikes = (likeCount ?? 0) > 0;
   // Random rotation for each card
   const rotation = useMemo(() => {
     const rotations = [-3, 2, -2, 3, -1, 1];
@@ -98,32 +104,26 @@ const PolaroidCard = ({
           pressed && styles.polaroidPressed,
         ]}
       >
+        {/* Point rouge pour les nouvelles interactions */}
+        {hasNewInteraction && <View style={styles.newBadge} />}
+
         <View style={styles.polaroidImageContainer}>
           <Image source={{ uri: photo.photo }} style={styles.polaroidImage} />
-          {(isLikedByMe || hasComments) && (
-            <View style={styles.overlayContainer}>
-              {hasComments && (
-                <View style={styles.iconOverlay}>
-                  <FontAwesome6
-                    name="comment"
-                    size={12}
-                    color="#0a7ea4"
-                    solid
-                  />
-                </View>
-              )}
-              {isLikedByMe && (
-                <View style={styles.iconOverlay}>
-                  <FontAwesome6 name="heart" size={12} color="#ef4444" solid />
-                </View>
-              )}
-            </View>
-          )}
         </View>
         <View style={styles.polaroidCaption}>
-          <Text style={styles.polaroidDate} numberOfLines={1}>
-            {formatDateShort(photo.date)}
-          </Text>
+          <View style={styles.captionRow}>
+            <Text style={styles.polaroidDate} numberOfLines={1}>
+              {formatDateShort(photo.date)}
+            </Text>
+            <View style={styles.iconsRow}>
+              {hasLikes && (
+                <FontAwesome6 name="heart" size={10} color="#ef4444" solid />
+              )}
+              {hasComments && (
+                <FontAwesome6 name="comment" size={10} color="#0a7ea4" solid />
+              )}
+            </View>
+          </View>
           {photo.titre && (
             <Text style={styles.polaroidTitle} numberOfLines={1}>
               {photo.titre}
@@ -168,6 +168,7 @@ export const PolaroidGallery = ({
   onSeeAll,
   likesInfo = {},
   commentCounts = {},
+  newEventIds = new Set(),
 }: PolaroidGalleryProps) => {
   // Show max 3 photos + add button at the end (4 items total)
   const displayPhotos = photos.slice(0, 3);
@@ -220,8 +221,10 @@ export const PolaroidGallery = ({
                 index={index}
                 onPress={() => onPhotoPress(photo)}
                 onLongPress={() => onPhotoLongPress?.(photo)}
+                likeCount={likesInfo[photo.id]?.count}
                 isLikedByMe={likesInfo[photo.id]?.likedByMe}
                 hasComments={(commentCounts[photo.id] ?? 0) > 0}
+                hasNewInteraction={newEventIds.has(photo.id)}
               />
             ))}
             {/* Add button always at the end */}
@@ -281,6 +284,18 @@ const styles = StyleSheet.create({
   polaroidPressed: {
     transform: [{ scale: 0.98 }],
   },
+  newBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#e63946",
+    borderWidth: 2,
+    borderColor: "#fff",
+    zIndex: 10,
+  },
   emptyPolaroid: {
     borderWidth: 2,
     borderColor: "#e5e7eb",
@@ -308,24 +323,23 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  overlayContainer: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    flexDirection: "row",
-    gap: 4,
-  },
-  iconOverlay: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   polaroidCaption: {
     marginTop: 10,
     alignItems: "center",
+  },
+  captionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    position: "relative",
+  },
+  iconsRow: {
+    position: "absolute",
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   polaroidDate: {
     fontSize: 11,

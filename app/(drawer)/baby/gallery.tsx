@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useMomentsNotification } from "@/contexts/MomentsNotificationContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
@@ -108,16 +109,19 @@ const PolaroidCard = ({
   index,
   onPress,
   onLongPress,
-  isLikedByMe,
+  likeCount,
   hasComments,
+  hasNewInteraction,
 }: {
   photo: PhotoMilestone;
   index: number;
   onPress: () => void;
   onLongPress?: () => void;
-  isLikedByMe?: boolean;
+  likeCount?: number;
   hasComments?: boolean;
+  hasNewInteraction?: boolean;
 }) => {
+  const hasLikes = (likeCount ?? 0) > 0;
   const rotation = useMemo(() => {
     const rotations = [-3, 2, -2, 3, -1, 1];
     return rotations[index % rotations.length];
@@ -147,32 +151,26 @@ const PolaroidCard = ({
           pressed && styles.polaroidPressed,
         ]}
       >
+        {/* Point rouge pour les nouvelles interactions */}
+        {hasNewInteraction && <View style={styles.newBadge} />}
+
         <View style={styles.polaroidImageContainer}>
           <Image source={{ uri: photo.photo }} style={styles.polaroidImage} />
-          {(isLikedByMe || hasComments) && (
-            <View style={styles.overlayContainer}>
-              {hasComments && (
-                <View style={styles.iconOverlay}>
-                  <FontAwesome6
-                    name="comment"
-                    size={12}
-                    color="#0a7ea4"
-                    solid
-                  />
-                </View>
-              )}
-              {isLikedByMe && (
-                <View style={styles.iconOverlay}>
-                  <FontAwesome6 name="heart" size={12} color="#ef4444" solid />
-                </View>
-              )}
-            </View>
-          )}
         </View>
         <View style={styles.polaroidCaption}>
-          <Text style={styles.polaroidDate} numberOfLines={1}>
-            {formatDateShort(photo.date)}
-          </Text>
+          <View style={styles.captionRow}>
+            <Text style={styles.polaroidDate} numberOfLines={1}>
+              {formatDateShort(photo.date)}
+            </Text>
+            <View style={styles.iconsRow}>
+              {hasLikes && (
+                <FontAwesome6 name="heart" size={10} color="#ef4444" solid />
+              )}
+              {hasComments && (
+                <FontAwesome6 name="comment" size={10} color="#0a7ea4" solid />
+              )}
+            </View>
+          </View>
           {photo.titre && (
             <Text style={styles.polaroidTitle} numberOfLines={1}>
               {photo.titre}
@@ -192,6 +190,7 @@ export default function GalleryScreen() {
   const { activeChild } = useBaby();
   const { userName, firebaseUser } = useAuth();
   const { showToast } = useToast();
+  const { newEventIds, markMomentsAsSeen } = useMomentsNotification();
   const { openSheet, closeSheet, isOpen } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
   const { setHeaderLeft } = useHeaderLeft();
@@ -297,6 +296,15 @@ export default function GalleryScreen() {
     }, [closeSheet, isOpen]),
   );
 
+  // Marquer les moments comme vus quand on quitte la galerie
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        markMomentsAsSeen();
+      };
+    }, [markMomentsAsSeen]),
+  );
+
   // Extract photos from events
   const allPhotoMilestones = useMemo(() => {
     const photos: PhotoMilestone[] = [];
@@ -304,11 +312,18 @@ export default function GalleryScreen() {
     events.forEach((event) => {
       const eventDate = toDate(event.date);
       if (event.photos && event.photos.length > 0) {
+        // Pour les jalons de type "photo", utiliser la description comme titre si elle existe
+        // Pour "autre" et autres types, garder le titre original
+        const photoTitre =
+          event.typeJalon === "photo" && event.description
+            ? event.description
+            : event.titre;
+
         photos.push({
           id: event.id,
           date: eventDate,
           photo: event.photos[0],
-          titre: event.titre,
+          titre: photoTitre,
           description: event.description,
           typeJalon: event.typeJalon,
         });
@@ -510,8 +525,9 @@ export default function GalleryScreen() {
             onLongPress={
               canManageContent ? () => handleEditPhoto(photo.id) : undefined
             }
-            isLikedByMe={likesInfo[photo.id]?.likedByMe}
+            likeCount={likesInfo[photo.id]?.count}
             hasComments={(commentCounts[photo.id] ?? 0) > 0}
+            hasNewInteraction={newEventIds.has(photo.id)}
           />
         ))}
       </View>
@@ -683,6 +699,18 @@ const styles = StyleSheet.create({
   polaroidPressed: {
     transform: [{ scale: 0.98 }],
   },
+  newBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#e63946",
+    borderWidth: 2,
+    borderColor: "#fff",
+    zIndex: 10,
+  },
   polaroidImageContainer: {
     width: "100%",
     aspectRatio: 1,
@@ -694,24 +722,23 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  overlayContainer: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    flexDirection: "row",
-    gap: 4,
-  },
-  iconOverlay: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   polaroidCaption: {
     marginTop: 10,
     alignItems: "center",
+  },
+  captionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    position: "relative",
+  },
+  iconsRow: {
+    position: "absolute",
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   polaroidDate: {
     fontSize: 11,

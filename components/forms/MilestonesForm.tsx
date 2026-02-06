@@ -325,6 +325,16 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       return;
     }
 
+    if (typeJalon === "photo" && !photoUri) {
+      showAlert("Photo requise", "Ajoutez une photo pour ce moment.");
+      return;
+    }
+
+    if (typeJalon === "humeur" && !mood) {
+      showAlert("Humeur requise", "Sélectionnez une humeur.");
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       let photoUrls: string[] | undefined = photoUri ? [photoUri] : undefined;

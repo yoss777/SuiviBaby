@@ -2,6 +2,7 @@ import { Colors } from "@/constants/theme";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BabyProvider } from "@/contexts/BabyContext";
 import { ModalProvider } from "@/contexts/ModalContext";
+import { MomentsNotificationProvider } from "@/contexts/MomentsNotificationContext";
 import { PermissionsMigrationProvider } from "@/contexts/PermissionsMigrationContext";
 import { ThemeProvider as AppThemeProvider } from "@/contexts/ThemeContext";
 import { SheetProvider } from "@/contexts/SheetContext";
@@ -34,15 +35,17 @@ export default function RootLayout() {
                 {/* <PermissionsMigrationProvider> */}
                   <AppThemeProvider>
                     <BabyProvider>
-                      <MigrationProvider>
-                        <SheetProvider>
-                          <SuccessAnimationProvider>
-                            <AppNavigation />
-                            <GlobalSheetManager />
-                            <InvitationListener />
-                          </SuccessAnimationProvider>
-                        </SheetProvider>
-                      </MigrationProvider>
+                      <MomentsNotificationProvider>
+                        <MigrationProvider>
+                          <SheetProvider>
+                            <SuccessAnimationProvider>
+                              <AppNavigation />
+                              <GlobalSheetManager />
+                              <InvitationListener />
+                            </SuccessAnimationProvider>
+                          </SheetProvider>
+                        </MigrationProvider>
+                      </MomentsNotificationProvider>
                     </BabyProvider>
                   </AppThemeProvider>
                 {/* </PermissionsMigrationProvider> */}
