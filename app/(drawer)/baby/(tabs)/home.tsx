@@ -1734,31 +1734,12 @@ export default function HomeDashboard() {
   useEffect(() => {
     if (!activeChild?.id) return;
 
-    // Reset loading state on day change to show fresh data
-    setLoading({
-      tetees: true,
-      biberons: true,
-      solides: true,
-      pompages: true,
-      croissances: true,
-      sommeils: true,
-      bains: true,
-      mictions: true,
-      selles: true,
-      temperatures: true,
-      medicaments: true,
-      symptomes: true,
-      vitamines: true,
-      vaccins: true,
-      activites: true,
-      jalons: true,
-    });
-
     const cached = getTodayEventsCache(activeChild.id);
+
+    // Si on a le cache, l'utiliser immédiatement sans afficher de loading
     if (cached) {
       setData((prev) => ({ ...prev, ...cached }));
-      setLoading((prev) => ({
-        ...prev,
+      setLoading({
         tetees: false,
         biberons: false,
         solides: false,
@@ -1775,7 +1756,27 @@ export default function HomeDashboard() {
         vaccins: false,
         activites: false,
         jalons: false,
-      }));
+      });
+    } else {
+      // Pas de cache, afficher le loading
+      setLoading({
+        tetees: true,
+        biberons: true,
+        solides: true,
+        pompages: true,
+        croissances: true,
+        sommeils: true,
+        bains: true,
+        mictions: true,
+        selles: true,
+        temperatures: true,
+        medicaments: true,
+        symptomes: true,
+        vitamines: true,
+        vaccins: true,
+        activites: true,
+        jalons: true,
+      });
     }
 
     const unsubscribe = ecouterEvenementsDuJourHybrid(

@@ -1,6 +1,6 @@
 import { db } from '@/config/firebase';
 import { obtenirPreferences } from '@/services/userPreferencesService';
-import { collection, doc, limit, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, query, setDoc, where } from 'firebase/firestore';
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { obtenirEvenementsDuJourHybrid } from '@/migration/eventsHybridService';
@@ -35,6 +35,9 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   const [loading, setLoading] = useState(true);
   const [childrenLoaded, setChildrenLoaded] = useState(false);
   const [hiddenChildrenIds, setHiddenChildrenIds] = useState<string[]>([]);
+  const [lastActiveChildId, setLastActiveChildId] = useState<string | null>(null);
+  const lastActiveChildIdRef = useRef<string | null>(null);
+  const lastActiveOverrideRef = useRef<string | null>(null);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const preloadInFlight = useRef<Set<string>>(new Set());
   const childListenersRef = useRef<Map<string, () => void>>(new Map());
@@ -55,16 +58,42 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     const unsubscribe = onSnapshot(userPrefsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        setHiddenChildrenIds(data.hiddenChildrenIds || []);
+        console.log('[BabyContext] Préférences chargées:', data.lastActiveChildId);
+        const newHiddenIds = data.hiddenChildrenIds || [];
+        setHiddenChildrenIds((prev) => {
+          if (prev.length === newHiddenIds.length && prev.every((id, i) => id === newHiddenIds[i])) {
+            return prev; // Pas de changement, retourner la même référence
+          }
+          return newHiddenIds;
+        });
+        const prefsLastActive = data.lastActiveChildId || null;
+        // Toujours mettre à jour le ref avec la valeur de Firestore au démarrage
+        lastActiveChildIdRef.current = prefsLastActive;
+        setLastActiveChildId(prefsLastActive);
+        // Effacer l'override seulement s'il correspond à la valeur reçue
+        if (lastActiveOverrideRef.current && prefsLastActive === lastActiveOverrideRef.current) {
+          lastActiveOverrideRef.current = null;
+        }
       } else {
-        setHiddenChildrenIds([]);
+        setHiddenChildrenIds((prev) => prev.length === 0 ? prev : []);
+        if (!lastActiveOverrideRef.current) {
+          setLastActiveChildId(null);
+          lastActiveChildIdRef.current = null;
+        }
       }
       setPreferencesLoaded(true);
     }, (error) => {
       console.error('Erreur lors de l\'écoute des préférences:', error);
       // En cas d'erreur (document n'existe pas encore), charger de manière asynchrone
       obtenirPreferences().then(prefs => {
-        setHiddenChildrenIds(prefs.hiddenChildrenIds || []);
+        const newHiddenIds = prefs.hiddenChildrenIds || [];
+        setHiddenChildrenIds((prev) => {
+          if (prev.length === newHiddenIds.length && prev.every((id, i) => id === newHiddenIds[i])) {
+            return prev;
+          }
+          return newHiddenIds;
+        });
+        setLastActiveChildId(prefs.lastActiveChildId || null);
         setPreferencesLoaded(true);
       }).catch(err => {
         console.error('Erreur lors du chargement des préférences:', err);
@@ -144,13 +173,25 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
             setChildren(visibleChildren);
 
             setActiveChildState((prev) => {
-              if (!prev && visibleChildren.length > 0) {
-                return visibleChildren[0];
+              if (visibleChildren.length === 0) return null;
+              if (lastActiveOverrideRef.current) {
+                const override = visibleChildren.find(
+                  (child) => child.id === lastActiveOverrideRef.current
+                );
+                if (override) return override;
               }
-              if (prev && hiddenChildrenIds.includes(prev.id)) {
-                return visibleChildren[0] || null;
+              // Au démarrage, utiliser lastActiveChildIdRef en priorité
+              if (lastActiveChildIdRef.current) {
+                const match = visibleChildren.find(
+                  (child) => child.id === lastActiveChildIdRef.current
+                );
+                if (match) return match;
               }
-              return prev;
+              // Garder prev seulement si lastActiveChildIdRef n'a pas trouvé de match
+              if (prev && !hiddenChildrenIds.includes(prev.id)) {
+                return prev;
+              }
+              return visibleChildren[0];
             });
 
             if (childDataRef.current.size >= currentChildIdsRef.current.size) {
@@ -183,13 +224,34 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       setChildren(visibleChildren);
 
       setActiveChildState((prev) => {
-        if (!prev && visibleChildren.length > 0) {
-          return visibleChildren[0];
+        console.log('[BabyContext] setActiveChildState appelé, prev:', prev?.id, 'lastActiveChildIdRef:', lastActiveChildIdRef.current);
+        if (visibleChildren.length === 0) return null;
+        if (lastActiveOverrideRef.current) {
+          const override = visibleChildren.find(
+            (child) => child.id === lastActiveOverrideRef.current
+          );
+          if (override) {
+            console.log('[BabyContext] Utilisation de lastActiveOverrideRef:', override.id);
+            return override;
+          }
         }
-        if (prev && hiddenChildrenIds.includes(prev.id)) {
-          return visibleChildren[0] || null;
+        // Au démarrage (prev === null), utiliser lastActiveChildIdRef en priorité
+        if (lastActiveChildIdRef.current) {
+          const match = visibleChildren.find(
+            (child) => child.id === lastActiveChildIdRef.current
+          );
+          if (match) {
+            console.log('[BabyContext] Utilisation de lastActiveChildIdRef:', match.id);
+            return match;
+          }
         }
-        return prev;
+        // Garder prev seulement si lastActiveChildIdRef n'a pas trouvé de match
+        if (prev && !hiddenChildrenIds.includes(prev.id)) {
+          console.log('[BabyContext] Garder prev:', prev.id);
+          return prev;
+        }
+        console.log('[BabyContext] Utilisation du premier enfant:', visibleChildren[0]?.id);
+        return visibleChildren[0];
       });
 
       if (currentChildIds.size === 0) {
@@ -264,6 +326,18 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
 
   const setActiveChild = (child: Child) => {
     setActiveChildState(child);
+    setLastActiveChildId(child.id);
+    lastActiveChildIdRef.current = child.id;
+    lastActiveOverrideRef.current = child.id;
+    if (user?.uid) {
+      setDoc(
+        doc(db, 'user_preferences', user.uid),
+        { lastActiveChildId: child.id },
+        { merge: true }
+      ).catch((error) => {
+        console.error('Erreur sauvegarde dernier enfant actif:', error);
+      });
+    }
   };
 
   const addChild = (child: Child) => {

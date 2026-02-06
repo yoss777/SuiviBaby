@@ -10,6 +10,7 @@ const getUserId = () => {
 
 interface UserPreferences {
   hiddenChildrenIds: string[];
+  lastActiveChildId?: string;
   notifications?: NotificationPreferences;
   theme?: ThemePreference;
   language?: LanguagePreference;
@@ -76,6 +77,7 @@ export async function obtenirPreferences(): Promise<UserPreferences> {
       const data = docSnap.data() as UserPreferences;
       return {
         hiddenChildrenIds: data.hiddenChildrenIds ?? [],
+        lastActiveChildId: data.lastActiveChildId ?? undefined,
         notifications: {
           ...defaultNotificationPreferences,
           ...(data.notifications || {}),
@@ -95,6 +97,7 @@ export async function obtenirPreferences(): Promise<UserPreferences> {
       // Si le document n'existe pas, le créer avec des valeurs par défaut
       const defaultPrefs: UserPreferences = {
         hiddenChildrenIds: [],
+        lastActiveChildId: undefined,
         notifications: defaultNotificationPreferences,
         theme: defaultThemePreference,
         language: defaultLanguagePreference,

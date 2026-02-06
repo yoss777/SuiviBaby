@@ -20,7 +20,7 @@ import { router } from "expo-router";
 export default function BootScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const { user, loading: authLoading } = useAuth();
-  const { children, loading: babyLoading, setActiveChild } = useBaby();
+  const { children, loading: babyLoading, activeChild, setActiveChild } = useBaby();
   const [delayDone, setDelayDone] = useState(false);
   const [unauthDelayDone, setUnauthDelayDone] = useState(false);
   const [videoDone, setVideoDone] = useState(false);
@@ -102,7 +102,9 @@ export default function BootScreen() {
       console.log(
         "[BOOT] Décision de navigation avec",
         children.length,
-        "enfant(s)",
+        "enfant(s), activeChild:",
+        activeChild?.id,
+        activeChild?.name,
       );
 
       if (children.length === 0) {
@@ -111,14 +113,28 @@ export default function BootScreen() {
         return;
       }
 
-      if (children.length === 1) {
-        console.log("[BOOT] 1 enfant, redirection vers baby");
-        setActiveChild(children[0]);
+      if (children.length >= 1) {
+        const targetChild = activeChild ?? children[0];
+        if (!targetChild) {
+          console.log("[BOOT] Aucun enfant, redirection vers explore");
+          router.replace("/explore");
+          return;
+        }
+
+        if (children.length === 1) {
+          console.log("[BOOT] 1 enfant, redirection vers baby");
+        } else {
+          console.log("[BOOT] Enfant actif trouvé, redirection vers baby");
+        }
+        // Ne pas écraser activeChild s'il est déjà défini par le contexte
+        if (!activeChild) {
+          setActiveChild(targetChild);
+        }
 
         const preloadTimeout = new Promise((resolve) =>
           setTimeout(resolve, 2500),
         );
-        await Promise.race([prefetchToday(children[0].id), preloadTimeout]);
+        await Promise.race([prefetchToday(targetChild.id), preloadTimeout]);
 
         if (!cancelled) {
           router.replace("/(drawer)/baby");
@@ -126,7 +142,7 @@ export default function BootScreen() {
         return;
       }
 
-      // Plusieurs enfants
+      // Fallback
       console.log("[BOOT] Plusieurs enfants, redirection vers explore");
       router.replace("/explore");
     };

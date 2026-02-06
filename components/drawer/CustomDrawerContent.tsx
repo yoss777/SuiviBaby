@@ -217,7 +217,12 @@ export function CustomDrawerContent(props: any) {
                 ]}
                 onPress={() => {
                   setActiveChild(child);
-                  router.replace("/(drawer)/baby" as any);
+                  // Fermer le drawer dans tous les cas si on est déjà dans le drawer
+                  props?.navigation?.closeDrawer?.();
+                  // Ne naviguer que si on n'est pas déjà sur baby
+                  if (!pathname.includes("/baby")) {
+                    router.replace("/(drawer)/baby" as any);
+                  }
                 }}
                 activeOpacity={0.7}
               >
