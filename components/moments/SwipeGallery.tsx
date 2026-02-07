@@ -230,6 +230,8 @@ export const SwipeGallery = ({
   useEffect(() => {
     if (!visible) {
       initialPositionSetRef.current = false;
+      setCommentsVisible(false);
+      setCommentsPhotoId(null);
     }
   }, [visible]);
 
@@ -420,7 +422,9 @@ export const SwipeGallery = ({
   }, [currentIndex, galleryItems, handleComment]);
 
   // Vertical pan gesture for swipe up (comments) and swipe down (close)
+  // Only active when comments sheet is NOT visible
   const verticalPanGesture = Gesture.Pan()
+    .enabled(!commentsVisible)
     .activeOffsetY([-20, 20]) // Only activate for vertical movement
     .failOffsetX([-20, 20]) // Fail if horizontal (let PagerView handle it)
     .onUpdate((event) => {

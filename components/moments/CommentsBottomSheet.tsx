@@ -16,7 +16,6 @@ import {
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
   PanResponder,
   Platform,
   Pressable,
@@ -67,7 +66,9 @@ const CommentItem = ({
 }) => {
   const [showDelete, setShowDelete] = useState(false);
   // For own comments, show "M" for "Moi"
-  const avatarLetter = isOwnComment ? "M" : comment.userName.charAt(0).toUpperCase();
+  const avatarLetter = isOwnComment
+    ? "M"
+    : comment.userName.charAt(0).toUpperCase();
 
   return (
     <Pressable
@@ -75,7 +76,9 @@ const CommentItem = ({
       onPress={() => setShowDelete(false)}
       style={styles.commentItem}
     >
-      <View style={[styles.commentAvatar, isOwnComment && styles.commentAvatarOwn]}>
+      <View
+        style={[styles.commentAvatar, isOwnComment && styles.commentAvatarOwn]}
+      >
         <Text style={styles.commentAvatarText}>{avatarLetter}</Text>
       </View>
       <View style={styles.commentContent}>
@@ -148,7 +151,7 @@ export const CommentsBottomSheet = ({
           }).start();
         }
       },
-    })
+    }),
   ).current;
 
   // Open/close animation
@@ -169,6 +172,9 @@ export const CommentsBottomSheet = ({
           useNativeDriver: true,
         }),
       ]).start();
+    } else {
+      translateY.setValue(SHEET_HEIGHT);
+      backdropOpacity.setValue(0);
     }
   }, [visible, translateY, backdropOpacity]);
 
@@ -213,7 +219,7 @@ export const CommentsBottomSheet = ({
         eventId,
         childId,
         userName ?? "Moi",
-        trimmedComment
+        trimmedComment,
       );
       setNewComment("");
       Keyboard.dismiss();
@@ -232,7 +238,7 @@ export const CommentsBottomSheet = ({
         showToast("Impossible de supprimer le commentaire");
       }
     },
-    [showToast]
+    [showToast],
   );
 
   const renderComment = useCallback(
@@ -243,7 +249,7 @@ export const CommentsBottomSheet = ({
         onDelete={handleDeleteComment}
       />
     ),
-    [currentUserId, handleDeleteComment]
+    [currentUserId, handleDeleteComment],
   );
 
   const renderEmpty = useCallback(() => {
@@ -265,16 +271,8 @@ export const CommentsBottomSheet = ({
     );
   }, [isLoading]);
 
-  if (!visible) return null;
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={handleClose}
-      statusBarTranslucent
-    >
+    <View style={styles.overlay} pointerEvents={visible ? "auto" : "none"}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -357,11 +355,15 @@ export const CommentsBottomSheet = ({
           </View>
         </Animated.View>
       </KeyboardAvoidingView>
-    </Modal>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+  },
   container: {
     flex: 1,
     justifyContent: "flex-end",
@@ -484,6 +486,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
+    marginBottom: 20,
     borderTopColor: "#f3f4f6",
     backgroundColor: "#fff",
     paddingBottom: Platform.OS === "ios" ? 28 : 12,
