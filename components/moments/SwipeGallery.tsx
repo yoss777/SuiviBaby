@@ -233,6 +233,19 @@ export const SwipeGallery = ({
     }
   }, [visible]);
 
+  // Calculate initial page index for PagerView
+  const computedInitialPage = useMemo(() => {
+    if (initialIndex >= 0 && photos.length > 0) {
+      const clickedPhoto = photos[initialIndex];
+      const sortedIndex = sortedPhotos.findIndex(
+        (p) => p.id === clickedPhoto?.id,
+      );
+      const baseIndex = onAddPhoto ? 1 : 0;
+      return sortedIndex >= 0 ? sortedIndex + baseIndex : baseIndex;
+    }
+    return onAddPhoto ? 1 : 0;
+  }, [initialIndex, photos, sortedPhotos, onAddPhoto]);
+
   // Find the initial position based on the photo clicked - only once when gallery opens
   useEffect(() => {
     if (
@@ -241,21 +254,23 @@ export const SwipeGallery = ({
       initialIndex >= 0 &&
       photos.length > 0
     ) {
-      const clickedPhoto = photos[initialIndex];
-      const sortedIndex = sortedPhotos.findIndex(
-        (p) => p.id === clickedPhoto?.id,
-      );
-      const baseIndex = onAddPhoto ? 1 : 0;
-      const targetIndex = sortedIndex >= 0 ? sortedIndex + baseIndex : baseIndex;
-      setCurrentIndex(targetIndex);
-      currentPage.value = targetIndex;
+      setCurrentIndex(computedInitialPage);
+      currentPage.value = computedInitialPage;
+      scrollOffset.value = 0; // Reset scroll offset to avoid scale animation glitch
       initialPositionSetRef.current = true;
       // Set initial page after a short delay to ensure pager is mounted
       setTimeout(() => {
-        pagerRef.current?.setPageWithoutAnimation(targetIndex);
-      }, 50);
+        pagerRef.current?.setPageWithoutAnimation(computedInitialPage);
+      }, 10);
     }
-  }, [visible, initialIndex, photos, sortedPhotos, currentPage, onAddPhoto]);
+  }, [
+    visible,
+    initialIndex,
+    photos,
+    computedInitialPage,
+    currentPage,
+    scrollOffset,
+  ]);
 
   // Handle page scroll for animations
   const onPageScroll = useCallback(
@@ -623,132 +638,135 @@ export const SwipeGallery = ({
             <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
               {/* Header */}
               <View style={styles.header}>
-            <Pressable style={styles.closeButton} onPress={onClose}>
-              <FontAwesome6 name="xmark" size={20} color="#fff" />
-            </Pressable>
-
-            <View style={styles.headerTitleContainer}>
-              <Text style={styles.headerTitle}>
-                {currentIndex === 0
-                  ? ""
-                  : `${currentIndex} / ${sortedPhotos.length}`}
-              </Text>
-            </View>
-
-            {currentItem.type === "photo" ? (
-              <View style={styles.headerActions}>
-                {onEdit && (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.headerButton,
-                      pressed && styles.headerButtonPressed,
-                    ]}
-                    onPress={handleEdit}
-                  >
-                    <FontAwesome6 name="pen" size={16} color="#fff" />
-                  </Pressable>
-                )}
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.headerButton,
-                    pressed && styles.headerButtonPressed,
-                  ]}
-                  onPress={() =>
-                    handleDownload(currentItem.photo.id, currentItem.photo.uri)
-                  }
-                >
-                  <FontAwesome6 name="download" size={16} color="#fff" />
+                <Pressable style={styles.closeButton} onPress={onClose}>
+                  <FontAwesome6 name="xmark" size={20} color="#fff" />
                 </Pressable>
-              </View>
-            ) : (
-              <View style={styles.headerActions} />
-            )}
-          </View>
 
-          {/* PagerView */}
-          <View style={styles.pagerWrapper}>
-            <PagerView
-              ref={pagerRef}
-              style={styles.pager}
-              initialPage={1}
-              onPageScroll={onPageScroll}
-              onPageSelected={onPageSelected}
-              overdrag={true}
-              offscreenPageLimit={2}
-              pageMargin={PAGE_MARGIN}
-            >
-              {galleryItems.map((item, index) =>
-                item.type === "add"
-                  ? renderAddCard(index)
-                  : renderPhotoCard(item, index),
+                <View style={styles.headerTitleContainer}>
+                  <Text style={styles.headerTitle}>
+                    {currentIndex === 0
+                      ? ""
+                      : `${currentIndex} / ${sortedPhotos.length}`}
+                  </Text>
+                </View>
+
+                {currentItem.type === "photo" ? (
+                  <View style={styles.headerActions}>
+                    {onEdit && (
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.headerButton,
+                          pressed && styles.headerButtonPressed,
+                        ]}
+                        onPress={handleEdit}
+                      >
+                        <FontAwesome6 name="pen" size={16} color="#fff" />
+                      </Pressable>
+                    )}
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.headerButton,
+                        pressed && styles.headerButtonPressed,
+                      ]}
+                      onPress={() =>
+                        handleDownload(
+                          currentItem.photo.id,
+                          currentItem.photo.uri,
+                        )
+                      }
+                    >
+                      <FontAwesome6 name="download" size={16} color="#fff" />
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View style={styles.headerActions} />
+                )}
+              </View>
+
+              {/* PagerView */}
+              <View style={styles.pagerWrapper}>
+                <PagerView
+                  ref={pagerRef}
+                  style={styles.pager}
+                  initialPage={computedInitialPage}
+                  onPageScroll={onPageScroll}
+                  onPageSelected={onPageSelected}
+                  overdrag={true}
+                  offscreenPageLimit={2}
+                  pageMargin={PAGE_MARGIN}
+                >
+                  {galleryItems.map((item, index) =>
+                    item.type === "add"
+                      ? renderAddCard(index)
+                      : renderPhotoCard(item, index),
+                  )}
+                </PagerView>
+              </View>
+
+              {/* Dots - only show if 10 or fewer items */}
+              {galleryItems.length <= 10 && (
+                <View style={styles.dotsContainer}>
+                  {galleryItems.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.dot,
+                        index === currentIndex && styles.dotActive,
+                        index === 0 && styles.dotAdd,
+                      ]}
+                    />
+                  ))}
+                </View>
               )}
-            </PagerView>
-          </View>
 
-          {/* Dots - only show if 10 or fewer items */}
-          {galleryItems.length <= 10 && (
-            <View style={styles.dotsContainer}>
-              {galleryItems.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.dot,
-                    index === currentIndex && styles.dotActive,
-                    index === 0 && styles.dotAdd,
-                  ]}
-                />
-              ))}
-            </View>
-          )}
-
-          {/* Swipe hints */}
-          <View style={styles.hintsContainer}>
-            {currentIndex > 0 && (
-              <View style={styles.hint}>
-                <FontAwesome6
-                  name="chevron-left"
-                  size={12}
-                  color="rgba(255,255,255,0.5)"
-                />
-                <Text style={styles.hintText}>Plus récent</Text>
+              {/* Swipe hints */}
+              <View style={styles.hintsContainer}>
+                {currentIndex > 0 && (
+                  <View style={styles.hint}>
+                    <FontAwesome6
+                      name="chevron-left"
+                      size={12}
+                      color="rgba(255,255,255,0.5)"
+                    />
+                    <Text style={styles.hintText}>Plus récent</Text>
+                  </View>
+                )}
+                <View style={{ flex: 1 }} />
+                {currentIndex < galleryItems.length - 1 && (
+                  <View style={styles.hint}>
+                    <Text style={styles.hintText}>Plus ancien</Text>
+                    <FontAwesome6
+                      name="chevron-right"
+                      size={12}
+                      color="rgba(255,255,255,0.5)"
+                    />
+                  </View>
+                )}
               </View>
-            )}
-            <View style={{ flex: 1 }} />
-            {currentIndex < galleryItems.length - 1 && (
-              <View style={styles.hint}>
-                <Text style={styles.hintText}>Plus ancien</Text>
-                <FontAwesome6
-                  name="chevron-right"
-                  size={12}
-                  color="rgba(255,255,255,0.5)"
-                />
-              </View>
-            )}
-          </View>
 
-          {/* Vertical swipe hints */}
-          <View style={styles.verticalHintsContainer}>
-            {currentItem.type === "photo" && (
-              <View style={styles.verticalHint}>
-                <FontAwesome6
-                  name="chevron-up"
-                  size={10}
-                  color="rgba(255,255,255,0.4)"
-                />
-                <Text style={styles.verticalHintText}>Commentaires</Text>
+              {/* Vertical swipe hints */}
+              <View style={styles.verticalHintsContainer}>
+                {currentItem.type === "photo" && (
+                  <View style={styles.verticalHint}>
+                    <FontAwesome6
+                      name="chevron-up"
+                      size={10}
+                      color="rgba(255,255,255,0.4)"
+                    />
+                    <Text style={styles.verticalHintText}>Commentaires</Text>
+                  </View>
+                )}
               </View>
-            )}
-          </View>
-        </SafeAreaView>
+            </SafeAreaView>
 
-        {/* Comments Bottom Sheet */}
-        <CommentsBottomSheet
-          visible={commentsVisible}
-          eventId={commentsPhotoId || ""}
-          childId={childId}
-          photoTitle={commentsPhotoTitle}
-          onClose={handleCloseComments}
-        />
+            {/* Comments Bottom Sheet */}
+            <CommentsBottomSheet
+              visible={commentsVisible}
+              eventId={commentsPhotoId || ""}
+              childId={childId}
+              photoTitle={commentsPhotoTitle}
+              onClose={handleCloseComments}
+            />
 
             {/* Local Toast */}
             {localToast && (
@@ -838,7 +856,7 @@ const styles = StyleSheet.create({
   },
   cardWrapper: {
     width: CARD_WIDTH,
-    height: CARD_HEIGHT + 60, // Card + social bar height
+    height: CARD_HEIGHT + 75, // Card + social bar height
     overflow: "visible",
   },
   cardWithSocial: {
@@ -858,9 +876,9 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   cardSocialBar: {
-    marginTop: 15,
-    height: 45,
+    marginTop: 12,
     paddingHorizontal: 8,
+    paddingBottom: 4,
   },
   cardImage: {
     width: "100%",

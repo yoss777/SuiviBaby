@@ -121,6 +121,7 @@ export const CommentsBottomSheet = ({
   const [isSending, setIsSending] = useState(false);
 
   const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput>(null);
 
   // Pan responder for swipe to close
@@ -154,14 +155,22 @@ export const CommentsBottomSheet = ({
   useEffect(() => {
     if (visible) {
       translateY.setValue(SHEET_HEIGHT);
-      Animated.spring(translateY, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 11,
-      }).start();
+      backdropOpacity.setValue(0);
+      Animated.parallel([
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 11,
+        }),
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
-  }, [visible, translateY]);
+  }, [visible, translateY, backdropOpacity]);
 
   // Listen to comments
   useEffect(() => {
@@ -178,14 +187,21 @@ export const CommentsBottomSheet = ({
 
   const handleClose = useCallback(() => {
     Keyboard.dismiss();
-    Animated.timing(translateY, {
-      toValue: SHEET_HEIGHT,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: SHEET_HEIGHT,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
       onClose();
     });
-  }, [translateY, onClose]);
+  }, [translateY, backdropOpacity, onClose]);
 
   const handleSendComment = useCallback(async () => {
     const trimmedComment = newComment.trim();
@@ -265,7 +281,9 @@ export const CommentsBottomSheet = ({
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         {/* Backdrop */}
-        <Pressable style={styles.backdrop} onPress={handleClose} />
+        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
 
         {/* Sheet */}
         <Animated.View

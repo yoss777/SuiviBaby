@@ -20,7 +20,12 @@ import { router } from "expo-router";
 export default function BootScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const { user, loading: authLoading } = useAuth();
-  const { children, loading: babyLoading, activeChild, setActiveChild } = useBaby();
+  const {
+    children,
+    loading: babyLoading,
+    activeChild,
+    setActiveChild,
+  } = useBaby();
   const [delayDone, setDelayDone] = useState(false);
   const [unauthDelayDone, setUnauthDelayDone] = useState(false);
   const [videoDone, setVideoDone] = useState(false);
