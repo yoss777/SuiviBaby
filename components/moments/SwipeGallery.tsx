@@ -3,27 +3,26 @@ import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
+  FlatList,
   Image,
   Modal,
   Pressable,
   StyleSheet,
   Text,
   View,
+  ViewToken,
 } from "react-native";
 import {
   Gesture,
   GestureDetector,
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
-import PagerView, {
-  PagerViewOnPageScrollEventData,
-  PagerViewOnPageSelectedEventData,
-} from "react-native-pager-view";
 import Animated, {
   FadeIn,
   FadeOut,
   interpolate,
   runOnJS,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withSequence,
@@ -36,9 +35,11 @@ import { CommentsBottomSheet } from "./CommentsBottomSheet";
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH * 0.85;
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.6;
-const SIDE_CARD_SCALE = 0.15;
-// Calculate page margin to show adjacent cards (must be integer)
-const PAGE_MARGIN = Math.round((SCREEN_WIDTH - CARD_WIDTH) / 2 - 20);
+const ITEM_WIDTH = SCREEN_WIDTH;
+const SIDE_CARD_SCALE = 0.9;
+const SIDE_CARD_OPACITY = 0.6;
+
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<GalleryItem>);
 
 type PhotoItem = {
   id: string;
@@ -69,18 +70,7 @@ type SwipeGalleryProps = {
   ) => Promise<{ success: boolean; message: string }>;
   likesInfo?: Record<string, LikeInfo>;
   commentCounts?: Record<string, number>;
-  currentUserName?: string; // Name to display when user likes (e.g., "Moi", "Papa")
-};
-
-// Format date for overlay
-const formatDate = (date: Date) => {
-  return date.toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  currentUserName?: string;
 };
 
 // Format date short for title fallback
@@ -94,43 +84,6 @@ const formatDateShort = (date: Date) =>
 type GalleryItem =
   | { type: "add"; id: string }
   | { type: "photo"; id: string; photo: PhotoItem };
-
-// Animated card wrapper component
-const AnimatedCard = ({
-  children,
-  index,
-  scrollOffset,
-  currentPage,
-}: {
-  children: React.ReactNode;
-  index: number;
-  scrollOffset: Animated.SharedValue<number>;
-  currentPage: Animated.SharedValue<number>;
-}) => {
-  const animatedStyle = useAnimatedStyle(() => {
-    const position = index - currentPage.value - scrollOffset.value;
-
-    const scale = interpolate(
-      position,
-      [-1, 0, 1],
-      [SIDE_CARD_SCALE, 1, SIDE_CARD_SCALE],
-      "clamp",
-    );
-
-    const opacity = interpolate(position, [-1, 0, 1], [0.7, 1, 0.7], "clamp");
-
-    return {
-      transform: [{ scale }],
-      opacity,
-    };
-  });
-
-  return (
-    <Animated.View style={[styles.cardWrapper, animatedStyle]}>
-      {children}
-    </Animated.View>
-  );
-};
 
 // Format likes text
 const formatLikesText = (likeInfo: LikeInfo): string => {
@@ -146,6 +99,40 @@ const formatLikesText = (likeInfo: LikeInfo): string => {
   }
   const othersCount = likeInfo.count - 2;
   return `Aimé par ${likeInfo.likedByNames[0]}, ${likeInfo.likedByNames[1]} et ${othersCount} autre${othersCount > 1 ? "s" : ""}`;
+};
+
+// Animated card wrapper - must be a real component for hooks
+const AnimatedCard = ({
+  index,
+  scrollX,
+  children,
+}: {
+  index: number;
+  scrollX: Animated.SharedValue<number>;
+  children: React.ReactNode;
+}) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    const inputRange = [
+      (index - 1) * ITEM_WIDTH,
+      index * ITEM_WIDTH,
+      (index + 1) * ITEM_WIDTH,
+    ];
+    const scale = interpolate(
+      scrollX.value,
+      inputRange,
+      [SIDE_CARD_SCALE, 1, SIDE_CARD_SCALE],
+      "clamp",
+    );
+    const opacity = interpolate(
+      scrollX.value,
+      inputRange,
+      [SIDE_CARD_OPACITY, 1, SIDE_CARD_OPACITY],
+      "clamp",
+    );
+    return { transform: [{ scale }], opacity };
+  });
+
+  return <Animated.View style={animatedStyle}>{children}</Animated.View>;
 };
 
 export const SwipeGallery = ({
@@ -164,15 +151,22 @@ export const SwipeGallery = ({
   currentUserName = "Moi",
 }: SwipeGalleryProps) => {
   const insets = useSafeAreaInsets();
-  const pagerRef = useRef<PagerView>(null);
-  const scrollOffset = useSharedValue(0);
-  const currentPage = useSharedValue(1);
+  const flatListRef = useRef<FlatList>(null);
+
+  // Horizontal scroll position for card animations
+  const scrollX = useSharedValue(0);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollX.value = event.contentOffset.x;
+    },
+  });
 
   // Vertical swipe animation values
   const translateY = useSharedValue(0);
-  const SWIPE_THRESHOLD = 80; // Minimum distance to trigger action
+  const SWIPE_THRESHOLD = 80;
 
-  // Local optimistic state for likes (merges with props)
+  // Local optimistic state for likes
   const [optimisticLikes, setOptimisticLikes] = useState<
     Record<string, { likedByMe: boolean; countDelta: number }>
   >({});
@@ -182,7 +176,6 @@ export const SwipeGallery = ({
     if (!visible) {
       setOptimisticLikes({});
     }
-    // Reset translateY when gallery opens or closes
     translateY.value = 0;
   }, [visible, translateY]);
 
@@ -214,7 +207,7 @@ export const SwipeGallery = ({
     string | undefined
   >(undefined);
 
-  // Local toast state (to show inside the modal)
+  // Local toast state
   const [localToast, setLocalToast] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -225,9 +218,9 @@ export const SwipeGallery = ({
   );
   const heartScale = useSharedValue(0);
   const lastTapTimeRef = useRef<number>(0);
-  const DOUBLE_TAP_DELAY = 300; // ms
+  const DOUBLE_TAP_DELAY = 300;
 
-  // Track if initial position has been set for this gallery session
+  // Track if initial position has been set
   const initialPositionSetRef = useRef(false);
 
   // Reset when gallery closes
@@ -239,7 +232,7 @@ export const SwipeGallery = ({
     }
   }, [visible]);
 
-  // Calculate initial page index for PagerView
+  // Calculate initial page index
   const computedInitialPage = useMemo(() => {
     if (initialIndex >= 0 && photos.length > 0) {
       const clickedPhoto = photos[initialIndex];
@@ -252,7 +245,7 @@ export const SwipeGallery = ({
     return onAddPhoto ? 1 : 0;
   }, [initialIndex, photos, sortedPhotos, onAddPhoto]);
 
-  // Find the initial position based on the photo clicked - only once when gallery opens
+  // Scroll to initial position when gallery opens
   useEffect(() => {
     if (
       visible &&
@@ -261,41 +254,28 @@ export const SwipeGallery = ({
       photos.length > 0
     ) {
       setCurrentIndex(computedInitialPage);
-      currentPage.value = computedInitialPage;
-      scrollOffset.value = 0; // Reset scroll offset to avoid scale animation glitch
       initialPositionSetRef.current = true;
-      // Set initial page after a short delay to ensure pager is mounted
       setTimeout(() => {
-        pagerRef.current?.setPageWithoutAnimation(computedInitialPage);
-      }, 10);
+        flatListRef.current?.scrollToIndex({
+          index: computedInitialPage,
+          animated: false,
+        });
+      }, 50);
     }
-  }, [
-    visible,
-    initialIndex,
-    photos,
-    computedInitialPage,
-    currentPage,
-    scrollOffset,
-  ]);
+  }, [visible, initialIndex, photos, computedInitialPage]);
 
-  // Handle page scroll for animations
-  const onPageScroll = useCallback(
-    (e: { nativeEvent: PagerViewOnPageScrollEventData }) => {
-      const { position, offset } = e.nativeEvent;
-      currentPage.value = position;
-      scrollOffset.value = offset;
+  // Handle viewable items change for FlatList
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      if (viewableItems.length > 0 && viewableItems[0].index != null) {
+        setCurrentIndex(viewableItems[0].index);
+      }
     },
-    [currentPage, scrollOffset],
-  );
+  ).current;
 
-  // Handle page change
-  const onPageSelected = useCallback(
-    (e: { nativeEvent: PagerViewOnPageSelectedEventData }) => {
-      const newIndex = e.nativeEvent.position;
-      setCurrentIndex(newIndex);
-    },
-    [],
-  );
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
 
   // Edit current photo
   const handleEdit = useCallback(() => {
@@ -315,38 +295,9 @@ export const SwipeGallery = ({
     onAddPhoto();
   }, [onClose, onAddPhoto]);
 
-  // Render add card
-  const renderAddCard = (index: number) => (
-    <View key="add-card" style={styles.pageContainer}>
-      <AnimatedCard
-        index={index}
-        scrollOffset={scrollOffset}
-        currentPage={currentPage}
-      >
-        <Pressable
-          style={[styles.card, styles.addCard]}
-          onPress={handleAddPhoto}
-        >
-          <View style={styles.addCardContent}>
-            <View style={styles.addIconCircle}>
-              <FontAwesome6
-                name="plus"
-                size={32}
-                color={eventColors.jalon.dark}
-              />
-            </View>
-            <Text style={styles.addCardTitle}>Nouveau souvenir</Text>
-            <Text style={styles.addCardSubtitle}>Ajoutez une photo</Text>
-          </View>
-        </Pressable>
-      </AnimatedCard>
-    </View>
-  );
-
   // Handle like with optimistic update
   const handleLike = useCallback(
     (photoId: string) => {
-      // Get current state (considering optimistic updates)
       const serverInfo = likesInfo[photoId] || {
         count: 0,
         likedByMe: false,
@@ -357,10 +308,8 @@ export const SwipeGallery = ({
         ? optimistic.likedByMe
         : serverInfo.likedByMe;
 
-      // Toggle like
       const newLikedByMe = !currentLikedByMe;
 
-      // Update optimistic state immediately
       setOptimisticLikes((prev) => ({
         ...prev,
         [photoId]: {
@@ -371,7 +320,6 @@ export const SwipeGallery = ({
         },
       }));
 
-      // Call parent callback for persistence (can handle offline queue)
       onLike?.(photoId);
     },
     [onLike, likesInfo, optimisticLikes],
@@ -380,20 +328,17 @@ export const SwipeGallery = ({
   // Handle double tap to like
   const handleDoubleTap = useCallback(
     (photoId: string) => {
-      // Show heart animation
       setDoubleTapHeartId(photoId);
       heartScale.value = withSequence(
         withSpring(1.2, { damping: 8, stiffness: 400 }),
         withSpring(1, { damping: 10, stiffness: 300 }),
       );
 
-      // Hide heart after animation
       setTimeout(() => {
         setDoubleTapHeartId(null);
         heartScale.value = 0;
       }, 800);
 
-      // Toggle like
       handleLike(photoId);
     },
     [handleLike, heartScale],
@@ -405,14 +350,14 @@ export const SwipeGallery = ({
     opacity: heartScale.value > 0 ? 1 : 0,
   }));
 
-  // Handle comment - open bottom sheet
+  // Handle comment
   const handleComment = useCallback((photoId: string, title?: string) => {
     setCommentsPhotoId(photoId);
     setCommentsPhotoTitle(title);
     setCommentsVisible(true);
   }, []);
 
-  // Close comments bottom sheet
+  // Close comments
   const handleCloseComments = useCallback(() => {
     setCommentsVisible(false);
   }, []);
@@ -426,13 +371,11 @@ export const SwipeGallery = ({
   }, [currentIndex, galleryItems, handleComment]);
 
   // Vertical pan gesture for swipe up (comments) and swipe down (close)
-  // Only active when comments sheet is NOT visible
   const verticalPanGesture = Gesture.Pan()
     .enabled(!commentsVisible)
-    .activeOffsetY([-30, 30]) // Larger threshold to avoid conflicts with PagerView
-    .failOffsetX([-15, 15]) // Fail faster on horizontal to let PagerView handle it
+    .activeOffsetY([-30, 30])
+    .failOffsetX([-15, 15])
     .onUpdate((event) => {
-      // Only apply visual feedback for swipe DOWN (positive Y), not swipe up
       if (event.translationY > 0) {
         translateY.value = event.translationY * 0.5;
       }
@@ -440,27 +383,22 @@ export const SwipeGallery = ({
     .onEnd((event) => {
       const { translationY, velocityY } = event;
 
-      // Swipe down to close (positive Y)
       if (translationY > SWIPE_THRESHOLD || velocityY > 500) {
         translateY.value = withTiming(SCREEN_HEIGHT, { duration: 200 });
         runOnJS(onClose)();
-      }
-      // Swipe up to open comments (negative Y) - only on photos, no visual feedback
-      else if (translationY < -SWIPE_THRESHOLD || velocityY < -500) {
+      } else if (translationY < -SWIPE_THRESHOLD || velocityY < -500) {
         runOnJS(openCurrentPhotoComments)();
-      }
-      // Reset if threshold not met
-      else {
+      } else {
         translateY.value = withSpring(0);
       }
     });
 
-  // Animated style for vertical drag feedback
+  // Animated style for vertical drag
   const containerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
   }));
 
-  // Show local toast inside the modal
+  // Show local toast
   const showLocalToast = useCallback((message: string) => {
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
@@ -482,7 +420,7 @@ export const SwipeGallery = ({
     [onDownload, showLocalToast],
   );
 
-  // Get photo info for a specific photo (with optimistic updates merged)
+  // Get photo info (with optimistic updates merged)
   const getPhotoInfo = useCallback(
     (photoId: string) => {
       const serverInfo = likesInfo[photoId] || {
@@ -498,7 +436,6 @@ export const SwipeGallery = ({
 
         let updatedNames = [...serverInfo.likedByNames];
         if (newLikedByMe && !wasLikedByMe) {
-          // Always use "Moi" for current user to avoid flash when server responds
           updatedNames = [
             "Moi",
             ...updatedNames.filter((name) => name !== "Moi"),
@@ -518,14 +455,13 @@ export const SwipeGallery = ({
     [likesInfo, optimisticLikes],
   );
 
-  // Handle tap on image - detect double tap manually
+  // Handle tap on image - detect double tap
   const handleImageTap = useCallback(
     (photoId: string) => {
       const now = Date.now();
       if (now - lastTapTimeRef.current < DOUBLE_TAP_DELAY) {
-        // Double tap detected
         handleDoubleTap(photoId);
-        lastTapTimeRef.current = 0; // Reset to prevent triple tap
+        lastTapTimeRef.current = 0;
       } else {
         lastTapTimeRef.current = now;
       }
@@ -533,110 +469,151 @@ export const SwipeGallery = ({
     [handleDoubleTap],
   );
 
-  // Render photo card
-  const renderPhotoCard = (
-    item: GalleryItem & { type: "photo" },
-    index: number,
-  ) => {
-    const likeInfo = getPhotoInfo(item.photo.id);
-    const commentCount = commentCounts[item.photo.id] || 0;
-
-    return (
-      <View key={item.id} style={styles.pageContainer}>
-        <AnimatedCard
-          index={index}
-          scrollOffset={scrollOffset}
-          currentPage={currentPage}
-        >
-          <View style={styles.cardWithSocial}>
-            <Pressable
-              style={styles.card}
-              onPress={() => handleImageTap(item.photo.id)}
-            >
-              <Image
-                source={{ uri: item.photo.uri }}
-                style={styles.cardImage}
-                resizeMode="contain"
-                fadeDuration={150}
-                onError={() =>
-                  setImageErrorIds((prev) => ({
-                    ...prev,
-                    [item.photo.id]: true,
-                  }))
-                }
-              />
-
-              {imageErrorIds[item.photo.id] && (
-                <View style={styles.imageErrorOverlay}>
-                  <Text style={styles.imageErrorText}>
-                    Impossible d'afficher l'image
-                  </Text>
-                </View>
-              )}
-
-              {/* Double tap heart animation */}
-              {doubleTapHeartId === item.photo.id && (
-                <Animated.View
-                  style={[styles.doubleTapHeart, heartAnimatedStyle]}
-                >
-                  <FontAwesome6 name="heart" size={80} color="#ef4444" solid />
-                </Animated.View>
-              )}
-            </Pressable>
-
-            {/* Social bar below the image */}
-            <View style={styles.cardSocialBar}>
-              <View style={styles.socialBarRow}>
-                <View style={styles.socialBarActions}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.socialBarButton,
-                      pressed && styles.socialBarButtonPressed,
-                    ]}
-                    onPress={() => handleLike(item.photo.id)}
-                  >
+  // Render a single gallery item
+  const renderItem = useCallback(
+    ({ item, index }: { item: GalleryItem; index: number }) => {
+      if (item.type === "add") {
+        return (
+          <View style={styles.itemContainer}>
+            <AnimatedCard index={index} scrollX={scrollX}>
+              <Pressable
+                style={[styles.card, styles.addCard]}
+                onPress={handleAddPhoto}
+              >
+                <View style={styles.addCardContent}>
+                  <View style={styles.addIconCircle}>
                     <FontAwesome6
-                      name="heart"
-                      size={22}
-                      color={likeInfo.likedByMe ? "#ef4444" : "#fff"}
-                      solid={likeInfo.likedByMe}
+                      name="plus"
+                      size={32}
+                      color={eventColors.jalon.dark}
                     />
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.socialBarButton,
-                      pressed && styles.socialBarButtonPressed,
-                    ]}
-                    onPress={() =>
-                      handleComment(item.photo.id, item.photo.titre)
-                    }
-                  >
-                    <FontAwesome6 name="comment" size={22} color="#fff" />
-                    {commentCount > 0 && <View style={styles.commentDot} />}
-                  </Pressable>
+                  </View>
+                  <Text style={styles.addCardTitle}>Nouveau souvenir</Text>
+                  <Text style={styles.addCardSubtitle}>Ajoutez une photo</Text>
                 </View>
-                <View style={styles.photoInfoContainer}>
-                  <Text style={styles.photoDate}>
-                    {formatDateShort(item.photo.date)}
-                  </Text>
-                  {item.photo.titre && (
-                    <Text style={styles.photoTitle} numberOfLines={1}>
-                      {item.photo.titre}
-                    </Text>
-                  )}
-                </View>
-              </View>
-              {likeInfo.count > 0 && (
-                <Text style={styles.likesText}>
-                  {formatLikesText(likeInfo)}
-                </Text>
-              )}
-            </View>
+              </Pressable>
+            </AnimatedCard>
           </View>
-        </AnimatedCard>
-      </View>
-    );
-  };
+        );
+      }
+
+      const likeInfo = getPhotoInfo(item.photo.id);
+      const commentCount = commentCounts[item.photo.id] || 0;
+
+      return (
+        <View style={styles.itemContainer}>
+          <AnimatedCard index={index} scrollX={scrollX}>
+            <View style={styles.cardWithSocial}>
+              <Pressable
+                style={styles.card}
+                onPress={() => handleImageTap(item.photo.id)}
+              >
+                <Image
+                  source={{ uri: item.photo.uri }}
+                  style={styles.cardImage}
+                  resizeMode="contain"
+                  fadeDuration={0}
+                  onError={() =>
+                    setImageErrorIds((prev) => ({
+                      ...prev,
+                      [item.photo.id]: true,
+                    }))
+                  }
+                />
+
+                {imageErrorIds[item.photo.id] && (
+                  <View style={styles.imageErrorOverlay}>
+                    <Text style={styles.imageErrorText}>
+                      Impossible d'afficher l'image
+                    </Text>
+                  </View>
+                )}
+
+                {/* Double tap heart animation */}
+                {doubleTapHeartId === item.photo.id && (
+                  <Animated.View
+                    style={[styles.doubleTapHeart, heartAnimatedStyle]}
+                  >
+                    <FontAwesome6 name="heart" size={80} color="#ef4444" solid />
+                  </Animated.View>
+                )}
+              </Pressable>
+
+              {/* Social bar below the image */}
+              <View style={styles.cardSocialBar}>
+                <View style={styles.socialBarRow}>
+                  <View style={styles.socialBarActions}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.socialBarButton,
+                        pressed && styles.socialBarButtonPressed,
+                      ]}
+                      onPress={() => handleLike(item.photo.id)}
+                    >
+                      <FontAwesome6
+                        name="heart"
+                        size={22}
+                        color={likeInfo.likedByMe ? "#ef4444" : "#fff"}
+                        solid={likeInfo.likedByMe}
+                      />
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.socialBarButton,
+                        pressed && styles.socialBarButtonPressed,
+                      ]}
+                      onPress={() =>
+                        handleComment(item.photo.id, item.photo.titre)
+                      }
+                    >
+                      <FontAwesome6 name="comment" size={22} color="#fff" />
+                      {commentCount > 0 && <View style={styles.commentDot} />}
+                    </Pressable>
+                  </View>
+                  <View style={styles.photoInfoContainer}>
+                    <Text style={styles.photoDate}>
+                      {formatDateShort(item.photo.date)}
+                    </Text>
+                    {item.photo.titre && (
+                      <Text style={styles.photoTitle} numberOfLines={1}>
+                        {item.photo.titre}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                {likeInfo.count > 0 && (
+                  <Text style={styles.likesText}>
+                    {formatLikesText(likeInfo)}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </AnimatedCard>
+        </View>
+      );
+    },
+    [
+      scrollX,
+      getPhotoInfo,
+      commentCounts,
+      handleImageTap,
+      handleLike,
+      handleComment,
+      handleAddPhoto,
+      doubleTapHeartId,
+      heartAnimatedStyle,
+      imageErrorIds,
+    ],
+  );
+
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({
+      length: ITEM_WIDTH,
+      offset: ITEM_WIDTH * index,
+      index,
+    }),
+    [],
+  );
 
   if (!visible) return null;
 
@@ -667,7 +644,7 @@ export const SwipeGallery = ({
 
                 <View style={styles.headerTitleContainer}>
                   <Text style={styles.headerTitle}>
-                    {currentIndex === 0
+                    {currentItem.type === "add"
                       ? ""
                       : `${currentIndex} / ${sortedPhotos.length}`}
                   </Text>
@@ -706,24 +683,25 @@ export const SwipeGallery = ({
                 )}
               </View>
 
-              {/* PagerView */}
+              {/* FlatList Gallery */}
               <View style={styles.pagerWrapper}>
-                <PagerView
-                  ref={pagerRef}
-                  style={styles.pager}
-                  initialPage={computedInitialPage}
-                  onPageScroll={onPageScroll}
-                  onPageSelected={onPageSelected}
-                  overdrag={true}
-                  offscreenPageLimit={2}
-                  pageMargin={PAGE_MARGIN}
-                >
-                  {galleryItems.map((item, index) =>
-                    item.type === "add"
-                      ? renderAddCard(index)
-                      : renderPhotoCard(item, index),
-                  )}
-                </PagerView>
+                <AnimatedFlatList
+                  ref={flatListRef}
+                  data={galleryItems}
+                  renderItem={renderItem}
+                  keyExtractor={(item: GalleryItem) => item.id}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  getItemLayout={getItemLayout}
+                  onViewableItemsChanged={onViewableItemsChanged}
+                  viewabilityConfig={viewabilityConfig}
+                  initialScrollIndex={computedInitialPage}
+                  decelerationRate="fast"
+                  bounces={false}
+                  onScroll={onScroll}
+                  scrollEventThrottle={16}
+                />
               </View>
 
               {/* Dots - only show if 10 or fewer items */}
@@ -735,7 +713,7 @@ export const SwipeGallery = ({
                       style={[
                         styles.dot,
                         index === currentIndex && styles.dotActive,
-                        index === 0 && styles.dotAdd,
+                        index === 0 && onAddPhoto && styles.dotAdd,
                       ]}
                     />
                   ))}
@@ -862,32 +840,18 @@ const styles = StyleSheet.create({
   },
   pagerWrapper: {
     flex: 1,
+    justifyContent: "center",
+  },
+  itemContainer: {
+    width: ITEM_WIDTH,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "visible",
-  },
-  pager: {
-    width: SCREEN_WIDTH,
-    height: CARD_HEIGHT + 80,
-    overflow: "visible",
-  },
-  pageContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "visible",
-  },
-  cardWrapper: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT + 75, // Card + social bar height
-    overflow: "visible",
   },
   cardWithSocial: {
-    width: "100%",
-    height: "100%",
+    width: CARD_WIDTH,
   },
   card: {
-    width: "100%",
+    width: CARD_WIDTH,
     height: CARD_HEIGHT,
     borderRadius: 20,
     overflow: "hidden",
@@ -933,30 +897,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-  },
-  overlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingBottom: 24,
-    paddingTop: 60,
-    paddingHorizontal: 20,
-  },
-  overlayContent: {
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    borderRadius: 12,
-    padding: 16,
-  },
-  overlayTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 4,
-  },
-  overlayDate: {
-    fontSize: 14,
-    color: "rgba(255, 255, 255, 0.8)",
   },
   addCard: {
     backgroundColor: "#1f2937",
