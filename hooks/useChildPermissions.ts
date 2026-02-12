@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { ChildPermissions, ChildAccessDocument } from '@/types/permissions';
 import { calculatePermissions } from '@/utils/permissions';
@@ -128,7 +128,6 @@ export function useChildAccesses(childId: string | null | undefined) {
       return;
     }
 
-    const { collection, onSnapshot } = require('firebase/firestore');
     const accessCollectionRef = collection(db, 'children', childId, 'access');
 
     const unsubscribe = onSnapshot(

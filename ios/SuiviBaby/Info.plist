@@ -31,12 +31,6 @@
           <string>com.yoss7.samaye</string>
         </array>
       </dict>
-      <dict>
-        <key>CFBundleURLSchemes</key>
-        <array>
-          <string>exp+samaye</string>
-        </array>
-      </dict>
     </array>
     <key>CFBundleVersion</key>
     <string>2</string>
@@ -52,15 +46,13 @@
       <true/>
     </dict>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Microphone pour commandes vocales</string>
+    <string>Autoriser $(PRODUCT_NAME) à utiliser le microphone pour les commandes vocales.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Reconnaissance vocale</string>
+    <string>Autoriser $(PRODUCT_NAME) à utiliser la reconnaissance vocale pour les commandes vocales.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>
     </array>
-    <key>RCTNewArchEnabled</key>
-    <true/>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>

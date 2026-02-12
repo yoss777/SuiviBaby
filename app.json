@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "samaye",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser le microphone pour les commandes vocales.",

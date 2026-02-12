@@ -7,6 +7,7 @@ import {
   updateLastLogin,
 } from "@/services/userService";
 import type { User, UserType } from "@/types/user";
+import Constants from "expo-constants";
 import {
   User as FirebaseUser,
   signOut as firebaseSignOut,
@@ -123,12 +124,11 @@ export function AuthProvider({
       }
 
       // Mettre à jour le dernier login
-      // Utilise la version du package partagé (monorepo)
-      const sharedPackage = require("../package.json");
+      const appVersion = Constants.expoConfig?.version ?? "1.0.0";
       await updateLastLogin(
         fbUser.uid,
         Platform.OS as "ios" | "android" | "web",
-        sharedPackage.version,
+        appVersion,
       );
 
       // Tout est OK, charger l'utilisateur

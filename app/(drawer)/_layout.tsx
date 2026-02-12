@@ -158,73 +158,73 @@ export default function DrawerLayout() {
   return (
     <HeaderRightContext.Provider value={{ setHeaderRight }}>
       <HeaderLeftContext.Provider value={{ setHeaderLeft }}>
-          <View
-            style={[
-              styles.container,
-              { backgroundColor: Colors[colorScheme].background },
-            ]}
+        <View
+          style={[
+            styles.container,
+            { backgroundColor: Colors[colorScheme].background },
+          ]}
+        >
+          {isOffline && (
+            <View style={[styles.offlineBanner, { paddingTop: insets.top }]}>
+              <Text style={styles.offlineText}>Hors ligne</Text>
+            </View>
+          )}
+          <Drawer
+            initialRouteName="baby"
+            backBehavior="initialRoute"
+            drawerContent={(props) => <CustomDrawerContent {...props} />}
+            screenOptions={{
+              drawerActiveTintColor: Colors[colorScheme].tint,
+              headerTintColor: Colors[colorScheme].text,
+              headerStyle: {
+                backgroundColor: Colors[colorScheme].background,
+              },
+              sceneContainerStyle: {
+                backgroundColor: Colors[colorScheme].background,
+              },
+            }}
           >
-            {isOffline && (
-              <View style={[styles.offlineBanner, { paddingTop: insets.top }]}>
-                <Text style={styles.offlineText}>Hors ligne</Text>
-              </View>
-            )}
-            <Drawer
-              initialRouteName="baby"
-              backBehavior="initialRoute"
-              drawerContent={(props) => <CustomDrawerContent {...props} />}
-              screenOptions={{
-                drawerActiveTintColor: Colors[colorScheme].tint,
-                headerTintColor: Colors[colorScheme].text,
-                headerStyle: {
-                  backgroundColor: Colors[colorScheme].background,
-                },
-                sceneContainerStyle: {
-                  backgroundColor: Colors[colorScheme].background,
-                },
+            <Drawer.Screen
+              name="settings"
+              options={{
+                title: "Paramètres",
+                drawerItemStyle: { display: "none" },
               }}
-            >
-              <Drawer.Screen
-                name="settings"
-                options={{
-                  title: "Paramètres",
-                  drawerItemStyle: { display: "none" },
-                }}
-              />
+            />
 
-              {/* Section: Suivi Bébé */}
-              <Drawer.Screen
-                name="baby"
-                options={{
-                  headerTitle: () => <BabyHeaderTitle />,
-                  drawerItemStyle: { display: "none" },
-                  headerRight: headerRightState.component
-                    ? () => headerRightState.component
-                    : undefined,
-                  headerLeft: headerLeftState.component
-                    ? () => headerLeftState.component
-                    : undefined,
-                }}
-              />
-              <Drawer.Screen
-                name="add-baby"
-                options={{
-                  title: "Ajouter un enfant",
-                  drawerItemStyle: { display: "none" },
-                }}
-              />
-              <Drawer.Screen
-                name="share-child"
-                options={{
-                  title: "Partage",
-                  drawerItemStyle: { display: "none" },
-                  headerLeft: headerLeftState.component
-                    ? () => headerLeftState.component
-                    : undefined,
-                }}
-              />
-            </Drawer>
-          </View>
+            {/* Section: Suivi Bébé */}
+            <Drawer.Screen
+              name="baby"
+              options={{
+                headerTitle: () => <BabyHeaderTitle />,
+                drawerItemStyle: { display: "none" },
+                headerRight: headerRightState.component
+                  ? () => headerRightState.component
+                  : undefined,
+                headerLeft: headerLeftState.component
+                  ? () => headerLeftState.component
+                  : undefined,
+              }}
+            />
+            <Drawer.Screen
+              name="add-baby"
+              options={{
+                title: "Ajouter un enfant",
+                drawerItemStyle: { display: "none" },
+              }}
+            />
+            <Drawer.Screen
+              name="share-child"
+              options={{
+                title: "Partage",
+                drawerItemStyle: { display: "none" },
+                headerLeft: headerLeftState.component
+                  ? () => headerLeftState.component
+                  : undefined,
+              }}
+            />
+          </Drawer>
+        </View>
       </HeaderLeftContext.Provider>
     </HeaderRightContext.Provider>
   );
