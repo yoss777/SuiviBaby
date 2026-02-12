@@ -7,7 +7,7 @@ const config = getDefaultConfig(__dirname);
 config.transformer.getTransformOptions = async () => ({
   transform: {
     experimentalImportSupport: false,
-    inlineRequires: true, // réduit les problèmes de performance et certains imports
+    inlineRequires: true,
   },
 });
 

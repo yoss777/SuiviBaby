@@ -30,7 +30,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CommentsBottomSheet } from "./CommentsBottomSheet";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -163,6 +163,7 @@ export const SwipeGallery = ({
   commentCounts = {},
   currentUserName = "Moi",
 }: SwipeGalleryProps) => {
+  const insets = useSafeAreaInsets();
   const pagerRef = useRef<PagerView>(null);
   const scrollOffset = useSharedValue(0);
   const currentPage = useSharedValue(1);
@@ -219,6 +220,9 @@ export const SwipeGallery = ({
 
   // Double tap heart animation state
   const [doubleTapHeartId, setDoubleTapHeartId] = useState<string | null>(null);
+  const [imageErrorIds, setImageErrorIds] = useState<Record<string, boolean>>(
+    {},
+  );
   const heartScale = useSharedValue(0);
   const lastTapTimeRef = useRef<number>(0);
   const DOUBLE_TAP_DELAY = 300; // ms
@@ -425,8 +429,8 @@ export const SwipeGallery = ({
   // Only active when comments sheet is NOT visible
   const verticalPanGesture = Gesture.Pan()
     .enabled(!commentsVisible)
-    .activeOffsetY([-20, 20]) // Only activate for vertical movement
-    .failOffsetX([-20, 20]) // Fail if horizontal (let PagerView handle it)
+    .activeOffsetY([-30, 30]) // Larger threshold to avoid conflicts with PagerView
+    .failOffsetX([-15, 15]) // Fail faster on horizontal to let PagerView handle it
     .onUpdate((event) => {
       // Only apply visual feedback for swipe DOWN (positive Y), not swipe up
       if (event.translationY > 0) {
@@ -553,7 +557,22 @@ export const SwipeGallery = ({
                 source={{ uri: item.photo.uri }}
                 style={styles.cardImage}
                 resizeMode="contain"
+                fadeDuration={150}
+                onError={() =>
+                  setImageErrorIds((prev) => ({
+                    ...prev,
+                    [item.photo.id]: true,
+                  }))
+                }
               />
+
+              {imageErrorIds[item.photo.id] && (
+                <View style={styles.imageErrorOverlay}>
+                  <Text style={styles.imageErrorText}>
+                    Impossible d'afficher l'image
+                  </Text>
+                </View>
+              )}
 
               {/* Double tap heart animation */}
               {doubleTapHeartId === item.photo.id && (
@@ -639,7 +658,7 @@ export const SwipeGallery = ({
               containerAnimatedStyle,
             ]}
           >
-            <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+            <View style={[styles.safeArea, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
               {/* Header */}
               <View style={styles.header}>
                 <Pressable style={styles.closeButton} onPress={onClose}>
@@ -761,7 +780,7 @@ export const SwipeGallery = ({
                   </View>
                 )}
               </View>
-            </SafeAreaView>
+            </View>
 
             {/* Comments Bottom Sheet */}
             <CommentsBottomSheet
@@ -885,8 +904,24 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   cardImage: {
-    width: "100%",
-    height: "100%",
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+  },
+  imageErrorOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  imageErrorText: {
+    color: "#fff",
+    fontSize: 14,
+    textAlign: "center",
   },
   doubleTapHeart: {
     position: "absolute",

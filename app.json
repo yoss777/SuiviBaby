@@ -10,11 +10,14 @@
     "newArchEnabled": false,
     "ios": {
       "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Autoriser $(PRODUCT_NAME) à accéder à votre photothèque pour ajouter des moments.",
+        "NSPhotoLibraryAddUsageDescription": "Autoriser $(PRODUCT_NAME) à enregistrer des photos dans votre photothèque.",
+        "NSCameraUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser l’appareil photo pour ajouter des moments.",
         "NSMicrophoneUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser le microphone pour les commandes vocales.",
         "NSSpeechRecognitionUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser la reconnaissance vocale pour les commandes vocales."
       },
       "bundleIdentifier": "com.yoss7.samaye",
-      "buildNumber": "2"
+      "buildNumber": "9"
     },
     "android": {
       "adaptiveIcon": {
