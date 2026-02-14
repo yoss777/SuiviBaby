@@ -1,5 +1,149 @@
 # CHANGELOG
 
+## 2026-02-14 — iOS Release, Play Store, Roles & FAB
+
+### Résumé
+
+Publication sur le Play Store (Android) et TestFlight (iOS). Gestion des rôles utilisateurs (owner/admin/contributor/viewer), FAB global pour ajout rapide, notifications sociales, commandes vocales enrichies, et corrections SwipeGallery iOS.
+
+### Summary
+
+Play Store (Android) and TestFlight (iOS) release. User roles management (owner/admin/contributor/viewer), global FAB for quick add, social notifications, enriched voice commands, and SwipeGallery iOS fixes.
+
+### Rôles & Permissions
+
+- Système de rôles à 4 niveaux: Owner (propriétaire), Admin (administrateur), Contributor (contributeur), Viewer (observateur).
+- Écran Manage Access pour gérer les accès et modifier les rôles des utilisateurs invités.
+- Contributor: lecture seule sur les événements, mais peut liker et commenter.
+- Enforcement multi-couches: UI conditionnelle via `useChildPermissions`, règles Firestore côté serveur.
+- Fichiers: types/permissions.ts, utils/permissions.ts, hooks/useChildPermissions.ts, app/(drawer)/baby/manage-access.tsx, firestore.rules
+
+### Roles & Permissions (EN)
+
+- 4-tier role system: Owner, Admin, Contributor, Viewer.
+- Manage Access screen for managing access and modifying invited users' roles.
+- Contributor: read-only on events, but can like and comment.
+- Multi-layer enforcement: conditional UI via `useChildPermissions`, server-side Firestore rules.
+- Files: types/permissions.ts, utils/permissions.ts, hooks/useChildPermissions.ts, app/(drawer)/baby/manage-access.tsx, firestore.rules
+
+### FAB Global (Floating Action Button)
+
+- Nouveau composant GlobalFAB avec 6 actions rapides: Repas, Tire-lait, Couche, Vocal, Sommeil, Moment.
+- Animation pulse subtile au repos, rotation 45° à l'ouverture, cascade d'apparition des boutons avec délai séquentiel.
+- Overlay sombre semi-transparent (backdrop) à l'ouverture.
+- FAB Moments séparé avec 3 actions: Humeur, Photo, Jalon.
+- Affiché conditionnellement selon les permissions de l'utilisateur (`canManageContent`).
+- Fichiers: components/suivibaby/GlobalFAB.tsx, components/moments/FloatingActionButton.tsx
+
+### Global FAB (EN)
+
+- New GlobalFAB component with 6 quick actions: Meal, Pumping, Diaper, Voice, Sleep, Milestone.
+- Subtle pulse animation when idle, 45° rotation on open, cascading button appearance with sequential delays.
+- Semi-transparent dark overlay (backdrop) on open.
+- Separate Moments FAB with 3 actions: Mood, Photo, Milestone.
+- Conditionally rendered based on user permissions (`canManageContent`).
+- Files: components/suivibaby/GlobalFAB.tsx, components/moments/FloatingActionButton.tsx
+
+### Commandes Vocales
+
+- Service de commandes vocales enrichi avec 24 types de commandes (biberon, tétée, couche, sommeil, pompage, activité, jalon, croissance, bain, température, médicament, etc.).
+- Normalisation phonétique avancée pour le français (èmèl→ml, céèm→cm, kagé→kg).
+- Parsing multi-commandes depuis une seule phrase ("il a bu 150ml, fait un pipi et on est allés au parc").
+- Enrichissement contextuel (lieu, accompagnement, activité secondaire).
+- Intégration AssemblyAI pour transcription vocale en français.
+- Fichier: services/voiceCommandService.ts
+
+### Voice Commands (EN)
+
+- Enriched voice command service with 24 command types (bottle, breastfeed, diaper, sleep, pumping, activity, milestone, growth, bath, temperature, medication, etc.).
+- Advanced phonetic normalization for French pronunciations.
+- Multi-command parsing from a single phrase.
+- Contextual enrichment (location, accompaniment, secondary activity).
+- AssemblyAI integration for French speech-to-text transcription.
+- File: services/voiceCommandService.ts
+
+### Notifications Sociales
+
+- Nouveau MomentsNotificationContext pour tracker les nouveaux likes, commentaires et jalons par enfant.
+- Stockage du dernier timestamp vu dans AsyncStorage par utilisateur+enfant.
+- Écoute temps réel Firestore des collections eventLikes, eventComments et events (jalons).
+- Badge de notification sur l'onglet Moments avec compteur combiné.
+- Fichiers: contexts/MomentsNotificationContext.tsx, components/ui/TabBarBadge.tsx
+
+### Social Notifications (EN)
+
+- New MomentsNotificationContext to track new likes, comments and milestones per child.
+- Last seen timestamp stored in AsyncStorage per user+child.
+- Real-time Firestore listeners on eventLikes, eventComments and events (milestones) collections.
+- Notification badge on Moments tab with combined counter.
+- Files: contexts/MomentsNotificationContext.tsx, components/ui/TabBarBadge.tsx
+
+### SwipeGallery iOS Fix
+
+- Remplacement de PagerView par FlatList horizontal + pagingEnabled pour corriger le non-affichage des images en mode Release sur iOS.
+- Ré-ajout des animations scale/opacity pour les cartes adjacentes via Animated.FlatList + scrollX interpolation (Reanimated).
+- Composant AnimatedCard externe avec useAnimatedStyle pour scale (0.9) et opacity (0.6) des cartes non-centrales.
+- Image en resizeMode="contain" pour affichage intégral sans coupure.
+- Fichier: components/moments/SwipeGallery.tsx
+
+### SwipeGallery iOS Fix (EN)
+
+- Replaced PagerView with horizontal FlatList + pagingEnabled to fix images not displaying in Release mode on iOS.
+- Re-added scale/opacity animations for adjacent cards via Animated.FlatList + scrollX interpolation (Reanimated).
+- External AnimatedCard component with useAnimatedStyle for scale (0.9) and opacity (0.6) on non-center cards.
+- Image resizeMode="contain" for full display without cropping.
+- File: components/moments/SwipeGallery.tsx
+
+### Publication Android (Play Store)
+
+- Keystore de production créé (samaye-release.keystore, PKCS12, RSA 2048, validité 10 000 jours).
+- build.gradle configuré avec signingConfigs release.
+- Bundle AAB généré (app-release.aab, 93 Mo) et uploadé sur la Google Play Console.
+- Firebase Hosting déployé avec pages privacy.html et delete-account.html.
+- Icône 512x512 et image de présentation 1024x500 générées pour la fiche Store.
+- Fichiers: android/app/build.gradle, android/gradle.properties, .gitignore, firebase.json, public/privacy.html, public/delete-account.html
+
+### Android Release (Play Store) (EN)
+
+- Production keystore created (samaye-release.keystore, PKCS12, RSA 2048, 10,000 days validity).
+- build.gradle configured with release signingConfigs.
+- AAB bundle generated (app-release.aab, 93 MB) and uploaded to Google Play Console.
+- Firebase Hosting deployed with privacy.html and delete-account.html pages.
+- 512x512 icon and 1024x500 feature graphic generated for Store listing.
+- Files: android/app/build.gradle, android/gradle.properties, .gitignore, firebase.json, public/privacy.html, public/delete-account.html
+
+### Publication iOS (TestFlight)
+
+- Correction du crash EXC_BAD_ACCESS en mode Release (imports dynamiques Firebase remplacés par imports statiques).
+- Permissions iOS ajoutées (NSPhotoLibraryUsageDescription, NSCameraUsageDescription).
+- Build Xcode Release + installation sur iPhone 13 Pro Max via xcrun devicectl.
+- Fichiers: config/firebase.ts, contexts/AuthContext.tsx, app.json, ios/ExportOptions.plist
+
+### iOS Release (TestFlight) (EN)
+
+- Fixed EXC_BAD_ACCESS crash in Release mode (dynamic Firebase imports replaced with static imports).
+- iOS permissions added (NSPhotoLibraryUsageDescription, NSCameraUsageDescription).
+- Xcode Release build + install on iPhone 13 Pro Max via xcrun devicectl.
+- Files: config/firebase.ts, contexts/AuthContext.tsx, app.json, ios/ExportOptions.plist
+
+### Corrections
+
+- Désactivation du mode sombre (useColorScheme hardcodé à "light"). Fichier: hooks/use-color-scheme.ts
+- Limitation des requêtes Firestore à 10 000 résultats pour sécurité et coûts. Fichiers: services/socialService.ts, services/eventsService.ts
+- Fix affichage de l'enfant actif au reload (système de double ref + persistance Firestore). Fichier: contexts/BabyContext.tsx
+- Fix flash SwipeGallery au swipe up pour commentaires. Fichier: components/moments/SwipeGallery.tsx
+- autoCorrect/spellCheck désactivés sur le champ email de login. Fichier: app/(auth)/login.tsx
+
+### Fixes (EN)
+
+- Dark mode disabled (useColorScheme hardcoded to "light"). File: hooks/use-color-scheme.ts
+- Firestore query limit set to 10,000 results for safety and cost control. Files: services/socialService.ts, services/eventsService.ts
+- Active child display fix on reload (dual ref system + Firestore persistence). File: contexts/BabyContext.tsx
+- SwipeGallery flash fix on swipe up for comments. File: components/moments/SwipeGallery.tsx
+- autoCorrect/spellCheck disabled on login email field. File: app/(auth)/login.tsx
+
+---
+
 ## 2026-02-02 — Home Dashboard UI/UX Refactoring
 
 ### Résumé
