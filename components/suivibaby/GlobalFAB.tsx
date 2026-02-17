@@ -5,7 +5,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -221,6 +222,7 @@ export const GlobalFAB = ({
   const { openSheet } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
+  const insets = useSafeAreaInsets();
   const [isOpen, setIsOpen] = useState(false);
   const rotation = useSharedValue(0);
   const pulseScale = useSharedValue(1);
@@ -312,7 +314,7 @@ export const GlobalFAB = ({
       </Animated.View>
 
       {/* FAB Container */}
-      <View style={styles.fabContainer}>
+      <View style={[styles.fabContainer, { bottom: Platform.OS === "ios" ? 16 + insets.bottom + 49 : 32 }]}>
         {/* Action buttons */}
         {actions.map((action, index) => (
           <ActionButton
@@ -360,7 +362,6 @@ const styles = StyleSheet.create({
   },
   fabContainer: {
     position: "absolute",
-    bottom: 32,
     right: 20,
     alignItems: "center",
     zIndex: 2,

@@ -865,7 +865,7 @@ export default function HomeDashboard() {
     const start = toDate(sommeilEnCours.heureDebut);
     return Math.max(
       0,
-      Math.round((currentTime.getTime() - start.getTime()) / 60000),
+      Math.ceil((currentTime.getTime() - start.getTime()) / 60000),
     );
   }, [sommeilEnCours, currentTime, toDate]);
 
