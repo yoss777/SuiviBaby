@@ -9,6 +9,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useRouter } from "expo-router";
 import {
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
 } from "firebase/auth";
 import { useEffect, useRef, useState } from "react";
@@ -125,6 +126,51 @@ export default function LoginScreen() {
     setActiveChild,
     router,
   ]);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      showModal(
+        "Email requis",
+        "Veuillez entrer votre adresse email pour réinitialiser votre mot de passe."
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim(), {
+        url: "https://samaye-53723.firebaseapp.com/reset-password",
+        handleCodeInApp: true,
+        iOS: { bundleId: "com.yoss7.samaye" },
+        android: { packageName: "com.yoss7.samaye", installApp: true },
+      });
+      showModal(
+        "Email envoyé",
+        "Un email de réinitialisation a été envoyé à " +
+          email.trim() +
+          ". Vérifiez votre boîte de réception (et vos spams)."
+      );
+    } catch (error: any) {
+      let errorMessage = "Une erreur est survenue";
+      switch (error.code) {
+        case "auth/invalid-email":
+          errorMessage = "Adresse email invalide";
+          break;
+        case "auth/user-not-found":
+          errorMessage = "Aucun compte trouvé avec cet email";
+          break;
+        case "auth/too-many-requests":
+          errorMessage =
+            "Trop de tentatives. Veuillez réessayer plus tard.";
+          break;
+        default:
+          errorMessage = error.message;
+      }
+      showModal("Erreur", errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAuth = async () => {
     if (!isLogin && !hasConsented) {
@@ -322,6 +368,19 @@ export default function LoginScreen() {
               />
             </TouchableOpacity>
           </View>
+
+          {/* Lien mot de passe oublié (mode connexion uniquement) */}
+          {isLogin && (
+            <TouchableOpacity
+              onPress={handleForgotPassword}
+              disabled={loading}
+              style={styles.forgotPasswordContainer}
+            >
+              <Text style={styles.forgotPasswordText}>
+                Mot de passe oublié ?
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {!isLogin && password.length > 0 && (
             <>
@@ -664,5 +723,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#d32f2f",
+  },
+  forgotPasswordContainer: {
+    alignSelf: "flex-end",
+    marginTop: -8,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    color: "#4A90E2",
+    fontWeight: "500",
   },
 });

@@ -11,6 +11,14 @@ export default function AuthLayout() {
     >
       <Stack.Screen name="login" />
       <Stack.Screen
+        name="reset-password"
+        options={{
+          headerShown: true,
+          title: 'Nouveau mot de passe',
+          headerBackTitle: 'Retour',
+        }}
+      />
+      <Stack.Screen
         name="privacy"
         options={{
           headerShown: true,

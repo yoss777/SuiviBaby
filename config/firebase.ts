@@ -28,6 +28,9 @@ export const auth = Platform.OS === 'web'
       persistence: getReactNativePersistence(AsyncStorage)
     });
 
+// Forcer les emails Firebase (reset password, etc.) en français
+auth.languageCode = 'fr';
+
 export const db = getFirestore(app);
 
 // Optionnel: connecter l'émulateur Firestore en dev

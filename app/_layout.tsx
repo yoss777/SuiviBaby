@@ -11,8 +11,10 @@ import { ToastProvider } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MigrationProvider } from "@/migration/MigrationProvider";
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from "@react-navigation/native";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
+import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -60,6 +62,39 @@ export default function RootLayout() {
 
 function AppNavigation() {
   const colorScheme = useColorScheme() ?? "light";
+  const router = useRouter();
+
+  // Intercepter les deep links Firebase (reset password)
+  useEffect(() => {
+    const handleUrl = (event: { url: string }) => {
+      const url = event.url;
+      // Gérer les URLs Firebase action (mode=resetPassword&oobCode=xxx)
+      // et les deep links samaye://reset-password?oobCode=xxx
+      const oobCodeMatch = url.match(/[?&]oobCode=([^&]+)/);
+      const modeMatch = url.match(/[?&]mode=([^&]+)/);
+
+      if (oobCodeMatch) {
+        const oobCode = oobCodeMatch[1];
+        const mode = modeMatch?.[1];
+        if (!mode || mode === "resetPassword") {
+          router.replace({
+            pathname: "/(auth)/reset-password",
+            params: { oobCode },
+          });
+        }
+      }
+    };
+
+    // Gérer l'URL initiale (app ouverte via deep link)
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl({ url });
+    });
+
+    // Gérer les URLs reçues pendant que l'app est ouverte
+    const subscription = Linking.addEventListener("url", handleUrl);
+    return () => subscription.remove();
+  }, [router]);
+
   const baseTheme = colorScheme === "dark" ? DarkTheme : DefaultTheme;
   const navigationTheme = {
     ...baseTheme,
