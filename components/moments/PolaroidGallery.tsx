@@ -39,7 +39,7 @@ type PolaroidGalleryProps = {
   photos: PhotoMilestone[];
   onPhotoPress: (photo: PhotoMilestone) => void;
   onPhotoLongPress?: (photo: PhotoMilestone) => void;
-  onAddPhoto: () => void;
+  onAddPhoto?: () => void;
   onSeeAll?: () => void;
   likesInfo?: Record<string, LikeInfo>;
   commentCounts?: Record<string, number>;
@@ -170,8 +170,10 @@ export const PolaroidGallery = ({
   commentCounts = {},
   newEventIds = new Set(),
 }: PolaroidGalleryProps) => {
-  // Show max 3 photos + add button at the end (4 items total)
-  const displayPhotos = photos.slice(0, 3);
+  // If user can add photos: show 3 photos + add button (4 slots)
+  // If user cannot (contributor): show 4 photos instead
+  const maxPhotos = onAddPhoto ? 3 : 4;
+  const displayPhotos = photos.slice(0, maxPhotos);
 
   return (
     <View style={styles.container}>
@@ -191,10 +193,31 @@ export const PolaroidGallery = ({
 
       <View style={styles.galleryGrid}>
         {displayPhotos.length === 0 ? (
-          // Show two empty placeholders
-          <>
-            <EmptyPolaroid onPress={onAddPhoto} />
-            <View style={[styles.polaroidWrapper, { opacity: 0.3 }]}>
+          onAddPhoto ? (
+            // Show two empty placeholders when user can add
+            <>
+              <EmptyPolaroid onPress={onAddPhoto} />
+              <View style={[styles.polaroidWrapper, { opacity: 0.3 }]}>
+                <View style={[styles.polaroid, styles.emptyPolaroid]}>
+                  <View
+                    style={[
+                      styles.polaroidImageContainer,
+                      styles.emptyImageContainer,
+                    ]}
+                  >
+                    <FontAwesome6 name="images" size={24} color="#e5e7eb" />
+                  </View>
+                  <View style={styles.polaroidCaption}>
+                    <Text style={[styles.polaroidDate, { color: "#d1d5db" }]}>
+                      En attente...
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </>
+          ) : (
+            // Contributor with no photos: show a simple empty state
+            <View style={[styles.polaroidWrapper, { opacity: 0.5 }]}>
               <View style={[styles.polaroid, styles.emptyPolaroid]}>
                 <View
                   style={[
@@ -206,12 +229,12 @@ export const PolaroidGallery = ({
                 </View>
                 <View style={styles.polaroidCaption}>
                   <Text style={[styles.polaroidDate, { color: "#d1d5db" }]}>
-                    En attente...
+                    Pas encore de souvenirs
                   </Text>
                 </View>
               </View>
             </View>
-          </>
+          )
         ) : (
           <>
             {displayPhotos.map((photo, index) => (
@@ -227,8 +250,8 @@ export const PolaroidGallery = ({
                 hasNewInteraction={newEventIds.has(photo.id)}
               />
             ))}
-            {/* Add button always at the end */}
-            <EmptyPolaroid onPress={onAddPhoto} />
+            {/* Add button at the end - only for users who can add */}
+            {onAddPhoto && <EmptyPolaroid onPress={onAddPhoto} />}
           </>
         )}
       </View>

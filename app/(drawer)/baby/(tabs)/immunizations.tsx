@@ -1487,6 +1487,7 @@ export default function ImmunizationsScreen() {
             value={dateHeure}
             mode="date"
             display={Platform.OS === "ios" ? "spinner" : "default"}
+            themeVariant={colorScheme}
             onChange={onChangeDate}
           />
         )}
@@ -1496,6 +1497,7 @@ export default function ImmunizationsScreen() {
             mode="time"
             is24Hour={true}
             display={Platform.OS === "ios" ? "spinner" : "default"}
+            themeVariant={colorScheme}
             onChange={onChangeTime}
           />
         )}

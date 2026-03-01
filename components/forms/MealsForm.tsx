@@ -305,11 +305,9 @@ export function MealsForm({
         if (isEditing && editData?.id) {
           await modifierTetee(activeChild.id, editData.id, dataToSave);
           successMessage = "Tétée modifiée";
-          showToast(successMessage);
         } else {
           await ajouterTetee(activeChild.id, dataToSave);
           successMessage = "Tétée enregistrée";
-          showToast(successMessage);
         }
         showSuccess('meal', successMessage);
       } else if (mealType === "biberon") {
@@ -324,11 +322,9 @@ export function MealsForm({
         if (isEditing && editData?.id) {
           await modifierBiberon(activeChild.id, editData.id, dataToSave);
           successMessage = "Biberon modifié";
-          showToast(successMessage);
         } else {
           await ajouterBiberon(activeChild.id, dataToSave);
           successMessage = "Biberon enregistré";
-          showToast(successMessage);
         }
         showSuccess('meal', successMessage);
       } else if (mealType === "solide") {
@@ -357,11 +353,9 @@ export function MealsForm({
         if (isEditing && editData?.id) {
           await modifierSolide(activeChild.id, editData.id, dataToSave);
           successMessage = "Repas solide modifié";
-          showToast(successMessage);
         } else {
           await ajouterSolide(activeChild.id, dataToSave);
           successMessage = "Repas solide enregistré";
-          showToast(successMessage);
         }
         showSuccess('meal', successMessage);
       }
@@ -959,6 +953,7 @@ export function MealsForm({
           value={dateHeure}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={onChangeDate}
         />
       )}
@@ -968,6 +963,7 @@ export function MealsForm({
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={onChangeTime}
         />
       )}

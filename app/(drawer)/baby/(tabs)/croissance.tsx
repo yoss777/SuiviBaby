@@ -7,7 +7,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { ecouterCroissancesHybrid } from "@/migration/eventsHybridService";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import {
@@ -353,7 +353,7 @@ export default function CroissanceScreen() {
       const headerButtons = (
         <View style={styles.headerActions}>
           <Pressable onPress={openAddModal} style={styles.headerButton}>
-            <FontAwesome name="plus" size={20} color={colors.tint} />
+            <Ionicons name="add" size={24} color={colors.tint} />
           </Pressable>
         </View>
       );
@@ -1466,9 +1466,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingRight: 16,
+    gap: 0,
   },
   headerButton: {
-    padding: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 8,
   },
   omsLegend: {
     marginTop: 10,

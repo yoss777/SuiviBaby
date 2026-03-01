@@ -530,10 +530,22 @@ export const ecouterCommentaires = (
     limit(10000)
   );
 
-  return onSnapshot(q, (snapshot) => {
+  return onSnapshot(q, async (snapshot) => {
     const comments = snapshot.docs.map(
       (d) => ({ id: d.id, ...d.data() }) as EventComment
     );
+
+    // Résoudre les noms à jour depuis users_public
+    const userIds = [...new Set(comments.map((c) => c.userId))];
+    if (userIds.length > 0) {
+      const names = await getUserNames(userIds);
+      comments.forEach((comment) => {
+        const resolvedName = names.get(comment.userId);
+        if (resolvedName) {
+          comment.userName = resolvedName;
+        }
+      });
+    }
 
     onUpdate({
       count: comments.length,

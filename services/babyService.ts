@@ -65,15 +65,7 @@ export const babyService = {
         .map((snap) => ({ id: snap.id, ...snap.data() })) as Baby[];
     } catch (error) {
       console.error('Erreur chargement enfants du parent:', error);
-      // Fallback: filtrer en local
-      try {
-        const allBabies = await this.getAll();
-        return allBabies.filter(baby =>
-          baby.parentIds?.includes(parentId)
-        );
-      } catch {
-        return [];
-      }
+      return [];
     }
   },
 };

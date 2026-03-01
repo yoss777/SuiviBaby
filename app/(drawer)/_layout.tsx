@@ -16,8 +16,6 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
-// Importer la configuration AssemblyAI
-import "@/config/assemblyai.config";
 import { useBaby } from "@/contexts/BabyContext";
 
 // Contexte pour gérer le headerRight dynamiquement

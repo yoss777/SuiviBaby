@@ -18,6 +18,16 @@
         "gradleCommand": ":app:assembleRelease"
       }
     },
+    "staging": {
+      "distribution": "internal",
+      "env": {
+        "APP_ENV": "staging"
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "android": {

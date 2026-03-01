@@ -757,6 +757,7 @@ export default function SommeilScreen() {
           value={heureDebut}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             setShowDateStart(false);
             if (date) {
@@ -779,6 +780,7 @@ export default function SommeilScreen() {
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             setShowTimeStart(false);
             if (date) {
@@ -796,6 +798,7 @@ export default function SommeilScreen() {
           value={heureFin}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             setShowDateEnd(false);
             if (date) {
@@ -819,6 +822,7 @@ export default function SommeilScreen() {
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             setShowTimeEnd(false);
             if (date) {

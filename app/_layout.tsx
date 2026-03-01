@@ -1,4 +1,6 @@
+import * as Sentry from "@sentry/react-native";
 import { Colors } from "@/constants/theme";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BabyProvider } from "@/contexts/BabyContext";
 import { ModalProvider } from "@/contexts/ModalContext";
@@ -22,43 +24,59 @@ import { PortalProvider } from "@gorhom/portal";
 import { GlobalSheetManager } from "@/components/ui/GlobalSheetManager";
 import { InvitationListener } from "@/components/ui/InvitationListener";
 
+import { startAutoSync } from "@/services/offlineQueueService";
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || "",
+  enabled: !__DEV__,
+  tracesSampleRate: 0.1,
+  environment: __DEV__ ? "development" : "production",
+});
+
+// Démarrer la synchronisation automatique de la queue offline
+startAutoSync();
+
 export const unstable_settings = {
   anchor: "(drawer)",
 };
 
-export default function RootLayout() {
+function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <PortalProvider>
-          <ToastProvider>
-            <ModalProvider>
-              <AuthProvider>
-                {/* <PermissionsMigrationProvider> */}
-                  <AppThemeProvider>
-                    <BabyProvider>
-                      <MomentsNotificationProvider>
-                        <MigrationProvider>
-                          <SheetProvider>
-                            <SuccessAnimationProvider>
-                              <AppNavigation />
-                              <GlobalSheetManager />
-                              <InvitationListener />
-                            </SuccessAnimationProvider>
-                          </SheetProvider>
-                        </MigrationProvider>
-                      </MomentsNotificationProvider>
-                    </BabyProvider>
-                  </AppThemeProvider>
-                {/* </PermissionsMigrationProvider> */}
-              </AuthProvider>
-            </ModalProvider>
-          </ToastProvider>
-        </PortalProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <PortalProvider>
+            <ToastProvider>
+              <ModalProvider>
+                <AuthProvider>
+                  {/* <PermissionsMigrationProvider> */}
+                    <AppThemeProvider>
+                      <BabyProvider>
+                        <MomentsNotificationProvider>
+                          <MigrationProvider>
+                            <SheetProvider>
+                              <SuccessAnimationProvider>
+                                <AppNavigation />
+                                <GlobalSheetManager />
+                                <InvitationListener />
+                              </SuccessAnimationProvider>
+                            </SheetProvider>
+                          </MigrationProvider>
+                        </MomentsNotificationProvider>
+                      </BabyProvider>
+                    </AppThemeProvider>
+                  {/* </PermissionsMigrationProvider> */}
+                </AuthProvider>
+              </ModalProvider>
+            </ToastProvider>
+          </PortalProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
+
+export default Sentry.wrap(RootLayout);
 
 function AppNavigation() {
   const colorScheme = useColorScheme() ?? "light";

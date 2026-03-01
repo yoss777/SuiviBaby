@@ -1,10 +1,7 @@
 // services/eventsService.ts
 // Service unifié pour TOUS les types d'événements
 import {
-  addDoc,
   collection,
-  deleteDoc,
-  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -14,10 +11,11 @@ import {
   query,
   setDoc,
   Timestamp,
-  updateDoc,
   where,
 } from "firebase/firestore";
-import { auth, db } from "../config/firebase";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "../config/firebase";
+import { enqueueEvent, isOnline } from "./offlineQueueService";
 
 const getUserId = () => {
   const user = auth.currentUser;
@@ -234,31 +232,34 @@ export type Event =
 const COLLECTION_NAME = "events";
 
 /**
- * Ajoute un événement
+ * Ajoute un événement via Cloud Function (validation serveur)
+ * Si offline, l'événement est mis en queue et synchronisé au retour en ligne.
  */
 export async function ajouterEvenement(
   childId: string,
   data: Omit<Event, "id" | "childId" | "userId" | "createdAt">,
 ): Promise<string> {
-  try {
-    const userId = getUserId();
+  const payload = {
+    ...data,
+    childId,
+    date:
+      data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
+  };
 
-    const eventData = {
-      ...data,
-      childId,
-      userId,
-      createdAt: Timestamp.now(),
-      date:
-        data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
-    };
-
-    const ref = await addDoc(collection(db, COLLECTION_NAME), eventData);
-    console.log(`✅ ${data.type} ajouté avec l'ID :`, ref.id);
-    return ref.id;
-  } catch (e) {
-    console.error("❌ Erreur lors de l'ajout :", e);
-    throw e;
+  // Si offline, mettre en queue
+  const online = await isOnline();
+  if (!online) {
+    const offlineId = await enqueueEvent("create", payload);
+    return offlineId;
   }
+
+  const createEvent = httpsCallable<
+    Record<string, unknown>,
+    { id: string }
+  >(functions, "validateAndCreateEvent");
+
+  const result = await createEvent(payload);
+  return result.data.id;
 }
 
 /**
@@ -282,19 +283,10 @@ export async function ajouterEvenementAvecId(
         data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
     };
 
-    // Utiliser setDoc au lieu de addDoc pour spécifier l'ID
+    // setDoc avec merge: true crée ou fusionne si le document existe déjà
     const docRef = doc(db, COLLECTION_NAME, id);
     await setDoc(docRef, eventData, { merge: true });
-
-    console.log(`✅ ${data.type} ajouté avec ID spécifique :`, id);
   } catch (e) {
-    const err = e as { code?: string };
-    if (err?.code === "already-exists") {
-      const docRef = doc(db, COLLECTION_NAME, id);
-      await updateDoc(docRef, eventData);
-      console.log(`✅ ${data.type} mis à jour (ID existant) :`, id);
-      return;
-    }
     console.error("❌ Erreur lors de l'ajout avec ID :", e);
     throw e;
   }
@@ -465,86 +457,45 @@ export function ecouterEvenements(
 }
 
 /**
- * Modifie un événement
+ * Modifie un événement via Cloud Function (validation serveur)
  */
 export async function modifierEvenement(
   childId: string,
   id: string,
   data: Partial<Event>,
 ): Promise<void> {
-  try {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    const docSnap = await getDoc(docRef);
+  const updateEvent = httpsCallable<
+    Record<string, unknown>,
+    { success: boolean }
+  >(functions, "validateAndUpdateEvent");
 
-    if (!docSnap.exists() || docSnap.data().childId !== childId) {
-      throw new Error("Accès refusé");
-    }
+  const payload = {
+    ...data,
+    childId,
+    eventId: id,
+  };
 
-    // Handle null values as field deletions
-    const updateData: any = { ...data, updatedAt: Timestamp.now() };
-    for (const key of Object.keys(data)) {
-      if ((data as any)[key] === null) {
-        updateData[key] = deleteField();
-      }
-    }
-
-    await updateDoc(docRef, updateData);
-    console.log("✅ Événement modifié");
-  } catch (e) {
-    console.error("Erreur lors de la modification :", e);
-    throw e;
+  // Convertir les dates si nécessaire
+  if (data.date && data.date instanceof Date) {
+    (payload as any).date = Timestamp.fromDate(data.date);
   }
+
+  await updateEvent(payload);
 }
 
 /**
- * Supprime un événement et ses interactions sociales associées (likes, commentaires)
+ * Supprime un événement et ses interactions sociales via Cloud Function (atomique)
  */
 export async function supprimerEvenement(
   childId: string,
   id: string,
 ): Promise<void> {
-  try {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    const docSnap = await getDoc(docRef);
+  const deleteEvent = httpsCallable<
+    { childId: string; eventId: string },
+    { success: boolean; deleted: { event: number; likes: number; comments: number } }
+  >(functions, "deleteEventCascade");
 
-    if (!docSnap.exists() || docSnap.data().childId !== childId) {
-      throw new Error("Accès refusé");
-    }
-
-    // Supprimer les likes associés
-    const likesQuery = query(
-      collection(db, "eventLikes"),
-      where("eventId", "==", id),
-      limit(10000),
-    );
-    const likesSnapshot = await getDocs(likesQuery);
-    const deleteLikesPromises = likesSnapshot.docs.map((d) =>
-      deleteDoc(doc(db, "eventLikes", d.id)),
-    );
-
-    // Supprimer les commentaires associés
-    const commentsQuery = query(
-      collection(db, "eventComments"),
-      where("eventId", "==", id),
-      limit(10000),
-    );
-    const commentsSnapshot = await getDocs(commentsQuery);
-    const deleteCommentsPromises = commentsSnapshot.docs.map((d) =>
-      deleteDoc(doc(db, "eventComments", d.id)),
-    );
-
-    // Exécuter toutes les suppressions en parallèle
-    await Promise.all([
-      deleteDoc(docRef),
-      ...deleteLikesPromises,
-      ...deleteCommentsPromises,
-    ]);
-
-    console.log("✅ Événement et interactions sociales supprimés");
-  } catch (e) {
-    console.error("Erreur lors de la suppression :", e);
-    throw e;
-  }
+  await deleteEvent({ childId, eventId: id });
 }
 
 // ============================================

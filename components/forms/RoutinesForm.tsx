@@ -315,11 +315,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
         if (editData && editData.type === "bain") {
           await modifierBain(activeChild.id, editData.id, data);
-          showToast("Bain modifié");
           showSuccess("bath", "Bain modifié");
         } else {
           await ajouterBain(activeChild.id, data);
-          showToast("Bain ajouté");
           showSuccess("bath", "Bain ajouté");
         }
       } else {
@@ -374,7 +372,6 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             Object.entries(editDataToSend).filter(([, v]) => v !== undefined),
           );
           await modifierSommeil(activeChild.id, editData.id, cleanedEditData);
-          showToast("Sommeil modifié");
           showSuccess("sleep", "Sommeil modifié");
         } else {
           // For new entries, just remove undefined values
@@ -389,7 +386,6 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             note: noteSommeil.trim() ? noteSommeil.trim() : undefined,
           });
           await ajouterSommeil(activeChild.id, data);
-          showToast("Sommeil ajouté");
           showSuccess("sleep", "Sommeil ajouté");
         }
       }
@@ -416,11 +412,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           if (editData.type === "bain") {
             await supprimerBain(activeChild.id, editData.id);
             showToast("Bain supprimé");
-            showSuccess("bath", "Bain supprimé");
           } else {
             await supprimerSommeil(activeChild.id, editData.id);
             showToast("Sommeil supprimé");
-            showSuccess("sleep", "Sommeil supprimé");
           }
           onDelete?.();
         } catch (error) {
@@ -639,6 +633,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           value={heureDebut}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowDateStart(false);
             if (date) {
@@ -661,6 +656,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowTimeStart(false);
             if (date) {
@@ -678,6 +674,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           value={heureFin}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowDateEnd(false);
             if (date) {
@@ -701,6 +698,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowTimeEnd(false);
             if (date) {
@@ -882,6 +880,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           value={dateHeure}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowDate(false);
             if (date) {
@@ -904,6 +903,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowTime(false);
             if (date) {

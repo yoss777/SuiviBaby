@@ -1,6 +1,8 @@
 // services/VoiceCommandService.ts
+import { functions } from "@/config/firebase";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
+import { httpsCallable } from "firebase/functions";
 
 // Types pour les commandes vocales
 export type CommandType =
@@ -205,13 +207,8 @@ interface ParsedSegment {
 
 class VoiceCommandService {
   private recording: Audio.Recording | null = null;
-  private apiKey: string = ""; // À configurer
 
-  constructor(apiKey?: string) {
-    if (apiKey) {
-      this.apiKey = apiKey;
-    }
-  }
+  constructor() {}
 
   private isAudioAvailable(): boolean {
     return !!Audio?.requestPermissionsAsync && !!Audio?.Recording?.createAsync;
@@ -286,126 +283,42 @@ class VoiceCommandService {
   }
 
   /**
-   * Upload le fichier audio vers AssemblyAI et récupère l'URL
-   */
-  async uploadAudioToAssemblyAI(audioUri: string): Promise<string> {
-    try {
-      // Lire le fichier audio
-      const audioData = await FileSystem.readAsStringAsync(audioUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Convertir en buffer pour l'upload
-      const buffer = Uint8Array.from(atob(audioData), (c) => c.charCodeAt(0));
-
-      const response = await fetch("https://api.assemblyai.com/v2/upload", {
-        method: "POST",
-        headers: {
-          authorization: this.apiKey,
-          "Content-Type": "application/octet-stream",
-        },
-        body: buffer,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${data.error || response.statusText}`);
-      }
-
-      return data.upload_url;
-    } catch (error) {
-      console.error("Erreur upload AssemblyAI:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Transcrit l'audio en texte via AssemblyAI
+   * Transcrit l'audio en texte via Cloud Function proxy (AssemblyAI)
+   * L'API key reste côté serveur — jamais exposée dans le bundle client.
    */
   async transcribeAudio(audioUri: string): Promise<string> {
     try {
-      if (!this.apiKey) {
-        throw new Error("API Key AssemblyAI non configurée");
+      // Lire le fichier audio en base64
+      const audioBase64 = await FileSystem.readAsStringAsync(audioUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // Appeler la Cloud Function
+      const transcribe = httpsCallable<
+        { audioBase64: string },
+        { text: string }
+      >(functions, "transcribeAudio");
+
+      const result = await transcribe({ audioBase64 });
+      return result.data.text || "";
+    } catch (error: any) {
+      // Remonter un message lisible pour les erreurs CF
+      if (error?.code === "functions/resource-exhausted") {
+        throw new Error(error.message || "Limite de transcriptions atteinte.");
       }
-
-      // 1. Upload le fichier audio
-      console.log("📤 Upload audio vers AssemblyAI...");
-      const uploadUrl = await this.uploadAudioToAssemblyAI(audioUri);
-
-      // 2. Créer la transcription
-      console.log("🎯 Demande de transcription...");
-      const transcriptResponse = await fetch(
-        "https://api.assemblyai.com/v2/transcript",
-        {
-          method: "POST",
-          headers: {
-            authorization: this.apiKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            audio_url: uploadUrl,
-            language_code: "fr", // Français
-            speech_model: "best", // Meilleur modèle disponible
-          }),
-        }
-      );
-
-      const transcript = await transcriptResponse.json();
-
-      if (!transcriptResponse.ok) {
-        throw new Error(
-          `Transcription failed: ${
-            transcript.error || transcriptResponse.statusText
-          }`
-        );
+      if (error?.code === "functions/unauthenticated") {
+        throw new Error("Vous devez être connecté pour utiliser la voix.");
       }
-
-      const transcriptId = transcript.id;
-
-      // 3. Attendre la fin de la transcription (polling)
-      console.log("⏳ Transcription en cours...");
-      let result = transcript;
-
-      while (result.status !== "completed" && result.status !== "error") {
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Attendre 1 seconde
-
-        const pollingResponse = await fetch(
-          `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
-          {
-            headers: {
-              authorization: this.apiKey,
-            },
-          }
-        );
-
-        result = await pollingResponse.json();
-      }
-
-      if (result.status === "error") {
-        throw new Error(`Transcription error: ${result.error}`);
-      }
-
-      console.log("✅ Transcription terminée");
-      return result.text || "";
-    } catch (error) {
-      console.error("Erreur transcription AssemblyAI:", error);
       throw error;
     }
   }
 
   /**
-   * Configure l'API key AssemblyAI
-   */
-  setApiKey(apiKey: string) {
-    this.apiKey = apiKey;
-  }
-
-  /**
-   * Vérifie si l'API key est configurée
+   * La transcription passe désormais par Cloud Function.
+   * Toujours disponible si l'utilisateur est authentifié.
    */
   hasApiKey(): boolean {
-    return !!this.apiKey && this.apiKey.length > 0;
+    return true;
   }
 
   /**

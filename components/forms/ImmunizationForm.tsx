@@ -215,11 +215,9 @@ export function ImmunizationForm({
 
         if (isEditing && editData?.id) {
           await modifierVaccin(activeChild.id, editData.id, vaccinData);
-          showToast("Vaccin modifié");
           showSuccess("vaccine", "Vaccin modifié");
         } else {
           await ajouterVaccin(activeChild.id, vaccinData);
-          showToast("Vaccin enregistré");
           showSuccess("vaccine", "Vaccin enregistré");
         }
       } else {
@@ -242,11 +240,9 @@ export function ImmunizationForm({
 
         if (isEditing && editData?.id) {
           await modifierVitamine(activeChild.id, editData.id, vitamineData);
-          showToast("Vitamine modifiée");
           showSuccess("vitamin", "Vitamine modifiée");
         } else {
           await ajouterVitamine(activeChild.id, vitamineData);
-          showToast("Vitamine enregistrée");
           showSuccess("vitamin", "Vitamine enregistrée");
         }
       }
@@ -268,11 +264,9 @@ export function ImmunizationForm({
       if (type === "vaccin") {
         await supprimerVaccin(activeChild.id, editData.id);
         showToast("Vaccin supprimé");
-        showSuccess("vaccine", "Vaccin supprimé");
       } else {
         await supprimerVitamine(activeChild.id, editData.id);
         showToast("Vitamine supprimée");
-        showSuccess("vitamin", "Vitamine supprimée");
       }
       onDelete?.();
     } catch (error) {
@@ -728,6 +722,7 @@ export function ImmunizationForm({
           value={dateHeure}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={onChangeDate}
         />
       )}
@@ -737,6 +732,7 @@ export function ImmunizationForm({
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={onChangeTime}
         />
       )}

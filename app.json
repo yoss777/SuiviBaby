@@ -49,6 +49,13 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "samaye",
+          "project": "samaye-mobile"
+        }
       ]
     ],
     "experiments": {

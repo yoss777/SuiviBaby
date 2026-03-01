@@ -194,11 +194,9 @@ export function PumpingForm({
 
       if (isEditing && editData) {
         await modifierPompage(activeChild.id, editData.id, data);
-        showToast("Session modifiée");
         showSuccess("pumping", "Session modifiée");
       } else {
         await ajouterPompage(activeChild.id, data);
-        showToast("Session enregistrée");
         showSuccess("pumping", "Session enregistrée");
       }
 
@@ -223,7 +221,6 @@ export function PumpingForm({
           setIsSubmitting(true);
           await supprimerPompage(activeChild.id, editData.id);
           showToast("Session supprimée");
-          showSuccess("pumping", "Session supprimée");
           onDelete?.();
         } catch (error) {
           console.error("Erreur lors de la suppression:", error);
@@ -457,6 +454,7 @@ export function PumpingForm({
           value={dateHeure}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={onChangeDate}
         />
       )}
@@ -466,6 +464,7 @@ export function PumpingForm({
           mode="time"
           is24Hour={true}
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={onChangeTime}
         />
       )}

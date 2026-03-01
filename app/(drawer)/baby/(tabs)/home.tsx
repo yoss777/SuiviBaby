@@ -36,7 +36,7 @@ import {
   getTodayEventsCache,
 } from "@/services/todayEventsCache";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
@@ -47,6 +47,7 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -1022,7 +1023,9 @@ export default function HomeDashboard() {
       todayStats.selles.lastTimestamp,
     ].filter((t): t is number => !!t);
     const mostRecentChangeToday =
-      changesTimestampsToday.length > 0 ? Math.max(...changesTimestampsToday) : undefined;
+      changesTimestampsToday.length > 0
+        ? Math.max(...changesTimestampsToday)
+        : undefined;
 
     // Use absolute timestamp for mictions/selles if no activity today
     const absoluteTimestamps = [
@@ -1622,26 +1625,8 @@ export default function HomeDashboard() {
         >
           <Animated.View
             style={{
-              opacity: headerAddOpacity,
-              marginRight: 8,
-            }}
-            pointerEvents={headerAddVisible ? "auto" : "none"}
-          >
-            <TouchableOpacity
-              onPress={openQuickAddSheet}
-              style={styles.headerActionButton}
-              activeOpacity={0.8}
-            >
-              <FontAwesome
-                name="plus"
-                size={18}
-                color={Colors[colorScheme].tint}
-              />
-            </TouchableOpacity>
-          </Animated.View>
-          <Animated.View
-            style={{
               opacity: headerMicOpacity,
+              marginRight: 8,
             }}
             pointerEvents={headerMicVisible ? "auto" : "none"}
           >
@@ -1650,6 +1635,19 @@ export default function HomeDashboard() {
               color={Colors[colorScheme].tint}
               showTestToggle={false}
             />
+          </Animated.View>
+          <Animated.View
+            style={{
+              opacity: headerAddOpacity,
+            }}
+            pointerEvents={headerAddVisible ? "auto" : "none"}
+          >
+            <Pressable
+              onPress={openQuickAddSheet}
+              style={styles.headerActionButton}
+            >
+              <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+            </Pressable>
           </Animated.View>
         </Animated.View>
       );
@@ -2121,237 +2119,242 @@ export default function HomeDashboard() {
         {/* Bannière de migration */}
         {activeChild?.id && <MigrationBanner childId={activeChild.id} />}
 
-      {/* En-tête avec salutation */}
-      <View
-        style={{
-          marginBottom: 8,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginRight: 50,
-        }}
-        onLayout={(event) => {
-          const { y, height } = event.nativeEvent.layout;
-          headerRowLayoutRef.current = { y, height };
-          updateHeaderControls(
-            scrollYRef.current,
-            { y, height },
-            activitiesLayoutRef.current,
-          );
-        }}
-      >
-        <View style={styles.header}>
-          <Text style={styles.greeting}>{getGreeting()}</Text>
-          <Text style={styles.date}>
-            {new Date().toLocaleDateString("fr-FR", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
-          </Text>
-        </View>
-        {canManageContent && (
-          <Animated.View style={{ paddingTop: 10, opacity: inlineMicOpacity }}>
-            <VoiceCommandButton
-              size={40}
-              color={Colors[colorScheme].tint}
-              showTestToggle={false}
-            />
-          </Animated.View>
-        )}
-      </View>
-
-      {/* Résumé du jour */}
-      <View style={styles.section}>
-        <View>
-          <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
-        </View>
-
-        {/* Alimentation Group */}
-        <View style={styles.statsGroupContainer}>
-          <StatsGroup
-            title="Alimentation"
-            icon="utensils"
-            color={categoryColors.alimentation.primary}
-            backgroundColor={categoryColors.alimentation.background}
-            borderColor={categoryColors.alimentation.border}
-            summary={alimentationGroup.summary}
-            lastActivity={alimentationGroup.lastTime}
-            timeSince={alimentationGroup.timeSince}
-            timeSinceLabel={alimentationGroup.timeSinceLabel}
-            items={alimentationGroup.items}
-            currentTime={currentTime}
-            onAddPress={
-              canManageContent
-                ? () =>
-                    openSheet({
-                      ownerId: headerOwnerId.current,
-                      formType: "meals",
-                      mealType: "tetee",
-                    })
-                : undefined
-            }
-            onHeaderPress={
-              canManageContent
-                ? () => router.push("/baby/stats?tab=tetees&returnTo=home" as any)
-                : undefined
-            }
-          />
-        </View>
-
-        {/* Santé Group (Couches + Vitamines + Vaccins) */}
+        {/* En-tête avec salutation */}
         <View
-          style={styles.statsGroupContainer}
+          style={{
+            marginBottom: 8,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginRight: 50,
+          }}
           onLayout={(event) => {
             const { y, height } = event.nativeEvent.layout;
-            activitiesLayoutRef.current = { y, height };
+            headerRowLayoutRef.current = { y, height };
             updateHeaderControls(
               scrollYRef.current,
-              headerRowLayoutRef.current,
-              {
-                y,
-                height,
-              },
+              { y, height },
+              activitiesLayoutRef.current,
             );
           }}
         >
-          <StatsGroup
-            title="Santé & Hygiène"
-            icon="heart-pulse"
-            color={categoryColors.sante.primary}
-            backgroundColor={categoryColors.sante.background}
-            borderColor={categoryColors.sante.border}
-            summary={santeGroup.summary}
-            lastActivity={santeGroup.lastTime}
-            timeSince={santeGroup.timeSince}
-            timeSinceLabel={santeGroup.timeSinceLabel}
-            isWarning={santeGroup.isWarning}
-            items={santeGroup.items}
-            currentTime={currentTime}
-            onAddPress={
-              canManageContent
-                ? () =>
-                    openSheet({
-                      ownerId: headerOwnerId.current,
-                      formType: "diapers",
-                      diapersType: "miction",
-                    })
-                : undefined
-            }
-          />
+          <View style={styles.header}>
+            <Text style={styles.greeting}>{getGreeting()}</Text>
+            <Text style={styles.date}>
+              {new Date().toLocaleDateString("fr-FR", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </Text>
+          </View>
+          {canManageContent && (
+            <Animated.View
+              style={{ paddingTop: 10, opacity: inlineMicOpacity }}
+            >
+              <VoiceCommandButton
+                size={40}
+                color={Colors[colorScheme].tint}
+                showTestToggle={false}
+              />
+            </Animated.View>
+          )}
         </View>
 
-        {/* Sommeil Section */}
-        {(canManageContent || !!sommeilEnCours) && (
+        {/* Résumé du jour */}
+        <View style={styles.section}>
+          <View>
+            <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
+          </View>
+
+          {/* Alimentation Group */}
           <View style={styles.statsGroupContainer}>
-            <SleepWidget
-              isActive={!!sommeilEnCours}
-              isNap={sommeilEnCours?.isNap}
-              elapsedMinutes={elapsedSleepMinutes}
-              startTime={
-                sommeilEnCours?.heureDebut
-                  ? formatTime(toDate(sommeilEnCours.heureDebut))
+            <StatsGroup
+              title="Alimentation"
+              icon="utensils"
+              color={categoryColors.alimentation.primary}
+              backgroundColor={categoryColors.alimentation.background}
+              borderColor={categoryColors.alimentation.border}
+              summary={alimentationGroup.summary}
+              lastActivity={alimentationGroup.lastTime}
+              timeSince={alimentationGroup.timeSince}
+              timeSinceLabel={alimentationGroup.timeSinceLabel}
+              items={alimentationGroup.items}
+              currentTime={currentTime}
+              onAddPress={
+                canManageContent
+                  ? () =>
+                      openSheet({
+                        ownerId: headerOwnerId.current,
+                        formType: "meals",
+                        mealType: "tetee",
+                      })
                   : undefined
               }
-              onStartSleep={handleStartSleep}
-              onStopSleep={handleStopSleep}
-              showStopButton={canManageContent}
+              onHeaderPress={
+                canManageContent
+                  ? () =>
+                      router.push("/baby/stats?tab=tetees&returnTo=home" as any)
+                  : undefined
+              }
             />
           </View>
-        )}
 
-        {/* Humeur & Jalons - Bloc unifié 2 colonnes */}
-        {canManageContent && (
-          <View style={styles.statsGroupContainer}>
-            <View style={styles.moodJalonsCard}>
-              {/* Section Humeur */}
-              <View style={styles.moodJalonsSection}>
-                <Text style={styles.moodJalonsLabel}>Humeur du jour</Text>
-                <View style={styles.moodEmojisRow}>
-                  {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
-                    const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
-                    const isSelected = todayMoodEvent?.humeur === moodValue;
-                    const isCurrentlySaving = isMoodSaving && isSelected;
-                    return (
-                      <TouchableOpacity
-                        key={key}
-                        style={[
-                          styles.moodEmojiButton,
-                          isSelected && styles.moodEmojiSelected,
-                        ]}
-                        onPress={() => handleSetMood(moodValue)}
-                        disabled={isMoodSaving}
-                        activeOpacity={0.7}
-                        accessibilityLabel={`Humeur ${moodValue} sur 5`}
-                        accessibilityState={{ selected: isSelected }}
-                      >
-                        {isCurrentlySaving ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={categoryColors.moments.primary}
-                          />
-                        ) : (
-                          <Text style={styles.moodEmojiText}>{emoji}</Text>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Séparateur vertical */}
-              <View style={styles.moodJalonsDivider} />
-
-              {/* Section Jalons */}
-              <TouchableOpacity
-                style={styles.jalonsSection}
-                onPress={() => router.push("/baby/moments" as any)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.jalonsLabel}>Jalons</Text>
-                <View style={styles.jalonsValueRow}>
-                  {todayJalons.length > 0 ? (
-                    <Text style={styles.jalonsSummary}>{todayJalons.length}</Text>
-                  ) : (
-                    <>
-                      <FontAwesome
-                        name="star"
-                        size={16}
-                        color={categoryColors.moments.primary}
-                      />
-                      <Text style={styles.jalonsEmptyText}>Ajouter</Text>
-                    </>
-                  )}
-                  <FontAwesome
-                    name="chevron-right"
-                    size={12}
-                    color={neutralColors.textMuted}
-                    style={styles.jalonsChevron}
-                  />
-                </View>
-              </TouchableOpacity>
-            </View>
+          {/* Santé Group (Couches + Vitamines + Vaccins) */}
+          <View
+            style={styles.statsGroupContainer}
+            onLayout={(event) => {
+              const { y, height } = event.nativeEvent.layout;
+              activitiesLayoutRef.current = { y, height };
+              updateHeaderControls(
+                scrollYRef.current,
+                headerRowLayoutRef.current,
+                {
+                  y,
+                  height,
+                },
+              );
+            }}
+          >
+            <StatsGroup
+              title="Santé & Hygiène"
+              icon="heart-pulse"
+              color={categoryColors.sante.primary}
+              backgroundColor={categoryColors.sante.background}
+              borderColor={categoryColors.sante.border}
+              summary={santeGroup.summary}
+              lastActivity={santeGroup.lastTime}
+              timeSince={santeGroup.timeSince}
+              timeSinceLabel={santeGroup.timeSinceLabel}
+              isWarning={santeGroup.isWarning}
+              items={santeGroup.items}
+              currentTime={currentTime}
+              onAddPress={
+                canManageContent
+                  ? () =>
+                      openSheet({
+                        ownerId: headerOwnerId.current,
+                        formType: "diapers",
+                        diapersType: "miction",
+                      })
+                  : undefined
+              }
+            />
           </View>
-        )}
-      </View>
 
-      {/* Chronologie récente */}
-      <View>
-        <RecentEventsList
-          events={recentEvents}
-          loading={!isDataLoaded}
-          showHint={showRecentHint}
-          colorScheme={colorScheme}
-          currentTime={currentTime}
-          onEventLongPress={canManageContent ? handleEventEdit : undefined}
-          onViewAllPress={() => router.push("/baby/chrono" as any)}
-          toDate={toDate}
-          formatTime={formatTime}
-          formatDuration={formatDuration}
-          buildDetails={buildDetails}
-          getDayLabel={getDayLabel}
-        />
-      </View>
+          {/* Sommeil Section */}
+          {(canManageContent || !!sommeilEnCours) && (
+            <View style={styles.statsGroupContainer}>
+              <SleepWidget
+                isActive={!!sommeilEnCours}
+                isNap={sommeilEnCours?.isNap}
+                elapsedMinutes={elapsedSleepMinutes}
+                startTime={
+                  sommeilEnCours?.heureDebut
+                    ? formatTime(toDate(sommeilEnCours.heureDebut))
+                    : undefined
+                }
+                onStartSleep={handleStartSleep}
+                onStopSleep={handleStopSleep}
+                showStopButton={canManageContent}
+              />
+            </View>
+          )}
+
+          {/* Humeur & Jalons - Bloc unifié 2 colonnes */}
+          {canManageContent && (
+            <View style={styles.statsGroupContainer}>
+              <View style={styles.moodJalonsCard}>
+                {/* Section Humeur */}
+                <View style={styles.moodJalonsSection}>
+                  <Text style={styles.moodJalonsLabel}>Humeur du jour</Text>
+                  <View style={styles.moodEmojisRow}>
+                    {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
+                      const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
+                      const isSelected = todayMoodEvent?.humeur === moodValue;
+                      const isCurrentlySaving = isMoodSaving && isSelected;
+                      return (
+                        <TouchableOpacity
+                          key={key}
+                          style={[
+                            styles.moodEmojiButton,
+                            isSelected && styles.moodEmojiSelected,
+                          ]}
+                          onPress={() => handleSetMood(moodValue)}
+                          disabled={isMoodSaving}
+                          activeOpacity={0.7}
+                          accessibilityLabel={`Humeur ${moodValue} sur 5`}
+                          accessibilityState={{ selected: isSelected }}
+                        >
+                          {isCurrentlySaving ? (
+                            <ActivityIndicator
+                              size="small"
+                              color={categoryColors.moments.primary}
+                            />
+                          ) : (
+                            <Text style={styles.moodEmojiText}>{emoji}</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Séparateur vertical */}
+                <View style={styles.moodJalonsDivider} />
+
+                {/* Section Jalons */}
+                <TouchableOpacity
+                  style={styles.jalonsSection}
+                  onPress={() => router.push("/baby/moments" as any)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.jalonsLabel}>Jalons</Text>
+                  <View style={styles.jalonsValueRow}>
+                    {todayJalons.length > 0 ? (
+                      <Text style={styles.jalonsSummary}>
+                        {todayJalons.length}
+                      </Text>
+                    ) : (
+                      <>
+                        <FontAwesome
+                          name="star"
+                          size={16}
+                          color={categoryColors.moments.primary}
+                        />
+                        <Text style={styles.jalonsEmptyText}>Ajouter</Text>
+                      </>
+                    )}
+                    <FontAwesome
+                      name="chevron-right"
+                      size={12}
+                      color={neutralColors.textMuted}
+                      style={styles.jalonsChevron}
+                    />
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Chronologie récente */}
+        <View>
+          <RecentEventsList
+            events={recentEvents}
+            loading={!isDataLoaded}
+            showHint={showRecentHint}
+            colorScheme={colorScheme}
+            currentTime={currentTime}
+            onEventLongPress={canManageContent ? handleEventEdit : undefined}
+            onViewAllPress={() => router.push("/baby/chrono" as any)}
+            toDate={toDate}
+            formatTime={formatTime}
+            formatDuration={formatDuration}
+            buildDetails={buildDetails}
+            getDayLabel={getDayLabel}
+          />
+        </View>
       </ScrollView>
       {canManageContent && <GlobalFAB includeVoiceAction={false} />}
     </View>
@@ -2386,7 +2389,9 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   headerActionButton: {
-    padding: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+    paddingRight: 8,
   },
   greeting: {
     fontSize: 28,

@@ -152,11 +152,9 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
 
       if (editData) {
         await modifierCroissance(activeChild.id, editData.id, data);
-        showToast("Mesure modifiée");
         showSuccess("growth", "Mesure modifiée");
       } else {
         await ajouterCroissance(activeChild.id, data);
-        showToast("Mesure ajoutée");
         showSuccess("growth", "Mesure ajoutée");
       }
 
@@ -180,7 +178,6 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
           setIsSubmitting(true);
           await supprimerCroissance(activeChild.id, editData.id);
           showToast("Mesure supprimée");
-          showSuccess("growth", "Mesure supprimée");
           onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);
@@ -287,6 +284,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
           value={dateHeure}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowDate(false);
             if (date) {
@@ -309,6 +307,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowTime(false);
             if (date) {

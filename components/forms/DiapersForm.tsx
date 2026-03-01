@@ -170,7 +170,6 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           });
           await modifierMiction(activeChild.id, editData.id, mictionData);
           successMessage = "Miction modifiée";
-          showToast(successMessage);
         } else {
           const selleData = removeUndefined({
             date: dateHeure,
@@ -179,7 +178,6 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           });
           await modifierSelle(activeChild.id, editData.id, selleData);
           successMessage = "Selle modifiée";
-          showToast(successMessage);
         }
       } else {
         // Add mode: add one or two excretions
@@ -203,7 +201,6 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           : includeMiction
             ? "Miction ajoutée"
             : "Selle ajoutée";
-        showToast(successMessage);
       }
 
       // Afficher l'animation de succès avant de fermer le formulaire
@@ -491,6 +488,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           value={dateHeure}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowDate(false);
             if (date) {
@@ -513,6 +511,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowTime(false);
             if (date) {

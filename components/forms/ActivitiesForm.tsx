@@ -202,11 +202,9 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 
       if (editData) {
         await modifierActivite(activeChild.id, editData.id, data);
-        showToast("Activité modifiée");
         showSuccess("activity", "Activité modifiée");
       } else {
         await ajouterActivite(activeChild.id, data);
-        showToast("Activité ajoutée");
         showSuccess("activity", "Activité ajoutée");
       }
 
@@ -230,7 +228,6 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           setIsSubmitting(true);
         await supprimerActivite(activeChild.id, editData.id);
         showToast("Activité supprimée");
-        showSuccess("activity", "Activité supprimée");
         onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);
@@ -377,6 +374,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           value={dateHeure}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowDate(false);
             if (date) {
@@ -399,6 +397,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowTime(false);
             if (date) {

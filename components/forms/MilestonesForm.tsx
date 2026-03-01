@@ -367,11 +367,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
       if (editData) {
         await modifierJalon(activeChild.id, editData.id, data);
-        showToast("Jalon modifié");
         showSuccess("milestone", "Jalon modifié");
       } else {
         await ajouterJalon(activeChild.id, data);
-        showToast("Jalon ajouté");
         showSuccess("milestone", "Jalon ajouté");
       }
 
@@ -396,7 +394,6 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           setIsSubmitting(true);
           await supprimerJalon(activeChild.id, editData.id);
           showToast("Jalon supprimé");
-          showSuccess("milestone", "Jalon supprimé");
           onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);
@@ -606,6 +603,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           value={dateHeure}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowDate(false);
             if (date) {
@@ -628,6 +626,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
           onChange={(_, date) => {
             handleShowTime(false);
             if (date) {

@@ -475,9 +475,9 @@ export default function MomentsScreen() {
           {/* Polaroid Gallery */}
           <Animated.View entering={FadeInUp.delay(350).springify()}>
             <PolaroidGallery
-              photos={displayedPhotoMilestones}
+              photos={canManageContent ? displayedPhotoMilestones : allPhotoMilestones.slice(0, 4)}
               onPhotoPress={handlePhotoPress}
-              onAddPhoto={handleAddPhoto}
+              onAddPhoto={canManageContent ? handleAddPhoto : undefined}
               onSeeAll={handleSeeAll}
               likesInfo={likesInfo}
               commentCounts={commentCounts}

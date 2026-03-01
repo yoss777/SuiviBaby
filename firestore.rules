@@ -96,15 +96,15 @@ service cloud.firestore {
 
     // Enfants - document principal
     match /children/{childId} {
-      // Lecture d'un document spécifique (get)
+      // Lecture d'un document spécifique (get) : accès via access subcollection ou parentIds legacy
       allow get: if hasAccess(childId) ||
         (isSignedIn() &&
          exists(/databases/$(database)/documents/children/$(childId)) &&
          get(/databases/$(database)/documents/children/$(childId)).data.parentIds.hasAny([request.auth.uid]));
 
-      // Liste/requêtes (list) - pour la migration, autoriser les requêtes avec parentIds
-      allow list: if isSignedIn() &&
-        request.query.limit <= 100;
+      // Liste (list) : désactivée — le pattern normal est user_child_access -> get children/{childId}
+      // BabyContext utilise des listeners par document, pas de list query
+      allow list: if false;
 
       // Création : l'utilisateur doit définir son propre UID comme ownerId
       allow create: if isSignedIn() &&
@@ -179,11 +179,9 @@ service cloud.firestore {
 
     // Likes sur les events
     match /eventLikes/{likeId} {
-      // Lecture : tous ceux qui ont accès à l'enfant
+      // Lecture (get+list) : uniquement ceux qui ont accès à l'enfant
+      // Les queries client filtrent toujours sur eventId ou childId
       allow read: if hasAccess(resource.data.childId);
-
-      // Liste : requêtes limitées (filtrage côté client)
-      allow list: if isSignedIn() && request.query.limit <= 10000;
 
       // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
       allow create: if canWriteLikes(request.resource.data.childId) &&
@@ -198,11 +196,9 @@ service cloud.firestore {
 
     // Commentaires sur les events
     match /eventComments/{commentId} {
-      // Lecture : tous ceux qui ont accès à l'enfant
+      // Lecture (get+list) : uniquement ceux qui ont accès à l'enfant
+      // Les queries client filtrent toujours sur eventId ou childId
       allow read: if hasAccess(resource.data.childId);
-
-      // Liste : requêtes limitées (filtrage côté client)
-      allow list: if isSignedIn() && request.query.limit <= 10000;
 
       // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
       allow create: if canWriteComments(request.resource.data.childId) &&
@@ -224,7 +220,8 @@ service cloud.firestore {
     // ============================================
 
     match /shareInvitations/{inviteId} {
-      allow read: if isSignedIn() && (
+      // Lecture (get) : parties concernées uniquement
+      allow get: if isSignedIn() && (
         (resource.data.invitedEmail is string &&
          request.auth.token.email == resource.data.invitedEmail) ||
         request.auth.uid == resource.data.invitedUserId ||
@@ -233,9 +230,13 @@ service cloud.firestore {
          request.auth.token.email == resource.data.inviterEmail)
       );
 
-      // Autoriser les listes limitées (filtrage côté client)
+      // Liste : uniquement ses propres invitations (envoyées ou reçues)
       allow list: if isSignedIn() &&
-        request.query.limit <= 200;
+        request.query.limit <= 200 && (
+          resource.data.inviterId == request.auth.uid ||
+          resource.data.invitedUserId == request.auth.uid ||
+          resource.data.invitedEmail == request.auth.token.email
+        );
 
       // Création : inviterId = uid et owner/admin (fallback via ownerId si access manquant)
       allow create: if isSignedIn() &&
@@ -296,9 +297,10 @@ service cloud.firestore {
       allow get: if isSignedIn() &&
         resource.data.userId == request.auth.uid;
 
-      // Liste : autoriser requêtes limitées (filtrage côté client)
+      // Liste : uniquement ses propres accès (toutes les queries client filtrent sur userId)
       allow list: if isSignedIn() &&
-        request.query.limit <= 200;
+        request.query.limit <= 200 &&
+        resource.data.userId == request.auth.uid;
 
       // Création/Mise à jour : owner ou via invitation/code pour soi
       allow create, update: if isSignedIn() &&
@@ -333,6 +335,21 @@ service cloud.firestore {
     match /user_preferences/{userId} {
       // Chaque utilisateur peut uniquement lire/écrire ses propres préférences
       allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ============================================
+    // CLOUD FUNCTIONS DATA (server-side only)
+    // ============================================
+
+    // Rate limiting pour les Cloud Functions (géré côté serveur uniquement)
+    match /rate_limits/{userId} {
+      allow read, write: if false;
+    }
+
+    // Usage quotas (géré côté serveur, lecture autorisée pour l'utilisateur)
+    match /usage_limits/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list, create, update, delete: if false;
     }
 
     // ============================================
