@@ -256,6 +256,30 @@ const VALID_EVENT_TYPES = [
 ];
 
 /**
+ * Convertit un objet date sérialisé en Firestore Timestamp.
+ * httpsCallable sérialise les Timestamps en {seconds, nanoseconds} (sans underscore)
+ * mais l'admin SDK les sérialise en {_seconds, _nanoseconds} (avec underscore).
+ */
+function toFirestoreTimestamp(dateValue) {
+  if (!dateValue || dateValue instanceof admin.firestore.Timestamp) {
+    return dateValue;
+  }
+  // Format httpsCallable client: {seconds, nanoseconds}
+  if (typeof dateValue.seconds === "number") {
+    return new admin.firestore.Timestamp(dateValue.seconds, dateValue.nanoseconds || 0);
+  }
+  // Format admin SDK: {_seconds, _nanoseconds}
+  if (typeof dateValue._seconds === "number") {
+    return new admin.firestore.Timestamp(dateValue._seconds, dateValue._nanoseconds || 0);
+  }
+  // ISO string ou autre
+  if (typeof dateValue === "string" || typeof dateValue === "number") {
+    return admin.firestore.Timestamp.fromDate(new Date(dateValue));
+  }
+  return dateValue;
+}
+
+/**
  * Vérifie que l'utilisateur a accès à l'enfant (owner, admin ou contributor)
  */
 async function checkChildAccess(db, uid, childId, requiredRoles) {
@@ -444,12 +468,9 @@ exports.validateAndCreateEvent = onCall(
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    // Convertir date si nécessaire
-    if (eventData.date && eventData.date._seconds) {
-      serverData.date = new admin.firestore.Timestamp(
-        eventData.date._seconds,
-        eventData.date._nanoseconds || 0
-      );
+    // Convertir date en Firestore Timestamp
+    if (eventData.date) {
+      serverData.date = toFirestoreTimestamp(eventData.date);
     }
 
     const ref = await db.collection("events").add(serverData);
@@ -507,12 +528,9 @@ exports.validateAndUpdateEvent = onCall(
       }
     }
 
-    // Convertir date si nécessaire
-    if (cleanData.date && cleanData.date._seconds) {
-      cleanData.date = new admin.firestore.Timestamp(
-        cleanData.date._seconds,
-        cleanData.date._nanoseconds || 0
-      );
+    // Convertir date en Firestore Timestamp
+    if (cleanData.date) {
+      cleanData.date = toFirestoreTimestamp(cleanData.date);
     }
 
     await eventRef.update(cleanData);
