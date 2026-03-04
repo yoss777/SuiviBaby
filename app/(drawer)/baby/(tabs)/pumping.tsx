@@ -195,7 +195,6 @@ export default function PumpingScreen() {
             router.replace("/baby/plus");
           }}
           tintColor={Colors[colorScheme].text}
-          labelVisible={false}
         />
       );
       setHeaderLeft(backButton, headerOwnerId.current);
@@ -273,7 +272,7 @@ export default function PumpingScreen() {
           maybeReturnTo(returnTarget);
         },
       });
-      navigation.setParams({ openModal: undefined, editId: undefined });
+      navigation.setParams({ openModal: undefined, editId: undefined } as any);
       setPendingOpen(false);
       setPendingEditData(null);
     });
@@ -284,6 +283,7 @@ export default function PumpingScreen() {
     pendingEditData,
     returnTargetParam,
     openSheet,
+    // @ts-expect-error — ensureTodayInRange is a useCallback declared later in the component
     ensureTodayInRange,
   ]);
 
@@ -297,7 +297,7 @@ export default function PumpingScreen() {
     editIdRef.current = normalizedId;
     setPendingEditData(buildEditData(target));
     setPendingOpen(true);
-    navigation.setParams({ openModal: undefined, editId: undefined });
+    navigation.setParams({ openModal: undefined, editId: undefined } as any);
   }, [editId, layoutReady, pompages, buildEditData]);
 
   // ============================================
@@ -911,7 +911,7 @@ export default function PumpingScreen() {
         <View>
           {/* Filtres */}
           <DateFilterBar
-            selected={selectedFilter}
+            selected={selectedFilter as any}
             onSelect={handleFilterPress}
           />
 

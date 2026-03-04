@@ -40,7 +40,6 @@ export function SuccessAnimationDemo() {
         icon={config.icon}
         color={config.color}
         onComplete={hideSuccess}
-        showConfetti={true}
       />
     </View>
   );

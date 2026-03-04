@@ -115,7 +115,7 @@ export const StatsCard = memo(function StatsCard({
       )}
       {timeSince && (
         <Text
-          style={[styles.statsTimeSince, isWarning && { color: "#dc3545" }]}
+          style={[styles.statsTimeSince, isWarning ? { color: "#dc3545" } : undefined]}
         >
           {timeSince}
         </Text>

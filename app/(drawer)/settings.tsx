@@ -436,7 +436,7 @@ export default function SettingsScreen() {
       <PromptModal
         visible={showDeletePasswordModal}
         title="Confirmer la suppression"
-        message={
+        message={(
           isDeleting ? (
             <View style={styles.deleteLoader}>
               <IconPulseDots />
@@ -452,7 +452,7 @@ export default function SettingsScreen() {
           ) : (
             "Votre compte et vos donnees seront supprimes immediatement."
           )
-        }
+        ) as any}
         value={deletePassword}
         placeholder="Mot de passe"
         secureTextEntry

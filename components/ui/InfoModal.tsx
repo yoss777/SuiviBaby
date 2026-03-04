@@ -70,11 +70,11 @@ export function InfoModal({
       React.isValidElement(message) &&
       (message.type === Text ||
         (typeof message.type === 'function' &&
-          (message.type.displayName === 'Text' ||
+          ((message.type as any).displayName === 'Text' ||
             message.type.name === 'Text')));
 
     if (isTextElement) {
-      return React.cloneElement(message, {
+      return React.cloneElement(message as React.ReactElement<any>, {
         style: [
           styles.modalMessage,
           { color: textColor },

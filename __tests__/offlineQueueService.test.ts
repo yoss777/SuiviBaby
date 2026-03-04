@@ -14,8 +14,8 @@ import {
 const mockDb = {
   execAsync: jest.fn(),
   runAsync: jest.fn(() => Promise.resolve({ changes: 0 })),
-  getFirstAsync: jest.fn(() => Promise.resolve(null)),
-  getAllAsync: jest.fn(() => Promise.resolve([])),
+  getFirstAsync: jest.fn((): Promise<any> => Promise.resolve(null)),
+  getAllAsync: jest.fn((): Promise<any[]> => Promise.resolve([])),
 };
 
 (SQLite.openDatabaseAsync as jest.Mock).mockResolvedValue(mockDb);

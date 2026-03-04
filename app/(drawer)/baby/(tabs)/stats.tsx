@@ -91,7 +91,6 @@ export default function StatsScreen() {
             router.replace("/baby/plus");
           }}
           tintColor={Colors[colorScheme].text}
-          labelVisible={false}
         />
       );
       setHeaderLeft(backButton, "stats");

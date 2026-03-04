@@ -38,7 +38,7 @@ export default function PendingRequestsScreen() {
       }
 
       const pendingRequests = await getPendingRequests(parentEmail);
-      setRequests(pendingRequests);
+      setRequests(pendingRequests as any);
     } catch (error) {
       console.error("Erreur lors du chargement des demandes:", error);
     } finally {

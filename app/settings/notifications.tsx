@@ -77,6 +77,8 @@ export default function NotificationsScreen() {
           visible: true,
           title: "Erreur",
           message: "Impossible de charger les preferences de notifications.",
+          confirmText: undefined,
+          onConfirm: undefined,
         });
       } finally {
         if (isMounted) setIsLoading(false);
@@ -104,6 +106,8 @@ export default function NotificationsScreen() {
         visible: true,
         title: "Non disponible",
         message: "Les notifications push ne sont pas disponibles sur le web.",
+        confirmText: undefined,
+        onConfirm: undefined,
       });
       return false;
     }
@@ -130,6 +134,8 @@ export default function NotificationsScreen() {
         visible: true,
         title: "Erreur",
         message: "Impossible de verifier les autorisations de notifications.",
+        confirmText: undefined,
+        onConfirm: undefined,
       });
     }
 
@@ -172,6 +178,8 @@ export default function NotificationsScreen() {
         visible: true,
         title: "Erreur",
         message: "Impossible de mettre a jour les notifications.",
+        confirmText: undefined,
+        onConfirm: undefined,
       });
     }
   };
@@ -244,6 +252,8 @@ export default function NotificationsScreen() {
         visible: true,
         title: "Erreur",
         message: "Impossible de mettre a jour les rappels.",
+        confirmText: undefined,
+        onConfirm: undefined,
       });
     }
   };

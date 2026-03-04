@@ -110,7 +110,7 @@ export default function LoginScreen() {
     if (children.length === 1) {
       navigationLocked.current = true;
       setActiveChild(children[0]);
-      router.replace("/(drawer)/baby");
+      router.replace("/(drawer)/baby" as any);
       return;
     }
 

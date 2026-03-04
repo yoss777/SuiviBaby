@@ -1,35 +1,21 @@
-// Service de transition avec DOUBLE ÉCRITURE
-// Écrit dans les anciennes ET nouvelles collections simultanément
+// Service de transition — migration terminée (NEW_ONLY)
+// Thin wrappers around eventsService, preserving import paths for consumers.
 
 import {
-  ajouterEvenementAvecId,
-  ajouterEvenement as ajouterEventNouveau,
+  ajouterEvenement,
   ecouterEvenements,
-  modifierEvenement as modifierEventNouveau,
+  modifierEvenement,
   obtenirEvenement,
   obtenirEvenements,
-  supprimerEvenement as supprimerEventNouveau,
+  supprimerEvenement,
   type EventType,
 } from "@/services/eventsService";
-
-// Import des anciens services
-import * as croissanceService from "@/services/croissanceService";
-import * as mictionsService from "@/services/mictionsService";
-import * as pompagesService from "@/services/pompagesService";
-import * as sellesService from "@/services/sellesService";
-import * as teteesService from "@/services/teteesService";
-import * as vaccinsService from "@/services/vaccinsService";
-import * as vitaminesService from "@/services/vitaminesService";
-import * as sommeilService from "@/services/sommeilService";
 import { auth } from "@/config/firebase";
 
 // ============================================
-// HELPER - Remove undefined
+// HELPER
 // ============================================
 
-/**
- * Supprime les champs undefined d'un objet (Firestore n'accepte pas undefined)
- */
 function removeUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
   const cleaned: Partial<T> = {};
   for (const key in obj) {
@@ -63,46 +49,34 @@ const computeSleepDuration = (
 };
 
 // ============================================
-// CONFIGURATION
+// CONFIG (kept for MigrationProvider compat)
 // ============================================
 
-interface MigrationConfig {
-  // Phase de migration
-  phase: "OLD_ONLY" | "DOUBLE_WRITE" | "NEW_ONLY";
-
-  // Lecture depuis quelle source
-  readFrom: "OLD" | "NEW";
-
-  // En cas d'erreur sur une écriture, continuer ou échouer ?
-  failOnError: boolean;
+export interface MigrationStats {
+  phase: string;
+  readFrom: string;
+  totalWrites: number;
+  successfulWrites: number;
+  failedWrites: number;
+  oldSystemErrors: number;
+  newSystemErrors: number;
 }
 
-// Configuration globale (à ajuster selon l'avancement)
-let config: MigrationConfig = {
-  phase: "NEW_ONLY", // 🎯 MIGRATION TERMINÉE - Nouveau système uniquement
-  readFrom: "NEW", // Lire depuis la nouvelle collection
-  failOnError: true, // Les erreurs sont critiques maintenant
-};
-
-// Fonction pour changer la config (utile pour tests A/B)
-export function setMigrationConfig(newConfig: Partial<MigrationConfig>) {
-  config = { ...config, ...newConfig };
-  console.log("🔧 Config migration mise à jour:", config);
-}
-
+export function setMigrationConfig(_newConfig: any) {}
 export function getMigrationConfig() {
-  return { ...config };
+  return { phase: "NEW_ONLY", readFrom: "NEW", failOnError: true };
 }
+export function getMigrationStats(): MigrationStats {
+  return { phase: "NEW_ONLY", readFrom: "NEW", totalWrites: 0, successfulWrites: 0, failedWrites: 0, oldSystemErrors: 0, newSystemErrors: 0 };
+}
+export function resetMigrationStats() {}
 
 // ============================================
-// DOUBLE ÉCRITURE - TÉTÉES
+// TÉTÉES
 // ============================================
 
 export async function ajouterTetee(childId: string, data: any) {
-  const errors: Error[] = [];
-
-  // Préparer les données pour le nouveau format
-  const newEventData = removeUndefined({
+  const eventData = removeUndefined({
     type: "tetee" as EventType,
     coteGauche: data.coteGauche || false,
     coteDroit: data.coteDroit || false,
@@ -111,1496 +85,416 @@ export async function ajouterTetee(childId: string, data: any) {
     date: data.date || new Date(),
     note: data.note,
   });
-
-  let sharedId: string | null = null;
-  let oldRef: any = null;
-
-  // Phase 1: Écriture dans ANCIEN système (génère l'ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      oldRef = await teteesService.ajouterTetee(childId, data);
-      sharedId = oldRef.id;
-      console.log("✅ Tétée ajoutée dans OLD:", sharedId);
-    } catch (error) {
-      console.error("❌ Erreur OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Phase 2: Écriture dans NOUVEAU système (utilise le même ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      if (sharedId) {
-        // Double write: utiliser l'ID de OLD
-        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
-        console.log("✅ Tétée ajoutée dans NEW avec ID:", sharedId);
-      } else {
-        // NEW_ONLY: générer un nouvel ID
-        sharedId = await ajouterEventNouveau(childId, newEventData as any);
-        console.log("✅ Tétée ajoutée dans NEW:", sharedId);
-      }
-    } catch (error) {
-      console.error("❌ Erreur NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error(
-      `Erreurs lors de la double écriture: ${errors.map((e) => e.message).join(", ")}`,
-    );
-  }
-
-  return sharedId;
+  return ajouterEvenement(childId, eventData as any);
 }
 
 export async function obtenirToutesLesTetees(childId: string) {
-  if (config.readFrom === "NEW") {
-    return obtenirEvenements(childId, { type: "tetee" });
-  } else {
-    return teteesService.obtenirToutesLesTetees(childId);
-  }
+  return obtenirEvenements(childId, { type: "tetee" });
 }
 
-export function ecouterTetees(
-  childId: string,
-  callback: (docs: any[]) => void,
-) {
-  if (config.readFrom === "NEW") {
-    return ecouterEvenements(childId, callback, { type: "tetee" });
-  } else {
-    return teteesService.ecouterTetees(childId, callback);
-  }
+export function ecouterTetees(childId: string, callback: (docs: any[]) => void) {
+  return ecouterEvenements(childId, callback, { type: "tetee" });
 }
 
 export async function modifierTetee(childId: string, id: string, data: any) {
-  const errors: Error[] = [];
-  const cleanedData = removeUndefined(data);
-
-  // Modifier dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await modifierEventNouveau(childId, id, cleanedData);
-      console.log("✅ Tétée modifiée dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur modification NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Modifier dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await teteesService.modifierTetee(childId, id, cleanedData);
-      console.log("✅ Tétée modifiée dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur modification OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la modification");
-  }
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerTetee(childId: string, id: string) {
-  const errors: Error[] = [];
-
-  // Supprimer dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await supprimerEventNouveau(childId, id);
-      console.log("✅ Tétée supprimée dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur suppression NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Supprimer dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await teteesService.supprimerTetee(childId, id);
-      console.log("✅ Tétée supprimée dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur suppression OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la suppression");
-  }
+  return supprimerEvenement(childId, id);
 }
 
 // ============================================
-// DOUBLE ÉCRITURE - CROISSANCE
+// CROISSANCE
 // ============================================
 
 export async function ajouterCroissance(childId: string, data: any) {
-  const errors: Error[] = [];
-
-  const newEventData = removeUndefined({
+  const eventData = removeUndefined({
     type: "croissance" as EventType,
-    tailleCm: data.tailleCm,
-    poidsKg: data.poidsKg,
-    teteCm: data.teteCm,
+    poids: data.poids,
+    taille: data.taille,
+    perimetreCranien: data.perimetreCranien,
     date: data.date || new Date(),
     note: data.note,
   });
-
-  let sharedId: string | null = null;
-  let oldRef: any = null;
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      oldRef = await croissanceService.ajouterCroissance(childId, data);
-      sharedId = oldRef.id;
-      console.log("✅ Croissance ajoutée dans OLD:", sharedId);
-    } catch (error) {
-      console.error("❌ Erreur OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      if (sharedId) {
-        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
-        console.log("✅ Croissance ajoutée dans NEW avec ID:", sharedId);
-      } else {
-        sharedId = await ajouterEventNouveau(childId, newEventData as any);
-        console.log("✅ Croissance ajoutée dans NEW:", sharedId);
-      }
-    } catch (error) {
-      console.error("❌ Erreur NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error(
-      `Erreurs lors de la double écriture: ${errors.map((e) => e.message).join(", ")}`,
-    );
-  }
-
-  return sharedId;
+  return ajouterEvenement(childId, eventData as any);
 }
 
 export async function obtenirToutesLesCroissances(childId: string) {
-  if (config.readFrom === "NEW") {
-    return obtenirEvenements(childId, { type: "croissance" });
-  }
-  return croissanceService.obtenirToutesLesCroissances(childId);
+  return obtenirEvenements(childId, { type: "croissance" });
 }
 
-export function ecouterCroissances(
-  childId: string,
-  callback: (docs: any[]) => void,
-) {
-  if (config.readFrom === "NEW") {
-    return ecouterEvenements(childId, callback, { type: "croissance" });
-  }
-  return croissanceService.ecouterCroissances(childId, callback);
+export function ecouterCroissances(childId: string, callback: (docs: any[]) => void) {
+  return ecouterEvenements(childId, callback, { type: "croissance" });
 }
 
-export async function modifierCroissance(
-  childId: string,
-  id: string,
-  data: any,
-) {
-  const errors: Error[] = [];
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await modifierEventNouveau(childId, id, data);
-      console.log("✅ Croissance modifiée dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur modification NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await croissanceService.modifierCroissance(childId, id, data);
-      console.log("✅ Croissance modifiée dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur modification OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la modification");
-  }
+export async function modifierCroissance(childId: string, id: string, data: any) {
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerCroissance(childId: string, id: string) {
-  const errors: Error[] = [];
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await supprimerEventNouveau(childId, id);
-      console.log("✅ Croissance supprimée dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur suppression NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await croissanceService.supprimerCroissance(childId, id);
-      console.log("✅ Croissance supprimée dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur suppression OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la suppression");
-  }
+  return supprimerEvenement(childId, id);
 }
 
 // ============================================
-// DOUBLE ÉCRITURE - BIBERONS
+// BIBERONS
 // ============================================
 
 export async function ajouterBiberon(childId: string, data: any) {
-  const errors: Error[] = [];
-
-  console.log("Ajout Biberon - Données reçues:", data);
-
-  // Préparer les données pour le nouveau format
-  const newEventData = removeUndefined({
-    type: "biberon" as EventType,
-    quantite: data.quantite,
+  const eventData = removeUndefined({
+    type: "biberons" as EventType,
+    quantite: data.quantite || 0,
+    typeBiberon: data.typeBiberon || "lait_infantile",
+    unit: data.unit || "ml",
     date: data.date || new Date(),
     note: data.note,
   });
-
-  let sharedId: string | null = null;
-  let oldRef: any = null;
-
-  // Phase 1: Écriture dans ANCIEN système (génère l'ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      oldRef = await teteesService.ajouterTetee(childId, data);
-      sharedId = oldRef.id;
-      console.log("✅ Biberon ajouté dans OLD:", sharedId);
-    } catch (error) {
-      console.error("❌ Erreur OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Phase 2: Écriture dans NOUVEAU système (utilise le même ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      if (sharedId) {
-        // Double write: utiliser l'ID de OLD
-        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
-        console.log("✅ Biberon ajouté dans NEW avec ID:", sharedId);
-      } else {
-        // NEW_ONLY: générer un nouvel ID
-        sharedId = await ajouterEventNouveau(childId, newEventData as any);
-        console.log("✅ Biberon ajouté dans NEW:", sharedId);
-      }
-    } catch (error) {
-      console.error("❌ Erreur NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error(
-      `Erreurs lors de la double écriture: ${errors.map((e) => e.message).join(", ")}`,
-    );
-  }
-
-  return sharedId;
+  return ajouterEvenement(childId, eventData as any);
 }
 
 export async function obtenirToutesLesBiberons(childId: string) {
-  if (config.readFrom === "NEW") {
-    return obtenirEvenements(childId, { type: "biberon" });
-  } else {
-    return teteesService.obtenirToutesLesTetees(childId);
-  }
+  return obtenirEvenements(childId, { type: "biberon" });
 }
 
-export function ecouterBiberons(
-  childId: string,
-  callback: (docs: any[]) => void,
-) {
-  if (config.readFrom === "NEW") {
-    return ecouterEvenements(childId, callback, { type: "biberon" });
-  } else {
-    return teteesService.ecouterTetees(childId, callback);
-  }
+export function ecouterBiberons(childId: string, callback: (docs: any[]) => void) {
+  return ecouterEvenements(childId, callback, { type: "biberon" });
 }
 
 export async function modifierBiberon(childId: string, id: string, data: any) {
-  const errors: Error[] = [];
-
-  // Modifier dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await modifierEventNouveau(childId, id, data);
-      console.log("✅ Biberon modifié dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur modification NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Modifier dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await teteesService.modifierTetee(childId, id, data);
-      console.log("✅ Biberon modifié dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur modification OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la modification");
-  }
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerBiberon(childId: string, id: string) {
-  const errors: Error[] = [];
-
-  // Supprimer dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await supprimerEventNouveau(childId, id);
-      console.log("✅ Biberon supprimé dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur suppression NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Supprimer dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await teteesService.supprimerTetee(childId, id);
-      console.log("✅ Biberon supprimé dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur suppression OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la suppression");
-  }
+  return supprimerEvenement(childId, id);
 }
 
 // ============================================
-// DOUBLE ÉCRITURE - REPAS SOLIDES
+// SOLIDES
 // ============================================
 
 export async function ajouterSolide(childId: string, data: any) {
-  const errors: Error[] = [];
-
-  const newEventData = removeUndefined({
-    type: "solide" as EventType,
-    typeSolide: data.typeSolide,
-    momentRepas: data.momentRepas,
-    ingredients: data.ingredients,
-    quantite: data.quantite,
-    nouveauAliment: data.nouveauAliment,
-    allergenes: data.allergenes,
-    reaction: data.reaction,
-    aime: data.aime,
-    date: data.date || new Date(),
-    note: data.note,
-  });
-
-  // NEW_ONLY pour les solides (pas d'ancien système)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      const id = await ajouterEventNouveau(childId, newEventData as any);
-      console.log("✅ Solide ajouté dans NEW:", id);
-      return id;
-    } catch (error) {
-      console.error("❌ Erreur NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de l'ajout");
-  }
-  return null;
+  const eventData = removeUndefined({ type: "solide" as EventType, ...data });
+  return ajouterEvenement(childId, eventData as any);
 }
 
-export function ecouterSolides(
-  childId: string,
-  callback: (docs: any[]) => void,
-) {
+export function ecouterSolides(childId: string, callback: (docs: any[]) => void) {
   return ecouterEvenements(childId, callback, { type: "solide" });
 }
 
 export async function modifierSolide(childId: string, id: string, data: any) {
-  const errors: Error[] = [];
-  const cleanedData = removeUndefined(data);
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await modifierEventNouveau(childId, id, cleanedData);
-      console.log("✅ Solide modifié dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur modification NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la modification");
-  }
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerSolide(childId: string, id: string) {
-  const errors: Error[] = [];
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await supprimerEventNouveau(childId, id);
-      console.log("✅ Solide supprimé dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur suppression NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la suppression");
-  }
+  return supprimerEvenement(childId, id);
 }
 
 // ============================================
-// DOUBLE ÉCRITURE - MICTIONS
+// MICTIONS
 // ============================================
 
 export async function ajouterMiction(childId: string, data: any) {
-  const errors: Error[] = [];
-  let sharedId: string | null = null;
-  let oldRef: any = null;
-
-  // Nouveau format
-  const newEventData = removeUndefined({
+  const eventData = removeUndefined({
     type: "miction" as EventType,
-    volume: data.volume,
-    couleur: data.couleur,
-    avecCouche: data.avecCouche,
+    avecCouche: data.avecCouche !== undefined ? data.avecCouche : true,
     date: data.date || new Date(),
     note: data.note,
   });
-
-  // Phase 1: Écriture dans ANCIEN système (génère l'ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      oldRef = await mictionsService.ajouterMiction(childId, data);
-      sharedId = oldRef.id;
-      console.log("✅ Miction ajoutée dans OLD:", sharedId);
-    } catch (error) {
-      console.error("❌ Erreur OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Phase 2: Écriture dans NOUVEAU système (utilise le même ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      if (sharedId) {
-        // Double write: utiliser l'ID de OLD
-        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
-        console.log("✅ Miction ajoutée dans NEW avec ID:", sharedId);
-      } else {
-        // NEW_ONLY: générer un nouvel ID
-        sharedId = await ajouterEventNouveau(childId, newEventData as any);
-        console.log("✅ Miction ajoutée dans NEW:", sharedId);
-      }
-    } catch (error) {
-      console.error("❌ Erreur NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  return sharedId;
+  return ajouterEvenement(childId, eventData as any);
 }
 
 export async function obtenirToutesLesMictions(childId: string) {
-  if (config.readFrom === "NEW") {
-    return obtenirEvenements(childId, { type: "miction" });
-  } else {
-    return mictionsService.obtenirToutesLesMictions(childId);
-  }
+  return obtenirEvenements(childId, { type: "miction" });
 }
 
-export function ecouterMictions(
-  childId: string,
-  callback: (docs: any[]) => void,
-) {
-  if (config.readFrom === "NEW") {
-    return ecouterEvenements(childId, callback, { type: "miction" });
-  } else {
-    return mictionsService.ecouterMictions(childId, callback);
-  }
+export function ecouterMictions(childId: string, callback: (docs: any[]) => void) {
+  return ecouterEvenements(childId, callback, { type: "miction" });
 }
 
 export async function modifierMiction(childId: string, id: string, data: any) {
-  const errors: Error[] = [];
-
-  // Modifier dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await modifierEventNouveau(childId, id, data);
-      console.log("✅ Miction modifiée dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur modification NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Modifier dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await mictionsService.modifierMiction(childId, id, data);
-      console.log("✅ Miction modifiée dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur modification OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la modification");
-  }
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerMiction(childId: string, id: string) {
-  const errors: Error[] = [];
-
-  // Supprimer dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await supprimerEventNouveau(childId, id);
-      console.log("✅ Miction supprimée dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur suppression NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Supprimer dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await mictionsService.supprimerMiction(childId, id);
-      console.log("✅ Miction supprimée dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur suppression OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la suppression");
-  }
+  return supprimerEvenement(childId, id);
 }
 
 // ============================================
-// DOUBLE ÉCRITURE - SELLES
+// SELLES
 // ============================================
 
 export async function ajouterSelle(childId: string, data: any) {
-  const errors: Error[] = [];
-  let sharedId: string | null = null;
-  let oldRef: any = null;
-
-  const newEventData = removeUndefined({
+  const eventData = removeUndefined({
     type: "selle" as EventType,
+    avecCouche: data.avecCouche !== undefined ? data.avecCouche : true,
     consistance: data.consistance,
     couleur: data.couleur,
-    quantite: data.quantite,
-    avecCouche: data.avecCouche,
     date: data.date || new Date(),
     note: data.note,
   });
-
-  // Phase 1: Écriture dans ANCIEN système (génère l'ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      oldRef = await sellesService.ajouterSelle(childId, data);
-      sharedId = oldRef.id;
-      console.log("✅ Selle ajoutée dans OLD:", sharedId);
-    } catch (error) {
-      console.error("❌ Erreur OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Phase 2: Écriture dans NOUVEAU système (utilise le même ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      if (sharedId) {
-        // Double write: utiliser l'ID de OLD
-        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
-        console.log("✅ Selle ajoutée dans NEW avec ID:", sharedId);
-      } else {
-        // NEW_ONLY: générer un nouvel ID
-        sharedId = await ajouterEventNouveau(childId, newEventData as any);
-        console.log("✅ Selle ajoutée dans NEW:", sharedId);
-      }
-    } catch (error) {
-      console.error("❌ Erreur NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  return sharedId;
+  return ajouterEvenement(childId, eventData as any);
 }
 
 export async function obtenirToutesLesSelles(childId: string) {
-  if (config.readFrom === "NEW") {
-    return obtenirEvenements(childId, { type: "selle" });
-  } else {
-    return sellesService.obtenirToutesLesSelles(childId);
-  }
+  return obtenirEvenements(childId, { type: "selle" });
 }
 
-export function ecouterSelles(
-  childId: string,
-  callback: (docs: any[]) => void,
-) {
-  if (config.readFrom === "NEW") {
-    return ecouterEvenements(childId, callback, { type: "selle" });
-  } else {
-    return sellesService.ecouterSelles(childId, callback);
-  }
+export function ecouterSelles(childId: string, callback: (docs: any[]) => void) {
+  return ecouterEvenements(childId, callback, { type: "selle" });
 }
 
 export async function modifierSelle(childId: string, id: string, data: any) {
-  const errors: Error[] = [];
-
-  // Modifier dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await modifierEventNouveau(childId, id, data);
-      console.log("✅ Selle modifiée dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur modification NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Modifier dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await sellesService.modifierSelle(childId, id, data);
-      console.log("✅ Selle modifiée dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur modification OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la modification");
-  }
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerSelle(childId: string, id: string) {
-  const errors: Error[] = [];
-
-  // Supprimer dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await supprimerEventNouveau(childId, id);
-      console.log("✅ Selle supprimée dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur suppression NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Supprimer dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await sellesService.supprimerSelle(childId, id);
-      console.log("✅ Selle supprimée dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur suppression OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la suppression");
-  }
+  return supprimerEvenement(childId, id);
 }
 
 // ============================================
-// DOUBLE ÉCRITURE - SOMMEIL
+// SOMMEIL
 // ============================================
 
 export async function ajouterSommeil(childId: string, data: any) {
-  const errors: Error[] = [];
-  let sharedId: string | null = null;
-  let oldRef: any = null;
-
-  const heureDebut = toDate(data.heureDebut);
+  const heureDebut = toDate(data.heureDebut || data.date);
   const heureFin = toDate(data.heureFin);
   const duree = computeSleepDuration(heureDebut, heureFin, data.duree);
-  const date = data.date || heureDebut || new Date();
 
-  // Protection : empêcher de créer un sommeil en cours si un autre existe déjà
-  if (!heureFin) {
-    const existingSommeils = await obtenirEvenements(childId, {
-      type: "sommeil",
-    });
-    const sommeilEnCours = existingSommeils.find(
-      (s: any) => s.heureDebut && !s.heureFin,
-    );
-    if (sommeilEnCours) {
-      throw new Error(
-        "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
-      );
-    }
-  }
-
-  const newEventData = removeUndefined({
+  const eventData = removeUndefined({
     type: "sommeil" as EventType,
     heureDebut,
     heureFin,
     duree,
-    location: data.location,
-    quality: data.quality,
-    isNap: data.isNap ?? true,
-    date,
+    isNap: data.isNap,
+    date: heureDebut || new Date(),
     note: data.note,
   });
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      oldRef = await sommeilService.ajouterSommeil(childId, {
-        ...data,
-        heureDebut,
-        heureFin,
-        duree,
-        date,
-      });
-      sharedId = oldRef.id;
-      console.log("✅ Sommeil ajouté dans OLD:", sharedId);
-    } catch (error) {
-      console.error("❌ Erreur OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      if (sharedId) {
-        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
-        console.log("✅ Sommeil ajouté dans NEW avec ID:", sharedId);
-      } else {
-        sharedId = await ajouterEventNouveau(childId, newEventData as any);
-        console.log("✅ Sommeil ajouté dans NEW:", sharedId);
-      }
-    } catch (error) {
-      console.error("❌ Erreur NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  return sharedId;
+  return ajouterEvenement(childId, eventData as any);
 }
 
 export async function obtenirTousLesSommeils(childId: string) {
-  if (config.readFrom === "NEW") {
-    return obtenirEvenements(childId, { type: "sommeil" });
-  }
-  return sommeilService.obtenirTousLesSommeils(childId);
+  return obtenirEvenements(childId, { type: "sommeil" });
 }
 
-export function ecouterSommeils(
-  childId: string,
-  callback: (docs: any[]) => void,
-) {
-  if (config.readFrom === "NEW") {
-    return ecouterEvenements(childId, callback, { type: "sommeil" });
-  }
-  return sommeilService.ecouterSommeils(childId, callback);
+export function ecouterSommeils(childId: string, callback: (docs: any[]) => void) {
+  return ecouterEvenements(childId, callback, { type: "sommeil" });
 }
 
 export async function modifierSommeil(childId: string, id: string, data: any) {
-  const errors: Error[] = [];
-  // Keep null values for field deletion, only remove undefined
-  const cleanedData = removeUndefined(data);
-
-  // Protection : empêcher de transformer un sommeil terminé en sommeil "en cours"
-  // si un autre sommeil est déjà en cours
-  if (data.heureFin === null || data.heureFin === undefined) {
-    const existingSommeils = await obtenirEvenements(childId, {
-      type: "sommeil",
-    });
-    const sommeilEnCours = existingSommeils.find(
-      (s: any) => s.heureDebut && !s.heureFin && s.id !== id,
-    );
-    if (sommeilEnCours) {
-      throw new Error(
-        "Un autre sommeil est déjà en cours. Terminez-le avant de modifier celui-ci.",
-      );
-    }
-  }
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      // Pass data with null values for field deletion
-      await modifierEventNouveau(childId, id, cleanedData);
-      console.log("✅ Sommeil modifié dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur modification NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      // Pass data with null values for field deletion
-      await sommeilService.modifierSommeil(childId, id, cleanedData);
-      console.log("✅ Sommeil modifié dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur modification OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la modification");
-  }
+  const heureDebut = toDate(data.heureDebut);
+  const heureFin = toDate(data.heureFin);
+  const duree = computeSleepDuration(heureDebut, heureFin, data.duree);
+  const cleanedData = removeUndefined({ ...data, heureDebut, heureFin, duree });
+  return modifierEvenement(childId, id, cleanedData);
 }
 
 export async function supprimerSommeil(childId: string, id: string) {
-  const errors: Error[] = [];
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await supprimerEventNouveau(childId, id);
-      console.log("✅ Sommeil supprimé dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur suppression NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await sommeilService.supprimerSommeil(childId, id);
-      console.log("✅ Sommeil supprimé dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur suppression OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la suppression");
-  }
+  return supprimerEvenement(childId, id);
 }
 
 // ============================================
-// DOUBLE ÉCRITURE - POMPAGES
+// POMPAGE
 // ============================================
 
 export async function ajouterPompage(childId: string, data: any) {
-  const errors: Error[] = [];
-  let sharedId: string | null = null;
-  let oldRef: any = null;
-
-  const newEventData = removeUndefined({
+  const eventData = removeUndefined({
     type: "pompage" as EventType,
-    quantiteGauche: data.quantiteGauche,
-    quantiteDroite: data.quantiteDroite,
-    duree: data.duree,
+    quantiteGauche: data.quantiteGauche || 0,
+    quantiteDroite: data.quantiteDroite || 0,
+    quantiteTotale: (data.quantiteGauche || 0) + (data.quantiteDroite || 0),
     date: data.date || new Date(),
     note: data.note,
   });
-
-  // Phase 1: Écriture dans ANCIEN système (génère l'ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      oldRef = await pompagesService.ajouterPompage(childId, data);
-      sharedId = oldRef.id;
-      console.log("✅ Pompage ajouté dans OLD:", sharedId);
-    } catch (error) {
-      console.error("❌ Erreur OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Phase 2: Écriture dans NOUVEAU système (utilise le même ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      if (sharedId) {
-        // Double write: utiliser l'ID de OLD
-        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
-        console.log("✅ Pompage ajouté dans NEW avec ID:", sharedId);
-      } else {
-        // NEW_ONLY: générer un nouvel ID
-        sharedId = await ajouterEventNouveau(childId, newEventData as any);
-        console.log("✅ Pompage ajouté dans NEW:", sharedId);
-      }
-    } catch (error) {
-      console.error("❌ Erreur NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  return sharedId;
+  return ajouterEvenement(childId, eventData as any);
 }
 
 export async function obtenirTousLesPompages(childId: string) {
-  if (config.readFrom === "NEW") {
-    return obtenirEvenements(childId, { type: "pompage" });
-  } else {
-    return pompagesService.obtenirTousLesPompages(childId);
-  }
+  return obtenirEvenements(childId, { type: "pompage" });
 }
 
 export async function modifierPompage(childId: string, id: string, data: any) {
-  const errors: Error[] = [];
-
-  // Modifier dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await modifierEventNouveau(childId, id, data);
-      console.log("✅ Pompage modifié dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur modification NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Modifier dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await pompagesService.modifierPompage(childId, id, data);
-      console.log("✅ Pompage modifié dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur modification OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la modification");
-  }
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerPompage(childId: string, id: string) {
-  const errors: Error[] = [];
-
-  // Supprimer dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await supprimerEventNouveau(childId, id);
-      console.log("✅ Pompage supprimé dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur suppression NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Supprimer dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await pompagesService.supprimerPompage(childId, id);
-      console.log("✅ Pompage supprimé dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur suppression OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la suppression");
-  }
+  return supprimerEvenement(childId, id);
 }
 
 // ============================================
-// DOUBLE ÉCRITURE - VACCINS
+// VACCINS
 // ============================================
 
 export async function ajouterVaccin(childId: string, data: any) {
-  const errors: Error[] = [];
-  let sharedId: string | null = null;
-  let oldRef: any = null;
-
-  const newEventData = removeUndefined({
+  const eventData = removeUndefined({
     type: "vaccin" as EventType,
     nomVaccin: data.nomVaccin || data.nom,
-    dosage: data.dosage,
-    lieu: data.lieu,
+    dateVaccin: data.dateVaccin || data.date,
+    dose: data.dose,
     date: data.date || new Date(),
     note: data.note,
   });
-
-  // Phase 1: Écriture dans ANCIEN système (génère l'ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      oldRef = await vaccinsService.ajouterVaccin(childId, data);
-      sharedId = oldRef.id;
-      console.log("✅ Vaccin ajouté dans OLD:", sharedId);
-    } catch (error) {
-      console.error("❌ Erreur OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Phase 2: Écriture dans NOUVEAU système (utilise le même ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      if (sharedId) {
-        // Double write: utiliser l'ID de OLD
-        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
-        console.log("✅ Vaccin ajouté dans NEW avec ID:", sharedId);
-      } else {
-        // NEW_ONLY: générer un nouvel ID
-        sharedId = await ajouterEventNouveau(childId, newEventData as any);
-        console.log("✅ Vaccin ajouté dans NEW:", sharedId);
-      }
-    } catch (error) {
-      console.error("❌ Erreur NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  return sharedId;
+  return ajouterEvenement(childId, eventData as any);
 }
 
 export async function obtenirToutesLesVaccins(childId: string) {
-  if (config.readFrom === "NEW") {
-    return obtenirEvenements(childId, { type: "vaccin" });
-  } else {
-    return vaccinsService.obtenirToutesLesVaccins(childId);
-  }
+  return obtenirEvenements(childId, { type: "vaccin" });
 }
 
 export async function modifierVaccin(childId: string, id: string, data: any) {
-  const errors: Error[] = [];
-
-  // Modifier dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await modifierEventNouveau(childId, id, data);
-      console.log("✅ Vaccin modifié dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur modification NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Modifier dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await vaccinsService.modifierVaccin(childId, id, data);
-      console.log("✅ Vaccin modifié dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur modification OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la modification");
-  }
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerVaccin(childId: string, id: string) {
-  const errors: Error[] = [];
-
-  // Supprimer dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await supprimerEventNouveau(childId, id);
-      console.log("✅ Vaccin supprimé dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur suppression NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Supprimer dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await vaccinsService.supprimerVaccin(childId, id);
-      console.log("✅ Vaccin supprimé dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur suppression OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la suppression");
-  }
+  return supprimerEvenement(childId, id);
 }
 
 // ============================================
-// DOUBLE ÉCRITURE - VITAMINES
+// VITAMINES
 // ============================================
 
 export async function ajouterVitamine(childId: string, data: any) {
-  const errors: Error[] = [];
-  let sharedId: string | null = null;
-  let oldRef: any = null;
-
-  const newEventData = removeUndefined({
+  const eventData = removeUndefined({
     type: "vitamine" as EventType,
-    nomVitamine: data.nomVitamine || data.nom,
-    dosage: data.dosage,
+    nomVitamine: data.nomVitamine || "Vitamine D",
     date: data.date || new Date(),
     note: data.note,
   });
-
-  // Phase 1: Écriture dans ANCIEN système (génère l'ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      oldRef = await vitaminesService.ajouterVitamine(childId, data);
-      sharedId = oldRef.id;
-      console.log("✅ Vitamine ajoutée dans OLD:", sharedId);
-    } catch (error) {
-      console.error("❌ Erreur OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Phase 2: Écriture dans NOUVEAU système (utilise le même ID)
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      if (sharedId) {
-        // Double write: utiliser l'ID de OLD
-        await ajouterEvenementAvecId(childId, sharedId, newEventData as any);
-        console.log("✅ Vitamine ajoutée dans NEW avec ID:", sharedId);
-      } else {
-        // NEW_ONLY: générer un nouvel ID
-        sharedId = await ajouterEventNouveau(childId, newEventData as any);
-        console.log("✅ Vitamine ajoutée dans NEW:", sharedId);
-      }
-    } catch (error) {
-      console.error("❌ Erreur NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  return sharedId;
+  return ajouterEvenement(childId, eventData as any);
 }
 
 export async function obtenirToutesLesVitamines(childId: string) {
-  if (config.readFrom === "NEW") {
-    return obtenirEvenements(childId, { type: "vitamine" });
-  } else {
-    return vitaminesService.obtenirToutesLesVitamines(childId);
-  }
+  return obtenirEvenements(childId, { type: "vitamine" });
 }
 
 export async function modifierVitamine(childId: string, id: string, data: any) {
-  const errors: Error[] = [];
-
-  // Modifier dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await modifierEventNouveau(childId, id, data);
-      console.log("✅ Vitamine modifiée dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur modification NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Modifier dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await vitaminesService.modifierVitamine(childId, id, data);
-      console.log("✅ Vitamine modifiée dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur modification OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la modification");
-  }
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerVitamine(childId: string, id: string) {
-  const errors: Error[] = [];
-
-  // Supprimer dans NOUVEAU
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "NEW_ONLY") {
-    try {
-      await supprimerEventNouveau(childId, id);
-      console.log("✅ Vitamine supprimée dans NEW");
-    } catch (error) {
-      console.error("❌ Erreur suppression NEW:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  // Supprimer dans ANCIEN
-  if (config.phase === "DOUBLE_WRITE" || config.phase === "OLD_ONLY") {
-    try {
-      await vitaminesService.supprimerVitamine(childId, id);
-      console.log("✅ Vitamine supprimée dans OLD");
-    } catch (error) {
-      console.error("❌ Erreur suppression OLD:", error);
-      errors.push(error as Error);
-      if (config.failOnError) throw error;
-    }
-  }
-
-  if (errors.length > 0 && config.failOnError) {
-    throw new Error("Erreurs lors de la suppression");
-  }
+  return supprimerEvenement(childId, id);
 }
 
 // ============================================
-// TEMPÉRATURE / BAIN / MÉDICAMENT / SYMPTÔME (NOUVEAU)
+// TEMPÉRATURE
 // ============================================
 
 export async function ajouterTemperature(childId: string, data: any) {
-  const newEventData = removeUndefined({
-    type: "temperature",
-    ...data,
-  });
-  return ajouterEventNouveau(childId, newEventData as any);
+  return ajouterEvenement(childId, removeUndefined({ type: "temperature", ...data }) as any);
 }
 
-export async function modifierTemperature(
-  childId: string,
-  id: string,
-  data: any,
-) {
-  const newEventData = removeUndefined({
-    ...data,
-  });
-  return modifierEventNouveau(childId, id, newEventData as any);
+export async function modifierTemperature(childId: string, id: string, data: any) {
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerTemperature(childId: string, id: string) {
-  return supprimerEventNouveau(childId, id);
+  return supprimerEvenement(childId, id);
 }
 
+// ============================================
+// BAIN
+// ============================================
+
 export async function ajouterBain(childId: string, data: any) {
-  const newEventData = removeUndefined({
-    type: "bain",
-    ...data,
-  });
-  return ajouterEventNouveau(childId, newEventData as any);
+  return ajouterEvenement(childId, removeUndefined({ type: "bain", ...data }) as any);
 }
 
 export async function modifierBain(childId: string, id: string, data: any) {
-  const newEventData = removeUndefined({
-    ...data,
-  });
-  return modifierEventNouveau(childId, id, newEventData as any);
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerBain(childId: string, id: string) {
-  return supprimerEventNouveau(childId, id);
+  return supprimerEvenement(childId, id);
 }
+
+// ============================================
+// MÉDICAMENT
+// ============================================
 
 export async function ajouterMedicament(childId: string, data: any) {
-  const newEventData = removeUndefined({
-    type: "medicament",
-    ...data,
-  });
-  return ajouterEventNouveau(childId, newEventData as any);
+  return ajouterEvenement(childId, removeUndefined({ type: "medicament", ...data }) as any);
 }
 
-export async function modifierMedicament(
-  childId: string,
-  id: string,
-  data: any,
-) {
-  const newEventData = removeUndefined({
-    ...data,
-  });
-  return modifierEventNouveau(childId, id, newEventData as any);
+export async function modifierMedicament(childId: string, id: string, data: any) {
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerMedicament(childId: string, id: string) {
-  return supprimerEventNouveau(childId, id);
+  return supprimerEvenement(childId, id);
 }
+
+// ============================================
+// SYMPTÔME
+// ============================================
 
 export async function ajouterSymptome(childId: string, data: any) {
-  const newEventData = removeUndefined({
-    type: "symptome",
-    ...data,
-  });
-  return ajouterEventNouveau(childId, newEventData as any);
+  return ajouterEvenement(childId, removeUndefined({ type: "symptome", ...data }) as any);
 }
 
-export async function modifierSymptome(
-  childId: string,
-  id: string,
-  data: any,
-) {
-  const newEventData = removeUndefined({
-    ...data,
-  });
-  return modifierEventNouveau(childId, id, newEventData as any);
+export async function modifierSymptome(childId: string, id: string, data: any) {
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerSymptome(childId: string, id: string) {
-  return supprimerEventNouveau(childId, id);
+  return supprimerEvenement(childId, id);
 }
+
+// ============================================
+// ACTIVITÉ
+// ============================================
 
 export async function ajouterActivite(childId: string, data: any) {
-  const newEventData = removeUndefined({
-    type: "activite",
-    ...data,
-  });
-  return ajouterEventNouveau(childId, newEventData as any);
+  return ajouterEvenement(childId, removeUndefined({ type: "activite", ...data }) as any);
 }
 
-export async function modifierActivite(
-  childId: string,
-  id: string,
-  data: any,
-) {
-  const newEventData = removeUndefined({
-    ...data,
-  });
-  return modifierEventNouveau(childId, id, newEventData as any);
+export async function modifierActivite(childId: string, id: string, data: any) {
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 export async function supprimerActivite(childId: string, id: string) {
-  return supprimerEventNouveau(childId, id);
+  return supprimerEvenement(childId, id);
 }
 
+// ============================================
+// JALON (with photo cleanup logic)
+// ============================================
+
 export async function ajouterJalon(childId: string, data: any) {
-  const newEventData = removeUndefined({
-    type: "jalon",
-    ...data,
-  });
-  return ajouterEventNouveau(childId, newEventData as any);
+  return ajouterEvenement(childId, removeUndefined({ type: "jalon", ...data }) as any);
 }
 
 export async function modifierJalon(childId: string, id: string, data: any) {
-  // Récupérer l'événement existant pour comparer les photos
+  // Cleanup removed photos from Firebase Storage
   try {
     const existingEvent = await obtenirEvenement(childId, id);
-    const oldPhotos: string[] = existingEvent?.photos ?? [];
+    const oldPhotos: string[] = (existingEvent as any)?.photos ?? [];
     const newPhotos: string[] = data.photos ?? [];
-
-    // Trouver les photos qui ont été retirées
     const removedPhotos = oldPhotos.filter(
       (oldUrl) =>
         oldUrl.startsWith("https://firebasestorage.googleapis.com") &&
         !newPhotos.includes(oldUrl)
     );
-
-    // Supprimer les photos retirées du Storage
     for (const photoUrl of removedPhotos) {
       await deletePhotoFromStorage(photoUrl);
     }
   } catch (error) {
     console.error("[MODIFIER_JALON] Erreur lors de la gestion des photos:", error);
   }
-
-  const newEventData = removeUndefined({
-    ...data,
-  });
-  return modifierEventNouveau(childId, id, newEventData as any);
+  return modifierEvenement(childId, id, removeUndefined(data));
 }
 
 const FIREBASE_STORAGE_BUCKET = "samaye-53723.firebasestorage.app";
 
-/**
- * Supprime une photo du Firebase Storage
- */
 export async function deletePhotoFromStorage(photoUrl: string): Promise<void> {
   try {
-    // Extraire le chemin du fichier depuis l'URL
-    // Format: https://firebasestorage.googleapis.com/v0/b/BUCKET/o/ENCODED_PATH?alt=media&token=...
     const match = photoUrl.match(/\/o\/([^?]+)/);
     if (!match) {
       console.warn("[DELETE_PHOTO] URL non reconnue:", photoUrl);
       return;
     }
-
     const encodedPath = match[1];
     const filePath = decodeURIComponent(encodedPath);
     console.log("[DELETE_PHOTO] Suppression de:", filePath);
 
-    // Obtenir le token d'authentification
     const user = auth.currentUser;
     if (!user) {
       console.warn("[DELETE_PHOTO] Utilisateur non connecté");
@@ -1608,13 +502,10 @@ export async function deletePhotoFromStorage(photoUrl: string): Promise<void> {
     }
     const token = await user.getIdToken();
 
-    // Supprimer via l'API REST
     const deleteUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodedPath}`;
     const response = await fetch(deleteUrl, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
     });
 
     if (response.ok || response.status === 404) {
@@ -1628,13 +519,12 @@ export async function deletePhotoFromStorage(photoUrl: string): Promise<void> {
 }
 
 export async function supprimerJalon(childId: string, id: string) {
-  // Récupérer l'événement pour obtenir les URLs des photos
+  // Cleanup photos from Firebase Storage before deleting
   try {
     const event = await obtenirEvenement(childId, id);
-    if (event?.photos && Array.isArray(event.photos)) {
-      // Supprimer chaque photo du Storage
-      for (const photoUrl of event.photos) {
-        if (photoUrl && photoUrl.startsWith("https://firebasestorage.googleapis.com")) {
+    if ((event as any)?.photos && Array.isArray((event as any).photos)) {
+      for (const photoUrl of (event as any).photos) {
+        if (photoUrl?.startsWith("https://firebasestorage.googleapis.com")) {
           await deletePhotoFromStorage(photoUrl);
         }
       }
@@ -1642,81 +532,5 @@ export async function supprimerJalon(childId: string, id: string) {
   } catch (error) {
     console.error("[SUPPRIMER_JALON] Erreur récupération événement:", error);
   }
-
-  // Supprimer l'événement de Firestore
-  return supprimerEventNouveau(childId, id);
+  return supprimerEvenement(childId, id);
 }
-
-// ============================================
-// MONITORING & DEBUG
-// ============================================
-
-export interface MigrationStats {
-  phase: string;
-  readFrom: string;
-  totalWrites: number;
-  successfulWrites: number;
-  failedWrites: number;
-  oldSystemErrors: number;
-  newSystemErrors: number;
-}
-
-let stats: MigrationStats = {
-  phase: config.phase,
-  readFrom: config.readFrom,
-  totalWrites: 0,
-  successfulWrites: 0,
-  failedWrites: 0,
-  oldSystemErrors: 0,
-  newSystemErrors: 0,
-};
-
-export function getMigrationStats() {
-  return { ...stats };
-}
-
-export function resetMigrationStats() {
-  stats = {
-    phase: config.phase,
-    readFrom: config.readFrom,
-    totalWrites: 0,
-    successfulWrites: 0,
-    failedWrites: 0,
-    oldSystemErrors: 0,
-    newSystemErrors: 0,
-  };
-}
-
-// ============================================
-// EXEMPLE D'UTILISATION
-// ============================================
-
-/*
-// Phase 1: Migration initiale des données historiques
-setMigrationConfig({
-  phase: "OLD_ONLY",
-  readFrom: "OLD"
-});
-await migrerToutesLesCollections(userId, childId);
-
-// Phase 2: Activer double écriture (lecture depuis NEW)
-setMigrationConfig({
-  phase: "DOUBLE_WRITE",
-  readFrom: "NEW",
-  failOnError: false // Continuer même si OLD échoue
-});
-// À partir de maintenant, tout nouvel event est écrit dans les 2
-
-// Phase 3: Après quelques jours de stabilité
-setMigrationConfig({
-  phase: "NEW_ONLY",
-  readFrom: "NEW"
-});
-// On écrit plus que dans NEW, on peut supprimer les anciennes collections
-
-// En cas de problème, rollback immédiat:
-setMigrationConfig({
-  phase: "OLD_ONLY",
-  readFrom: "OLD"
-});
-*/

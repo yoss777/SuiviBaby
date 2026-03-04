@@ -219,7 +219,7 @@ export default function ExportScreen() {
               ]);
 
               const events = eventsSnapshot.docs.map(
-                (d) => ({ id: d.id, ...d.data() }) as Event
+                (d: any) => ({ id: d.id, ...d.data() }) as Event
               );
 
               const role = accessDoc && accessDoc.exists()
@@ -230,10 +230,10 @@ export default function ExportScreen() {
                 child,
                 events,
                 likes: likesSnapshot.docs.map(
-                  (d) => ({ id: d.id, ...d.data() }) as EventLike
+                  (d: any) => ({ id: d.id, ...d.data() }) as EventLike
                 ),
                 comments: commentsSnapshot.docs.map(
-                  (d) => ({ id: d.id, ...d.data() }) as EventComment
+                  (d: any) => ({ id: d.id, ...d.data() }) as EventComment
                 ),
                 role,
                 selected: true,
@@ -579,7 +579,6 @@ export default function ExportScreen() {
               onPress={() => goToIndex(Math.max(0, summaryIndex - 1))}
               activeOpacity={0.7}
               disabled={summaryIndex === 0}
-              pointerEvents={summaryIndex === 0 ? "none" : "auto"}
             >
               <Ionicons
                 name="chevron-back"
@@ -606,9 +605,6 @@ export default function ExportScreen() {
               }
               activeOpacity={0.7}
               disabled={summaryIndex === summary.length - 1}
-              pointerEvents={
-                summaryIndex === summary.length - 1 ? "none" : "auto"
-              }
             >
               <Ionicons
                 name="chevron-forward"
@@ -1184,7 +1180,7 @@ export default function ExportScreen() {
                 opacity: isExportDisabled ? 0.6 : 1,
               },
             ]}
-            onPress={handleExport}
+            onPress={() => handleExport()}
             disabled={isExportDisabled}
             activeOpacity={0.8}
           >
@@ -1317,6 +1313,9 @@ const styles = StyleSheet.create({
   },
   childSubtitle: {
     fontSize: 13,
+  },
+  summarySlide: {
+    paddingHorizontal: 16,
   },
   summaryRow: {
     flexDirection: "row",

@@ -250,7 +250,6 @@ export default function MealsScreen() {
             router.replace("/baby/plus");
           }}
           tintColor={Colors[colorScheme].text}
-          labelVisible={false}
         />
       );
       setHeaderLeft(backButton, headerOwnerId.current);
@@ -344,7 +343,7 @@ export default function MealsScreen() {
           maybeReturnTo(returnTarget);
         },
       });
-      navigation.setParams({ openModal: undefined, editId: undefined });
+      navigation.setParams({ openModal: undefined, editId: undefined } as any);
       setPendingOpen(false);
       setPendingEditData(null);
     });
@@ -357,6 +356,7 @@ export default function MealsScreen() {
     openSheet,
     navigation,
     buildEditData,
+    // @ts-expect-error — ensureTodayInRange is a useCallback declared later in the component
     ensureTodayInRange,
   ]);
 
@@ -370,7 +370,7 @@ export default function MealsScreen() {
     editIdRef.current = normalizedId;
     setPendingEditData(target);
     setPendingOpen(true);
-    navigation.setParams({ openModal: undefined, editId: undefined });
+    navigation.setParams({ openModal: undefined, editId: undefined } as any);
   }, [editId, layoutReady, meals, navigation]);
 
   // ============================================
@@ -970,7 +970,7 @@ export default function MealsScreen() {
                   <Text style={styles.sessionDetailText}>
                     {MOMENT_REPAS_LABELS[meal.momentRepas]}
                     {" · "}
-                    {meal.quantiteSolide ?? meal.quantite ?? ""}
+                    {(meal as any).quantiteSolide ?? meal.quantite ?? ""}
                   </Text>
                 )}
                 {(meal.aime !== undefined || meal.nouveauAliment) && (
@@ -1172,7 +1172,7 @@ export default function MealsScreen() {
         <View>
           {/* Filtres */}
           <DateFilterBar
-            selected={selectedFilter}
+            selected={selectedFilter as any}
             onSelect={handleFilterPress}
           />
 

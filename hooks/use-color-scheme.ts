@@ -1,6 +1,6 @@
 
 
-export function useColorScheme() {
+export function useColorScheme(): "light" | "dark" {
   // const systemScheme = useSystemColorScheme() ?? 'light';
   // const context = useContext(ThemeContext);
 

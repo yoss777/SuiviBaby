@@ -142,14 +142,14 @@ export default function BootScreen() {
         await Promise.race([prefetchToday(targetChild.id), preloadTimeout]);
 
         if (!cancelled) {
-          router.replace("/(drawer)/baby");
+          router.replace("/(drawer)/baby" as any);
         }
         return;
       }
 
       // Fallback
       console.log("[BOOT] Plusieurs enfants, redirection vers explore");
-      router.replace("/explore");
+      router.replace("/explore" as any);
     };
 
     run();

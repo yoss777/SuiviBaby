@@ -177,7 +177,7 @@ export default function DrawerLayout() {
               headerStyle: {
                 backgroundColor: Colors[colorScheme].background,
               },
-              sceneContainerStyle: {
+              sceneStyle: {
                 backgroundColor: Colors[colorScheme].background,
               },
             }}

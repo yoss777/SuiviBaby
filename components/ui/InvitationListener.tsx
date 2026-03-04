@@ -101,7 +101,7 @@ export function InvitationListener() {
           }),
           preloadTimeout,
         ]);
-        router.replace("/(drawer)/baby");
+        router.replace("/(drawer)/baby" as any);
       } finally {
         setPendingChildId(null);
         setIsPreparingChild(false);

@@ -1,7 +1,7 @@
 import { db } from '@/config/firebase';
 import { obtenirPreferences } from '@/services/userPreferencesService';
 import { collection, doc, limit, onSnapshot, query, setDoc, where } from 'firebase/firestore';
-import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { obtenirEvenementsDuJourHybrid } from '@/migration/eventsHybridService';
 import { buildTodayEventsData, getTodayEventsCache, setTodayEventsCache } from '@/services/todayEventsCache';
@@ -28,6 +28,47 @@ interface BabyContextType {
 
 const BabyContext = createContext<BabyContextType | undefined>(undefined);
 
+/**
+ * Compute visible & sorted children from raw data + hidden list.
+ * Pure function — no side effects.
+ */
+function computeVisibleChildren(
+  allData: Map<string, Child>,
+  hiddenIds: string[],
+): Child[] {
+  const visible = Array.from(allData.values()).filter(
+    (child) => !hiddenIds.includes(child.id),
+  );
+  visible.sort((a, b) => a.name.localeCompare(b.name));
+  return visible;
+}
+
+/**
+ * Pick the best active child from the visible list.
+ * Priority: override ref > lastActive ref > previous > first visible.
+ */
+function pickActiveChild(
+  visibleChildren: Child[],
+  prev: Child | null,
+  overrideId: string | null,
+  lastActiveId: string | null,
+  hiddenIds: string[],
+): Child | null {
+  if (visibleChildren.length === 0) return null;
+  if (overrideId) {
+    const match = visibleChildren.find((c) => c.id === overrideId);
+    if (match) return match;
+  }
+  if (lastActiveId) {
+    const match = visibleChildren.find((c) => c.id === lastActiveId);
+    if (match) return match;
+  }
+  if (prev && !hiddenIds.includes(prev.id)) {
+    return prev;
+  }
+  return visibleChildren[0];
+}
+
 export function BabyProvider({ children: childrenProp }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
   const [children, setChildren] = useState<Child[]>([]);
@@ -35,7 +76,6 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   const [loading, setLoading] = useState(true);
   const [childrenLoaded, setChildrenLoaded] = useState(false);
   const [hiddenChildrenIds, setHiddenChildrenIds] = useState<string[]>([]);
-  const [lastActiveChildId, setLastActiveChildId] = useState<string | null>(null);
   const lastActiveChildIdRef = useRef<string | null>(null);
   const lastActiveOverrideRef = useRef<string | null>(null);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
@@ -43,6 +83,42 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   const childListenersRef = useRef<Map<string, () => void>>(new Map());
   const childDataRef = useRef<Map<string, Child>>(new Map());
   const currentChildIdsRef = useRef<Set<string>>(new Set());
+  // Ref mirrors for hiddenChildrenIds — avoids putting state in listener useEffect deps
+  const hiddenChildrenIdsRef = useRef<string[]>([]);
+
+  // Keep the ref in sync with state
+  useEffect(() => {
+    hiddenChildrenIdsRef.current = hiddenChildrenIds;
+  }, [hiddenChildrenIds]);
+
+  /**
+   * Recompute visible children + active child from refs, then setState.
+   * Called from any listener callback — single source of truth.
+   */
+  const syncState = useCallback(() => {
+    const visible = computeVisibleChildren(
+      childDataRef.current,
+      hiddenChildrenIdsRef.current,
+    );
+    setChildren(visible);
+    setActiveChildState((prev) =>
+      pickActiveChild(
+        visible,
+        prev,
+        lastActiveOverrideRef.current,
+        lastActiveChildIdRef.current,
+        hiddenChildrenIdsRef.current,
+      ),
+    );
+  }, []);
+
+  // Re-derive visible children when hiddenChildrenIds changes
+  // (without tearing down Firestore listeners)
+  useEffect(() => {
+    if (childDataRef.current.size > 0) {
+      syncState();
+    }
+  }, [hiddenChildrenIds, syncState]);
 
   // Écouter les changements des préférences utilisateur en temps réel
   useEffect(() => {
@@ -61,39 +137,34 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
         console.log('[BabyContext] Préférences chargées:', data.lastActiveChildId);
         const newHiddenIds = data.hiddenChildrenIds || [];
         setHiddenChildrenIds((prev) => {
-          if (prev.length === newHiddenIds.length && prev.every((id, i) => id === newHiddenIds[i])) {
-            return prev; // Pas de changement, retourner la même référence
+          if (prev.length === newHiddenIds.length && prev.every((id: string, i: number) => id === newHiddenIds[i])) {
+            return prev;
           }
           return newHiddenIds;
         });
         const prefsLastActive = data.lastActiveChildId || null;
-        // Toujours mettre à jour le ref avec la valeur de Firestore au démarrage
         lastActiveChildIdRef.current = prefsLastActive;
-        setLastActiveChildId(prefsLastActive);
-        // Effacer l'override seulement s'il correspond à la valeur reçue
         if (lastActiveOverrideRef.current && prefsLastActive === lastActiveOverrideRef.current) {
           lastActiveOverrideRef.current = null;
         }
       } else {
         setHiddenChildrenIds((prev) => prev.length === 0 ? prev : []);
         if (!lastActiveOverrideRef.current) {
-          setLastActiveChildId(null);
           lastActiveChildIdRef.current = null;
         }
       }
       setPreferencesLoaded(true);
     }, (error) => {
       console.error('Erreur lors de l\'écoute des préférences:', error);
-      // En cas d'erreur (document n'existe pas encore), charger de manière asynchrone
       obtenirPreferences().then(prefs => {
         const newHiddenIds = prefs.hiddenChildrenIds || [];
         setHiddenChildrenIds((prev) => {
-          if (prev.length === newHiddenIds.length && prev.every((id, i) => id === newHiddenIds[i])) {
+          if (prev.length === newHiddenIds.length && prev.every((id: string, i: number) => id === newHiddenIds[i])) {
             return prev;
           }
           return newHiddenIds;
         });
-        setLastActiveChildId(prefs.lastActiveChildId || null);
+        lastActiveChildIdRef.current = prefs.lastActiveChildId || null;
         setPreferencesLoaded(true);
       }).catch(err => {
         console.error('Erreur lors du chargement des préférences:', err);
@@ -105,17 +176,15 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   }, [user]);
 
   // Charger les enfants depuis Firestore
+  // Deps: user, preferencesLoaded, authLoading — NOT hiddenChildrenIds
   useEffect(() => {
-    // Si l'auth est encore en cours de chargement, rester en loading
     if (authLoading) {
-      console.log('[BabyContext] Auth en cours de chargement...');
       setLoading(true);
       setChildrenLoaded(false);
       return;
     }
 
     if (!user?.uid) {
-      console.log('[BabyContext] Pas de user.uid, arrêt du chargement');
       setChildren([]);
       setActiveChildState(null);
       setLoading(false);
@@ -123,10 +192,8 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       return;
     }
 
-    // Attendre que les préférences soient chargées
     if (!preferencesLoaded) {
-      console.log('[BabyContext] En attente du chargement des préférences...');
-      setLoading(true); // IMPORTANT : rester en loading tant que les préférences ne sont pas chargées
+      setLoading(true);
       setChildrenLoaded(false);
       return;
     }
@@ -140,7 +207,6 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       where('userId', '==', user.uid),
       limit(200)
     );
-    console.log('[BabyContext] Query user_child_access where userId ==', user.uid);
 
     const unsubscribeAccess = onSnapshot(accessQuery, (snapshot) => {
       const currentChildIds = new Set<string>();
@@ -151,7 +217,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       });
       currentChildIdsRef.current = currentChildIds;
 
-      // Ajouter listeners pour les nouveaux enfants
+      // Add listeners for new children
       currentChildIds.forEach((childId) => {
         if (childListenersRef.current.has(childId)) return;
 
@@ -165,34 +231,8 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
               childDataRef.current.set(childId, { id: childId, ...data });
             }
 
-            const allChildren = Array.from(childDataRef.current.values());
-            const visibleChildren = allChildren.filter(
-              (child) => !hiddenChildrenIds.includes(child.id)
-            );
-            visibleChildren.sort((a, b) => a.name.localeCompare(b.name));
-            setChildren(visibleChildren);
-
-            setActiveChildState((prev) => {
-              if (visibleChildren.length === 0) return null;
-              if (lastActiveOverrideRef.current) {
-                const override = visibleChildren.find(
-                  (child) => child.id === lastActiveOverrideRef.current
-                );
-                if (override) return override;
-              }
-              // Au démarrage, utiliser lastActiveChildIdRef en priorité
-              if (lastActiveChildIdRef.current) {
-                const match = visibleChildren.find(
-                  (child) => child.id === lastActiveChildIdRef.current
-                );
-                if (match) return match;
-              }
-              // Garder prev seulement si lastActiveChildIdRef n'a pas trouvé de match
-              if (prev && !hiddenChildrenIds.includes(prev.id)) {
-                return prev;
-              }
-              return visibleChildren[0];
-            });
+            // Single call to recompute state
+            syncState();
 
             if (childDataRef.current.size >= currentChildIdsRef.current.size) {
               setLoading(false);
@@ -207,7 +247,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
         childListenersRef.current.set(childId, unsub);
       });
 
-      // Retirer listeners pour les enfants supprimés
+      // Remove listeners for deleted children
       childListenersRef.current.forEach((unsub, childId) => {
         if (!currentChildIds.has(childId)) {
           unsub();
@@ -216,43 +256,8 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
         }
       });
 
-      const allChildren = Array.from(childDataRef.current.values());
-      const visibleChildren = allChildren.filter(
-        (child) => !hiddenChildrenIds.includes(child.id)
-      );
-      visibleChildren.sort((a, b) => a.name.localeCompare(b.name));
-      setChildren(visibleChildren);
-
-      setActiveChildState((prev) => {
-        console.log('[BabyContext] setActiveChildState appelé, prev:', prev?.id, 'lastActiveChildIdRef:', lastActiveChildIdRef.current);
-        if (visibleChildren.length === 0) return null;
-        if (lastActiveOverrideRef.current) {
-          const override = visibleChildren.find(
-            (child) => child.id === lastActiveOverrideRef.current
-          );
-          if (override) {
-            console.log('[BabyContext] Utilisation de lastActiveOverrideRef:', override.id);
-            return override;
-          }
-        }
-        // Au démarrage (prev === null), utiliser lastActiveChildIdRef en priorité
-        if (lastActiveChildIdRef.current) {
-          const match = visibleChildren.find(
-            (child) => child.id === lastActiveChildIdRef.current
-          );
-          if (match) {
-            console.log('[BabyContext] Utilisation de lastActiveChildIdRef:', match.id);
-            return match;
-          }
-        }
-        // Garder prev seulement si lastActiveChildIdRef n'a pas trouvé de match
-        if (prev && !hiddenChildrenIds.includes(prev.id)) {
-          console.log('[BabyContext] Garder prev:', prev.id);
-          return prev;
-        }
-        console.log('[BabyContext] Utilisation du premier enfant:', visibleChildren[0]?.id);
-        return visibleChildren[0];
-      });
+      // Sync after access changes (handles child removal)
+      syncState();
 
       if (currentChildIds.size === 0) {
         setLoading(false);
@@ -273,8 +278,9 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       childListenersRef.current.clear();
       childDataRef.current.clear();
     };
-  }, [user, hiddenChildrenIds, preferencesLoaded, authLoading]);
+  }, [user, preferencesLoaded, authLoading, syncState]);
 
+  // Preload today's events for all children
   useEffect(() => {
     if (loading || !user?.uid) return;
     if (children.length === 0) return;
@@ -324,9 +330,8 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     };
   }, [children, loading, user]);
 
-  const setActiveChild = (child: Child) => {
+  const setActiveChild = useCallback((child: Child) => {
     setActiveChildState(child);
-    setLastActiveChildId(child.id);
     lastActiveChildIdRef.current = child.id;
     lastActiveOverrideRef.current = child.id;
     if (user?.uid) {
@@ -338,43 +343,45 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
         console.error('Erreur sauvegarde dernier enfant actif:', error);
       });
     }
-  };
+  }, [user]);
 
-  const addChild = (child: Child) => {
+  const addChild = useCallback((child: Child) => {
     setChildren((prev) => [...prev, child]);
-  };
+  }, []);
 
-  const updateChild = (id: string, updatedChild: Partial<Child>) => {
+  const updateChild = useCallback((id: string, updatedChild: Partial<Child>) => {
     setChildren((prev) =>
       prev.map((child) => (child.id === id ? { ...child, ...updatedChild } : child))
     );
-    if (activeChild?.id === id) {
-      setActiveChildState((prev) => (prev ? { ...prev, ...updatedChild } : null));
-    }
-  };
+    setActiveChildState((prev) =>
+      prev?.id === id ? { ...prev, ...updatedChild } : prev
+    );
+  }, []);
 
-  const deleteChild = (id: string) => {
-    setChildren((prev) => prev.filter((child) => child.id !== id));
-    if (activeChild?.id === id) {
-      const remainingChildren = children.filter((child) => child.id !== id);
-      setActiveChildState(remainingChildren[0] || null);
-    }
-  };
+  const deleteChild = useCallback((id: string) => {
+    setChildren((prev) => {
+      const remaining = prev.filter((child) => child.id !== id);
+      setActiveChildState((prevActive) =>
+        prevActive?.id === id ? remaining[0] || null : prevActive
+      );
+      return remaining;
+    });
+  }, []);
+
+  const value = useMemo<BabyContextType>(() => ({
+    children,
+    activeChild,
+    loading,
+    childrenLoaded,
+    hiddenChildrenIds,
+    setActiveChild,
+    addChild,
+    updateChild,
+    deleteChild,
+  }), [children, activeChild, loading, childrenLoaded, hiddenChildrenIds, setActiveChild, addChild, updateChild, deleteChild]);
 
   return (
-    <BabyContext.Provider
-      value={{
-        children,
-        activeChild,
-        loading,
-        childrenLoaded,
-        hiddenChildrenIds,
-        setActiveChild,
-        addChild,
-        updateChild,
-        deleteChild,
-      }}
-    >
+    <BabyContext.Provider value={value}>
       {childrenProp}
     </BabyContext.Provider>
   );

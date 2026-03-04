@@ -394,7 +394,6 @@ export default function ImmunizationsScreen() {
             router.replace("/baby/plus");
           }}
           tintColor={Colors[colorScheme].text}
-          labelVisible={false}
         />
       );
       setHeaderLeft(backButton, headerOwnerId.current);
@@ -452,7 +451,7 @@ export default function ImmunizationsScreen() {
         prepareAddModal(tab as "vitamines" | "vaccins" | undefined);
       }
       openSheet(buildSheetProps());
-      navigation.setParams({ openModal: undefined, editId: undefined });
+      navigation.setParams({ openModal: undefined, editId: undefined } as any);
       setPendingOpen(false);
       setPendingMode(null);
     });
@@ -477,7 +476,7 @@ export default function ImmunizationsScreen() {
     stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(target);
-    navigation.setParams({ openModal: undefined, editId: undefined });
+    navigation.setParams({ openModal: undefined, editId: undefined } as any);
   }, [editId, layoutReady, immunos, router, returnTo]);
 
   // ============================================
@@ -1787,7 +1786,7 @@ export default function ImmunizationsScreen() {
           >
             {/* Filtres */}
             <DateFilterBar
-              selected={selectedFilter}
+              selected={selectedFilter as any}
               onSelect={handleFilterPress}
             />
             {/* Switch Vitamines/Vaccins */}

@@ -120,7 +120,7 @@ export default function MomentsScreen() {
 
   // Data processing
   const { moods, allPhotoMilestones, displayedPhotoMilestones, currentMood } =
-    useMemo(() => {
+    useMemo((): { moods: MoodEntry[]; allPhotoMilestones: PhotoMilestone[]; displayedPhotoMilestones: PhotoMilestone[]; currentMood: MoodEntry | null } => {
       const moodEntries: MoodEntry[] = [];
       const photos: PhotoMilestone[] = [];
       let latestMood: MoodEntry | null = null;
@@ -451,7 +451,7 @@ export default function MomentsScreen() {
             <View style={styles.heroCardWrapper}>
               <HeroMoodCard
                 mood={todayMood?.humeur ?? null}
-                babyName={activeChild?.prenom ?? "Bébé"}
+                babyName={activeChild?.name ?? "Bébé"}
                 time={todayMood ? formatTime(todayMood.date) : undefined}
                 onAddMood={handleAddMood}
                 canEditMood={canManageContent}

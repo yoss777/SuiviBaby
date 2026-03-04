@@ -87,8 +87,8 @@ export async function obtenirPreferences(): Promise<UserPreferences> {
             thresholds: {
               ...defaultNotificationPreferences.reminders?.thresholds,
               ...(data.notifications?.reminders?.thresholds || {}),
-            },
-          },
+            } as Record<ReminderKey, number>,
+          } as ReminderPreferences,
         },
         theme: data.theme ?? defaultThemePreference,
         language: data.language ?? defaultLanguagePreference,

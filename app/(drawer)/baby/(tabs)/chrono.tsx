@@ -388,7 +388,7 @@ function buildDetails(event: Event) {
       const momentLabel = event.momentRepas
         ? MOMENT_REPAS_LABELS[event.momentRepas]
         : null;
-      const quantity = event.quantiteSolide ?? event.quantite;
+      const quantity = (event as any).quantiteSolide ?? event.quantite;
       const line2 =
         momentLabel || quantity
           ? `${momentLabel ?? ""}${momentLabel && quantity ? " · " : ""}${quantity ?? ""}`
@@ -740,7 +740,7 @@ const TimelineCard = React.memo(
         ? MOMENT_REPAS_LABELS[event.momentRepas]
         : null
       : null;
-    const solideQuantity = isSolide ? event.quantiteSolide ?? event.quantite : null;
+    const solideQuantity = isSolide ? (event as any).quantiteSolide ?? event.quantite : null;
     const solideLine2 =
       isSolide && (solideMomentLabel || solideQuantity)
         ? `${solideMomentLabel ?? ""}${
@@ -1004,7 +1004,7 @@ export default function ChronoScreen() {
       openSheetRaw({
         ...props,
         onSuccess: () => {
-          props.onSuccess?.();
+          (props as any).onSuccess?.();
           triggerRefresh();
         },
       });

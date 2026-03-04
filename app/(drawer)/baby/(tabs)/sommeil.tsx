@@ -213,7 +213,6 @@ export default function SommeilScreen() {
             router.replace("/baby/plus");
           }}
           tintColor={Colors[colorScheme].text}
-          labelVisible={false}
         />
       );
       setHeaderLeft(backButton, "sommeil");
@@ -962,7 +961,7 @@ export default function SommeilScreen() {
         openModal: undefined,
         editId: undefined,
         mode: undefined,
-      });
+      } as any);
       setPendingOpen(false);
       setPendingMode(null);
       pendingModeRef.current = null;
@@ -988,7 +987,7 @@ export default function SommeilScreen() {
     stashReturnTo();
     editIdRef.current = normalizedId;
     openEditModal(match);
-    navigation.setParams({ openModal: undefined, editId: undefined, mode: undefined });
+    navigation.setParams({ openModal: undefined, editId: undefined, mode: undefined } as any);
   }, [
     editId,
     layoutReady,
@@ -1352,7 +1351,7 @@ export default function SommeilScreen() {
 
         <View>
           <DateFilterBar
-            selected={selectedFilter}
+            selected={selectedFilter as any}
             onSelect={handleFilterPress}
           />
 

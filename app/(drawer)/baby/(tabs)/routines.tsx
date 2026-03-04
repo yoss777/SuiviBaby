@@ -280,7 +280,6 @@ export default function RoutinesScreen() {
             router.replace("/baby/plus");
           }}
           tintColor={Colors[colorScheme].text}
-          labelVisible={false}
         />
       );
       setHeaderLeft(backButton, headerOwnerId.current);
@@ -733,7 +732,7 @@ export default function RoutinesScreen() {
         editId: undefined,
         type: undefined,
         mode: undefined,
-      });
+      } as any);
       setPendingOpen(false);
     });
     return () => task.cancel?.();
@@ -766,7 +765,7 @@ export default function RoutinesScreen() {
       editId: undefined,
       type: undefined,
       mode: undefined,
-    });
+    } as any);
   }, [editId, layoutReady, events, navigation, openEditModal, stashReturnTo]);
 
   // ============================================
@@ -1106,7 +1105,7 @@ export default function RoutinesScreen() {
         <View>
           <View style={styles.filterRow}>
             <DateFilterBar
-              selected={selectedFilter}
+              selected={selectedFilter as any}
               onSelect={handleFilterPress}
             />
             <View style={styles.quickActionsRow}>
@@ -1202,10 +1201,10 @@ export default function RoutinesScreen() {
               </ThemedText>
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
-                  isLoading={isLoadingMore}
+                  loading={isLoadingMore}
                   hasMore={hasMore}
                   onPress={handleLoadMore}
-                  color={Colors[colorScheme].tint}
+                  accentColor={Colors[colorScheme].tint}
                 />
               )}
             </View>
@@ -1219,10 +1218,10 @@ export default function RoutinesScreen() {
               ListFooterComponent={
                 selectedFilter === "today" || selectedDate ? null : (
                   <LoadMoreButton
-                    isLoading={isLoadingMore}
+                    loading={isLoadingMore}
                     hasMore={hasMore}
                     onPress={handleLoadMore}
-                    color={Colors[colorScheme].tint}
+                    accentColor={Colors[colorScheme].tint}
                   />
                 )
               }

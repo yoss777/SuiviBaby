@@ -115,7 +115,7 @@ export default function LanguageScreen() {
               : "transparent",
           },
         ]}
-        onPress={() => handleSelect(language.code)}
+        onPress={() => handleSelect(language.code as LanguagePreference)}
         activeOpacity={0.7}
         disabled={isSaving || isLoading}
       >

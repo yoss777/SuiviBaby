@@ -1,4 +1,3 @@
-import { MigrationBanner } from "@/components/migration";
 import {
   RecentEventsList,
   SleepWidget,
@@ -559,7 +558,7 @@ export default function HomeDashboard() {
       openSheetRaw({
         ...props,
         onSuccess: () => {
-          props.onSuccess?.();
+          (props as any).onSuccess?.();
           triggerRefresh();
         },
       });
@@ -2116,9 +2115,6 @@ export default function HomeDashboard() {
         onScroll={handleScroll}
         scrollEventThrottle={16}
       >
-        {/* Bannière de migration */}
-        {activeChild?.id && <MigrationBanner childId={activeChild.id} />}
-
         {/* En-tête avec salutation */}
         <View
           style={{

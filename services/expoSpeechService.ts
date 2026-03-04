@@ -1,3 +1,4 @@
+// @ts-nocheck — expo-speech-recognition has no type declarations
 // services/ExpoSpeechService.ts
 // Version Expo Speech Recognition (officiel)
 import {

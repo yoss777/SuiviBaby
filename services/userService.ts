@@ -37,7 +37,7 @@ export async function createPatientUser(
     email,
     userName: safeUserName,
     userType: 'patient',
-    babyName: babyName?.trim() ? babyName.trim() : null,
+    babyName: babyName?.trim() ? babyName.trim() : undefined,
     children: [],
     createdAt: Timestamp.now(),
     lastLogin: Timestamp.now(),

@@ -87,7 +87,7 @@ export default function JoinChildScreen() {
       try {
         setActiveChild(child);
         await prefetchTodayForChild(child);
-        router.replace("/(drawer)/baby");
+        router.replace("/(drawer)/baby" as any);
       } finally {
         setIsPreparingChild(false);
       }
@@ -213,7 +213,7 @@ export default function JoinChildScreen() {
   const handleSwitchLater = useCallback(() => {
     setSwitchPromptVisible(false);
     setSwitchTarget(null);
-    router.replace("/(drawer)/baby");
+    router.replace("/(drawer)/baby" as any);
   }, []);
 
   return (

@@ -32,7 +32,7 @@ const MAPPING = {
   'chat.bubble.fill': 'chat',
   'hand-holding-medical': 'hand-holding-medical',
   'notes-medical': 'notes-medical',
-} as IconMapping;
+} as unknown as IconMapping;
 
 /**
  * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.

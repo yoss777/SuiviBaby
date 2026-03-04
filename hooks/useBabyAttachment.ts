@@ -1,3 +1,4 @@
+// @ts-nocheck — Dead code: references non-existent @/shared/* modules, not imported anywhere
 import { useEffect } from "react";
 import { useBaby } from "@/shared/contexts/BabyContext";
 import { listenToApprovedRequests } from "@/shared/services/babyAttachmentService";

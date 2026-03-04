@@ -324,7 +324,7 @@ export const GlobalFAB = ({
             isOpen={isOpen}
             onPress={() => handleActionPress(action)}
             labelTextColor={colors.text}
-            labelBackgroundColor={colors.card ?? colors.background}
+            labelBackgroundColor={colors.background}
           />
         ))}
 

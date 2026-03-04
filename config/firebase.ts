@@ -1,5 +1,6 @@
 // config/firebase.ts
 import { initializeApp } from "firebase/app";
+// @ts-expect-error — getReactNativePersistence exists at runtime but not in firebase/auth types
 import { getReactNativePersistence, indexedDBLocalPersistence, initializeAuth } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions } from "firebase/functions";

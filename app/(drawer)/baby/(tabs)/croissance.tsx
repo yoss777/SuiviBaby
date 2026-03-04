@@ -319,7 +319,7 @@ export default function CroissanceScreen() {
       if (openModal !== "true") return;
       const task = InteractionManager.runAfterInteractions(() => {
         openAddModal();
-        navigation.setParams({ openModal: undefined, returnTo: undefined });
+        navigation.setParams({ openModal: undefined, returnTo: undefined } as any);
       });
       return () => task.cancel();
     }, [navigation, openAddModal, openModal]),
@@ -941,7 +941,7 @@ export default function CroissanceScreen() {
                       ))}
                     </View>
                     <Animated.ScrollView
-                      ref={chartScrollRef}
+                      ref={chartScrollRef as any}
                       horizontal
                       showsHorizontalScrollIndicator={false}
                       onScrollBeginDrag={() => setSelectedPointIndex(null)}

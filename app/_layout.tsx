@@ -5,18 +5,18 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BabyProvider } from "@/contexts/BabyContext";
 import { ModalProvider } from "@/contexts/ModalContext";
 import { MomentsNotificationProvider } from "@/contexts/MomentsNotificationContext";
-import { PermissionsMigrationProvider } from "@/contexts/PermissionsMigrationContext";
 import { ThemeProvider as AppThemeProvider } from "@/contexts/ThemeContext";
 import { SheetProvider } from "@/contexts/SheetContext";
 import { SuccessAnimationProvider } from "@/contexts/SuccessAnimationContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MigrationProvider } from "@/migration/MigrationProvider";
+import { composeProviders } from "@/utils/composeProviders";
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from "@react-navigation/native";
 import { Stack, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -40,39 +40,47 @@ export const unstable_settings = {
   anchor: "(drawer)",
 };
 
+// Wrapper pour GestureHandlerRootView (nécessite style prop)
+function GestureWrapper({ children }: { children: ReactNode }) {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      {children}
+    </GestureHandlerRootView>
+  );
+}
+
+/**
+ * Provider stack — ordre important (premier = outermost).
+ * Dépendances :
+ *   Auth dépend de Modal
+ *   Theme dépend de Auth
+ *   Baby dépend de Auth
+ *   MomentsNotification dépend de Auth + Baby
+ *   Migration dépend de Auth + Modal
+ */
+const AppProviders = composeProviders([
+  ErrorBoundary,
+  GestureWrapper,
+  SafeAreaProvider,
+  PortalProvider,
+  ToastProvider,
+  ModalProvider,
+  AuthProvider,
+  AppThemeProvider,
+  BabyProvider,
+  MomentsNotificationProvider,
+  MigrationProvider,
+  SheetProvider,
+  SuccessAnimationProvider,
+]);
+
 function RootLayout() {
   return (
-    <ErrorBoundary>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <PortalProvider>
-            <ToastProvider>
-              <ModalProvider>
-                <AuthProvider>
-                  {/* <PermissionsMigrationProvider> */}
-                    <AppThemeProvider>
-                      <BabyProvider>
-                        <MomentsNotificationProvider>
-                          <MigrationProvider>
-                            <SheetProvider>
-                              <SuccessAnimationProvider>
-                                <AppNavigation />
-                                <GlobalSheetManager />
-                                <InvitationListener />
-                              </SuccessAnimationProvider>
-                            </SheetProvider>
-                          </MigrationProvider>
-                        </MomentsNotificationProvider>
-                      </BabyProvider>
-                    </AppThemeProvider>
-                  {/* </PermissionsMigrationProvider> */}
-                </AuthProvider>
-              </ModalProvider>
-            </ToastProvider>
-          </PortalProvider>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    </ErrorBoundary>
+    <AppProviders>
+      <AppNavigation />
+      <GlobalSheetManager />
+      <InvitationListener />
+    </AppProviders>
   );
 }
 

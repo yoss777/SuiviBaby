@@ -50,7 +50,7 @@ export default function HelpScreen() {
       question: 'Comment ajouter un bébé au suivi ?',
       answer:
         'Allez dans le menu principal et sélectionnez "Ajouter un bébé". Remplissez les informations et validez.',
-      icon: 'baby',
+      icon: 'person-add',
     },
     {
       question: 'Comment changer mon mot de passe ?',
