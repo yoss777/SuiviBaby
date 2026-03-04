@@ -9,6 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "ios": {
+      "supportsTablet": false,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Autoriser $(PRODUCT_NAME) à accéder à votre photothèque pour ajouter des moments.",
         "NSPhotoLibraryAddUsageDescription": "Autoriser $(PRODUCT_NAME) à enregistrer des photos dans votre photothèque.",
@@ -55,6 +56,15 @@
         {
           "organization": "samaye",
           "project": "samaye-mobile"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
         }
       ]
     ],

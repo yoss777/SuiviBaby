@@ -1,6 +1,7 @@
 // contexts/AuthContext.tsx
 import { auth, db } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
+import { clearTodayEventsCache } from "@/services/todayEventsCache";
 import {
   canUserAccessApp,
   createPatientUser,
@@ -217,6 +218,7 @@ export function AuthProvider({
 
   const signOut = useCallback(async () => {
     try {
+      clearTodayEventsCache();
       await firebaseSignOut(auth);
       if (isMountedRef.current) {
         dispatch({ type: "CLEAR_USER" });

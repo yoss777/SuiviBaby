@@ -144,4 +144,8 @@ export const getTodayEventsCache = (childId: string) => {
   return cache.data;
 };
 
+export const clearTodayEventsCache = () => {
+  cache = null;
+};
+
 export const getTodayTypes = () => TODAY_TYPES.slice();
