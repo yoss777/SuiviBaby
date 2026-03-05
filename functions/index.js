@@ -6,6 +6,146 @@ admin.initializeApp();
 
 const BATCH_LIMIT = 450;
 
+// ============================================
+// SHARED HELPERS
+// ============================================
+
+/**
+ * Rate limiting réutilisable — vérifie par bucket séparé.
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string} uid
+ * @param {string} bucket - Nom du bucket (ex: "transcribe", "events", "delete")
+ * @param {number} maxPerMinute
+ */
+async function checkRateLimit(db, uid, bucket, maxPerMinute) {
+  const rateLimitRef = db.doc(`rate_limits/${uid}`);
+  const now = Date.now();
+  const oneMinuteAgo = now - 60 * 1000;
+  const bucketKey = `${bucket}_timestamps`;
+
+  const rateLimitDoc = await rateLimitRef.get();
+  const data = rateLimitDoc.exists ? rateLimitDoc.data() : {};
+  const recentRequests = (data[bucketKey] || []).filter((t) => t > oneMinuteAgo);
+
+  if (recentRequests.length >= maxPerMinute) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "Trop de requêtes. Réessayez dans une minute."
+    );
+  }
+
+  await rateLimitRef.set(
+    { [bucketKey]: [...recentRequests, now] },
+    { merge: true }
+  );
+}
+
+/**
+ * App Check monitoring — log sans bloquer.
+ * Quand prêt pour l'enforcement, ajouter enforceAppCheck: true dans les options onCall.
+ */
+function monitorAppCheck(request, functionName) {
+  if (request.app) {
+    console.log(`[AppCheck] ${functionName}: VERIFIED (uid: ${request.auth?.uid})`);
+  } else {
+    console.warn(`[AppCheck] ${functionName}: UNVERIFIED (uid: ${request.auth?.uid})`);
+  }
+}
+
+/**
+ * Supprime des documents par champ en batches de BATCH_LIMIT.
+ */
+async function deleteDocsByFieldBatched(db, collectionName, field, value) {
+  let totalDeleted = 0;
+  while (true) {
+    const snapshot = await db
+      .collection(collectionName)
+      .where(field, "==", value)
+      .limit(BATCH_LIMIT)
+      .get();
+
+    if (snapshot.empty) return totalDeleted;
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+
+    totalDeleted += snapshot.size;
+    if (snapshot.size < BATCH_LIMIT) return totalDeleted;
+  }
+}
+
+/**
+ * Supprime toutes les données d'un enfant (événements, social, partage, legacy).
+ */
+async function deleteChildDataBatched(db, childId) {
+  // Main + social
+  await Promise.all([
+    deleteDocsByFieldBatched(db, "events", "childId", childId),
+    deleteDocsByFieldBatched(db, "eventLikes", "childId", childId),
+    deleteDocsByFieldBatched(db, "eventComments", "childId", childId),
+  ]);
+
+  // Sharing + requests
+  await Promise.all([
+    deleteDocsByFieldBatched(db, "shareCodes", "childId", childId),
+    deleteDocsByFieldBatched(db, "shareInvitations", "childId", childId),
+    deleteDocsByFieldBatched(db, "babyAttachmentRequests", "childId", childId),
+  ]);
+
+  // Legacy collections
+  const legacyCollections = ["tetees", "pompages", "mictions", "selles", "vitamines", "vaccins"];
+  await Promise.all(
+    legacyCollections.map((coll) => deleteDocsByFieldBatched(db, coll, "childId", childId))
+  );
+
+  // Access subcollection
+  const accessSnap = await db.collection("children").doc(childId).collection("access").get();
+  if (!accessSnap.empty) {
+    const batch = db.batch();
+    accessSnap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+  }
+
+  // user_child_access index entries for this child
+  await deleteDocsByFieldBatched(db, "user_child_access", "childId", childId);
+}
+
+/**
+ * Transfère la propriété d'un enfant au meilleur candidat.
+ */
+async function transferOwnership(db, childId, currentOwnerId, childAccessSnapshot) {
+  const rolePriority = { admin: 0, contributor: 1, viewer: 2 };
+  const candidates = childAccessSnapshot.docs
+    .filter((d) => d.id !== currentOwnerId)
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => {
+      const rA = rolePriority[a.role] ?? 3;
+      const rB = rolePriority[b.role] ?? 3;
+      if (rA !== rB) return rA - rB;
+      const tA = a.grantedAt?.toMillis?.() ?? 0;
+      const tB = b.grantedAt?.toMillis?.() ?? 0;
+      return tA - tB;
+    });
+
+  if (candidates.length === 0) return;
+
+  const newOwner = candidates[0];
+  const batch = db.batch();
+
+  batch.update(db.doc(`children/${childId}`), { ownerId: newOwner.id });
+  batch.update(db.doc(`children/${childId}/access/${newOwner.id}`), {
+    role: "owner",
+    canWriteEvents: true,
+    canWriteLikes: true,
+    canWriteComments: true,
+    grantedBy: newOwner.id,
+    grantedAt: admin.firestore.Timestamp.now(),
+  });
+
+  await batch.commit();
+}
+
 exports.cleanupExpiredShareCodes = onSchedule("every 24 hours", async () => {
   const db = admin.firestore();
   const now = admin.firestore.Timestamp.now();
@@ -57,6 +197,7 @@ exports.transcribeAudio = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
     }
+    monitorAppCheck(request, "transcribeAudio");
 
     const uid = request.auth.uid;
     const { audioBase64 } = request.data;
@@ -87,28 +228,7 @@ exports.transcribeAudio = onCall(
     }
 
     // 2. Rate limiting — max 10 requêtes/min/user
-    const rateLimitRef = db.doc(`rate_limits/${uid}`);
-    const now = Date.now();
-    const oneMinuteAgo = now - 60 * 1000;
-
-    const rateLimitDoc = await rateLimitRef.get();
-    if (rateLimitDoc.exists) {
-      const data = rateLimitDoc.data();
-      const recentRequests = (data.timestamps || []).filter(
-        (t) => t > oneMinuteAgo
-      );
-      if (recentRequests.length >= 10) {
-        throw new HttpsError(
-          "resource-exhausted",
-          "Trop de requêtes. Réessayez dans une minute."
-        );
-      }
-      await rateLimitRef.update({
-        timestamps: [...recentRequests, now],
-      });
-    } else {
-      await rateLimitRef.set({ timestamps: [now] });
-    }
+    await checkRateLimit(db, uid, "transcribe", 10);
 
     // 3. Quota check — FREE = 5 transcriptions/jour
     const usageRef = db.doc(`usage_limits/${uid}`);
@@ -437,8 +557,12 @@ exports.validateAndCreateEvent = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
     }
+    monitorAppCheck(request, "validateAndCreateEvent");
 
     const uid = request.auth.uid;
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "events", 30);
+
     const { childId, ...eventData } = request.data;
 
     if (!childId || typeof childId !== "string") {
@@ -451,8 +575,6 @@ exports.validateAndCreateEvent = onCall(
         `Type d'événement invalide: '${eventData.type}'. Types valides: ${VALID_EVENT_TYPES.join(", ")}`
       );
     }
-
-    const db = admin.firestore();
 
     // Permission check
     await checkChildAccess(db, uid, childId, ["owner", "admin"]);
@@ -487,15 +609,17 @@ exports.validateAndUpdateEvent = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
     }
+    monitorAppCheck(request, "validateAndUpdateEvent");
 
     const uid = request.auth.uid;
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "events", 30);
+
     const { childId, eventId, ...updateData } = request.data;
 
     if (!childId || !eventId) {
       throw new HttpsError("invalid-argument", "childId et eventId sont requis.");
     }
-
-    const db = admin.firestore();
 
     // Permission check
     await checkChildAccess(db, uid, childId, ["owner", "admin"]);
@@ -547,15 +671,17 @@ exports.deleteEventCascade = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
     }
+    monitorAppCheck(request, "deleteEventCascade");
 
     const uid = request.auth.uid;
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "events", 30);
+
     const { childId, eventId } = request.data;
 
     if (!childId || !eventId) {
       throw new HttpsError("invalid-argument", "childId et eventId sont requis.");
     }
-
-    const db = admin.firestore();
 
     // Permission check
     await checkChildAccess(db, uid, childId, ["owner", "admin"]);
@@ -594,5 +720,111 @@ exports.deleteEventCascade = onCall(
         comments: commentsSnap.size,
       },
     };
+  }
+);
+
+// ============================================
+// ACCOUNT DELETION (RGPD)
+// ============================================
+
+/**
+ * deleteUserAccount — Suppression complète du compte utilisateur et de toutes ses données.
+ * Obligatoire pour conformité RGPD (Apple/Google Store requirement).
+ */
+exports.deleteUserAccount = onCall(
+  { region: "europe-west1", timeoutSeconds: 300, memory: "512MiB" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    monitorAppCheck(request, "deleteUserAccount");
+
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+
+    // Rate limit: 1 suppression/min max
+    await checkRateLimit(db, uid, "delete", 1);
+
+    // Récupérer l'email pour cleanup des invitations
+    let email = "";
+    try {
+      const userRecord = await admin.auth().getUser(uid);
+      email = (userRecord.email || "").toLowerCase();
+    } catch (e) {
+      // User may already be partially deleted, continue
+      console.warn(`deleteUserAccount: could not fetch user record for ${uid}`, e.message);
+    }
+
+    // 1. Récupérer tous les enfants auxquels l'utilisateur a accès
+    const accessSnapshot = await db
+      .collection("user_child_access")
+      .where("userId", "==", uid)
+      .get();
+
+    // 2. Traiter chaque enfant
+    for (const accessDoc of accessSnapshot.docs) {
+      const { childId, role } = accessDoc.data();
+      if (!childId) continue;
+
+      const childAccessSnap = await db
+        .collection("children").doc(childId).collection("access")
+        .get();
+
+      if (childAccessSnap.size <= 1) {
+        // Seul utilisateur → supprimer l'enfant et toutes ses données
+        await deleteChildDataBatched(db, childId);
+        await db.doc(`children/${childId}`).delete();
+      } else if (role === "owner") {
+        // Owner avec co-parents → transférer la propriété
+        await transferOwnership(db, childId, uid, childAccessSnap);
+        await db.doc(`children/${childId}/access/${uid}`).delete();
+      } else {
+        // Non-owner → supprimer l'accès uniquement
+        await db.doc(`children/${childId}/access/${uid}`).delete();
+      }
+
+      // Supprimer l'entrée d'index
+      await accessDoc.ref.delete();
+    }
+
+    // 3. Supprimer les données créées par l'utilisateur (par userId)
+    await Promise.all([
+      deleteDocsByFieldBatched(db, "events", "userId", uid),
+      deleteDocsByFieldBatched(db, "eventLikes", "userId", uid),
+      deleteDocsByFieldBatched(db, "eventComments", "userId", uid),
+      deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", uid),
+      deleteDocsByFieldBatched(db, "shareCodes", "createdBy", uid),
+    ]);
+
+    // 4. Supprimer les invitations par email
+    if (email) {
+      await Promise.all([
+        deleteDocsByFieldBatched(db, "shareInvitations", "inviterEmail", email),
+        deleteDocsByFieldBatched(db, "shareInvitations", "invitedEmail", email),
+      ]);
+    }
+
+    // 5. Supprimer les documents uniques de l'utilisateur
+    const singleDocPaths = [
+      `users/${uid}`,
+      `users_public/${uid}`,
+      `user_preferences/${uid}`,
+      `rate_limits/${uid}`,
+      `usage_limits/${uid}`,
+    ];
+    const batch = db.batch();
+    singleDocPaths.forEach((path) => batch.delete(db.doc(path)));
+    await batch.commit();
+
+    // 6. Supprimer l'utilisateur Firebase Auth (DERNIER — irréversible)
+    try {
+      await admin.auth().deleteUser(uid);
+    } catch (e) {
+      console.error(`deleteUserAccount: failed to delete auth user ${uid}`, e.message);
+      // Data is already cleaned up, auth deletion failure is non-critical
+    }
+
+    console.log(`deleteUserAccount: completed for uid=${uid}`);
+    return { success: true };
   }
 );

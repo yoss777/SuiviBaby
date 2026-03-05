@@ -69,7 +69,7 @@ const getUserName = async (userId: string): Promise<string> => {
 /**
  * Récupérer les noms de plusieurs utilisateurs en batch
  */
-const getUserNames = async (
+export const getUserNames = async (
   userIds: string[]
 ): Promise<Map<string, string>> => {
   const result = new Map<string, string>();

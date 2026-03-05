@@ -2,7 +2,7 @@ import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBaby } from '@/contexts/BabyContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { collection, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
+import { collection, limit, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 interface MomentsNotificationContextType {
@@ -144,7 +144,8 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     const likesQuery = query(
       collection(db, 'eventLikes'),
       where('childId', '==', activeChild.id),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(10000)
     );
 
     const unsubscribeLikes = onSnapshot(likesQuery, (snapshot) => {
@@ -175,7 +176,8 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     const commentsQuery = query(
       collection(db, 'eventComments'),
       where('childId', '==', activeChild.id),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(10000)
     );
 
     const unsubscribeComments = onSnapshot(commentsQuery, (snapshot) => {

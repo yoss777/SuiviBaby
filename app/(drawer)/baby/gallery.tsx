@@ -13,6 +13,7 @@ import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
 import { JalonEvent } from "@/services/eventsService";
 import {
   ecouterInteractionsSociales,
+  getUserNames,
   toggleLike,
 } from "@/services/socialService";
 import { LikeInfo } from "@/types/social";
@@ -58,6 +59,7 @@ type PhotoMilestone = {
   titre?: string;
   description?: string;
   typeJalon: string;
+  userId?: string;
 };
 
 // ============================================
@@ -214,6 +216,8 @@ export default function GalleryScreen() {
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>(
     {},
   );
+  // Author names for photos not by current user
+  const [authorNames, setAuthorNames] = useState<Record<string, string>>({});
 
   const refreshData = useCallback(() => {
     setRefreshTick((prev) => prev + 1);
@@ -326,6 +330,7 @@ export default function GalleryScreen() {
           titre: photoTitre,
           description: event.description,
           typeJalon: event.typeJalon,
+          userId: event.userId,
         });
       }
     });
@@ -372,6 +377,26 @@ export default function GalleryScreen() {
 
     return () => unsubscribe();
   }, [activeChild?.id, refreshTick]);
+
+  // Resolve author names for photos not by current user
+  useEffect(() => {
+    if (!firebaseUser?.uid || allPhotoMilestones.length === 0) return;
+    const otherUserIds = [
+      ...new Set(
+        allPhotoMilestones
+          .filter((p) => p.userId && p.userId !== firebaseUser.uid)
+          .map((p) => p.userId!)
+      ),
+    ];
+    if (otherUserIds.length === 0) return;
+    getUserNames(otherUserIds).then((namesMap) => {
+      const names: Record<string, string> = {};
+      namesMap.forEach((name, uid) => {
+        names[uid] = name;
+      });
+      setAuthorNames(names);
+    });
+  }, [firebaseUser?.uid, allPhotoMilestones]);
 
   // Social interactions listener
   useEffect(() => {
@@ -589,6 +614,7 @@ export default function GalleryScreen() {
           uri: p.photo,
           date: p.date,
           titre: p.titre,
+          userId: p.userId,
         }))}
         initialIndex={galleryInitialIndex}
         visible={galleryVisible}
@@ -602,6 +628,8 @@ export default function GalleryScreen() {
         likesInfo={likesInfo}
         commentCounts={commentCounts}
         currentUserName={userName ?? "Moi"}
+        authorNames={authorNames}
+        currentUserId={firebaseUser?.uid}
       />
     </View>
   );

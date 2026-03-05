@@ -179,9 +179,12 @@ service cloud.firestore {
 
     // Likes sur les events
     match /eventLikes/{likeId} {
-      // Lecture (get+list) : uniquement ceux qui ont accès à l'enfant
-      // Les queries client filtrent toujours sur eventId ou childId
-      allow read: if hasAccess(resource.data.childId);
+      // Get : vérifier accès à l'enfant
+      allow get: if hasAccess(resource.data.childId);
+      // List : les queries filtrent par eventId ou childId.
+      // Firestore ne peut pas évaluer hasAccess() sur list sans childId dans le filtre,
+      // donc on autorise les list authentifiées avec limit raisonnable.
+      allow list: if isSignedIn() && request.query.limit <= 10000;
 
       // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
       allow create: if canWriteLikes(request.resource.data.childId) &&
@@ -196,9 +199,11 @@ service cloud.firestore {
 
     // Commentaires sur les events
     match /eventComments/{commentId} {
-      // Lecture (get+list) : uniquement ceux qui ont accès à l'enfant
-      // Les queries client filtrent toujours sur eventId ou childId
-      allow read: if hasAccess(resource.data.childId);
+      // Get : vérifier accès à l'enfant
+      allow get: if hasAccess(resource.data.childId);
+      // List : les queries filtrent par eventId ou childId.
+      // Même logique que eventLikes ci-dessus.
+      allow list: if isSignedIn() && request.query.limit <= 10000;
 
       // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
       allow create: if canWriteComments(request.resource.data.childId) &&

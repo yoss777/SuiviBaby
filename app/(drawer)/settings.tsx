@@ -484,7 +484,9 @@ export default function SettingsScreen() {
             await deleteAccountAndData(deletePassword);
             setShowDeletePasswordModal(false);
             setDeletePassword("");
-            await signOut();
+            // L'utilisateur Auth est supprimé côté serveur par la CF,
+            // signOut peut échouer — on navigue quand même.
+            try { await signOut(); } catch (_) { /* user already deleted */ }
             router.replace("/(auth)/login");
           } catch (error: any) {
             const code = error?.code || "";

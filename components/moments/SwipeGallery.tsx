@@ -46,6 +46,7 @@ type PhotoItem = {
   uri: string;
   date: Date;
   titre?: string;
+  userId?: string;
 };
 
 type LikeInfo = {
@@ -71,6 +72,8 @@ type SwipeGalleryProps = {
   likesInfo?: Record<string, LikeInfo>;
   commentCounts?: Record<string, number>;
   currentUserName?: string;
+  authorNames?: Record<string, string>;
+  currentUserId?: string;
 };
 
 // Format date short for title fallback
@@ -149,6 +152,8 @@ export const SwipeGallery = ({
   likesInfo = {},
   commentCounts = {},
   currentUserName = "Moi",
+  authorNames = {},
+  currentUserId,
 }: SwipeGalleryProps) => {
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
@@ -572,10 +577,12 @@ export const SwipeGallery = ({
                   </View>
                   <View style={styles.photoInfoContainer}>
                     <Text style={styles.photoDate}>
-                      {formatDateShort(item.photo.date)}
+                      {item.photo.userId && item.photo.userId !== currentUserId && authorNames[item.photo.userId]
+                        ? `par ${authorNames[item.photo.userId]}, ${formatDateShort(item.photo.date)}`
+                        : formatDateShort(item.photo.date)}
                     </Text>
                     {item.photo.titre && (
-                      <Text style={styles.photoTitle} numberOfLines={1}>
+                      <Text style={styles.photoTitle} numberOfLines={2}>
                         {item.photo.titre}
                       </Text>
                     )}
@@ -603,6 +610,8 @@ export const SwipeGallery = ({
       doubleTapHeartId,
       heartAnimatedStyle,
       imageErrorIds,
+      authorNames,
+      currentUserId,
     ],
   );
 
