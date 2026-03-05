@@ -350,7 +350,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         const duree =
           heureDebut && fin
             ? Math.max(
-                0,
+                1,
                 Math.round((fin.getTime() - heureDebut.getTime()) / 60000),
               )
             : undefined;
@@ -859,7 +859,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       </View>
 
       <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate}>
+        <Text style={styles.selectedDate} numberOfLines={1} adjustsFontSizeToFit>
           {dateHeure.toLocaleDateString("fr-FR", {
             weekday: "long",
             year: "numeric",

@@ -41,7 +41,7 @@ const computeSleepDuration = (
   if (typeof duree === "number") return duree;
   if (heureDebut && heureFin) {
     return Math.max(
-      0,
+      1,
       Math.round((heureFin.getTime() - heureDebut.getTime()) / 60000),
     );
   }
@@ -266,6 +266,8 @@ export async function ajouterSommeil(childId: string, data: any) {
     heureFin,
     duree,
     isNap: data.isNap,
+    location: data.location,
+    quality: data.quality,
     date: heureDebut || new Date(),
     note: data.note,
   });
@@ -281,10 +283,20 @@ export function ecouterSommeils(childId: string, callback: (docs: any[]) => void
 }
 
 export async function modifierSommeil(childId: string, id: string, data: any) {
+  // Preserve null values for heureFin/duree — the CF converts null to deleteField()
+  const heureFinIsNull = data.heureFin === null;
+  const dureeIsNull = data.duree === null;
+
   const heureDebut = toDate(data.heureDebut);
-  const heureFin = toDate(data.heureFin);
-  const duree = computeSleepDuration(heureDebut, heureFin, data.duree);
-  const cleanedData = removeUndefined({ ...data, heureDebut, heureFin, duree });
+  const heureFin = heureFinIsNull ? null : toDate(data.heureFin);
+  const duree = dureeIsNull ? null : computeSleepDuration(heureDebut, heureFin ?? undefined, data.duree);
+
+  const cleanedData = removeUndefined({ ...data, heureDebut, heureFin: heureFinIsNull ? undefined : heureFin, duree: dureeIsNull ? undefined : duree });
+
+  // Re-add null values after removeUndefined so they reach the CF as deleteField
+  if (heureFinIsNull) cleanedData.heureFin = null;
+  if (dureeIsNull) cleanedData.duree = null;
+
   return modifierEvenement(childId, id, cleanedData);
 }
 

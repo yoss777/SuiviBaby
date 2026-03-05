@@ -1,11 +1,12 @@
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
+import { QUICK_ADD_ACTIONS } from "@/constants/dashboardConfig";
 import { Colors } from "@/constants/theme";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useEffect, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   Easing,
@@ -58,16 +59,6 @@ const ACTIONS = [
   },
   // Position 2 (accessible avec léger ajustement)
   {
-    key: "sleep",
-    icon: { lib: "fa6" as const, name: "bed" },
-    label: "Sommeil",
-    color: "#7C6BA4",
-    bgColor: "#F5F3F8",
-    formType: "routines" as const,
-    routineType: "sommeil" as const,
-  },
-  // Position 1 (la plus éloignée - action réfléchie)
-  {
     key: "milestone",
     icon: { lib: "fa6" as const, name: "camera" },
     label: "Moment",
@@ -75,6 +66,15 @@ const ACTIONS = [
     bgColor: "#dbeafe",
     formType: "milestones" as const,
     jalonType: "photo" as const,
+  },
+  // Position 1 (la plus éloignée - action réfléchie)
+  {
+    key: "more",
+    icon: { lib: "fa6" as const, name: "ellipsis" },
+    label: "Plus",
+    color: "#6B7280",
+    bgColor: "#F3F4F6",
+    isMore: true as const,
   },
 ];
 
@@ -262,9 +262,103 @@ export const GlobalFAB = ({
     opacity: backdropOpacity.value,
   }));
 
+  const handleQuickAddPress = useCallback(
+    (route: string) => {
+      const soinsMatch = route.match(/soins\?type=(\w+)/);
+      if (soinsMatch) {
+        openSheet({ ownerId: "global-fab", formType: "soins", soinsType: soinsMatch[1] as any });
+        return;
+      }
+      const mealsMatch = route.match(/meals\?tab=(\w+)/);
+      if (mealsMatch) {
+        const map: Record<string, "tetee" | "biberon" | "solide"> = { seins: "tetee", tetee: "tetee", biberons: "biberon", biberon: "biberon", solide: "solide", solides: "solide" };
+        const mealType = map[mealsMatch[1]];
+        if (mealType) { openSheet({ ownerId: "global-fab", formType: "meals", mealType }); return; }
+      }
+      if (route.includes("pumping") && route.includes("openModal=true")) {
+        openSheet({ ownerId: "global-fab", formType: "pumping" }); return;
+      }
+      if (route.includes("activities") && route.includes("openModal=true")) {
+        openSheet({ ownerId: "global-fab", formType: "activities", activiteType: "tummyTime" }); return;
+      }
+      const milestonesMatch = route.match(/milestones\?type=(\w+)/);
+      if (milestonesMatch) {
+        openSheet({ ownerId: "global-fab", formType: "milestones", jalonType: milestonesMatch[1] as any }); return;
+      }
+      if (route.includes("milestones") && route.includes("openModal=true")) {
+        openSheet({ ownerId: "global-fab", formType: "milestones", jalonType: "photo" }); return;
+      }
+      const diapersMatch = route.match(/diapers\?tab=(\w+)/);
+      if (diapersMatch) {
+        const map: Record<string, "miction" | "selle"> = { mictions: "miction", miction: "miction", selles: "selle", selle: "selle" };
+        const diapersType = map[diapersMatch[1]];
+        if (diapersType) { openSheet({ ownerId: "global-fab", formType: "diapers", diapersType }); return; }
+      }
+      if (route.includes("routines") && route.includes("openModal=true")) {
+        const typeMatch = route.match(/type=(\w+)/);
+        const routineType = typeMatch?.[1] as "sommeil" | "bain" | undefined;
+        if (routineType === "sommeil") { openSheet({ ownerId: "global-fab", formType: "routines", routineType: "sommeil", sleepMode: "nap" }); return; }
+        if (routineType === "bain") { openSheet({ ownerId: "global-fab", formType: "routines", routineType: "bain" }); return; }
+      }
+      if (route.includes("croissance") && route.includes("openModal=true")) {
+        openSheet({ ownerId: "global-fab", formType: "croissance" }); return;
+      }
+    },
+    [openSheet],
+  );
+
+  const openMoreSheet = useCallback(() => {
+    openSheet({
+      ownerId: "global-fab-more",
+      title: "Ajouter un événement",
+      icon: "plus",
+      accentColor: colors.tint,
+      showActions: false,
+      onSubmit: () => {},
+      snapPoints: ["55%", "75%"],
+      children: (
+        <View style={styles.quickSheetList}>
+          {QUICK_ADD_ACTIONS.map((action) => (
+            <TouchableOpacity
+              key={action.key}
+              style={styles.quickSheetItem}
+              onPress={() => handleQuickAddPress(action.route)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`Ajouter ${action.label}`}
+            >
+              <View style={styles.quickSheetIcon}>
+                {action.icon.type === "mc" ? (
+                  <MaterialCommunityIcons
+                    name={action.icon.name as any}
+                    size={18}
+                    color={action.icon.color}
+                  />
+                ) : (
+                  <FontAwesome6
+                    name={action.icon.name as any}
+                    size={18}
+                    color={action.icon.color}
+                  />
+                )}
+              </View>
+              <Text
+                style={[styles.quickSheetLabel, { color: colors.text }]}
+              >
+                {action.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ),
+    });
+  }, [colors, handleQuickAddPress, openSheet]);
+
   const handleActionPress = (action: (typeof ACTIONS)[0]) => {
     setIsOpen(false);
-    if (action.formType === "meals") {
+    if ("isMore" in action) {
+      openMoreSheet();
+    } else if (action.formType === "meals") {
       openSheet({
         ownerId: "global-fab",
         formType: "meals",
@@ -275,12 +369,6 @@ export const GlobalFAB = ({
         ownerId: "global-fab",
         formType: "diapers",
         diapersType: action.diapersType,
-      });
-    } else if (action.formType === "routines") {
-      openSheet({
-        ownerId: "global-fab",
-        formType: "routines",
-        routineType: action.routineType,
       });
     } else if (action.formType === "milestones") {
       openSheet({
@@ -419,6 +507,33 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     fontSize: 13,
+    fontWeight: "600",
+  },
+  quickSheetList: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  quickSheetItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#f5f5f5",
+    borderWidth: 1,
+    borderColor: "#e5e5e5",
+  },
+  quickSheetIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  quickSheetLabel: {
+    fontSize: 15,
     fontWeight: "600",
   },
 });

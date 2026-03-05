@@ -15,7 +15,6 @@ import {
 import {
   MOMENT_REPAS_LABELS,
   MOOD_EMOJIS,
-  QUICK_ADD_ACTIONS,
 } from "@/constants/dashboardConfig";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,7 +26,6 @@ import { useChildPermissions } from "@/hooks/useChildPermissions";
 import {
   ajouterJalon,
   ajouterSommeil,
-  modifierSommeil,
 } from "@/migration/eventsDoubleWriteService";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import {
@@ -35,7 +33,7 @@ import {
   getTodayEventsCache,
 } from "@/services/todayEventsCache";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
@@ -46,7 +44,6 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -353,8 +350,8 @@ function useEventEditHandler(
               heureDebut: toDate(event.heureDebut),
               heureFin: event.heureFin ? toDate(event.heureFin) : undefined,
               isNap: event.isNap,
-              location: event.lieu,
-              quality: event.qualite,
+              location: event.location,
+              quality: event.quality,
               note: event.note,
             },
             sommeilEnCours,
@@ -442,7 +439,7 @@ export default function HomeDashboard() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
-  const { openSheet: openSheetRaw, closeSheet, isOpen } = useSheet();
+  const { openSheet: openSheetRaw } = useSheet();
   const { showToast } = useToast();
   const warningStateRef = useRef<
     Record<string, { miction?: number; selle?: number }>
@@ -458,17 +455,11 @@ export default function HomeDashboard() {
   const [showRecentHint, setShowRecentHint] = useState(false);
   const headerMicOpacity = useRef(new Animated.Value(0)).current;
   const inlineMicOpacity = useRef(new Animated.Value(1)).current;
-  const headerAddOpacity = useRef(new Animated.Value(0)).current;
   const [headerMicVisible, setHeaderMicVisible] = useState(false);
-  const [headerAddVisible, setHeaderAddVisible] = useState(false);
   const headerMicVisibleRef = useRef(false);
-  const headerAddVisibleRef = useRef(false);
   const headerRowLayoutRef = useRef<{ y: number; height: number } | null>(null);
-  const activitiesLayoutRef = useRef<{ y: number; height: number } | null>(
-    null,
-  );
   const scrollYRef = useRef(0);
-  const pendingQuickAddRouteRef = useRef<string | null>(null);
+
   const [refreshTick, setRefreshTick] = useState(0);
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
@@ -865,7 +856,7 @@ export default function HomeDashboard() {
     const start = toDate(sommeilEnCours.heureDebut);
     return Math.max(
       0,
-      Math.ceil((currentTime.getTime() - start.getTime()) / 60000),
+      Math.round((currentTime.getTime() - start.getTime()) / 60000),
     );
   }, [sommeilEnCours, currentTime, toDate]);
 
@@ -893,15 +884,32 @@ export default function HomeDashboard() {
 
   // Alimentation Group
   const alimentationGroup = useMemo((): {
-    summary: string;
+    summary: React.ReactNode;
     timeSince?: string;
     timeSinceLabel?: string;
     lastTime?: string;
     items: StatItem[];
   } => {
-    const totalCount = todayStats.meals.total.count;
     const biberonQty = todayStats.meals.biberons.quantity;
     const pompageQty = todayStats.pompages.quantity;
+
+    // Count unique meals: events within 2 min = 1 meal
+    const MEAL_GROUP_MS = 20 * 60 * 1000;
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const allMealTimestamps = [...data.tetees, ...data.biberons, ...data.solides]
+      .map((e) => toDate(e.date).getTime())
+      .filter((t) => t >= startOfToday.getTime() && t < endOfToday.getTime())
+      .sort((a, b) => a - b);
+    let mealCount = 0;
+    let lastMealGroupTs = -Infinity;
+    for (const ts of allMealTimestamps) {
+      if (ts - lastMealGroupTs > MEAL_GROUP_MS) {
+        mealCount++;
+        lastMealGroupTs = ts;
+      }
+    }
 
     // Use only meals timestamp (not pompages) for "il y a" display
     const mealsTimestampToday = todayStats.meals.total.lastTimestamp;
@@ -912,12 +920,42 @@ export default function HomeDashboard() {
         ? formatTime(new Date(displayTimestamp))
         : undefined;
 
-    const summaryParts = [`${totalCount} repas`];
-    if (biberonQty > 0) summaryParts.push(`${biberonQty}ml bib.`);
-    if (pompageQty > 0) summaryParts.push(`${pompageQty}ml tiré`);
+    const iconBoxStyle = { width: 20, alignItems: "center" as const };
+    const detailTextStyle = { fontSize: 18, fontWeight: "700" as const, color: neutralColors.textStrong };
+    const detailRows: React.ReactNode[] = [];
+    if (biberonQty > 0)
+      detailRows.push(
+        <View key="bib" style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View style={iconBoxStyle}>
+            <MaterialCommunityIcons name="baby-bottle" size={16} color={itemColors.biberon} />
+          </View>
+          <Text style={detailTextStyle}>{biberonQty}ml</Text>
+        </View>,
+      );
+    if (pompageQty > 0)
+      detailRows.push(
+        <View key="pump" style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View style={iconBoxStyle}>
+            <FontAwesome name="pump-medical" size={14} color={itemColors.pompage} />
+          </View>
+          <Text style={detailTextStyle}>{pompageQty}ml</Text>
+        </View>,
+      );
+
+    const summaryNode: React.ReactNode =
+      detailRows.length > 0 ? (
+        <View style={{ gap: 2 }}>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: neutralColors.textStrong }}>
+            {mealCount} repas
+          </Text>
+          {detailRows}
+        </View>
+      ) : (
+        `${mealCount} repas`
+      );
 
     return {
-      summary: summaryParts.join(" • "),
+      summary: summaryNode,
       timeSince: getTimeSince(displayTimestamp),
       lastTime,
       items: [
@@ -978,7 +1016,7 @@ export default function HomeDashboard() {
         },
       ],
     };
-  }, [todayStats, getTimeSince, openSheet, formatTime, canManageContent]);
+  }, [todayStats, data.tetees, data.biberons, data.solides, toDate, getTimeSince, openSheet, formatTime, canManageContent]);
 
   // Santé Group (Couches + Vitamines + Vaccins)
   const santeGroup = useMemo((): {
@@ -1042,14 +1080,34 @@ export default function HomeDashboard() {
         ? formatTime(new Date(displayTimestamp))
         : undefined;
 
+    // Count unique changes: miction + selle within 2 min = 1 change
+    const CHANGE_GROUP_MS = 2 * 60 * 1000;
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const allChangeTimestamps = [...data.mictions, ...data.selles]
+      .map((e) => toDate(e.date).getTime())
+      .filter((t) => t >= startOfToday.getTime() && t < endOfToday.getTime())
+      .sort((a, b) => a - b);
+    let changeCount = 0;
+    let lastChangeGroupTs = -Infinity;
+    for (const ts of allChangeTimestamps) {
+      if (ts - lastChangeGroupTs > CHANGE_GROUP_MS) {
+        changeCount++;
+        lastChangeGroupTs = ts;
+      }
+    }
+
     const summaryParts = [
-      `${mictionCount + selleCount} change${mictionCount + selleCount > 1 ? "s" : ""}`,
+      `${changeCount} change${changeCount > 1 ? "s" : ""}`,
     ];
-    if (vitamineCount > 0) summaryParts.push(`${vitamineCount} vit.`);
-    if (vaccinCount > 0) summaryParts.push(`${vaccinCount} vacc.`);
+    if (vitamineCount > 0)
+      summaryParts.push(`${vitamineCount} vitamine${vitamineCount > 1 ? "s" : ""}`);
+    if (vaccinCount > 0)
+      summaryParts.push(`${vaccinCount} vaccin${vaccinCount > 1 ? "s" : ""}`);
 
     return {
-      summary: summaryParts.join(" • "),
+      summary: summaryParts.join("\n"),
       timeSince: getTimeSince(displayTimestamp),
       lastTime,
       isWarning,
@@ -1126,6 +1184,9 @@ export default function HomeDashboard() {
     };
   }, [
     todayStats,
+    data.mictions,
+    data.selles,
+    toDate,
     getTimeSince,
     openSheet,
     formatTime,
@@ -1152,43 +1213,30 @@ export default function HomeDashboard() {
     [activeChild?.id, sommeilEnCours, showToast],
   );
 
-  const handleStopSleep = useCallback(async () => {
+  const handleStopSleep = useCallback(() => {
     if (!activeChild?.id || !sommeilEnCours?.id) return;
-    try {
-      const fin = new Date();
-      const start = toDate(sommeilEnCours.heureDebut);
-      const duree = Math.max(
-        0,
-        Math.round((fin.getTime() - start.getTime()) / 60000),
-      );
-      await modifierSommeil(activeChild.id, sommeilEnCours.id, {
-        heureFin: fin,
-        duree,
-      });
-      // Open the form sheet to edit the completed sleep
-      openSheet({
-        ownerId: headerOwnerId.current,
-        formType: "routines",
-        routineType: "sommeil",
-        sleepMode: sommeilEnCours.isNap ? "nap" : "night",
-        editData: {
-          id: sommeilEnCours.id,
-          type: "sommeil",
-          date: start,
-          heureDebut: start,
-          heureFin: fin,
-          isNap: sommeilEnCours.isNap,
-          location: sommeilEnCours.lieu,
-          quality: sommeilEnCours.qualite,
-          note: sommeilEnCours.note,
-          duree,
-        },
-      });
-    } catch (error) {
-      console.error("Erreur arrêt sommeil:", error);
-      showToast("Impossible d'arrêter le sommeil");
-    }
-  }, [activeChild?.id, sommeilEnCours, showToast, toDate, openSheet]);
+    const start = toDate(sommeilEnCours.heureDebut);
+
+    // Open the form with heureFin pre-filled so it's ready to terminate
+    openSheet({
+      ownerId: headerOwnerId.current,
+      formType: "routines",
+      routineType: "sommeil",
+      sleepMode: sommeilEnCours.isNap ? "nap" : "night",
+      editData: {
+        id: sommeilEnCours.id,
+        type: "sommeil",
+        date: start,
+        heureDebut: start,
+        heureFin: new Date(),
+        isNap: sommeilEnCours.isNap,
+        location: sommeilEnCours.location,
+        quality: sommeilEnCours.quality,
+        note: sommeilEnCours.note,
+      },
+      sommeilEnCours,
+    });
+  }, [activeChild?.id, sommeilEnCours, toDate, openSheet]);
 
   // ============================================
   // EFFECTS - TIMER
@@ -1328,7 +1376,6 @@ export default function HomeDashboard() {
     (
       scrollY: number,
       headerLayout: { y: number; height: number } | null,
-      activitiesLayout: { y: number; height: number } | null,
     ) => {
       if (headerLayout) {
         const threshold = headerLayout.y + headerLayout.height - 8;
@@ -1349,25 +1396,8 @@ export default function HomeDashboard() {
           setHeaderMicVisible(shouldShow);
         }
       }
-
-      if (activitiesLayout) {
-        const threshold = activitiesLayout.y + activitiesLayout.height * 0.5;
-        const fadeRange = 70;
-        const fadeStart = threshold - fadeRange;
-        const progress = Math.max(
-          0,
-          Math.min(1, (scrollY - fadeStart) / fadeRange),
-        );
-        headerAddOpacity.setValue(progress);
-
-        const shouldShow = progress > 0.05;
-        if (shouldShow !== headerAddVisibleRef.current) {
-          headerAddVisibleRef.current = shouldShow;
-          setHeaderAddVisible(shouldShow);
-        }
-      }
     },
-    [headerAddOpacity, headerMicOpacity, inlineMicOpacity],
+    [headerMicOpacity, inlineMicOpacity],
   );
 
   const handleScroll = useCallback(
@@ -1377,7 +1407,6 @@ export default function HomeDashboard() {
       updateHeaderControls(
         scrollY,
         headerRowLayoutRef.current,
-        activitiesLayoutRef.current,
       );
     },
     [updateHeaderControls],
@@ -1387,223 +1416,8 @@ export default function HomeDashboard() {
     updateHeaderControls(
       scrollYRef.current,
       headerRowLayoutRef.current,
-      activitiesLayoutRef.current,
     );
   }, [updateHeaderControls]);
-
-  useEffect(() => {
-    if (isOpen) return;
-    if (!pendingQuickAddRouteRef.current) return;
-    const route = pendingQuickAddRouteRef.current;
-    pendingQuickAddRouteRef.current = null;
-    router.push(route as any);
-  }, [isOpen]);
-
-  const handleQuickAddPress = useCallback(
-    (route: string) => {
-      if (!canManageContent) return;
-      // Special handling for soins types: open form sheet directly without navigation
-      const soinsTypeMatch = route.match(/soins\?type=(\w+)/);
-      if (soinsTypeMatch) {
-        const soinsType = soinsTypeMatch[1] as
-          | "temperature"
-          | "medicament"
-          | "symptome"
-          | "vaccin"
-          | "vitamine";
-        openSheet({
-          ownerId: headerOwnerId.current,
-          formType: "soins",
-          soinsType,
-        });
-        return;
-      }
-
-      // Special handling for meals types: open form sheet directly without navigation
-      const mealsTypeMatch = route.match(/meals\?tab=(\w+)/);
-      if (mealsTypeMatch) {
-        const tabName = mealsTypeMatch[1];
-        // Map tab names to meal types
-        const mealTypeMap: Record<string, "tetee" | "biberon" | "solide"> = {
-          seins: "tetee",
-          tetee: "tetee",
-          biberons: "biberon",
-          biberon: "biberon",
-          solide: "solide",
-          solides: "solide",
-        };
-        const mealType = mealTypeMap[tabName];
-        if (mealType) {
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "meals",
-            mealType,
-          });
-          return;
-        }
-      }
-
-      // Special handling for pumping: open form sheet directly without navigation
-      if (route.includes("pumping") && route.includes("openModal=true")) {
-        openSheet({
-          ownerId: headerOwnerId.current,
-          formType: "pumping",
-        });
-        return;
-      }
-
-      // Special handling for activities: open form sheet directly without navigation
-      if (route.includes("activities") && route.includes("openModal=true")) {
-        openSheet({
-          ownerId: headerOwnerId.current,
-          formType: "activities",
-          activiteType: "tummyTime",
-        });
-        return;
-      }
-
-      // Special handling for milestones: open form sheet directly without navigation
-      const milestonesTypeMatch = route.match(/milestones\?type=(\w+)/);
-      if (milestonesTypeMatch) {
-        const jalonType = milestonesTypeMatch[1] as
-          | "dent"
-          | "pas"
-          | "sourire"
-          | "mot"
-          | "humeur"
-          | "photo"
-          | "autre";
-        openSheet({
-          ownerId: headerOwnerId.current,
-          formType: "milestones",
-          jalonType,
-        });
-        return;
-      }
-      if (route.includes("milestones") && route.includes("openModal=true")) {
-        openSheet({
-          ownerId: headerOwnerId.current,
-          formType: "milestones",
-          jalonType: "photo",
-        });
-        return;
-      }
-
-      // Special handling for diapers types: open form sheet directly without navigation
-      const diapersTypeMatch = route.match(/diapers\?tab=(\w+)/);
-      if (diapersTypeMatch) {
-        const tabName = diapersTypeMatch[1];
-        const diapersTypeMap: Record<string, "miction" | "selle"> = {
-          mictions: "miction",
-          miction: "miction",
-          selles: "selle",
-          selle: "selle",
-        };
-        const diapersType = diapersTypeMap[tabName];
-        if (diapersType) {
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "diapers",
-            diapersType,
-          });
-          return;
-        }
-      }
-
-      // Special handling for routines: open form sheet directly without navigation
-      if (route.includes("routines") && route.includes("openModal=true")) {
-        const typeMatch = route.match(/type=(\w+)/);
-        const routineType = typeMatch?.[1] as "sommeil" | "bain" | undefined;
-        if (routineType === "sommeil") {
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "routines",
-            routineType: "sommeil",
-            sleepMode: "nap",
-            sommeilEnCours,
-          });
-          return;
-        }
-        if (routineType === "bain") {
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "routines",
-            routineType: "bain",
-          });
-          return;
-        }
-      }
-
-      // Special handling for croissance: open form sheet directly without navigation
-      if (route.includes("croissance") && route.includes("openModal=true")) {
-        openSheet({
-          ownerId: headerOwnerId.current,
-          formType: "croissance",
-        });
-        return;
-      }
-
-      // Default behavior for other routes
-      if (isOpen) {
-        pendingQuickAddRouteRef.current = route;
-        closeSheet();
-        return;
-      }
-      router.push(route as any);
-    },
-    [closeSheet, isOpen, openSheet, sommeilEnCours, canManageContent],
-  );
-
-  const openQuickAddSheet = useCallback(() => {
-    if (!canManageContent) return;
-    openSheet({
-      ownerId: "home-quick-add",
-      title: "Ajouter un evenement",
-      icon: "plus",
-      accentColor: Colors[colorScheme].tint,
-      showActions: false,
-      onSubmit: () => {},
-      snapPoints: ["55%", "75%"],
-      children: (
-        <View style={styles.quickSheetList}>
-          {QUICK_ADD_ACTIONS.map((action) => (
-            <TouchableOpacity
-              key={action.key}
-              style={styles.quickSheetItem}
-              onPress={() => handleQuickAddPress(action.route)}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel={`Ajouter ${action.label}`}
-            >
-              <View style={styles.quickSheetIcon}>
-                {action.icon.type === "mc" ? (
-                  <MaterialCommunityIcons
-                    name={action.icon.name as any}
-                    size={18}
-                    color={action.icon.color}
-                  />
-                ) : (
-                  <FontAwesome
-                    name={action.icon.name as any}
-                    size={18}
-                    color={action.icon.color}
-                  />
-                )}
-              </View>
-              <Text
-                style={[
-                  styles.quickSheetLabel,
-                  { color: Colors[colorScheme].text },
-                ]}
-              >
-                {action.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      ),
-    });
-  }, [colorScheme, handleQuickAddPress, openSheet, canManageContent]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1620,12 +1434,11 @@ export default function HomeDashboard() {
             alignItems: "center",
             paddingRight: 16,
           }}
-          pointerEvents={headerMicVisible || headerAddVisible ? "auto" : "none"}
+          pointerEvents={headerMicVisible ? "auto" : "none"}
         >
           <Animated.View
             style={{
               opacity: headerMicOpacity,
-              marginRight: 8,
             }}
             pointerEvents={headerMicVisible ? "auto" : "none"}
           >
@@ -1634,19 +1447,6 @@ export default function HomeDashboard() {
               color={Colors[colorScheme].tint}
               showTestToggle={false}
             />
-          </Animated.View>
-          <Animated.View
-            style={{
-              opacity: headerAddOpacity,
-            }}
-            pointerEvents={headerAddVisible ? "auto" : "none"}
-          >
-            <Pressable
-              onPress={openQuickAddSheet}
-              style={styles.headerActionButton}
-            >
-              <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-            </Pressable>
           </Animated.View>
         </Animated.View>
       );
@@ -1658,11 +1458,8 @@ export default function HomeDashboard() {
       };
     }, [
       colorScheme,
-      headerAddOpacity,
-      headerAddVisible,
       headerMicOpacity,
       headerMicVisible,
-      openQuickAddSheet,
       setHeaderRight,
       canManageContent,
     ]),
@@ -2130,7 +1927,6 @@ export default function HomeDashboard() {
             updateHeaderControls(
               scrollYRef.current,
               { y, height },
-              activitiesLayoutRef.current,
             );
           }}
         >
@@ -2199,18 +1995,6 @@ export default function HomeDashboard() {
           {/* Santé Group (Couches + Vitamines + Vaccins) */}
           <View
             style={styles.statsGroupContainer}
-            onLayout={(event) => {
-              const { y, height } = event.nativeEvent.layout;
-              activitiesLayoutRef.current = { y, height };
-              updateHeaderControls(
-                scrollYRef.current,
-                headerRowLayoutRef.current,
-                {
-                  y,
-                  height,
-                },
-              );
-            }}
           >
             <StatsGroup
               title="Santé & Hygiène"
@@ -2384,11 +2168,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 10,
   },
-  headerActionButton: {
-    paddingVertical: 8,
-    borderRadius: 8,
-    paddingRight: 8,
-  },
   greeting: {
     fontSize: 28,
     fontWeight: "700",
@@ -2413,33 +2192,6 @@ const styles = StyleSheet.create({
   sectionTitleInline: {
     marginHorizontal: 0,
     marginBottom: 0,
-  },
-  quickSheetList: {
-    gap: 10,
-    paddingBottom: 8,
-  },
-  quickSheetItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: neutralColors.backgroundPressed,
-    borderWidth: 1,
-    borderColor: neutralColors.border,
-  },
-  quickSheetIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: neutralColors.backgroundCard,
-  },
-  quickSheetLabel: {
-    fontSize: 15,
-    fontWeight: "600",
   },
   statsGrid: {
     flexDirection: "row",

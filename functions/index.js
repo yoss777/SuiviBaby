@@ -475,7 +475,7 @@ function validateEventData(type, data) {
       break;
 
     case "sommeil":
-      if (data.duree !== undefined) {
+      if (data.duree !== undefined && data.duree !== null) {
         if (typeof data.duree !== "number" || data.duree < 1 || data.duree > 1440) {
           throw new HttpsError(
             "invalid-argument",

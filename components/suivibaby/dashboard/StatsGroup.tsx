@@ -1,6 +1,7 @@
 import { neutralColors } from "@/constants/dashboardColors";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -47,7 +48,7 @@ export interface StatsGroupProps {
   /** Border color for the card */
   borderColor?: string;
   /** Summary displayed when collapsed (e.g., "5 repas • 120ml") */
-  summary: string;
+  summary: ReactNode;
   /** Optional last activity time (e.g., "00:30") */
   lastActivity?: string;
   /** Optional secondary text (e.g., "il y a 2h") */
@@ -234,9 +235,13 @@ export const StatsGroup = memo(function StatsGroup({
 
         <View style={styles.headerContent}>
           <Text style={styles.title}>{title}</Text>
-          <Text style={[styles.summary, isWarning && styles.summaryWarning]}>
-            {summary}
-          </Text>
+          {typeof summary === "string" ? (
+            <Text style={[styles.summary, isWarning && styles.summaryWarning]}>
+              {summary}
+            </Text>
+          ) : (
+            <View style={isWarning ? { opacity: 0.8 } : undefined}>{summary}</View>
+          )}
           {(lastActivity || timeSince) && (
             <>
               {/* {lastActivity && (

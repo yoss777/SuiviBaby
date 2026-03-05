@@ -353,7 +353,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       </View>
 
       <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate}>
+        <Text style={styles.selectedDate} numberOfLines={1} adjustsFontSizeToFit>
           {dateHeure.toLocaleDateString("fr-FR", {
             weekday: "long",
             year: "numeric",
