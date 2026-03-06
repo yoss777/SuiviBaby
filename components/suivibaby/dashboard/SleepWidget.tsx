@@ -1,9 +1,10 @@
 import {
-  categoryColors,
-  neutralColors,
+  getCategoryColors,
+  getNeutralColors,
 } from "@/constants/dashboardColors";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { memo, useEffect, useRef } from "react";
+import * as Haptics from "expo-haptics";
+import React, { memo, useCallback, useEffect, useRef } from "react";
 import {
   Animated,
   Easing,
@@ -25,6 +26,7 @@ export interface SleepWidgetProps {
   onStartSleep: (isNap: boolean) => void;
   onStopSleep: () => void;
   showStopButton?: boolean;
+  colorScheme?: "light" | "dark";
 }
 
 // ============================================
@@ -39,16 +41,6 @@ const formatDuration = (minutes?: number): string => {
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
 };
 
-// Sleep color palette (derived from categoryColors.sommeil)
-const sleepColors = {
-  primary: categoryColors.sommeil.primary, // #7C6BA4
-  background: categoryColors.sommeil.background, // #F5F3F8
-  border: categoryColors.sommeil.border, // #EBE7F0
-  textDark: "#4A3D6B", // Darker variant for text
-  textMuted: "#7A6B9A", // Muted variant for subtitles
-  buttonSecondaryBg: "#EDE9F4", // Secondary button background
-};
-
 // ============================================
 // COMPONENT
 // ============================================
@@ -61,9 +53,43 @@ export const SleepWidget = memo(function SleepWidget({
   onStartSleep,
   onStopSleep,
   showStopButton = true,
+  colorScheme = "light",
 }: SleepWidgetProps) {
+  const nc = getNeutralColors(colorScheme);
+  const cat = getCategoryColors(colorScheme);
+
+  // Derive sleep colors from category colors + dark-aware variants
+  const sleepColors = {
+    primary: cat.sommeil.primary,
+    background: cat.sommeil.background,
+    border: cat.sommeil.border,
+    textDark: colorScheme === "dark" ? "#D4C8F0" : "#4A3D6B",
+    textMuted: colorScheme === "dark" ? "#9B8CBF" : "#7A6B9A",
+    buttonSecondaryBg: colorScheme === "dark" ? "#2A2140" : "#EDE9F4",
+  };
+
   const hour = new Date().getHours();
   const preferNight = hour >= 20 || hour < 6;
+  const busy = useRef(false);
+
+  const handleStart = useCallback(
+    (isNapValue: boolean) => {
+      if (busy.current) return;
+      busy.current = true;
+      setTimeout(() => { busy.current = false; }, 600);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onStartSleep(isNapValue);
+    },
+    [onStartSleep],
+  );
+
+  const handleStop = useCallback(() => {
+    if (busy.current) return;
+    busy.current = true;
+    setTimeout(() => { busy.current = false; }, 600);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onStopSleep();
+  }, [onStopSleep]);
 
   // Pulse animation for active sleep
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -98,8 +124,16 @@ export const SleepWidget = memo(function SleepWidget({
       <Animated.View
         style={[
           styles.statsCard,
+          { backgroundColor: nc.backgroundCard },
           styles.sleepWidget,
-          styles.sleepWidgetActive,
+          {
+            backgroundColor: sleepColors.background,
+            borderWidth: 2,
+            borderColor: sleepColors.primary,
+            shadowColor: sleepColors.primary,
+            shadowOpacity: 0.25,
+            shadowRadius: 12,
+          },
           { transform: [{ scale: pulseAnim }] },
         ]}
         accessibilityRole="timer"
@@ -112,26 +146,30 @@ export const SleepWidget = memo(function SleepWidget({
               size={14}
               color={sleepColors.textDark}
             />
-            <Text style={styles.sleepWidgetTitle}>
+            <Text style={[styles.sleepWidgetTitle, { color: sleepColors.textDark }]}>
               {isNap ? "Sieste" : "Nuit"} en cours
             </Text>
           </View>
         </View>
         <Text
-          style={styles.sleepWidgetValue}
+          style={[styles.sleepWidgetValue, { color: sleepColors.textDark }]}
           accessibilityLiveRegion="polite"
         >
           {formatDuration(elapsedMinutes)}
         </Text>
-        <Text style={styles.sleepWidgetSubtitle}>Début {startTime}</Text>
+        <Text style={[styles.sleepWidgetSubtitle, { color: sleepColors.textMuted }]}>
+          Début {startTime}
+        </Text>
         {showStopButton && (
           <TouchableOpacity
-            style={styles.sleepWidgetStop}
-            onPress={onStopSleep}
+            style={[styles.sleepWidgetStop, { backgroundColor: sleepColors.primary }]}
+            onPress={handleStop}
             accessibilityRole="button"
             accessibilityLabel="Terminer le sommeil"
           >
-            <Text style={styles.sleepWidgetStopText}>Terminer</Text>
+            <Text style={[styles.sleepWidgetStopText, { color: nc.backgroundCard }]}>
+              Terminer
+            </Text>
           </TouchableOpacity>
         )}
       </Animated.View>
@@ -140,64 +178,71 @@ export const SleepWidget = memo(function SleepWidget({
 
   return (
     <View
-      style={[styles.statsCard, styles.sleepWidget]}
+      style={[
+        styles.statsCard,
+        { backgroundColor: nc.backgroundCard },
+        styles.sleepWidget,
+        {
+          backgroundColor: sleepColors.background,
+          borderWidth: 1,
+          borderColor: sleepColors.border,
+        },
+      ]}
       accessibilityRole="none"
     >
-      <Text style={styles.sleepWidgetTitle}>
+      <Text style={[styles.sleepWidgetTitle, { color: sleepColors.textDark }]}>
         C'est l'heure des beaux rêves ?
       </Text>
-      <Text style={styles.sleepWidgetSubtitle}>Tap pour démarrer</Text>
+      <Text style={[styles.sleepWidgetSubtitle, { color: sleepColors.textMuted }]}>
+        Tap pour démarrer
+      </Text>
       <View style={styles.sleepWidgetButtons}>
         <TouchableOpacity
-          style={
-            preferNight ? styles.sleepWidgetSecondary : styles.sleepWidgetPrimary
-          }
-          onPress={() => onStartSleep(true)}
+          style={[
+            styles.sleepWidgetButton,
+            preferNight
+              ? { backgroundColor: sleepColors.buttonSecondaryBg }
+              : { backgroundColor: sleepColors.primary },
+          ]}
+          onPress={() => handleStart(true)}
           accessibilityRole="button"
           accessibilityLabel="Démarrer une sieste"
         >
           <FontAwesome
             name="bed"
             size={12}
-            color={
-              preferNight
-                ? sleepColors.primary
-                : neutralColors.backgroundCard
-            }
+            color={preferNight ? sleepColors.primary : nc.backgroundCard}
           />
           <Text
-            style={
-              preferNight
-                ? styles.sleepWidgetSecondaryText
-                : styles.sleepWidgetPrimaryText
-            }
+            style={[
+              styles.sleepWidgetButtonText,
+              { color: preferNight ? sleepColors.primary : nc.backgroundCard },
+            ]}
           >
             Sieste
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={
-            preferNight ? styles.sleepWidgetPrimary : styles.sleepWidgetSecondary
-          }
-          onPress={() => onStartSleep(false)}
+          style={[
+            styles.sleepWidgetButton,
+            preferNight
+              ? { backgroundColor: sleepColors.primary }
+              : { backgroundColor: sleepColors.buttonSecondaryBg },
+          ]}
+          onPress={() => handleStart(false)}
           accessibilityRole="button"
           accessibilityLabel="Démarrer une nuit de sommeil"
         >
           <FontAwesome
             name="moon"
             size={12}
-            color={
-              preferNight
-                ? neutralColors.backgroundCard
-                : sleepColors.primary
-            }
+            color={preferNight ? nc.backgroundCard : sleepColors.primary}
           />
           <Text
-            style={
-              preferNight
-                ? styles.sleepWidgetPrimaryText
-                : styles.sleepWidgetSecondaryText
-            }
+            style={[
+              styles.sleepWidgetButtonText,
+              { color: preferNight ? nc.backgroundCard : sleepColors.primary },
+            ]}
           >
             Nuit
           </Text>
@@ -208,13 +253,12 @@ export const SleepWidget = memo(function SleepWidget({
 });
 
 // ============================================
-// STYLES
+// STYLES (layout only — colors applied inline)
 // ============================================
 
 const styles = StyleSheet.create({
   statsCard: {
     flex: 1,
-    backgroundColor: neutralColors.backgroundCard,
     padding: 16,
     borderRadius: 16,
     shadowColor: "#000",
@@ -224,16 +268,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   sleepWidget: {
-    backgroundColor: sleepColors.background,
-    borderWidth: 1,
-    borderColor: sleepColors.border,
-  },
-  sleepWidgetActive: {
-    borderColor: sleepColors.primary,
-    borderWidth: 2,
-    shadowColor: sleepColors.primary,
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
+    overflow: "hidden",
   },
   sleepWidgetHeader: {
     flexDirection: "row",
@@ -248,27 +283,24 @@ const styles = StyleSheet.create({
   sleepWidgetTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: sleepColors.textDark,
   },
   sleepWidgetValue: {
     marginTop: 6,
     fontSize: 26,
     fontWeight: "700",
-    color: sleepColors.textDark,
   },
   sleepWidgetSubtitle: {
     marginTop: 4,
     fontSize: 12,
-    color: sleepColors.textMuted,
   },
   sleepWidgetButtons: {
     flexDirection: "row",
     gap: 10,
     marginTop: 10,
   },
-  sleepWidgetPrimary: {
+  sleepWidgetButton: {
     flex: 1,
-    backgroundColor: sleepColors.primary,
+    minHeight: 44,
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: "center",
@@ -276,33 +308,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-  sleepWidgetPrimaryText: {
-    color: neutralColors.backgroundCard,
-    fontWeight: "700",
-  },
-  sleepWidgetSecondary: {
-    flex: 1,
-    backgroundColor: sleepColors.buttonSecondaryBg,
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 6,
-  },
-  sleepWidgetSecondaryText: {
-    color: sleepColors.primary,
+  sleepWidgetButtonText: {
     fontWeight: "700",
   },
   sleepWidgetStop: {
     marginTop: 10,
-    backgroundColor: sleepColors.primary,
+    minHeight: 44,
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
   sleepWidgetStopText: {
-    color: neutralColors.backgroundCard,
     fontWeight: "700",
   },
 });

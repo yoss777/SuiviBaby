@@ -142,7 +142,7 @@ export async function supprimerCroissance(childId: string, id: string) {
 
 export async function ajouterBiberon(childId: string, data: any) {
   const eventData = removeUndefined({
-    type: "biberons" as EventType,
+    type: "biberon" as EventType,
     quantite: data.quantite || 0,
     typeBiberon: data.typeBiberon || "lait_infantile",
     unit: data.unit || "ml",

@@ -30,6 +30,7 @@ import Animated, {
 
 type Props = {
   tetees: any[];
+  initialTypeFilter?: "tous" | "seins" | "biberons";
 };
 
 const SCREEN_WIDTH = Dimensions.get("window").width - 40;
@@ -65,12 +66,12 @@ function addWeeks(date: Date, weeks: number) {
   return d;
 }
 
-export default function TeteesChart({ tetees }: Props) {
+export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
   const [viewMode, setViewMode] = useState<"quantity" | "frequency">(
     "frequency",
   );
   const [typeFilter, setTypeFilter] = useState<"tous" | "seins" | "biberons">(
-    "tous",
+    initialTypeFilter ?? "tous",
   );
   const [currentWeek, setCurrentWeek] = useState<Date>(
     getStartOfWeek(new Date()),
@@ -82,6 +83,12 @@ export default function TeteesChart({ tetees }: Props) {
   const tooltipY = useSharedValue(0);
 
   const jours = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+  useEffect(() => {
+    if (initialTypeFilter) {
+      setTypeFilter(initialTypeFilter);
+    }
+  }, [initialTypeFilter]);
 
   useEffect(() => {
     if (typeFilter === "seins") {

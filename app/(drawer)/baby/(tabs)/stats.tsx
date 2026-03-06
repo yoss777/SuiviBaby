@@ -45,15 +45,21 @@ export default function StatsScreen() {
   // Récupérer les paramètres de l'URL
   const { tab, returnTo } = useLocalSearchParams();
   const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
+  const rawTab = Array.isArray(tab) ? tab[0] : tab;
+
+  // Mapper le paramètre tab vers l'onglet stats + filtre TeteesChart
+  const initialTypeFilter =
+    rawTab === "biberons" ? "biberons" : rawTab === "tetees" ? "seins" : undefined;
 
   // Définir l'onglet initial en fonction du paramètre
   useEffect(() => {
-    if (tab === "pompages") {
+    if (rawTab === "pompages") {
       setSelectedTab("pompages");
     } else {
-      setSelectedTab("tetees"); // Par défaut, ou si tab === 'tetees'
+      // tetees, biberons et solides sont tous dans l'onglet "tetees"
+      setSelectedTab("tetees");
     }
-  }, [tab]);
+  }, [rawTab]);
 
   useEffect(() => {
     if (tabWidth === 0) return;
@@ -288,7 +294,7 @@ export default function StatsScreen() {
               <IconPulseDots color={Colors[colorScheme].tint} />
             </View>
           ) : (
-            <TeteesChart tetees={tetees} />
+            <TeteesChart tetees={tetees} initialTypeFilter={initialTypeFilter} />
           )
         ) : isPompagesLoading || !pompagesEmptyDelayDone ? (
           <View style={styles.loaderContainer}>

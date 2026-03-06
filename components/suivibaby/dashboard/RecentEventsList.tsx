@@ -1,3 +1,4 @@
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import {
   ACTIVITY_TYPE_LABELS,
   EVENT_CONFIG,
@@ -7,17 +8,20 @@ import {
 } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { memo } from "react";
+import React, { memo, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Image,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
 // ============================================
 // TYPES
@@ -43,7 +47,8 @@ export interface RecentEventsListProps {
   showHint: boolean;
   colorScheme: "light" | "dark";
   currentTime: Date;
-  onEventLongPress?: (event: RecentEvent) => void;
+  onEventPress?: (event: RecentEvent) => void;
+  onEventDelete?: (event: RecentEvent) => void;
   onViewAllPress: () => void;
   toDate: (value: any) => Date;
   formatTime: (date: Date) => string;
@@ -168,6 +173,75 @@ const TimeDisplay = memo(function TimeDisplay({
   );
 });
 
+const StaggeredRow = memo(function StaggeredRow({
+  index,
+  children,
+}: {
+  index: number;
+  children: React.ReactNode;
+}) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 300,
+      delay: index * 50,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: anim,
+        transform: [
+          {
+            translateY: anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [12, 0],
+            }),
+          },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+});
+
+const DeleteAction = memo(function DeleteAction({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Supprimer cet événement"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={styles.deleteActionText}>Supprimer</Text>
+    </Pressable>
+  );
+});
+
+const EmptyState = memo(function EmptyState({
+  titleColor,
+  subtitleColor,
+}: {
+  titleColor: string;
+  subtitleColor: string;
+}) {
+  return (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyStateEmoji}>{"\uD83C\uDF1F"}</Text>
+      <Text style={[styles.emptyStateTitle, { color: titleColor }]}>Rien pour l&apos;instant</Text>
+      <Text style={[styles.emptyStateSubtitle, { color: subtitleColor }]}>
+        Appuyez sur + pour enregistrer le premier événement
+      </Text>
+    </View>
+  );
+});
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -178,7 +252,8 @@ function RecentEventsListComponent({
   showHint,
   colorScheme,
   currentTime,
-  onEventLongPress,
+  onEventPress,
+  onEventDelete,
   onViewAllPress,
   toDate,
   formatTime,
@@ -186,6 +261,7 @@ function RecentEventsListComponent({
   buildDetails,
   getDayLabel,
 }: RecentEventsListProps) {
+  const nc = getNeutralColors(colorScheme);
   const borderColor = `${Colors[colorScheme].tabIconDefault}30`;
   const textColor = Colors[colorScheme].tabIconDefault;
 
@@ -223,7 +299,7 @@ function RecentEventsListComponent({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeaderRow}>
-        <Text style={[styles.sectionTitle, styles.sectionTitleInline]}>
+        <Text style={[styles.sectionTitle, styles.sectionTitleInline, { color: nc.textStrong }]}>
           Évènements récents
         </Text>
         <TouchableOpacity
@@ -232,12 +308,12 @@ function RecentEventsListComponent({
           accessibilityRole="link"
           accessibilityLabel="Voir tous les événements"
         >
-          <Text style={styles.sectionLink}>Voir tout</Text>
+          <Text style={[styles.sectionLink, { color: Colors[colorScheme].tint }]}>Voir tout</Text>
         </TouchableOpacity>
       </View>
 
       {showHint && events.length > 0 && (
-        <Text style={styles.recentHint}>
+        <Text style={[styles.recentHint, { color: nc.textMuted }]}>
           Appuyez sur un événement pour le modifier
         </Text>
       )}
@@ -245,12 +321,13 @@ function RecentEventsListComponent({
       {loading ? (
         <View style={styles.recentLoading}>
           <ActivityIndicator size="small" color={Colors[colorScheme].tint} />
-          <Text style={styles.recentLoadingText}>Chargement...</Text>
+          <Text style={[styles.recentLoadingText, { color: nc.textLight }]}>Chargement...</Text>
         </View>
       ) : events.length === 0 ? (
-        <Text style={styles.recentEmpty}>
-          Aucun événement aujourd&apos;hui.
-        </Text>
+        <EmptyState
+          titleColor={nc.textStrong}
+          subtitleColor={nc.textMuted}
+        />
       ) : (
         events.map((event, index) => {
           const config = EVENT_CONFIG[event.type] || {
@@ -302,8 +379,8 @@ function RecentEventsListComponent({
           const solideLikeColor =
             isSolide && event.aime !== undefined
               ? event.aime
-                ? "#16a34a"
-                : "#dc2626"
+                ? nc.success
+                : nc.error
               : undefined;
 
           const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
@@ -343,112 +420,126 @@ function RecentEventsListComponent({
                   textColor={textColor}
                 />
               )}
-              <View style={styles.recentRow}>
-                <View style={styles.recentTimelineColumn}>
-                  <View
-                    style={[
-                      styles.recentDot,
-                      { backgroundColor: config.color },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.recentLine,
-                      { backgroundColor: borderColor },
-                      index === events.length - 1 && styles.recentLineLast,
-                    ]}
-                  />
-                </View>
-                <View style={styles.recentTimeLeft}>
-                  <TimeDisplay
-                    isSleep={isSleep}
-                    hasEndTime={!!event.heureFin}
-                    startTime={formatTime(date)}
-                    endTime={
-                      event.heureFin
-                        ? formatTime(toDate(event.heureFin))
-                        : undefined
-                    }
-                    textColor={textColor}
-                  />
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.recentCard,
-                    {
-                      borderColor,
-                      backgroundColor: Colors[colorScheme].background,
-                    },
-                  ]}
-                  activeOpacity={0.85}
-                  onPress={
-                    onEventLongPress ? () => onEventLongPress(event) : undefined
-                  }
-                  disabled={!onEventLongPress}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${displayLabel}${displayDetails ? `, ${displayDetails}` : ""}`}
-                  accessibilityHint={
-                    onEventLongPress ? "Appuyez pour modifier" : undefined
-                  }
-                >
-                  <View style={styles.recentTitleRow}>
-                    <EventIcon
-                      config={config}
-                      isSleep={isSleep}
-                      sleepIconName={sleepIconName}
-                    />
-                    <Text
-                      style={[
-                        styles.recentTitle,
-                        { color: Colors[colorScheme].text },
-                      ]}
-                    >
-                      {displayLabel}
-                    </Text>
-                    {isJalon && event.photos?.[0] && (
-                      <Image
-                        source={{ uri: event.photos[0] }}
-                        style={styles.recentThumb}
-                        accessibilityLabel="Photo de l'événement"
+              <ReanimatedSwipeable
+                renderRightActions={
+                  onEventDelete && event.id
+                    ? () => <DeleteAction onPress={() => onEventDelete(event)} />
+                    : undefined
+                }
+                friction={2}
+                rightThreshold={40}
+                overshootRight={false}
+                enabled={!!onEventDelete && !!event.id}
+              >
+                <StaggeredRow index={index}>
+                  <View style={styles.recentRow}>
+                    <View style={styles.recentTimelineColumn}>
+                      <View
+                        style={[
+                          styles.recentDot,
+                          { backgroundColor: config.color },
+                        ]}
                       />
-                    )}
-                  </View>
-                  {!isSolide && displayDetails && (
-                    <Text
-                      style={[styles.recentDetails, { color: textColor }]}
-                      accessibilityLiveRegion={
-                        isOngoingSleep ? "polite" : "none"
+                      <View
+                        style={[
+                          styles.recentLine,
+                          { backgroundColor: borderColor },
+                          index === events.length - 1 && styles.recentLineLast,
+                        ]}
+                      />
+                    </View>
+                    <View style={styles.recentTimeLeft}>
+                      <TimeDisplay
+                        isSleep={isSleep}
+                        hasEndTime={!!event.heureFin}
+                        startTime={formatTime(date)}
+                        endTime={
+                          event.heureFin
+                            ? formatTime(toDate(event.heureFin))
+                            : undefined
+                        }
+                        textColor={textColor}
+                      />
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.recentCard,
+                        {
+                          borderColor,
+                          backgroundColor: Colors[colorScheme].background,
+                        },
+                      ]}
+                      activeOpacity={0.85}
+                      onPress={
+                        onEventPress ? () => onEventPress(event) : undefined
+                      }
+                      disabled={!onEventPress}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${displayLabel}${displayDetails ? `, ${displayDetails}` : ""}`}
+                      accessibilityHint={
+                        onEventPress ? "Appuyez pour modifier" : undefined
                       }
                     >
-                      {displayDetails}
-                    </Text>
-                  )}
-                  {isSolide && (solideLine2 || solideLikeLabel) && (
-                    <View style={styles.solideDetails}>
-                      {solideLine2 && (
+                      <View style={styles.recentTitleRow}>
+                        <EventIcon
+                          config={config}
+                          isSleep={isSleep}
+                          sleepIconName={sleepIconName}
+                        />
                         <Text
                           style={[
-                            styles.solideDetailsText,
-                            { color: textColor },
+                            styles.recentTitle,
+                            { color: Colors[colorScheme].text },
                           ]}
                         >
-                          {solideLine2}
+                          {displayLabel}
                         </Text>
-                      )}
-                      {solideLikeLabel && (
+                        {isJalon && event.photos?.[0] && (
+                          <Image
+                            source={{ uri: event.photos[0] }}
+                            style={[styles.recentThumb, { backgroundColor: nc.backgroundPressed }]}
+                            accessibilityLabel="Photo de l'événement"
+                          />
+                        )}
+                      </View>
+                      {!isSolide && displayDetails && (
                         <Text
-                          style={[
-                            styles.solideDetailsText,
-                            { color: solideLikeColor ?? textColor },
-                          ]}
+                          style={[styles.recentDetails, { color: textColor }]}
+                          accessibilityLiveRegion={
+                            isOngoingSleep ? "polite" : "none"
+                          }
                         >
-                          {solideLikeLabel}
+                          {displayDetails}
                         </Text>
                       )}
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
+                      {isSolide && (solideLine2 || solideLikeLabel) && (
+                        <View style={styles.solideDetails}>
+                          {solideLine2 && (
+                            <Text
+                              style={[
+                                styles.solideDetailsText,
+                                { color: textColor },
+                              ]}
+                            >
+                              {solideLine2}
+                            </Text>
+                          )}
+                          {solideLikeLabel && (
+                            <Text
+                              style={[
+                                styles.solideDetailsText,
+                                { color: solideLikeColor ?? textColor },
+                              ]}
+                            >
+                              {solideLikeLabel}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </StaggeredRow>
+              </ReanimatedSwipeable>
             </React.Fragment>
           );
         })
@@ -477,7 +568,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#212529",
+    color: neutralColors.textStrong,
   },
   sectionTitleInline: {
     marginHorizontal: 0,
@@ -487,6 +578,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#0a7ea4",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   recentLoading: {
     flexDirection: "row",
@@ -496,19 +589,14 @@ const styles = StyleSheet.create({
   },
   recentLoadingText: {
     fontSize: 13,
-    color: "#6c757d",
-  },
-  recentEmpty: {
-    fontSize: 13,
-    color: "#6c757d",
-    marginHorizontal: 20,
+    color: neutralColors.textLight,
   },
   recentHint: {
     marginTop: -2,
     marginBottom: 8,
     marginHorizontal: 20,
     fontSize: 12,
-    color: "#9aa0a6",
+    color: neutralColors.textMuted,
     fontWeight: "500",
   },
   recentRow: {
@@ -522,10 +610,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   recentDot: {
-    width: 10,
-    height: 10,
+    width: 12,
+    height: 12,
     borderRadius: 999,
-    marginTop: 6,
+    marginTop: 5,
   },
   recentLine: {
     width: 2,
@@ -581,7 +669,7 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 8,
     marginLeft: "auto",
-    backgroundColor: "#f1f3f5",
+    backgroundColor: neutralColors.backgroundPressed,
   },
   recentDetails: {
     marginTop: 6,
@@ -608,5 +696,43 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     textTransform: "capitalize",
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 32,
+    paddingHorizontal: 40,
+    marginHorizontal: 20,
+    marginBottom: 20,
+  },
+  emptyStateEmoji: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: neutralColors.textStrong,
+    marginBottom: 6,
+  },
+  emptyStateSubtitle: {
+    fontSize: 13,
+    color: neutralColors.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  deleteAction: {
+    backgroundColor: neutralColors.error,
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    marginBottom: 14,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

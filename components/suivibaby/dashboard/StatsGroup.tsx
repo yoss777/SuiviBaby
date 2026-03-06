@@ -1,6 +1,7 @@
-import { neutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import * as Haptics from "expo-haptics";
 import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -59,16 +60,16 @@ export interface StatsGroupProps {
   items: StatItem[];
   /** If true, shows warning style */
   isWarning?: boolean;
-  /** Called when the main header is pressed (optional quick-add) */
+  /** Called when the main header is pressed (optional) */
   onHeaderPress?: () => void;
-  /** Called when the add button is pressed */
-  onAddPress?: () => void;
   /** Current time for "time since" calculations */
   currentTime?: Date;
   /** Loading state */
   isLoading?: boolean;
   /** Start expanded */
   defaultExpanded?: boolean;
+  /** Color scheme for dark mode support */
+  colorScheme?: "light" | "dark";
 }
 
 // ============================================
@@ -115,14 +116,16 @@ export const StatsGroup = memo(function StatsGroup({
   items,
   isWarning = false,
   onHeaderPress,
-  onAddPress,
   currentTime = new Date(),
   isLoading = false,
   defaultExpanded = false,
+  colorScheme = "light",
 }: StatsGroupProps) {
+  const nc = getNeutralColors(colorScheme);
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   const toggleExpanded = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded((prev) => !prev);
   }, []);
@@ -175,32 +178,36 @@ export const StatsGroup = memo(function StatsGroup({
       inputRange: [0, 1],
       outputRange: [-200, 200],
     });
+    const shimmerBg =
+      colorScheme === "dark"
+        ? "rgba(255, 255, 255, 0.08)"
+        : "rgba(255, 255, 255, 0.4)";
 
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: nc.backgroundCard }]}>
         <View style={styles.skeletonRow}>
-          <View style={styles.skeletonIcon}>
+          <View style={[styles.skeletonIcon, { backgroundColor: nc.borderLight }]}>
             <Animated.View
               style={[
                 styles.shimmerOverlay,
-                { transform: [{ translateX: shimmerTranslate }] },
+                { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] },
               ]}
             />
           </View>
           <View style={styles.skeletonContent}>
-            <View style={styles.skeletonTitle}>
+            <View style={[styles.skeletonTitle, { backgroundColor: nc.borderLight }]}>
               <Animated.View
                 style={[
                   styles.shimmerOverlay,
-                  { transform: [{ translateX: shimmerTranslate }] },
+                  { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] },
                 ]}
               />
             </View>
-            <View style={styles.skeletonSummary}>
+            <View style={[styles.skeletonSummary, { backgroundColor: nc.borderLight }]}>
               <Animated.View
                 style={[
                   styles.shimmerOverlay,
-                  { transform: [{ translateX: shimmerTranslate }] },
+                  { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] },
                 ]}
               />
             </View>
@@ -212,7 +219,7 @@ export const StatsGroup = memo(function StatsGroup({
 
   const containerStyle = [
     styles.container,
-    backgroundColor && { backgroundColor },
+    { backgroundColor: backgroundColor ?? nc.backgroundCard },
     borderColor && { borderWidth: 1, borderColor },
   ];
 
@@ -222,7 +229,7 @@ export const StatsGroup = memo(function StatsGroup({
       <Pressable
         style={({ pressed }) => [
           styles.header,
-          pressed && styles.headerPressed,
+          pressed && { backgroundColor: nc.backgroundPressed },
         ]}
         onPress={handleHeaderPress}
         accessibilityRole="button"
@@ -234,29 +241,35 @@ export const StatsGroup = memo(function StatsGroup({
         </View>
 
         <View style={styles.headerContent}>
-          <Text style={styles.title}>{title}</Text>
+          <Text style={[styles.title, { color: nc.textLight }]}>{title}</Text>
           {typeof summary === "string" ? (
-            <Text style={[styles.summary, isWarning && styles.summaryWarning]}>
+            <Text
+              style={[
+                styles.summary,
+                { color: nc.textStrong },
+                isWarning && { color: nc.error },
+              ]}
+            >
               {summary}
             </Text>
           ) : (
-            <View style={isWarning ? { opacity: 0.8 } : undefined}>{summary}</View>
+            <View style={isWarning ? { opacity: 0.8 } : undefined}>
+              {summary}
+            </View>
           )}
           {(lastActivity || timeSince) && (
             <>
-              {/* {lastActivity && (
-                <Text style={styles.lastActivity}>
-                  Dernière fois: {lastActivity}
-                </Text>
-              )} */}
               {timeSince && (
                 <Text
                   style={[
                     styles.timeSince,
-                    isWarning && styles.timeSinceWarning,
+                    { color: nc.textMuted },
+                    isWarning && { color: nc.error },
                   ]}
                 >
-                  {timeSinceLabel ? `${timeSinceLabel}, ${timeSince}` : timeSince}
+                  {timeSinceLabel
+                    ? `${timeSinceLabel}, ${timeSince}`
+                    : timeSince}
                 </Text>
               )}
             </>
@@ -264,30 +277,19 @@ export const StatsGroup = memo(function StatsGroup({
         </View>
 
         <View style={styles.headerActions}>
-          {onAddPress && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.addButton,
-                { backgroundColor: `${color}15` },
-                pressed && styles.addButtonPressed,
-              ]}
-              onPress={onAddPress}
-              hitSlop={8}
-              accessibilityLabel={`Ajouter ${title.toLowerCase()}`}
-            >
-              <FontAwesome name="plus" size={14} color={color} />
-            </Pressable>
-          )}
           <Pressable
             style={styles.expandButton}
-            onPress={toggleExpanded}
+            onPress={(e) => {
+              e.stopPropagation();
+              toggleExpanded();
+            }}
             hitSlop={8}
             accessibilityLabel={expanded ? "Réduire" : "Développer"}
           >
             <Ionicons
               name={expanded ? "chevron-up" : "chevron-down"}
               size={20}
-              color="#9ca3af"
+              color={nc.textMuted}
             />
           </Pressable>
         </View>
@@ -295,7 +297,7 @@ export const StatsGroup = memo(function StatsGroup({
 
       {/* Expanded Items */}
       {expanded && (
-        <View style={styles.itemsContainer}>
+        <View style={[styles.itemsContainer, { borderTopColor: nc.borderLight }]}>
           {items.map((item, index) => {
             const itemTimeSince = item.lastTimestamp
               ? getTimeSinceLastActivity(item.lastTimestamp, currentTime)
@@ -307,10 +309,21 @@ export const StatsGroup = memo(function StatsGroup({
                 key={item.key}
                 style={({ pressed }) => [
                   styles.item,
-                  index < items.length - 1 && styles.itemBorder,
-                  pressed && !isItemDisabled && styles.itemPressed,
+                  index < items.length - 1 && [
+                    styles.itemBorder,
+                    { borderBottomColor: nc.borderLight },
+                  ],
+                  pressed && !isItemDisabled && { backgroundColor: nc.background },
+                  isItemDisabled && styles.itemDisabled,
                 ]}
-                onPress={item.onPress}
+                onPress={
+                  item.onPress
+                    ? () => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        item.onPress!();
+                      }
+                    : undefined
+                }
                 disabled={isItemDisabled}
                 accessibilityRole="button"
                 accessibilityLabel={`${item.label}: ${item.value} ${item.unit || ""}`}
@@ -324,9 +337,13 @@ export const StatsGroup = memo(function StatsGroup({
                   {renderIcon(item.icon, item.iconType, 16, item.color)}
                 </View>
                 <View style={styles.itemContent}>
-                  <Text style={styles.itemLabel}>{item.label}</Text>
+                  <Text style={[styles.itemLabel, { color: nc.textNormal }]}>
+                    {item.label}
+                  </Text>
                   {itemTimeSince && (
-                    <Text style={styles.itemTimeSince}>{itemTimeSince}</Text>
+                    <Text style={[styles.itemTimeSince, { color: nc.textMuted }]}>
+                      {itemTimeSince}
+                    </Text>
                   )}
                 </View>
                 <View style={styles.itemValue}>
@@ -334,9 +351,14 @@ export const StatsGroup = memo(function StatsGroup({
                     {item.value}
                   </Text>
                   {item.unit && (
-                    <Text style={styles.itemUnit}>{item.unit}</Text>
+                    <Text style={[styles.itemUnit, { color: nc.textMuted }]}>
+                      {item.unit}
+                    </Text>
                   )}
                 </View>
+                {!isItemDisabled && (
+                  <Ionicons name="chevron-forward" size={16} color={nc.textMuted} />
+                )}
               </Pressable>
             );
           })}
@@ -347,12 +369,11 @@ export const StatsGroup = memo(function StatsGroup({
 });
 
 // ============================================
-// STYLES
+// STYLES (layout only — colors applied inline via nc)
 // ============================================
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: neutralColors.backgroundCard,
     borderRadius: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -366,9 +387,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     gap: 12,
-  },
-  headerPressed: {
-    backgroundColor: neutralColors.backgroundPressed,
   },
   iconContainer: {
     width: 48,
@@ -384,59 +402,28 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 13,
     fontWeight: "600",
-    color: neutralColors.textLight,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   summary: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
-    color: neutralColors.textStrong,
-  },
-  summaryWarning: {
-    color: neutralColors.error,
   },
   timeSince: {
     fontSize: 12,
-    color: neutralColors.textMuted,
     fontWeight: "500",
-  },
-  lastActivity: {
-    fontSize: 12,
-    color: neutralColors.textLight,
-    marginTop: 4,
-  },
-  timeSinceLabel: {
-    fontSize: 11,
-    color: neutralColors.textMuted,
-    marginTop: 6,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  timeSinceWarning: {
-    color: neutralColors.error,
   },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  addButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addButtonPressed: {
-    opacity: 0.7,
-  },
   expandButton: {
-    padding: 4,
+    padding: 12,
+    margin: -8,
   },
   itemsContainer: {
     borderTopWidth: 1,
-    borderTopColor: neutralColors.borderLight,
   },
   item: {
     flexDirection: "row",
@@ -447,10 +434,9 @@ const styles = StyleSheet.create({
   },
   itemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: neutralColors.borderLight,
   },
-  itemPressed: {
-    backgroundColor: neutralColors.background,
+  itemDisabled: {
+    opacity: 0.7,
   },
   itemIcon: {
     width: 36,
@@ -465,11 +451,9 @@ const styles = StyleSheet.create({
   itemLabel: {
     fontSize: 15,
     fontWeight: "500",
-    color: neutralColors.textNormal,
   },
   itemTimeSince: {
     fontSize: 12,
-    color: neutralColors.textMuted,
     marginTop: 1,
   },
   itemValue: {
@@ -481,7 +465,6 @@ const styles = StyleSheet.create({
   },
   itemUnit: {
     fontSize: 12,
-    color: neutralColors.textMuted,
     marginTop: 1,
   },
   // Skeleton with shimmer
@@ -495,7 +478,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: neutralColors.borderLight,
     overflow: "hidden",
   },
   skeletonContent: {
@@ -506,14 +488,12 @@ const styles = StyleSheet.create({
     height: 14,
     width: "40%",
     borderRadius: 6,
-    backgroundColor: neutralColors.borderLight,
     overflow: "hidden",
   },
   skeletonSummary: {
     height: 20,
     width: "70%",
     borderRadius: 8,
-    backgroundColor: neutralColors.borderLight,
     overflow: "hidden",
   },
   shimmerOverlay: {
@@ -522,7 +502,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(255, 255, 255, 0.4)",
     width: 100,
   },
 });

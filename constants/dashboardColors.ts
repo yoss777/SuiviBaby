@@ -94,6 +94,59 @@ export const neutralColors = {
 } as const;
 
 // ============================================
+// DARK MODE VARIANTS
+// ============================================
+
+export const neutralColorsDark = {
+  textStrong: "#f9fafb",
+  textNormal: "#d1d5db",
+  textLight: "#9ca3af",
+  textMuted: "#6b7280",
+
+  background: "#111827",
+  backgroundCard: "#1f2937",
+  backgroundPressed: "#374151",
+
+  border: "#374151",
+  borderLight: "#1f2937",
+
+  success: "#22c55e",
+  warning: "#f59e0b",
+  error: "#ef4444",
+} as const;
+
+export const categoryColorsDark = {
+  alimentation: {
+    primary: "#E8785A",
+    background: "#2d1a14",
+    border: "#3d2219",
+  },
+  sante: {
+    primary: "#5BA4A4",
+    background: "#0f2020",
+    border: "#172b2b",
+  },
+  sommeil: {
+    primary: "#7C6BA4",
+    background: "#1a1526",
+    border: "#231e33",
+  },
+  moments: {
+    primary: "#E8A85A",
+    background: "#2a1f0d",
+    border: "#3a2c12",
+  },
+} as const;
+
+export function getNeutralColors(scheme: "light" | "dark") {
+  return scheme === "dark" ? neutralColorsDark : neutralColors;
+}
+
+export function getCategoryColors(scheme: "light" | "dark") {
+  return scheme === "dark" ? categoryColorsDark : categoryColors;
+}
+
+// ============================================
 // HELPERS
 // ============================================
 

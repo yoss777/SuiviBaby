@@ -6,9 +6,12 @@ import {
 } from "@/components/suivibaby/dashboard";
 import { GlobalFAB } from "@/components/suivibaby/GlobalFAB";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import {
   categoryColors,
+  getCategoryColors,
+  getNeutralColors,
   itemColors,
   neutralColors,
 } from "@/constants/dashboardColors";
@@ -32,8 +35,8 @@ import {
   buildTodayEventsData,
   getTodayEventsCache,
 } from "@/services/todayEventsCache";
+import { supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
@@ -44,6 +47,7 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -51,6 +55,34 @@ import {
   View,
 } from "react-native";
 import { useHeaderRight } from "../../_layout";
+
+// ============================================
+// STAGGERED ENTRANCE
+// ============================================
+
+function StaggeredCard({ index, visible, children }: { index: number; visible: boolean; children: React.ReactNode }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (visible) {
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 350,
+        delay: index * 80,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, anim, index]);
+  return (
+    <Animated.View
+      style={{
+        opacity: anim,
+        transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
 
 // ============================================
 // CONSTANTS
@@ -438,6 +470,8 @@ export default function HomeDashboard() {
   const { firebaseUser } = useAuth();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
+  const cat = getCategoryColors(colorScheme);
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
   const { openSheet: openSheetRaw } = useSheet();
   const { showToast } = useToast();
@@ -461,9 +495,15 @@ export default function HomeDashboard() {
   const scrollYRef = useRef(0);
 
   const [refreshTick, setRefreshTick] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    visible: boolean;
+    event: any | null;
+  }>({ visible: false, event: null });
 
   // États des données
   const [data, setData] = useState<DashboardData>({
@@ -544,6 +584,13 @@ export default function HomeDashboard() {
     setRefreshTick((prev) => prev + 1);
   }, []);
 
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setRefreshTick((prev) => prev + 1);
+    // The listener will fire and update data; give it a short minimum delay for UX
+    setTimeout(() => setIsRefreshing(false), 800);
+  }, []);
+
   const openSheet = useCallback(
     (props: Parameters<typeof openSheetRaw>[0]) => {
       openSheetRaw({
@@ -556,6 +603,27 @@ export default function HomeDashboard() {
     },
     [openSheetRaw, triggerRefresh],
   );
+
+  const handleEventDelete = useCallback((event: any) => {
+    setDeleteConfirm({ visible: true, event });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!activeChild?.id || !deleteConfirm.event?.id) return;
+    const eventId = deleteConfirm.event.id;
+    setDeleteConfirm({ visible: false, event: null });
+    try {
+      await supprimerEvenement(activeChild.id, eventId);
+      showToast("Événement supprimé");
+      triggerRefresh();
+    } catch {
+      showToast("Impossible de supprimer cet événement");
+    }
+  }, [activeChild?.id, deleteConfirm.event, showToast, triggerRefresh]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirm({ visible: false, event: null });
+  }, []);
 
   const toDate = useCallback((value: any) => {
     if (value?.seconds) return new Date(value.seconds * 1000);
@@ -829,7 +897,9 @@ export default function HomeDashboard() {
         // Toujours ajouter une nouvelle entrée (l'enfant peut changer d'humeur plusieurs fois par jour)
         const moodId = await ajouterJalon(activeChild.id, dataToSave);
 
-        if (!moodId) {
+        if (moodId) {
+          showToast("Humeur enregistrée");
+        } else {
           showToast("Impossible d'enregistrer l'humeur.");
         }
       } catch {
@@ -920,39 +990,10 @@ export default function HomeDashboard() {
         ? formatTime(new Date(displayTimestamp))
         : undefined;
 
-    const iconBoxStyle = { width: 20, alignItems: "center" as const };
-    const detailTextStyle = { fontSize: 18, fontWeight: "700" as const, color: neutralColors.textStrong };
-    const detailRows: React.ReactNode[] = [];
-    if (biberonQty > 0)
-      detailRows.push(
-        <View key="bib" style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <View style={iconBoxStyle}>
-            <MaterialCommunityIcons name="baby-bottle" size={16} color={itemColors.biberon} />
-          </View>
-          <Text style={detailTextStyle}>{biberonQty}ml</Text>
-        </View>,
-      );
-    if (pompageQty > 0)
-      detailRows.push(
-        <View key="pump" style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <View style={iconBoxStyle}>
-            <FontAwesome name="pump-medical" size={14} color={itemColors.pompage} />
-          </View>
-          <Text style={detailTextStyle}>{pompageQty}ml</Text>
-        </View>,
-      );
-
-    const summaryNode: React.ReactNode =
-      detailRows.length > 0 ? (
-        <View style={{ gap: 2 }}>
-          <Text style={{ fontSize: 18, fontWeight: "700", color: neutralColors.textStrong }}>
-            {mealCount} repas
-          </Text>
-          {detailRows}
-        </View>
-      ) : (
-        `${mealCount} repas`
-      );
+    const summaryParts = [`${mealCount} repas`];
+    if (biberonQty > 0) summaryParts.push(`${biberonQty}ml bib`);
+    if (pompageQty > 0) summaryParts.push(`${pompageQty}ml pomp`);
+    const summaryNode = summaryParts.join(" · ");
 
     return {
       summary: summaryNode,
@@ -968,12 +1009,7 @@ export default function HomeDashboard() {
           color: itemColors.tetee,
           lastTimestamp: todayStats.meals.seins.lastTimestamp,
           onPress: canManageContent
-            ? () =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "meals",
-                  mealType: "tetee",
-                })
+            ? () => router.push("/baby/stats?tab=tetees&returnTo=home" as any)
             : undefined,
         },
         {
@@ -988,12 +1024,7 @@ export default function HomeDashboard() {
           color: itemColors.biberon,
           lastTimestamp: todayStats.meals.biberons.lastTimestamp,
           onPress: canManageContent
-            ? () =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "meals",
-                  mealType: "biberon",
-                })
+            ? () => router.push("/baby/stats?tab=biberons&returnTo=home" as any)
             : undefined,
         },
         {
@@ -1007,16 +1038,12 @@ export default function HomeDashboard() {
           color: itemColors.pompage,
           lastTimestamp: todayStats.pompages.lastTimestamp,
           onPress: canManageContent
-            ? () =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "pumping",
-                })
+            ? () => router.push("/baby/stats?tab=pompages&returnTo=home" as any)
             : undefined,
         },
       ],
     };
-  }, [todayStats, data.tetees, data.biberons, data.solides, toDate, getTimeSince, openSheet, formatTime, canManageContent]);
+  }, [todayStats, data.tetees, data.biberons, data.solides, toDate, getTimeSince, formatTime, canManageContent]);
 
   // Santé Group (Couches + Vitamines + Vaccins)
   const santeGroup = useMemo((): {
@@ -1107,7 +1134,7 @@ export default function HomeDashboard() {
       summaryParts.push(`${vaccinCount} vaccin${vaccinCount > 1 ? "s" : ""}`);
 
     return {
-      summary: summaryParts.join("\n"),
+      summary: summaryParts.join(" · "),
       timeSince: getTimeSince(displayTimestamp),
       lastTime,
       isWarning,
@@ -1121,12 +1148,7 @@ export default function HomeDashboard() {
           color: itemColors.miction,
           lastTimestamp: todayStats.mictions.lastTimestamp,
           onPress: canManageContent
-            ? () =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "diapers",
-                  diapersType: "miction",
-                })
+            ? () => router.push("/baby/diapers?tab=mictions&returnTo=home" as any)
             : undefined,
         },
         {
@@ -1138,12 +1160,7 @@ export default function HomeDashboard() {
           color: itemColors.selle,
           lastTimestamp: todayStats.selles.lastTimestamp,
           onPress: canManageContent
-            ? () =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "diapers",
-                  diapersType: "selle",
-                })
+            ? () => router.push("/baby/diapers?tab=selles&returnTo=home" as any)
             : undefined,
         },
         {
@@ -1155,12 +1172,7 @@ export default function HomeDashboard() {
           color: itemColors.vitamine,
           lastTimestamp: todayStats.vitamines.lastTimestamp,
           onPress: canManageContent
-            ? () =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "soins",
-                  soinsType: "vitamine",
-                })
+            ? () => router.push("/baby/soins?type=vitamine&returnTo=home" as any)
             : undefined,
         },
         {
@@ -1172,12 +1184,7 @@ export default function HomeDashboard() {
           color: itemColors.vaccin,
           lastTimestamp: todayStats.vaccins.lastTimestamp,
           onPress: canManageContent
-            ? () =>
-                openSheet({
-                  ownerId: headerOwnerId.current,
-                  formType: "soins",
-                  soinsType: "vaccin",
-                })
+            ? () => router.push("/baby/soins?type=vaccin&returnTo=home" as any)
             : undefined,
         },
       ],
@@ -1188,7 +1195,6 @@ export default function HomeDashboard() {
     data.selles,
     toDate,
     getTimeSince,
-    openSheet,
     formatTime,
     remindersEnabled,
     reminderThresholds.mictions,
@@ -1205,6 +1211,7 @@ export default function HomeDashboard() {
           heureDebut: new Date(),
           isNap,
         });
+        showToast(isNap ? "Sieste démarrée" : "Nuit démarrée");
       } catch (error) {
         console.error("Erreur démarrage sommeil:", error);
         showToast("Impossible de démarrer le sommeil");
@@ -1885,6 +1892,7 @@ export default function HomeDashboard() {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
+    if (hour < 6) return "Bonne nuit";
     if (hour < 12) return "Bonjour";
     if (hour < 18) return "Bon après-midi";
     return "Bonsoir";
@@ -1897,9 +1905,9 @@ export default function HomeDashboard() {
   // Loading state - show spinner until data is ready
   if (!isDataLoaded) {
     return (
-      <View style={styles.loadingContainer}>
-        <IconPulseDots color={categoryColors.alimentation.primary} />
-        <Text style={styles.loadingText}>Chargement...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: nc.background }]}>
+        <IconPulseDots color={cat.alimentation.primary} />
+        <Text style={[styles.loadingText, { color: nc.textLight }]}>Chargement...</Text>
       </View>
     );
   }
@@ -1907,20 +1915,22 @@ export default function HomeDashboard() {
   return (
     <View style={styles.screen}>
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: nc.background }]}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
-        scrollEventThrottle={16}
+        scrollEventThrottle={32}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={cat.alimentation.primary}
+          />
+        }
       >
         {/* En-tête avec salutation */}
         <View
-          style={{
-            marginBottom: 8,
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginRight: 50,
-          }}
+          style={styles.headerRow}
           onLayout={(event) => {
             const { y, height } = event.nativeEvent.layout;
             headerRowLayoutRef.current = { y, height };
@@ -1931,8 +1941,8 @@ export default function HomeDashboard() {
           }}
         >
           <View style={styles.header}>
-            <Text style={styles.greeting}>{getGreeting()}</Text>
-            <Text style={styles.date}>
+            <Text style={[styles.greeting, { color: nc.textStrong }]}>{getGreeting()}</Text>
+            <Text style={[styles.date, { color: nc.textLight }]}>
               {new Date().toLocaleDateString("fr-FR", {
                 weekday: "long",
                 day: "numeric",
@@ -1942,7 +1952,7 @@ export default function HomeDashboard() {
           </View>
           {canManageContent && (
             <Animated.View
-              style={{ paddingTop: 10, opacity: inlineMicOpacity }}
+              style={[styles.inlineMicContainer, { opacity: inlineMicOpacity }]}
             >
               <VoiceCommandButton
                 size={40}
@@ -1956,98 +1966,80 @@ export default function HomeDashboard() {
         {/* Résumé du jour */}
         <View style={styles.section}>
           <View>
-            <Text style={styles.sectionTitle}>{`Résumé d'aujourd'hui`}</Text>
+            <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>{`Résumé d'aujourd'hui`}</Text>
           </View>
 
           {/* Alimentation Group */}
-          <View style={styles.statsGroupContainer}>
-            <StatsGroup
-              title="Alimentation"
-              icon="utensils"
-              color={categoryColors.alimentation.primary}
-              backgroundColor={categoryColors.alimentation.background}
-              borderColor={categoryColors.alimentation.border}
-              summary={alimentationGroup.summary}
-              lastActivity={alimentationGroup.lastTime}
-              timeSince={alimentationGroup.timeSince}
-              timeSinceLabel={alimentationGroup.timeSinceLabel}
-              items={alimentationGroup.items}
-              currentTime={currentTime}
-              onAddPress={
-                canManageContent
-                  ? () =>
-                      openSheet({
-                        ownerId: headerOwnerId.current,
-                        formType: "meals",
-                        mealType: "tetee",
-                      })
-                  : undefined
-              }
-              onHeaderPress={
-                canManageContent
-                  ? () =>
-                      router.push("/baby/stats?tab=tetees&returnTo=home" as any)
-                  : undefined
-              }
-            />
-          </View>
+          <StaggeredCard index={0} visible={isDataLoaded}>
+            <View style={styles.statsGroupContainer}>
+              <StatsGroup
+                title="Alimentation"
+                icon="utensils"
+                color={cat.alimentation.primary}
+                backgroundColor={cat.alimentation.background}
+                borderColor={cat.alimentation.border}
+                summary={alimentationGroup.summary}
+                lastActivity={alimentationGroup.lastTime}
+                timeSince={alimentationGroup.timeSince}
+                timeSinceLabel={alimentationGroup.timeSinceLabel}
+                items={alimentationGroup.items}
+                currentTime={currentTime}
+                colorScheme={colorScheme}
+              />
+            </View>
+          </StaggeredCard>
 
           {/* Santé Group (Couches + Vitamines + Vaccins) */}
-          <View
-            style={styles.statsGroupContainer}
-          >
-            <StatsGroup
-              title="Santé & Hygiène"
-              icon="heart-pulse"
-              color={categoryColors.sante.primary}
-              backgroundColor={categoryColors.sante.background}
-              borderColor={categoryColors.sante.border}
-              summary={santeGroup.summary}
-              lastActivity={santeGroup.lastTime}
-              timeSince={santeGroup.timeSince}
-              timeSinceLabel={santeGroup.timeSinceLabel}
-              isWarning={santeGroup.isWarning}
-              items={santeGroup.items}
-              currentTime={currentTime}
-              onAddPress={
-                canManageContent
-                  ? () =>
-                      openSheet({
-                        ownerId: headerOwnerId.current,
-                        formType: "diapers",
-                        diapersType: "miction",
-                      })
-                  : undefined
-              }
-            />
-          </View>
+          <StaggeredCard index={1} visible={isDataLoaded}>
+            <View style={styles.statsGroupContainer}>
+              <StatsGroup
+                title="Santé & Hygiène"
+                icon="heart-pulse"
+                color={cat.sante.primary}
+                backgroundColor={cat.sante.background}
+                borderColor={cat.sante.border}
+                summary={santeGroup.summary}
+                lastActivity={santeGroup.lastTime}
+                timeSince={santeGroup.timeSince}
+                timeSinceLabel={santeGroup.timeSinceLabel}
+                isWarning={santeGroup.isWarning}
+                items={santeGroup.items}
+                currentTime={currentTime}
+                colorScheme={colorScheme}
+              />
+            </View>
+          </StaggeredCard>
 
           {/* Sommeil Section */}
           {(canManageContent || !!sommeilEnCours) && (
-            <View style={styles.statsGroupContainer}>
-              <SleepWidget
-                isActive={!!sommeilEnCours}
-                isNap={sommeilEnCours?.isNap}
-                elapsedMinutes={elapsedSleepMinutes}
-                startTime={
-                  sommeilEnCours?.heureDebut
-                    ? formatTime(toDate(sommeilEnCours.heureDebut))
-                    : undefined
-                }
-                onStartSleep={handleStartSleep}
-                onStopSleep={handleStopSleep}
-                showStopButton={canManageContent}
-              />
-            </View>
+            <StaggeredCard index={2} visible={isDataLoaded}>
+              <View style={styles.statsGroupContainer}>
+                <SleepWidget
+                  isActive={!!sommeilEnCours}
+                  isNap={sommeilEnCours?.isNap}
+                  elapsedMinutes={elapsedSleepMinutes}
+                  startTime={
+                    sommeilEnCours?.heureDebut
+                      ? formatTime(toDate(sommeilEnCours.heureDebut))
+                      : undefined
+                  }
+                  onStartSleep={handleStartSleep}
+                  onStopSleep={handleStopSleep}
+                  showStopButton={canManageContent}
+                  colorScheme={colorScheme}
+                />
+              </View>
+            </StaggeredCard>
           )}
 
           {/* Humeur & Jalons - Bloc unifié 2 colonnes */}
           {canManageContent && (
+            <StaggeredCard index={3} visible={isDataLoaded}>
             <View style={styles.statsGroupContainer}>
-              <View style={styles.moodJalonsCard}>
+              <View style={[styles.moodJalonsCard, { backgroundColor: cat.moments.background, borderColor: cat.moments.border }]}>
                 {/* Section Humeur */}
                 <View style={styles.moodJalonsSection}>
-                  <Text style={styles.moodJalonsLabel}>Humeur du jour</Text>
+                  <Text style={[styles.moodJalonsLabel, { color: nc.textLight }]}>Humeur du jour</Text>
                   <View style={styles.moodEmojisRow}>
                     {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
                       const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
@@ -2058,7 +2050,8 @@ export default function HomeDashboard() {
                           key={key}
                           style={[
                             styles.moodEmojiButton,
-                            isSelected && styles.moodEmojiSelected,
+                            { backgroundColor: nc.backgroundCard },
+                            isSelected && [styles.moodEmojiSelected, { backgroundColor: `${cat.moments.primary}20`, borderColor: cat.moments.primary }],
                           ]}
                           onPress={() => handleSetMood(moodValue)}
                           disabled={isMoodSaving}
@@ -2069,7 +2062,7 @@ export default function HomeDashboard() {
                           {isCurrentlySaving ? (
                             <ActivityIndicator
                               size="small"
-                              color={categoryColors.moments.primary}
+                              color={cat.moments.primary}
                             />
                           ) : (
                             <Text style={styles.moodEmojiText}>{emoji}</Text>
@@ -2081,18 +2074,21 @@ export default function HomeDashboard() {
                 </View>
 
                 {/* Séparateur vertical */}
-                <View style={styles.moodJalonsDivider} />
+                <View style={[styles.moodJalonsDivider, { backgroundColor: cat.moments.border }]} />
 
                 {/* Section Jalons */}
                 <TouchableOpacity
                   style={styles.jalonsSection}
                   onPress={() => router.push("/baby/moments" as any)}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Jalons"
+                  accessibilityHint="Ouvre la page des jalons et moments"
                 >
-                  <Text style={styles.jalonsLabel}>Jalons</Text>
+                  <Text style={[styles.jalonsLabel, { color: nc.textLight }]}>Jalons</Text>
                   <View style={styles.jalonsValueRow}>
                     {todayJalons.length > 0 ? (
-                      <Text style={styles.jalonsSummary}>
+                      <Text style={[styles.jalonsSummary, { color: nc.textStrong }]}>
                         {todayJalons.length}
                       </Text>
                     ) : (
@@ -2100,21 +2096,22 @@ export default function HomeDashboard() {
                         <FontAwesome
                           name="star"
                           size={16}
-                          color={categoryColors.moments.primary}
+                          color={cat.moments.primary}
                         />
-                        <Text style={styles.jalonsEmptyText}>Ajouter</Text>
+                        <Text style={[styles.jalonsEmptyText, { color: cat.moments.primary }]}>Ajouter</Text>
                       </>
                     )}
                     <FontAwesome
                       name="chevron-right"
                       size={12}
-                      color={neutralColors.textMuted}
+                      color={nc.textMuted}
                       style={styles.jalonsChevron}
                     />
                   </View>
                 </TouchableOpacity>
               </View>
             </View>
+            </StaggeredCard>
           )}
         </View>
 
@@ -2123,10 +2120,11 @@ export default function HomeDashboard() {
           <RecentEventsList
             events={recentEvents}
             loading={!isDataLoaded}
-            showHint={showRecentHint}
+            showHint={showRecentHint && canManageContent}
             colorScheme={colorScheme}
             currentTime={currentTime}
-            onEventLongPress={canManageContent ? handleEventEdit : undefined}
+            onEventPress={canManageContent ? handleEventEdit : undefined}
+            onEventDelete={canManageContent ? handleEventDelete : undefined}
             onViewAllPress={() => router.push("/baby/chrono" as any)}
             toDate={toDate}
             formatTime={formatTime}
@@ -2136,7 +2134,18 @@ export default function HomeDashboard() {
           />
         </View>
       </ScrollView>
-      {canManageContent && <GlobalFAB includeVoiceAction={false} />}
+      {canManageContent && <GlobalFAB />}
+      <ConfirmModal
+        visible={deleteConfirm.visible}
+        title="Supprimer cet événement ?"
+        message="Cette action est irréversible."
+        confirmText="Supprimer"
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
+        confirmButtonColor={nc.error}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
     </View>
   );
 }
@@ -2153,6 +2162,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: neutralColors.background,
   },
+  scrollContent: {
+    paddingBottom: 100,
+  },
   loadingContainer: {
     flex: 1,
     alignItems: "center",
@@ -2164,9 +2176,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: neutralColors.textLight,
   },
+  headerRow: {
+    marginBottom: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginRight: 50,
+  },
   header: {
     padding: 20,
     paddingBottom: 10,
+  },
+  inlineMicContainer: {
+    paddingTop: 10,
   },
   greeting: {
     fontSize: 28,

@@ -1126,7 +1126,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         case "biberon":
           const dataBiberon = {
             ...data,
-            type: "biberons" as const,
+            type: "biberon" as const,
           };
           await ajouterBiberon(childId, dataBiberon);
           setInfoModal({

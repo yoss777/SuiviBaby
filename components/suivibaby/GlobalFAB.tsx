@@ -1,11 +1,12 @@
-import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
-import { QUICK_ADD_ACTIONS } from "@/constants/dashboardConfig";
+import { QUICK_ADD_CATEGORIES } from "@/constants/dashboardConfig";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import React, { useCallback, useEffect, useState } from "react";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
@@ -19,7 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 const ACTIONS = [
-  // Position 5 (la plus proche - zone de pouce optimale)
+  // Position 3 (la plus proche - zone de pouce optimale)
   {
     key: "meal",
     icon: { lib: "fa6" as const, name: "utensils" },
@@ -29,16 +30,7 @@ const ACTIONS = [
     formType: "meals" as const,
     mealType: "tetee" as const,
   },
-  // Position 4 (très accessible)
-  {
-    key: "pumping",
-    icon: { lib: "fa6" as const, name: "pump-medical" },
-    label: "Tire-lait",
-    color: "#28a745",
-    bgColor: "#f0f8f4",
-    formType: "pumping" as const,
-  },
-  // Position 4 (très accessible)
+  // Position 2 (très accessible)
   {
     key: "diaper",
     icon: { lib: "mci" as const, name: "human-baby-changing-table" },
@@ -48,26 +40,17 @@ const ACTIONS = [
     formType: "diapers" as const,
     diapersType: "miction" as const,
   },
-  // Position 3 (milieu - action polyvalente)
+  // Position 1 (action quotidienne fréquente)
   {
-    key: "voice",
-    icon: { lib: "fa6" as const, name: "microphone" },
-    label: "Vocal",
-    color: "#10b981",
-    bgColor: "#d1fae5",
-    isVoiceCommand: true as const,
+    key: "vitamine",
+    icon: { lib: "fa6" as const, name: "pills" },
+    label: "Vitamine",
+    color: "#E8A85A",
+    bgColor: "#FEF5E7",
+    formType: "soins" as const,
+    soinsType: "vitamine" as const,
   },
-  // Position 2 (accessible avec léger ajustement)
-  {
-    key: "milestone",
-    icon: { lib: "fa6" as const, name: "camera" },
-    label: "Moment",
-    color: "#4A90E2",
-    bgColor: "#dbeafe",
-    formType: "milestones" as const,
-    jalonType: "photo" as const,
-  },
-  // Position 1 (la plus éloignée - action réfléchie)
+  // Position 0 (la plus éloignée - menu complet)
   {
     key: "more",
     icon: { lib: "fa6" as const, name: "ellipsis" },
@@ -118,44 +101,6 @@ const ActionButton = ({
     transform: [{ scale: scale.value }],
     opacity: opacity.value,
   }));
-
-  // Special rendering for voice command button
-  if ("isVoiceCommand" in action && action.isVoiceCommand) {
-    return (
-      <Animated.View
-        style={[styles.actionButtonWrapper, animatedStyle]}
-        pointerEvents={isOpen ? "auto" : "none"}
-      >
-        <View
-          style={[styles.actionButton, { backgroundColor: action.bgColor }]}
-        >
-          <VoiceCommandButton
-            size={20}
-            color={action.color}
-            showTestToggle={false}
-            accessibilityLabel="Commande vocale"
-          />
-        </View>
-        <View
-          style={[
-            styles.actionLabelContainer,
-            { backgroundColor: labelBackgroundColor },
-          ]}
-        >
-          <Pressable
-            onPress={onPress}
-            accessibilityRole="button"
-            accessibilityLabel={action.label}
-            hitSlop={8}
-          >
-            <Text style={[styles.actionLabel, { color: labelTextColor }]}>
-              {action.label}
-            </Text>
-          </Pressable>
-        </View>
-      </Animated.View>
-    );
-  }
 
   return (
     <Animated.View
@@ -214,23 +159,22 @@ const withDelay = (delay: number, animation: any) => {
   return withSequence(withTiming(0, { duration: delay }), animation);
 };
 
-export const GlobalFAB = ({
-  includeVoiceAction = true,
-}: {
-  includeVoiceAction?: boolean;
-}) => {
+export const GlobalFAB = () => {
   const { openSheet } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
+  const nc = getNeutralColors(colorScheme);
   const insets = useSafeAreaInsets();
   const [isOpen, setIsOpen] = useState(false);
   const rotation = useSharedValue(0);
   const pulseScale = useSharedValue(1);
   const backdropOpacity = useSharedValue(0);
 
-  // Subtle pulse animation when closed
+  // Subtle pulse animation when closed — 2 cycles only (not infinite)
+  const hasPlayedPulse = useRef(false);
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen && !hasPlayedPulse.current) {
+      hasPlayedPulse.current = true;
       pulseScale.value = withRepeat(
         withSequence(
           withTiming(1.05, {
@@ -239,9 +183,9 @@ export const GlobalFAB = ({
           }),
           withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
         ),
-        -1,
+        2,
       );
-    } else {
+    } else if (isOpen) {
       pulseScale.value = withTiming(1, { duration: 200 });
     }
   }, [isOpen]);
@@ -263,46 +207,8 @@ export const GlobalFAB = ({
   }));
 
   const handleQuickAddPress = useCallback(
-    (route: string) => {
-      const soinsMatch = route.match(/soins\?type=(\w+)/);
-      if (soinsMatch) {
-        openSheet({ ownerId: "global-fab", formType: "soins", soinsType: soinsMatch[1] as any });
-        return;
-      }
-      const mealsMatch = route.match(/meals\?tab=(\w+)/);
-      if (mealsMatch) {
-        const map: Record<string, "tetee" | "biberon" | "solide"> = { seins: "tetee", tetee: "tetee", biberons: "biberon", biberon: "biberon", solide: "solide", solides: "solide" };
-        const mealType = map[mealsMatch[1]];
-        if (mealType) { openSheet({ ownerId: "global-fab", formType: "meals", mealType }); return; }
-      }
-      if (route.includes("pumping") && route.includes("openModal=true")) {
-        openSheet({ ownerId: "global-fab", formType: "pumping" }); return;
-      }
-      if (route.includes("activities") && route.includes("openModal=true")) {
-        openSheet({ ownerId: "global-fab", formType: "activities", activiteType: "tummyTime" }); return;
-      }
-      const milestonesMatch = route.match(/milestones\?type=(\w+)/);
-      if (milestonesMatch) {
-        openSheet({ ownerId: "global-fab", formType: "milestones", jalonType: milestonesMatch[1] as any }); return;
-      }
-      if (route.includes("milestones") && route.includes("openModal=true")) {
-        openSheet({ ownerId: "global-fab", formType: "milestones", jalonType: "photo" }); return;
-      }
-      const diapersMatch = route.match(/diapers\?tab=(\w+)/);
-      if (diapersMatch) {
-        const map: Record<string, "miction" | "selle"> = { mictions: "miction", miction: "miction", selles: "selle", selle: "selle" };
-        const diapersType = map[diapersMatch[1]];
-        if (diapersType) { openSheet({ ownerId: "global-fab", formType: "diapers", diapersType }); return; }
-      }
-      if (route.includes("routines") && route.includes("openModal=true")) {
-        const typeMatch = route.match(/type=(\w+)/);
-        const routineType = typeMatch?.[1] as "sommeil" | "bain" | undefined;
-        if (routineType === "sommeil") { openSheet({ ownerId: "global-fab", formType: "routines", routineType: "sommeil", sleepMode: "nap" }); return; }
-        if (routineType === "bain") { openSheet({ ownerId: "global-fab", formType: "routines", routineType: "bain" }); return; }
-      }
-      if (route.includes("croissance") && route.includes("openModal=true")) {
-        openSheet({ ownerId: "global-fab", formType: "croissance" }); return;
-      }
+    (sheetParams: Record<string, string>) => {
+      openSheet({ ownerId: "global-fab", ...sheetParams } as any);
     },
     [openSheet],
   );
@@ -318,43 +224,54 @@ export const GlobalFAB = ({
       snapPoints: ["55%", "75%"],
       children: (
         <View style={styles.quickSheetList}>
-          {QUICK_ADD_ACTIONS.map((action) => (
-            <TouchableOpacity
-              key={action.key}
-              style={styles.quickSheetItem}
-              onPress={() => handleQuickAddPress(action.route)}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel={`Ajouter ${action.label}`}
-            >
-              <View style={styles.quickSheetIcon}>
-                {action.icon.type === "mc" ? (
-                  <MaterialCommunityIcons
-                    name={action.icon.name as any}
-                    size={18}
-                    color={action.icon.color}
-                  />
-                ) : (
-                  <FontAwesome6
-                    name={action.icon.name as any}
-                    size={18}
-                    color={action.icon.color}
-                  />
-                )}
-              </View>
-              <Text
-                style={[styles.quickSheetLabel, { color: colors.text }]}
-              >
-                {action.label}
+          {QUICK_ADD_CATEGORIES.map((category) => (
+            <View key={category.key}>
+              <Text style={[styles.quickSheetCategoryLabel, { color: colors.text }]}>
+                {category.label}
               </Text>
-            </TouchableOpacity>
+              {category.actions.map((action) => (
+                <TouchableOpacity
+                  key={action.key}
+                  style={[styles.quickSheetItem, { backgroundColor: nc.background, borderColor: nc.borderLight }]}
+                  onPress={() => handleQuickAddPress(action.sheetParams)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ajouter ${action.label}`}
+                >
+                  <View style={[styles.quickSheetIcon, { backgroundColor: nc.backgroundCard }]}>
+                    {action.icon.type === "mc" ? (
+                      <MaterialCommunityIcons
+                        name={action.icon.name as any}
+                        size={18}
+                        color={action.icon.color}
+                      />
+                    ) : (
+                      <FontAwesome6
+                        name={action.icon.name as any}
+                        size={18}
+                        color={action.icon.color}
+                      />
+                    )}
+                  </View>
+                  <Text style={[styles.quickSheetLabel, { color: colors.text }]}>
+                    {action.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           ))}
         </View>
       ),
     });
-  }, [colors, handleQuickAddPress, openSheet]);
+  }, [colors, nc, handleQuickAddPress, openSheet]);
 
+  const actionBusy = useRef(false);
   const handleActionPress = (action: (typeof ACTIONS)[0]) => {
+    if (actionBusy.current) return;
+    actionBusy.current = true;
+    setTimeout(() => { actionBusy.current = false; }, 400);
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsOpen(false);
     if ("isMore" in action) {
       openMoreSheet();
@@ -370,23 +287,14 @@ export const GlobalFAB = ({
         formType: "diapers",
         diapersType: action.diapersType,
       });
-    } else if (action.formType === "milestones") {
+    } else if (action.formType === "soins") {
       openSheet({
         ownerId: "global-fab",
-        formType: "milestones",
-        jalonType: action.jalonType,
-      });
-    } else if (action.formType === "pumping") {
-      openSheet({
-        ownerId: "global-fab",
-        formType: "pumping",
+        formType: "soins",
+        soinsType: action.soinsType,
       });
     }
   };
-
-  const actions = includeVoiceAction
-    ? ACTIONS
-    : ACTIONS.filter((action) => !("isVoiceCommand" in action));
 
   return (
     <>
@@ -404,7 +312,7 @@ export const GlobalFAB = ({
       {/* FAB Container */}
       <View style={[styles.fabContainer, { bottom: Platform.OS === "ios" ? 16 + insets.bottom + 49 : 32 }]}>
         {/* Action buttons */}
-        {actions.map((action, index) => (
+        {ACTIONS.map((action, index) => (
           <ActionButton
             key={action.key}
             action={action}
@@ -418,7 +326,10 @@ export const GlobalFAB = ({
 
         {/* Main FAB */}
         <Pressable
-          onPress={() => setIsOpen(!isOpen)}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            setIsOpen(!isOpen);
+          }}
           accessibilityRole="button"
           accessibilityLabel={
             isOpen ? "Fermer les actions rapides" : "Ouvrir les actions rapides"
@@ -520,9 +431,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: neutralColors.background,
     borderWidth: 1,
-    borderColor: "#e5e5e5",
+    borderColor: neutralColors.borderLight,
   },
   quickSheetIcon: {
     width: 28,
@@ -530,10 +441,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
+    backgroundColor: neutralColors.backgroundCard,
   },
   quickSheetLabel: {
     fontSize: 15,
     fontWeight: "600",
+  },
+  quickSheetCategoryLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    opacity: 0.5,
+    marginTop: 12,
+    marginBottom: 4,
+    marginLeft: 4,
   },
 });
