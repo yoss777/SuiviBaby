@@ -107,17 +107,17 @@ export function ecouterEvenementsHybrid(
 // TYPE-SPECIFIC (all delegate to eventsService)
 // ============================================
 
-type ListenerOptions = { waitForServer?: boolean; depuis?: Date; jusqu?: Date };
+type ListenerOptions = { waitForServer?: boolean; depuis?: Date; jusqu?: Date; limite?: number };
 
 function makeObtenir(type: EventType) {
   return (childId: string) => obtenirEvenements(childId, { type });
 }
 
 function makeEcouter(type: EventType) {
-  return (childId: string, callback: (events: any[]) => void, options?: ListenerOptions): (() => void) =>
+  return (childId: string, callback: (events: any[]) => void, options?: ListenerOptions, onError?: (error: Error) => void): (() => void) =>
     ecouterEvenements(childId, callback, {
-      type, waitForServer: options?.waitForServer, depuis: options?.depuis, jusqu: options?.jusqu,
-    });
+      type, waitForServer: options?.waitForServer, depuis: options?.depuis, jusqu: options?.jusqu, limite: options?.limite,
+    }, onError);
 }
 
 // Tétées

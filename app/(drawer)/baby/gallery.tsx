@@ -1,5 +1,6 @@
 import { SwipeGallery } from "@/components/moments";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,9 +19,11 @@ import {
 } from "@/services/socialService";
 import { LikeInfo } from "@/types/social";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
+import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -114,6 +117,7 @@ const PolaroidCard = ({
   likeCount,
   hasComments,
   hasNewInteraction,
+  nc,
 }: {
   photo: PhotoMilestone;
   index: number;
@@ -122,46 +126,85 @@ const PolaroidCard = ({
   likeCount?: number;
   hasComments?: boolean;
   hasNewInteraction?: boolean;
+  nc: ReturnType<typeof getNeutralColors>;
 }) => {
   const hasLikes = (likeCount ?? 0) > 0;
+  const [imageError, setImageError] = useState(false);
+
+  // Stable rotation based on photo ID hash
   const rotation = useMemo(() => {
+    let hash = 0;
+    for (let i = 0; i < photo.id.length; i++) {
+      hash = ((hash << 5) - hash + photo.id.charCodeAt(i)) | 0;
+    }
     const rotations = [-3, 2, -2, 3, -1, 1];
-    return rotations[index % rotations.length];
-  }, [index]);
+    return rotations[Math.abs(hash) % rotations.length];
+  }, [photo.id]);
 
   const scale = useSharedValue(0.8);
   const opacity = useSharedValue(0);
+  const pressScale = useSharedValue(1);
 
+  const clampedIndex = Math.min(index, 5);
   useEffect(() => {
-    opacity.value = withDelay(index * 50, withSpring(1));
-    scale.value = withDelay(index * 50, withSpring(1, { damping: 12 }));
+    opacity.value = withDelay(clampedIndex * 50, withSpring(1));
+    scale.value = withDelay(clampedIndex * 50, withSpring(1, { damping: 12 }));
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    transform: [{ scale: scale.value }, { rotate: `${rotation}deg` }],
+    transform: [
+      { scale: scale.value * pressScale.value },
+      { rotate: `${rotation}deg` },
+    ],
   }));
+
+  const handlePress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress();
+  }, [onPress]);
+
+  const handleLongPress = useCallback(() => {
+    if (onLongPress) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      onLongPress();
+    }
+  }, [onLongPress]);
 
   return (
     <Animated.View style={[styles.polaroidWrapper, animatedStyle]}>
       <Pressable
-        onPress={onPress}
-        onLongPress={onLongPress}
+        onPress={handlePress}
+        onLongPress={onLongPress ? handleLongPress : undefined}
         delayLongPress={400}
-        style={({ pressed }) => [
-          styles.polaroid,
-          pressed && styles.polaroidPressed,
-        ]}
+        onPressIn={() => { pressScale.value = withSpring(0.97, { damping: 15 }); }}
+        onPressOut={() => { pressScale.value = withSpring(1, { damping: 15 }); }}
+        style={[styles.polaroid, { backgroundColor: nc.backgroundCard }]}
+        accessibilityRole="button"
+        accessibilityLabel={`Photo ${photo.titre || formatDateShort(photo.date)}${hasLikes ? ", aimée" : ""}${hasComments ? ", commentée" : ""}`}
+        accessibilityHint={onLongPress ? "Appuyez longuement pour modifier" : "Appuyez pour voir en plein écran"}
       >
         {/* Point rouge pour les nouvelles interactions */}
-        {hasNewInteraction && <View style={styles.newBadge} />}
+        {hasNewInteraction && (
+          <View style={[styles.newBadge, { borderColor: nc.backgroundCard }]} />
+        )}
 
-        <View style={styles.polaroidImageContainer}>
-          <Image source={{ uri: photo.photo }} style={styles.polaroidImage} />
+        <View style={[styles.polaroidImageContainer, { backgroundColor: nc.borderLight }]}>
+          {imageError ? (
+            <View style={[styles.polaroidImage, styles.imagePlaceholder, { backgroundColor: nc.backgroundPressed }]}>
+              <FontAwesome6 name="image" size={24} color={nc.textMuted} />
+            </View>
+          ) : (
+            <Image
+              source={{ uri: photo.photo }}
+              style={styles.polaroidImage}
+              onError={() => setImageError(true)}
+            />
+          )}
         </View>
         <View style={styles.polaroidCaption}>
           <View style={styles.captionRow}>
-            <Text style={styles.polaroidDate} numberOfLines={1}>
+            <Text style={[styles.polaroidDate, { color: nc.textLight }]} numberOfLines={1}>
               {formatDateShort(photo.date)}
             </Text>
             <View style={styles.iconsRow}>
@@ -174,7 +217,7 @@ const PolaroidCard = ({
             </View>
           </View>
           {photo.titre && (
-            <Text style={styles.polaroidTitle} numberOfLines={1}>
+            <Text style={[styles.polaroidTitle, { color: nc.textNormal }]} numberOfLines={1}>
               {photo.titre}
             </Text>
           )}
@@ -195,11 +238,10 @@ export default function GalleryScreen() {
   const { newEventIds, markMomentsAsSeen } = useMomentsNotification();
   const { openSheet, closeSheet, isOpen } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const { setHeaderLeft } = useHeaderLeft();
   const { setHeaderRight } = useHeaderRight();
-  const headerOwnerId = useRef(
-    `gallery-${Math.random().toString(36).slice(2)}`,
-  );
+  const headerOwnerId = useRef("gallery-header");
   const sheetOwnerId = "gallery";
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
@@ -207,9 +249,11 @@ export default function GalleryScreen() {
 
   const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [galleryVisible, setGalleryVisible] = useState(false);
   const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
-  const [refreshTick, setRefreshTick] = useState(0);
+  const isMountedRef = useRef(true);
 
   // Social interactions state
   const [likesInfo, setLikesInfo] = useState<Record<string, LikeInfo>>({});
@@ -219,8 +263,12 @@ export default function GalleryScreen() {
   // Author names for photos not by current user
   const [authorNames, setAuthorNames] = useState<Record<string, string>>({});
 
-  const refreshData = useCallback(() => {
-    setRefreshTick((prev) => prev + 1);
+  // Unmount tracking
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   // Navigation handlers
@@ -230,9 +278,8 @@ export default function GalleryScreen() {
       ownerId: sheetOwnerId,
       formType: "milestones",
       jalonType: "photo",
-      onSuccess: refreshData,
     });
-  }, [canManageContent, openSheet, refreshData]);
+  }, [canManageContent, openSheet]);
 
   // Header left - back button
   useFocusEffect(
@@ -262,12 +309,14 @@ export default function GalleryScreen() {
       }
       const headerButtons = (
         <View style={styles.headerActions}>
-          <Pressable onPress={handleAddPhoto} style={styles.headerButton}>
-            <FontAwesome6
-              name="plus"
-              size={20}
-              color={Colors[colorScheme].tint}
-            />
+          <Pressable
+            onPress={handleAddPhoto}
+            style={styles.headerButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel="Ajouter un souvenir photo"
+          >
+            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
           </Pressable>
         </View>
       );
@@ -366,43 +415,62 @@ export default function GalleryScreen() {
   useEffect(() => {
     if (!activeChild?.id) return;
 
+    setLoadError(false);
     const unsubscribe = ecouterJalonsHybrid(
       activeChild.id,
       (data) => {
+        if (!isMountedRef.current) return;
         setEvents(data as MilestoneEventWithId[]);
         setLoaded(true);
+        setLoadError(false);
       },
       { waitForServer: true },
+      (error) => {
+        console.error("[Gallery] Erreur listener jalons:", error);
+        if (!isMountedRef.current) return;
+        setLoaded(true);
+        setLoadError(true);
+      },
     );
 
     return () => unsubscribe();
-  }, [activeChild?.id, refreshTick]);
+  }, [activeChild?.id, retryCount]);
+
+  // Stable keys for dependency tracking
+  const photoIdsKey = useMemo(
+    () => allPhotoMilestones.map((p) => p.id).join(","),
+    [allPhotoMilestones],
+  );
+  const otherUserIdsKey = useMemo(() => {
+    if (!firebaseUser?.uid) return "";
+    return [...new Set(
+      allPhotoMilestones
+        .filter((p) => p.userId && p.userId !== firebaseUser.uid)
+        .map((p) => p.userId!),
+    )].join(",");
+  }, [allPhotoMilestones, firebaseUser?.uid]);
 
   // Resolve author names for photos not by current user
   useEffect(() => {
-    if (!firebaseUser?.uid || allPhotoMilestones.length === 0) return;
-    const otherUserIds = [
-      ...new Set(
-        allPhotoMilestones
-          .filter((p) => p.userId && p.userId !== firebaseUser.uid)
-          .map((p) => p.userId!)
-      ),
-    ];
-    if (otherUserIds.length === 0) return;
-    getUserNames(otherUserIds).then((namesMap) => {
+    if (!otherUserIdsKey) return;
+    let cancelled = false;
+    const userIds = otherUserIdsKey.split(",");
+    getUserNames(userIds).then((namesMap) => {
+      if (cancelled) return;
       const names: Record<string, string> = {};
       namesMap.forEach((name, uid) => {
         names[uid] = name;
       });
       setAuthorNames(names);
     });
-  }, [firebaseUser?.uid, allPhotoMilestones]);
+    return () => { cancelled = true; };
+  }, [otherUserIdsKey]);
 
   // Social interactions listener
   useEffect(() => {
-    if (!activeChild?.id || allPhotoMilestones.length === 0) return;
+    if (!activeChild?.id || !photoIdsKey) return;
 
-    const eventIds = allPhotoMilestones.map((p) => p.id);
+    const eventIds = photoIdsKey.split(",");
 
     const unsubscribe = ecouterInteractionsSociales(
       activeChild.id,
@@ -412,7 +480,7 @@ export default function GalleryScreen() {
     );
 
     return () => unsubscribe();
-  }, [activeChild?.id, allPhotoMilestones]);
+  }, [activeChild?.id, photoIdsKey]);
 
   const handlePhotoPress = useCallback(
     (photo: PhotoMilestone) => {
@@ -424,7 +492,7 @@ export default function GalleryScreen() {
   );
 
   const handleEditPhoto = useCallback(
-    (photoId: string) => {
+    (photoId: string, _photoIndex?: number) => {
       if (!canManageContent) return;
       const event = events.find((e) => e.id === photoId);
       if (!event) return;
@@ -440,7 +508,6 @@ export default function GalleryScreen() {
           | "humeur"
           | "photo"
           | "autre",
-        onSuccess: refreshData,
         editData: {
           id: event.id,
           typeJalon: event.typeJalon as
@@ -460,7 +527,7 @@ export default function GalleryScreen() {
         },
       });
     },
-    [events, openSheet, refreshData, canManageContent],
+    [events, openSheet, canManageContent],
   );
 
   // Social handlers
@@ -485,14 +552,22 @@ export default function GalleryScreen() {
       try {
         const { status } = await MediaLibrary.requestPermissionsAsync(false);
         if (status !== "granted") {
-          return {
+          const result = {
             success: false,
             message: "Permission refusée pour accéder à la galerie",
           };
+          showToast(result.message);
+          return result;
+        }
+
+        if (!FileSystem.cacheDirectory) {
+          const result = { success: false, message: "Stockage temporaire indisponible" };
+          showToast(result.message);
+          return result;
         }
 
         const filename = `moment_${photoId}_${Date.now()}.jpg`;
-        const localUri = FileSystem.documentDirectory + filename;
+        const localUri = FileSystem.cacheDirectory + filename;
 
         const downloadResult = await FileSystem.downloadAsync(uri, localUri);
 
@@ -501,45 +576,67 @@ export default function GalleryScreen() {
           await FileSystem.deleteAsync(downloadResult.uri, {
             idempotent: true,
           });
-          return {
+          const result = {
             success: true,
             message: "Photo enregistrée dans la galerie",
           };
+          if (isMountedRef.current) showToast(result.message);
+          return result;
         } else {
-          return { success: false, message: "Échec du téléchargement" };
+          const result = { success: false, message: "Échec du téléchargement" };
+          showToast(result.message);
+          return result;
         }
       } catch (error) {
         console.error("Erreur lors du téléchargement:", error);
-        return {
+        const result = {
           success: false,
           message: "Impossible de télécharger la photo",
         };
+        showToast(result.message);
+        return result;
       }
     },
-    [],
+    [showToast],
   );
+
+  // Retry loading after error
+  const handleRetry = useCallback(() => {
+    setLoaded(false);
+    setLoadError(false);
+    setEvents([]);
+    setRetryCount((c) => c + 1);
+  }, []);
 
   const handleCloseGallery = useCallback(() => {
     setGalleryVisible(false);
   }, []);
 
-  // Render day separator
-  const renderDaySeparator = (label: string) => (
-    <View style={styles.daySeparator}>
-      <View style={styles.daySeparatorLine} />
-      <Text style={styles.daySeparatorText}>{label}</Text>
-      <View style={styles.daySeparatorLine} />
-    </View>
+  // Memoize photos for SwipeGallery to avoid re-creating array each render
+  const swipeGalleryPhotos = useMemo(
+    () =>
+      allPhotoMilestones.map((p) => ({
+        id: p.id,
+        uri: p.photo,
+        date: p.date,
+        titre: p.titre,
+        userId: p.userId,
+      })),
+    [allPhotoMilestones],
   );
 
   // Render photo grid for a day
-  const renderDayGroup = ({
+  const renderDayGroup = useCallback(({
     item,
   }: {
     item: { label: string; date: Date; photos: PhotoMilestone[] };
   }) => (
     <View style={styles.dayGroup}>
-      {renderDaySeparator(item.label)}
+      <View style={styles.daySeparator}>
+        <View style={[styles.daySeparatorLine, { backgroundColor: nc.border }]} />
+        <Text style={[styles.daySeparatorText, { color: nc.textLight }]}>{item.label}</Text>
+        <View style={[styles.daySeparatorLine, { backgroundColor: nc.border }]} />
+      </View>
       <View style={styles.photoGrid}>
         {item.photos.map((photo, index) => (
           <PolaroidCard
@@ -553,29 +650,45 @@ export default function GalleryScreen() {
             likeCount={likesInfo[photo.id]?.count}
             hasComments={(commentCounts[photo.id] ?? 0) > 0}
             hasNewInteraction={newEventIds.has(photo.id)}
+            nc={nc}
           />
         ))}
       </View>
     </View>
-  );
+  ), [handlePhotoPress, canManageContent, handleEditPhoto, likesInfo, commentCounts, newEventIds, nc]);
 
   // Loading state
   if (!loaded) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={[styles.loadingContainer, { backgroundColor: nc.background }]}>
         <IconPulseDots color={eventColors.jalon.dark} />
-        <Text style={styles.loadingText}>Chargement des souvenirs...</Text>
+        <Text style={[styles.loadingText, { color: nc.textLight }]}>Chargement des souvenirs...</Text>
+      </View>
+    );
+  }
+
+  // Error state with retry
+  if (loadError && events.length === 0) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: nc.background }]}>
+        <FontAwesome6 name="triangle-exclamation" size={32} color={nc.warning} />
+        <Text style={[styles.errorTitle, { color: nc.textStrong }]}>Impossible de charger</Text>
+        <Text style={[styles.loadingText, { color: nc.textLight }]}>Vérifiez votre connexion</Text>
+        <Pressable onPress={handleRetry} style={styles.retryButton}>
+          <FontAwesome6 name="arrow-rotate-right" size={14} color="#fff" />
+          <Text style={styles.retryButtonText}>Réessayer</Text>
+        </Pressable>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         {/* Header block - aligned with croissance.tsx */}
         <View style={styles.headerBlock}>
-          <Text style={styles.title}>Souvenirs</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: nc.textStrong }]}>Souvenirs</Text>
+          <Text style={[styles.subtitle, { color: nc.textLight }]}>
             {allPhotoMilestones.length} photo
             {allPhotoMilestones.length > 1 ? "s" : ""}
           </Text>
@@ -584,41 +697,46 @@ export default function GalleryScreen() {
         {/* Content */}
         {allPhotoMilestones.length === 0 ? (
           <View style={styles.emptyState}>
-            <FontAwesome6 name="images" size={48} color="#d1d5db" />
-            <Text style={styles.emptyStateTitle}>Aucun souvenir</Text>
-            <Text style={styles.emptyStateText}>
-              Ajoutez votre premier souvenir photo
+            <FontAwesome6 name="images" size={48} color={nc.textMuted} />
+            <Text style={[styles.emptyStateTitle, { color: nc.textStrong }]}>Aucun souvenir</Text>
+            <Text style={[styles.emptyStateText, { color: nc.textLight }]}>
+              {canManageContent
+                ? "Ajoutez votre premier souvenir photo"
+                : "Les souvenirs partagés apparaîtront ici"}
             </Text>
-            <Pressable onPress={handleAddPhoto} style={styles.emptyStateButton}>
-              <FontAwesome6 name="camera" size={16} color="#fff" />
-              <Text style={styles.emptyStateButtonText}>
-                Ajouter un souvenir
-              </Text>
-            </Pressable>
+            {canManageContent && (
+              <Pressable onPress={handleAddPhoto} style={styles.emptyStateButton}>
+                <FontAwesome6 name="camera" size={16} color="#fff" />
+                <Text style={styles.emptyStateButtonText}>
+                  Ajouter un souvenir
+                </Text>
+              </Pressable>
+            )}
           </View>
         ) : (
           <FlatList
             data={groupedPhotos}
-            keyExtractor={(item) => item.label}
+            keyExtractor={(item) => {
+              const d = item.date;
+              return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+            }}
             renderItem={renderDayGroup}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            initialNumToRender={5}
+            maxToRenderPerBatch={3}
+            windowSize={5}
+            removeClippedSubviews={true}
           />
         )}
       </SafeAreaView>
 
       {/* Swipe Gallery */}
       <SwipeGallery
-        photos={allPhotoMilestones.map((p) => ({
-          id: p.id,
-          uri: p.photo,
-          date: p.date,
-          titre: p.titre,
-          userId: p.userId,
-        }))}
+        photos={swipeGalleryPhotos}
         initialIndex={galleryInitialIndex}
         visible={galleryVisible}
-        childId={activeChild?.id ?? ""}
+        childId={activeChild?.id || "unknown"}
         backgroundColor="rgba(60, 50, 40, 0.97)"
         onClose={handleCloseGallery}
         onAddPhoto={canManageContent ? handleAddPhoto : undefined}
@@ -642,7 +760,6 @@ export default function GalleryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FDF8F3",
   },
   safeArea: {
     flex: 1,
@@ -651,12 +768,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FDF8F3",
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: "#6b7280",
   },
   headerBlock: {
     marginBottom: 12,
@@ -666,11 +781,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: "800",
-    color: "#1f2937",
   },
   subtitle: {
     fontSize: 13,
-    color: "#6b7280",
     marginTop: 4,
   },
   headerActions: {
@@ -679,7 +792,9 @@ const styles = StyleSheet.create({
     paddingRight: 16,
   },
   headerButton: {
-    padding: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
   },
   listContent: {
     paddingHorizontal: 20,
@@ -697,12 +812,10 @@ const styles = StyleSheet.create({
   daySeparatorLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#e5e7eb",
   },
   daySeparatorText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#6b7280",
     textTransform: "capitalize",
   },
   photoGrid: {
@@ -714,7 +827,6 @@ const styles = StyleSheet.create({
     width: POLAROID_WIDTH,
   },
   polaroid: {
-    backgroundColor: "#fff",
     borderRadius: 4,
     padding: 8,
     paddingBottom: 12,
@@ -723,9 +835,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 4,
-  },
-  polaroidPressed: {
-    transform: [{ scale: 0.98 }],
   },
   newBadge: {
     position: "absolute",
@@ -736,7 +845,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: "#e63946",
     borderWidth: 2,
-    borderColor: "#fff",
     zIndex: 10,
   },
   polaroidImageContainer: {
@@ -744,11 +852,14 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 2,
     overflow: "hidden",
-    backgroundColor: "#f3f4f6",
   },
   polaroidImage: {
     width: "100%",
     height: "100%",
+  },
+  imagePlaceholder: {
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
   },
   polaroidCaption: {
     marginTop: 10,
@@ -770,12 +881,10 @@ const styles = StyleSheet.create({
   },
   polaroidDate: {
     fontSize: 11,
-    color: "#6b7280",
     fontStyle: "italic",
   },
   polaroidTitle: {
     fontSize: 12,
-    color: "#374151",
     fontWeight: "500",
     marginTop: 2,
   },
@@ -788,12 +897,10 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#374151",
     marginTop: 16,
   },
   emptyStateText: {
     fontSize: 14,
-    color: "#6b7280",
     marginTop: 8,
     textAlign: "center",
   },
@@ -808,6 +915,26 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   emptyStateButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 12,
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: eventColors.jalon.dark,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  retryButtonText: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",

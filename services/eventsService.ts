@@ -375,6 +375,7 @@ export function ecouterEvenements(
     jusqu?: Date;
     waitForServer?: boolean;
   },
+  onError?: (error: Error) => void,
 ): () => void {
   let hasReceivedServerSnapshot = false;
 
@@ -405,10 +406,18 @@ export function ecouterEvenements(
   let fallbackTriggered = false;
   let cachedEvents: Event[] | null = null;
 
+  const lid = Math.random().toString(36).slice(2, 6);
+  const tl = Array.isArray(options?.type)
+    ? options.type.length > 3 ? `[${options.type.length} types]` : options.type.join(",")
+    : options?.type ?? "all";
+  console.log(`[L:${lid}] SETUP type=${tl} wfs=${!!options?.waitForServer} imc=${!!options?.waitForServer}`);
+
   const unsubscribe = onSnapshot(
     q,
     { includeMetadataChanges: !!options?.waitForServer },
     (snapshot) => {
+      console.log(`[L:${lid}] SNAP type=${tl} sz=${snapshot.size} empty=${snapshot.empty} cache=${snapshot.metadata.fromCache} server=${hasReceivedServerSnapshot} fb=${fallbackTriggered}`);
+
       if (!snapshot.metadata.fromCache) {
         hasReceivedServerSnapshot = true;
         if (fallbackTimer) {
@@ -432,8 +441,10 @@ export function ecouterEvenements(
         snapshot.metadata.fromCache &&
         snapshot.empty
       ) {
+        console.log(`[L:${lid}] BLOCKED waiting for server`);
         if (!fallbackTimer && !fallbackTriggered) {
           fallbackTimer = setTimeout(() => {
+            console.log(`[L:${lid}] FALLBACK after ${waitForServerTimeoutMs}ms server=${hasReceivedServerSnapshot}`);
             if (!hasReceivedServerSnapshot) {
               fallbackTriggered = true;
               callback(cachedEvents ?? []);
@@ -443,7 +454,12 @@ export function ecouterEvenements(
         return;
       }
 
+      console.log(`[L:${lid}] CB ${events.length} events`);
       callback(events);
+    },
+    (error) => {
+      console.error(`[L:${lid}] ERROR:`, error);
+      onError?.(error);
     },
   );
 

@@ -9,6 +9,7 @@ export { SparkleBurst } from "./SparkleBurst";
 
 // New redesigned components
 export { CommentsBottomSheet } from "./CommentsBottomSheet";
+export { MomentsSkeletonLoader } from "./MomentsSkeletonLoader";
 export { ConfettiBurst } from "./ConfettiBurst";
 export { FloatingActionButton } from "./FloatingActionButton";
 export { HeroMoodCard } from "./HeroMoodCard";

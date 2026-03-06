@@ -1,9 +1,12 @@
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dimensions,
   Image,
+  ImageErrorEventData,
+  NativeSyntheticEvent,
   Pressable,
   StyleSheet,
   Text,
@@ -44,6 +47,7 @@ type PolaroidGalleryProps = {
   likesInfo?: Record<string, LikeInfo>;
   commentCounts?: Record<string, number>;
   newEventIds?: Set<string>;
+  colorScheme?: "light" | "dark";
 };
 
 const formatDateShort = (date: Date) =>
@@ -60,9 +64,9 @@ const PolaroidCard = ({
   onPress,
   onLongPress,
   likeCount,
-  isLikedByMe,
   hasComments,
   hasNewInteraction,
+  nc,
 }: {
   photo: PhotoMilestone;
   index: number;
@@ -72,13 +76,24 @@ const PolaroidCard = ({
   isLikedByMe?: boolean;
   hasComments?: boolean;
   hasNewInteraction?: boolean;
+  nc: ReturnType<typeof getNeutralColors>;
 }) => {
   const hasLikes = (likeCount ?? 0) > 0;
-  // Random rotation for each card
+  const [imageError, setImageError] = useState(false);
+
+  const handleImageError = useCallback((_e: NativeSyntheticEvent<ImageErrorEventData>) => {
+    setImageError(true);
+  }, []);
+
+  // Stable rotation based on photo ID hash
   const rotation = useMemo(() => {
+    let hash = 0;
+    for (let i = 0; i < photo.id.length; i++) {
+      hash = ((hash << 5) - hash + photo.id.charCodeAt(i)) | 0;
+    }
     const rotations = [-3, 2, -2, 3, -1, 1];
-    return rotations[index % rotations.length];
-  }, [index]);
+    return rotations[Math.abs(hash) % rotations.length];
+  }, [photo.id]);
 
   const scale = useSharedValue(0.8);
   const opacity = useSharedValue(0);
@@ -101,18 +116,39 @@ const PolaroidCard = ({
         delayLongPress={400}
         style={({ pressed }) => [
           styles.polaroid,
+          { backgroundColor: nc.backgroundCard },
           pressed && styles.polaroidPressed,
         ]}
+        accessibilityRole="button"
+        accessibilityLabel={`Photo ${photo.titre || formatDateShort(photo.date)}`}
       >
         {/* Point rouge pour les nouvelles interactions */}
-        {hasNewInteraction && <View style={styles.newBadge} />}
+        {hasNewInteraction && (
+          <View
+            style={[styles.newBadge, { borderColor: nc.backgroundCard }]}
+          />
+        )}
 
-        <View style={styles.polaroidImageContainer}>
-          <Image source={{ uri: photo.photo }} style={styles.polaroidImage} />
+        <View
+          style={[
+            styles.polaroidImageContainer,
+            { backgroundColor: nc.borderLight },
+          ]}
+        >
+          {imageError ? (
+            <View style={[styles.polaroidImage, styles.imagePlaceholder, { backgroundColor: nc.backgroundPressed }]}>
+              <FontAwesome6 name="image" size={24} color={nc.textMuted} />
+            </View>
+          ) : (
+            <Image source={{ uri: photo.photo }} style={styles.polaroidImage} onError={handleImageError} />
+          )}
         </View>
         <View style={styles.polaroidCaption}>
           <View style={styles.captionRow}>
-            <Text style={styles.polaroidDate} numberOfLines={1}>
+            <Text
+              style={[styles.polaroidDate, { color: nc.textLight }]}
+              numberOfLines={1}
+            >
               {formatDateShort(photo.date)}
             </Text>
             <View style={styles.iconsRow}>
@@ -125,7 +161,10 @@ const PolaroidCard = ({
             </View>
           </View>
           {photo.titre && (
-            <Text style={styles.polaroidTitle} numberOfLines={1}>
+            <Text
+              style={[styles.polaroidTitle, { color: nc.textNormal }]}
+              numberOfLines={1}
+            >
               {photo.titre}
             </Text>
           )}
@@ -136,7 +175,13 @@ const PolaroidCard = ({
 };
 
 // Empty state polaroid placeholder
-const EmptyPolaroid = ({ onPress }: { onPress: () => void }) => (
+const EmptyPolaroid = ({
+  onPress,
+  nc,
+}: {
+  onPress: () => void;
+  nc: ReturnType<typeof getNeutralColors>;
+}) => (
   <Animated.View
     entering={FadeInDown.delay(100).springify()}
     style={styles.polaroidWrapper}
@@ -145,16 +190,30 @@ const EmptyPolaroid = ({ onPress }: { onPress: () => void }) => (
       onPress={onPress}
       style={({ pressed }) => [
         styles.polaroid,
+        { backgroundColor: nc.backgroundCard },
         styles.emptyPolaroid,
+        { borderColor: nc.border },
         pressed && styles.polaroidPressed,
       ]}
+      accessibilityRole="button"
+      accessibilityLabel="Ajouter une photo souvenir"
     >
-      <View style={[styles.polaroidImageContainer, styles.emptyImageContainer]}>
-        <FontAwesome6 name="camera" size={32} color="#d1d5db" />
-        <Text style={styles.emptyImageText}>Ajouter</Text>
+      <View
+        style={[
+          styles.polaroidImageContainer,
+          styles.emptyImageContainer,
+          { backgroundColor: nc.background },
+        ]}
+      >
+        <FontAwesome6 name="camera" size={32} color={nc.textMuted} />
+        <Text style={[styles.emptyImageText, { color: nc.textMuted }]}>
+          Ajouter
+        </Text>
       </View>
       <View style={styles.polaroidCaption}>
-        <Text style={styles.polaroidDate}>Nouveau souvenir</Text>
+        <Text style={[styles.polaroidDate, { color: nc.textLight }]}>
+          Nouveau souvenir
+        </Text>
       </View>
     </Pressable>
   </Animated.View>
@@ -169,7 +228,9 @@ export const PolaroidGallery = ({
   likesInfo = {},
   commentCounts = {},
   newEventIds = new Set(),
+  colorScheme = "light",
 }: PolaroidGalleryProps) => {
+  const nc = getNeutralColors(colorScheme);
   // If user can add photos: show 3 photos + add button (4 slots)
   // If user cannot (contributor): show 4 photos instead
   const maxPhotos = onAddPhoto ? 3 : 4;
@@ -178,9 +239,14 @@ export const PolaroidGallery = ({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Souvenirs</Text>
+        <Text style={[styles.title, { color: nc.textStrong }]}>Souvenirs</Text>
         {photos.length > 0 && onSeeAll && (
-          <Pressable onPress={onSeeAll} style={styles.seeAllButton}>
+          <Pressable
+            onPress={onSeeAll}
+            style={styles.seeAllButton}
+            accessibilityRole="link"
+            accessibilityLabel="Voir tous les souvenirs"
+          >
             <Text style={styles.seeAllText}>Voir tout</Text>
             <FontAwesome6
               name="chevron-right"
@@ -196,19 +262,33 @@ export const PolaroidGallery = ({
           onAddPhoto ? (
             // Show two empty placeholders when user can add
             <>
-              <EmptyPolaroid onPress={onAddPhoto} />
+              <EmptyPolaroid onPress={onAddPhoto} nc={nc} />
               <View style={[styles.polaroidWrapper, { opacity: 0.3 }]}>
-                <View style={[styles.polaroid, styles.emptyPolaroid]}>
+                <View
+                  style={[
+                    styles.polaroid,
+                    { backgroundColor: nc.backgroundCard },
+                    styles.emptyPolaroid,
+                    { borderColor: nc.border },
+                  ]}
+                >
                   <View
                     style={[
                       styles.polaroidImageContainer,
                       styles.emptyImageContainer,
+                      { backgroundColor: nc.background },
                     ]}
                   >
-                    <FontAwesome6 name="images" size={24} color="#e5e7eb" />
+                    <FontAwesome6
+                      name="images"
+                      size={24}
+                      color={nc.border}
+                    />
                   </View>
                   <View style={styles.polaroidCaption}>
-                    <Text style={[styles.polaroidDate, { color: "#d1d5db" }]}>
+                    <Text
+                      style={[styles.polaroidDate, { color: nc.textMuted }]}
+                    >
                       En attente...
                     </Text>
                   </View>
@@ -218,17 +298,29 @@ export const PolaroidGallery = ({
           ) : (
             // Contributor with no photos: show a simple empty state
             <View style={[styles.polaroidWrapper, { opacity: 0.5 }]}>
-              <View style={[styles.polaroid, styles.emptyPolaroid]}>
+              <View
+                style={[
+                  styles.polaroid,
+                  { backgroundColor: nc.backgroundCard },
+                  styles.emptyPolaroid,
+                  { borderColor: nc.border },
+                ]}
+              >
                 <View
                   style={[
                     styles.polaroidImageContainer,
                     styles.emptyImageContainer,
+                    { backgroundColor: nc.background },
                   ]}
                 >
-                  <FontAwesome6 name="images" size={24} color="#e5e7eb" />
+                  <FontAwesome6
+                    name="images"
+                    size={24}
+                    color={nc.border}
+                  />
                 </View>
                 <View style={styles.polaroidCaption}>
-                  <Text style={[styles.polaroidDate, { color: "#d1d5db" }]}>
+                  <Text style={[styles.polaroidDate, { color: nc.textMuted }]}>
                     Pas encore de souvenirs
                   </Text>
                 </View>
@@ -248,10 +340,11 @@ export const PolaroidGallery = ({
                 isLikedByMe={likesInfo[photo.id]?.likedByMe}
                 hasComments={(commentCounts[photo.id] ?? 0) > 0}
                 hasNewInteraction={newEventIds.has(photo.id)}
+                nc={nc}
               />
             ))}
             {/* Add button at the end - only for users who can add */}
-            {onAddPhoto && <EmptyPolaroid onPress={onAddPhoto} />}
+            {onAddPhoto && <EmptyPolaroid onPress={onAddPhoto} nc={nc} />}
           </>
         )}
       </View>
@@ -273,7 +366,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#1f2937",
   },
   seeAllButton: {
     flexDirection: "row",
@@ -294,7 +386,6 @@ const styles = StyleSheet.create({
     width: POLAROID_WIDTH,
   },
   polaroid: {
-    backgroundColor: "#fff",
     borderRadius: 4,
     padding: 8,
     paddingBottom: 12,
@@ -316,12 +407,10 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: "#e63946",
     borderWidth: 2,
-    borderColor: "#fff",
     zIndex: 10,
   },
   emptyPolaroid: {
     borderWidth: 2,
-    borderColor: "#e5e7eb",
     borderStyle: "dashed",
     shadowOpacity: 0.05,
   },
@@ -330,21 +419,22 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 2,
     overflow: "hidden",
-    backgroundColor: "#f3f4f6",
   },
   emptyImageContainer: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fafafa",
   },
   emptyImageText: {
     fontSize: 12,
-    color: "#9ca3af",
     marginTop: 8,
   },
   polaroidImage: {
     width: "100%",
     height: "100%",
+  },
+  imagePlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   polaroidCaption: {
     marginTop: 10,
@@ -366,12 +456,10 @@ const styles = StyleSheet.create({
   },
   polaroidDate: {
     fontSize: 11,
-    color: "#6b7280",
     fontStyle: "italic",
   },
   polaroidTitle: {
     fontSize: 12,
-    color: "#374151",
     fontWeight: "500",
     marginTop: 2,
   },

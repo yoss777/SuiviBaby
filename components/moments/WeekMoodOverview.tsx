@@ -1,5 +1,6 @@
+import { getMoodFills, getNeutralColors } from "@/constants/dashboardColors";
 import { useEffect, useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import Animated, {
   FadeIn,
   useAnimatedStyle,
@@ -18,6 +19,7 @@ type MoodEntry = {
 
 type WeekMoodOverviewProps = {
   moods: MoodEntry[];
+  colorScheme?: "light" | "dark";
 };
 
 const MOOD_EMOJIS: Record<MoodLevel, string> = {
@@ -28,12 +30,12 @@ const MOOD_EMOJIS: Record<MoodLevel, string> = {
   5: "🥰",
 };
 
-const MOOD_COLORS: Record<MoodLevel, string> = {
-  1: "#fecaca",
-  2: "#fde68a",
-  3: "#bfdbfe",
-  4: "#bbf7d0",
-  5: "#fbcfe8",
+const MOOD_LABELS: Record<MoodLevel, string> = {
+  1: "Difficile",
+  2: "Mitigé",
+  3: "OK",
+  4: "Content",
+  5: "Rayonnant",
 };
 
 const DAY_NAMES = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
@@ -51,6 +53,8 @@ const DayCircle = ({
   isToday,
   isFuture,
   index,
+  nc,
+  moodColors,
 }: {
   day: Date;
   dayIndex: number;
@@ -58,6 +62,8 @@ const DayCircle = ({
   isToday: boolean;
   isFuture: boolean;
   index: number;
+  nc: ReturnType<typeof getNeutralColors>;
+  moodColors: Record<MoodLevel, string>;
 }) => {
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
@@ -73,14 +79,29 @@ const DayCircle = ({
   }));
 
   const bgColor = dominantMood
-    ? MOOD_COLORS[dominantMood]
+    ? moodColors[dominantMood]
     : isFuture
     ? "transparent"
-    : "#f3f4f6";
+    : nc.backgroundPressed;
+
+  const moodLabel = dominantMood
+    ? MOOD_LABELS[dominantMood]
+    : isFuture
+    ? "pas encore de données"
+    : "pas de données";
 
   return (
-    <View style={styles.dayColumn}>
-      <Text style={[styles.dayName, isToday && styles.dayNameToday]}>
+    <View
+      style={styles.dayColumn}
+      accessibilityLabel={`${DAY_NAMES[dayIndex]} ${day.getDate()}: ${moodLabel}`}
+    >
+      <Text
+        style={[
+          styles.dayName,
+          { color: nc.textMuted },
+          isToday && { color: nc.todayAccent, fontWeight: "700" },
+        ]}
+      >
         {DAY_NAMES[dayIndex]}
       </Text>
       <Animated.View
@@ -89,10 +110,20 @@ const DayCircle = ({
           {
             backgroundColor: bgColor,
             borderWidth: isFuture ? 2 : isToday ? 3 : 0,
-            borderColor: isFuture ? "#e5e7eb" : isToday ? "#6366f1" : "transparent",
+            borderColor: isFuture
+              ? nc.border
+              : isToday
+              ? nc.todayAccent
+              : "transparent",
             borderStyle: isFuture ? "dashed" : "solid",
           },
-          isToday && styles.dayCircleToday,
+          isToday && {
+            shadowColor: nc.todayAccent,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.3,
+            shadowRadius: 4,
+            elevation: 3,
+          },
           animatedStyle,
         ]}
       >
@@ -100,14 +131,29 @@ const DayCircle = ({
           {dominantMood ? MOOD_EMOJIS[dominantMood] : isFuture ? "?" : "—"}
         </Text>
       </Animated.View>
-      <Text style={[styles.dayDate, isToday && styles.dayDateToday]}>
+      <Text
+        style={[
+          styles.dayDate,
+          { color: nc.textMuted },
+          isToday && { color: nc.todayAccent, fontWeight: "600" },
+        ]}
+      >
         {day.getDate()}
       </Text>
     </View>
   );
 };
 
-export const WeekMoodOverview = ({ moods }: WeekMoodOverviewProps) => {
+export const WeekMoodOverview = ({
+  moods,
+  colorScheme = "light",
+}: WeekMoodOverviewProps) => {
+  const nc = getNeutralColors(colorScheme);
+  const moodColors = getMoodFills(colorScheme);
+
+  // Refresh weekDays when date changes (e.g. after midnight)
+  const todayKey = new Date().toDateString();
+
   // Get current week (Monday to Sunday)
   const weekDays = useMemo(() => {
     const today = new Date();
@@ -122,7 +168,8 @@ export const WeekMoodOverview = ({ moods }: WeekMoodOverviewProps) => {
       days.push(date);
     }
     return days;
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayKey]);
 
   // Calculate dominant mood for each day
   const weekMoods = useMemo(() => {
@@ -130,9 +177,9 @@ export const WeekMoodOverview = ({ moods }: WeekMoodOverviewProps) => {
       const dayMoods = moods.filter((m) => isSameDay(m.date, day));
       if (dayMoods.length === 0) return null;
 
-      // Get most frequent mood or average rounded
+      // Get most frequent mood or average rounded, clamped to valid range
       const sum = dayMoods.reduce((acc, m) => acc + m.humeur, 0);
-      return Math.round(sum / dayMoods.length) as MoodLevel;
+      return Math.max(1, Math.min(5, Math.round(sum / dayMoods.length))) as MoodLevel;
     });
   }, [weekDays, moods]);
 
@@ -154,15 +201,25 @@ export const WeekMoodOverview = ({ moods }: WeekMoodOverviewProps) => {
   }, [weekMoods]);
 
   return (
-    <Animated.View entering={FadeIn.delay(200)} style={styles.container}>
+    <Animated.View
+      entering={FadeIn.delay(200)}
+      style={[styles.container, { backgroundColor: nc.backgroundCard }]}
+    >
       <View style={styles.header}>
-        <Text style={styles.title}>Cette semaine</Text>
+        <Text style={[styles.title, { color: nc.textStrong }]}>
+          Cette semaine
+        </Text>
         {weekStats && (
-          <View style={styles.weekSummary}>
+          <View
+            style={[
+              styles.weekSummary,
+              { backgroundColor: nc.backgroundPressed },
+            ]}
+          >
             <Text style={styles.weekSummaryEmoji}>
               {MOOD_EMOJIS[weekStats.avgMood]}
             </Text>
-            <Text style={styles.weekSummaryText}>
+            <Text style={[styles.weekSummaryText, { color: nc.textLight }]}>
               {weekStats.daysTracked}/7 jours
             </Text>
           </View>
@@ -185,10 +242,18 @@ export const WeekMoodOverview = ({ moods }: WeekMoodOverviewProps) => {
               isToday={isCurrentDay}
               isFuture={isFuture}
               index={index}
+              nc={nc}
+              moodColors={moodColors}
             />
           );
         })}
       </View>
+
+      {!weekStats && (
+        <Text style={[styles.emptyHint, { color: nc.textMuted }]}>
+          Enregistrez des humeurs pour voir le récap
+        </Text>
+      )}
     </Animated.View>
   );
 };
@@ -197,7 +262,6 @@ const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
     marginTop: 24,
-    backgroundColor: "#fff",
     borderRadius: 20,
     padding: 16,
     shadowColor: "#000",
@@ -215,13 +279,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#1f2937",
   },
   weekSummary: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#f3f4f6",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -231,7 +293,6 @@ const styles = StyleSheet.create({
   },
   weekSummaryText: {
     fontSize: 12,
-    color: "#6b7280",
     fontWeight: "500",
   },
   weekRow: {
@@ -244,14 +305,9 @@ const styles = StyleSheet.create({
   },
   dayName: {
     fontSize: 11,
-    color: "#9ca3af",
     fontWeight: "500",
     marginBottom: 8,
     textTransform: "uppercase",
-  },
-  dayNameToday: {
-    color: "#6366f1",
-    fontWeight: "700",
   },
   dayCircle: {
     width: 40,
@@ -259,13 +315,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-  },
-  dayCircleToday: {
-    shadowColor: "#6366f1",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
   },
   dayEmoji: {
     fontSize: 18,
@@ -275,11 +324,12 @@ const styles = StyleSheet.create({
   },
   dayDate: {
     fontSize: 11,
-    color: "#9ca3af",
     marginTop: 6,
   },
-  dayDateToday: {
-    color: "#6366f1",
-    fontWeight: "600",
+  emptyHint: {
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 12,
+    fontStyle: "italic",
   },
 });

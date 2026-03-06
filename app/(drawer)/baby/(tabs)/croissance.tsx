@@ -352,7 +352,11 @@ export default function CroissanceScreen() {
       }
       const headerButtons = (
         <View style={styles.headerActions}>
-          <Pressable onPress={openAddModal} style={styles.headerButton}>
+          <Pressable
+              onPress={openAddModal}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={styles.headerButton}
+            >
             <Ionicons name="add" size={24} color={colors.tint} />
           </Pressable>
         </View>

@@ -1,3 +1,4 @@
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import {
@@ -34,6 +35,7 @@ type CommentsBottomSheetProps = {
   childId: string;
   photoTitle?: string;
   onClose: () => void;
+  colorScheme?: "light" | "dark";
 };
 
 const formatCommentDate = (timestamp: Timestamp): string => {
@@ -59,13 +61,14 @@ const CommentItem = ({
   comment,
   isOwnComment,
   onDelete,
+  nc,
 }: {
   comment: EventComment;
   isOwnComment: boolean;
   onDelete: (id: string) => void;
+  nc: ReturnType<typeof getNeutralColors>;
 }) => {
   const [showDelete, setShowDelete] = useState(false);
-  // For own comments, show "M" for "Moi"
   const avatarLetter = isOwnComment
     ? "M"
     : comment.userName.charAt(0).toUpperCase();
@@ -77,25 +80,35 @@ const CommentItem = ({
       style={styles.commentItem}
     >
       <View
-        style={[styles.commentAvatar, isOwnComment && styles.commentAvatarOwn]}
+        style={[
+          styles.commentAvatar,
+          { backgroundColor: nc.borderLight },
+          isOwnComment && { backgroundColor: nc.todayAccent + "30" },
+        ]}
       >
-        <Text style={styles.commentAvatarText}>{avatarLetter}</Text>
+        <Text style={[styles.commentAvatarText, { color: nc.textMuted }]}>
+          {avatarLetter}
+        </Text>
       </View>
       <View style={styles.commentContent}>
         <View style={styles.commentHeader}>
-          <Text style={styles.commentUserName}>
+          <Text style={[styles.commentUserName, { color: nc.textStrong }]}>
             {isOwnComment ? "Moi" : comment.userName}
           </Text>
-          <Text style={styles.commentTime}>
+          <Text style={[styles.commentTime, { color: nc.textMuted }]}>
             {formatCommentDate(comment.createdAt)}
           </Text>
         </View>
-        <Text style={styles.commentText}>{comment.content}</Text>
+        <Text style={[styles.commentText, { color: nc.textNormal }]}>
+          {comment.content}
+        </Text>
       </View>
       {showDelete && isOwnComment && (
         <Pressable
           style={styles.deleteButton}
           onPress={() => onDelete(comment.id!)}
+          accessibilityRole="button"
+          accessibilityLabel="Supprimer ce commentaire"
         >
           <FontAwesome6 name="trash" size={14} color="#ef4444" />
         </Pressable>
@@ -110,7 +123,9 @@ export const CommentsBottomSheet = ({
   childId,
   photoTitle,
   onClose,
+  colorScheme = "light",
 }: CommentsBottomSheetProps) => {
+  const nc = getNeutralColors(colorScheme);
   const { user, userName } = useAuth();
   const currentUserId = user?.uid;
   const { showToast } = useToast();
@@ -127,10 +142,10 @@ export const CommentsBottomSheet = ({
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput>(null);
 
-  // Pan responder for swipe to close
+  // Pan responder for swipe to close (restricted to handle area via hitSlop)
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
         return gestureState.dy > 10;
       },
@@ -247,29 +262,32 @@ export const CommentsBottomSheet = ({
         comment={item}
         isOwnComment={item.userId === currentUserId}
         onDelete={handleDeleteComment}
+        nc={nc}
       />
     ),
-    [currentUserId, handleDeleteComment],
+    [currentUserId, handleDeleteComment, nc],
   );
 
   const renderEmpty = useCallback(() => {
     if (isLoading) {
       return (
         <View style={styles.emptyContainer}>
-          <ActivityIndicator size="small" color="#9ca3af" />
+          <ActivityIndicator size="small" color={nc.textMuted} />
         </View>
       );
     }
     return (
       <View style={styles.emptyContainer}>
-        <FontAwesome6 name="comment" size={40} color="#d1d5db" />
-        <Text style={styles.emptyText}>Aucun commentaire</Text>
-        <Text style={styles.emptySubtext}>
+        <FontAwesome6 name="comment" size={40} color={nc.borderLight} />
+        <Text style={[styles.emptyText, { color: nc.textMuted }]}>
+          Aucun commentaire
+        </Text>
+        <Text style={[styles.emptySubtext, { color: nc.textLight }]}>
           Soyez le premier à commenter ce moment !
         </Text>
       </View>
     );
-  }, [isLoading]);
+  }, [isLoading, nc]);
 
   return (
     <View style={styles.overlay} pointerEvents={visible ? "auto" : "none"}>
@@ -280,7 +298,12 @@ export const CommentsBottomSheet = ({
       >
         {/* Backdrop */}
         <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={handleClose}
+            accessibilityRole="button"
+            accessibilityLabel="Fermer les commentaires"
+          />
         </Animated.View>
 
         {/* Sheet */}
@@ -288,25 +311,32 @@ export const CommentsBottomSheet = ({
           style={[
             styles.sheet,
             {
+              backgroundColor: nc.backgroundCard,
               transform: [{ translateY }],
             },
           ]}
         >
           {/* Handle */}
           <View {...panResponder.panHandlers} style={styles.handleContainer}>
-            <View style={styles.handle} />
+            <View style={[styles.handle, { backgroundColor: nc.borderLight }]} />
           </View>
 
           {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>
+          <View style={[styles.header, { borderBottomColor: nc.borderLight }]}>
+            <Text style={[styles.headerTitle, { color: nc.textStrong }]}>
               Commentaires
               {commentInfo.count > 0 && (
-                <Text style={styles.headerCount}> ({commentInfo.count})</Text>
+                <Text style={[styles.headerCount, { color: nc.textMuted }]}>
+                  {" "}
+                  ({commentInfo.count})
+                </Text>
               )}
             </Text>
             {photoTitle && (
-              <Text style={styles.headerSubtitle} numberOfLines={1}>
+              <Text
+                style={[styles.headerSubtitle, { color: nc.textLight }]}
+                numberOfLines={1}
+              >
                 {photoTitle}
               </Text>
             )}
@@ -324,12 +354,26 @@ export const CommentsBottomSheet = ({
           />
 
           {/* Input area */}
-          <View style={styles.inputContainer}>
+          <View
+            style={[
+              styles.inputContainer,
+              {
+                borderTopColor: nc.borderLight,
+                backgroundColor: nc.backgroundCard,
+              },
+            ]}
+          >
             <TextInput
               ref={inputRef}
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: nc.background,
+                  color: nc.textStrong,
+                },
+              ]}
               placeholder="Ajouter un commentaire..."
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={nc.textLight}
               value={newComment}
               onChangeText={setNewComment}
               multiline
@@ -337,14 +381,20 @@ export const CommentsBottomSheet = ({
               returnKeyType="send"
               onSubmitEditing={handleSendComment}
               blurOnSubmit={false}
+              accessibilityLabel="Écrire un commentaire"
             />
             <Pressable
               style={[
                 styles.sendButton,
-                (!newComment.trim() || isSending) && styles.sendButtonDisabled,
+                (!newComment.trim() || isSending) && {
+                  backgroundColor: nc.borderLight,
+                },
               ]}
               onPress={handleSendComment}
               disabled={!newComment.trim() || isSending}
+              accessibilityRole="button"
+              accessibilityLabel="Envoyer le commentaire"
+              accessibilityState={{ disabled: !newComment.trim() || isSending }}
             >
               {isSending ? (
                 <ActivityIndicator size="small" color="#fff" />
@@ -373,7 +423,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   sheet: {
-    backgroundColor: "#fff",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: SHEET_HEIGHT,
@@ -386,27 +435,22 @@ const styles = StyleSheet.create({
   handle: {
     width: 40,
     height: 4,
-    backgroundColor: "#d1d5db",
     borderRadius: 2,
   },
   header: {
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1f2937",
   },
   headerCount: {
     fontWeight: "500",
-    color: "#6b7280",
   },
   headerSubtitle: {
     fontSize: 13,
-    color: "#9ca3af",
     marginTop: 2,
   },
   listContent: {
@@ -423,18 +467,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#e5e7eb",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
-  commentAvatarOwn: {
-    backgroundColor: "#dbeafe",
-  },
   commentAvatarText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#6b7280",
   },
   commentContent: {
     flex: 1,
@@ -447,16 +486,13 @@ const styles = StyleSheet.create({
   commentUserName: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#1f2937",
     marginRight: 8,
   },
   commentTime: {
     fontSize: 12,
-    color: "#9ca3af",
   },
   commentText: {
     fontSize: 14,
-    color: "#374151",
     lineHeight: 20,
   },
   deleteButton: {
@@ -472,12 +508,10 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#6b7280",
     marginTop: 16,
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#9ca3af",
     marginTop: 4,
   },
   inputContainer: {
@@ -487,18 +521,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     marginBottom: 20,
-    borderTopColor: "#f3f4f6",
-    backgroundColor: "#fff",
     paddingBottom: Platform.OS === "ios" ? 28 : 12,
   },
   input: {
     flex: 1,
-    backgroundColor: "#f3f4f6",
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
-    color: "#1f2937",
     maxHeight: 100,
     marginRight: 8,
   },
@@ -509,8 +539,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#3b82f6",
     alignItems: "center",
     justifyContent: "center",
-  },
-  sendButtonDisabled: {
-    backgroundColor: "#d1d5db",
   },
 });

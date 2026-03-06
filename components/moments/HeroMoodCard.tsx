@@ -1,8 +1,11 @@
 import { PulsingAura } from "@/components/moments/PulsingAura";
+import {
+  getMoodGradients,
+  getNeutralColors,
+} from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
 import { useEffect, useMemo } from "react";
 import {
   Dimensions,
@@ -34,6 +37,7 @@ type HeroMoodCardProps = {
   time?: string;
   onAddMood: (mood?: MoodLevel) => void;
   canEditMood?: boolean;
+  colorScheme?: "light" | "dark";
 };
 
 const MOOD_DATA: Record<
@@ -41,7 +45,7 @@ const MOOD_DATA: Record<
   {
     emoji: string;
     message: string;
-    gradient: [string, string, string];
+    label: string;
     icons: string[];
     auraColor: string;
   }
@@ -49,35 +53,35 @@ const MOOD_DATA: Record<
   1: {
     emoji: "😢",
     message: "a besoin de câlins",
-    gradient: ["#fef2f2", "#fee2e2", "#fecaca"],
+    label: "Difficile",
     icons: ["cloud-rain", "heart"],
     auraColor: "#fca5a5",
   },
   2: {
     emoji: "😐",
     message: "est un peu grognon",
-    gradient: ["#fffbeb", "#fef3c7", "#fde68a"],
+    label: "Mitigé",
     icons: ["cloud", "cloud"],
     auraColor: "#fcd34d",
   },
   3: {
     emoji: "🙂",
     message: "va bien",
-    gradient: ["#eff6ff", "#dbeafe", "#bfdbfe"],
+    label: "OK",
     icons: ["cloud-sun", "star"],
     auraColor: "#93c5fd",
   },
   4: {
     emoji: "😄",
     message: "est de bonne humeur",
-    gradient: ["#f0fdf4", "#dcfce7", "#bbf7d0"],
+    label: "Content",
     icons: ["sun", "star"],
     auraColor: "#86efac",
   },
   5: {
     emoji: "🥰",
     message: "rayonne de bonheur",
-    gradient: ["#fdf2f8", "#fce7f3", "#fbcfe8"],
+    label: "Rayonnant",
     icons: ["sparkles", "heart", "star"],
     auraColor: "#f9a8d4",
   },
@@ -163,7 +167,10 @@ export const HeroMoodCard = ({
   time,
   onAddMood,
   canEditMood = true,
+  colorScheme = "light",
 }: HeroMoodCardProps) => {
+  const nc = getNeutralColors(colorScheme);
+  const gradients = getMoodGradients(colorScheme);
   const cardScale = useSharedValue(0.95);
   const cardOpacity = useSharedValue(0);
 
@@ -180,7 +187,8 @@ export const HeroMoodCard = ({
   const moodData = mood ? MOOD_DATA[mood] : null;
 
   const floatingIcons = useMemo(() => {
-    if (!moodData) return [];
+    if (!moodData || !mood) return [];
+    const moodGradient = gradients[mood];
     const positions = [
       { x: 30, y: 20, size: 16, delay: 0 },
       { x: SCREEN_WIDTH - 100, y: 35, size: 14, delay: 300 },
@@ -191,24 +199,26 @@ export const HeroMoodCard = ({
     return positions.map((pos, i) => ({
       ...pos,
       icon: moodData.icons[i % moodData.icons.length],
-      color: moodData.gradient[1],
+      color: moodGradient[1],
     }));
-  }, [moodData]);
+  }, [moodData, mood, gradients]);
 
   if (!mood) {
     return (
       <Animated.View style={[styles.heroCard, cardAnimatedStyle]}>
         <LinearGradient
-          colors={["#f8f9fa", "#e9ecef", "#dee2e6"]}
+          colors={gradients.empty}
           style={styles.heroGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
           <Text style={styles.heroEmojiEmpty}>🌤️</Text>
-          <Text style={styles.heroTitle}>Comment va {babyName} ?</Text>
+          <Text style={[styles.heroTitle, { color: nc.textStrong }]}>
+            Comment va {babyName} ?
+          </Text>
           {canEditMood && (
             <>
-              <Text style={styles.heroSubtitle}>
+              <Text style={[styles.heroSubtitle, { color: nc.textLight }]}>
                 Touchez une humeur pour commencer
               </Text>
               <ScrollView
@@ -224,6 +234,8 @@ export const HeroMoodCard = ({
                       pressed && styles.emojiButtonPressed,
                     ]}
                     onPress={() => onAddMood(level)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Humeur ${MOOD_DATA[level].label}`}
                   >
                     <Text style={styles.emojiButtonText}>
                       {MOOD_DATA[level].emoji}
@@ -241,7 +253,7 @@ export const HeroMoodCard = ({
   return (
     <Animated.View style={[styles.heroCard, cardAnimatedStyle]}>
       <LinearGradient
-        colors={moodData!.gradient}
+        colors={gradients[mood]}
         style={styles.heroGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -257,11 +269,15 @@ export const HeroMoodCard = ({
           <AnimatedEmoji emoji={moodData!.emoji} />
         </View>
 
-        <Text style={styles.heroTitle}>
+        <Text style={[styles.heroTitle, { color: nc.textStrong }]}>
           {babyName} {moodData!.message}
         </Text>
 
-        {time && <Text style={styles.heroTime}>à {time}</Text>}
+        {time && (
+          <Text style={[styles.heroTime, { color: nc.textLight }]}>
+            à {time}
+          </Text>
+        )}
 
         {canEditMood && (
           <ScrollView
@@ -278,6 +294,9 @@ export const HeroMoodCard = ({
                   pressed && styles.emojiButtonPressed,
                 ]}
                 onPress={() => onAddMood(level)}
+                accessibilityRole="button"
+                accessibilityLabel={`Humeur ${MOOD_DATA[level].label}`}
+                accessibilityState={{ selected: level === mood }}
               >
                 <Text style={styles.emojiButtonTextSmall}>
                   {MOOD_DATA[level].emoji}
@@ -328,19 +347,16 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#1f2937",
     textAlign: "center",
     marginBottom: 4,
   },
   heroSubtitle: {
     fontSize: 14,
-    color: "#6b7280",
     textAlign: "center",
     marginBottom: 20,
   },
   heroTime: {
     fontSize: 14,
-    color: "#6b7280",
     marginBottom: 16,
   },
   addMoodButton: {

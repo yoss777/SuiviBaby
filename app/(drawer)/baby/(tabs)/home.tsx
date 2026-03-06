@@ -37,7 +37,6 @@ import {
 } from "@/services/todayEventsCache";
 import { supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
-import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -2032,83 +2031,43 @@ export default function HomeDashboard() {
             </StaggeredCard>
           )}
 
-          {/* Humeur & Jalons - Bloc unifié 2 colonnes */}
+          {/* Humeur du jour */}
           {canManageContent && (
             <StaggeredCard index={3} visible={isDataLoaded}>
             <View style={styles.statsGroupContainer}>
-              <View style={[styles.moodJalonsCard, { backgroundColor: cat.moments.background, borderColor: cat.moments.border }]}>
-                {/* Section Humeur */}
-                <View style={styles.moodJalonsSection}>
-                  <Text style={[styles.moodJalonsLabel, { color: nc.textLight }]}>Humeur du jour</Text>
-                  <View style={styles.moodEmojisRow}>
-                    {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
-                      const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
-                      const isSelected = todayMoodEvent?.humeur === moodValue;
-                      const isCurrentlySaving = isMoodSaving && isSelected;
-                      return (
-                        <TouchableOpacity
-                          key={key}
-                          style={[
-                            styles.moodEmojiButton,
-                            { backgroundColor: nc.backgroundCard },
-                            isSelected && [styles.moodEmojiSelected, { backgroundColor: `${cat.moments.primary}20`, borderColor: cat.moments.primary }],
-                          ]}
-                          onPress={() => handleSetMood(moodValue)}
-                          disabled={isMoodSaving}
-                          activeOpacity={0.7}
-                          accessibilityLabel={`Humeur ${moodValue} sur 5`}
-                          accessibilityState={{ selected: isSelected }}
-                        >
-                          {isCurrentlySaving ? (
-                            <ActivityIndicator
-                              size="small"
-                              color={cat.moments.primary}
-                            />
-                          ) : (
-                            <Text style={styles.moodEmojiText}>{emoji}</Text>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+              <View style={[styles.moodCard, { backgroundColor: cat.moments.background, borderColor: cat.moments.border }]}>
+                <Text style={[styles.moodLabel, { color: nc.textLight }]}>Humeur du jour</Text>
+                <View style={styles.moodEmojisRow}>
+                  {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
+                    const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
+                    const isSelected = todayMoodEvent?.humeur === moodValue;
+                    const isCurrentlySaving = isMoodSaving && isSelected;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={[
+                          styles.moodEmojiButton,
+                          { backgroundColor: nc.backgroundCard },
+                          isSelected && [styles.moodEmojiSelected, { backgroundColor: `${cat.moments.primary}20`, borderColor: cat.moments.primary }],
+                        ]}
+                        onPress={() => handleSetMood(moodValue)}
+                        disabled={isMoodSaving}
+                        activeOpacity={0.7}
+                        accessibilityLabel={`Humeur ${moodValue} sur 5`}
+                        accessibilityState={{ selected: isSelected }}
+                      >
+                        {isCurrentlySaving ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={cat.moments.primary}
+                          />
+                        ) : (
+                          <Text style={styles.moodEmojiText}>{emoji}</Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
-
-                {/* Séparateur vertical */}
-                <View style={[styles.moodJalonsDivider, { backgroundColor: cat.moments.border }]} />
-
-                {/* Section Jalons */}
-                <TouchableOpacity
-                  style={styles.jalonsSection}
-                  onPress={() => router.push("/baby/moments" as any)}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="Jalons"
-                  accessibilityHint="Ouvre la page des jalons et moments"
-                >
-                  <Text style={[styles.jalonsLabel, { color: nc.textLight }]}>Jalons</Text>
-                  <View style={styles.jalonsValueRow}>
-                    {todayJalons.length > 0 ? (
-                      <Text style={[styles.jalonsSummary, { color: nc.textStrong }]}>
-                        {todayJalons.length}
-                      </Text>
-                    ) : (
-                      <>
-                        <FontAwesome
-                          name="star"
-                          size={16}
-                          color={cat.moments.primary}
-                        />
-                        <Text style={[styles.jalonsEmptyText, { color: cat.moments.primary }]}>Ajouter</Text>
-                      </>
-                    )}
-                    <FontAwesome
-                      name="chevron-right"
-                      size={12}
-                      color={nc.textMuted}
-                      style={styles.jalonsChevron}
-                    />
-                  </View>
-                </TouchableOpacity>
               </View>
             </View>
             </StaggeredCard>
@@ -2245,8 +2204,8 @@ const styles = StyleSheet.create({
     color: neutralColors.textNormal,
     fontWeight: "500",
   },
-  // Mood & Jalons unified card styles
-  moodJalonsCard: {
+  // Mood card styles
+  moodCard: {
     backgroundColor: categoryColors.moments.background,
     borderRadius: 16,
     paddingHorizontal: 14,
@@ -2258,20 +2217,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
-    flexDirection: "row",
-    alignItems: "flex-start",
   },
-  moodJalonsSection: {
-    flex: 7,
-    paddingVertical: 2,
-    paddingRight: 10,
-  },
-  moodJalonsDivider: {
-    width: 1,
-    alignSelf: "stretch",
-    backgroundColor: categoryColors.moments.border,
-  },
-  moodJalonsLabel: {
+  moodLabel: {
     marginBottom: 6,
     fontSize: 13,
     fontWeight: "600",
@@ -2299,38 +2246,5 @@ const styles = StyleSheet.create({
   },
   moodEmojiText: {
     fontSize: 22,
-  },
-  jalonsSection: {
-    flex: 3,
-    paddingVertical: 2,
-    paddingHorizontal: 12,
-    alignItems: "center",
-  },
-  jalonsLabel: {
-    marginBottom: 6,
-    fontSize: 13,
-    fontWeight: "600",
-    color: neutralColors.textLight,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  jalonsValueRow: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  jalonsSummary: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: neutralColors.textStrong,
-  },
-  jalonsEmptyText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: categoryColors.moments.primary,
-    marginTop: 4,
-  },
-  jalonsChevron: {
-    marginTop: 4,
   },
 });

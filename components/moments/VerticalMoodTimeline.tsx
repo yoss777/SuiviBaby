@@ -1,4 +1,4 @@
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -21,6 +21,7 @@ type MoodEntry = {
 
 type VerticalMoodTimelineProps = {
   moods: MoodEntry[];
+  colorScheme?: "light" | "dark";
 };
 
 const PAGE_SIZE = 3;
@@ -55,10 +56,12 @@ const TimelineItem = ({
   mood,
   index,
   isLast,
+  nc,
 }: {
   mood: MoodEntry;
   index: number;
   isLast: boolean;
+  nc: ReturnType<typeof getNeutralColors>;
 }) => {
   const config = MOOD_CONFIG[mood.humeur];
   const dotScale = useSharedValue(0);
@@ -78,10 +81,13 @@ const TimelineItem = ({
     <Animated.View
       entering={FadeInLeft.delay(Math.min(index, 4) * 60).springify()}
       style={styles.timelineItem}
+      accessibilityLabel={`${formatTime(mood.date)}: ${config.label}`}
     >
       {/* Time label */}
       <View style={styles.timeColumn}>
-        <Text style={styles.timeText}>{formatTime(mood.date)}</Text>
+        <Text style={[styles.timeText, { color: nc.textMuted }]}>
+          {formatTime(mood.date)}
+        </Text>
       </View>
 
       {/* Dot and line */}
@@ -103,16 +109,26 @@ const TimelineItem = ({
       </View>
 
       {/* Content bubble */}
-      <View style={[styles.bubble, { borderLeftColor: config.color }]}>
-        <Text style={styles.bubbleLabel}>{config.label}</Text>
+      <View
+        style={[
+          styles.bubble,
+          { backgroundColor: nc.background, borderLeftColor: config.color },
+        ]}
+      >
+        <Text style={[styles.bubbleLabel, { color: nc.textNormal }]}>
+          {config.label}
+        </Text>
       </View>
     </Animated.View>
   );
 };
 
-export const VerticalMoodTimeline = ({ moods }: VerticalMoodTimelineProps) => {
+export const VerticalMoodTimeline = ({
+  moods,
+  colorScheme = "light",
+}: VerticalMoodTimelineProps) => {
+  const nc = getNeutralColors(colorScheme);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Filter and sort today's moods
   const todayMoods = useMemo(() => {
@@ -128,11 +144,7 @@ export const VerticalMoodTimeline = ({ moods }: VerticalMoodTimelineProps) => {
   // Toggle expand/collapse
   const handleToggleExpand = useCallback(() => {
     if (!isExpanded) {
-      setIsLoadingMore(true);
-      setTimeout(() => {
-        setIsExpanded(true);
-        setIsLoadingMore(false);
-      }, 200);
+      setIsExpanded(true);
     } else {
       setIsExpanded(false);
     }
@@ -143,10 +155,12 @@ export const VerticalMoodTimeline = ({ moods }: VerticalMoodTimelineProps) => {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: nc.backgroundCard }]}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.title}>Fil du jour</Text>
+          <Text style={[styles.title, { color: nc.textStrong }]}>
+            Fil du jour
+          </Text>
           <View style={styles.countBadge}>
             <Text style={styles.countText}>{todayMoods.length}</Text>
           </View>
@@ -167,6 +181,7 @@ export const VerticalMoodTimeline = ({ moods }: VerticalMoodTimelineProps) => {
               mood={mood}
               index={index}
               isLast={index === visibleMoods.length - 1}
+              nc={nc}
             />
           ))}
         </ScrollView>
@@ -178,33 +193,29 @@ export const VerticalMoodTimeline = ({ moods }: VerticalMoodTimelineProps) => {
               mood={mood}
               index={index}
               isLast={index === visibleMoods.length - 1 && !hasMoreToShow}
+              nc={nc}
             />
           ))}
         </View>
       )}
 
-      {/* Loading indicator */}
-      {isLoadingMore && (
-        <View style={styles.footerLoader}>
-          <IconPulseDots
-            icons={["face-smile", "face-laugh", "face-grin-hearts"]}
-            size={16}
-            color={eventColors.jalon.dark}
-            gap={12}
-          />
-        </View>
-      )}
-
       {/* Toggle button */}
-      {hasMoreToShow && !isLoadingMore && (
+      {hasMoreToShow && (
         <Pressable
           style={({ pressed }) => [
             styles.toggleButton,
+            { borderTopColor: nc.borderLight },
             pressed && styles.toggleButtonPressed,
           ]}
           onPress={handleToggleExpand}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isExpanded
+              ? "Réduire la liste"
+              : "Voir toutes les humeurs"
+          }
         >
-          <Text style={styles.toggleButtonText}>
+          <Text style={[styles.toggleButtonText, { color: nc.textLight }]}>
             {isExpanded
               ? "Réduire"
               : `Voir tout (${todayMoods.length - PAGE_SIZE} de plus)`}
@@ -212,7 +223,7 @@ export const VerticalMoodTimeline = ({ moods }: VerticalMoodTimelineProps) => {
           <FontAwesome6
             name={isExpanded ? "chevron-up" : "chevron-down"}
             size={12}
-            color="#6b7280"
+            color={nc.textLight}
           />
         </Pressable>
       )}
@@ -224,7 +235,6 @@ const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
     marginTop: 24,
-    backgroundColor: "#fff",
     borderRadius: 20,
     padding: 16,
     shadowColor: "#000",
@@ -247,7 +257,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#1f2937",
   },
   countBadge: {
     backgroundColor: eventColors.jalon.light,
@@ -285,7 +294,6 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 12,
-    color: "#9ca3af",
     fontWeight: "500",
   },
   dotColumn: {
@@ -316,7 +324,6 @@ const styles = StyleSheet.create({
   },
   bubble: {
     flex: 1,
-    backgroundColor: "#f9fafb",
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -326,7 +333,6 @@ const styles = StyleSheet.create({
   bubbleLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
   },
   emptyState: {
     alignItems: "center",
@@ -338,7 +344,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: "#9ca3af",
     marginBottom: 16,
     textAlign: "center",
   },
@@ -360,11 +365,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  footerLoader: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-  },
   toggleButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -373,14 +373,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
   },
   toggleButtonPressed: {
     opacity: 0.7,
   },
   toggleButtonText: {
     fontSize: 13,
-    color: "#6b7280",
     fontWeight: "500",
   },
 });

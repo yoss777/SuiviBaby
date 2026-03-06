@@ -91,6 +91,9 @@ export const neutralColors = {
   success: "#22c55e", // green-500
   warning: "#f59e0b", // amber-500
   error: "#ef4444", // red-500
+
+  // Accents
+  todayAccent: "#6366f1", // indigo-500
 } as const;
 
 // ============================================
@@ -113,6 +116,8 @@ export const neutralColorsDark = {
   success: "#22c55e",
   warning: "#f59e0b",
   error: "#ef4444",
+
+  todayAccent: "#818cf8", // indigo-400 (brighter for dark bg)
 } as const;
 
 export const categoryColorsDark = {
@@ -144,6 +149,44 @@ export function getNeutralColors(scheme: "light" | "dark") {
 
 export function getCategoryColors(scheme: "light" | "dark") {
   return scheme === "dark" ? categoryColorsDark : categoryColors;
+}
+
+// ============================================
+// MOOD COLORS (moments components)
+// ============================================
+
+type MoodLevel = 1 | 2 | 3 | 4 | 5;
+
+export const moodGradients = {
+  light: {
+    1: ["#fef2f2", "#fee2e2", "#fecaca"] as [string, string, string],
+    2: ["#fffbeb", "#fef3c7", "#fde68a"] as [string, string, string],
+    3: ["#eff6ff", "#dbeafe", "#bfdbfe"] as [string, string, string],
+    4: ["#f0fdf4", "#dcfce7", "#bbf7d0"] as [string, string, string],
+    5: ["#fdf2f8", "#fce7f3", "#fbcfe8"] as [string, string, string],
+    empty: ["#f8f9fa", "#e9ecef", "#dee2e6"] as [string, string, string],
+  },
+  dark: {
+    1: ["#450a0a", "#7f1d1d", "#991b1b"] as [string, string, string],
+    2: ["#451a03", "#78350f", "#92400e"] as [string, string, string],
+    3: ["#0c1929", "#172554", "#1e3a5f"] as [string, string, string],
+    4: ["#052e16", "#14532d", "#166534"] as [string, string, string],
+    5: ["#4a0d2e", "#831843", "#9d174d"] as [string, string, string],
+    empty: ["#1f2937", "#374151", "#4b5563"] as [string, string, string],
+  },
+} as const;
+
+export const moodFills: Record<"light" | "dark", Record<MoodLevel, string>> = {
+  light: { 1: "#fecaca", 2: "#fde68a", 3: "#bfdbfe", 4: "#bbf7d0", 5: "#fbcfe8" },
+  dark: { 1: "#991b1b", 2: "#92400e", 3: "#1e3a5f", 4: "#166534", 5: "#9d174d" },
+};
+
+export function getMoodGradients(scheme: "light" | "dark") {
+  return moodGradients[scheme];
+}
+
+export function getMoodFills(scheme: "light" | "dark") {
+  return moodFills[scheme];
 }
 
 // ============================================

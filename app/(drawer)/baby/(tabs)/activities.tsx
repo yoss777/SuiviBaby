@@ -265,6 +265,7 @@ export default function ActivitiesScreen() {
         <View style={styles.headerButtons}>
           <Pressable
             onPress={handleCalendarPress}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[
               styles.headerButton,
               { paddingLeft: 12 },
@@ -279,7 +280,11 @@ export default function ActivitiesScreen() {
               color={Colors[colorScheme].tint}
             />
           </Pressable>
-          <Pressable onPress={() => openAddModal("tummyTime")} style={styles.headerButton}>
+          <Pressable
+              onPress={() => openAddModal("tummyTime")}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={styles.headerButton}
+            >
             <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
           </Pressable>
         </View>

@@ -1,4 +1,5 @@
 import { eventColors } from "@/constants/eventColors";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -33,6 +34,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CommentsBottomSheet } from "./CommentsBottomSheet";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const DOUBLE_TAP_HINT_KEY = "gallery_double_tap_hint_shown";
 const CARD_WIDTH = SCREEN_WIDTH * 0.85;
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.6;
 const ITEM_WIDTH = SCREEN_WIDTH;
@@ -64,7 +66,7 @@ type SwipeGalleryProps = {
   onClose: () => void;
   onAddPhoto?: () => void;
   onEdit?: (photoId: string, photoIndex: number) => void;
-  onLike?: (photoId: string) => void;
+  onLike?: (photoId: string) => Promise<void> | void;
   onDownload?: (
     photoId: string,
     uri: string,
@@ -176,10 +178,33 @@ export const SwipeGallery = ({
     Record<string, { likedByMe: boolean; countDelta: number }>
   >({});
 
+  // Double-tap onboarding hint
+  const [showDoubleTapHint, setShowDoubleTapHint] = useState(false);
+  const hintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (visible && photos.length > 0) {
+      AsyncStorage.getItem(DOUBLE_TAP_HINT_KEY).then((val) => {
+        if (!val) {
+          setShowDoubleTapHint(true);
+          AsyncStorage.setItem(DOUBLE_TAP_HINT_KEY, "1");
+          hintTimeoutRef.current = setTimeout(() => setShowDoubleTapHint(false), 3000);
+        }
+      });
+    } else {
+      setShowDoubleTapHint(false);
+    }
+    return () => {
+      if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+    };
+  }, [visible, photos.length]);
+
   // Reset optimistic state and translateY when gallery closes/opens
   useEffect(() => {
     if (!visible) {
       setOptimisticLikes({});
+      if (heartTimeoutRef.current) { clearTimeout(heartTimeoutRef.current); heartTimeoutRef.current = null; }
+      if (hintTimeoutRef.current) { clearTimeout(hintTimeoutRef.current); hintTimeoutRef.current = null; }
     }
     translateY.value = 0;
   }, [visible, translateY]);
@@ -217,6 +242,7 @@ export const SwipeGallery = ({
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Double tap heart animation state
+  const heartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [doubleTapHeartId, setDoubleTapHeartId] = useState<string | null>(null);
   const [imageErrorIds, setImageErrorIds] = useState<Record<string, boolean>>(
     {},
@@ -300,9 +326,21 @@ export const SwipeGallery = ({
     onAddPhoto();
   }, [onClose, onAddPhoto]);
 
-  // Handle like with optimistic update
+  // Show local toast
+  const showLocalToast = useCallback((message: string) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setLocalToast(message);
+    toastTimeoutRef.current = setTimeout(() => {
+      setLocalToast(null);
+      toastTimeoutRef.current = null;
+    }, 2600);
+  }, []);
+
+  // Handle like with optimistic update + rollback on error
   const handleLike = useCallback(
-    (photoId: string) => {
+    async (photoId: string) => {
       const serverInfo = likesInfo[photoId] || {
         count: 0,
         likedByMe: false,
@@ -315,6 +353,9 @@ export const SwipeGallery = ({
 
       const newLikedByMe = !currentLikedByMe;
 
+      // Save previous state for rollback
+      const previousOptimistic = optimisticLikes[photoId];
+
       setOptimisticLikes((prev) => ({
         ...prev,
         [photoId]: {
@@ -325,23 +366,39 @@ export const SwipeGallery = ({
         },
       }));
 
-      onLike?.(photoId);
+      try {
+        await onLike?.(photoId);
+      } catch {
+        // Rollback optimistic state on error
+        setOptimisticLikes((prev) => {
+          const updated = { ...prev };
+          if (previousOptimistic) {
+            updated[photoId] = previousOptimistic;
+          } else {
+            delete updated[photoId];
+          }
+          return updated;
+        });
+        showLocalToast("Impossible d'enregistrer le like");
+      }
     },
-    [onLike, likesInfo, optimisticLikes],
+    [onLike, likesInfo, optimisticLikes, showLocalToast],
   );
 
   // Handle double tap to like
   const handleDoubleTap = useCallback(
     (photoId: string) => {
+      if (heartTimeoutRef.current) clearTimeout(heartTimeoutRef.current);
       setDoubleTapHeartId(photoId);
       heartScale.value = withSequence(
         withSpring(1.2, { damping: 8, stiffness: 400 }),
         withSpring(1, { damping: 10, stiffness: 300 }),
       );
 
-      setTimeout(() => {
+      heartTimeoutRef.current = setTimeout(() => {
         setDoubleTapHeartId(null);
         heartScale.value = 0;
+        heartTimeoutRef.current = null;
       }, 800);
 
       handleLike(photoId);
@@ -403,18 +460,6 @@ export const SwipeGallery = ({
     transform: [{ translateY: translateY.value }],
   }));
 
-  // Show local toast
-  const showLocalToast = useCallback((message: string) => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    setLocalToast(message);
-    toastTimeoutRef.current = setTimeout(() => {
-      setLocalToast(null);
-      toastTimeoutRef.current = null;
-    }, 2600);
-  }, []);
-
   // Handle download
   const handleDownload = useCallback(
     async (photoId: string, uri: string) => {
@@ -463,6 +508,7 @@ export const SwipeGallery = ({
   // Handle tap on image - detect double tap
   const handleImageTap = useCallback(
     (photoId: string) => {
+      if (showDoubleTapHint) setShowDoubleTapHint(false);
       const now = Date.now();
       if (now - lastTapTimeRef.current < DOUBLE_TAP_DELAY) {
         handleDoubleTap(photoId);
@@ -471,7 +517,7 @@ export const SwipeGallery = ({
         lastTapTimeRef.current = now;
       }
     },
-    [handleDoubleTap],
+    [handleDoubleTap, showDoubleTapHint],
   );
 
   // Render a single gallery item
@@ -484,6 +530,8 @@ export const SwipeGallery = ({
               <Pressable
                 style={[styles.card, styles.addCard]}
                 onPress={handleAddPhoto}
+                accessibilityRole="button"
+                accessibilityLabel="Ajouter un nouveau souvenir"
               >
                 <View style={styles.addCardContent}>
                   <View style={styles.addIconCircle}>
@@ -554,6 +602,8 @@ export const SwipeGallery = ({
                         pressed && styles.socialBarButtonPressed,
                       ]}
                       onPress={() => handleLike(item.photo.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={likeInfo.likedByMe ? "Retirer le like" : "Aimer cette photo"}
                     >
                       <FontAwesome6
                         name="heart"
@@ -570,6 +620,8 @@ export const SwipeGallery = ({
                       onPress={() =>
                         handleComment(item.photo.id, item.photo.titre)
                       }
+                      accessibilityRole="button"
+                      accessibilityLabel={`Commenter${commentCount > 0 ? ` (${commentCount})` : ""}`}
                     >
                       <FontAwesome6 name="comment" size={22} color="#fff" />
                       {commentCount > 0 && <View style={styles.commentDot} />}
@@ -588,11 +640,18 @@ export const SwipeGallery = ({
                     )}
                   </View>
                 </View>
-                {likeInfo.count > 0 && (
-                  <Text style={styles.likesText}>
-                    {formatLikesText(likeInfo)}
-                  </Text>
-                )}
+                <View style={styles.likesTextContainer}>
+                  {likeInfo.count > 0 && (
+                    <Animated.Text
+                      entering={FadeIn.duration(200)}
+                      exiting={FadeOut.duration(150)}
+                      style={styles.likesText}
+                      numberOfLines={1}
+                    >
+                      {formatLikesText(likeInfo)}
+                    </Animated.Text>
+                  )}
+                </View>
               </View>
             </View>
           </AnimatedCard>
@@ -624,6 +683,15 @@ export const SwipeGallery = ({
     [],
   );
 
+  const onScrollToIndexFailed = useCallback(
+    (info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
+      setTimeout(() => {
+        flatListRef.current?.scrollToIndex({ index: info.index, animated: false });
+      }, 100);
+    },
+    [],
+  );
+
   if (!visible) return null;
 
   const currentItem = galleryItems[currentIndex] ?? galleryItems[0];
@@ -647,7 +715,12 @@ export const SwipeGallery = ({
             <View style={[styles.safeArea, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
               {/* Header */}
               <View style={styles.header}>
-                <Pressable style={styles.closeButton} onPress={onClose}>
+                <Pressable
+                  style={styles.closeButton}
+                  onPress={onClose}
+                  accessibilityRole="button"
+                  accessibilityLabel="Fermer la galerie"
+                >
                   <FontAwesome6 name="xmark" size={20} color="#fff" />
                 </Pressable>
 
@@ -668,6 +741,8 @@ export const SwipeGallery = ({
                           pressed && styles.headerButtonPressed,
                         ]}
                         onPress={handleEdit}
+                        accessibilityRole="button"
+                        accessibilityLabel="Modifier la photo"
                       >
                         <FontAwesome6 name="pen" size={16} color="#fff" />
                       </Pressable>
@@ -683,6 +758,8 @@ export const SwipeGallery = ({
                           currentItem.photo.uri,
                         )
                       }
+                      accessibilityRole="button"
+                      accessibilityLabel="Télécharger la photo"
                     >
                       <FontAwesome6 name="download" size={16} color="#fff" />
                     </Pressable>
@@ -710,6 +787,7 @@ export const SwipeGallery = ({
                   bounces={false}
                   onScroll={onScroll}
                   scrollEventThrottle={16}
+                  onScrollToIndexFailed={onScrollToIndexFailed}
                 />
               </View>
 
@@ -777,6 +855,20 @@ export const SwipeGallery = ({
               photoTitle={commentsPhotoTitle}
               onClose={handleCloseComments}
             />
+
+            {/* Double-tap onboarding hint */}
+            {showDoubleTapHint && !commentsVisible && (
+              <Animated.View
+                entering={FadeIn.duration(300)}
+                exiting={FadeOut.duration(300)}
+                style={styles.doubleTapHint}
+              >
+                <FontAwesome6 name="heart" size={16} color="#ef4444" solid />
+                <Text style={styles.doubleTapHintText}>
+                  Double-tapez une photo pour l'aimer
+                </Text>
+              </Animated.View>
+            )}
 
             {/* Local Toast */}
             {localToast && (
@@ -1007,10 +1099,13 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.9 }],
     opacity: 0.8,
   },
+  likesTextContainer: {
+    minHeight: 18,
+    marginTop: 4,
+  },
   likesText: {
     fontSize: 13,
     color: "rgba(255, 255, 255, 0.85)",
-    marginTop: 4,
     fontWeight: "500",
   },
   commentDot: {
@@ -1021,6 +1116,23 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: eventColors.jalon.dark,
+  },
+  doubleTapHint: {
+    position: "absolute",
+    bottom: 140,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 999,
+  },
+  doubleTapHintText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "500",
   },
   localToast: {
     position: "absolute",

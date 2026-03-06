@@ -2,13 +2,13 @@ import {
   ConfettiBurst,
   // FloatingActionButton, // Commented - keeping animation for later use
   HeroMoodCard,
+  MomentsSkeletonLoader,
   PolaroidGallery,
   SwipeGallery,
   VerticalMoodTimeline,
   WeekMoodOverview,
 } from "@/components/moments";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
-import { eventColors } from "@/constants/eventColors";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -29,10 +29,11 @@ import { LikeInfo } from "@/types/social";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
+import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderRight } from "../../_layout";
@@ -94,9 +95,8 @@ export default function MomentsScreen() {
   const { openSheet } = useSheet();
   const { newEventIds } = useMomentsNotification();
   const colorScheme = useColorScheme() ?? "light";
-  const headerOwnerId = useRef(
-    `moments-${Math.random().toString(36).slice(2)}`,
-  );
+  const nc = getNeutralColors(colorScheme);
+  const headerOwnerId = useRef("moments-header");
   const sheetOwnerId = "moments";
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
@@ -122,66 +122,63 @@ export default function MomentsScreen() {
     setRefreshTick((prev) => prev + 1);
   }, []);
 
-  // Data processing
-  const { moods, allPhotoMilestones, displayedPhotoMilestones, currentMood } =
-    useMemo((): {
-      moods: MoodEntry[];
-      allPhotoMilestones: PhotoMilestone[];
-      displayedPhotoMilestones: PhotoMilestone[];
-      currentMood: MoodEntry | null;
-    } => {
-      const moodEntries: MoodEntry[] = [];
-      const photos: PhotoMilestone[] = [];
-      let latestMood: MoodEntry | null = null;
+  // Mood data processing (separate from photos to avoid cross-invalidation)
+  const { moods, currentMood } = useMemo((): {
+    moods: MoodEntry[];
+    currentMood: MoodEntry | null;
+  } => {
+    const moodEntries: MoodEntry[] = [];
+    let latestMood: MoodEntry | null = null;
 
-      events.forEach((event) => {
-        const eventDate = toDate(event.date);
-
-        // Moods
-        if (event.typeJalon === "humeur" && event.humeur) {
-          const entry: MoodEntry = {
-            id: event.id,
-            date: eventDate,
-            humeur: event.humeur as 1 | 2 | 3 | 4 | 5,
-          };
-          moodEntries.push(entry);
-          if (!latestMood || eventDate > latestMood.date) {
-            latestMood = entry;
-          }
+    events.forEach((event) => {
+      if (event.typeJalon === "humeur" && event.humeur) {
+        const entry: MoodEntry = {
+          id: event.id,
+          date: toDate(event.date),
+          humeur: event.humeur as 1 | 2 | 3 | 4 | 5,
+        };
+        moodEntries.push(entry);
+        if (!latestMood || entry.date > latestMood.date) {
+          latestMood = entry;
         }
+      }
+    });
 
-        // Photos
-        if (event.photos && event.photos.length > 0) {
-          // Pour les jalons de type "photo", utiliser la description comme titre si elle existe
-          // Pour "autre" et autres types, garder le titre original
-          const photoTitre =
-            event.typeJalon === "photo" && event.description
-              ? event.description
-              : event.titre;
+    return { moods: moodEntries, currentMood: latestMood };
+  }, [events]);
 
-          photos.push({
-            id: event.id,
-            date: eventDate,
-            photo: event.photos[0],
-            titre: photoTitre,
-            description: event.description,
-            typeJalon: event.typeJalon,
-            userId: event.userId,
-          });
-        }
-      });
+  // Photo data processing
+  const { allPhotoMilestones, displayedPhotoMilestones } = useMemo(() => {
+    const photos: PhotoMilestone[] = [];
 
-      const sortedPhotos = photos.sort(
-        (a, b) => b.date.getTime() - a.date.getTime(),
-      );
+    events.forEach((event) => {
+      if (event.photos && event.photos.length > 0) {
+        const photoTitre =
+          event.typeJalon === "photo" && event.description
+            ? event.description
+            : event.titre;
 
-      return {
-        moods: moodEntries,
-        allPhotoMilestones: sortedPhotos,
-        displayedPhotoMilestones: sortedPhotos.slice(0, 3),
-        currentMood: latestMood,
-      };
-    }, [events]);
+        photos.push({
+          id: event.id,
+          date: toDate(event.date),
+          photo: event.photos[0],
+          titre: photoTitre,
+          description: event.description,
+          typeJalon: event.typeJalon,
+          userId: event.userId,
+        });
+      }
+    });
+
+    const sortedPhotos = photos.sort(
+      (a, b) => b.date.getTime() - a.date.getTime(),
+    );
+
+    return {
+      allPhotoMilestones: sortedPhotos,
+      displayedPhotoMilestones: sortedPhotos.slice(0, 3),
+    };
+  }, [events]);
 
   // Get today's latest mood for hero card
   const todayMood = useMemo(() => {
@@ -218,7 +215,13 @@ export default function MomentsScreen() {
             gap: 0,
           }}
         >
-          <Pressable onPress={handleAddMilestone} style={styles.headerButton}>
+          <Pressable
+            onPress={handleAddMilestone}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Ajouter un souvenir"
+          >
             <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
           </Pressable>
         </View>
@@ -231,7 +234,7 @@ export default function MomentsScreen() {
     }, [canManageContent, colorScheme, setHeaderRight, handleAddMilestone]),
   );
 
-  // Data loading - load all milestones (no date limit) to ensure we always have 3 photos
+  // Data loading - load most recent milestones (limited to 100 for performance)
   useEffect(() => {
     if (!activeChild?.id) return;
 
@@ -241,23 +244,33 @@ export default function MomentsScreen() {
         setEvents(data as MilestoneEventWithId[]);
         setLoaded(true);
       },
-      { waitForServer: true },
+      { waitForServer: true, limite: 100 },
+      () => {
+        // On error, mark as loaded to exit skeleton (show empty state vs infinite loading)
+        setLoaded(true);
+      },
     );
 
     return () => unsubscribe();
   }, [activeChild?.id, refreshTick]);
 
-  // Resolve author names for photos not by current user
-  useEffect(() => {
-    if (!firebaseUser?.uid || allPhotoMilestones.length === 0) return;
-    const otherUserIds = [
+  // Stable key of other user IDs — only re-fetch names when the set changes
+  const otherUserIdsKey = useMemo(() => {
+    if (!firebaseUser?.uid || allPhotoMilestones.length === 0) return "";
+    const ids = [
       ...new Set(
         allPhotoMilestones
           .filter((p) => p.userId && p.userId !== firebaseUser.uid)
           .map((p) => p.userId!),
       ),
     ];
-    if (otherUserIds.length === 0) return;
+    return ids.sort().join(",");
+  }, [firebaseUser?.uid, allPhotoMilestones]);
+
+  // Resolve author names for photos not by current user
+  useEffect(() => {
+    if (!otherUserIdsKey) return;
+    const otherUserIds = otherUserIdsKey.split(",");
     getUserNames(otherUserIds).then((namesMap) => {
       const names: Record<string, string> = {};
       namesMap.forEach((name, uid) => {
@@ -265,13 +278,18 @@ export default function MomentsScreen() {
       });
       setAuthorNames(names);
     });
-  }, [firebaseUser?.uid, allPhotoMilestones]);
+  }, [otherUserIdsKey]);
+
+  // Stable key of photo IDs for social listener — avoids re-subscribing on every events update
+  const photoIdsKey = useMemo(() => {
+    return allPhotoMilestones.map((p) => p.id).join(",");
+  }, [allPhotoMilestones]);
 
   // Social interactions listener
   useEffect(() => {
-    if (!activeChild?.id || allPhotoMilestones.length === 0) return;
+    if (!activeChild?.id || !photoIdsKey) return;
 
-    const eventIds = allPhotoMilestones.map((p) => p.id);
+    const eventIds = photoIdsKey.split(",");
 
     const unsubscribe = ecouterInteractionsSociales(
       activeChild.id,
@@ -281,7 +299,7 @@ export default function MomentsScreen() {
     );
 
     return () => unsubscribe();
-  }, [activeChild?.id, allPhotoMilestones]);
+  }, [activeChild?.id, photoIdsKey]);
 
   // Navigation handlers
   const handleAddMood = useCallback(
@@ -297,10 +315,11 @@ export default function MomentsScreen() {
             humeur: mood,
             titre: "Humeur du jour",
           };
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           const moodId = await ajouterJalon(activeChild.id, dataToSave);
           if (moodId) {
-            // Trigger confetti on success
             setConfettiTrigger((prev) => prev + 1);
+            showToast("Humeur enregistrée");
           } else {
             showToast("Impossible d'enregistrer l'humeur.");
           }
@@ -397,6 +416,7 @@ export default function MomentsScreen() {
     async (photoId: string) => {
       if (!activeChild?.id) return;
       try {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await toggleLike(photoId, activeChild.id, userName ?? "Moi");
       } catch (error) {
         console.error("[Moments] Erreur like:", error);
@@ -421,9 +441,9 @@ export default function MomentsScreen() {
           };
         }
 
-        // Télécharger l'image localement
+        // Télécharger l'image localement (cacheDirectory pour ne pas bloater iCloud)
         const filename = `moment_${photoId}_${Date.now()}.jpg`;
-        const localUri = FileSystem.documentDirectory + filename;
+        const localUri = FileSystem.cacheDirectory + filename;
 
         const downloadResult = await FileSystem.downloadAsync(uri, localUri);
 
@@ -460,23 +480,18 @@ export default function MomentsScreen() {
 
   // Loading state
   if (!loaded) {
-    return (
-      <View style={styles.loadingContainer}>
-        <IconPulseDots color={eventColors.jalon.dark} />
-        <Text style={styles.loadingText}>Chargement des moments...</Text>
-      </View>
-    );
+    return <MomentsSkeletonLoader colorScheme={colorScheme} />;
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
           {/* Hero Mood Card */}
-          <Animated.View entering={FadeIn.duration(500)}>
+          <Animated.View entering={FadeIn.duration(400)}>
             <View style={styles.heroCardWrapper}>
               <HeroMoodCard
                 mood={todayMood?.humeur ?? null}
@@ -484,6 +499,7 @@ export default function MomentsScreen() {
                 time={todayMood ? formatTime(todayMood.date) : undefined}
                 onAddMood={handleAddMood}
                 canEditMood={canManageContent}
+                colorScheme={colorScheme}
               />
               <View style={styles.confettiContainer}>
                 <ConfettiBurst trigger={confettiTrigger} />
@@ -492,17 +508,17 @@ export default function MomentsScreen() {
           </Animated.View>
 
           {/* Vertical Timeline */}
-          <Animated.View entering={FadeInUp.delay(150).springify()}>
-            <VerticalMoodTimeline moods={moods} />
+          <Animated.View entering={FadeInUp.delay(50).springify()}>
+            <VerticalMoodTimeline moods={moods} colorScheme={colorScheme} />
           </Animated.View>
 
           {/* Week Overview */}
-          <Animated.View entering={FadeInUp.delay(250).springify()}>
-            <WeekMoodOverview moods={moods} />
+          <Animated.View entering={FadeInUp.delay(100).springify()}>
+            <WeekMoodOverview moods={moods} colorScheme={colorScheme} />
           </Animated.View>
 
           {/* Polaroid Gallery */}
-          <Animated.View entering={FadeInUp.delay(350).springify()}>
+          <Animated.View entering={FadeInUp.delay(150).springify()}>
             <PolaroidGallery
               photos={
                 canManageContent
@@ -515,6 +531,7 @@ export default function MomentsScreen() {
               likesInfo={likesInfo}
               commentCounts={commentCounts}
               newEventIds={newEventIds}
+              colorScheme={colorScheme}
             />
           </Animated.View>
 
@@ -566,7 +583,6 @@ export default function MomentsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FDF8F3",
   },
   safeArea: {
     flex: 1,
@@ -574,18 +590,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 16,
     paddingBottom: 20,
-    paddingHorizontal: 4,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FDF8F3",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6b7280",
   },
   heroCardWrapper: {
     position: "relative",

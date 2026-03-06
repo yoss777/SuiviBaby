@@ -183,6 +183,7 @@ export default function MealsScreen() {
 
           <Pressable
             onPress={handleCalendarPress}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[
               styles.headerButton,
               { paddingLeft: 12 },
@@ -197,7 +198,11 @@ export default function MealsScreen() {
               color={Colors[colorScheme].tint}
             />
           </Pressable>
-          <Pressable onPress={() => openAddModal()} style={styles.headerButton}>
+          <Pressable
+            onPress={() => openAddModal()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.headerButton}
+          >
             <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
           </Pressable>
         </View>

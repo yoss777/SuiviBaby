@@ -144,7 +144,7 @@ export const supprimerLike = async (eventId: string): Promise<void> => {
     collection(db, "eventLikes"),
     where("eventId", "==", eventId),
     where("userId", "==", userId),
-    limit(10000)
+    limit(1)
   );
 
   const snapshot = await getDocs(q);
@@ -230,7 +230,7 @@ export const obtenirLikes = async (eventId: string): Promise<EventLike[]> => {
     collection(db, "eventLikes"),
     where("eventId", "==", eventId),
     orderBy("createdAt", "desc"),
-    limit(10000)
+    limit(500)
   );
 
   const snapshot = await getDocs(q);
@@ -297,7 +297,7 @@ export const obtenirLikesInfoBatch = async (
     const q = query(
       collection(db, "eventLikes"),
       where("eventId", "in", batch),
-      limit(10000)
+      limit(500)
     );
 
     const snapshot = await getDocs(q);
@@ -337,35 +337,32 @@ export const ecouterLikes = (
   onUpdate: (info: LikeInfo) => void
 ): (() => void) => {
   const userId = getUserId();
+  let version = 0;
 
   const q = query(
     collection(db, "eventLikes"),
     where("eventId", "==", eventId),
     orderBy("createdAt", "desc"),
-    limit(10000)
+    limit(500)
   );
 
-  return onSnapshot(q, async (snapshot) => {
+  return onSnapshot(q, (snapshot) => {
+    const currentVersion = ++version;
     const likes = snapshot.docs.map(
       (d) => ({ id: d.id, ...d.data() }) as EventLike
     );
 
-    // Récupérer les noms à jour
     const uniqueUserIds = [...new Set(likes.slice(0, 3).map((l) => l.userId))];
-    const userNames = await getUserNames(uniqueUserIds);
+    getUserNames(uniqueUserIds).then((userNames) => {
+      if (currentVersion !== version) return; // Discard stale result
 
-    const likedByMe = likes.some((like) => like.userId === userId);
-    const likedByNames = likes.slice(0, 3).map((like) => {
-      if (like.userId === userId) {
-        return "Moi";
-      }
-      return userNames.get(like.userId) || like.userName;
-    });
+      const likedByMe = likes.some((like) => like.userId === userId);
+      const likedByNames = likes.slice(0, 3).map((like) => {
+        if (like.userId === userId) return "Moi";
+        return userNames.get(like.userId) || like.userName;
+      });
 
-    onUpdate({
-      count: likes.length,
-      likedByMe,
-      likedByNames,
+      onUpdate({ count: likes.length, likedByMe, likedByNames });
     });
   });
 };
@@ -456,7 +453,7 @@ export const obtenirCommentaires = async (
     collection(db, "eventComments"),
     where("eventId", "==", eventId),
     orderBy("createdAt", "asc"),
-    limit(10000)
+    limit(500)
   );
 
   const snapshot = await getDocs(q);
@@ -502,7 +499,7 @@ export const obtenirCommentCountsBatch = async (
     const q = query(
       collection(db, "eventComments"),
       where("eventId", "in", batch),
-      limit(10000)
+      limit(500)
     );
 
     const snapshot = await getDocs(q);
@@ -523,33 +520,36 @@ export const ecouterCommentaires = (
   eventId: string,
   onUpdate: (info: CommentInfo) => void
 ): (() => void) => {
+  let version = 0;
+
   const q = query(
     collection(db, "eventComments"),
     where("eventId", "==", eventId),
     orderBy("createdAt", "asc"),
-    limit(10000)
+    limit(500)
   );
 
-  return onSnapshot(q, async (snapshot) => {
+  return onSnapshot(q, (snapshot) => {
+    const currentVersion = ++version;
     const comments = snapshot.docs.map(
       (d) => ({ id: d.id, ...d.data() }) as EventComment
     );
 
-    // Résoudre les noms à jour depuis users_public
     const userIds = [...new Set(comments.map((c) => c.userId))];
-    if (userIds.length > 0) {
-      const names = await getUserNames(userIds);
+    if (userIds.length === 0) {
+      onUpdate({ count: comments.length, comments });
+      return;
+    }
+
+    getUserNames(userIds).then((names) => {
+      if (currentVersion !== version) return; // Discard stale result
       comments.forEach((comment) => {
         const resolvedName = names.get(comment.userId);
         if (resolvedName) {
           comment.userName = resolvedName;
         }
       });
-    }
-
-    onUpdate({
-      count: comments.length,
-      comments,
+      onUpdate({ count: comments.length, comments });
     });
   });
 };
@@ -575,10 +575,12 @@ export const ecouterInteractionsSociales = (
   const likesQuery = query(
     collection(db, "eventLikes"),
     where("childId", "==", childId),
-    limit(10000)
+    limit(500)
   );
 
-  const unsubLikes = onSnapshot(likesQuery, async (snapshot) => {
+  let likesVersion = 0;
+  const unsubLikes = onSnapshot(likesQuery, (snapshot) => {
+    const currentVersion = ++likesVersion;
     const likesInfo: Record<string, LikeInfo> = {};
 
     // Initialiser
@@ -591,42 +593,46 @@ export const ecouterInteractionsSociales = (
     const uniqueUserIds = [...new Set(likes.map((l) => l.userId))];
 
     // Récupérer les noms à jour depuis les profils
-    const userNames = await getUserNames(uniqueUserIds);
+    getUserNames(uniqueUserIds).then((userNames) => {
+      if (currentVersion !== likesVersion) return;
 
-    likes.forEach((like) => {
-      if (!likesInfo[like.eventId]) {
-        likesInfo[like.eventId] = {
-          count: 0,
-          likedByMe: false,
-          likedByNames: [],
-        };
-      }
+      likes.forEach((like) => {
+        if (!likesInfo[like.eventId]) {
+          likesInfo[like.eventId] = {
+            count: 0,
+            likedByMe: false,
+            likedByNames: [],
+          };
+        }
 
-      const info = likesInfo[like.eventId];
-      info.count++;
-      if (like.userId === userId) {
-        info.likedByMe = true;
-      }
-      if (info.likedByNames.length < 3) {
-        // Utiliser le nom du profil (à jour) au lieu du nom stocké
-        const displayName = like.userId === userId
-          ? "Moi"
-          : userNames.get(like.userId) || like.userName;
-        info.likedByNames.push(displayName);
-      }
+        const info = likesInfo[like.eventId];
+        info.count++;
+        if (like.userId === userId) {
+          info.likedByMe = true;
+        }
+        if (info.likedByNames.length < 3) {
+          // Utiliser le nom du profil (à jour) au lieu du nom stocké
+          const displayName = like.userId === userId
+            ? "Moi"
+            : userNames.get(like.userId) || like.userName;
+          info.likedByNames.push(displayName);
+        }
+      });
+
+      onLikesUpdate(likesInfo);
     });
-
-    onLikesUpdate(likesInfo);
   });
 
   // Listener pour les commentaires
   const commentsQuery = query(
     collection(db, "eventComments"),
     where("childId", "==", childId),
-    limit(10000)
+    limit(500)
   );
 
-  const unsubComments = onSnapshot(commentsQuery, async (snapshot) => {
+  let commentsVersion = 0;
+  const unsubComments = onSnapshot(commentsQuery, (snapshot) => {
+    const currentVersion = ++commentsVersion;
     const commentCounts: Record<string, number> = {};
     const latestComments: Record<string, LatestComment> = {};
 
@@ -669,19 +675,21 @@ export const ecouterInteractionsSociales = (
 
       // Récupérer les noms à jour
       const uniqueUserIds = [...new Set(latestCommentsPerEvent.map((c) => c.userId))];
-      const userNames = await getUserNames(uniqueUserIds);
+      getUserNames(uniqueUserIds).then((userNames) => {
+        if (currentVersion !== commentsVersion) return;
 
-      latestCommentsPerEvent.forEach((comment) => {
-        const displayName = comment.userId === userId
-          ? "Moi"
-          : userNames.get(comment.userId) || comment.userName;
-        latestComments[comment.eventId] = {
-          userName: displayName,
-          content: comment.content,
-        };
+        latestCommentsPerEvent.forEach((comment) => {
+          const displayName = comment.userId === userId
+            ? "Moi"
+            : userNames.get(comment.userId) || comment.userName;
+          latestComments[comment.eventId] = {
+            userName: displayName,
+            content: comment.content,
+          };
+        });
+
+        onLatestCommentsUpdate(latestComments);
       });
-
-      onLatestCommentsUpdate(latestComments);
     }
 
     onCommentsUpdate(commentCounts);

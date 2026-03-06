@@ -107,7 +107,8 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
       collection(db, 'events'),
       where('childId', '==', activeChild.id),
       where('type', '==', 'jalon'),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(100)
     );
 
     const unsubscribeJalons = onSnapshot(jalonsQuery, (snapshot) => {
@@ -145,7 +146,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
       collection(db, 'eventLikes'),
       where('childId', '==', activeChild.id),
       orderBy('createdAt', 'desc'),
-      limit(10000)
+      limit(500)
     );
 
     const unsubscribeLikes = onSnapshot(likesQuery, (snapshot) => {
@@ -177,7 +178,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
       collection(db, 'eventComments'),
       where('childId', '==', activeChild.id),
       orderBy('createdAt', 'desc'),
-      limit(10000)
+      limit(500)
     );
 
     const unsubscribeComments = onSnapshot(commentsQuery, (snapshot) => {

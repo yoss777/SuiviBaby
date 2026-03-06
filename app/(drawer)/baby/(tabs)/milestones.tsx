@@ -290,6 +290,7 @@ export default function MilestonesScreen() {
         <View style={styles.headerButtons}>
           <Pressable
             onPress={handleCalendarPress}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[
               styles.headerButton,
               { paddingLeft: 12 },
@@ -304,7 +305,11 @@ export default function MilestonesScreen() {
               color={Colors[colorScheme].tint}
             />
           </Pressable>
-          <Pressable onPress={handleAddPress} style={styles.headerButton}>
+          <Pressable
+            onPress={handleAddPress}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.headerButton}
+          >
             <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
           </Pressable>
         </View>
