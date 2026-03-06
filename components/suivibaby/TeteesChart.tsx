@@ -1,3 +1,4 @@
+import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   Canvas,
@@ -8,7 +9,9 @@ import {
   Line as SkiaLine,
   vec,
 } from "@shopify/react-native-skia";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Timestamp } from "firebase/firestore";
+import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Dimensions,
@@ -31,24 +34,15 @@ import Animated, {
 type Props = {
   tetees: any[];
   initialTypeFilter?: "tous" | "seins" | "biberons";
+  colorScheme?: "light" | "dark";
+  screenWidth?: number;
 };
 
-const SCREEN_WIDTH = Dimensions.get("window").width - 40;
+const DEFAULT_SCREEN_WIDTH = Dimensions.get("window").width - 40;
 const CHART_HEIGHT = 210;
 const CHART_PADDING = { top: 18, right: 18, bottom: 46, left: 50 };
-const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
 
-const COLORS = {
-  surface: "#ffffff",
-  ink: "#1e2a36",
-  muted: "#6a7784",
-  border: "#e5ecf2",
-  blue: "#2f80ed",
-  blueDeep: "#1b4f9c",
-  cyan: "#2bb3a3",
-  green: "#2e7d32",
-  gold: "#f5b700",
-};
+const TAP_HINT_KEY = "tetees_chart_tap_hint_shown";
 
 function getStartOfWeek(date: Date) {
   const d = new Date(date);
@@ -66,7 +60,17 @@ function addWeeks(date: Date, weeks: number) {
   return d;
 }
 
-export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
+export default function TeteesChart({
+  tetees,
+  initialTypeFilter,
+  colorScheme = "light",
+  screenWidth: screenWidthProp,
+}: Props) {
+  const SCREEN_WIDTH = screenWidthProp ?? DEFAULT_SCREEN_WIDTH;
+  const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
+  const C = getChartColors(colorScheme).tetees;
+  const nc = getNeutralColors(colorScheme);
+
   const [viewMode, setViewMode] = useState<"quantity" | "frequency">(
     "frequency",
   );
@@ -78,11 +82,18 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
   );
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
   const [isGroupedView, setIsGroupedView] = useState(false);
+  const [showTapHint, setShowTapHint] = useState(false);
 
   const tooltipX = useSharedValue(0);
   const tooltipY = useSharedValue(0);
 
   const jours = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+  useEffect(() => {
+    AsyncStorage.getItem(TAP_HINT_KEY).then((val) => {
+      if (!val) setShowTapHint(true);
+    });
+  }, []);
 
   useEffect(() => {
     if (initialTypeFilter) {
@@ -334,15 +345,15 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
         currentMax > 0 ? (value / currentMax) * chartAreaHeight : 0;
       const y = CHART_PADDING.top + (chartAreaHeight - barHeight);
 
-      let color = COLORS.blue;
+      let color = C.blue;
       if (value === 0) {
-        color = "#eef2f7";
+        color = C.emptyBar;
       } else if (typeFilter === "seins") {
-        color = COLORS.green;
+        color = C.green;
       } else if (typeFilter === "biberons") {
-        color = COLORS.cyan;
+        color = C.cyan;
       } else if (value === currentMax && value > 0) {
-        color = COLORS.gold;
+        color = C.gold;
       }
 
       return {
@@ -368,6 +379,7 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
     isStacked,
     typeFilter,
     weeklyData,
+    C,
   ]);
 
   const yAxisLabels = useMemo(() => {
@@ -396,6 +408,10 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
   const tapGesture = Gesture.Tap()
     .runOnJS(true)
     .onEnd((event) => {
+      if (showTapHint) {
+        setShowTapHint(false);
+        AsyncStorage.setItem(TAP_HINT_KEY, "1");
+      }
       const barIndex = findBarAtPosition(event.x);
       if (barIndex !== null && bars[barIndex].value > 0) {
         setSelectedBarIndex((prev) => {
@@ -418,24 +434,52 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
   }));
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <GestureHandlerRootView
+      style={[styles.container, { backgroundColor: nc.background }]}
+    >
       {isEmpty ? (
         <View style={styles.emptyContainer}>
-          <FontAwesome name="baby" size={64} color="#e9ecef" />
-          <Text style={styles.emptyTitle}>Aucune donnée disponible</Text>
-          <Text style={styles.emptySubtitle}>
+          <FontAwesome name="baby" size={64} color={nc.textMuted} />
+          <Text style={[styles.emptyTitle, { color: nc.textNormal }]}>
+            Aucune donnée disponible
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: nc.textLight }]}>
             Commencez à enregistrer des tétées pour voir les statistiques
           </Text>
+          <TouchableOpacity
+            style={[styles.emptyCta, { backgroundColor: C.blue }]}
+            onPress={() => router.replace("/baby/chrono")}
+            accessibilityRole="button"
+            accessibilityLabel="Ajouter une tétée"
+          >
+            <FontAwesome name="plus" size={14} color="#ffffff" />
+            <Text style={styles.emptyCtaText}>Ajouter une tétée</Text>
+          </TouchableOpacity>
         </View>
       ) : (
-        <View style={styles.section}>
+        <View
+          style={[
+            styles.section,
+            {
+              backgroundColor: C.surface,
+              shadowColor: colorScheme === "dark" ? "transparent" : "#000",
+              borderColor:
+                colorScheme === "dark" ? nc.border : "transparent",
+              borderWidth: colorScheme === "dark" ? 1 : 0,
+            },
+          ]}
+        >
           <View style={styles.sectionHeader}>
-            <View style={styles.iconBadge}>
-              <FontAwesome name="baby" size={18} color={COLORS.blue} />
+            <View
+              style={[styles.iconBadge, { backgroundColor: C.iconBadgeBg }]}
+            >
+              <FontAwesome name="baby" size={18} color={C.blue} />
             </View>
             <View style={styles.headerText}>
-              <Text style={styles.sectionTitle}>Statistiques des tétées</Text>
-              <Text style={styles.sectionSubtitle}>
+              <Text style={[styles.sectionTitle, { color: C.ink }]}>
+                Statistiques des tétées
+              </Text>
+              <Text style={[styles.sectionSubtitle, { color: C.muted }]}>
                 {`${start.toLocaleDateString("fr-FR", {
                   day: "numeric",
                   month: "short",
@@ -452,61 +496,84 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
 
           <View style={styles.navigationRow}>
             <TouchableOpacity
-              style={styles.navButton}
+              style={[
+                styles.navButton,
+                {
+                  backgroundColor: C.navButtonBg,
+                  borderColor: C.border,
+                },
+              ]}
               onPress={() => setCurrentWeek(addWeeks(currentWeek, -1))}
+              accessibilityLabel="Semaine précédente"
             >
-              <FontAwesome name="chevron-left" size={14} color={COLORS.muted} />
-              <Text style={styles.navText}>Préc.</Text>
+              <FontAwesome name="chevron-left" size={14} color={C.muted} />
+              <Text style={[styles.navText, { color: C.muted }]}>Préc.</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.todayButton}
+              style={[styles.todayButton, { backgroundColor: C.blue }]}
               onPress={() => setCurrentWeek(getStartOfWeek(new Date()))}
+              accessibilityLabel="Revenir à cette semaine"
             >
               <Text style={styles.todayText}>Cette semaine</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.navButton}
+              style={[
+                styles.navButton,
+                {
+                  backgroundColor: C.navButtonBg,
+                  borderColor: C.border,
+                },
+              ]}
               onPress={() => setCurrentWeek(addWeeks(currentWeek, 1))}
+              accessibilityLabel="Semaine suivante"
             >
-              <Text style={styles.navText}>Suiv.</Text>
-              <FontAwesome
-                name="chevron-right"
-                size={14}
-                color={COLORS.muted}
-              />
+              <Text style={[styles.navText, { color: C.muted }]}>Suiv.</Text>
+              <FontAwesome name="chevron-right" size={14} color={C.muted} />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.typeFilterContainer}>
+          <View
+            style={[
+              styles.typeFilterContainer,
+              { backgroundColor: C.filterBg },
+            ]}
+          >
             {[
               { key: "tous", label: "Tous", icon: "baby" },
               { key: "seins", label: "Tétées", icon: "person-breastfeeding" },
               { key: "biberons", label: "Biberons", icon: "jar-wheat" },
             ].map((type) => {
               const isActive = typeFilter === type.key;
-              const activeColor = COLORS.blue;
               return (
                 <TouchableOpacity
                   key={type.key}
                   style={[
                     styles.typeFilterButton,
-                    isActive && styles.typeFilterButtonActive,
-                    isActive && styles.typeFilterButtonActive,
+                    isActive && [
+                      styles.typeFilterButtonActive,
+                      {
+                        backgroundColor: C.filterActiveBg,
+                        borderColor: C.blue,
+                      },
+                    ],
                   ]}
                   onPress={() => setTypeFilter(type.key as typeof typeFilter)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  accessibilityLabel={`Filtre ${type.label}`}
                 >
                   <FontAwesome
                     name={type.icon}
                     size={14}
-                    color={isActive ? activeColor : COLORS.muted}
+                    color={isActive ? C.blue : C.muted}
                   />
                   <Text
                     style={[
                       styles.typeFilterText,
-                      isActive && styles.typeFilterTextActive,
-                      isActive && { color: activeColor },
+                      { color: C.muted },
+                      isActive && { color: C.ink, fontWeight: "700" },
                     ]}
                   >
                     {type.label}
@@ -516,24 +583,36 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
             })}
           </View>
 
-          <View style={styles.toggleContainer}>
+          <View
+            style={[
+              styles.toggleContainer,
+              { backgroundColor: C.filterBg },
+            ]}
+          >
             {typeFilter !== "seins" && (
               <TouchableOpacity
                 style={[
                   styles.toggleButton,
-                  viewMode === "quantity" && styles.toggleButtonActive,
+                  viewMode === "quantity" && [
+                    styles.toggleButtonActive,
+                    {
+                      backgroundColor: C.filterActiveBg,
+                      borderColor: C.blue,
+                    },
+                  ],
                 ]}
                 onPress={() => setViewMode("quantity")}
               >
                 <FontAwesome
                   name="droplet"
                   size={14}
-                  color={viewMode === "quantity" ? COLORS.blue : COLORS.muted}
+                  color={viewMode === "quantity" ? C.blue : C.muted}
                 />
                 <Text
                   style={[
                     styles.toggleText,
-                    viewMode === "quantity" && styles.toggleTextActive,
+                    { color: C.muted },
+                    viewMode === "quantity" && { color: C.blue, fontWeight: "700" },
                   ]}
                 >
                   Quantité
@@ -543,19 +622,26 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
             <TouchableOpacity
               style={[
                 styles.toggleButton,
-                viewMode === "frequency" && styles.toggleButtonActive,
+                viewMode === "frequency" && [
+                  styles.toggleButtonActive,
+                  {
+                    backgroundColor: C.filterActiveBg,
+                    borderColor: C.blue,
+                  },
+                ],
               ]}
               onPress={() => setViewMode("frequency")}
             >
               <FontAwesome
                 name="clock"
                 size={14}
-                color={viewMode === "frequency" ? COLORS.blue : COLORS.muted}
+                color={viewMode === "frequency" ? C.blue : C.muted}
               />
               <Text
                 style={[
                   styles.toggleText,
-                  viewMode === "frequency" && styles.toggleTextActive,
+                  { color: C.muted },
+                  viewMode === "frequency" && { color: C.blue, fontWeight: "700" },
                 ]}
               >
                 Fréquence
@@ -563,22 +649,56 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
             </TouchableOpacity>
           </View>
 
+          {totalWeekCount === 0 ? (
+            <View style={styles.noDataContainer}>
+              <FontAwesome name="chart-bar" size={24} color={C.muted} />
+              <Text style={[styles.noDataText, { color: C.muted }]}>
+                Aucune donnée cette semaine
+              </Text>
+            </View>
+          ) : (
+          <>
           <View style={styles.metricsRow}>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricLabel}>
+            <View
+              style={[
+                styles.metricCard,
+                { backgroundColor: C.metricBg, borderColor: C.border },
+              ]}
+            >
+              <Text style={[styles.metricLabel, { color: C.muted }]}>
                 {totalCountLabel}
                 {totalCountLabel !== "Repas" && totalWeekCount > 1 ? "s" : ""}
               </Text>
-              <Text style={styles.metricValue}>{totalWeekCount}</Text>
+              <Text style={[styles.metricValue, { color: C.blueDeep }]}>
+                {totalWeekCount}
+              </Text>
             </View>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricLabel}>{countAverageLabel}</Text>
-              <Text style={styles.metricValue}>{dailyAverageCount}</Text>
+            <View
+              style={[
+                styles.metricCard,
+                { backgroundColor: C.metricBg, borderColor: C.border },
+              ]}
+            >
+              <Text style={[styles.metricLabel, { color: C.muted }]}>
+                {countAverageLabel}
+              </Text>
+              <Text style={[styles.metricValue, { color: C.blueDeep }]}>
+                {dailyAverageCount}
+              </Text>
             </View>
             {viewMode === "quantity" && typeFilter !== "seins" && (
-              <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>Total lait</Text>
-                <Text style={styles.metricValue}>{totalWeekQuantity} ml</Text>
+              <View
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: C.metricBg, borderColor: C.border },
+                ]}
+              >
+                <Text style={[styles.metricLabel, { color: C.muted }]}>
+                  Total lait
+                </Text>
+                <Text style={[styles.metricValue, { color: C.blueDeep }]}>
+                  {totalWeekQuantity} ml
+                </Text>
               </View>
             )}
           </View>
@@ -589,32 +709,44 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                   <View
                     style={[
                       styles.legendSwatch,
-                      { backgroundColor: COLORS.green },
+                      { backgroundColor: C.green },
                     ]}
                   />
-                  <Text style={styles.legendLabel}>Tétées</Text>
+                  <Text style={[styles.legendLabel, { color: C.muted }]}>
+                    Tétées
+                  </Text>
                 </View>
                 <View style={styles.legendItem}>
                   <View
                     style={[
                       styles.legendSwatch,
-                      { backgroundColor: COLORS.cyan },
+                      { backgroundColor: C.cyan },
                     ]}
                   />
-                  <Text style={styles.legendLabel}>Biberons</Text>
+                  <Text style={[styles.legendLabel, { color: C.muted }]}>
+                    Biberons
+                  </Text>
                 </View>
               </View>
               <TouchableOpacity
                 style={[
                   styles.groupToggle,
-                  isGrouped && styles.groupToggleActive,
+                  {
+                    borderColor: C.border,
+                    backgroundColor: C.metricBg,
+                  },
+                  isGrouped && {
+                    backgroundColor: C.blue,
+                    borderColor: C.blue,
+                  },
                 ]}
                 onPress={() => setIsGroupedView((prev) => !prev)}
               >
                 <Text
                   style={[
                     styles.groupToggleText,
-                    isGrouped && styles.groupToggleTextActive,
+                    { color: C.muted },
+                    isGrouped && { color: "white" },
                   ]}
                 >
                   Vue groupée
@@ -630,13 +762,18 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                   key={index}
                   style={[styles.yAxisLabel, { top: label.y - 8 }]}
                 >
-                  <Text style={styles.yAxisText}>{label.value}</Text>
+                  <Text style={[styles.yAxisText, { color: C.muted }]}>
+                    {label.value}
+                  </Text>
                 </View>
               ))}
             </View>
 
             <GestureDetector gesture={tapGesture}>
-              <Canvas style={styles.canvas}>
+              <Canvas
+                style={[styles.canvas, { width: SCREEN_WIDTH }]}
+                accessibilityLabel="Graphique des tétées de la semaine. Appuyez sur une barre pour voir les détails."
+              >
                 <RoundedRect
                   x={CHART_PADDING.left}
                   y={CHART_PADDING.top}
@@ -645,7 +782,7 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                     CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
                   }
                   r={12}
-                  color={COLORS.surface}
+                  color={C.surface}
                 >
                   <LinearGradient
                     start={vec(CHART_PADDING.left, CHART_PADDING.top)}
@@ -653,7 +790,7 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                       CHART_PADDING.left,
                       CHART_HEIGHT - CHART_PADDING.bottom,
                     )}
-                    colors={["#f5f9ff", "#ffffff"]}
+                    colors={[C.gradientStart, C.gradientEnd]}
                   />
                 </RoundedRect>
 
@@ -662,7 +799,7 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                     key={`grid-${index}`}
                     p1={vec(CHART_PADDING.left, label.y)}
                     p2={vec(SCREEN_WIDTH - CHART_PADDING.right, label.y)}
-                    color="rgba(30, 60, 90, 0.08)"
+                    color={C.gridLine}
                     strokeWidth={1}
                   />
                 ))}
@@ -687,7 +824,7 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                             width={subWidth}
                             height={Math.max(seinsHeight, 2)}
                             r={6}
-                            color={COLORS.green}
+                            color={C.green}
                           />
                         )}
                         {biberonsHeight > 0 && (
@@ -697,14 +834,14 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                             width={subWidth}
                             height={Math.max(biberonsHeight, 2)}
                             r={6}
-                            color={COLORS.cyan}
+                            color={C.cyan}
                           >
                             {bar.isMax && (
                               <Shadow
                                 dx={0}
                                 dy={2}
                                 blur={6}
-                                color="rgba(245, 183, 0, 0.35)"
+                                color="rgba(184, 134, 11, 0.35)"
                               />
                             )}
                           </RoundedRect>
@@ -728,7 +865,7 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                             width={bar.width}
                             height={Math.max(biberonsHeight, 2)}
                             r={6}
-                            color={COLORS.cyan}
+                            color={C.cyan}
                           />
                         )}
                         {seinsHeight > 0 && (
@@ -738,14 +875,14 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                             width={bar.width}
                             height={Math.max(seinsHeight, 2)}
                             r={6}
-                            color={COLORS.green}
+                            color={C.green}
                           >
                             {bar.isMax && (
                               <Shadow
                                 dx={0}
                                 dy={2}
                                 blur={6}
-                                color="rgba(245, 183, 0, 0.35)"
+                                color="rgba(184, 134, 11, 0.35)"
                               />
                             )}
                           </RoundedRect>
@@ -769,7 +906,7 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                           dx={0}
                           dy={2}
                           blur={6}
-                          color="rgba(245, 183, 0, 0.35)"
+                          color="rgba(184, 134, 11, 0.35)"
                         />
                       )}
                     </RoundedRect>
@@ -778,17 +915,35 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
               </Canvas>
             </GestureDetector>
 
+            {showTapHint && totalWeekCount > 0 && (
+              <View style={[styles.tapHint, { backgroundColor: C.tooltipBg, borderColor: C.tooltipBorder }]}>
+                <FontAwesome name="hand-pointer" size={12} color={C.muted} />
+                <Text style={[styles.tapHintText, { color: C.muted }]}>
+                  Touchez une barre pour les détails
+                </Text>
+              </View>
+            )}
+
             {selectedBarIndex !== null && (
-              <Animated.View style={[styles.tooltip, animatedTooltipStyle]}>
-                <Text style={styles.tooltipDay}>
+              <Animated.View
+                style={[
+                  styles.tooltip,
+                  animatedTooltipStyle,
+                  {
+                    backgroundColor: C.tooltipBg,
+                    borderColor: C.tooltipBorder,
+                  },
+                ]}
+              >
+                <Text style={[styles.tooltipDay, { color: C.muted }]}>
                   {bars[selectedBarIndex].jour}
                 </Text>
-                <Text style={styles.tooltipValue}>
+                <Text style={[styles.tooltipValue, { color: C.blueDeep }]}>
                   {bars[selectedBarIndex].value}{" "}
                   {viewMode === "quantity" ? "ml" : frequencyUnit}
                 </Text>
                 {typeFilter === "tous" && viewMode === "frequency" && (
-                  <Text style={styles.tooltipDetail}>
+                  <Text style={[styles.tooltipDetail, { color: C.muted }]}>
                     {weeklyData[bars[selectedBarIndex].jour].seinsCount} tétée
                     {weeklyData[bars[selectedBarIndex].jour].seinsCount > 1
                       ? "s"
@@ -810,7 +965,7 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                   key={`xlabel-${index}`}
                   style={[
                     styles.xAxisText,
-                    { left: bars[index].x + bars[index].width / 2 - 15 },
+                    { left: bars[index].x + bars[index].width / 2 - 15, color: C.muted },
                   ]}
                 >
                   {jour}
@@ -820,11 +975,13 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
           </View>
 
           {typeFilter === "tous" ? (
-            <View style={styles.statsContainer}>
+            <View style={[styles.statsContainer, { borderTopColor: C.border }]}>
               <View style={styles.statsRow}>
                 <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{totalWeekCount}</Text>
-                  <Text style={styles.statLabel}>
+                  <Text style={[styles.statValue, { color: C.blueDeep }]}>
+                    {totalWeekCount}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: C.muted }]}>
                     {totalCountLabel}
                     {totalCountLabel !== "Repas" && totalWeekCount > 1
                       ? "s"
@@ -835,52 +992,60 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                   <FontAwesome
                     name="person-breastfeeding"
                     size={14}
-                    color={COLORS.green}
+                    color={C.green}
                   />
-                  <Text style={[styles.statValue, { color: COLORS.green }]}>
+                  <Text style={[styles.statValue, { color: C.green }]}>
                     {totalSeinsCount}
                   </Text>
-                  <Text style={styles.statLabel}>
+                  <Text style={[styles.statLabel, { color: C.muted }]}>
                     Tétée{totalSeinsCount > 1 ? "s" : ""}
                   </Text>
                 </View>
                 <View style={styles.statItem}>
-                  <FontAwesome name="jar-wheat" size={14} color={COLORS.cyan} />
-                  <Text style={[styles.statValue, { color: COLORS.cyan }]}>
+                  <FontAwesome name="jar-wheat" size={14} color={C.cyan} />
+                  <Text style={[styles.statValue, { color: C.cyan }]}>
                     {totalBiberonsCount}
                   </Text>
-                  <Text style={styles.statLabel}>
+                  <Text style={[styles.statLabel, { color: C.muted }]}>
                     Biberon{totalBiberonsCount > 1 ? "s" : ""}
                   </Text>
                 </View>
                 <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{totalWeekQuantity} ml</Text>
-                  <Text style={styles.statLabel}>Total lait</Text>
+                  <Text style={[styles.statValue, { color: C.blueDeep }]}>
+                    {totalWeekQuantity} ml
+                  </Text>
+                  <Text style={[styles.statLabel, { color: C.muted }]}>
+                    Total lait
+                  </Text>
                 </View>
               </View>
             </View>
           ) : viewMode === "quantity" ? (
-            <View style={styles.statsContainer}>
+            <View style={[styles.statsContainer, { borderTopColor: C.border }]}>
               <View style={styles.statsRow}>
                 <View style={styles.statItem}>
-                  <Text style={[styles.statValue, { color: COLORS.cyan }]}>
+                  <Text style={[styles.statValue, { color: C.cyan }]}>
                     {totalWeekQuantity} ml
                   </Text>
-                  <Text style={styles.statLabel}>Total semaine</Text>
+                  <Text style={[styles.statLabel, { color: C.muted }]}>
+                    Total semaine
+                  </Text>
                 </View>
                 <View style={styles.statItem}>
-                  <Text style={[styles.statValue, { color: COLORS.cyan }]}>
+                  <Text style={[styles.statValue, { color: C.cyan }]}>
                     {dailyAverageQuantity} ml
                   </Text>
-                  <Text style={styles.statLabel}>{quantityAverageLabel}</Text>
+                  <Text style={[styles.statLabel, { color: C.muted }]}>
+                    {quantityAverageLabel}
+                  </Text>
                 </View>
                 {maxQuantity > 0 && (
                   <View style={styles.statItem}>
-                    <FontAwesome name="trophy" size={16} color={COLORS.gold} />
-                    <Text style={[styles.statValue, { color: COLORS.gold }]}>
+                    <FontAwesome name="trophy" size={16} color={C.gold} />
+                    <Text style={[styles.statValue, { color: C.gold }]}>
                       {bestQuantityDay}
                     </Text>
-                    <Text style={styles.statLabel}>
+                    <Text style={[styles.statLabel, { color: C.muted }]}>
                       Record: {maxQuantity} ml
                     </Text>
                   </View>
@@ -888,20 +1053,20 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
               </View>
             </View>
           ) : (
-            <View style={styles.statsContainer}>
+            <View style={[styles.statsContainer, { borderTopColor: C.border }]}>
               <View style={styles.statsRow}>
                 <View style={styles.statItem}>
                   <Text
                     style={[
                       styles.statValue,
                       typeFilter === "seins"
-                        ? { color: COLORS.green }
-                        : { color: COLORS.cyan },
+                        ? { color: C.green }
+                        : { color: C.cyan },
                     ]}
                   >
                     {totalWeekCount}
                   </Text>
-                  <Text style={styles.statLabel}>
+                  <Text style={[styles.statLabel, { color: C.muted }]}>
                     {totalCountLabel}
                     {totalWeekCount > 1 ? "s" : ""}
                   </Text>
@@ -911,21 +1076,23 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
                     style={[
                       styles.statValue,
                       typeFilter === "seins"
-                        ? { color: COLORS.green }
-                        : { color: COLORS.cyan },
+                        ? { color: C.green }
+                        : { color: C.cyan },
                     ]}
                   >
                     {dailyAverageCount}
                   </Text>
-                  <Text style={styles.statLabel}>{countAverageLabel}</Text>
+                  <Text style={[styles.statLabel, { color: C.muted }]}>
+                    {countAverageLabel}
+                  </Text>
                 </View>
                 {maxCount > 0 && (
                   <View style={styles.statItem}>
-                    <FontAwesome name="trophy" size={16} color={COLORS.gold} />
-                    <Text style={[styles.statValue, { color: COLORS.gold }]}>
+                    <FontAwesome name="trophy" size={16} color={C.gold} />
+                    <Text style={[styles.statValue, { color: C.gold }]}>
                       {bestCountDay}
                     </Text>
-                    <Text style={styles.statLabel}>
+                    <Text style={[styles.statLabel, { color: C.muted }]}>
                       {recordLabel}
                       {maxCount > 1 ? "s" : ""} {maxCount}
                     </Text>
@@ -936,15 +1103,20 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
           )}
 
           {totalWeekCount > 0 && (
-            <View style={styles.insightContainer}>
-              <FontAwesome name="lightbulb" size={16} color={COLORS.cyan} />
+            <View
+              style={[
+                styles.insightContainer,
+                { backgroundColor: C.insightBg },
+              ]}
+            >
+              <FontAwesome name="lightbulb" size={16} color={C.cyan} />
               <View style={styles.insightContent}>
-                <Text style={styles.insightTitle}>
+                <Text style={[styles.insightTitle, { color: C.blueDeep }]}>
                   {typeFilter === "tous"
                     ? "Aperçu global de la semaine"
                     : `Aperçu ${typeFilter} de la semaine`}
                 </Text>
-                <Text style={styles.insightText}>
+                <Text style={[styles.insightText, { color: C.insightText }]}>
                   {typeFilter === "tous"
                     ? `Cette semaine: ${totalSeinsCount} tétée${totalSeinsCount > 1 ? "s" : ""} au sein, ${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s" : ""} (${totalWeekQuantity} ml au total). ${
                         totalSeinsCount > totalBiberonsCount
@@ -964,6 +1136,8 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
               </View>
             </View>
           )}
+          </>
+          )}
         </View>
       )}
     </GestureHandlerRootView>
@@ -973,7 +1147,6 @@ export default function TeteesChart({ tetees, initialTypeFilter }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   emptyContainer: {
     flex: 1,
@@ -984,25 +1157,46 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#495057",
     marginTop: 16,
     textAlign: "center",
   },
   emptySubtitle: {
     fontSize: 16,
-    color: "#6c757d",
     marginTop: 8,
     textAlign: "center",
     lineHeight: 22,
   },
+  emptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  emptyCtaText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  noDataContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    gap: 10,
+  },
+  noDataText: {
+    fontSize: 14,
+    fontWeight: "500",
+    textAlign: "center",
+  },
   section: {
-    backgroundColor: COLORS.surface,
     marginHorizontal: 16,
     marginBottom: 16,
     marginTop: 6,
     borderRadius: 18,
     padding: 18,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
@@ -1017,7 +1211,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: "#eaf1ff",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -1028,11 +1221,9 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: COLORS.ink,
   },
   sectionSubtitle: {
     fontSize: 13,
-    color: COLORS.muted,
     marginTop: 2,
   },
   navigationRow: {
@@ -1044,21 +1235,17 @@ const styles = StyleSheet.create({
   navButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f2f6ff",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
     gap: 6,
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   navText: {
     fontSize: 13,
-    color: COLORS.muted,
     fontWeight: "600",
   },
   todayButton: {
-    backgroundColor: COLORS.blue,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
@@ -1070,7 +1257,6 @@ const styles = StyleSheet.create({
   },
   typeFilterContainer: {
     flexDirection: "row",
-    backgroundColor: "#f5f6f8",
     borderRadius: 12,
     padding: 4,
     marginBottom: 12,
@@ -1087,22 +1273,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   typeFilterButtonActive: {
-    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: COLORS.blue,
   },
   typeFilterText: {
     fontSize: 13,
-    color: COLORS.muted,
     fontWeight: "600",
-  },
-  typeFilterTextActive: {
-    color: COLORS.ink,
-    fontWeight: "700",
   },
   toggleContainer: {
     flexDirection: "row",
-    backgroundColor: "#f5f6f8",
     borderRadius: 12,
     padding: 4,
     marginBottom: 12,
@@ -1119,18 +1297,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toggleButtonActive: {
-    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: COLORS.blue,
   },
   toggleText: {
     fontSize: 13,
-    color: COLORS.muted,
     fontWeight: "600",
-  },
-  toggleTextActive: {
-    color: COLORS.blue,
-    fontWeight: "700",
   },
   metricsRow: {
     flexDirection: "row",
@@ -1161,7 +1332,6 @@ const styles = StyleSheet.create({
   },
   legendLabel: {
     fontSize: 12,
-    color: COLORS.muted,
     fontWeight: "600",
   },
   groupToggle: {
@@ -1169,39 +1339,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: "#f7f9fc",
-  },
-  groupToggleActive: {
-    backgroundColor: COLORS.blue,
-    borderColor: COLORS.blue,
   },
   groupToggleText: {
     fontSize: 12,
-    color: COLORS.muted,
     fontWeight: "600",
-  },
-  groupToggleTextActive: {
-    color: "white",
   },
   metricCard: {
     flex: 1,
-    backgroundColor: "#f7f9fc",
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   metricLabel: {
     fontSize: 11,
-    color: COLORS.muted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   metricValue: {
     fontSize: 18,
     fontWeight: "700",
-    color: COLORS.blueDeep,
     marginTop: 6,
   },
   chartContainer: {
@@ -1225,11 +1381,10 @@ const styles = StyleSheet.create({
   },
   yAxisText: {
     fontSize: 10,
-    color: COLORS.muted,
     fontWeight: "600",
   },
   canvas: {
-    width: SCREEN_WIDTH,
+    width: DEFAULT_SCREEN_WIDTH,
     height: CHART_HEIGHT,
   },
   xAxisContainer: {
@@ -1242,19 +1397,32 @@ const styles = StyleSheet.create({
   xAxisText: {
     position: "absolute",
     fontSize: 11,
-    color: COLORS.muted,
     fontWeight: "600",
     width: 30,
     textAlign: "center",
     bottom: 8,
   },
+  tapHint: {
+    position: "absolute",
+    bottom: CHART_PADDING.bottom + 8,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  tapHintText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
   tooltip: {
     position: "absolute",
-    backgroundColor: "white",
     borderRadius: 10,
     padding: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.14,
@@ -1265,25 +1433,21 @@ const styles = StyleSheet.create({
   },
   tooltipDay: {
     fontSize: 12,
-    color: COLORS.muted,
     fontWeight: "600",
   },
   tooltipValue: {
     fontSize: 15,
-    color: COLORS.blueDeep,
     fontWeight: "700",
     marginTop: 2,
   },
   tooltipDetail: {
     fontSize: 10,
-    color: COLORS.muted,
     marginTop: 2,
   },
   statsContainer: {
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
   },
   statsRow: {
     flexDirection: "row",
@@ -1300,16 +1464,13 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: "700",
-    color: COLORS.blueDeep,
   },
   statLabel: {
     fontSize: 11,
-    color: COLORS.muted,
     textAlign: "center",
   },
   insightContainer: {
     flexDirection: "row",
-    backgroundColor: "#eaf5fb",
     padding: 16,
     borderRadius: 12,
     marginTop: 16,
@@ -1321,12 +1482,10 @@ const styles = StyleSheet.create({
   insightTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: COLORS.blueDeep,
     marginBottom: 4,
   },
   insightText: {
     fontSize: 13,
-    color: "#2f4c66",
     lineHeight: 18,
   },
 });

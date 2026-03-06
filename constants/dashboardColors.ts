@@ -190,6 +190,116 @@ export function getMoodFills(scheme: "light" | "dark") {
 }
 
 // ============================================
+// CHART COLORS (stats screen)
+// ============================================
+
+export function getChartColors(scheme: "light" | "dark") {
+  const nc = scheme === "dark" ? neutralColorsDark : neutralColors;
+  if (scheme === "dark") {
+    return {
+      // Tétées chart
+      tetees: {
+        surface: "#1f2937",
+        ink: "#f9fafb",
+        muted: "#9ca3af",
+        border: "#374151",
+        blue: "#60a5fa",
+        blueDeep: "#93bbfc",
+        cyan: "#5eead4",
+        green: "#4ade80",
+        gold: "#d4a017",
+        gradientStart: "#1e293b",
+        gradientEnd: "#1f2937",
+        gridLine: "rgba(148, 163, 184, 0.15)",
+        emptyBar: "#374151",
+        iconBadgeBg: "rgba(96, 165, 250, 0.15)",
+        navButtonBg: "#374151",
+        filterBg: "#374151",
+        filterActiveBg: "#1f2937",
+        metricBg: "#374151",
+        insightBg: "rgba(96, 165, 250, 0.1)",
+        insightText: "#93c5fd",
+        tooltipBg: "#1f2937",
+        tooltipBorder: "#4b5563",
+      },
+      // Pompages chart
+      pompages: {
+        surface: "#1f2937",
+        ink: "#f9fafb",
+        muted: "#9ca3af",
+        border: "#374151",
+        green: "#4ade80",
+        greenDeep: "#86efac",
+        greenGlow: "#22c55e",
+        gold: "#d4a017",
+        gradientStart: "#1a2e1e",
+        gradientEnd: "#1f2937",
+        gridLine: "rgba(74, 222, 128, 0.1)",
+        emptyBar: "#374151",
+        iconBadgeBg: "rgba(74, 222, 128, 0.15)",
+        navButtonBg: "#374151",
+        metricBg: "#374151",
+        metricHighlightBg: "rgba(212, 160, 23, 0.15)",
+        metricHighlightBorder: "rgba(212, 160, 23, 0.3)",
+        fillGradientStart: "rgba(74, 222, 128, 0.25)",
+        fillGradientEnd: "rgba(74, 222, 128, 0.02)",
+        tooltipBg: "#1f2937",
+        tooltipBorder: "#4b5563",
+      },
+    };
+  }
+  return {
+    tetees: {
+      surface: "#ffffff",
+      ink: "#1e2a36",
+      muted: "#6a7784",
+      border: "#e5ecf2",
+      blue: "#2f80ed",
+      blueDeep: "#1b4f9c",
+      cyan: "#2bb3a3",
+      green: "#2e7d32",
+      gold: "#b8860b",
+      gradientStart: "#f5f9ff",
+      gradientEnd: "#ffffff",
+      gridLine: "rgba(30, 60, 90, 0.08)",
+      emptyBar: "#eef2f7",
+      iconBadgeBg: "#eaf1ff",
+      navButtonBg: "#f2f6ff",
+      filterBg: "#f5f6f8",
+      filterActiveBg: "#ffffff",
+      metricBg: "#f7f9fc",
+      insightBg: "#eaf5fb",
+      insightText: "#2f4c66",
+      tooltipBg: "#ffffff",
+      tooltipBorder: "#e5ecf2",
+    },
+    pompages: {
+      surface: "#ffffff",
+      ink: "#1f2a2e",
+      muted: "#6b7a7f",
+      border: "#e6ecef",
+      green: "#2e7d32",
+      greenDeep: "#1b5e20",
+      greenGlow: "#7ee081",
+      gold: "#b8860b",
+      gradientStart: "#f4fbf5",
+      gradientEnd: "#ffffff",
+      gridLine: "rgba(34, 75, 44, 0.08)",
+      emptyBar: "#e9eef1",
+      iconBadgeBg: "#e7f4ea",
+      navButtonBg: "#f2f6f5",
+      metricBg: "#f6faf7",
+      metricHighlightBg: "#fff9e6",
+      metricHighlightBorder: "#f8e1a1",
+      fillGradientStart: "rgba(46, 125, 50, 0.3)",
+      fillGradientEnd: "rgba(46, 125, 50, 0.02)",
+      tooltipBg: "#ffffff",
+      tooltipBorder: "#d6e8da",
+    },
+  };
+}
+
+// ============================================
 // HELPERS
 // ============================================
 

@@ -1,3 +1,4 @@
+import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import {
   Canvas,
@@ -10,7 +11,9 @@ import {
   Line as SkiaLine,
   vec,
 } from "@shopify/react-native-skia";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Timestamp } from "firebase/firestore";
+import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Dimensions,
@@ -32,23 +35,15 @@ import Animated, {
 
 type Props = {
   pompages: any[];
+  colorScheme?: "light" | "dark";
+  screenWidth?: number;
 };
 
-const SCREEN_WIDTH = Dimensions.get("window").width - 40;
+const DEFAULT_SCREEN_WIDTH = Dimensions.get("window").width - 40;
 const CHART_HEIGHT = 210;
 const CHART_PADDING = { top: 18, right: 18, bottom: 42, left: 50 };
-const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
 
-const COLORS = {
-  surface: "#ffffff",
-  ink: "#1f2a2e",
-  muted: "#6b7a7f",
-  border: "#e6ecef",
-  green: "#2e7d32",
-  greenDeep: "#1b5e20",
-  greenGlow: "#7ee081",
-  gold: "#f5b700",
-};
+const TAP_HINT_KEY = "pompages_chart_tap_hint_shown";
 
 function startOfDay(date: Date) {
   const d = new Date(date);
@@ -123,7 +118,16 @@ function createFillPath(points: { x: number; y: number }[]) {
   return path;
 }
 
-export default function PompagesChart({ pompages }: Props) {
+export default function PompagesChart({
+  pompages,
+  colorScheme = "light",
+  screenWidth: screenWidthProp,
+}: Props) {
+  const SCREEN_WIDTH = screenWidthProp ?? DEFAULT_SCREEN_WIDTH;
+  const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
+  const C = getChartColors(colorScheme).pompages;
+  const nc = getNeutralColors(colorScheme);
+
   const [currentDay, setCurrentDay] = useState<Date>(startOfDay(new Date()));
   const [currentWeek, setCurrentWeek] = useState<Date>(
     getStartOfWeek(new Date()),
@@ -132,11 +136,18 @@ export default function PompagesChart({ pompages }: Props) {
     null,
   );
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
+  const [showTapHint, setShowTapHint] = useState(false);
 
   const selectedX = useSharedValue(0);
   const selectedY = useSharedValue(0);
   const barTooltipX = useSharedValue(0);
   const barTooltipY = useSharedValue(0);
+
+  useEffect(() => {
+    AsyncStorage.getItem(TAP_HINT_KEY).then((val) => {
+      if (!val) setShowTapHint(true);
+    });
+  }, []);
 
   useEffect(() => {
     setSelectedPointIndex(null);
@@ -225,9 +236,17 @@ export default function PompagesChart({ pompages }: Props) {
     return minDistance < 44 ? nearest : null;
   };
 
+  const dismissHint = () => {
+    if (showTapHint) {
+      setShowTapHint(false);
+      AsyncStorage.setItem(TAP_HINT_KEY, "1");
+    }
+  };
+
   const tapGesture = Gesture.Tap()
     .runOnJS(true)
     .onEnd((event) => {
+      dismissHint();
       const pointIndex = findNearestPoint(event.x, event.y);
       setSelectedPointIndex(pointIndex);
 
@@ -240,6 +259,7 @@ export default function PompagesChart({ pompages }: Props) {
   const panGesture = Gesture.Pan()
     .runOnJS(true)
     .onUpdate((event) => {
+      dismissHint();
       const pointIndex = findNearestPoint(event.x, event.y);
       if (pointIndex !== null && pointIndex !== selectedPointIndex) {
         setSelectedPointIndex(pointIndex);
@@ -314,11 +334,11 @@ export default function PompagesChart({ pompages }: Props) {
         y,
         width: weeklyBarWidth,
         height: Math.max(barHeight, 2),
-        color: isMax ? COLORS.gold : value > 0 ? COLORS.green : "#e9eef1",
+        color: isMax ? C.gold : value > 0 ? C.green : C.emptyBar,
         isMax,
       };
     });
-  }, [weeklyValues, maxWeekly]);
+  }, [weeklyValues, maxWeekly, C]);
 
   const weeklyYAxisLabels = useMemo(() => {
     const steps = 4;
@@ -366,29 +386,60 @@ export default function PompagesChart({ pompages }: Props) {
   }));
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <GestureHandlerRootView
+      style={[styles.container, { backgroundColor: nc.background }]}
+    >
       {isEmpty ? (
         <View style={styles.emptyContainer}>
-          <FontAwesome name="pump-medical" size={64} color="#e9ecef" />
-          <Text style={styles.emptyTitle}>Aucune donnée disponible</Text>
-          <Text style={styles.emptySubtitle}>
+          <FontAwesome name="pump-medical" size={64} color={nc.textMuted} />
+          <Text style={[styles.emptyTitle, { color: nc.textNormal }]}>
+            Aucune donnée disponible
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: nc.textLight }]}>
             Commencez à enregistrer vos sessions pour voir les statistiques
           </Text>
+          <TouchableOpacity
+            style={[styles.emptyCta, { backgroundColor: C.green }]}
+            onPress={() => router.replace("/baby/chrono")}
+            accessibilityRole="button"
+            accessibilityLabel="Ajouter un pompage"
+          >
+            <FontAwesome name="plus" size={14} color="#ffffff" />
+            <Text style={styles.emptyCtaText}>Ajouter un pompage</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <>
-          <View style={styles.section}>
+          <View
+            style={[
+              styles.section,
+              {
+                backgroundColor: C.surface,
+                shadowColor: colorScheme === "dark" ? "transparent" : "#000",
+                borderColor:
+                  colorScheme === "dark" ? nc.border : "transparent",
+                borderWidth: colorScheme === "dark" ? 1 : 0,
+              },
+            ]}
+          >
             <View style={styles.sectionHeader}>
-              <View style={styles.iconBadge}>
+              <View
+                style={[
+                  styles.iconBadge,
+                  { backgroundColor: C.iconBadgeBg },
+                ]}
+              >
                 <FontAwesome
                   name="pump-medical"
                   size={18}
-                  color={COLORS.green}
+                  color={C.green}
                 />
               </View>
               <View style={styles.headerText}>
-                <Text style={styles.sectionTitle}>Pompages du jour</Text>
-                <Text style={styles.sectionSubtitle}>
+                <Text style={[styles.sectionTitle, { color: C.ink }]}>
+                  Pompages du jour
+                </Text>
+                <Text style={[styles.sectionSubtitle, { color: C.muted }]}>
                   {currentDay.toLocaleDateString("fr-FR", {
                     weekday: "long",
                     day: "numeric",
@@ -400,33 +451,46 @@ export default function PompagesChart({ pompages }: Props) {
 
             <View style={styles.navigationRow}>
               <TouchableOpacity
-                style={styles.navButton}
+                style={[
+                  styles.navButton,
+                  { backgroundColor: C.navButtonBg, borderColor: C.border },
+                ]}
                 onPress={() => setCurrentDay(addDays(currentDay, -1))}
+                accessibilityLabel="Jour précédent"
               >
                 <FontAwesome
                   name="chevron-left"
                   size={14}
-                  color={COLORS.muted}
+                  color={C.muted}
                 />
-                <Text style={styles.navText}>Préc.</Text>
+                <Text style={[styles.navText, { color: C.muted }]}>
+                  Préc.
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.todayButton}
+                style={[styles.todayButton, { backgroundColor: C.green }]}
                 onPress={() => setCurrentDay(startOfDay(new Date()))}
+                accessibilityLabel="Revenir à aujourd'hui"
               >
                 <Text style={styles.todayText}>Aujourd&apos;hui</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.navButton}
+                style={[
+                  styles.navButton,
+                  { backgroundColor: C.navButtonBg, borderColor: C.border },
+                ]}
                 onPress={() => setCurrentDay(addDays(currentDay, 1))}
+                accessibilityLabel="Jour suivant"
               >
-                <Text style={styles.navText}>Suiv.</Text>
+                <Text style={[styles.navText, { color: C.muted }]}>
+                  Suiv.
+                </Text>
                 <FontAwesome
                   name="chevron-right"
                   size={14}
-                  color={COLORS.muted}
+                  color={C.muted}
                 />
               </TouchableOpacity>
             </View>
@@ -436,26 +500,59 @@ export default function PompagesChart({ pompages }: Props) {
                 <FontAwesome
                   name="info-circle"
                   size={24}
-                  color={COLORS.muted}
+                  color={C.muted}
                 />
-                <Text style={styles.noDataText}>Aucune session ce jour</Text>
+                <Text style={[styles.noDataText, { color: C.muted }]}>
+                  Aucune session ce jour
+                </Text>
               </View>
             ) : (
               <>
                 <View style={styles.metricsRow}>
-                  <View style={styles.metricCard}>
-                    <Text style={styles.metricLabel}>Total</Text>
-                    <Text style={styles.metricValue}>{dailyTotal} ml</Text>
+                  <View
+                    style={[
+                      styles.metricCard,
+                      { backgroundColor: C.metricBg, borderColor: C.border },
+                    ]}
+                  >
+                    <Text style={[styles.metricLabel, { color: C.muted }]}>
+                      Total
+                    </Text>
+                    <Text
+                      style={[styles.metricValue, { color: C.greenDeep }]}
+                    >
+                      {dailyTotal} ml
+                    </Text>
                   </View>
-                  <View style={styles.metricCard}>
-                    <Text style={styles.metricLabel}>
+                  <View
+                    style={[
+                      styles.metricCard,
+                      { backgroundColor: C.metricBg, borderColor: C.border },
+                    ]}
+                  >
+                    <Text style={[styles.metricLabel, { color: C.muted }]}>
                       Session{dailyValues.length > 1 ? "s" : ""}
                     </Text>
-                    <Text style={styles.metricValue}>{dailyValues.length}</Text>
+                    <Text
+                      style={[styles.metricValue, { color: C.greenDeep }]}
+                    >
+                      {dailyValues.length}
+                    </Text>
                   </View>
-                  <View style={styles.metricCard}>
-                    <Text style={styles.metricLabel}>Moyenne</Text>
-                    <Text style={styles.metricValue}>{dailyAverage} ml</Text>
+                  <View
+                    style={[
+                      styles.metricCard,
+                      { backgroundColor: C.metricBg, borderColor: C.border },
+                    ]}
+                  >
+                    <Text style={[styles.metricLabel, { color: C.muted }]}>
+                      Moyenne
+                    </Text>
+                    <Text
+                      style={[styles.metricValue, { color: C.greenDeep }]}
+                    >
+                      {dailyAverage} ml
+                    </Text>
                   </View>
                 </View>
 
@@ -466,13 +563,18 @@ export default function PompagesChart({ pompages }: Props) {
                         key={`y-label-${index}`}
                         style={[styles.yAxisLabel, { top: label.y - 8 }]}
                       >
-                        <Text style={styles.yAxisText}>{label.value}</Text>
+                        <Text style={[styles.yAxisText, { color: C.muted }]}>
+                          {label.value}
+                        </Text>
                       </View>
                     ))}
                   </View>
 
                   <GestureDetector gesture={pointGesture}>
-                    <Canvas style={[styles.canvas, { width: SCREEN_WIDTH + 20 }]}>
+                    <Canvas
+                      style={[styles.canvas, { width: SCREEN_WIDTH + 20 }]}
+                      accessibilityLabel="Graphique des pompages du jour. Touchez ou glissez pour voir les détails."
+                    >
                       <RoundedRect
                         x={CHART_PADDING.left}
                         y={CHART_PADDING.top}
@@ -483,7 +585,7 @@ export default function PompagesChart({ pompages }: Props) {
                           CHART_PADDING.bottom
                         }
                         r={12}
-                        color={COLORS.surface}
+                        color={C.surface}
                       >
                         <LinearGradient
                           start={vec(CHART_PADDING.left, CHART_PADDING.top)}
@@ -491,7 +593,7 @@ export default function PompagesChart({ pompages }: Props) {
                             CHART_PADDING.left,
                             CHART_HEIGHT - CHART_PADDING.bottom,
                           )}
-                          colors={["#f4fbf5", "#ffffff"]}
+                          colors={[C.gradientStart, C.gradientEnd]}
                         />
                       </RoundedRect>
 
@@ -499,8 +601,11 @@ export default function PompagesChart({ pompages }: Props) {
                         <SkiaLine
                           key={`grid-${index}`}
                           p1={vec(CHART_PADDING.left, label.y)}
-                          p2={vec(SCREEN_WIDTH - CHART_PADDING.right, label.y)}
-                          color="rgba(34, 75, 44, 0.08)"
+                          p2={vec(
+                            SCREEN_WIDTH - CHART_PADDING.right,
+                            label.y,
+                          )}
+                          color={C.gridLine}
                           strokeWidth={1}
                         />
                       ))}
@@ -510,8 +615,8 @@ export default function PompagesChart({ pompages }: Props) {
                           start={vec(0, CHART_PADDING.top)}
                           end={vec(0, CHART_HEIGHT - CHART_PADDING.bottom)}
                           colors={[
-                            "rgba(46, 125, 50, 0.3)",
-                            "rgba(46, 125, 50, 0.02)",
+                            C.fillGradientStart,
+                            C.fillGradientEnd,
                           ]}
                         />
                       </Path>
@@ -520,7 +625,7 @@ export default function PompagesChart({ pompages }: Props) {
                         path={linePath}
                         style="stroke"
                         strokeWidth={3}
-                        color={COLORS.green}
+                        color={C.green}
                       >
                         <Shadow
                           dx={0}
@@ -538,7 +643,7 @@ export default function PompagesChart({ pompages }: Props) {
                             cx={point.x}
                             cy={point.y}
                             r={isRecord ? 6.5 : 4.5}
-                            color={isRecord ? COLORS.gold : COLORS.green}
+                            color={isRecord ? C.gold : C.green}
                           >
                             <Shadow
                               dx={0}
@@ -546,7 +651,7 @@ export default function PompagesChart({ pompages }: Props) {
                               blur={4}
                               color={
                                 isRecord
-                                  ? "rgba(245, 183, 0, 0.45)"
+                                  ? "rgba(184, 134, 11, 0.45)"
                                   : "rgba(46, 125, 50, 0.3)"
                               }
                             />
@@ -556,19 +661,59 @@ export default function PompagesChart({ pompages }: Props) {
                     </Canvas>
                   </GestureDetector>
 
+                  {showTapHint && dailyValues.length > 0 && (
+                    <View
+                      style={[
+                        styles.tapHint,
+                        {
+                          backgroundColor: C.tooltipBg,
+                          borderColor: C.tooltipBorder,
+                        },
+                      ]}
+                    >
+                      <FontAwesome
+                        name="hand-pointer"
+                        size={12}
+                        color={C.muted}
+                      />
+                      <Text style={[styles.tapHintText, { color: C.muted }]}>
+                        Touchez ou glissez pour les détails
+                      </Text>
+                    </View>
+                  )}
+
                   {selectedPointIndex !== null && (
                     <Animated.View
-                      style={[styles.tooltip, animatedTooltipStyle]}
+                      style={[
+                        styles.tooltip,
+                        animatedTooltipStyle,
+                        {
+                          backgroundColor: C.tooltipBg,
+                          borderColor: C.tooltipBorder,
+                        },
+                      ]}
                     >
                       <View style={styles.tooltipContent}>
-                        <Text style={styles.tooltipTime}>
+                        <Text
+                          style={[styles.tooltipTime, { color: C.muted }]}
+                        >
                           {chartPoints[selectedPointIndex].label}
                         </Text>
-                        <Text style={styles.tooltipValue}>
+                        <Text
+                          style={[
+                            styles.tooltipValue,
+                            { color: C.greenDeep },
+                          ]}
+                        >
                           {chartPoints[selectedPointIndex].value} ml
                         </Text>
                       </View>
-                      <View style={styles.tooltipArrow} />
+                      <View
+                        style={[
+                          styles.tooltipArrow,
+                          { borderTopColor: C.tooltipBg },
+                        ]}
+                      />
                     </Animated.View>
                   )}
 
@@ -577,13 +722,19 @@ export default function PompagesChart({ pompages }: Props) {
                       .filter(
                         (_, i) =>
                           i %
-                            Math.max(1, Math.floor(chartPoints.length / 5)) ===
+                            Math.max(
+                              1,
+                              Math.floor(chartPoints.length / 5),
+                            ) ===
                           0,
                       )
                       .map((point, index) => (
                         <Text
                           key={`xlabel-${index}`}
-                          style={[styles.xAxisText, { left: point.x - 22 }]}
+                          style={[
+                            styles.xAxisText,
+                            { left: point.x - 22, color: C.muted },
+                          ]}
                         >
                           {point.label}
                         </Text>
@@ -594,18 +745,36 @@ export default function PompagesChart({ pompages }: Props) {
             )}
           </View>
 
-          <View style={styles.section}>
+          <View
+            style={[
+              styles.section,
+              {
+                backgroundColor: C.surface,
+                shadowColor: colorScheme === "dark" ? "transparent" : "#000",
+                borderColor:
+                  colorScheme === "dark" ? nc.border : "transparent",
+                borderWidth: colorScheme === "dark" ? 1 : 0,
+              },
+            ]}
+          >
             <View style={styles.sectionHeader}>
-              <View style={styles.iconBadge}>
+              <View
+                style={[
+                  styles.iconBadge,
+                  { backgroundColor: C.iconBadgeBg },
+                ]}
+              >
                 <FontAwesome
                   name="calendar-week"
                   size={18}
-                  color={COLORS.green}
+                  color={C.green}
                 />
               </View>
               <View style={styles.headerText}>
-                <Text style={styles.sectionTitle}>Semaine en cours</Text>
-                <Text style={styles.sectionSubtitle}>
+                <Text style={[styles.sectionTitle, { color: C.ink }]}>
+                  Semaine en cours
+                </Text>
+                <Text style={[styles.sectionSubtitle, { color: C.muted }]}>
                   {`${weekStart.toLocaleDateString("fr-FR", {
                     day: "numeric",
                     month: "short",
@@ -622,50 +791,91 @@ export default function PompagesChart({ pompages }: Props) {
 
             <View style={styles.navigationRow}>
               <TouchableOpacity
-                style={styles.navButton}
+                style={[
+                  styles.navButton,
+                  { backgroundColor: C.navButtonBg, borderColor: C.border },
+                ]}
                 onPress={() => setCurrentWeek(addWeeks(currentWeek, -1))}
+                accessibilityLabel="Semaine précédente"
               >
                 <FontAwesome
                   name="chevron-left"
                   size={14}
-                  color={COLORS.muted}
+                  color={C.muted}
                 />
-                <Text style={styles.navText}>Préc.</Text>
+                <Text style={[styles.navText, { color: C.muted }]}>
+                  Préc.
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.todayButton}
+                style={[styles.todayButton, { backgroundColor: C.green }]}
                 onPress={() => setCurrentWeek(getStartOfWeek(new Date()))}
+                accessibilityLabel="Revenir à cette semaine"
               >
                 <Text style={styles.todayText}>Cette semaine</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.navButton}
+                style={[
+                  styles.navButton,
+                  { backgroundColor: C.navButtonBg, borderColor: C.border },
+                ]}
                 onPress={() => setCurrentWeek(addWeeks(currentWeek, 1))}
+                accessibilityLabel="Semaine suivante"
               >
-                <Text style={styles.navText}>Suiv.</Text>
+                <Text style={[styles.navText, { color: C.muted }]}>
+                  Suiv.
+                </Text>
                 <FontAwesome
                   name="chevron-right"
                   size={14}
-                  color={COLORS.muted}
+                  color={C.muted}
                 />
               </TouchableOpacity>
             </View>
 
             <View style={styles.metricsRow}>
-              <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>Total semaine</Text>
-                <Text style={styles.metricValue}>{weeklyTotal} ml</Text>
+              <View
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: C.metricBg, borderColor: C.border },
+                ]}
+              >
+                <Text style={[styles.metricLabel, { color: C.muted }]}>
+                  Total semaine
+                </Text>
+                <Text style={[styles.metricValue, { color: C.greenDeep }]}>
+                  {weeklyTotal} ml
+                </Text>
               </View>
-              <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>{weeklyAverageLabel}</Text>
-                <Text style={styles.metricValue}>{weeklyAverage} ml</Text>
+              <View
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: C.metricBg, borderColor: C.border },
+                ]}
+              >
+                <Text style={[styles.metricLabel, { color: C.muted }]}>
+                  {weeklyAverageLabel}
+                </Text>
+                <Text style={[styles.metricValue, { color: C.greenDeep }]}>
+                  {weeklyAverage} ml
+                </Text>
               </View>
               {maxWeekly > 0 && (
-                <View style={[styles.metricCard, styles.metricHighlight]}>
-                  <Text style={styles.metricLabel}>Record</Text>
-                  <Text style={[styles.metricValue, styles.metricValueGold]}>
+                <View
+                  style={[
+                    styles.metricCard,
+                    {
+                      backgroundColor: C.metricHighlightBg,
+                      borderColor: C.metricHighlightBorder,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.metricLabel, { color: C.muted }]}>
+                    Record
+                  </Text>
+                  <Text style={[styles.metricValue, { color: C.gold }]}>
                     {bestDay}
                   </Text>
                 </View>
@@ -679,13 +889,18 @@ export default function PompagesChart({ pompages }: Props) {
                     key={`wy-${index}`}
                     style={[styles.yAxisLabel, { top: label.y - 8 }]}
                   >
-                    <Text style={styles.yAxisText}>{label.value}</Text>
+                    <Text style={[styles.yAxisText, { color: C.muted }]}>
+                      {label.value}
+                    </Text>
                   </View>
                 ))}
               </View>
 
               <GestureDetector gesture={weeklyTapGesture}>
-                <Canvas style={styles.canvas}>
+                <Canvas
+                  style={styles.canvas}
+                  accessibilityLabel="Graphique hebdomadaire des pompages. Appuyez sur une barre pour voir les détails."
+                >
                   <RoundedRect
                     x={CHART_PADDING.left}
                     y={CHART_PADDING.top}
@@ -694,7 +909,7 @@ export default function PompagesChart({ pompages }: Props) {
                       CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
                     }
                     r={12}
-                    color={COLORS.surface}
+                    color={C.surface}
                   >
                     <LinearGradient
                       start={vec(CHART_PADDING.left, CHART_PADDING.top)}
@@ -702,7 +917,7 @@ export default function PompagesChart({ pompages }: Props) {
                         CHART_PADDING.left,
                         CHART_HEIGHT - CHART_PADDING.bottom,
                       )}
-                      colors={["#f6fbf7", "#ffffff"]}
+                      colors={[C.gradientStart, C.gradientEnd]}
                     />
                   </RoundedRect>
 
@@ -711,7 +926,7 @@ export default function PompagesChart({ pompages }: Props) {
                       key={`wgrid-${index}`}
                       p1={vec(CHART_PADDING.left, label.y)}
                       p2={vec(SCREEN_WIDTH - CHART_PADDING.right, label.y)}
-                      color="rgba(34, 75, 44, 0.08)"
+                      color={C.gridLine}
                       strokeWidth={1}
                     />
                   ))}
@@ -731,7 +946,7 @@ export default function PompagesChart({ pompages }: Props) {
                           dx={0}
                           dy={2}
                           blur={6}
-                          color="rgba(245, 183, 0, 0.4)"
+                          color="rgba(184, 134, 11, 0.4)"
                         />
                       )}
                     </RoundedRect>
@@ -741,12 +956,21 @@ export default function PompagesChart({ pompages }: Props) {
 
               {selectedBarIndex !== null && (
                 <Animated.View
-                  style={[styles.barTooltip, animatedBarTooltipStyle]}
+                  style={[
+                    styles.barTooltip,
+                    animatedBarTooltipStyle,
+                    {
+                      backgroundColor: C.tooltipBg,
+                      borderColor: C.tooltipBorder,
+                    },
+                  ]}
                 >
-                  <Text style={styles.tooltipTime}>
+                  <Text style={[styles.tooltipTime, { color: C.muted }]}>
                     {weeklyBars[selectedBarIndex].jour}
                   </Text>
-                  <Text style={styles.tooltipValue}>
+                  <Text
+                    style={[styles.tooltipValue, { color: C.greenDeep }]}
+                  >
                     {weeklyBars[selectedBarIndex].value} ml
                   </Text>
                 </Animated.View>
@@ -761,6 +985,7 @@ export default function PompagesChart({ pompages }: Props) {
                       {
                         left: weeklyBars[index].x - weeklyBarSpacing / 2,
                         width: weeklyBarWidth + weeklyBarSpacing,
+                        color: C.muted,
                       },
                     ]}
                   >
@@ -779,7 +1004,6 @@ export default function PompagesChart({ pompages }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   emptyContainer: {
     flex: 1,
@@ -790,25 +1014,35 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#495057",
     marginTop: 16,
     textAlign: "center",
   },
   emptySubtitle: {
     fontSize: 16,
-    color: "#6c757d",
     marginTop: 8,
     textAlign: "center",
     lineHeight: 22,
   },
+  emptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  emptyCtaText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
   section: {
-    backgroundColor: COLORS.surface,
     marginHorizontal: 16,
     marginBottom: 16,
     marginTop: 6,
     borderRadius: 18,
     padding: 18,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
@@ -823,7 +1057,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: "#e7f4ea",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -834,11 +1067,9 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: COLORS.ink,
   },
   sectionSubtitle: {
     fontSize: 13,
-    color: COLORS.muted,
     marginTop: 2,
     textTransform: "capitalize",
   },
@@ -851,21 +1082,17 @@ const styles = StyleSheet.create({
   navButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f2f6f5",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
     gap: 6,
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   navText: {
     fontSize: 13,
-    color: COLORS.muted,
     fontWeight: "600",
   },
   todayButton: {
-    backgroundColor: COLORS.green,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
@@ -882,30 +1109,19 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    backgroundColor: "#f6faf7",
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  metricHighlight: {
-    backgroundColor: "#fff9e6",
-    borderColor: "#f8e1a1",
   },
   metricLabel: {
     fontSize: 11,
-    color: COLORS.muted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   metricValue: {
     fontSize: 18,
     fontWeight: "700",
-    color: COLORS.greenDeep,
     marginTop: 6,
-  },
-  metricValueGold: {
-    color: COLORS.gold,
   },
   noDataContainer: {
     alignItems: "center",
@@ -914,7 +1130,6 @@ const styles = StyleSheet.create({
   },
   noDataText: {
     fontSize: 16,
-    color: COLORS.muted,
   },
   chartContainer: {
     position: "relative",
@@ -937,11 +1152,10 @@ const styles = StyleSheet.create({
   },
   yAxisText: {
     fontSize: 10,
-    color: COLORS.muted,
     fontWeight: "600",
   },
   canvas: {
-    width: SCREEN_WIDTH,
+    width: DEFAULT_SCREEN_WIDTH,
     height: CHART_HEIGHT,
   },
   xAxisContainer: {
@@ -954,18 +1168,31 @@ const styles = StyleSheet.create({
   xAxisText: {
     position: "absolute",
     fontSize: 10,
-    color: COLORS.muted,
     fontWeight: "600",
     width: 44,
     textAlign: "center",
     bottom: 6,
   },
+  tapHint: {
+    position: "absolute",
+    bottom: CHART_PADDING.bottom + 8,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  tapHintText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
   tooltip: {
     position: "absolute",
-    backgroundColor: "white",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#d6e8da",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.14,
@@ -982,12 +1209,10 @@ const styles = StyleSheet.create({
   },
   tooltipTime: {
     fontSize: 10,
-    color: COLORS.muted,
     fontWeight: "600",
   },
   tooltipValue: {
     fontSize: 14,
-    color: COLORS.greenDeep,
     fontWeight: "700",
     marginTop: 2,
   },
@@ -1003,15 +1228,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 8,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
-    borderTopColor: "#ffffff",
   },
   barTooltip: {
     position: "absolute",
-    backgroundColor: "white",
     borderRadius: 10,
     padding: 8,
     borderWidth: 1,
-    borderColor: "#d6e8da",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.14,
