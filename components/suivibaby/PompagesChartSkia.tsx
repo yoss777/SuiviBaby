@@ -479,8 +479,8 @@ export default function PompagesChart({ pompages }: Props) {
                       start={vec(0, CHART_PADDING.top)}
                       end={vec(0, CHART_HEIGHT - CHART_PADDING.bottom)}
                       colors={[
-                        "rgba(46, 125, 50, 0.3)",
-                        "rgba(46, 125, 50, 0.02)",
+                        "rgba(0, 158, 73, 0.3)",
+                        "rgba(0, 158, 73, 0.02)",
                       ]}
                     />
                   </Path>
@@ -495,7 +495,7 @@ export default function PompagesChart({ pompages }: Props) {
                       dx={0}
                       dy={2}
                       blur={4}
-                      color="rgba(46, 125, 50, 0.35)"
+                      color="rgba(0, 158, 73, 0.35)"
                     />
                   </Path>
 
@@ -516,7 +516,7 @@ export default function PompagesChart({ pompages }: Props) {
                           color={
                             isRecord
                               ? "rgba(245, 183, 0, 0.45)"
-                              : "rgba(46, 125, 50, 0.3)"
+                              : "rgba(0, 158, 73, 0.3)"
                           }
                         />
                       </Circle>

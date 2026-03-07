@@ -631,7 +631,7 @@ export default function PompagesChart({
                           dx={0}
                           dy={2}
                           blur={4}
-                          color="rgba(46, 125, 50, 0.35)"
+                          color="rgba(0, 158, 73, 0.35)"
                         />
                       </Path>
 
@@ -651,8 +651,8 @@ export default function PompagesChart({
                               blur={4}
                               color={
                                 isRecord
-                                  ? "rgba(184, 134, 11, 0.45)"
-                                  : "rgba(46, 125, 50, 0.3)"
+                                  ? "rgba(234, 179, 8, 0.45)"
+                                  : "rgba(0, 158, 73, 0.3)"
                               }
                             />
                           </Circle>
@@ -946,7 +946,7 @@ export default function PompagesChart({
                           dx={0}
                           dy={2}
                           blur={6}
-                          color="rgba(184, 134, 11, 0.4)"
+                          color="rgba(234, 179, 8, 0.4)"
                         />
                       )}
                     </RoundedRect>

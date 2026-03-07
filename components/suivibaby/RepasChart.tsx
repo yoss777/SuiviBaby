@@ -5,8 +5,11 @@ import {
   Canvas,
   Group,
   LinearGradient,
+  Path,
+  Rect,
   RoundedRect,
   Shadow,
+  Skia,
   Line as SkiaLine,
   vec,
 } from "@shopify/react-native-skia";
@@ -60,6 +63,22 @@ function addWeeks(date: Date, weeks: number) {
   const d = new Date(date);
   d.setDate(d.getDate() + weeks * 7);
   return d;
+}
+
+/** Build a Skia path for a rect with per-corner radii */
+function makeRRect(
+  x: number, y: number, w: number, h: number,
+  topLeft: number, topRight: number, bottomRight: number, bottomLeft: number,
+) {
+  const path = Skia.Path.Make();
+  path.addRRect({
+    rect: { x, y, width: w, height: h },
+    topLeft: { x: topLeft, y: topLeft },
+    topRight: { x: topRight, y: topRight },
+    bottomRight: { x: bottomRight, y: bottomRight },
+    bottomLeft: { x: bottomLeft, y: bottomLeft },
+  });
+  return path;
 }
 
 export default function RepasChart({
@@ -988,7 +1007,7 @@ export default function RepasChart({
                                 dx={0}
                                 dy={2}
                                 blur={6}
-                                color="rgba(184, 134, 11, 0.35)"
+                                color="rgba(234, 179, 8, 0.35)"
                               />
                             )}
                           </RoundedRect>
@@ -1005,47 +1024,29 @@ export default function RepasChart({
                     const biberonsY = baseY - biberonsHeight;
                     const solidesY = baseY - biberonsHeight - solidesHeight;
                     const seinsY = baseY - biberonsHeight - solidesHeight - seinsHeight;
+
+                    // Determine which segments are visible for corner radius
+                    const visibleSegments: { y: number; h: number; color: string }[] = [];
+                    if (biberonsHeight > 0) visibleSegments.push({ y: biberonsY, h: Math.max(biberonsHeight, 2), color: C.cyan });
+                    if (solidesHeight > 0) visibleSegments.push({ y: solidesY, h: Math.max(solidesHeight, 2), color: C.orange });
+                    if (seinsHeight > 0) visibleSegments.push({ y: seinsY, h: Math.max(seinsHeight, 2), color: C.green });
+
+                    const R = 6;
                     return (
                       <Group key={`bar-${index}`}>
-                        {biberonsHeight > 0 && (
-                          <RoundedRect
-                            x={bar.x}
-                            y={biberonsY}
-                            width={bar.width}
-                            height={Math.max(biberonsHeight, 2)}
-                            r={6}
-                            color={C.cyan}
-                          />
-                        )}
-                        {solidesHeight > 0 && (
-                          <RoundedRect
-                            x={bar.x}
-                            y={solidesY}
-                            width={bar.width}
-                            height={Math.max(solidesHeight, 2)}
-                            r={6}
-                            color={C.orange}
-                          />
-                        )}
-                        {seinsHeight > 0 && (
-                          <RoundedRect
-                            x={bar.x}
-                            y={seinsY}
-                            width={bar.width}
-                            height={Math.max(seinsHeight, 2)}
-                            r={6}
-                            color={C.green}
-                          >
-                            {bar.isMax && (
-                              <Shadow
-                                dx={0}
-                                dy={2}
-                                blur={6}
-                                color="rgba(184, 134, 11, 0.35)"
-                              />
-                            )}
-                          </RoundedRect>
-                        )}
+                        {visibleSegments.map((seg, si) => {
+                          const isBottom = si === 0;
+                          const isTop = si === visibleSegments.length - 1;
+                          if (isBottom && isTop) {
+                            // Single segment: all corners rounded
+                            return <RoundedRect key={si} x={bar.x} y={seg.y} width={bar.width} height={seg.h} r={R} color={seg.color} />;
+                          }
+                          const tl = isTop ? R : 0;
+                          const tr = isTop ? R : 0;
+                          const br = isBottom ? R : 0;
+                          const bl = isBottom ? R : 0;
+                          return <Path key={si} path={makeRRect(bar.x, seg.y, bar.width, seg.h, tl, tr, br, bl)} color={seg.color} />;
+                        })}
                       </Group>
                     );
                   }
@@ -1065,7 +1066,7 @@ export default function RepasChart({
                           dx={0}
                           dy={2}
                           blur={6}
-                          color="rgba(184, 134, 11, 0.35)"
+                          color="rgba(234, 179, 8, 0.35)"
                         />
                       )}
                     </RoundedRect>
