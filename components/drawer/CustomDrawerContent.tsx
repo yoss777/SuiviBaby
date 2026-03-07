@@ -1,15 +1,14 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { DrawerContentScrollView } from "@react-navigation/drawer";
+import { DrawerContentComponentProps, DrawerContentScrollView } from "@react-navigation/drawer";
 import { usePathname, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  Dimensions,
   Modal,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { doc, getDoc } from "firebase/firestore";
@@ -17,6 +16,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { AddChildModal } from "@/components/suivibaby/AddChildModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -26,16 +26,14 @@ import { masquerEnfant } from "@/services/userPreferencesService";
 import { db } from "@/config/firebase";
 import type { ChildRole } from "@/types/permissions";
 
-const { width } = Dimensions.get("window");
-
-export function CustomDrawerContent(props: any) {
+export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const router = useRouter();
   const pathname = usePathname();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
+  const { width } = useWindowDimensions();
   const { activeChild, children, childrenLoaded, setActiveChild } = useBaby();
   const { signOut, user, userName, email, firebaseUser } = useAuth();
-  const [isSearchActive, setIsSearchActive] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [showHideModal, setShowHideModal] = useState(false);
   const [childToHide, setChildToHide] = useState<{
     id: string;
@@ -45,20 +43,9 @@ export function CustomDrawerContent(props: any) {
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
   const [childRoles, setChildRoles] = useState<Record<string, ChildRole | null>>({});
-  const inputRef = useRef<TextInput>(null);
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const canShareChild =
-    permissions.role === "owner" || permissions.role === "admin";
   const canAddChild =
     permissions.role === "owner" || permissions.role === "admin";
-
-  const isActive = (routeName: string) => pathname.includes(routeName);
-
-  // Réinitialiser le champ de recherche quand on change de route
-  useEffect(() => {
-    setIsSearchActive(false);
-    setSearchQuery("");
-  }, [pathname]);
 
   useEffect(() => {
     let isMounted = true;
@@ -163,19 +150,16 @@ export function CustomDrawerContent(props: any) {
     >
       {/* Section: Informations utilisateur */}
       {user && (
-        <View style={styles.userInfoSection}>
-          <View style={styles.userInfoContainer}>
+        <View style={[styles.userInfoSection, { borderBottomColor: nc.border }]}>
+          <View style={[styles.userInfoContainer, { backgroundColor: nc.backgroundPressed }]}>
             <Text
-              style={[styles.userName, { color: Colors[colorScheme].text }]}
+              style={[styles.userName, { color: nc.textStrong }]}
             >
               {userName || email?.split("@")[0] || user.email?.split("@")[0]}
             </Text>
 
             <Text
-              style={[
-                styles.userEmail,
-                { color: Colors[colorScheme].tabIconDefault },
-              ]}
+              style={[styles.userEmail, { color: nc.textLight }]}
             >
               {email || user.email}
             </Text>
@@ -184,14 +168,14 @@ export function CustomDrawerContent(props: any) {
       )}
 
       {/* Section: Suivi Enfant */}
-      <View style={[styles.section, styles.babySection]}>
+      <View style={styles.section}>
         <Text
           style={[
             styles.sectionHeader,
             { color: Colors[colorScheme].tabIconDefault },
           ]}
         >
-          <FontAwesome name="baby" size={16} color="#4A90E2" />
+          <FontAwesome name="baby" size={16} color={nc.todayAccent} />
           &nbsp;SUIVI POUR
         </Text>
 
@@ -217,16 +201,17 @@ export function CustomDrawerContent(props: any) {
                 ]}
                 onPress={() => {
                   setActiveChild(child);
-                  // Fermer le drawer dans tous les cas si on est déjà dans le drawer
-                  props?.navigation?.closeDrawer?.();
-                  // Ne naviguer que si on n'est pas déjà sur baby
+                  props.navigation.closeDrawer();
                   if (!pathname.includes("/baby")) {
                     router.replace("/(drawer)/baby" as any);
                   }
                 }}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`Sélectionner ${child.name}`}
+                accessibilityState={{ selected: isActive }}
               >
-                <View style={styles.childAvatar}>
+                <View style={[styles.childAvatar, { backgroundColor: nc.backgroundPressed }]}>
                   <Text style={styles.childAvatarEmoji}>
                     {child.gender === "male" ? "👶" : "👧"}
                   </Text>
@@ -257,8 +242,10 @@ export function CustomDrawerContent(props: any) {
                       )
                     }
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Partager ${child.name}`}
                   >
-                    <FontAwesome name="share-alt" size={16} color="#4A90E2" />
+                    <FontAwesome name="share-alt" size={16} color={nc.todayAccent} />
                   </TouchableOpacity>
                 )}
 
@@ -266,8 +253,10 @@ export function CustomDrawerContent(props: any) {
                   style={styles.actionButton}
                   onPress={() => handleHideChild(child.id, child.name)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Masquer ${child.name}`}
                 >
-                  <FontAwesome name="trash-alt" size={16} color="#dc3545" />
+                  <FontAwesome name="trash-alt" size={16} color={nc.error} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -287,6 +276,8 @@ export function CustomDrawerContent(props: any) {
             }
             router.push("/settings/join-child" as any);
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Ajouter un enfant"
         >
           <Text
             style={[styles.addBabyText, { color: Colors[colorScheme].tint }]}
@@ -299,13 +290,15 @@ export function CustomDrawerContent(props: any) {
       </View>
 
       {/* Section: Compte utilisateur */}
-      <View style={[styles.section, styles.actionsSection]}>
+      <View style={[styles.section, styles.actionsSection, { borderTopColor: nc.border }]}>
         <TouchableOpacity
           style={[
             styles.settingsButton,
-            { borderColor: Colors[colorScheme].tint },
+            { borderColor: Colors[colorScheme].tint, backgroundColor: colorScheme === "dark" ? "rgba(99, 102, 241, 0.1)" : "#f0f8ff" },
           ]}
           onPress={() => router.push("/(drawer)/settings")}
+          accessibilityRole="button"
+          accessibilityLabel="Ouvrir les paramètres"
         >
           <Text
             style={[styles.settingsText, { color: Colors[colorScheme].tint }]}
@@ -315,10 +308,12 @@ export function CustomDrawerContent(props: any) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.signOutButton, { borderColor: "#dc3545" }]}
+          style={[styles.signOutButton, { borderColor: nc.error, backgroundColor: colorScheme === "dark" ? "rgba(239, 68, 68, 0.1)" : "#fff5f5" }]}
           onPress={handleSignOut}
+          accessibilityRole="button"
+          accessibilityLabel="Se déconnecter"
         >
-          <Text style={[styles.signOutText, { color: "#dc3545" }]}>
+          <Text style={[styles.signOutText, { color: nc.error }]}>
             🚪 Déconnexion
           </Text>
         </TouchableOpacity>
@@ -338,7 +333,7 @@ export function CustomDrawerContent(props: any) {
           <Pressable
             style={[
               styles.modalContent,
-              { backgroundColor: Colors[colorScheme].background },
+              { backgroundColor: Colors[colorScheme].background, width: width * 0.85 },
             ]}
             onPress={(e) => e.stopPropagation()}
           >
@@ -362,16 +357,20 @@ export function CustomDrawerContent(props: any) {
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
+                style={[styles.modalButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => setShowHideModal(false)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Annuler"
               >
-                <Text style={styles.cancelButtonText}>Annuler</Text>
+                <Text style={[styles.cancelButtonText, { color: nc.textNormal }]}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.deleteButton]}
+                style={[styles.modalButton, { backgroundColor: nc.error }]}
                 onPress={confirmHideChild}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Confirmer masquer l'enfant"
               >
                 <Text style={styles.deleteButtonText}>Masquer</Text>
               </TouchableOpacity>
@@ -433,18 +432,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginTop: 8,
   },
-  emoji: {
-    fontSize: 20,
-  },
   userInfoSection: {
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
     marginBottom: 8,
   },
   userInfoContainer: {
-    backgroundColor: "#f8f9fa",
     padding: 12,
     borderRadius: 10,
   },
@@ -456,12 +450,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  babySection: {},
   childAvatar: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#f0f0f0",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -494,7 +486,6 @@ const styles = StyleSheet.create({
   },
   actionsSection: {
     borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
     paddingTop: 12,
   },
   settingsButton: {
@@ -504,7 +495,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 2,
     alignItems: "center",
-    backgroundColor: "#f0f8ff",
   },
   settingsText: {
     fontSize: 14,
@@ -516,44 +506,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 2,
     alignItems: "center",
-    backgroundColor: "#fff5f5",
   },
   signOutText: {
     fontSize: 14,
     fontWeight: "600",
-  },
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 12,
-  },
-  searchButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 12,
-    borderRadius: 10,
-  },
-  searchText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  searchInputWrapper: {},
-  searchInput: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
-    padding: 0,
-    margin: 0,
-  },
-  mapButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
   },
   childItemContainer: {
     flexDirection: "row",
@@ -578,23 +534,6 @@ const styles = StyleSheet.create({
   actionButton: {
     padding: 8,
   },
-  hideButton: {
-    padding: 8,
-  },
-  joinChildButton: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderStyle: "dashed",
-    alignItems: "center",
-    backgroundColor: "#f8f0ff",
-  },
-  joinChildText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -602,7 +541,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalContent: {
-    width: width * 0.85,
     borderRadius: 20,
     padding: 24,
     shadowColor: "#000",
@@ -635,16 +573,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  cancelButton: {
-    backgroundColor: "#f0f0f0",
-  },
-  deleteButton: {
-    backgroundColor: "#dc3545",
-  },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#666",
   },
   deleteButtonText: {
     fontSize: 16,

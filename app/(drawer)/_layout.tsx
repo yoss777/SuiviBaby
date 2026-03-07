@@ -160,8 +160,8 @@ export default function DrawerLayout() {
           ]}
         >
           {isOffline && (
-            <View style={[styles.offlineBanner, { paddingTop: insets.top }]}>
-              <Text style={styles.offlineText}>Hors ligne</Text>
+            <View style={[styles.offlineBanner, { paddingTop: insets.top, backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : "#fdecec" }]}>
+              <Text style={[styles.offlineText, { color: colorScheme === "dark" ? "#fca5a5" : "#b42318" }]} accessibilityRole="alert">Hors ligne</Text>
             </View>
           )}
           <Drawer
@@ -231,13 +231,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   offlineBanner: {
-    backgroundColor: "#fdecec",
     alignItems: "center",
     justifyContent: "center",
     paddingBottom: 6,
   },
   offlineText: {
-    color: "#b42318",
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.6,
