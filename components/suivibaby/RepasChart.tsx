@@ -13,7 +13,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Timestamp } from "firebase/firestore";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   StyleSheet,
@@ -30,6 +30,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 
 type Props = {
@@ -88,6 +89,48 @@ export default function RepasChart({
   const tooltipX = useSharedValue(0);
   const tooltipY = useSharedValue(0);
 
+  // Animated filter indicators
+  const TYPE_FILTER_KEYS = ["tous", "seins", "biberons", "solides"] as const;
+  const typeFilterIndex = useSharedValue(
+    TYPE_FILTER_KEYS.indexOf(initialTypeFilter ?? "tous"),
+  );
+  const [typeTabsWidth, setTypeTabsWidth] = useState(0);
+  const typeTabWidth =
+    typeTabsWidth > 0 ? (typeTabsWidth - 8 - 18) / 4 : 0; // 8=padding*2, 18=gap*3
+  const animatedTypeIndicator = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX: withTiming(
+          4 + typeFilterIndex.value * (typeTabWidth + 6),
+          { duration: 250 },
+        ),
+      },
+    ],
+    width: typeTabWidth,
+  }));
+
+  const viewModeIndex = useSharedValue(1); // 0=quantity, 1=frequency
+  const savedViewModes = useRef<Record<string, "quantity" | "frequency">>({
+    tous: "frequency",
+    biberons: "frequency",
+  });
+  const [viewTabsWidth, setViewTabsWidth] = useState(0);
+  const showBothViewModes =
+    typeFilter !== "seins" && typeFilter !== "solides";
+  const viewTabWidth =
+    viewTabsWidth > 0 ? (viewTabsWidth - 8 - 6) / 2 : 0; // 8=padding*2, 6=gap
+  const animatedViewIndicator = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX: withTiming(
+          4 + viewModeIndex.value * (viewTabWidth + 6),
+          { duration: 250 },
+        ),
+      },
+    ],
+    width: viewTabWidth,
+  }));
+
   const jours = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
   useEffect(() => {
@@ -97,16 +140,29 @@ export default function RepasChart({
   }, []);
 
   useEffect(() => {
-    if (initialTypeFilter) {
+    if (initialTypeFilter && initialTypeFilter !== typeFilter) {
       setTypeFilter(initialTypeFilter);
+      typeFilterIndex.value = TYPE_FILTER_KEYS.indexOf(initialTypeFilter);
+      if (initialTypeFilter === "seins" || initialTypeFilter === "solides") {
+        setViewMode("frequency");
+        viewModeIndex.value = 0;
+      }
     }
   }, [initialTypeFilter]);
 
-  useEffect(() => {
-    if (typeFilter === "seins" || typeFilter === "solides") {
+  // Switch type filter with synced viewMode (batched in same render, no desync frame)
+  const switchTypeFilter = useCallback((newFilter: "tous" | "seins" | "biberons" | "solides") => {
+    setTypeFilter(newFilter);
+    typeFilterIndex.value = TYPE_FILTER_KEYS.indexOf(newFilter);
+    if (newFilter === "seins" || newFilter === "solides") {
       setViewMode("frequency");
+      viewModeIndex.value = 0;
+    } else {
+      const restored = savedViewModes.current[newFilter] ?? "frequency";
+      setViewMode(restored);
+      viewModeIndex.value = restored === "quantity" ? 0 : 1;
     }
-  }, [typeFilter]);
+  }, []);
 
   useEffect(() => {
     setSelectedBarIndex(null);
@@ -577,29 +633,34 @@ export default function RepasChart({
               styles.typeFilterContainer,
               { backgroundColor: C.filterBg },
             ]}
+            onLayout={(e) => setTypeTabsWidth(e.nativeEvent.layout.width)}
           >
+            <Animated.View
+              style={[
+                styles.tabIndicator,
+                {
+                  backgroundColor: C.filterActiveBg,
+                  borderColor: C.blue,
+                  opacity: typeTabWidth > 0 ? 1 : 0,
+                },
+                animatedTypeIndicator,
+              ]}
+            />
             {[
               { key: "tous", label: "Tous", icon: "utensils" },
               { key: "seins", label: "Tétées", icon: "person-breastfeeding" },
               { key: "biberons", label: "Bib.", icon: "baby-bottle", iconType: "mc" as const },
               { key: "solides", label: "Solides", icon: "bowl-food" },
-            ].map((type) => {
+            ].map((type, index) => {
               const isActive = typeFilter === type.key;
               return (
                 <TouchableOpacity
                   key={type.key}
-                  style={[
-                    styles.typeFilterButton,
-                    isActive && [
-                      styles.typeFilterButtonActive,
-                      {
-                        backgroundColor: C.filterActiveBg,
-                        borderColor: C.blue,
-                      },
-                    ],
-                  ]}
-                  onPress={() => setTypeFilter(type.key as typeof typeFilter)}
-                  accessibilityRole="button"
+                  style={styles.typeFilterButton}
+                  onPress={() => {
+                    switchTypeFilter(type.key as typeof typeFilter);
+                  }}
+                  accessibilityRole="tab"
                   accessibilityState={{ selected: isActive }}
                   accessibilityLabel={`Filtre ${type.label}`}
                 >
@@ -635,20 +696,29 @@ export default function RepasChart({
               styles.toggleContainer,
               { backgroundColor: C.filterBg },
             ]}
+            onLayout={(e) => setViewTabsWidth(e.nativeEvent.layout.width)}
           >
-            {typeFilter !== "seins" && typeFilter !== "solides" && (
+            <Animated.View
+              style={[
+                styles.tabIndicator,
+                {
+                  backgroundColor: C.filterActiveBg,
+                  borderColor: C.blue,
+                  opacity: showBothViewModes && viewTabWidth > 0 ? 1 : 0,
+                },
+                animatedViewIndicator,
+              ]}
+            />
+            {showBothViewModes && (
               <TouchableOpacity
-                style={[
-                  styles.toggleButton,
-                  viewMode === "quantity" && [
-                    styles.toggleButtonActive,
-                    {
-                      backgroundColor: C.filterActiveBg,
-                      borderColor: C.blue,
-                    },
-                  ],
-                ]}
-                onPress={() => setViewMode("quantity")}
+                style={styles.toggleButton}
+                onPress={() => {
+                  viewModeIndex.value = 0;
+                  setViewMode("quantity");
+                  savedViewModes.current[typeFilter] = "quantity";
+                }}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: viewMode === "quantity" }}
               >
                 <FontAwesome
                   name="droplet"
@@ -669,7 +739,7 @@ export default function RepasChart({
             <TouchableOpacity
               style={[
                 styles.toggleButton,
-                viewMode === "frequency" && [
+                !showBothViewModes && [
                   styles.toggleButtonActive,
                   {
                     backgroundColor: C.filterActiveBg,
@@ -677,7 +747,13 @@ export default function RepasChart({
                   },
                 ],
               ]}
-              onPress={() => setViewMode("frequency")}
+              onPress={() => {
+                savedViewModes.current[typeFilter] = "frequency";
+                viewModeIndex.value = showBothViewModes ? 1 : 0;
+                setViewMode("frequency");
+              }}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: viewMode === "frequency" }}
             >
               <FontAwesome
                 name="clock"
@@ -1393,9 +1469,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius: 10,
     gap: 3,
-  },
-  typeFilterButtonActive: {
-    borderWidth: 1,
+    zIndex: 1,
   },
   typeFilterLabel: {
     fontSize: 10,
@@ -1417,9 +1491,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 10,
     gap: 8,
+    zIndex: 1,
   },
   toggleButtonActive: {
     borderWidth: 1,
+  },
+  tabIndicator: {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
   toggleText: {
     fontSize: 13,

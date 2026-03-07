@@ -422,29 +422,36 @@ export default function StatsScreen() {
                 <Text style={styles.retryText}>Réessayer</Text>
               </TouchableOpacity>
             </View>
-          ) : selectedTab === "tetees" ? (
-            isTeteesLoading || !teteesEmptyDelayDone ? (
-              <View style={styles.loaderContainer}>
-                <IconPulseDots color={refreshTintColor} />
-              </View>
-            ) : (
-              <RepasChart
-                tetees={tetees}
-                initialTypeFilter={initialTypeFilter}
-                colorScheme={colorScheme}
-                screenWidth={screenWidth}
-              />
-            )
-          ) : isPompagesLoading || !pompagesEmptyDelayDone ? (
-            <View style={styles.loaderContainer}>
-              <IconPulseDots color={refreshTintColor} />
-            </View>
           ) : (
-            <PompagesChart
-              pompages={pompages}
-              colorScheme={colorScheme}
-              screenWidth={screenWidth}
-            />
+            <>
+              <View style={[styles.tabPanel, selectedTab !== "tetees" && styles.hiddenTab]}>
+                {isTeteesLoading || !teteesEmptyDelayDone ? (
+                  <View style={styles.loaderContainer}>
+                    <IconPulseDots color={chartColors.tetees.blue} />
+                  </View>
+                ) : (
+                  <RepasChart
+                    tetees={tetees}
+                    initialTypeFilter={initialTypeFilter}
+                    colorScheme={colorScheme}
+                    screenWidth={screenWidth}
+                  />
+                )}
+              </View>
+              <View style={[styles.tabPanel, selectedTab !== "pompages" && styles.hiddenTab]}>
+                {isPompagesLoading || !pompagesEmptyDelayDone ? (
+                  <View style={styles.loaderContainer}>
+                    <IconPulseDots color={chartColors.pompages.green} />
+                  </View>
+                ) : (
+                  <PompagesChart
+                    pompages={pompages}
+                    colorScheme={colorScheme}
+                    screenWidth={screenWidth}
+                  />
+                )}
+              </View>
+            </>
           )}
         </Animated.View>
       </ScrollView>
@@ -523,5 +530,14 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "600",
+  },
+  tabPanel: {
+    flex: 1,
+    width: "100%",
+  },
+  hiddenTab: {
+    position: "absolute",
+    opacity: 0,
+    pointerEvents: "none",
   },
 });

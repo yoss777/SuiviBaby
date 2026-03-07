@@ -7,6 +7,7 @@ import { useChildPermissions } from "@/hooks/useChildPermissions";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "@react-navigation/native";
+import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useCallback, useRef } from "react";
 import {
@@ -18,79 +19,128 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const ITEMS = [
+type ItemIcon = string | { lib: "mci"; name: string };
+
+interface Item {
+  title: string;
+  subtitle: string;
+  icon: ItemIcon;
+  color: string;
+  darkColor?: string;
+  route: string;
+  ownerOnly?: boolean;
+}
+
+interface Section {
+  label: string;
+  items: Item[];
+}
+
+const SECTIONS: Section[] = [
   {
-    title: "Gestion des accès",
-    subtitle: "Gérer les permissions des parents",
-    icon: "user-gear",
-    color: "#f59e0b",
-    route: "/baby/manage-access",
-    ownerOnly: true,
+    label: "Suivi quotidien",
+    items: [
+      {
+        title: "Repas",
+        subtitle: "Biberons et tétées",
+        icon: "utensils",
+        color: "#4A90E2",
+        route: "/baby/meals",
+      },
+      {
+        title: "Routines",
+        subtitle: "Sommeil, bain et routines rapides",
+        icon: "bath",
+        color: "#8b5cf6",
+        route: "/baby/routines",
+      },
+      {
+        title: "Couches",
+        subtitle: "Mictions et selles",
+        icon: { lib: "mci", name: "human-baby-changing-table" },
+        color: "#17a2b8",
+        route: "/baby/diapers",
+      },
+      {
+        title: "Statistiques",
+        subtitle: "Alimentation et expression du lait",
+        icon: "chart-line",
+        color: "#607D8B",
+        darkColor: "#90A4AE",
+        route: "/baby/stats",
+      },
+    ],
   },
   {
-    title: "Statistiques",
-    subtitle: "Alimentation et expression du lait",
-    icon: "chart-line",
-    color: "#607D8B",
-    darkColor: "#90A4AE",
-    route: "/baby/stats",
+    label: "Santé & bien-être",
+    items: [
+      {
+        title: "Santé",
+        subtitle: "Température, symptômes, médicaments, vaccins",
+        icon: "prescription-bottle",
+        color: "#9C27B0",
+        route: "/baby/soins",
+      },
+      {
+        title: "Tire-lait",
+        subtitle: "Sessions et totaux",
+        icon: "pump-medical",
+        color: "#28a745",
+        route: "/baby/pumping",
+      },
+    ],
   },
   {
-    title: "Croissance",
-    subtitle: "Poids, taille et tour de tête",
-    icon: "seedling",
-    color: "#8BCF9B",
-    darkColor: "#A8E6B8",
-    route: "/baby/growth",
+    label: "Développement",
+    items: [
+      {
+        title: "Croissance",
+        subtitle: "Poids, taille et tour de tête",
+        icon: "seedling",
+        color: "#8BCF9B",
+        darkColor: "#A8E6B8",
+        route: "/baby/growth",
+      },
+      {
+        title: "Activités",
+        subtitle: "Tummy time, jeux, lecture, promenade...",
+        icon: "play-circle",
+        color: "#10b981",
+        route: "/baby/activities",
+      },
+    ],
   },
   {
-    title: "Repas",
-    subtitle: "Biberons et tétées",
-    icon: "utensils",
-    color: "#4A90E2",
-    route: "/baby/meals",
+    label: "Souvenirs",
+    items: [
+      {
+        title: "Galerie",
+        subtitle: "Photos et moments capturés",
+        icon: "images",
+        color: "#f472b6",
+        route: "/baby/gallery",
+      },
+      {
+        title: "Jalons",
+        subtitle: "Premiers pas, premiers mots...",
+        icon: "star",
+        color: "#ec4899",
+        route: "/baby/milestones",
+      },
+    ],
   },
   {
-    title: "Tire-lait",
-    subtitle: "Sessions et totaux",
-    icon: "pump-medical",
-    color: "#28a745",
-    route: "/baby/pumping",
-  },
-  {
-    title: "Santé",
-    subtitle: "Température, symptômes, médicaments, vaccins",
-    icon: "prescription-bottle",
-    color: "#9C27B0",
-    route: "/baby/soins",
-  },
-  {
-    title: "Activités",
-    subtitle: "Tummy time, jeux, lecture, promenade...",
-    icon: "play-circle",
-    color: "#10b981",
-    route: "/baby/activities",
-  },
-  {
-    title: "Jalons",
-    subtitle: "Premiers moments et souvenirs",
-    icon: "star",
-    color: "#ec4899",
-    route: "/baby/milestones",
-  },
-  {
-    title: "Couches",
-    subtitle: "Mictions et selles",
-    icon: { lib: "mci", name: "human-baby-changing-table" },
-    color: "#17a2b8",
-    route: "/baby/diapers",
-  },
-  {
-    title: "Routines",
-    subtitle: "Sommeil, bain et routines rapides",
-    icon: "bath",
-    color: "#3b82f6",
-    route: "/baby/routines",
+    label: "Administration",
+    items: [
+      {
+        title: "Gestion des accès",
+        subtitle: "Gérer les permissions des parents",
+        icon: "user-gear",
+        color: "#f59e0b",
+        route: "/baby/manage-access",
+        ownerOnly: true,
+      },
+    ],
   },
 ];
 
@@ -118,26 +168,28 @@ export default function PlusScreen() {
       }
 
       navLockRef.current = true;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      // Si c'est la route de gestion des accès, ajouter le childId
+      // Ajouter returnTo=plus pour afficher le back arrow + childId si manage-access
       if (route === "/baby/manage-access" && activeChild?.id) {
-        router.push(`${route}?childId=${activeChild.id}` as any);
+        router.push(`${route}?childId=${activeChild.id}&returnTo=plus` as any);
       } else {
-        router.push(route as any);
+        router.push(`${route}?returnTo=plus` as any);
       }
     },
     [activeChild?.id],
   );
 
-  // Filtrer les items selon les permissions
-  const visibleItems = ITEMS.filter((item) => {
-    if ("ownerOnly" in item && item.ownerOnly) {
-      return permissions.canManageAccess;
-    }
-    return true;
-  });
-
   const isDark = colorScheme === "dark";
+
+  // Filtrer les sections : retirer les items ownerOnly si pas les droits,
+  // puis exclure les sections vides
+  const visibleSections = SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter(
+      (item) => !item.ownerOnly || permissions.canManageAccess,
+    ),
+  })).filter((section) => section.items.length > 0);
 
   return (
     <ThemedView style={styles.screen}>
@@ -153,85 +205,97 @@ export default function PlusScreen() {
             </Text>
           </View>
 
-          <View style={styles.list}>
-            {visibleItems.length === 0 ? (
-              <View style={styles.emptyState}>
-                <FontAwesome
-                  name="lock"
-                  size={24}
-                  color={nc.textMuted}
-                />
-                <Text style={[styles.emptyText, { color: nc.textLight }]}>
-                  Aucun écran disponible avec vos permissions actuelles
+          {visibleSections.length === 0 ? (
+            <View style={styles.emptyState}>
+              <FontAwesome name="lock" size={24} color={nc.textMuted} />
+              <Text style={[styles.emptyText, { color: nc.textLight }]}>
+                Aucun écran disponible avec vos permissions actuelles
+              </Text>
+            </View>
+          ) : (
+            visibleSections.map((section) => (
+              <View key={section.label} style={styles.section}>
+                <Text
+                  style={[styles.sectionLabel, { color: nc.textMuted }]}
+                  accessibilityRole="header"
+                >
+                  {section.label}
                 </Text>
-              </View>
-            ) : (
-              visibleItems.map((item) => {
-                const itemColor =
-                  isDark && "darkColor" in item ? item.darkColor : item.color;
-                return (
-                  <TouchableOpacity
-                    key={item.title}
-                    style={[
-                      styles.row,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                        shadowOpacity: isDark ? 0 : 0.04,
-                        elevation: isDark ? 0 : 1,
-                      },
-                    ]}
-                    onPress={() => handleNavigate(item.route)}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${item.title} — ${item.subtitle}`}
-                  >
-                    <View
-                      style={[
-                        styles.iconWrap,
-                        {
-                          backgroundColor: `${itemColor}${iconBgOpacity}`,
-                        },
-                      ]}
-                      importantForAccessibility="no"
-                    >
-                      {typeof item.icon === "string" ? (
+                <View style={styles.sectionItems}>
+                  {section.items.map((item) => {
+                    const itemColor =
+                      isDark && item.darkColor ? item.darkColor : item.color;
+                    return (
+                      <TouchableOpacity
+                        key={item.title}
+                        style={[
+                          styles.row,
+                          {
+                            backgroundColor: nc.backgroundCard,
+                            borderColor: nc.border,
+                            shadowOpacity: isDark ? 0 : 0.04,
+                            elevation: isDark ? 0 : 1,
+                          },
+                        ]}
+                        onPress={() => handleNavigate(item.route)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${item.title} — ${item.subtitle}`}
+                      >
+                        <View
+                          style={[
+                            styles.iconWrap,
+                            {
+                              backgroundColor: `${itemColor}${iconBgOpacity}`,
+                            },
+                          ]}
+                          importantForAccessibility="no"
+                        >
+                          {typeof item.icon === "string" ? (
+                            <FontAwesome
+                              name={item.icon as any}
+                              size={18}
+                              color={itemColor}
+                            />
+                          ) : (
+                            <MaterialCommunityIcons
+                              name={item.icon.name as any}
+                              size={18}
+                              color={itemColor}
+                            />
+                          )}
+                        </View>
+                        <View style={styles.textBlock}>
+                          <Text
+                            style={[
+                              styles.rowTitle,
+                              { color: nc.textStrong },
+                            ]}
+                          >
+                            {item.title}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.rowSubtitle,
+                              { color: nc.textLight },
+                            ]}
+                          >
+                            {item.subtitle}
+                          </Text>
+                        </View>
                         <FontAwesome
-                          name={item.icon as any}
-                          size={18}
-                          color={itemColor}
+                          name="chevron-right"
+                          size={14}
+                          color={nc.textMuted}
+                          importantForAccessibility="no"
                         />
-                      ) : (
-                        <MaterialCommunityIcons
-                          name={item.icon.name as any}
-                          size={18}
-                          color={itemColor}
-                        />
-                      )}
-                    </View>
-                    <View style={styles.textBlock}>
-                      <Text
-                        style={[styles.rowTitle, { color: nc.textStrong }]}
-                      >
-                        {item.title}
-                      </Text>
-                      <Text
-                        style={[styles.rowSubtitle, { color: nc.textLight }]}
-                      >
-                        {item.subtitle}
-                      </Text>
-                    </View>
-                    <FontAwesome
-                      name="chevron-right"
-                      size={14}
-                      color={nc.textMuted}
-                      importantForAccessibility="no"
-                    />
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ))
+          )}
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -262,9 +326,20 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 13,
   },
-  list: {
+  section: {
     paddingHorizontal: 20,
-    gap: 12,
+    marginBottom: 20,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  sectionItems: {
+    gap: 10,
   },
   row: {
     flexDirection: "row",
