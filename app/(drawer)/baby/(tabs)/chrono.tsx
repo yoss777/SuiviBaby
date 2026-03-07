@@ -2,9 +2,16 @@ import { ThemedView } from "@/components/themed-view";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { MOMENT_REPAS_LABELS } from "@/constants/dashboardConfig";
+import {
+  ACTIVITY_TYPE_LABELS,
+  BIBERON_TYPE_LABELS,
+  EVENT_CONFIG,
+  JALON_TYPE_LABELS,
+  MOMENT_REPAS_LABELS,
+  MOOD_EMOJIS,
+} from "@/constants/dashboardConfig";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
-import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -17,6 +24,7 @@ import { supprimerEvenement } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
 import React, {
   useCallback,
   useEffect,
@@ -29,12 +37,14 @@ import {
   AppState,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
@@ -58,7 +68,6 @@ type TimelineSection = {
   title: string;
   key: string;
   data: Event[];
-  kind?: "filters" | "day";
 };
 
 // ============================================
@@ -67,162 +76,19 @@ type TimelineSection = {
 
 const STORAGE_KEY = "chrono_filters_v1";
 
-// Activity type labels
-const ACTIVITY_TYPE_LABELS: Record<string, string> = {
-  tummyTime: "Tummy Time",
-  jeux: "Jeux",
-  lecture: "Lecture",
-  promenade: "Promenade",
-  massage: "Massage",
-  musique: "Musique",
-  eveil: "Éveil sensoriel",
-  sortie: "Sortie",
-  autre: "Autre",
-};
-
-const JALON_TYPE_LABELS: Record<string, string> = {
-  dent: "Première dent",
-  pas: "Premiers pas",
-  sourire: "Premier sourire",
-  mot: "Premiers mots",
-  humeur: "Humeur du jour",
-  photo: "Moment photo",
-  autre: "Autre moment",
-};
-
-const MOOD_EMOJIS: Record<number, string> = {
-  1: "😢",
-  2: "😐",
-  3: "🙂",
-  4: "😄",
-  5: "🥰",
-};
-
-const EVENT_CONFIG: Record<
-  EventType,
-  {
-    color: string;
-    label: string;
-    short: string;
-    icon: { lib: "fa6" | "mci"; name: string };
-  }
-> = {
-  biberon: {
-    color: "#FF5722",
-    label: "Biberon",
-    short: "Bib",
-    icon: { lib: "mci", name: "baby-bottle" },
-  },
-  tetee: {
-    color: "#E91E63",
-    label: "Tétée",
-    short: "Tétée",
-    icon: { lib: "fa6", name: "person-breastfeeding" },
-  },
-  solide: {
-    color: "#8BC34A",
-    label: "Repas solide",
-    short: "Solide",
-    icon: { lib: "fa6", name: "bowl-food" },
-  },
-  pompage: {
-    color: "#28a745",
-    label: "Pompage",
-    short: "Pompe",
-    icon: { lib: "fa6", name: "pump-medical" },
-  },
-  couche: {
-    color: "#4A90E2",
-    label: "Couche",
-    short: "Couche",
-    icon: { lib: "fa6", name: "baby" },
-  },
-  miction: {
-    color: "#17a2b8",
-    label: "Miction",
-    short: "Pipi",
-    icon: { lib: "fa6", name: "water" },
-  },
-  selle: {
-    color: "#dc3545",
-    label: "Selle",
-    short: "Popo",
-    icon: { lib: "fa6", name: "poop" },
-  },
-  sommeil: {
-    color: "#6f42c1",
-    label: "Sommeil",
-    short: "Sommeil",
-    icon: { lib: "fa6", name: "bed" },
-  },
-  bain: {
-    color: "#3b82f6",
-    label: "Bain",
-    short: "Bain",
-    icon: { lib: "fa6", name: "bath" },
-  },
-  temperature: {
-    color: "#e03131",
-    label: "Température",
-    short: "Temp",
-    icon: { lib: "fa6", name: "temperature-half" },
-  },
-  medicament: {
-    color: "#2f9e44",
-    label: "Médicament",
-    short: "Médoc",
-    icon: { lib: "fa6", name: "pills" },
-  },
-  symptome: {
-    color: "#f59f00",
-    label: "Symptôme",
-    short: "Sympt.",
-    icon: { lib: "fa6", name: "virus" },
-  },
-  vaccin: {
-    color: "#9C27B0",
-    label: "Vaccin",
-    short: "Vaccin",
-    icon: { lib: "fa6", name: "syringe" },
-  },
-  vitamine: {
-    color: "#FF9800",
-    label: "Vitamine",
-    short: "Vitamine",
-    icon: { lib: "fa6", name: "pills" },
-  },
-  activite: {
-    color: "#10b981",
-    label: "Activité",
-    short: "Activité",
-    icon: { lib: "fa6", name: "play-circle" },
-  },
-  jalon: {
-    color: eventColors.jalon.dark,
-    label: "Jalon",
-    short: "Jalon",
-    icon: { lib: "fa6", name: "star" },
-  },
-  croissance: {
-    color: "#8BCF9B",
-    label: "Croissance",
-    short: "Croiss.",
-    icon: { lib: "fa6", name: "seedling" },
-  },
-};
-
 const FILTER_CONFIG: Record<
   FilterType,
   {
     label: string;
     icon: string;
+    iconLib?: "mci";
     color: string;
     eventTypes: EventType[];
   }
 > = {
   meals: {
     label: "Repas",
-    icon: "baby",
+    icon: "utensils",
     color: "#4A90E2",
     eventTypes: ["tetee", "biberon", "solide"],
   },
@@ -246,9 +112,10 @@ const FILTER_CONFIG: Record<
   },
   diapers: {
     label: "Couches",
-    icon: "toilet",
+    icon: "human-baby-changing-table",
+    iconLib: "mci",
     color: "#17a2b8",
-    eventTypes: ["miction", "selle"],
+    eventTypes: ["couche", "miction", "selle"],
   },
   activities: {
     label: "Activités",
@@ -358,22 +225,6 @@ const formatDuration = (minutes?: number) => {
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
 };
 
-const BIBERON_TYPE_LABELS: Record<string, string> = {
-  lait_maternel: "Lait maternel",
-  lait_infantile: "Lait infantile",
-  eau: "Eau",
-  jus: "Jus",
-  autre: "Autre",
-};
-const SOLIDE_TYPE_LABELS: Record<string, string> = {
-  puree: "Purée",
-  compote: "Compote",
-  cereales: "Céréales",
-  yaourt: "Yaourt",
-  morceaux: "Morceaux",
-  autre: "Autre",
-};
-
 function buildDetails(event: Event) {
   switch (event.type) {
     case "biberon": {
@@ -434,7 +285,7 @@ function buildDetails(event: Event) {
       return event.volume ? `${event.volume} ml` : event.couleur;
     case "selle":
       return event.consistance || event.couleur;
-    case "sommeil":
+    case "sommeil": {
       const start = event.heureDebut
         ? toDate(event.heureDebut)
         : toDate(event.date);
@@ -444,12 +295,12 @@ function buildDetails(event: Event) {
         (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
 
       const parts = [
-        end ? formatDuration(duration) : null, // Only show duration if sleep is finished
+        end ? formatDuration(duration) : null,
         event.location,
         event.quality,
       ].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;
-
+    }
     case "bain": {
       const parts = [
         event.duree ? `${event.duree} min` : null,
@@ -528,18 +379,19 @@ interface EventIconProps {
 }
 
 const EventIcon = React.memo(({ type, color, size }: EventIconProps) => {
-  const iconConfig = EVENT_CONFIG[type].icon;
-  if (iconConfig.lib === "mci") {
+  const config = EVENT_CONFIG[type];
+  if (!config) return null;
+  if (config.icon.lib === "mci") {
     return (
       <MaterialCommunityIcons
-        name={iconConfig.name as any}
+        name={config.icon.name as any}
         size={size}
         color={color}
       />
     );
   }
   return (
-    <FontAwesome name={iconConfig.name as any} size={size} color={color} />
+    <FontAwesome name={config.icon.name as any} size={size} color={color} />
   );
 });
 EventIcon.displayName = "EventIcon";
@@ -547,40 +399,60 @@ EventIcon.displayName = "EventIcon";
 interface FilterChipProps {
   type: FilterType;
   isActive: boolean;
-  borderColor: string;
-  tintColor: string;
-  backgroundColor: string;
   textColor: string;
+  count?: number;
   onPress: () => void;
 }
 
 const FilterChip = React.memo(
-  ({
-    type,
-    isActive,
-    borderColor,
-    tintColor,
-    backgroundColor,
-    textColor,
-    onPress,
-  }: FilterChipProps) => {
+  ({ type, isActive, textColor, count, onPress }: FilterChipProps) => {
     const config = FILTER_CONFIG[type];
     return (
       <TouchableOpacity
         style={[
           styles.filterChip,
-          { borderColor: config.color },
-          // !isActive &&
-          { borderWidth: 0 },
+          { borderColor: config.color, borderWidth: 0 },
           isActive && { backgroundColor: `${config.color}1A` },
         ]}
         onPress={onPress}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={`Filtre ${config.label}${count ? `, ${count} événements` : ""}`}
+        accessibilityState={{ selected: isActive }}
       >
-        <FontAwesome name={config.icon as any} size={12} color={config.color} />
-        <Text style={[styles.filterChipText, { color: textColor }]}>
+        {config.iconLib === "mci" ? (
+          <MaterialCommunityIcons
+            name={config.icon as any}
+            size={12}
+            color={config.color}
+          />
+        ) : (
+          <FontAwesome
+            name={config.icon as any}
+            size={12}
+            color={config.color}
+          />
+        )}
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: textColor },
+          ]}
+        >
           {config.label}
         </Text>
+        {typeof count === "number" && count > 0 && (
+          <View
+            style={[
+              styles.filterChipBadge,
+              {
+                backgroundColor: isActive ? config.color : `${config.color}40`,
+              },
+            ]}
+          >
+            <Text style={styles.filterChipBadgeText}>{count}</Text>
+          </View>
+        )}
       </TouchableOpacity>
     );
   },
@@ -590,36 +462,36 @@ FilterChip.displayName = "FilterChip";
 interface RangeChipProps {
   value: RangeOption;
   isActive: boolean;
-  borderColor: string;
   tintColor: string;
-  backgroundColor: string;
-  textColor: string;
+  mutedColor: string;
   onPress: () => void;
+  activeBg: string;
 }
 
 const RangeChip = React.memo(
   ({
     value,
     isActive,
-    borderColor,
     tintColor,
-    backgroundColor,
-    textColor,
+    mutedColor,
+    activeBg,
     onPress,
   }: RangeChipProps) => (
     <TouchableOpacity
       style={[
         styles.rangeChip,
-        { borderColor },
-        isActive && { backgroundColor: "#f8f9fa" },
+        isActive && { backgroundColor: activeBg },
       ]}
       onPress={onPress}
       activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={`Afficher ${value} jours`}
+      accessibilityState={{ selected: isActive }}
     >
       <Text
         style={[
           styles.rangeChipText,
-          { color: isActive ? tintColor : "#999999" },
+          { color: isActive ? tintColor : mutedColor },
         ]}
       >
         {value}j
@@ -646,6 +518,7 @@ const DaySummary = React.memo(
       <View style={styles.summaryRow}>
         {topTypes.map(([type, count]) => {
           const config = EVENT_CONFIG[type];
+          if (!config) return null;
           return (
             <View key={type} style={[styles.summaryPill, { borderColor }]}>
               <EventIcon type={type} color={config.color} size={12} />
@@ -724,13 +597,14 @@ const TimelineCard = React.memo(
     currentTime,
   }: TimelineCardProps) => {
     const date = toDate(event.date);
-    const details = buildDetails(event);
     const config = EVENT_CONFIG[event.type];
+    if (!config) return null;
     const isSleep = event.type === "sommeil";
     const isActivity = event.type === "activite";
     const isJalon = event.type === "jalon";
     const isSolide = event.type === "solide";
 
+    // Build solide-specific details inline (avoids double computation with buildDetails)
     const solideMomentLabel = isSolide
       ? event.momentRepas
         ? MOMENT_REPAS_LABELS[event.momentRepas]
@@ -762,6 +636,9 @@ const TimelineCard = React.memo(
           ? "#16a34a"
           : "#dc2626"
         : undefined;
+
+    // Non-solide details
+    const details = isSolide ? undefined : buildDetails(event);
 
     // Determine the label based on event type
     let displayLabel = config.label;
@@ -872,6 +749,8 @@ const TimelineCard = React.memo(
           activeOpacity={0.85}
           onPress={onPress}
           disabled={!onPress}
+          accessibilityRole="button"
+          accessibilityLabel={`${displayLabel}, ${formatTime(date)}${details ? `, ${details}` : ""}`}
         >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
@@ -887,9 +766,6 @@ const TimelineCard = React.memo(
               <Text style={[styles.cardTitle, { color: textColor }]}>
                 {sleepLabel}
               </Text>
-              {/* {moodEmoji ? (
-                <Text style={styles.cardMoodEmoji}>{moodEmoji}</Text>
-              ) : null} */}
             </View>
             {isJalon && event.photos?.[0] ? (
               <Image
@@ -1016,16 +892,20 @@ export default function ChronoScreen() {
   // Fade animation
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Theme colors
+  // Theme colors — use design system
+  const nc = useMemo(() => getNeutralColors(colorScheme), [colorScheme]);
   const colors = useMemo(
     () => ({
-      text: Colors[colorScheme].text,
-      background: Colors[colorScheme].background,
-      tint: Colors[colorScheme].tint,
-      secondary: Colors[colorScheme].tabIconDefault,
-      border: `${Colors[colorScheme].tabIconDefault}20`,
+      text: nc.textStrong,
+      background: nc.backgroundCard,
+      surface: nc.background,
+      tint: nc.todayAccent,
+      secondary: nc.textMuted,
+      secondaryText: nc.textLight,
+      border: nc.border,
+      borderLight: nc.borderLight,
     }),
-    [colorScheme],
+    [nc],
   );
 
   const updateCurrentDay = useCallback(() => {
@@ -1055,6 +935,7 @@ export default function ChronoScreen() {
     "solide",
     "pompage",
     "croissance",
+    "couche",
     "miction",
     "selle",
     "vaccin",
@@ -1225,6 +1106,26 @@ export default function ChronoScreen() {
     setIsRefreshing(true);
   }, [maxRange]);
 
+  // Count events per filter type (using unfiltered events + range)
+  const filterCounts = useMemo(() => {
+    const rangeStart = startOfDay(new Date());
+    rangeStart.setDate(rangeStart.getDate() - (range - 1));
+    const inRange = events.filter((e) => toDate(e.date) >= rangeStart);
+
+    const counts: Record<FilterType, number> = {} as any;
+    for (const filter of ALL_FILTERS) {
+      const types = new Set(FILTER_CONFIG[filter].eventTypes);
+      counts[filter] = inRange.filter((e) => types.has(e.type)).length;
+    }
+    return counts;
+  }, [events, range, currentDay]);
+
+  const allSelected = selectedTypes.length === ALL_FILTERS.length;
+
+  const handleToggleAll = useCallback(() => {
+    setSelectedTypes(allSelected ? [] : [...ALL_FILTERS]);
+  }, [allSelected]);
+
   const handleFilterToggle = useCallback((type: FilterType) => {
     setSelectedTypes((prev) =>
       prev.includes(type)
@@ -1233,10 +1134,15 @@ export default function ChronoScreen() {
     );
   }, []);
 
+  const handlePullToRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    triggerRefresh();
+  }, [triggerRefresh]);
+
   const handleEdit = useCallback(
     (event: Event) => {
       if (!event.id) {
-        setInfoModalMessage("Cet evenement ne peut pas etre modifie ici.");
+        setInfoModalMessage("Cet événement ne peut pas être modifié ici.");
         return;
       }
 
@@ -1429,6 +1335,22 @@ export default function ChronoScreen() {
         return;
       }
 
+      // Handle growth (croissance)
+      if (event.type === "croissance") {
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "croissance",
+          editData: {
+            id: event.id,
+            date: eventDate,
+            tailleCm: event.tailleCm,
+            poidsKg: event.poidsKg,
+            teteCm: event.teteCm,
+          },
+        });
+        return;
+      }
+
       // Handle milestones (jalon)
       if (event.type === "jalon") {
         openSheet({
@@ -1466,12 +1388,13 @@ export default function ChronoScreen() {
       }
 
       // Fallback for unsupported types
-      setInfoModalMessage("Cet evenement ne peut pas etre modifie ici.");
+      setInfoModalMessage("Cet événement ne peut pas être modifié ici.");
     },
     [openSheet],
   );
 
   const handleEventDelete = useCallback((event: Event) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDeleteConfirm({ visible: true, event });
   }, []);
 
@@ -1507,11 +1430,11 @@ export default function ChronoScreen() {
           counts={counts}
           borderColor={colors.border}
           textColor={colors.text}
-          backgroundColor={"#f8f9fa"}
+          backgroundColor={colors.surface}
         />
       );
     },
-    [colors.border, colors.text],
+    [colors.border, colors.text, colors.surface],
   );
 
   // Render item
@@ -1530,10 +1453,10 @@ export default function ChronoScreen() {
       >
         <TimelineCard
           event={item}
-          borderColor={colors.border}
+          borderColor={colors.borderLight}
           backgroundColor={colors.background}
           textColor={colors.text}
-          secondaryTextColor={colors.secondary}
+          secondaryTextColor={colors.secondaryText}
           onPress={canManageContent ? () => handleEdit(item) : undefined}
           currentTime={currentTime}
         />
@@ -1577,23 +1500,40 @@ export default function ChronoScreen() {
                 stickySectionHeadersEnabled
                 renderSectionHeader={renderSectionHeader}
                 renderItem={renderItem}
-                containerStyle={styles.stickyContainer}
+                containerStyle={[
+                  styles.stickyContainer,
+                  { backgroundColor: colors.surface },
+                ]}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={isRefreshing}
+                    onRefresh={handlePullToRefresh}
+                    tintColor={colors.tint}
+                  />
+                }
                 renderHeader={() => (
                   <View style={styles.header}>
                     <View style={styles.headerRow}>
                       <Text style={[styles.title, { color: colors.text }]}>
                         Chronologie
                       </Text>
-                      <View style={styles.rangeRow}>
+                      <View
+                        style={[
+                          styles.rangeRow,
+                          {
+                            borderColor: colors.border,
+                            backgroundColor: colors.background,
+                          },
+                        ]}
+                      >
                         {RANGE_OPTIONS.map((value) => (
                           <RangeChip
                             key={value}
                             value={value}
                             isActive={range === value}
-                            borderColor={colors.border}
                             tintColor={colors.tint}
-                            backgroundColor={colors.background}
-                            textColor={colors.text}
+                            mutedColor={colors.secondary}
+                            activeBg={colors.surface}
                             onPress={() => handleRangeChange(value)}
                           />
                         ))}
@@ -1602,25 +1542,67 @@ export default function ChronoScreen() {
                   </View>
                 )}
                 renderTabs={() => (
-                  <View style={styles.stickyFilters}>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.filterRow}
-                    >
-                      {ALL_FILTERS.map((type) => (
-                        <FilterChip
-                          key={type}
-                          type={type}
-                          isActive={selectedTypes.includes(type)}
-                          borderColor={colors.border}
-                          tintColor={colors.tint}
-                          backgroundColor={colors.background}
-                          textColor={colors.text}
-                          onPress={() => handleFilterToggle(type)}
-                        />
-                      ))}
-                    </ScrollView>
+                  <View
+                    style={[
+                      styles.stickyFilters,
+                      { backgroundColor: colors.surface },
+                    ]}
+                  >
+                    <View style={styles.filterScrollContainer}>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.filterRow}
+                      >
+                        {/* "Tous" toggle chip */}
+                        <TouchableOpacity
+                          style={[
+                            styles.filterChip,
+                            { borderColor: colors.tint, borderWidth: 0 },
+                            allSelected && { backgroundColor: `${colors.tint}1A` },
+                          ]}
+                          onPress={handleToggleAll}
+                          activeOpacity={0.8}
+                          accessibilityRole="button"
+                          accessibilityLabel={allSelected ? "Désélectionner tous les filtres" : "Sélectionner tous les filtres"}
+                          accessibilityState={{ selected: allSelected }}
+                        >
+                          <Ionicons
+                            name={allSelected ? "checkmark-circle" : "ellipse-outline"}
+                            size={14}
+                            color={allSelected ? colors.tint : colors.secondary}
+                          />
+                          <Text
+                            style={[
+                              styles.filterChipText,
+                              { color: allSelected ? colors.tint : colors.secondary },
+                            ]}
+                          >
+                            Tous
+                          </Text>
+                        </TouchableOpacity>
+
+                        {ALL_FILTERS.map((type) => (
+                          <FilterChip
+                            key={type}
+                            type={type}
+                            isActive={selectedTypes.includes(type)}
+                            textColor={colors.text}
+                            count={filterCounts[type]}
+                            onPress={() => handleFilterToggle(type)}
+                          />
+                        ))}
+                      </ScrollView>
+
+                      {/* Fade gradient right edge */}
+                      <LinearGradient
+                        colors={[`${colors.surface}00`, colors.surface]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.filterFadeRight}
+                        pointerEvents="none"
+                      />
+                    </View>
                   </View>
                 )}
                 stickyTabs
@@ -1628,27 +1610,17 @@ export default function ChronoScreen() {
                 ListFooterComponent={
                   sections.length === 0 ? (
                     <View style={styles.emptyState}>
-                      <View
-                        style={[
-                          styles.emptyIconCircle,
-                          { borderColor: colors.border },
-                        ]}
-                      >
-                        <FontAwesome
-                          name="calendar-xmark"
-                          size={32}
-                          color={colors.secondary}
-                        />
-                      </View>
-                      <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                        Aucun événement
-                      </Text>
+                      <Ionicons
+                        name="calendar-outline"
+                        size={64}
+                        color={colors.secondary}
+                      />
                       <Text
                         style={[styles.emptyText, { color: colors.secondary }]}
                       >
                         {selectedTypes.length === 0
-                          ? "Selectionnez au moins un type pour afficher la timeline."
-                          : "Aucun evenement pour ces filtres."}
+                          ? "Sélectionnez au moins un type pour afficher la timeline."
+                          : "Aucun événement pour ces filtres."}
                       </Text>
                     </View>
                   ) : null
@@ -1688,14 +1660,12 @@ export default function ChronoScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   safeArea: {
     flex: 1,
   },
   stickyContainer: {
     paddingTop: 0,
-    backgroundColor: "#f8f9fa",
   },
   headerRow: {
     flexDirection: "row",
@@ -1715,10 +1685,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     borderWidth: 1,
-    borderColor: "#e1e4e8",
     borderRadius: 20,
     padding: 4,
-    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1726,8 +1694,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 16,
-    // borderWidth: 1,
-    // backgroundColor: "#f8f9fa",
   },
   rangeChipText: {
     fontSize: 13,
@@ -1745,7 +1711,18 @@ const styles = StyleSheet.create({
     height: FILTERS_HEIGHT + FILTERS_TOP_OFFSET,
     justifyContent: "flex-end",
     paddingTop: FILTERS_TOP_OFFSET,
-    backgroundColor: "#f8f9fa",
+  },
+  filterScrollContainer: {
+    flex: 1,
+    position: "relative",
+    justifyContent: "center",
+  },
+  filterFadeRight: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 32,
   },
   filterChip: {
     flexDirection: "row",
@@ -1760,6 +1737,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  filterChipBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+    marginLeft: 2,
+  },
+  filterChipBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
   content: {
     flex: 1,
   },
@@ -1770,9 +1761,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
     paddingTop: LIST_PADDING_TOP,
-  },
-  listContentEmpty: {
-    flexGrow: 1,
   },
   sectionHeader: {
     marginHorizontal: -20,
@@ -1860,30 +1848,15 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "#f1f3f5",
   },
   cardTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  sleepInlineIcon: {
-    minWidth: 28,
-    height: 24,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   cardTitle: {
     fontSize: 15,
     fontWeight: "700",
-  },
-  cardMoodEmoji: {
-    fontSize: 16,
-  },
-  cardTime: {
-    fontSize: 12,
-    fontWeight: "600",
   },
   cardTimeLeft: {
     width: 42,
@@ -1943,19 +1916,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 32,
     gap: 12,
-  },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
   },
   emptyText: {
     fontSize: 13,

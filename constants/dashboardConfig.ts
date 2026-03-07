@@ -6,6 +6,7 @@ import { eventColors } from "./eventColors";
 
 export interface EventConfigItem {
   label: string;
+  short: string;
   icon: { lib: "fa6" | "mci"; name: string };
   color: string;
 }
@@ -13,81 +14,103 @@ export interface EventConfigItem {
 export const EVENT_CONFIG: Record<string, EventConfigItem> = {
   tetee: {
     label: "Tétée",
+    short: "Tétée",
     icon: { lib: "fa6", name: "person-breastfeeding" },
     color: "#E91E63",
   },
   biberon: {
     label: "Biberon",
+    short: "Bib",
     icon: { lib: "mci", name: "baby-bottle" },
     color: "#FF5722",
   },
   solide: {
     label: "Repas solide",
+    short: "Solide",
     icon: { lib: "fa6", name: "bowl-food" },
     color: "#8BC34A",
   },
   pompage: {
     label: "Pompage",
+    short: "Pompe",
     icon: { lib: "fa6", name: "pump-medical" },
     color: "#28a745",
   },
   croissance: {
     label: "Croissance",
+    short: "Croiss.",
     icon: { lib: "fa6", name: "seedling" },
     color: "#8BCF9B",
   },
+  couche: {
+    label: "Couche",
+    short: "Couche",
+    icon: { lib: "fa6", name: "baby" },
+    color: "#4A90E2",
+  },
   sommeil: {
     label: "Sommeil",
+    short: "Sommeil",
     icon: { lib: "fa6", name: "bed" },
     color: "#6f42c1",
   },
   bain: {
     label: "Bain",
+    short: "Bain",
     icon: { lib: "fa6", name: "bath" },
     color: "#3b82f6",
   },
   temperature: {
     label: "Température",
+    short: "Temp",
     icon: { lib: "fa6", name: "temperature-half" },
     color: "#e03131",
   },
   medicament: {
     label: "Médicament",
+    short: "Médoc",
     icon: { lib: "fa6", name: "pills" },
     color: "#2f9e44",
   },
   symptome: {
     label: "Symptôme",
+    short: "Sympt.",
     icon: { lib: "fa6", name: "virus" },
     color: "#f59f00",
   },
   miction: {
     label: "Miction",
+    short: "Pipi",
     icon: { lib: "fa6", name: "water" },
     color: "#17a2b8",
   },
   selle: {
     label: "Selle",
+    short: "Popo",
     icon: { lib: "fa6", name: "poop" },
     color: "#dc3545",
   },
   vitamine: {
     label: "Vitamine",
+    short: "Vitamine",
     icon: { lib: "fa6", name: "pills" },
     color: "#FF9800",
   },
   vaccin: {
     label: "Vaccin",
+    short: "Vaccin",
     icon: { lib: "fa6", name: "syringe" },
     color: "#9C27B0",
   },
   activite: {
     label: "Activité",
+    short: "Activité",
     icon: { lib: "fa6", name: "play-circle" },
     color: "#10b981",
   },
   jalon: {
     label: "Jalon",
+    short: "Jalon",
     icon: { lib: "fa6", name: "star" },
     color: eventColors.jalon.dark,
   },
