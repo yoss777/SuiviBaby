@@ -1,5 +1,5 @@
 import PompagesChart from "@/components/suivibaby/PompagesChart";
-import TeteesChart from "@/components/suivibaby/TeteesChart";
+import RepasChart from "@/components/suivibaby/RepasChart";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { Colors } from "@/constants/theme";
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
@@ -8,6 +8,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
   ecouterPompagesHybrid as ecouterPompages,
+  ecouterSolidesHybrid as ecouterSolides,
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -41,6 +42,7 @@ export default function StatsScreen() {
   const [pompages, setPompages] = useState<any[]>([]);
   const [teteesLoaded, setTeteesLoaded] = useState(false);
   const [biberonsLoaded, setBiberonsLoaded] = useState(false);
+  const [solidesLoaded, setSolidesLoaded] = useState(false);
   const [pompagesLoaded, setPompagesLoaded] = useState(false);
   const [teteesEmptyDelayDone, setTeteesEmptyDelayDone] = useState(false);
   const [pompagesEmptyDelayDone, setPompagesEmptyDelayDone] = useState(false);
@@ -59,14 +61,16 @@ export default function StatsScreen() {
   const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const rawTab = Array.isArray(tab) ? tab[0] : tab;
 
-  // Mapper le paramètre tab vers l'onglet stats + filtre TeteesChart
+  // Mapper le paramètre tab vers l'onglet stats + filtre RepasChart
   const initialTypeFilter = useMemo(
     () =>
       rawTab === "biberons"
         ? "biberons"
         : rawTab === "tetees"
           ? "seins"
-          : undefined,
+          : rawTab === "solides"
+            ? "solides"
+            : undefined,
     [rawTab],
   );
 
@@ -164,18 +168,20 @@ export default function StatsScreen() {
     setLoadError("Impossible de charger les données");
     setTeteesLoaded(true);
     setBiberonsLoaded(true);
+    setSolidesLoaded(true);
     setPompagesLoaded(true);
   }, []);
 
-  // écoute en temps réel des tetees ET biberons
+  // écoute en temps réel des tetees, biberons ET solides
   useEffect(() => {
     if (!activeChild?.id) return;
 
     let teteesData: any[] = [];
     let biberonsData: any[] = [];
+    let solidesData: any[] = [];
 
-    const mergeTeteesAndBiberons = () => {
-      const merged = [...teteesData, ...biberonsData].sort(
+    const mergeRepas = () => {
+      const merged = [...teteesData, ...biberonsData, ...solidesData].sort(
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
       setTetees(merged);
@@ -188,7 +194,7 @@ export default function StatsScreen() {
       (tetees) => {
         teteesData = tetees;
         setTeteesLoaded(true);
-        mergeTeteesAndBiberons();
+        mergeRepas();
       },
       { waitForServer: true },
       handleListenerError,
@@ -199,7 +205,18 @@ export default function StatsScreen() {
       (biberons) => {
         biberonsData = biberons;
         setBiberonsLoaded(true);
-        mergeTeteesAndBiberons();
+        mergeRepas();
+      },
+      { waitForServer: true },
+      handleListenerError,
+    );
+
+    const unsubscribeSolides = ecouterSolides(
+      activeChild.id,
+      (solides) => {
+        solidesData = solides;
+        setSolidesLoaded(true);
+        mergeRepas();
       },
       { waitForServer: true },
       handleListenerError,
@@ -208,6 +225,7 @@ export default function StatsScreen() {
     return () => {
       unsubscribeTetees();
       unsubscribeBiberons();
+      unsubscribeSolides();
     };
   }, [activeChild, refreshKey, handleListenerError]);
 
@@ -232,13 +250,14 @@ export default function StatsScreen() {
     setPompages([]);
     setTeteesLoaded(false);
     setBiberonsLoaded(false);
+    setSolidesLoaded(false);
     setPompagesLoaded(false);
     setTeteesEmptyDelayDone(false);
     setPompagesEmptyDelayDone(false);
     setLoadError(null);
   }, [activeChild?.id]);
 
-  const isTeteesLoading = !(teteesLoaded && biberonsLoaded);
+  const isTeteesLoading = !(teteesLoaded && biberonsLoaded && solidesLoaded);
   const isPompagesLoading = !pompagesLoaded;
 
   // End refresh spinner when ALL data arrives (tab-agnostic to avoid stuck spinner)
@@ -279,6 +298,7 @@ export default function StatsScreen() {
     setIsRefreshing(true);
     setTeteesLoaded(false);
     setBiberonsLoaded(false);
+    setSolidesLoaded(false);
     setPompagesLoaded(false);
     setLoadError(null);
     setRefreshKey((k) => k + 1);
@@ -312,8 +332,8 @@ export default function StatsScreen() {
           onPress={() => handleTabChange("tetees")}
           accessibilityRole="tab"
           accessibilityState={{ selected: selectedTab === "tetees" }}
-          accessibilityLabel="Onglet Tétées"
-          accessibilityHint="Afficher les statistiques des tétées et biberons"
+          accessibilityLabel="Onglet Repas"
+          accessibilityHint="Afficher les statistiques des repas"
         >
           <Text
             style={[
@@ -324,7 +344,7 @@ export default function StatsScreen() {
               },
             ]}
           >
-            Tétées
+            Repas
           </Text>
         </TouchableOpacity>
 
@@ -408,7 +428,7 @@ export default function StatsScreen() {
                 <IconPulseDots color={refreshTintColor} />
               </View>
             ) : (
-              <TeteesChart
+              <RepasChart
                 tetees={tetees}
                 initialTypeFilter={initialTypeFilter}
                 colorScheme={colorScheme}

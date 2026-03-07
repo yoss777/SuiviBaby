@@ -1,4 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { MOMENT_REPAS_LABELS } from "@/constants/dashboardConfig";
@@ -7,15 +8,15 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { ecouterEvenementsHybrid } from "@/migration/eventsHybridService";
 import type { Event, EventType } from "@/services/eventsService";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { supprimerEvenement } from "@/services/eventsService";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
-import * as Haptics from "expo-haptics";
 import React, {
   useCallback,
   useEffect,
@@ -27,17 +28,16 @@ import {
   Animated,
   AppState,
   Image,
-  LayoutChangeEvent,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { runOnJS, useSharedValue } from "react-native-reanimated";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
-import { useHeaderRight } from "../../_layout";
 
 // ============================================
 // TYPES
@@ -595,7 +595,6 @@ interface RangeChipProps {
   backgroundColor: string;
   textColor: string;
   onPress: () => void;
-  compact?: boolean;
 }
 
 const RangeChip = React.memo(
@@ -607,12 +606,10 @@ const RangeChip = React.memo(
     backgroundColor,
     textColor,
     onPress,
-    compact = false,
   }: RangeChipProps) => (
     <TouchableOpacity
       style={[
         styles.rangeChip,
-        compact && styles.rangeChipCompact,
         { borderColor },
         isActive && { backgroundColor: "#f8f9fa" },
       ]}
@@ -622,7 +619,6 @@ const RangeChip = React.memo(
       <Text
         style={[
           styles.rangeChipText,
-          compact && styles.rangeChipTextCompact,
           { color: isActive ? tintColor : "#999999" },
         ]}
       >
@@ -713,7 +709,7 @@ interface TimelineCardProps {
   backgroundColor: string;
   textColor: string;
   secondaryTextColor: string;
-  onLongPress?: () => void;
+  onPress?: () => void;
   currentTime: Date;
 }
 
@@ -724,7 +720,7 @@ const TimelineCard = React.memo(
     backgroundColor,
     textColor,
     secondaryTextColor,
-    onLongPress,
+    onPress,
     currentTime,
   }: TimelineCardProps) => {
     const date = toDate(event.date);
@@ -873,10 +869,9 @@ const TimelineCard = React.memo(
         </View>
         <TouchableOpacity
           style={[styles.card, { backgroundColor, borderColor }]}
-          activeOpacity={0.9}
-          delayLongPress={250}
-          onLongPress={onLongPress}
-          disabled={!onLongPress}
+          activeOpacity={0.85}
+          onPress={onPress}
+          disabled={!onPress}
         >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
@@ -896,21 +891,12 @@ const TimelineCard = React.memo(
                 <Text style={styles.cardMoodEmoji}>{moodEmoji}</Text>
               ) : null} */}
             </View>
-            <View style={styles.cardHeaderActions}>
-              {isJalon && event.photos?.[0] ? (
-                <Image
-                  source={{ uri: event.photos[0] }}
-                  style={styles.cardThumb}
-                />
-              ) : null}
-              {onLongPress && (
-                <FontAwesome
-                  name="pen-to-square"
-                  size={14}
-                  color={secondaryTextColor}
-                />
-              )}
-            </View>
+            {isJalon && event.photos?.[0] ? (
+              <Image
+                source={{ uri: event.photos[0] }}
+                style={styles.cardThumb}
+              />
+            ) : null}
           </View>
           {!isSolide && (details || isOngoingSleep) && (
             <Text style={[styles.cardDetails, { color: secondaryTextColor }]}>
@@ -959,6 +945,24 @@ const TimelineCard = React.memo(
 );
 TimelineCard.displayName = "TimelineCard";
 
+const DeleteAction = React.memo(function DeleteAction({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Supprimer cet événement"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={styles.deleteActionText}>Supprimer</Text>
+    </Pressable>
+  );
+});
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -966,7 +970,6 @@ TimelineCard.displayName = "TimelineCard";
 export default function ChronoScreen() {
   const { activeChild } = useBaby();
   const { firebaseUser } = useAuth();
-  const { setHeaderRight } = useHeaderRight();
   const { openSheet: openSheetRaw } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
   const sheetOwnerId = "chrono";
@@ -984,16 +987,14 @@ export default function ChronoScreen() {
   const hasInitialLoad = useRef(false);
   const hasPrefetchedMore = useRef(false);
   const [infoModalMessage, setInfoModalMessage] = useState<string | null>(null);
-  const [showRangeInHeader, setShowRangeInHeader] = useState(false);
-  const [headerRangeVisible, setHeaderRangeVisible] = useState(false);
-  const showRangeRef = useRef(false);
-  const headerHeight = useSharedValue(0);
-  const headerScrollState = useSharedValue(0);
-  const headerOwnerId = useRef(`chrono-${Math.random().toString(36).slice(2)}`);
-  const headerRangeOpacity = useRef(new Animated.Value(0)).current;
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
+  const { showToast } = useToast();
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    visible: boolean;
+    event: Event | null;
+  }>({ visible: false, event: null });
 
   const triggerRefresh = useCallback(() => {
     setRefreshTick((prev) => prev + 1);
@@ -1025,35 +1026,6 @@ export default function ChronoScreen() {
       border: `${Colors[colorScheme].tabIconDefault}20`,
     }),
     [colorScheme],
-  );
-
-  const updateHeaderRangeVisibility = useCallback((next: boolean) => {
-    if (showRangeRef.current === next) return;
-    showRangeRef.current = next;
-    setShowRangeInHeader(next);
-  }, []);
-
-  const handleHeaderLayout = useCallback((event: LayoutChangeEvent) => {
-    const height = event.nativeEvent.layout.height;
-    if (Math.abs(headerHeight.value - height) > 1) {
-      headerHeight.value = height;
-    }
-  }, []);
-
-  const handleScroll = useCallback(
-    (event: { contentOffset: { y: number } }) => {
-      "worklet";
-      if (headerHeight.value <= 0) {
-        return;
-      }
-      const threshold = Math.max(headerHeight.value - 1, 0);
-      const next = event.contentOffset.y >= threshold ? 1 : 0;
-      if (headerScrollState.value !== next) {
-        headerScrollState.value = next;
-        runOnJS(updateHeaderRangeVisibility)(next === 1);
-      }
-    },
-    [updateHeaderRangeVisibility],
   );
 
   const updateCurrentDay = useCallback(() => {
@@ -1237,7 +1209,6 @@ export default function ChronoScreen() {
   // Handlers with useCallback
   const handleRangeChange = useCallback(
     (value: RangeOption) => {
-      // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       if (value > maxRange) {
         setMaxRange(value);
         setIsRefreshing(true);
@@ -1254,69 +1225,7 @@ export default function ChronoScreen() {
     setIsRefreshing(true);
   }, [maxRange]);
 
-  useEffect(() => {
-    if (showRangeInHeader) {
-      if (!headerRangeVisible) {
-        setHeaderRangeVisible(true);
-      }
-      Animated.timing(headerRangeOpacity, {
-        toValue: 1,
-        duration: 180,
-        useNativeDriver: true,
-      }).start();
-      return;
-    }
-    Animated.timing(headerRangeOpacity, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        setHeaderRangeVisible(false);
-      }
-    });
-  }, [headerRangeOpacity, headerRangeVisible, showRangeInHeader]);
-
-  useFocusEffect(
-    useCallback(() => {
-      const headerButtons = (
-        <Animated.View
-          style={[styles.headerRangeRow, { opacity: headerRangeOpacity }]}
-          pointerEvents={headerRangeVisible ? "auto" : "none"}
-        >
-          {RANGE_OPTIONS.map((value) => (
-            <RangeChip
-              key={value}
-              value={value}
-              isActive={range === value}
-              borderColor={colors.border}
-              tintColor={colors.tint}
-              backgroundColor={colors.background}
-              textColor={colors.text}
-              onPress={() => handleRangeChange(value)}
-              compact
-            />
-          ))}
-        </Animated.View>
-      );
-
-      setHeaderRight(headerButtons, headerOwnerId.current);
-
-      return () => {
-        setHeaderRight(null, headerOwnerId.current);
-      };
-    }, [
-      colors,
-      handleRangeChange,
-      headerRangeOpacity,
-      headerRangeVisible,
-      range,
-      setHeaderRight,
-    ]),
-  );
-
   const handleFilterToggle = useCallback((type: FilterType) => {
-    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedTypes((prev) =>
       prev.includes(type)
         ? prev.filter((value) => value !== type)
@@ -1562,13 +1471,26 @@ export default function ChronoScreen() {
     [openSheet],
   );
 
-  const handleEventLongPress = useCallback(
-    (event: Event) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      handleEdit(event);
-    },
-    [handleEdit],
-  );
+  const handleEventDelete = useCallback((event: Event) => {
+    setDeleteConfirm({ visible: true, event });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!activeChild?.id || !deleteConfirm.event?.id) return;
+    const eventId = deleteConfirm.event.id;
+    setDeleteConfirm({ visible: false, event: null });
+    try {
+      await supprimerEvenement(activeChild.id, eventId);
+      showToast("Événement supprimé");
+      triggerRefresh();
+    } catch {
+      showToast("Impossible de supprimer cet événement");
+    }
+  }, [activeChild?.id, deleteConfirm.event, showToast, triggerRefresh]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirm({ visible: false, event: null });
+  }, []);
 
   const closeInfoModal = useCallback(() => {
     setInfoModalMessage(null);
@@ -1595,17 +1517,29 @@ export default function ChronoScreen() {
   // Render item
   const renderItem = useCallback(
     ({ item }: { item: Event }) => (
-      <TimelineCard
-        event={item}
-        borderColor={colors.border}
-        backgroundColor={colors.background}
-        textColor={colors.text}
-        secondaryTextColor={colors.secondary}
-        onLongPress={canManageContent ? () => handleEventLongPress(item) : undefined}
-        currentTime={currentTime}
-      />
+      <ReanimatedSwipeable
+        renderRightActions={
+          canManageContent && item.id
+            ? () => <DeleteAction onPress={() => handleEventDelete(item)} />
+            : undefined
+        }
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
+        enabled={canManageContent && !!item.id}
+      >
+        <TimelineCard
+          event={item}
+          borderColor={colors.border}
+          backgroundColor={colors.background}
+          textColor={colors.text}
+          secondaryTextColor={colors.secondary}
+          onPress={canManageContent ? () => handleEdit(item) : undefined}
+          currentTime={currentTime}
+        />
+      </ReanimatedSwipeable>
     ),
-    [canManageContent, colors, handleEventLongPress, currentTime],
+    [canManageContent, colors, handleEdit, handleEventDelete, currentTime],
   );
 
   // Key extractor
@@ -1633,9 +1567,6 @@ export default function ChronoScreen() {
                 keyExtractor={keyExtractor}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.listContent}
-                onHeaderLayout={handleHeaderLayout}
-                onScroll={handleScroll}
-                scrollEventThrottle={16}
                 windowSize={7}
                 initialNumToRender={12}
                 maxToRenderPerBatch={8}
@@ -1735,6 +1666,17 @@ export default function ChronoScreen() {
         textColor={colors.text}
         onClose={closeInfoModal}
       />
+      <ConfirmModal
+        visible={deleteConfirm.visible}
+        title="Supprimer cet événement ?"
+        message="Cette action est irréversible."
+        confirmText="Supprimer"
+        backgroundColor={colors.background}
+        textColor={colors.text}
+        confirmButtonColor="#dc3545"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
     </ThemedView>
   );
 }
@@ -1765,11 +1707,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
   },
-  headerRangeRow: {
-    flexDirection: "row",
-    gap: 6,
-    marginRight: 20,
-  },
   title: {
     fontSize: 24,
     fontWeight: "700",
@@ -1792,17 +1729,9 @@ const styles = StyleSheet.create({
     // borderWidth: 1,
     // backgroundColor: "#f8f9fa",
   },
-  rangeChipCompact: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
   rangeChipText: {
     fontSize: 13,
     fontWeight: "600",
-  },
-  rangeChipTextCompact: {
-    fontSize: 12,
   },
   listPadding: {
     paddingTop: 0,
@@ -1927,11 +1856,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  cardHeaderActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
   cardThumb: {
     width: 32,
     height: 32,
@@ -2036,5 +1960,20 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 13,
     textAlign: "center",
+  },
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    marginBottom: 14,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

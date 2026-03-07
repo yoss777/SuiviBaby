@@ -8,7 +8,12 @@ import {
   useEffect,
   useState,
 } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
@@ -40,27 +45,19 @@ export const useHeaderLeft = () => useContext(HeaderLeftContext);
 function BabyHeaderTitle() {
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
+
   return (
-    <View
+    <Text
+      numberOfLines={1}
+      ellipsizeMode="tail"
       style={{
-        flex: 1,
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        width: "100%",
+        color: Colors[colorScheme].text,
+        fontSize: 17,
+        fontWeight: "600",
       }}
     >
-      <Text
-        style={{
-          color: Colors[colorScheme].text,
-          fontSize: 17,
-          fontWeight: "600",
-        }}
-      >
-        {activeChild?.name || "Suivi Enfant"}
-      </Text>
-      {/* <VoiceCommandButton size={18} color="#4A90E2" showTestToggle={true} /> */}
-    </View>
+      {activeChild?.name || "Suivi Enfant"}
+    </Text>
   );
 }
 
@@ -195,6 +192,7 @@ export default function DrawerLayout() {
               name="baby"
               options={{
                 headerTitle: () => <BabyHeaderTitle />,
+                headerTitleAlign: "center",
                 drawerItemStyle: { display: "none" },
                 headerRight: headerRightState.component
                   ? () => headerRightState.component

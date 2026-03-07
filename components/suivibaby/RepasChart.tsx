@@ -1,4 +1,5 @@
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   Canvas,
@@ -33,7 +34,7 @@ import Animated, {
 
 type Props = {
   tetees: any[];
-  initialTypeFilter?: "tous" | "seins" | "biberons";
+  initialTypeFilter?: "tous" | "seins" | "biberons" | "solides";
   colorScheme?: "light" | "dark";
   screenWidth?: number;
 };
@@ -60,7 +61,7 @@ function addWeeks(date: Date, weeks: number) {
   return d;
 }
 
-export default function TeteesChart({
+export default function RepasChart({
   tetees,
   initialTypeFilter,
   colorScheme = "light",
@@ -74,7 +75,7 @@ export default function TeteesChart({
   const [viewMode, setViewMode] = useState<"quantity" | "frequency">(
     "frequency",
   );
-  const [typeFilter, setTypeFilter] = useState<"tous" | "seins" | "biberons">(
+  const [typeFilter, setTypeFilter] = useState<"tous" | "seins" | "biberons" | "solides">(
     initialTypeFilter ?? "tous",
   );
   const [currentWeek, setCurrentWeek] = useState<Date>(
@@ -102,7 +103,7 @@ export default function TeteesChart({
   }, [initialTypeFilter]);
 
   useEffect(() => {
-    if (typeFilter === "seins") {
+    if (typeFilter === "seins" || typeFilter === "solides") {
       setViewMode("frequency");
     }
   }, [typeFilter]);
@@ -125,6 +126,9 @@ export default function TeteesChart({
     if (typeFilter === "biberons") {
       return type === "biberons" || type === "biberon";
     }
+    if (typeFilter === "solides") {
+      return type === "solide";
+    }
     return false;
   });
 
@@ -136,6 +140,7 @@ export default function TeteesChart({
       seinsCount: number;
       biberonsCount: number;
       biberonsQuantity: number;
+      solidesCount: number;
     }
   > = {
     Lun: {
@@ -144,6 +149,7 @@ export default function TeteesChart({
       seinsCount: 0,
       biberonsCount: 0,
       biberonsQuantity: 0,
+      solidesCount: 0,
     },
     Mar: {
       quantity: 0,
@@ -151,6 +157,7 @@ export default function TeteesChart({
       seinsCount: 0,
       biberonsCount: 0,
       biberonsQuantity: 0,
+      solidesCount: 0,
     },
     Mer: {
       quantity: 0,
@@ -158,6 +165,7 @@ export default function TeteesChart({
       seinsCount: 0,
       biberonsCount: 0,
       biberonsQuantity: 0,
+      solidesCount: 0,
     },
     Jeu: {
       quantity: 0,
@@ -165,6 +173,7 @@ export default function TeteesChart({
       seinsCount: 0,
       biberonsCount: 0,
       biberonsQuantity: 0,
+      solidesCount: 0,
     },
     Ven: {
       quantity: 0,
@@ -172,6 +181,7 @@ export default function TeteesChart({
       seinsCount: 0,
       biberonsCount: 0,
       biberonsQuantity: 0,
+      solidesCount: 0,
     },
     Sam: {
       quantity: 0,
@@ -179,6 +189,7 @@ export default function TeteesChart({
       seinsCount: 0,
       biberonsCount: 0,
       biberonsQuantity: 0,
+      solidesCount: 0,
     },
     Dim: {
       quantity: 0,
@@ -186,6 +197,7 @@ export default function TeteesChart({
       seinsCount: 0,
       biberonsCount: 0,
       biberonsQuantity: 0,
+      solidesCount: 0,
     },
   };
 
@@ -205,6 +217,8 @@ export default function TeteesChart({
           weeklyData[jourKey].biberonsCount += 1;
           weeklyData[jourKey].biberonsQuantity += quantite;
           weeklyData[jourKey].quantity += quantite;
+        } else if (type === "solide") {
+          weeklyData[jourKey].solidesCount += 1;
         }
       }
     }
@@ -223,24 +237,34 @@ export default function TeteesChart({
     (acc, j) => acc + weeklyData[j].biberonsCount,
     0,
   );
+  const totalSolidesCount = jours.reduce(
+    (acc, j) => acc + weeklyData[j].solidesCount,
+    0,
+  );
   const totalCountLabel =
     typeFilter === "tous"
       ? "Repas"
       : typeFilter === "biberons"
         ? "Biberon"
-        : "Tétée";
+        : typeFilter === "solides"
+          ? "Solide"
+          : "Tétée";
   const frequencyUnit =
     typeFilter === "tous"
       ? "repas"
       : typeFilter === "biberons"
         ? "biberons"
-        : "tétées";
+        : typeFilter === "solides"
+          ? "solides"
+          : "tétées";
   const recordLabel =
     typeFilter === "tous"
       ? "Record: repas"
       : typeFilter === "biberons"
         ? "Record: biberon"
-        : "Record: tétée";
+        : typeFilter === "solides"
+          ? "Record: solide"
+          : "Record: tétée";
 
   const daysWithCount = countValues.filter((v) => v > 0).length;
   const daysWithQuantity = quantityValues.filter((v) => v > 0).length;
@@ -268,7 +292,11 @@ export default function TeteesChart({
     ...jours.map((j) => weeklyData[j].biberonsCount),
     0,
   );
-  const groupedMax = Math.max(maxSeinsCount, maxBiberonsCount, 0);
+  const maxSolidesCount = Math.max(
+    ...jours.map((j) => weeklyData[j].solidesCount),
+    0,
+  );
+  const groupedMax = Math.max(maxSeinsCount, maxBiberonsCount, maxSolidesCount, 0);
   const currentValues = viewMode === "quantity" ? quantityValues : countValues;
   const isGrouped =
     typeFilter === "tous" && viewMode === "frequency" && isGroupedView;
@@ -291,12 +319,15 @@ export default function TeteesChart({
         const total = countValues[index];
         const seins = weeklyData[jour].seinsCount;
         const biberons = weeklyData[jour].biberonsCount;
+        const solides = weeklyData[jour].solidesCount;
         const biberonsHeight =
           currentMax > 0 ? (biberons / currentMax) * chartAreaHeight : 0;
         const seinsHeight =
           currentMax > 0 ? (seins / currentMax) * chartAreaHeight : 0;
+        const solidesHeight =
+          currentMax > 0 ? (solides / currentMax) * chartAreaHeight : 0;
         const baseY = CHART_PADDING.top + chartAreaHeight;
-        const topY = baseY - Math.max(biberonsHeight, seinsHeight, 2);
+        const topY = baseY - Math.max(biberonsHeight, seinsHeight, solidesHeight, 2);
 
         return {
           jour,
@@ -304,11 +335,12 @@ export default function TeteesChart({
           x,
           width: barWidth,
           y: topY,
-          height: Math.max(Math.max(biberonsHeight, seinsHeight), 2),
+          height: Math.max(Math.max(biberonsHeight, seinsHeight, solidesHeight), 2),
           isMax: total === maxCount && total > 0,
           segments: {
             biberonsHeight,
             seinsHeight,
+            solidesHeight,
           },
         };
       }
@@ -317,13 +349,16 @@ export default function TeteesChart({
         const total = countValues[index];
         const seins = weeklyData[jour].seinsCount;
         const biberons = weeklyData[jour].biberonsCount;
-        const totalParts = seins + biberons;
+        const solides = weeklyData[jour].solidesCount;
+        const totalParts = seins + biberons + solides;
         const barHeight =
           currentMax > 0 ? (total / currentMax) * chartAreaHeight : 0;
         const biberonsHeight =
           totalParts > 0 ? (biberons / totalParts) * barHeight : 0;
         const seinsHeight =
           totalParts > 0 ? (seins / totalParts) * barHeight : 0;
+        const solidesHeight =
+          totalParts > 0 ? (solides / totalParts) * barHeight : 0;
         const baseY = CHART_PADDING.top + chartAreaHeight;
 
         return {
@@ -337,6 +372,7 @@ export default function TeteesChart({
           segments: {
             biberonsHeight,
             seinsHeight,
+            solidesHeight,
           },
         };
       }
@@ -352,6 +388,8 @@ export default function TeteesChart({
         color = C.green;
       } else if (typeFilter === "biberons") {
         color = C.cyan;
+      } else if (typeFilter === "solides") {
+        color = C.orange;
       } else if (value === currentMax && value > 0) {
         color = C.gold;
       }
@@ -439,7 +477,7 @@ export default function TeteesChart({
     >
       {isEmpty ? (
         <View style={styles.emptyContainer}>
-          <FontAwesome name="baby" size={64} color={nc.textMuted} />
+          <FontAwesome name="utensils" size={64} color={nc.textMuted} />
           <Text style={[styles.emptyTitle, { color: nc.textNormal }]}>
             Aucune donnée disponible
           </Text>
@@ -473,11 +511,11 @@ export default function TeteesChart({
             <View
               style={[styles.iconBadge, { backgroundColor: C.iconBadgeBg }]}
             >
-              <FontAwesome name="baby" size={18} color={C.blue} />
+              <FontAwesome name="utensils" size={18} color={C.blue} />
             </View>
             <View style={styles.headerText}>
               <Text style={[styles.sectionTitle, { color: C.ink }]}>
-                Statistiques des tétées
+                Statistiques des repas
               </Text>
               <Text style={[styles.sectionSubtitle, { color: C.muted }]}>
                 {`${start.toLocaleDateString("fr-FR", {
@@ -541,9 +579,10 @@ export default function TeteesChart({
             ]}
           >
             {[
-              { key: "tous", label: "Tous", icon: "baby" },
+              { key: "tous", label: "Tous", icon: "utensils" },
               { key: "seins", label: "Tétées", icon: "person-breastfeeding" },
-              { key: "biberons", label: "Biberons", icon: "jar-wheat" },
+              { key: "biberons", label: "Bib.", icon: "baby-bottle", iconType: "mc" as const },
+              { key: "solides", label: "Solides", icon: "bowl-food" },
             ].map((type) => {
               const isActive = typeFilter === type.key;
               return (
@@ -564,14 +603,22 @@ export default function TeteesChart({
                   accessibilityState={{ selected: isActive }}
                   accessibilityLabel={`Filtre ${type.label}`}
                 >
-                  <FontAwesome
-                    name={type.icon}
-                    size={14}
-                    color={isActive ? C.blue : C.muted}
-                  />
+                  {"iconType" in type && type.iconType === "mc" ? (
+                    <MaterialCommunityIcons
+                      name={type.icon as any}
+                      size={16}
+                      color={isActive ? C.blue : C.muted}
+                    />
+                  ) : (
+                    <FontAwesome
+                      name={type.icon}
+                      size={16}
+                      color={isActive ? C.blue : C.muted}
+                    />
+                  )}
                   <Text
                     style={[
-                      styles.typeFilterText,
+                      styles.typeFilterLabel,
                       { color: C.muted },
                       isActive && { color: C.ink, fontWeight: "700" },
                     ]}
@@ -589,7 +636,7 @@ export default function TeteesChart({
               { backgroundColor: C.filterBg },
             ]}
           >
-            {typeFilter !== "seins" && (
+            {typeFilter !== "seins" && typeFilter !== "solides" && (
               <TouchableOpacity
                 style={[
                   styles.toggleButton,
@@ -686,7 +733,7 @@ export default function TeteesChart({
                 {dailyAverageCount}
               </Text>
             </View>
-            {viewMode === "quantity" && typeFilter !== "seins" && (
+            {viewMode === "quantity" && typeFilter !== "seins" && typeFilter !== "solides" && (
               <View
                 style={[
                   styles.metricCard,
@@ -725,6 +772,17 @@ export default function TeteesChart({
                   />
                   <Text style={[styles.legendLabel, { color: C.muted }]}>
                     Biberons
+                  </Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View
+                    style={[
+                      styles.legendSwatch,
+                      { backgroundColor: C.orange },
+                    ]}
+                  />
+                  <Text style={[styles.legendLabel, { color: C.muted }]}>
+                    Solides
                   </Text>
                 </View>
               </View>
@@ -809,12 +867,15 @@ export default function TeteesChart({
                     const baseY = CHART_PADDING.top + chartAreaHeight;
                     const biberonsHeight = bar.segments.biberonsHeight;
                     const seinsHeight = bar.segments.seinsHeight;
-                    const groupGap = 4;
-                    const subWidth = Math.max((bar.width - groupGap) / 2, 2);
+                    const solidesHeight = bar.segments.solidesHeight ?? 0;
+                    const groupGap = 2;
+                    const subWidth = Math.max((bar.width - groupGap * 2) / 3, 2);
                     const seinsX = bar.x;
                     const biberonsX = bar.x + subWidth + groupGap;
+                    const solidesX = bar.x + (subWidth + groupGap) * 2;
                     const seinsY = baseY - seinsHeight;
                     const biberonsY = baseY - biberonsHeight;
+                    const solidesY = baseY - solidesHeight;
                     return (
                       <Group key={`bar-${index}`}>
                         {seinsHeight > 0 && (
@@ -823,7 +884,7 @@ export default function TeteesChart({
                             y={seinsY}
                             width={subWidth}
                             height={Math.max(seinsHeight, 2)}
-                            r={6}
+                            r={4}
                             color={C.green}
                           />
                         )}
@@ -833,8 +894,18 @@ export default function TeteesChart({
                             y={biberonsY}
                             width={subWidth}
                             height={Math.max(biberonsHeight, 2)}
-                            r={6}
+                            r={4}
                             color={C.cyan}
+                          />
+                        )}
+                        {solidesHeight > 0 && (
+                          <RoundedRect
+                            x={solidesX}
+                            y={solidesY}
+                            width={subWidth}
+                            height={Math.max(solidesHeight, 2)}
+                            r={4}
+                            color={C.orange}
                           >
                             {bar.isMax && (
                               <Shadow
@@ -853,9 +924,11 @@ export default function TeteesChart({
                   if (isStacked && bar.segments) {
                     const baseY = CHART_PADDING.top + chartAreaHeight;
                     const biberonsHeight = bar.segments.biberonsHeight;
+                    const solidesHeight = bar.segments.solidesHeight ?? 0;
                     const seinsHeight = bar.segments.seinsHeight;
                     const biberonsY = baseY - biberonsHeight;
-                    const seinsY = baseY - biberonsHeight - seinsHeight;
+                    const solidesY = baseY - biberonsHeight - solidesHeight;
+                    const seinsY = baseY - biberonsHeight - solidesHeight - seinsHeight;
                     return (
                       <Group key={`bar-${index}`}>
                         {biberonsHeight > 0 && (
@@ -866,6 +939,16 @@ export default function TeteesChart({
                             height={Math.max(biberonsHeight, 2)}
                             r={6}
                             color={C.cyan}
+                          />
+                        )}
+                        {solidesHeight > 0 && (
+                          <RoundedRect
+                            x={bar.x}
+                            y={solidesY}
+                            width={bar.width}
+                            height={Math.max(solidesHeight, 2)}
+                            r={6}
+                            color={C.orange}
                           />
                         )}
                         {seinsHeight > 0 && (
@@ -940,20 +1023,32 @@ export default function TeteesChart({
                 </Text>
                 <Text style={[styles.tooltipValue, { color: C.blueDeep }]}>
                   {bars[selectedBarIndex].value}{" "}
-                  {viewMode === "quantity" ? "ml" : frequencyUnit}
+                  {viewMode === "quantity"
+                    ? "ml"
+                    : typeFilter === "tous"
+                      ? "repas"
+                      : typeFilter === "biberons"
+                        ? bars[selectedBarIndex].value > 1 ? "biberons" : "biberon"
+                        : typeFilter === "solides"
+                          ? bars[selectedBarIndex].value > 1 ? "solides" : "solide"
+                          : bars[selectedBarIndex].value > 1 ? "tétées" : "tétée"}
                 </Text>
                 {typeFilter === "tous" && viewMode === "frequency" && (
                   <Text style={[styles.tooltipDetail, { color: C.muted }]}>
-                    {weeklyData[bars[selectedBarIndex].jour].seinsCount} tétée
+                    {weeklyData[bars[selectedBarIndex].jour].seinsCount}{" "}
                     {weeklyData[bars[selectedBarIndex].jour].seinsCount > 1
-                      ? "s"
-                      : ""}
+                      ? "tétées"
+                      : "tétée"}
                     {"\n"}
                     {weeklyData[bars[selectedBarIndex].jour].biberonsCount}{" "}
-                    biberon
                     {weeklyData[bars[selectedBarIndex].jour].biberonsCount > 1
-                      ? "s"
-                      : ""}
+                      ? "biberons"
+                      : "biberon"}
+                    {"\n"}
+                    {weeklyData[bars[selectedBarIndex].jour].solidesCount}{" "}
+                    {weeklyData[bars[selectedBarIndex].jour].solidesCount > 1
+                      ? "solides"
+                      : "solide"}
                   </Text>
                 )}
               </Animated.View>
@@ -1002,12 +1097,21 @@ export default function TeteesChart({
                   </Text>
                 </View>
                 <View style={styles.statItem}>
-                  <FontAwesome name="jar-wheat" size={14} color={C.cyan} />
+                  <MaterialCommunityIcons name="baby-bottle" size={14} color={C.cyan} />
                   <Text style={[styles.statValue, { color: C.cyan }]}>
                     {totalBiberonsCount}
                   </Text>
                   <Text style={[styles.statLabel, { color: C.muted }]}>
                     Biberon{totalBiberonsCount > 1 ? "s" : ""}
+                  </Text>
+                </View>
+                <View style={styles.statItem}>
+                  <FontAwesome name="bowl-food" size={14} color={C.orange} />
+                  <Text style={[styles.statValue, { color: C.orange }]}>
+                    {totalSolidesCount}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: C.muted }]}>
+                    Solide{totalSolidesCount > 1 ? "s" : ""}
                   </Text>
                 </View>
                 <View style={styles.statItem}>
@@ -1061,14 +1165,16 @@ export default function TeteesChart({
                       styles.statValue,
                       typeFilter === "seins"
                         ? { color: C.green }
-                        : { color: C.cyan },
+                        : typeFilter === "solides"
+                          ? { color: C.orange }
+                          : { color: C.cyan },
                     ]}
                   >
                     {totalWeekCount}
                   </Text>
                   <Text style={[styles.statLabel, { color: C.muted }]}>
                     {totalCountLabel}
-                    {totalWeekCount > 1 ? "s" : ""}
+                    {totalCountLabel !== "Repas" && totalWeekCount > 1 ? "s" : ""}
                   </Text>
                 </View>
                 <View style={styles.statItem}>
@@ -1077,7 +1183,9 @@ export default function TeteesChart({
                       styles.statValue,
                       typeFilter === "seins"
                         ? { color: C.green }
-                        : { color: C.cyan },
+                        : typeFilter === "solides"
+                          ? { color: C.orange }
+                          : { color: C.cyan },
                     ]}
                   >
                     {dailyAverageCount}
@@ -1114,16 +1222,24 @@ export default function TeteesChart({
                 <Text style={[styles.insightTitle, { color: C.blueDeep }]}>
                   {typeFilter === "tous"
                     ? "Aperçu global de la semaine"
-                    : `Aperçu ${typeFilter} de la semaine`}
+                    : typeFilter === "solides"
+                      ? "Aperçu solides de la semaine"
+                      : `Aperçu ${typeFilter} de la semaine`}
                 </Text>
                 <Text style={[styles.insightText, { color: C.insightText }]}>
                   {typeFilter === "tous"
-                    ? `Cette semaine: ${totalSeinsCount} tétée${totalSeinsCount > 1 ? "s" : ""} au sein, ${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s" : ""} (${totalWeekQuantity} ml au total). ${
-                        totalSeinsCount > totalBiberonsCount
-                          ? "L'allaitement domine cette semaine."
-                          : totalBiberonsCount > totalSeinsCount
-                            ? "Les biberons dominent cette semaine."
-                            : "Équilibre entre seins et biberons."
+                    ? `Cette semaine: ${totalSeinsCount} tétée${totalSeinsCount > 1 ? "s" : ""} au sein, ${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s" : ""}${totalSolidesCount > 0 ? `, ${totalSolidesCount} solide${totalSolidesCount > 1 ? "s" : ""}` : ""} (${totalWeekQuantity} ml de lait). ${
+                        (() => {
+                          const max = Math.max(totalSeinsCount, totalBiberonsCount, totalSolidesCount);
+                          if (max === 0) return "";
+                          if (totalSeinsCount === max && totalSeinsCount > totalBiberonsCount && totalSeinsCount > totalSolidesCount)
+                            return "L'allaitement domine cette semaine.";
+                          if (totalBiberonsCount === max && totalBiberonsCount > totalSeinsCount && totalBiberonsCount > totalSolidesCount)
+                            return "Les biberons dominent cette semaine.";
+                          if (totalSolidesCount === max && totalSolidesCount > totalSeinsCount && totalSolidesCount > totalBiberonsCount)
+                            return "Les solides dominent cette semaine.";
+                          return "Alimentation variée cette semaine.";
+                        })()
                       }`
                     : typeFilter === "seins"
                       ? `${totalSeinsCount} tétée${totalSeinsCount > 1 ? "s" : ""} cette semaine, soit ${dailyAverageCount} par jour en moyenne. ${
@@ -1131,7 +1247,13 @@ export default function TeteesChart({
                             ? `Le ${bestCountDay} a été particulièrement actif.`
                             : "Rythme régulier cette semaine."
                         }`
-                      : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s au total" : ""}). Moyenne de ${dailyAverageQuantity} ml par jour.`}
+                      : typeFilter === "solides"
+                        ? `${totalSolidesCount} repas solide${totalSolidesCount > 1 ? "s" : ""} cette semaine, soit ${dailyAverageCount} par jour en moyenne. ${
+                            maxCount > dailyAverageCount * 1.5
+                              ? `Le ${bestCountDay} a été particulièrement actif.`
+                              : "Rythme régulier cette semaine."
+                          }`
+                        : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s au total" : ""}). Moyenne de ${dailyAverageQuantity} ml par jour.`}
                 </Text>
               </View>
             </View>
@@ -1264,19 +1386,19 @@ const styles = StyleSheet.create({
   },
   typeFilterButton: {
     flex: 1,
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 4,
     borderRadius: 10,
-    gap: 6,
+    gap: 3,
   },
   typeFilterButtonActive: {
     borderWidth: 1,
   },
-  typeFilterText: {
-    fontSize: 13,
+  typeFilterLabel: {
+    fontSize: 10,
     fontWeight: "600",
   },
   toggleContainer: {
