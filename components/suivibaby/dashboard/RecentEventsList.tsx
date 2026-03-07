@@ -420,19 +420,19 @@ function RecentEventsListComponent({
                   textColor={textColor}
                 />
               )}
-              <ReanimatedSwipeable
-                containerStyle={styles.swipeableContainer}
-                renderRightActions={
-                  onEventDelete && event.id
-                    ? () => <DeleteAction onPress={() => onEventDelete(event)} />
-                    : undefined
-                }
-                friction={2}
-                rightThreshold={40}
-                overshootRight={false}
-                enabled={!!onEventDelete && !!event.id}
-              >
-                <StaggeredRow index={index}>
+              <StaggeredRow index={index}>
+                <ReanimatedSwipeable
+                  containerStyle={styles.swipeableContainer}
+                  renderRightActions={
+                    onEventDelete && event.id
+                      ? () => <DeleteAction onPress={() => onEventDelete(event)} />
+                      : undefined
+                  }
+                  friction={2}
+                  rightThreshold={40}
+                  overshootRight={false}
+                  enabled={!!onEventDelete && !!event.id}
+                >
                   <View style={styles.recentRow}>
                     <View style={styles.recentTimelineColumn}>
                       <View
@@ -539,8 +539,8 @@ function RecentEventsListComponent({
                       )}
                     </TouchableOpacity>
                   </View>
-                </StaggeredRow>
-              </ReanimatedSwipeable>
+                </ReanimatedSwipeable>
+              </StaggeredRow>
             </React.Fragment>
           );
         })
@@ -605,6 +605,7 @@ const styles = StyleSheet.create({
   },
   recentRow: {
     flexDirection: "row",
+    alignItems: "flex-start",
     gap: 12,
     marginBottom: 14,
   },
