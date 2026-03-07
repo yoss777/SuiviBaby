@@ -1,12 +1,22 @@
 import { ThemedView } from "@/components/themed-view";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { getNeutralColors } from "@/constants/dashboardColors";
+import {
+  OMS_MAX_DAY,
+  OMS_PERCENTILES,
+  OMSMetric,
+  OMSSex,
+} from "@/constants/omsPercentiles";
 import { Colors } from "@/constants/theme";
-import { useBaby } from "@/contexts/BabyContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { ecouterCroissancesHybrid } from "@/migration/eventsHybridService";
+import { supprimerEvenement } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -14,15 +24,16 @@ import {
   Canvas,
   Circle,
   LinearGradient,
+  matchFont,
   Path,
   RoundedRect,
   Shadow,
   Skia,
   Line as SkiaLine,
-  vec,
   Text as SkiaText,
-  matchFont,
+  vec,
 } from "@shopify/react-native-skia";
+import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import React, {
   useCallback,
@@ -36,6 +47,7 @@ import {
   FlatList,
   InteractionManager,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -47,20 +59,16 @@ import {
   GestureDetector,
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderRight } from "../../_layout";
-import {
-  OMS_MAX_DAY,
-  OMS_PERCENTILES,
-  OMSMetric,
-  OMSSex,
-} from "@/constants/omsPercentiles";
 
 type CroissanceEntry = {
   id: string;
@@ -82,19 +90,9 @@ type ChartPoint = {
 };
 
 const CHART_HEIGHT = 210;
-const CHART_PADDING = { top: 16, right: 32, bottom: 30, left: 32 };
+const CHART_PADDING = { top: 16, right: 55, bottom: 30, left: 32 };
 const CHART_VISIBLE_POINTS = 5;
 const CHART_AXIS_WIDTH = 40;
-
-const TOOLTIP_H = 62; // 54 body + 8 arrow
-const TOOLTIP_W = 84;
-
-// const CHART_PADDING = {
-//   top: TOOLTIP_H + 4,
-//   right: TOOLTIP_W / 2 + 18,
-//   bottom: 30,
-//   left: TOOLTIP_W / 2 + 8,
-// };
 
 function toDate(value: any): Date {
   if (value?.seconds) return new Date(value.seconds * 1000);
@@ -157,13 +155,45 @@ function getAgeInDays(birthDate: Date, target: Date) {
   return Math.round(ms / 86_400_000);
 }
 
+const DeleteAction = React.memo(function DeleteAction({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Supprimer cet événement"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={styles.deleteActionText}>Supprimer</Text>
+    </Pressable>
+  );
+});
+
 export default function CroissanceScreen() {
   const { activeChild } = useBaby();
   const { firebaseUser } = useAuth();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
-  const colors = Colors[colorScheme];
+  const nc = useMemo(() => getNeutralColors(colorScheme), [colorScheme]);
+  const colors = useMemo(
+    () => ({
+      text: nc.textStrong,
+      background: nc.backgroundCard,
+      surface: nc.background,
+      tint: nc.todayAccent,
+      secondary: nc.textMuted,
+      secondaryText: nc.textLight,
+      border: nc.border,
+      borderLight: nc.borderLight,
+    }),
+    [nc],
+  );
   const { openSheet } = useSheet();
+  const { showToast } = useToast();
   const { openModal, returnTo } = useLocalSearchParams();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
@@ -173,10 +203,27 @@ export default function CroissanceScreen() {
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
 
+  const PAGE_SIZE = 3;
   const [entries, setEntries] = useState<CroissanceEntry[]>([]);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    visible: boolean;
+    event: CroissanceEntry | null;
+  }>({ visible: false, event: null });
   const [metric, setMetric] = useState<MetricKey>("poids");
+  const metricKeys: MetricKey[] = ["taille", "poids", "tete"];
+  const [tabsWidth, setTabsWidth] = useState(0);
+  const tabIndicatorX = useSharedValue(1); // index initial = poids (1)
+
+  const tabWidth = tabsWidth > 0 ? (tabsWidth - 8 - 12) / 3 : 0; // 8 = padding*2, 12 = gap*2
+  const animatedIndicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: withTiming(4 + tabIndicatorX.value * (tabWidth + 6), { duration: 250 }) }],
+    width: tabWidth,
+  }));
+
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(
     null,
   );
@@ -192,9 +239,14 @@ export default function CroissanceScreen() {
   const sheetOwnerId = "croissance";
   const returnToRef = useRef<string | null>(null);
 
-  const refreshToday = useCallback(() => {
+  const triggerRefresh = useCallback(() => {
     setRefreshTick((prev) => prev + 1);
   }, []);
+
+  const handlePullToRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    triggerRefresh();
+  }, [triggerRefresh]);
 
   const palette = useMemo(
     () => ({
@@ -205,15 +257,15 @@ export default function CroissanceScreen() {
       border: colorScheme === "dark" ? "#2a3340" : "#e5ecf2",
       tint: Colors[colorScheme].tint,
       orange: "#f97316",
-      orangeSoft: "#fff3e6",
       green: "#8BCF9B",
       blue: "#2f80ed",
-      blueDeep: "#1b4f9c",
-      blueSoft: "#e8efff",
+      blueSoft: colorScheme === "dark" ? "rgba(47, 128, 237, 0.15)" : "#e8efff",
       violet: "#7c3aed",
-      violetSoft: "#f1eaff",
+      violetSoft:
+        colorScheme === "dark" ? "rgba(124, 58, 237, 0.15)" : "#f1eaff",
       amber: "#f59e0b",
-      amberSoft: "#fff3cd",
+      amberSoft:
+        colorScheme === "dark" ? "rgba(245, 158, 11, 0.15)" : "#fff3cd",
     }),
     [colorScheme],
   );
@@ -221,52 +273,69 @@ export default function CroissanceScreen() {
   const omsPalette = useMemo(
     () => ({
       // Bandes colorées pour les zones de percentiles
-      bandExtreme: colorScheme === "dark"
-        ? "rgba(251, 146, 60, 0.12)"  // orange très pâle
-        : "rgba(251, 146, 60, 0.08)",
-      bandLimit: colorScheme === "dark"
-        ? "rgba(252, 211, 77, 0.15)"  // jaune pâle
-        : "rgba(252, 211, 77, 0.10)",
-      bandNormal: colorScheme === "dark"
-        ? "rgba(134, 239, 172, 0.18)"  // vert pâle
-        : "rgba(134, 239, 172, 0.12)",
+      bandExtreme:
+        colorScheme === "dark"
+          ? "rgba(251, 146, 60, 0.12)" // orange très pâle
+          : "rgba(251, 146, 60, 0.08)",
+      bandLimit:
+        colorScheme === "dark"
+          ? "rgba(252, 211, 77, 0.15)" // jaune pâle
+          : "rgba(252, 211, 77, 0.10)",
+      bandNormal:
+        colorScheme === "dark"
+          ? "rgba(134, 239, 172, 0.18)" // vert pâle
+          : "rgba(134, 239, 172, 0.12)",
       // Lignes des percentiles
-      lineP50: colorScheme === "dark"
-        ? "rgba(34, 197, 94, 0.6)"    // vert médian bien visible
-        : "rgba(34, 197, 94, 0.5)",
-      lineOther: colorScheme === "dark"
-        ? "rgba(148, 163, 184, 0.35)"  // gris pour autres percentiles
-        : "rgba(148, 163, 184, 0.30)",
+      lineP50:
+        colorScheme === "dark"
+          ? "rgba(34, 197, 94, 0.6)" // vert médian bien visible
+          : "rgba(34, 197, 94, 0.5)",
+      lineOther:
+        colorScheme === "dark"
+          ? "rgba(148, 163, 184, 0.35)" // gris pour autres percentiles
+          : "rgba(148, 163, 184, 0.30)",
     }),
     [colorScheme],
   );
 
-  const metricConfig: Record<
-    MetricKey,
-    { label: string; color: string; soft: string; unit: string; rgb: string }
-  > = {
-    taille: {
-      label: "Taille",
-      color: palette.blue,
-      soft: palette.blueSoft,
-      unit: "cm",
-      rgb: "37, 99, 235",
-    },
-    poids: {
-      label: "Poids",
-      color: palette.violet,
-      soft: palette.violetSoft,
-      unit: "kg",
-      rgb: "124, 58, 237",
-    },
-    tete: {
-      label: "Tête",
-      color: palette.amber,
-      soft: palette.amberSoft,
-      unit: "cm",
-      rgb: "245, 158, 11",
-    },
-  };
+  const metricConfig = useMemo<
+    Record<
+      MetricKey,
+      { label: string; color: string; soft: string; unit: string; rgb: string }
+    >
+  >(
+    () => ({
+      taille: {
+        label: "Taille",
+        color: palette.blue,
+        soft: palette.blueSoft,
+        unit: "cm",
+        rgb: "37, 99, 235",
+      },
+      poids: {
+        label: "Poids",
+        color: palette.violet,
+        soft: palette.violetSoft,
+        unit: "kg",
+        rgb: "124, 58, 237",
+      },
+      tete: {
+        label: "Tête",
+        color: palette.amber,
+        soft: palette.amberSoft,
+        unit: "cm",
+        rgb: "245, 158, 11",
+      },
+    }),
+    [
+      palette.blue,
+      palette.blueSoft,
+      palette.violet,
+      palette.violetSoft,
+      palette.amber,
+      palette.amberSoft,
+    ],
+  );
 
   const normalizeParam = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value;
@@ -305,21 +374,24 @@ export default function CroissanceScreen() {
   const openAddModal = useCallback(() => {
     openSheet({
       ownerId: sheetOwnerId,
-      formType: 'croissance',
-      onSuccess: refreshToday,
+      formType: "croissance",
+      onSuccess: triggerRefresh,
       onDismiss: () => {
         const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
         maybeReturnTo(returnTarget);
       },
     });
-  }, [openSheet, returnTo, maybeReturnTo, refreshToday]);
+  }, [openSheet, returnTo, maybeReturnTo, triggerRefresh]);
 
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
       const task = InteractionManager.runAfterInteractions(() => {
         openAddModal();
-        navigation.setParams({ openModal: undefined, returnTo: undefined } as any);
+        navigation.setParams({
+          openModal: undefined,
+          returnTo: undefined,
+        } as any);
       });
       return () => task.cancel();
     }, [navigation, openAddModal, openModal]),
@@ -329,8 +401,8 @@ export default function CroissanceScreen() {
     (entry: CroissanceEntry) => {
       openSheet({
         ownerId: sheetOwnerId,
-        formType: 'croissance',
-        onSuccess: refreshToday,
+        formType: "croissance",
+        onSuccess: triggerRefresh,
         editData: {
           id: entry.id,
           date: toDate(entry.date),
@@ -341,8 +413,30 @@ export default function CroissanceScreen() {
         onDismiss: () => maybeReturnTo(returnToRef.current),
       });
     },
-    [openSheet, maybeReturnTo, refreshToday],
+    [openSheet, maybeReturnTo, triggerRefresh],
   );
+
+  const handleEventDelete = useCallback((event: CroissanceEntry) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setDeleteConfirm({ visible: true, event });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!activeChild?.id || !deleteConfirm.event?.id) return;
+    const eventId = deleteConfirm.event.id;
+    setDeleteConfirm({ visible: false, event: null });
+    try {
+      await supprimerEvenement(activeChild.id, eventId);
+      showToast("Événement supprimé");
+      triggerRefresh();
+    } catch {
+      showToast("Impossible de supprimer cet événement");
+    }
+  }, [activeChild?.id, deleteConfirm.event, showToast, triggerRefresh]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirm({ visible: false, event: null });
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -353,17 +447,19 @@ export default function CroissanceScreen() {
       const headerButtons = (
         <View style={styles.headerActions}>
           <Pressable
-              onPress={openAddModal}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              style={styles.headerButton}
-            >
-            <Ionicons name="add" size={24} color={colors.tint} />
+            onPress={openAddModal}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Ajouter une mesure"
+          >
+            <Ionicons name="add" size={24} color={palette.tint} />
           </Pressable>
         </View>
       );
       setHeaderRight(headerButtons, headerOwnerId.current);
       return () => setHeaderRight(null, headerOwnerId.current);
-    }, [canManageContent, colors.tint, openAddModal, setHeaderRight]),
+    }, [canManageContent, palette.tint, openAddModal, setHeaderRight]),
   );
 
   useEffect(() => {
@@ -380,6 +476,7 @@ export default function CroissanceScreen() {
           .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
         setEntries(normalized);
         setLoading(false);
+        setIsRefreshing(false);
       },
       { waitForServer: true },
     );
@@ -388,7 +485,18 @@ export default function CroissanceScreen() {
 
   useEffect(() => {
     setSelectedPointIndex(null);
+    setVisibleCount(PAGE_SIZE);
   }, [metric, entries]);
+
+  const visibleEntries = useMemo(
+    () => entries.slice(0, visibleCount),
+    [entries, visibleCount],
+  );
+  const hasMore = visibleCount < entries.length;
+
+  const handleShowMore = useCallback(() => {
+    setVisibleCount((prev) => prev + PAGE_SIZE);
+  }, []);
 
   const getDayLabel = useCallback((date: Date) => {
     const today = new Date();
@@ -412,153 +520,183 @@ export default function CroissanceScreen() {
     });
   }, []);
 
-  const renderItem = ({
-    item,
-    index,
-  }: {
-    item: CroissanceEntry;
-    index: number;
-  }) => {
-    const date = toDate(item.date);
-    const currentDayLabel = getDayLabel(date);
-    const prevEntry = index > 0 ? entries[index - 1] : null;
-    const prevDate = prevEntry ? toDate(prevEntry.date) : null;
-    const prevDayLabel = prevDate ? getDayLabel(prevDate) : null;
-    const showDaySeparator = index === 0 || currentDayLabel !== prevDayLabel;
+  const renderItem = useCallback(
+    ({ item, index }: { item: CroissanceEntry; index: number }) => {
+      const date = toDate(item.date);
+      const currentDayLabel = getDayLabel(date);
+      const prevEntry = index > 0 ? visibleEntries[index - 1] : null;
+      const prevDate = prevEntry ? toDate(prevEntry.date) : null;
+      const prevDayLabel = prevDate ? getDayLabel(prevDate) : null;
+      const showDaySeparator = index === 0 || currentDayLabel !== prevDayLabel;
 
-    return (
-      <React.Fragment>
-        {showDaySeparator && (
-          <View style={styles.daySeparator}>
-            <View
-              style={[
-                styles.daySeparatorLine,
-                { backgroundColor: palette.border },
-              ]}
-            />
-            <Text style={[styles.daySeparatorText, { color: palette.muted }]}>
-              {currentDayLabel}
-            </Text>
-            <View
-              style={[
-                styles.daySeparatorLine,
-                { backgroundColor: palette.border },
-              ]}
-            />
+      const cardContent = (
+        <TouchableOpacity
+          onPress={
+            canManageContent
+              ? () => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  openEditModal(item);
+                }
+              : undefined
+          }
+          disabled={!canManageContent}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Mesure du ${currentDayLabel}${item.poidsKg ? `, poids ${item.poidsKg} kg` : ""}${item.tailleCm ? `, taille ${item.tailleCm} cm` : ""}${item.teteCm ? `, tour de tête ${item.teteCm} cm` : ""}`}
+          accessibilityHint={
+            canManageContent ? "Appuyer pour modifier" : undefined
+          }
+          style={[
+            styles.card,
+            {
+              borderColor: palette.border,
+              backgroundColor: palette.surface,
+            },
+          ]}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <FontAwesome name="seedling" size={14} color={palette.green} />
+              <Text style={[styles.cardTitle, { color: palette.ink }]}>
+                Croissance
+              </Text>
+            </View>
           </View>
-        )}
-        <View style={styles.itemRow}>
-          <View style={styles.timelineColumn}>
-            <View style={[styles.dot, { backgroundColor: palette.green }]} />
-            <View style={[styles.line, { backgroundColor: palette.border }]} />
-          </View>
-          <Text style={[styles.timeText, { color: palette.muted }]}>
-            {date.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-          <Pressable
-            onLongPress={canManageContent ? () => openEditModal(item) : undefined}
-            delayLongPress={250}
-            disabled={!canManageContent}
-            style={({ pressed }) => [
-              styles.card,
-              {
-                borderColor: palette.border,
-                backgroundColor: palette.surface,
-              },
-              pressed && canManageContent && { opacity: 0.9 },
-            ]}
-          >
-            <View style={styles.cardHeader}>
-              <View style={styles.cardTitleRow}>
-                <FontAwesome name="seedling" size={14} color={palette.green} />
-                <Text style={[styles.cardTitle, { color: palette.ink }]}>
-                  Croissance
+          <View style={styles.metricPillRow}>
+            {item.tailleCm ? (
+              <View
+                style={[
+                  styles.metricPill,
+                  { backgroundColor: palette.blueSoft },
+                ]}
+              >
+                <View style={styles.metricHeader}>
+                  <FontAwesome
+                    name="ruler-vertical"
+                    size={12}
+                    color={palette.blue}
+                  />
+                  <Text style={[styles.metricLabel, { color: palette.ink }]}>
+                    Taille
+                  </Text>
+                </View>
+                <Text style={[styles.metricValue, { color: palette.ink }]}>
+                  {item.tailleCm} cm
                 </Text>
               </View>
-              {canManageContent && (
-                <FontAwesome
-                  name="pen-to-square"
-                  size={12}
-                  color={palette.muted}
-                />
-              )}
+            ) : null}
+            {item.poidsKg ? (
+              <View
+                style={[
+                  styles.metricPill,
+                  { backgroundColor: palette.violetSoft },
+                ]}
+              >
+                <View style={styles.metricHeader}>
+                  <FontAwesome
+                    name="weight-scale"
+                    size={12}
+                    color={palette.violet}
+                  />
+                  <Text style={[styles.metricLabel, { color: palette.ink }]}>
+                    Poids
+                  </Text>
+                </View>
+                <Text style={[styles.metricValue, { color: palette.ink }]}>
+                  {item.poidsKg} kg
+                </Text>
+              </View>
+            ) : null}
+            {item.teteCm ? (
+              <View
+                style={[
+                  styles.metricPill,
+                  { backgroundColor: palette.amberSoft },
+                ]}
+              >
+                <View style={styles.metricHeader}>
+                  <MaterialCommunityIcons
+                    name="baby-face-outline"
+                    size={12}
+                    color={palette.amber}
+                  />
+                  <Text style={[styles.metricLabel, { color: palette.ink }]}>
+                    Tête
+                  </Text>
+                </View>
+                <Text style={[styles.metricValue, { color: palette.ink }]}>
+                  {item.teteCm} cm
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+      );
+
+      return (
+        <React.Fragment>
+          {showDaySeparator && (
+            <View style={styles.daySeparator}>
+              <View
+                style={[
+                  styles.daySeparatorLine,
+                  { backgroundColor: palette.border },
+                ]}
+              />
+              <Text style={[styles.daySeparatorText, { color: palette.muted }]}>
+                {currentDayLabel}
+              </Text>
+              <View
+                style={[
+                  styles.daySeparatorLine,
+                  { backgroundColor: palette.border },
+                ]}
+              />
             </View>
-            <View style={styles.metricPillRow}>
-              {item.tailleCm ? (
-                <View
-                  style={[
-                    styles.metricPill,
-                    { backgroundColor: palette.blueSoft },
-                  ]}
-                >
-                  <View style={styles.metricHeader}>
-                    <FontAwesome
-                      name="ruler-vertical"
-                      size={12}
-                      color={palette.blue}
-                    />
-                    <Text style={[styles.metricLabel, { color: palette.ink }]}>
-                      Taille
-                    </Text>
-                  </View>
-                  <Text style={[styles.metricValue, { color: palette.ink }]}>
-                    {item.tailleCm} cm
-                  </Text>
-                </View>
-              ) : null}
-              {item.poidsKg ? (
-                <View
-                  style={[
-                    styles.metricPill,
-                    { backgroundColor: palette.violetSoft },
-                  ]}
-                >
-                  <View style={styles.metricHeader}>
-                    <FontAwesome
-                      name="weight-scale"
-                      size={12}
-                      color={palette.violet}
-                    />
-                    <Text style={[styles.metricLabel, { color: palette.ink }]}>
-                      Poids
-                    </Text>
-                  </View>
-                  <Text style={[styles.metricValue, { color: palette.ink }]}>
-                    {item.poidsKg} kg
-                  </Text>
-                </View>
-              ) : null}
-              {item.teteCm ? (
-                <View
-                  style={[
-                    styles.metricPill,
-                    { backgroundColor: palette.amberSoft },
-                  ]}
-                >
-                  <View style={styles.metricHeader}>
-                    <MaterialCommunityIcons
-                      name="baby-face-outline"
-                      size={12}
-                      color={palette.amber}
-                    />
-                    <Text style={[styles.metricLabel, { color: palette.ink }]}>
-                      Tête
-                    </Text>
-                  </View>
-                  <Text style={[styles.metricValue, { color: palette.ink }]}>
-                    {item.teteCm} cm
-                  </Text>
-                </View>
-              ) : null}
+          )}
+          <View style={styles.itemRow}>
+            <View style={styles.timelineColumn}>
+              <View style={[styles.dot, { backgroundColor: palette.green }]} />
+              <View
+                style={[styles.line, { backgroundColor: palette.border }]}
+              />
             </View>
-          </Pressable>
-        </View>
-      </React.Fragment>
-    );
-  };
+            <Text style={[styles.timeText, { color: palette.muted }]}>
+              {date.toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+            <View style={styles.cardSwipeWrapper}>
+              <ReanimatedSwipeable
+                renderRightActions={
+                  canManageContent && item.id
+                    ? () => (
+                        <DeleteAction onPress={() => handleEventDelete(item)} />
+                      )
+                    : undefined
+                }
+                friction={2}
+                rightThreshold={40}
+                overshootRight={false}
+                enabled={canManageContent && !!item.id}
+              >
+                {cardContent}
+              </ReanimatedSwipeable>
+            </View>
+          </View>
+        </React.Fragment>
+      );
+    },
+    [
+      visibleEntries,
+      canManageContent,
+      getDayLabel,
+      handleEventDelete,
+      openEditModal,
+      palette,
+    ],
+  );
 
   const metricEntries = useMemo(() => {
     return entries
@@ -581,20 +719,20 @@ export default function CroissanceScreen() {
   );
   const omsSex = activeChild?.gender ?? null;
 
-  const labels = metricEntries.map((entry) =>
+  const labels = useMemo(() => metricEntries.map((entry) =>
     entry.date.toLocaleDateString("fr-FR", {
       day: "2-digit",
       month: "2-digit",
     }),
-  );
-  const labelsFull = metricEntries.map((entry) =>
+  ), [metricEntries]);
+  const labelsFull = useMemo(() => metricEntries.map((entry) =>
     entry.date.toLocaleDateString("fr-FR", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     }),
-  );
-  const values = metricEntries.map((entry) => entry.value as number);
+  ), [metricEntries]);
+  const values = useMemo(() => metricEntries.map((entry) => entry.value as number), [metricEntries]);
   const hasData = values.length > 0;
   const metricStyle = metricConfig[metric];
 
@@ -623,7 +761,10 @@ export default function CroissanceScreen() {
             "p3" | "p15" | "p50" | "p85" | "p97",
             { x: number; y: number }[]
           >;
-          bands: { upper: { x: number; y: number }[]; lower: { x: number; y: number }[] }[];
+          bands: {
+            upper: { x: number; y: number }[];
+            lower: { x: number; y: number }[];
+          }[];
         },
       };
     }
@@ -807,7 +948,7 @@ export default function CroissanceScreen() {
 
   const animatedTooltipStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: CHART_AXIS_WIDTH + selectedX.value - scrollX.value - 40 },
+      { translateX: CHART_AXIS_WIDTH + selectedX.value - scrollX.value - 45 },
       { translateY: selectedY.value - 74 },
     ],
   }));
@@ -827,7 +968,9 @@ export default function CroissanceScreen() {
   }, [metricEntries]);
 
   return (
-    <ThemedView style={[styles.screen, { backgroundColor: "#f8f9fa" }]}>
+    <ThemedView
+      style={[styles.screen, { backgroundColor: palette.surfaceAlt }]}
+    >
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         <GestureHandlerRootView style={styles.container}>
           <View style={styles.headerBlock}>
@@ -841,342 +984,480 @@ export default function CroissanceScreen() {
 
           {loading ? (
             <View style={styles.fullScreenLoading}>
-              <IconPulseDots color={colors.tint} />
+              <IconPulseDots color={palette.tint} />
             </View>
           ) : (
             <View style={styles.body}>
-              <View
-                style={[
-                  styles.chartCard,
-                  {
-                    backgroundColor: palette.surface,
-                    borderColor: palette.border,
-                  },
-                ]}
-                onLayout={(event) => {
-                  const width =
-                    event.nativeEvent.layout.width - CHART_AXIS_WIDTH - 12;
-                  if (width > 0 && Math.abs(width - chartWidth) > 1) {
-                    setChartWidth(width);
-                  }
-                }}
-              >
-                <View style={styles.metricTabs}>
-                  {(["taille", "poids", "tete"] as MetricKey[]).map((key) => (
-                    <TouchableOpacity
-                      key={key}
-                      style={[
-                        styles.metricTab,
-                        metric === key && {
-                          backgroundColor: palette.surface,
-                          // borderColor: metricConfig[key].color,
-                        },
-                      ]}
-                      onPress={() => setMetric(key)}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.metricTabText,
-                          metric === key && { color: palette.ink },
-                        ]}
-                      >
-                        {metricConfig[key].label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <View style={styles.metricsRow}>
-                  <View
-                    style={[
-                      styles.summaryCard,
-                      { borderColor: palette.border },
-                    ]}
-                  >
-                    <Text style={styles.summaryLabel}>Dernière mesure</Text>
-                    <Text
-                      style={[
-                        styles.summaryValue,
-                        { color: metricStyle.color },
-                      ]}
-                    >
-                      {latestValue ? `${latestValue} ${metricStyle.unit}` : "-"}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.summaryCard,
-                      { borderColor: palette.border },
-                    ]}
-                  >
-                    <Text style={styles.summaryLabel}>Variation</Text>
-                    <Text
-                      style={[
-                        styles.summaryValue,
-                        { color: metricStyle.color },
-                      ]}
-                    >
-                      {deltaValue === null
-                        ? "-"
-                        : `${deltaValue > 0 ? "+" : ""}${deltaValue.toFixed(1)} ${
-                            metricStyle.unit
-                          }`}
-                    </Text>
-                  </View>
-                </View>
-
-                {!hasData ? (
-                  <View style={styles.chartEmpty}>
-                    <Text style={[styles.emptyText, { color: palette.muted }]}>
-                      Ajoute une mesure pour voir la courbe.
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.chartRow}>
-                    <View style={styles.yAxisColumn}>
-                      {yAxisLabels.map((label, index) => (
-                        <Text
-                          key={`${label.value}-${index}`}
-                          style={[styles.yAxisLabel, { color: palette.muted }]}
-                        >
-                          {label.value}
-                        </Text>
-                      ))}
-                    </View>
-                    <Animated.ScrollView
-                      ref={chartScrollRef as any}
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      onScrollBeginDrag={() => setSelectedPointIndex(null)}
-                      onScroll={scrollHandler}
-                      onMomentumScrollEnd={() => {
-                        autoScrollRef.current = false;
-                      }}
-                      scrollEventThrottle={16}
-                      style={styles.chartScroll}
-                    >
-                      <View style={styles.chartWrapper}>
-                        <GestureDetector gesture={tapGesture}>
-                          <Canvas
-                            style={{ width: plotWidth, height: CHART_HEIGHT }}
-                          >
-                            <RoundedRect
-                              x={CHART_PADDING.left}
-                              y={CHART_PADDING.top}
-                              width={
-                                plotWidth -
-                                CHART_PADDING.left -
-                                CHART_PADDING.right
-                              }
-                              height={
-                                CHART_HEIGHT -
-                                CHART_PADDING.top -
-                                CHART_PADDING.bottom
-                              }
-                              r={14}
-                              color={palette.surface}
-                            >
-                              <LinearGradient
-                                start={vec(
-                                  CHART_PADDING.left,
-                                  CHART_PADDING.top,
-                                )}
-                                end={vec(
-                                  CHART_PADDING.left,
-                                  CHART_HEIGHT - CHART_PADDING.bottom,
-                                )}
-                                colors={["#ffffff", "#ffffff"]}
-                              />
-                            </RoundedRect>
-
-                            {oms?.bands.map((band, index) => {
-                              // index 0: p3-p15 (extrême bas), index 1: p15-p50 (limite bas/normal),
-                              // index 2: p50-p85 (normal/limite haut), index 3: p85-p97 (extrême haut)
-                              const bandColor =
-                                index === 0 || index === 3 ? omsPalette.bandExtreme :
-                                index === 1 || index === 2 ? omsPalette.bandLimit :
-                                omsPalette.bandNormal;
-                              return (
-                                <Path
-                                  key={`oms-band-${index}`}
-                                  path={createBandPath(band.upper, band.lower)}
-                                  color={bandColor}
-                                />
-                              );
-                            })}
-
-                            {yAxisLabels.map((label, index) => (
-                              <SkiaLine
-                                key={`grid-${index}`}
-                                p1={vec(CHART_PADDING.left, label.y)}
-                                p2={vec(
-                                  plotWidth - CHART_PADDING.right,
-                                  label.y,
-                                )}
-                                color="rgba(15, 23, 42, 0.08)"
-                                strokeWidth={1}
-                              />
-                            ))}
-
-                            {oms ? (
-                              <>
-                                {(["p3", "p15", "p50", "p85", "p97"] as const).map(
-                                  (key) => {
-                                    const line = oms.lines[key];
-                                    const lastPoint = line[line.length - 1];
-                                    const fontFamily = "System";
-                                    const fontSize = 9;
-                                    const font = matchFont({ fontFamily, fontSize, fontWeight: "600" });
-
-                                    return (
-                                      <React.Fragment key={`oms-${key}`}>
-                                        <Path
-                                          path={createSmoothPath(line)}
-                                          style="stroke"
-                                          strokeWidth={key === "p50" ? 2 : 1.2}
-                                          color={key === "p50" ? omsPalette.lineP50 : omsPalette.lineOther}
-                                        />
-                                        {lastPoint && (
-                                          <SkiaText
-                                            x={lastPoint.x + 8}
-                                            y={lastPoint.y + 3}
-                                            text={key.toUpperCase()}
-                                            font={font}
-                                            color={key === "p50" ? omsPalette.lineP50 : omsPalette.lineOther}
-                                          />
-                                        )}
-                                      </React.Fragment>
-                                    );
-                                  },
-                                )}
-                              </>
-                            ) : null}
-
-                            <Path
-                              path={linePath}
-                              style="stroke"
-                              strokeWidth={3.5}
-                              color={metricStyle.color}
-                            >
-                              <Shadow
-                                dx={0}
-                                dy={3}
-                                blur={6}
-                                color={`rgba(${metricStyle.rgb}, 0.45)`}
-                              />
-                            </Path>
-
-                            {chartPoints.map((point, index) => {
-                              const isSelected = selectedPointIndex === index;
-                              const isMax =
-                                point.value === maxValue && point.value > 0;
-                              return (
-                                <React.Fragment key={`pt-${index}`}>
-                                  {isSelected && (
-                                    <Circle
-                                      cx={point.x}
-                                      cy={point.y}
-                                      r={10}
-                                      color="rgba(249, 115, 22, 0.18)"
-                                    />
-                                  )}
-                                  <Circle
-                                    cx={point.x}
-                                    cy={point.y}
-                                    r={isSelected || isMax ? 6 : 4.5}
-                                    color={
-                                      isSelected
-                                        ? palette.orange
-                                        : metricStyle.color
-                                    }
-                                  >
-                                    <Shadow
-                                      dx={0}
-                                      dy={2}
-                                      blur={4}
-                                      color={`rgba(${metricStyle.rgb}, 0.3)`}
-                                    />
-                                  </Circle>
-                                </React.Fragment>
-                              );
-                            })}
-                          </Canvas>
-                        </GestureDetector>
-                      </View>
-                    </Animated.ScrollView>
-
-                    {selectedPointIndex !== null &&
-                    chartPoints[selectedPointIndex] ? (
-                      <Animated.View
-                        pointerEvents="none"
-                        style={[
-                          styles.tooltip,
-                          { borderColor: metricStyle.color },
-                          animatedTooltipStyle,
-                        ]}
-                      >
-                        <View style={styles.tooltipContent}>
-                          <Text style={styles.tooltipTime}>
-                            {chartPoints[selectedPointIndex].labelFull}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.tooltipValue,
-                              { color: metricStyle.color },
-                            ]}
-                          >
-                            {chartPoints[selectedPointIndex].value}{" "}
-                            {metricStyle.unit}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.tooltipArrow,
-                            { borderTopColor: metricStyle.color },
-                          ]}
-                        />
-                      </Animated.View>
-                    ) : null}
-                  </View>
-                )}
-
-                {hasData && oms && (
-                  <View style={styles.omsLegend}>
-                    <Text style={[styles.omsLegendTitle, { color: palette.muted }]}>
-                      Référence OMS
-                    </Text>
-                    <View style={styles.omsLegendRow}>
-                      <View style={styles.omsLegendItem}>
-                        <View style={[styles.omsLegendDot, { backgroundColor: omsPalette.lineP50 }]} />
-                        <Text style={[styles.omsLegendText, { color: palette.muted }]}>
-                          Médiane
-                        </Text>
-                      </View>
-                      <View style={styles.omsLegendItem}>
-                        <View style={[styles.omsLegendBox, { backgroundColor: omsPalette.bandLimit }]} />
-                        <Text style={[styles.omsLegendText, { color: palette.muted }]}>
-                          Normal
-                        </Text>
-                      </View>
-                      <View style={styles.omsLegendItem}>
-                        <View style={[styles.omsLegendBox, { backgroundColor: omsPalette.bandExtreme }]} />
-                        <Text style={[styles.omsLegendText, { color: palette.muted }]}>
-                          Extrême
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                )}
-              </View>
-
               <FlatList
-                data={entries}
+                data={visibleEntries}
                 keyExtractor={(item) => item.id}
                 renderItem={renderItem}
                 contentContainerStyle={styles.listContent}
                 style={styles.listWindow}
-                initialNumToRender={2}
+                initialNumToRender={PAGE_SIZE}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={isRefreshing}
+                    onRefresh={handlePullToRefresh}
+                    tintColor={palette.tint}
+                  />
+                }
+                ListHeaderComponent={
+                  <View
+                    style={[
+                      styles.chartCard,
+                      {
+                        backgroundColor: palette.surface,
+                        borderColor: palette.border,
+                      },
+                    ]}
+                    onLayout={(event) => {
+                      const width =
+                        event.nativeEvent.layout.width - CHART_AXIS_WIDTH - 12;
+                      if (width > 0 && Math.abs(width - chartWidth) > 1) {
+                        setChartWidth(width);
+                      }
+                    }}
+                  >
+                    <View
+                      style={[styles.metricTabs, { backgroundColor: palette.surfaceAlt }]}
+                      accessibilityRole="tablist"
+                      onLayout={(e) => setTabsWidth(e.nativeEvent.layout.width)}
+                    >
+                      {tabWidth > 0 && (
+                        <Animated.View
+                          style={[
+                            styles.metricTabIndicator,
+                            { backgroundColor: palette.surface },
+                            animatedIndicatorStyle,
+                          ]}
+                        />
+                      )}
+                      {metricKeys.map((key, index) => (
+                        <TouchableOpacity
+                          key={key}
+                          style={styles.metricTab}
+                          onPress={() => {
+                            Haptics.impactAsync(
+                              Haptics.ImpactFeedbackStyle.Light,
+                            );
+                            tabIndicatorX.value = index;
+                            setMetric(key);
+                          }}
+                          activeOpacity={0.7}
+                          accessibilityRole="tab"
+                          accessibilityState={{ selected: metric === key }}
+                          accessibilityLabel={`Courbe ${metricConfig[key].label}`}
+                        >
+                          <Text
+                            style={[
+                              styles.metricTabText,
+                              { color: palette.muted },
+                              metric === key && { color: palette.ink },
+                            ]}
+                          >
+                            {metricConfig[key].label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <View style={styles.metricsRow}>
+                      <View
+                        style={[
+                          styles.summaryCard,
+                          {
+                            borderColor: palette.border,
+                            backgroundColor: palette.surface,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.summaryLabel,
+                            { color: palette.muted },
+                          ]}
+                        >
+                          Dernière mesure
+                        </Text>
+                        <Text
+                          style={[
+                            styles.summaryValue,
+                            { color: metricStyle.color },
+                          ]}
+                        >
+                          {latestValue
+                            ? `${latestValue} ${metricStyle.unit}`
+                            : "-"}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.summaryCard,
+                          {
+                            borderColor: palette.border,
+                            backgroundColor: palette.surface,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.summaryLabel,
+                            { color: palette.muted },
+                          ]}
+                        >
+                          Variation
+                        </Text>
+                        <Text
+                          style={[
+                            styles.summaryValue,
+                            { color: metricStyle.color },
+                          ]}
+                        >
+                          {deltaValue === null
+                            ? "-"
+                            : `${deltaValue > 0 ? "+" : ""}${deltaValue.toFixed(1)} ${
+                                metricStyle.unit
+                              }`}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {!hasData ? (
+                      <View style={styles.chartEmpty}>
+                        <Text
+                          style={[styles.emptyText, { color: palette.muted }]}
+                        >
+                          Ajoute une mesure pour voir la courbe.
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.chartRow}>
+                        <View style={styles.yAxisColumn}>
+                          {yAxisLabels.map((label, index) => (
+                            <View
+                              key={`${label.value}-${index}`}
+                              style={[
+                                styles.yAxisLabelWrap,
+                                { top: label.y - 7 },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.yAxisLabel,
+                                  { color: palette.muted },
+                                ]}
+                              >
+                                {label.value}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                        <Animated.ScrollView
+                          ref={chartScrollRef as any}
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          onScrollBeginDrag={() => setSelectedPointIndex(null)}
+                          onScroll={scrollHandler}
+                          onMomentumScrollEnd={() => {
+                            autoScrollRef.current = false;
+                          }}
+                          scrollEventThrottle={16}
+                          style={styles.chartScroll}
+                        >
+                          <View style={styles.chartWrapper}>
+                            <GestureDetector gesture={tapGesture}>
+                              <Canvas
+                                style={{
+                                  width: plotWidth,
+                                  height: CHART_HEIGHT,
+                                }}
+                              >
+                                <RoundedRect
+                                  x={CHART_PADDING.left}
+                                  y={CHART_PADDING.top}
+                                  width={
+                                    plotWidth -
+                                    CHART_PADDING.left -
+                                    CHART_PADDING.right
+                                  }
+                                  height={
+                                    CHART_HEIGHT -
+                                    CHART_PADDING.top -
+                                    CHART_PADDING.bottom
+                                  }
+                                  r={14}
+                                  color={palette.surface}
+                                >
+                                  <LinearGradient
+                                    start={vec(
+                                      CHART_PADDING.left,
+                                      CHART_PADDING.top,
+                                    )}
+                                    end={vec(
+                                      CHART_PADDING.left,
+                                      CHART_HEIGHT - CHART_PADDING.bottom,
+                                    )}
+                                    colors={[palette.surface, palette.surface]}
+                                  />
+                                </RoundedRect>
+
+                                {oms?.bands.map((band, index) => {
+                                  const bandColor =
+                                    index === 0 || index === 3
+                                      ? omsPalette.bandExtreme
+                                      : index === 1 || index === 2
+                                        ? omsPalette.bandLimit
+                                        : omsPalette.bandNormal;
+                                  return (
+                                    <Path
+                                      key={`oms-band-${index}`}
+                                      path={createBandPath(
+                                        band.upper,
+                                        band.lower,
+                                      )}
+                                      color={bandColor}
+                                    />
+                                  );
+                                })}
+
+                                {yAxisLabels.map((label, index) => (
+                                  <SkiaLine
+                                    key={`grid-${index}`}
+                                    p1={vec(CHART_PADDING.left, label.y)}
+                                    p2={vec(
+                                      plotWidth - CHART_PADDING.right,
+                                      label.y,
+                                    )}
+                                    color={
+                                      colorScheme === "dark"
+                                        ? "rgba(255, 255, 255, 0.08)"
+                                        : "rgba(15, 23, 42, 0.08)"
+                                    }
+                                    strokeWidth={1}
+                                  />
+                                ))}
+
+                                {oms ? (
+                                  <>
+                                    {(
+                                      [
+                                        "p3",
+                                        "p15",
+                                        "p50",
+                                        "p85",
+                                        "p97",
+                                      ] as const
+                                    ).map((key) => {
+                                      const line = oms.lines[key];
+                                      const lastPoint = line[line.length - 1];
+                                      const fontFamily = "System";
+                                      const fontSize = 9;
+                                      const font = matchFont({
+                                        fontFamily,
+                                        fontSize,
+                                        fontWeight: "600",
+                                      });
+
+                                      return (
+                                        <React.Fragment key={`oms-${key}`}>
+                                          <Path
+                                            path={createSmoothPath(line)}
+                                            style="stroke"
+                                            strokeWidth={
+                                              key === "p50" ? 2 : 1.2
+                                            }
+                                            color={
+                                              key === "p50"
+                                                ? omsPalette.lineP50
+                                                : omsPalette.lineOther
+                                            }
+                                          />
+                                          {lastPoint && (
+                                            <SkiaText
+                                              x={lastPoint.x + 8}
+                                              y={lastPoint.y + 3}
+                                              text={key.toUpperCase()}
+                                              font={font}
+                                              color={
+                                                key === "p50"
+                                                  ? omsPalette.lineP50
+                                                  : omsPalette.lineOther
+                                              }
+                                            />
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </>
+                                ) : null}
+
+                                <Path
+                                  path={linePath}
+                                  style="stroke"
+                                  strokeWidth={3.5}
+                                  color={metricStyle.color}
+                                >
+                                  <Shadow
+                                    dx={0}
+                                    dy={3}
+                                    blur={6}
+                                    color={`rgba(${metricStyle.rgb}, 0.45)`}
+                                  />
+                                </Path>
+
+                                {chartPoints.map((point, index) => {
+                                  const isSelected =
+                                    selectedPointIndex === index;
+                                  const isMax =
+                                    point.value === maxValue && point.value > 0;
+                                  return (
+                                    <React.Fragment key={`pt-${index}`}>
+                                      {isSelected && (
+                                        <Circle
+                                          cx={point.x}
+                                          cy={point.y}
+                                          r={10}
+                                          color="rgba(249, 115, 22, 0.18)"
+                                        />
+                                      )}
+                                      <Circle
+                                        cx={point.x}
+                                        cy={point.y}
+                                        r={isSelected || isMax ? 6 : 4.5}
+                                        color={
+                                          isSelected
+                                            ? palette.orange
+                                            : metricStyle.color
+                                        }
+                                      >
+                                        <Shadow
+                                          dx={0}
+                                          dy={2}
+                                          blur={4}
+                                          color={`rgba(${metricStyle.rgb}, 0.3)`}
+                                        />
+                                      </Circle>
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </Canvas>
+                            </GestureDetector>
+                          </View>
+                        </Animated.ScrollView>
+
+                        {selectedPointIndex !== null &&
+                        chartPoints[selectedPointIndex] ? (
+                          <Animated.View
+                            pointerEvents="none"
+                            style={[
+                              styles.tooltip,
+                              {
+                                borderColor: metricStyle.color,
+                                backgroundColor: palette.surface,
+                              },
+                              animatedTooltipStyle,
+                            ]}
+                          >
+                            <View style={styles.tooltipContent}>
+                              <Text
+                                style={[
+                                  styles.tooltipTime,
+                                  { color: palette.muted },
+                                ]}
+                              >
+                                {chartPoints[selectedPointIndex].labelFull}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.tooltipValue,
+                                  { color: metricStyle.color },
+                                ]}
+                              >
+                                {chartPoints[selectedPointIndex].value}{" "}
+                                {metricStyle.unit}
+                              </Text>
+                            </View>
+                            <View
+                              style={[
+                                styles.tooltipArrow,
+                                { borderTopColor: metricStyle.color },
+                              ]}
+                            />
+                          </Animated.View>
+                        ) : null}
+                      </View>
+                    )}
+
+                    {hasData && oms && (
+                      <View
+                        style={[
+                          styles.omsLegend,
+                          { borderTopColor: palette.border },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.omsLegendTitle,
+                            { color: palette.muted },
+                          ]}
+                        >
+                          Référence OMS
+                        </Text>
+                        <View style={styles.omsLegendRow}>
+                          <View style={styles.omsLegendItem}>
+                            <View
+                              style={[
+                                styles.omsLegendDot,
+                                { backgroundColor: omsPalette.lineP50 },
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.omsLegendText,
+                                { color: palette.muted },
+                              ]}
+                            >
+                              Médiane
+                            </Text>
+                          </View>
+                          <View style={styles.omsLegendItem}>
+                            <View
+                              style={[
+                                styles.omsLegendBox,
+                                { backgroundColor: omsPalette.bandLimit },
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.omsLegendText,
+                                { color: palette.muted },
+                              ]}
+                            >
+                              Normal
+                            </Text>
+                          </View>
+                          <View style={styles.omsLegendItem}>
+                            <View
+                              style={[
+                                styles.omsLegendBox,
+                                { backgroundColor: omsPalette.bandExtreme },
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.omsLegendText,
+                                { color: palette.muted },
+                              ]}
+                            >
+                              Extrême
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                }
                 ListEmptyComponent={
                   <View style={styles.emptyState}>
                     <Text style={[styles.emptyText, { color: palette.muted }]}>
@@ -1184,11 +1465,49 @@ export default function CroissanceScreen() {
                     </Text>
                   </View>
                 }
+                ListFooterComponent={
+                  hasMore ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.showMoreButton,
+                        { borderColor: palette.border },
+                      ]}
+                      onPress={handleShowMore}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Afficher ${Math.min(PAGE_SIZE, entries.length - visibleCount)} mesures supplémentaires`}
+                    >
+                      <Text
+                        style={[styles.showMoreText, { color: palette.tint }]}
+                      >
+                        Voir plus ({entries.length - visibleCount} restant
+                        {entries.length - visibleCount > 1 ? "s" : ""})
+                      </Text>
+                      <Ionicons
+                        name="chevron-down"
+                        size={16}
+                        color={palette.tint}
+                      />
+                    </TouchableOpacity>
+                  ) : null
+                }
               />
             </View>
           )}
         </GestureHandlerRootView>
       </SafeAreaView>
+
+      <ConfirmModal
+        visible={deleteConfirm.visible}
+        title="Supprimer cette mesure ?"
+        message="Cette action est irréversible."
+        confirmText="Supprimer"
+        backgroundColor={colors.background}
+        textColor={colors.text}
+        confirmButtonColor="#dc3545"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
     </ThemedView>
   );
 }
@@ -1233,67 +1552,61 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     marginBottom: 16,
+    overflow: "visible",
+    zIndex: 10,
   },
   metricTabs: {
     flexDirection: "row",
-    backgroundColor: "#f5f6f8",
     borderRadius: 12,
     padding: 4,
     gap: 6,
     marginBottom: 12,
+  },
+  metricTabIndicator: {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    borderRadius: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
   metricTab: {
     flex: 1,
     paddingVertical: 8,
     borderRadius: 10,
     alignItems: "center",
-    // borderWidth: 1,
-    // borderColor: "transparent",
+    zIndex: 1,
   },
   metricTabText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6c757d",
   },
   metricsRow: {
     flexDirection: "row",
     gap: 10,
     marginBottom: 12,
   },
-  metricCard: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#eef1f5",
-  },
   metricLabel: {
     fontSize: 10,
     fontWeight: "700",
     textTransform: "uppercase",
-    color: "#9aa0a6",
   },
   metricValue: {
     fontSize: 16,
     fontWeight: "700",
     marginTop: 6,
   },
-  summaryRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 12,
-  },
   summaryCard: {
     flex: 1,
     borderRadius: 14,
     padding: 12,
     borderWidth: 1,
-    backgroundColor: "#ffffff",
   },
   summaryLabel: {
     fontSize: 11,
-    color: "#6b7280",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -1306,11 +1619,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     position: "relative",
+    overflow: "visible",
   },
   yAxisColumn: {
+    position: "relative",
     width: CHART_AXIS_WIDTH,
-    justifyContent: "space-between",
-    paddingVertical: 12,
+    height: CHART_HEIGHT,
+  },
+  yAxisLabelWrap: {
+    position: "absolute",
+    left: 0,
+    width: CHART_AXIS_WIDTH - 6,
+    alignItems: "flex-end",
   },
   yAxisLabel: {
     fontSize: 11,
@@ -1331,17 +1651,15 @@ const styles = StyleSheet.create({
   },
   tooltip: {
     position: "absolute",
-    backgroundColor: "white",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#d6e8da",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.14,
     shadowRadius: 6,
     elevation: 6,
     zIndex: 1000,
-    width: 84,
+    width: 90,
     height: 54,
   },
   tooltipContent: {
@@ -1351,7 +1669,6 @@ const styles = StyleSheet.create({
   },
   tooltipTime: {
     fontSize: 10,
-    color: "#6c757d",
     fontWeight: "500",
   },
   tooltipValue: {
@@ -1481,7 +1798,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
   },
   omsLegendTitle: {
     fontSize: 11,
@@ -1505,11 +1821,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  omsLegendLine: {
-    width: 16,
-    height: 2,
-    borderRadius: 1,
-  },
   omsLegendBox: {
     width: 12,
     height: 12,
@@ -1518,5 +1829,38 @@ const styles = StyleSheet.create({
   omsLegendText: {
     fontSize: 11,
     fontWeight: "500",
+  },
+  cardSwipeWrapper: {
+    flex: 1,
+  },
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    height: "100%",
+    borderRadius: 14,
+    marginHorizontal: 4,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  showMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 14,
+    marginTop: 4,
+    borderWidth: 1,
+    borderRadius: 14,
+    borderStyle: "dashed",
+  },
+  showMoreText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

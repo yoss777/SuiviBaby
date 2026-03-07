@@ -2,7 +2,6 @@ import { SwipeGallery } from "@/components/moments";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
-import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -26,7 +25,7 @@ import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   Dimensions,
@@ -109,11 +108,12 @@ const getDayLabel = (date: Date): string => {
 // POLAROID CARD COMPONENT
 // ============================================
 
-const PolaroidCard = ({
+const PolaroidCard = React.memo(function PolaroidCard({
   photo,
   index,
-  onPress,
-  onLongPress,
+  onPhotoPress,
+  onPhotoEdit,
+  canEdit,
   likeCount,
   hasComments,
   hasNewInteraction,
@@ -121,17 +121,17 @@ const PolaroidCard = ({
 }: {
   photo: PhotoMilestone;
   index: number;
-  onPress: () => void;
-  onLongPress?: () => void;
+  onPhotoPress: (photo: PhotoMilestone) => void;
+  onPhotoEdit: (photoId: string) => void;
+  canEdit: boolean;
   likeCount?: number;
   hasComments?: boolean;
   hasNewInteraction?: boolean;
   nc: ReturnType<typeof getNeutralColors>;
-}) => {
+}) {
   const hasLikes = (likeCount ?? 0) > 0;
   const [imageError, setImageError] = useState(false);
 
-  // Stable rotation based on photo ID hash
   const rotation = useMemo(() => {
     let hash = 0;
     for (let i = 0; i < photo.id.length; i++) {
@@ -161,32 +161,31 @@ const PolaroidCard = ({
 
   const handlePress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onPress();
-  }, [onPress]);
+    onPhotoPress(photo);
+  }, [onPhotoPress, photo]);
 
   const handleLongPress = useCallback(() => {
-    if (onLongPress) {
+    if (canEdit) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      onLongPress();
+      onPhotoEdit(photo.id);
     }
-  }, [onLongPress]);
+  }, [canEdit, onPhotoEdit, photo.id]);
 
   return (
     <Animated.View style={[styles.polaroidWrapper, animatedStyle]}>
       <Pressable
         onPress={handlePress}
-        onLongPress={onLongPress ? handleLongPress : undefined}
+        onLongPress={canEdit ? handleLongPress : undefined}
         delayLongPress={400}
         onPressIn={() => { pressScale.value = withSpring(0.97, { damping: 15 }); }}
         onPressOut={() => { pressScale.value = withSpring(1, { damping: 15 }); }}
         style={[styles.polaroid, { backgroundColor: nc.backgroundCard }]}
         accessibilityRole="button"
         accessibilityLabel={`Photo ${photo.titre || formatDateShort(photo.date)}${hasLikes ? ", aimée" : ""}${hasComments ? ", commentée" : ""}`}
-        accessibilityHint={onLongPress ? "Appuyez longuement pour modifier" : "Appuyez pour voir en plein écran"}
+        accessibilityHint={canEdit ? "Appuyez longuement pour modifier" : "Appuyez pour voir en plein écran"}
       >
-        {/* Point rouge pour les nouvelles interactions */}
         {hasNewInteraction && (
-          <View style={[styles.newBadge, { borderColor: nc.backgroundCard }]} />
+          <View style={[styles.newBadge, { borderColor: nc.backgroundCard, backgroundColor: nc.error }]} />
         )}
 
         <View style={[styles.polaroidImageContainer, { backgroundColor: nc.borderLight }]}>
@@ -198,6 +197,7 @@ const PolaroidCard = ({
             <Image
               source={{ uri: photo.photo }}
               style={styles.polaroidImage}
+              resizeMode="cover"
               onError={() => setImageError(true)}
             />
           )}
@@ -209,10 +209,10 @@ const PolaroidCard = ({
             </Text>
             <View style={styles.iconsRow}>
               {hasLikes && (
-                <FontAwesome6 name="heart" size={10} color="#ef4444" solid />
+                <FontAwesome6 name="heart" size={10} color={nc.error} solid />
               )}
               {hasComments && (
-                <FontAwesome6 name="comment" size={10} color="#0a7ea4" solid />
+                <FontAwesome6 name="comment" size={10} color={nc.todayAccent} solid />
               )}
             </View>
           </View>
@@ -225,7 +225,7 @@ const PolaroidCard = ({
       </Pressable>
     </Animated.View>
   );
-};
+});
 
 // ============================================
 // MAIN COMPONENT
@@ -287,7 +287,7 @@ export default function GalleryScreen() {
       const backButton = (
         <HeaderBackButton
           onPress={() => router.back()}
-          tintColor={Colors[colorScheme].text}
+          tintColor={nc.textStrong}
         />
       );
       setHeaderLeft(backButton, headerOwnerId.current);
@@ -316,7 +316,7 @@ export default function GalleryScreen() {
             accessibilityRole="button"
             accessibilityLabel="Ajouter un souvenir photo"
           >
-            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+            <Ionicons name="add" size={24} color={nc.todayAccent} />
           </Pressable>
         </View>
       );
@@ -643,10 +643,9 @@ export default function GalleryScreen() {
             key={photo.id}
             photo={photo}
             index={index}
-            onPress={() => handlePhotoPress(photo)}
-            onLongPress={
-              canManageContent ? () => handleEditPhoto(photo.id) : undefined
-            }
+            onPhotoPress={handlePhotoPress}
+            onPhotoEdit={handleEditPhoto}
+            canEdit={canManageContent}
             likeCount={likesInfo[photo.id]?.count}
             hasComments={(commentCounts[photo.id] ?? 0) > 0}
             hasNewInteraction={newEventIds.has(photo.id)}
@@ -674,7 +673,7 @@ export default function GalleryScreen() {
         <FontAwesome6 name="triangle-exclamation" size={32} color={nc.warning} />
         <Text style={[styles.errorTitle, { color: nc.textStrong }]}>Impossible de charger</Text>
         <Text style={[styles.loadingText, { color: nc.textLight }]}>Vérifiez votre connexion</Text>
-        <Pressable onPress={handleRetry} style={styles.retryButton}>
+        <Pressable onPress={handleRetry} style={styles.retryButton} accessibilityRole="button" accessibilityLabel="Réessayer le chargement">
           <FontAwesome6 name="arrow-rotate-right" size={14} color="#fff" />
           <Text style={styles.retryButtonText}>Réessayer</Text>
         </Pressable>
@@ -705,7 +704,7 @@ export default function GalleryScreen() {
                 : "Les souvenirs partagés apparaîtront ici"}
             </Text>
             {canManageContent && (
-              <Pressable onPress={handleAddPhoto} style={styles.emptyStateButton}>
+              <Pressable onPress={handleAddPhoto} style={styles.emptyStateButton} accessibilityRole="button" accessibilityLabel="Ajouter un souvenir photo">
                 <FontAwesome6 name="camera" size={16} color="#fff" />
                 <Text style={styles.emptyStateButtonText}>
                   Ajouter un souvenir
@@ -716,10 +715,7 @@ export default function GalleryScreen() {
         ) : (
           <FlatList
             data={groupedPhotos}
-            keyExtractor={(item) => {
-              const d = item.date;
-              return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-            }}
+            keyExtractor={(item) => item.date.toISOString().slice(0, 10)}
             renderItem={renderDayGroup}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
@@ -737,7 +733,7 @@ export default function GalleryScreen() {
         initialIndex={galleryInitialIndex}
         visible={galleryVisible}
         childId={activeChild?.id || "unknown"}
-        backgroundColor="rgba(60, 50, 40, 0.97)"
+        backgroundColor={colorScheme === "dark" ? "rgba(10, 10, 15, 0.97)" : "rgba(60, 50, 40, 0.97)"}
         onClose={handleCloseGallery}
         onAddPhoto={canManageContent ? handleAddPhoto : undefined}
         onEdit={canManageContent ? handleEditPhoto : undefined}
@@ -843,7 +839,6 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#e63946",
     borderWidth: 2,
     zIndex: 10,
   },
@@ -858,8 +853,8 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   imagePlaceholder: {
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
+    alignItems: "center",
+    justifyContent: "center",
   },
   polaroidCaption: {
     marginTop: 10,

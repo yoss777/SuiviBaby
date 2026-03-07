@@ -13,6 +13,7 @@ import {
   supprimerBain,
   supprimerSommeil,
 } from "@/migration/eventsDoubleWriteService";
+import { obtenirEvenements, EventType } from "@/services/eventsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -336,8 +337,29 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         }
 
         // Prevent creating ongoing sleep if one already exists (unless editing the same sleep)
+        if (isOngoing && !isEditing) {
+          // If sommeilEnCours prop is provided, use it; otherwise query Firestore
+          let hasOngoingSleep = !!sommeilEnCours;
+          if (!sommeilEnCours && activeChild?.id) {
+            const recentSleeps = await obtenirEvenements(activeChild.id, {
+              type: "sommeil" as EventType,
+              limite: 5,
+            });
+            hasOngoingSleep = recentSleeps.some(
+              (e: any) => e.heureDebut && !e.heureFin,
+            );
+          }
+          if (hasOngoingSleep) {
+            showAlert(
+              "Attention",
+              "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
+            );
+            setIsSubmitting(false);
+            return;
+          }
+        }
         const isEditingSameOngoingSleep = editData && sommeilEnCours && editData.id === sommeilEnCours.id;
-        if (isOngoing && sommeilEnCours && !isEditingSameOngoingSleep) {
+        if (isOngoing && sommeilEnCours && isEditing && !isEditingSameOngoingSleep) {
           showAlert(
             "Attention",
             "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",

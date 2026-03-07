@@ -421,6 +421,7 @@ function RecentEventsListComponent({
                 />
               )}
               <ReanimatedSwipeable
+                containerStyle={styles.swipeableContainer}
                 renderRightActions={
                   onEventDelete && event.id
                     ? () => <DeleteAction onPress={() => onEventDelete(event)} />
@@ -599,11 +600,13 @@ const styles = StyleSheet.create({
     color: neutralColors.textMuted,
     fontWeight: "500",
   },
+  swipeableContainer: {
+    marginHorizontal: 20,
+  },
   recentRow: {
     flexDirection: "row",
     gap: 12,
     marginBottom: 14,
-    marginHorizontal: 20,
   },
   recentTimelineColumn: {
     width: 20,

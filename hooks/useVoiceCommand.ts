@@ -1238,6 +1238,24 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "sommeil":
+          // Si pas de durée → sommeil "en cours" : vérifier qu'il n'y en a pas déjà un
+          if (!(data as any).duree) {
+            const recentSleeps = await obtenirEvenements(childId, {
+              type: "sommeil" as EventType,
+              limite: 5,
+            });
+            const hasOngoing = recentSleeps.some(
+              (e: any) => e.heureDebut && !e.heureFin,
+            );
+            if (hasOngoing) {
+              setInfoModal({
+                visible: true,
+                title: "Sommeil déjà en cours",
+                message: "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
+              });
+              break;
+            }
+          }
           await ajouterSommeil(childId, data);
           setInfoModal({
             visible: true,
