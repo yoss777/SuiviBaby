@@ -1,5 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
-import { Colors } from "@/constants/theme";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -32,6 +32,7 @@ const ITEMS = [
     subtitle: "Alimentation et expression du lait",
     icon: "chart-line",
     color: "#607D8B",
+    darkColor: "#90A4AE",
     route: "/baby/stats",
   },
   {
@@ -39,6 +40,7 @@ const ITEMS = [
     subtitle: "Poids, taille et tour de tête",
     icon: "seedling",
     color: "#8BCF9B",
+    darkColor: "#A8E6B8",
     route: "/baby/growth",
   },
   {
@@ -94,16 +96,14 @@ const ITEMS = [
 
 export default function PlusScreen() {
   const colorScheme = useColorScheme() ?? "light";
-  const colors = Colors[colorScheme];
-  const borderColor = `${colors.tabIconDefault}30`;
+  const nc = getNeutralColors(colorScheme);
   const navLockRef = useRef(false);
+  const iconBgOpacity = colorScheme === "dark" ? "26" : "1A";
 
   // Récupérer l'enfant actif et les permissions
   const { activeChild } = useBaby();
   const { firebaseUser } = useAuth();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const canManageContent =
-    permissions.role === "owner" || permissions.role === "admin";
 
   useFocusEffect(
     useCallback(() => {
@@ -131,12 +131,13 @@ export default function PlusScreen() {
 
   // Filtrer les items selon les permissions
   const visibleItems = ITEMS.filter((item) => {
-    // Si l'item nécessite d'être owner
     if ("ownerOnly" in item && item.ownerOnly) {
       return permissions.canManageAccess;
     }
     return true;
   });
+
+  const isDark = colorScheme === "dark";
 
   return (
     <ThemedView style={styles.screen}>
@@ -146,63 +147,90 @@ export default function PlusScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.text }]}>Plus</Text>
-            <Text style={[styles.subtitle, { color: colors.tabIconDefault }]}>
+            <Text style={[styles.title, { color: nc.textStrong }]}>Plus</Text>
+            <Text style={[styles.subtitle, { color: nc.textMuted }]}>
               Accès aux écrans détaillés
             </Text>
           </View>
 
           <View style={styles.list}>
-            {visibleItems.map((item) => (
-              <TouchableOpacity
-                key={item.title}
-                style={[
-                  styles.row,
-                  { backgroundColor: colors.background, borderColor },
-                ]}
-                onPress={() => handleNavigate(item.route)}
-                activeOpacity={0.85}
-              >
-                <View
-                  style={[
-                    styles.iconWrap,
-                    { backgroundColor: `${item.color}1A` },
-                  ]}
-                >
-                  {typeof item.icon === "string" ? (
-                    <FontAwesome
-                      name={item.icon as any}
-                      size={18}
-                      color={item.color}
-                    />
-                  ) : (
-                    <MaterialCommunityIcons
-                      name={item.icon.name as any}
-                      size={18}
-                      color={item.color}
-                    />
-                  )}
-                </View>
-                <View style={styles.textBlock}>
-                  <Text style={[styles.rowTitle, { color: colors.text }]}>
-                    {item.title}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.rowSubtitle,
-                      { color: colors.tabIconDefault },
-                    ]}
-                  >
-                    {item.subtitle}
-                  </Text>
-                </View>
+            {visibleItems.length === 0 ? (
+              <View style={styles.emptyState}>
                 <FontAwesome
-                  name="chevron-right"
-                  size={14}
-                  color={colors.tabIconDefault}
+                  name="lock"
+                  size={24}
+                  color={nc.textMuted}
                 />
-              </TouchableOpacity>
-            ))}
+                <Text style={[styles.emptyText, { color: nc.textLight }]}>
+                  Aucun écran disponible avec vos permissions actuelles
+                </Text>
+              </View>
+            ) : (
+              visibleItems.map((item) => {
+                const itemColor =
+                  isDark && "darkColor" in item ? item.darkColor : item.color;
+                return (
+                  <TouchableOpacity
+                    key={item.title}
+                    style={[
+                      styles.row,
+                      {
+                        backgroundColor: nc.backgroundCard,
+                        borderColor: nc.border,
+                        shadowOpacity: isDark ? 0 : 0.04,
+                        elevation: isDark ? 0 : 1,
+                      },
+                    ]}
+                    onPress={() => handleNavigate(item.route)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.title} — ${item.subtitle}`}
+                  >
+                    <View
+                      style={[
+                        styles.iconWrap,
+                        {
+                          backgroundColor: `${itemColor}${iconBgOpacity}`,
+                        },
+                      ]}
+                      importantForAccessibility="no"
+                    >
+                      {typeof item.icon === "string" ? (
+                        <FontAwesome
+                          name={item.icon as any}
+                          size={18}
+                          color={itemColor}
+                        />
+                      ) : (
+                        <MaterialCommunityIcons
+                          name={item.icon.name as any}
+                          size={18}
+                          color={itemColor}
+                        />
+                      )}
+                    </View>
+                    <View style={styles.textBlock}>
+                      <Text
+                        style={[styles.rowTitle, { color: nc.textStrong }]}
+                      >
+                        {item.title}
+                      </Text>
+                      <Text
+                        style={[styles.rowSubtitle, { color: nc.textLight }]}
+                      >
+                        {item.subtitle}
+                      </Text>
+                    </View>
+                    <FontAwesome
+                      name="chevron-right"
+                      size={14}
+                      color={nc.textMuted}
+                      importantForAccessibility="no"
+                    />
+                  </TouchableOpacity>
+                );
+              })
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -213,7 +241,6 @@ export default function PlusScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   safeArea: {
     flex: 1,
@@ -270,5 +297,16 @@ const styles = StyleSheet.create({
   rowSubtitle: {
     marginTop: 2,
     fontSize: 12,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 20,
   },
 });

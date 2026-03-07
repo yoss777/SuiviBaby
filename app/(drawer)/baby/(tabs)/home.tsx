@@ -730,9 +730,13 @@ export default function HomeDashboard() {
             event.duree ??
             (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
 
+          const locationLabel =
+            event.location === "autre" && event.note
+              ? event.note
+              : event.location;
           const parts = [
             end ? formatDuration(duration) : null, // Only show duration if sleep is finished
-            event.location,
+            locationLabel,
             event.quality,
           ].filter(Boolean);
           return parts.length > 0 ? parts.join(" · ") : undefined;
@@ -767,7 +771,7 @@ export default function HomeDashboard() {
         case "activite": {
           const isOther = event.typeActivite === "autre";
           const parts = [
-            event.duree ? `${event.duree} min` : null,
+            event.duree ? formatDuration(event.duree) : null,
             isOther ? null : event.description,
           ].filter(Boolean);
           return parts.length > 0 ? parts.join(" · ") : undefined;

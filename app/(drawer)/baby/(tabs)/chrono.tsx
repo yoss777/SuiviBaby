@@ -338,7 +338,7 @@ function buildDetails(event: Event) {
     case "activite": {
       const isOther = event.typeActivite === "autre";
       const parts = [
-        event.duree ? `${event.duree} min` : null,
+        event.duree ? formatDuration(event.duree) : null,
         isOther ? null : event.description,
       ].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;

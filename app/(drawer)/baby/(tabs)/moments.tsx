@@ -33,7 +33,13 @@ import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderRight } from "../../_layout";
@@ -109,6 +115,7 @@ export default function MomentsScreen() {
   const [isMoodSaving, setIsMoodSaving] = useState(false);
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Social interactions state
   const [likesInfo, setLikesInfo] = useState<Record<string, LikeInfo>>({});
@@ -120,6 +127,12 @@ export default function MomentsScreen() {
 
   const refreshToday = useCallback(() => {
     setRefreshTick((prev) => prev + 1);
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setRefreshTick((prev) => prev + 1);
+    setTimeout(() => setIsRefreshing(false), 800);
   }, []);
 
   // Mood data processing (separate from photos to avoid cross-invalidation)
@@ -489,6 +502,12 @@ export default function MomentsScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+            />
+          }
         >
           {/* Hero Mood Card */}
           <Animated.View entering={FadeIn.duration(400)}>
