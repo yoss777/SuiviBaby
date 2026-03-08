@@ -528,6 +528,9 @@ export default function CroissanceScreen() {
       const prevDate = prevEntry ? toDate(prevEntry.date) : null;
       const prevDayLabel = prevDate ? getDayLabel(prevDate) : null;
       const showDaySeparator = index === 0 || currentDayLabel !== prevDayLabel;
+      const nextEntry = index < visibleEntries.length - 1 ? visibleEntries[index + 1] : null;
+      const nextDayLabel = nextEntry ? getDayLabel(toDate(nextEntry.date)) : null;
+      const isLastInSection = !nextEntry || currentDayLabel !== nextDayLabel;
 
       const cardContent = (
         <TouchableOpacity
@@ -654,43 +657,48 @@ export default function CroissanceScreen() {
               />
             </View>
           )}
-          <View style={styles.itemRow}>
-            <View style={styles.timelineColumn}>
-              <View style={[styles.dot, { backgroundColor: palette.green }]} />
-              <View
-                style={[styles.line, { backgroundColor: palette.border }]}
-              />
-            </View>
-            <Text style={[styles.timeText, { color: palette.muted }]}>
-              {date.toLocaleTimeString("fr-FR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-            <View style={styles.cardSwipeWrapper}>
-              <ReanimatedSwipeable
-                renderRightActions={
-                  canManageContent && item.id
-                    ? () => (
-                        <DeleteAction onPress={() => handleEventDelete(item)} />
-                      )
-                    : undefined
-                }
-                friction={2}
-                rightThreshold={40}
-                overshootRight={false}
-                enabled={canManageContent && !!item.id}
-              >
+          <ReanimatedSwipeable
+            renderRightActions={
+              canManageContent && item.id
+                ? () => (
+                    <DeleteAction onPress={() => handleEventDelete(item)} />
+                  )
+                : undefined
+            }
+            friction={2}
+            rightThreshold={40}
+            overshootRight={false}
+            enabled={canManageContent && !!item.id}
+          >
+            <View style={styles.itemRow}>
+              <View style={styles.timelineColumn}>
+                <View style={[styles.dot, { backgroundColor: palette.green }]} />
+                <View
+                  style={[
+                    styles.line,
+                    { backgroundColor: `${Colors[colorScheme].tabIconDefault}30` },
+                    isLastInSection && styles.lineLast,
+                  ]}
+                />
+              </View>
+              <Text style={[styles.timeText, { color: palette.muted }]}>
+                {date.toLocaleTimeString("fr-FR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
+              <View style={styles.cardSwipeWrapper}>
                 {cardContent}
-              </ReanimatedSwipeable>
+              </View>
             </View>
-          </View>
+          </ReanimatedSwipeable>
         </React.Fragment>
       );
     },
     [
       visibleEntries,
       canManageContent,
+      colorScheme,
       getDayLabel,
       handleEventDelete,
       openEditModal,
@@ -1716,6 +1724,9 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: 4,
   },
+  lineLast: {
+    backgroundColor: "transparent",
+  },
   daySeparator: {
     flexDirection: "row",
     alignItems: "center",
@@ -1838,9 +1849,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: 80,
-    height: "100%",
     borderRadius: 14,
     marginHorizontal: 4,
+    marginVertical: 7,
     gap: 4,
   },
   deleteActionText: {

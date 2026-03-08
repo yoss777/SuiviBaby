@@ -634,10 +634,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   recentDot: {
-    width: 12,
-    height: 12,
+    width: 10,
+    height: 10,
     borderRadius: 999,
-    marginTop: 5,
+    marginTop: 6,
   },
   recentLine: {
     width: 2,
