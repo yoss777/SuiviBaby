@@ -310,7 +310,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 12,
     paddingBottom: 24,
   },
   header: {
@@ -319,8 +318,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 26,
+    fontWeight: "800",
   },
   subtitle: {
     marginTop: 4,
