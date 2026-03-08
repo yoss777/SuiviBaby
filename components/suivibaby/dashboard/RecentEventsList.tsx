@@ -210,7 +210,11 @@ const StaggeredRow = memo(function StaggeredRow({
   );
 });
 
-const DeleteAction = memo(function DeleteAction({ onPress }: { onPress: () => void }) {
+const DeleteAction = memo(function DeleteAction({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
   return (
     <Pressable
       style={styles.deleteAction}
@@ -234,7 +238,9 @@ const EmptyState = memo(function EmptyState({
   return (
     <View style={styles.emptyState}>
       <Text style={styles.emptyStateEmoji}>{"\uD83C\uDF1F"}</Text>
-      <Text style={[styles.emptyStateTitle, { color: titleColor }]}>Rien pour l&apos;instant</Text>
+      <Text style={[styles.emptyStateTitle, { color: titleColor }]}>
+        Rien pour l&apos;instant
+      </Text>
       <Text style={[styles.emptyStateSubtitle, { color: subtitleColor }]}>
         Appuyez sur + pour enregistrer le premier événement
       </Text>
@@ -299,7 +305,13 @@ function RecentEventsListComponent({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeaderRow}>
-        <Text style={[styles.sectionTitle, styles.sectionTitleInline, { color: nc.textStrong }]}>
+        <Text
+          style={[
+            styles.sectionTitle,
+            styles.sectionTitleInline,
+            { color: nc.textStrong },
+          ]}
+        >
           Évènements récents
         </Text>
         <TouchableOpacity
@@ -308,7 +320,11 @@ function RecentEventsListComponent({
           accessibilityRole="link"
           accessibilityLabel="Voir tous les événements"
         >
-          <Text style={[styles.sectionLink, { color: Colors[colorScheme].tint }]}>Voir tout</Text>
+          <Text
+            style={[styles.sectionLink, { color: Colors[colorScheme].tint }]}
+          >
+            Voir tout
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -321,13 +337,12 @@ function RecentEventsListComponent({
       {loading ? (
         <View style={styles.recentLoading}>
           <ActivityIndicator size="small" color={Colors[colorScheme].tint} />
-          <Text style={[styles.recentLoadingText, { color: nc.textLight }]}>Chargement...</Text>
+          <Text style={[styles.recentLoadingText, { color: nc.textLight }]}>
+            Chargement...
+          </Text>
         </View>
       ) : events.length === 0 ? (
-        <EmptyState
-          titleColor={nc.textStrong}
-          subtitleColor={nc.textMuted}
-        />
+        <EmptyState titleColor={nc.textStrong} subtitleColor={nc.textMuted} />
       ) : (
         events.map((event, index) => {
           const config = EVENT_CONFIG[event.type] || {
@@ -425,7 +440,9 @@ function RecentEventsListComponent({
                   containerStyle={styles.swipeableContainer}
                   renderRightActions={
                     onEventDelete && event.id
-                      ? () => <DeleteAction onPress={() => onEventDelete(event)} />
+                      ? () => (
+                          <DeleteAction onPress={() => onEventDelete(event)} />
+                        )
                       : undefined
                   }
                   friction={2}
@@ -498,7 +515,10 @@ function RecentEventsListComponent({
                         {isJalon && event.photos?.[0] && (
                           <Image
                             source={{ uri: event.photos[0] }}
-                            style={[styles.recentThumb, { backgroundColor: nc.backgroundPressed }]}
+                            style={[
+                              styles.recentThumb,
+                              { backgroundColor: nc.backgroundPressed },
+                            ]}
                             accessibilityLabel="Photo de l'événement"
                           />
                         )}
@@ -729,9 +749,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: 80,
-    marginBottom: 14,
+    marginBottom: 15,
     borderRadius: 14,
     marginHorizontal: 4,
+    marginVertical: 1,
     gap: 4,
   },
   deleteActionText: {

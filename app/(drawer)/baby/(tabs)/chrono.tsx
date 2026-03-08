@@ -2,6 +2,7 @@ import { ThemedView } from "@/components/themed-view";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ACTIVITY_TYPE_LABELS,
   BIBERON_TYPE_LABELS,
@@ -10,10 +11,10 @@ import {
   MOMENT_REPAS_LABELS,
   MOOD_EMOJIS,
 } from "@/constants/dashboardConfig";
-import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
-import { useBaby } from "@/contexts/BabyContext";
+import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -25,6 +26,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import React, {
   useCallback,
   useEffect,
@@ -44,7 +46,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
@@ -433,12 +434,7 @@ const FilterChip = React.memo(
             color={config.color}
           />
         )}
-        <Text
-          style={[
-            styles.filterChipText,
-            { color: textColor },
-          ]}
-        >
+        <Text style={[styles.filterChipText, { color: textColor }]}>
           {config.label}
         </Text>
         {typeof count === "number" && count > 0 && (
@@ -478,10 +474,7 @@ const RangeChip = React.memo(
     onPress,
   }: RangeChipProps) => (
     <TouchableOpacity
-      style={[
-        styles.rangeChip,
-        isActive && { backgroundColor: activeBg },
-      ]}
+      style={[styles.rangeChip, isActive && { backgroundColor: activeBg }]}
       onPress={onPress}
       activeOpacity={0.8}
       accessibilityRole="button"
@@ -582,6 +575,7 @@ interface TimelineCardProps {
   backgroundColor: string;
   textColor: string;
   secondaryTextColor: string;
+  isLastInSection: boolean;
   onPress?: () => void;
   currentTime: Date;
 }
@@ -593,6 +587,7 @@ const TimelineCard = React.memo(
     backgroundColor,
     textColor,
     secondaryTextColor,
+    isLastInSection,
     onPress,
     currentTime,
   }: TimelineCardProps) => {
@@ -610,7 +605,9 @@ const TimelineCard = React.memo(
         ? MOMENT_REPAS_LABELS[event.momentRepas]
         : null
       : null;
-    const solideQuantity = isSolide ? (event as any).quantiteSolide ?? event.quantite : null;
+    const solideQuantity = isSolide
+      ? ((event as any).quantiteSolide ?? event.quantite)
+      : null;
     const solideLine2 =
       isSolide && (solideMomentLabel || solideQuantity)
         ? `${solideMomentLabel ?? ""}${
@@ -693,7 +690,13 @@ const TimelineCard = React.memo(
       <View style={styles.itemRow}>
         <View style={styles.timelineColumn}>
           <View style={[styles.dot, { backgroundColor: config.color }]} />
-          <View style={[styles.line, { backgroundColor: borderColor }]} />
+          <View
+            style={[
+              styles.line,
+              { backgroundColor: borderColor },
+              isLastInSection && styles.lineLast,
+            ]}
+          />
         </View>
         <View style={styles.cardTimeLeft}>
           {isSleep && event.heureFin ? (
@@ -786,7 +789,12 @@ const TimelineCard = React.memo(
           {isSolide && (solideLine2 || solideLikeLabel) && (
             <View style={styles.solideDetails}>
               {solideLine2 && (
-                <Text style={[styles.solideDetailsText, { color: secondaryTextColor }]}>
+                <Text
+                  style={[
+                    styles.solideDetailsText,
+                    { color: secondaryTextColor },
+                  ]}
+                >
                   {solideLine2}
                 </Text>
               )}
@@ -1439,30 +1447,51 @@ export default function ChronoScreen() {
 
   // Render item
   const renderItem = useCallback(
-    ({ item }: { item: Event }) => (
-      <ReanimatedSwipeable
-        renderRightActions={
-          canManageContent && item.id
-            ? () => <DeleteAction onPress={() => handleEventDelete(item)} />
-            : undefined
-        }
-        friction={2}
-        rightThreshold={40}
-        overshootRight={false}
-        enabled={canManageContent && !!item.id}
-      >
-        <TimelineCard
-          event={item}
-          borderColor={colors.borderLight}
-          backgroundColor={colors.background}
-          textColor={colors.text}
-          secondaryTextColor={colors.secondaryText}
-          onPress={canManageContent ? () => handleEdit(item) : undefined}
-          currentTime={currentTime}
-        />
-      </ReanimatedSwipeable>
-    ),
-    [canManageContent, colors, handleEdit, handleEventDelete, currentTime],
+    ({
+      item,
+      index,
+      section,
+    }: {
+      item: Event;
+      index: number;
+      section: TimelineSection;
+    }) => {
+      const isLastInSection = index === section.data.length - 1;
+      return (
+        <ReanimatedSwipeable
+          renderRightActions={
+            canManageContent && item.id
+              ? () => <DeleteAction onPress={() => handleEventDelete(item)} />
+              : undefined
+          }
+          friction={2}
+          rightThreshold={40}
+          overshootRight={false}
+          enabled={canManageContent && !!item.id}
+        >
+          <TimelineCard
+            event={item}
+            borderColor={`${Colors[colorScheme].tabIconDefault}30`}
+            backgroundColor={colors.background}
+            textColor={colors.text}
+            secondaryTextColor={colors.secondaryText}
+            isLastInSection={isLastInSection}
+            onPress={canManageContent ? () => handleEdit(item) : undefined}
+            currentTime={currentTime}
+          />
+        </ReanimatedSwipeable>
+      );
+    },
+    [
+      canManageContent,
+      colors.background,
+      colors.secondaryText,
+      colors.text,
+      handleEdit,
+      handleEventDelete,
+      currentTime,
+      colorScheme,
+    ],
   );
 
   // Key extractor
@@ -1559,23 +1588,37 @@ export default function ChronoScreen() {
                           style={[
                             styles.filterChip,
                             { borderColor: colors.tint, borderWidth: 0 },
-                            allSelected && { backgroundColor: `${colors.tint}1A` },
+                            allSelected && {
+                              backgroundColor: `${colors.tint}1A`,
+                            },
                           ]}
                           onPress={handleToggleAll}
                           activeOpacity={0.8}
                           accessibilityRole="button"
-                          accessibilityLabel={allSelected ? "Désélectionner tous les filtres" : "Sélectionner tous les filtres"}
+                          accessibilityLabel={
+                            allSelected
+                              ? "Désélectionner tous les filtres"
+                              : "Sélectionner tous les filtres"
+                          }
                           accessibilityState={{ selected: allSelected }}
                         >
                           <Ionicons
-                            name={allSelected ? "checkmark-circle" : "ellipse-outline"}
+                            name={
+                              allSelected
+                                ? "checkmark-circle"
+                                : "ellipse-outline"
+                            }
                             size={14}
                             color={allSelected ? colors.tint : colors.secondary}
                           />
                           <Text
                             style={[
                               styles.filterChipText,
-                              { color: allSelected ? colors.tint : colors.secondary },
+                              {
+                                color: allSelected
+                                  ? colors.tint
+                                  : colors.secondary,
+                              },
                             ]}
                           >
                             Tous
@@ -1828,6 +1871,9 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: 4,
   },
+  lineLast: {
+    backgroundColor: "transparent",
+  },
   card: {
     flex: 1,
     borderRadius: 14,
@@ -1845,9 +1891,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cardThumb: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     borderRadius: 8,
+    backgroundColor: "#f3f4f6",
   },
   cardTitleRow: {
     flexDirection: "row",
@@ -1926,9 +1973,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: 80,
-    marginBottom: 14,
+    marginBottom: 15,
     borderRadius: 14,
     marginHorizontal: 4,
+    marginVertical: 1,
     gap: 4,
   },
   deleteActionText: {
