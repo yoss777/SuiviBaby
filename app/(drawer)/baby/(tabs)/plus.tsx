@@ -192,7 +192,7 @@ export default function PlusScreen() {
   })).filter((section) => section.items.length > 0);
 
   return (
-    <ThemedView style={styles.screen}>
+    <ThemedView style={[styles.screen, { backgroundColor: nc.background }]}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}

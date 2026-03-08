@@ -1501,7 +1501,7 @@ export default function ChronoScreen() {
   );
 
   return (
-    <ThemedView style={styles.screen}>
+    <ThemedView style={[styles.screen, { backgroundColor: nc.background }]}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         {/* Content */}
         <View style={styles.content}>

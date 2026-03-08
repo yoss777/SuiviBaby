@@ -977,7 +977,7 @@ export default function CroissanceScreen() {
 
   return (
     <ThemedView
-      style={[styles.screen, { backgroundColor: palette.surfaceAlt }]}
+      style={[styles.screen, { backgroundColor: nc.background }]}
     >
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         <GestureHandlerRootView style={styles.container}>
