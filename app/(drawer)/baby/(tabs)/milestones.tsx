@@ -23,7 +23,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   FlatList,
@@ -36,7 +36,12 @@ import {
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { supprimerJalon } from "@/migration/eventsDoubleWriteService";
+import * as Haptics from "expo-haptics";
 
 // ============================================
 // TYPES
@@ -127,6 +132,28 @@ const toDate = (value: any) => {
 };
 
 // ============================================
+// DELETE ACTION COMPONENT
+// ============================================
+
+const DeleteAction = React.memo(function DeleteAction({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Supprimer ce jalon"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={styles.deleteActionText}>Supprimer</Text>
+    </Pressable>
+  );
+});
+
+// ============================================
 // COMPONENT
 // ============================================
 
@@ -165,6 +192,11 @@ export default function MilestonesScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    visible: boolean;
+    event: MilestoneEventWithId | null;
+  }>({ visible: false, event: null });
 
   // Form pattern states
   const [pendingEditData, setPendingEditData] =
@@ -763,59 +795,68 @@ export default function MilestonesScreen() {
         ? event.titre ?? TYPE_CONFIG.autre.label
         : TYPE_CONFIG[event.typeJalon].label;
     return (
-      <Pressable
+      <ReanimatedSwipeable
         key={event.id}
-        style={({ pressed }) => [
-          styles.sessionCard,
-          pressed && styles.sessionCardPressed,
-        ]}
-        onPress={() => openEditModal(event)}
-        accessibilityRole="button"
-        accessibilityLabel="Modifier ce jalon"
+        renderRightActions={() => (
+          <DeleteAction onPress={() => handleEventDelete(event)} />
+        )}
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
       >
-        <View style={styles.sessionTime}>
-          <Text
+        <Pressable
+          style={({ pressed }) => [
+            styles.sessionCard,
+            pressed && styles.sessionCardPressed,
+          ]}
+          onPress={() => openEditModal(event)}
+          accessibilityRole="button"
+          accessibilityLabel="Modifier ce jalon"
+        >
+          <View style={styles.sessionTime}>
+            <Text
+              style={[
+                styles.sessionTimeText,
+                isLast && styles.sessionTimeTextLast,
+              ]}
+            >
+              {formatTime(date)}
+            </Text>
+          </View>
+          <View
             style={[
-              styles.sessionTimeText,
-              isLast && styles.sessionTimeTextLast,
+              styles.sessionIconWrapper,
+              { backgroundColor: `${config.color}20` },
             ]}
           >
-            {formatTime(date)}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.sessionIconWrapper,
-            { backgroundColor: `${config.color}20` },
-          ]}
-        >
-          <FontAwesome
-            name={config.icon as any}
-            size={14}
-            color={config.color}
-          />
-        </View>
-        <View style={styles.sessionContent}>
-          <View style={styles.sessionDetails}>
-            {titleText ? (
-              <Text style={styles.sessionType}>{titleText}</Text>
-            ) : null}
-            {event.description ? (
-              <Text style={styles.sessionDetailText}>{event.description}</Text>
-            ) : null}
-            {event.typeJalon === "humeur" && moodEmoji ? (
-              <Text style={styles.sessionMood}>{moodEmoji}</Text>
+            <FontAwesome
+              name={config.icon as any}
+              size={14}
+              color={config.color}
+            />
+          </View>
+          <View style={styles.sessionContent}>
+            <View style={styles.sessionDetails}>
+              {titleText ? (
+                <Text style={styles.sessionType}>{titleText}</Text>
+              ) : null}
+              {event.description ? (
+                <Text style={styles.sessionDetailText}>{event.description}</Text>
+              ) : null}
+              {event.typeJalon === "humeur" && moodEmoji ? (
+                <Text style={styles.sessionMood}>{moodEmoji}</Text>
+              ) : null}
+            </View>
+            {event.photos?.[0] ? (
+              <Image
+                source={{ uri: event.photos[0] }}
+                style={styles.sessionPhoto}
+              />
             ) : null}
           </View>
-          {event.photos?.[0] ? (
-            <Image
-              source={{ uri: event.photos[0] }}
-              style={styles.sessionPhoto}
-            />
-          ) : null}
-        </View>
-        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
-      </Pressable>
+          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+        </Pressable>
+      </ReanimatedSwipeable>
     );
   };
 
@@ -830,6 +871,26 @@ export default function MilestonesScreen() {
       return next;
     });
   };
+
+  const handleEventDelete = useCallback((event: MilestoneEventWithId) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setDeleteConfirm({ visible: true, event });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!activeChild?.id || !deleteConfirm.event?.id) return;
+    const eventId = deleteConfirm.event.id;
+    setDeleteConfirm({ visible: false, event: null });
+    try {
+      await supprimerJalon(activeChild.id, eventId);
+    } catch {
+      // silently fail
+    }
+  }, [activeChild?.id, deleteConfirm.event]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirm({ visible: false, event: null });
+  }, []);
 
   const renderDayGroup = ({ item }: { item: MilestoneGroup }) => {
     const [year, month, day] = item.date.split("-").map(Number);
@@ -932,7 +993,7 @@ export default function MilestonesScreen() {
   // RENDER
   // ============================================
   return (
-    <View style={[styles.container, { backgroundColor: nc.background }]}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={styles.safeArea}
         edges={["bottom"]}
@@ -1017,7 +1078,18 @@ export default function MilestonesScreen() {
           </View>
         )}
       </SafeAreaView>
-    </View>
+      <ConfirmModal
+        visible={deleteConfirm.visible}
+        title="Suppression"
+        message="Voulez-vous vraiment supprimer ce jalon ?"
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onCancel={cancelDelete}
+        onConfirm={confirmDelete}
+      />
+    </GestureHandlerRootView>
   );
 }
 
@@ -1218,5 +1290,20 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 10,
     backgroundColor: "#f3f4f6",
+  },
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    marginVertical: 1,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

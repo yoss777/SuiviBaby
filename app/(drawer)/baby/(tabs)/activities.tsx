@@ -1,5 +1,6 @@
 import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesForm";
 import { ThemedText } from "@/components/themed-text";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
@@ -15,13 +16,15 @@ import {
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
+import { supprimerActivite } from "@/migration/eventsDoubleWriteService";
 import { ActiviteEvent } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   FlatList,
@@ -32,6 +35,8 @@ import {
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 
@@ -125,6 +130,28 @@ const toDate = (value: any) => {
 };
 
 // ============================================
+// DELETE ACTION COMPONENT
+// ============================================
+
+const DeleteAction = React.memo(function DeleteAction({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Supprimer cette activité"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={styles.deleteActionText}>Supprimer</Text>
+    </Pressable>
+  );
+});
+
+// ============================================
 // COMPONENT
 // ============================================
 
@@ -165,6 +192,11 @@ export default function ActivitiesScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    visible: boolean;
+    event: ActivityEventWithId | null;
+  }>({ visible: false, event: null });
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -735,54 +767,83 @@ export default function ActivitiesScreen() {
     });
   }, []);
 
+  const handleEventDelete = useCallback((event: ActivityEventWithId) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setDeleteConfirm({ visible: true, event });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!activeChild?.id || !deleteConfirm.event?.id) return;
+    const eventId = deleteConfirm.event.id;
+    setDeleteConfirm({ visible: false, event: null });
+    try {
+      await supprimerActivite(activeChild.id, eventId);
+    } catch {
+      // silently fail
+    }
+  }, [activeChild?.id, deleteConfirm.event]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirm({ visible: false, event: null });
+  }, []);
+
   const renderEventItem = (event: ActivityEventWithId, isLast = false) => {
     const time = toDate(event.date);
     const config = TYPE_CONFIG[event.typeActivite as ActiviteType];
     return (
-      <Pressable
+      <ReanimatedSwipeable
         key={event.id}
-        style={({ pressed }) => [
-          styles.sessionCard,
-          pressed && styles.sessionCardPressed,
-        ]}
-        onPress={() => openEditModal(event)}
-        accessibilityRole="button"
-        accessibilityLabel="Modifier cette activité"
+        renderRightActions={() => (
+          <DeleteAction onPress={() => handleEventDelete(event)} />
+        )}
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
       >
-        <View style={styles.sessionTime}>
-          <Text
+        <Pressable
+          style={({ pressed }) => [
+            styles.sessionCard,
+            pressed && styles.sessionCardPressed,
+          ]}
+          onPress={() => openEditModal(event)}
+          accessibilityRole="button"
+          accessibilityLabel="Modifier cette activité"
+        >
+          <View style={styles.sessionTime}>
+            <Text
+              style={[
+                styles.sessionTimeText,
+                isLast && styles.sessionTimeTextLast,
+              ]}
+            >
+              {formatTime(time)}
+            </Text>
+          </View>
+          <View
             style={[
-              styles.sessionTimeText,
-              isLast && styles.sessionTimeTextLast,
+              styles.sessionIconWrapper,
+              { backgroundColor: `${config.color}20` },
             ]}
           >
-            {formatTime(time)}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.sessionIconWrapper,
-            { backgroundColor: `${config.color}20` },
-          ]}
-        >
-          <FontAwesome
-            name={config.icon as any}
-            size={14}
-            color={config.color}
-          />
-        </View>
-        <View style={styles.sessionContent}>
-          <View style={styles.sessionDetails}>
-            <Text style={styles.sessionType}>{config.label}</Text>
-            {buildDetails(event) && (
-              <Text style={styles.sessionDetailText}>
-                {buildDetails(event)}
-              </Text>
-            )}
+            <FontAwesome
+              name={config.icon as any}
+              size={14}
+              color={config.color}
+            />
           </View>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
-      </Pressable>
+          <View style={styles.sessionContent}>
+            <View style={styles.sessionDetails}>
+              <Text style={styles.sessionType}>{config.label}</Text>
+              {buildDetails(event) && (
+                <Text style={styles.sessionDetailText}>
+                  {buildDetails(event)}
+                </Text>
+              )}
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+        </Pressable>
+      </ReanimatedSwipeable>
     );
   };
 
@@ -884,7 +945,7 @@ export default function ActivitiesScreen() {
   // RENDER
   // ============================================
   return (
-    <View style={[styles.container, { backgroundColor: nc.background }]}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={{ flex: 1 }}
         edges={["bottom"]}
@@ -1002,7 +1063,18 @@ export default function ActivitiesScreen() {
           </View>
         )}
       </SafeAreaView>
-    </View>
+      <ConfirmModal
+        visible={deleteConfirm.visible}
+        title="Suppression"
+        message="Voulez-vous vraiment supprimer cette activité ?"
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onCancel={cancelDelete}
+        onConfirm={confirmDelete}
+      />
+    </GestureHandlerRootView>
   );
 }
 
@@ -1207,5 +1279,20 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 16,
     fontWeight: "600",
+  },
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    marginVertical: 1,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
