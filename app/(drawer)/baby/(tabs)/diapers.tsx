@@ -1,4 +1,5 @@
 import { ThemedText } from "@/components/themed-text";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
@@ -15,7 +16,12 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import {
+  supprimerMiction,
+  supprimerSelle,
+} from "@/migration/eventsDoubleWriteService";
 import {
   ecouterMictionsHybrid as ecouterMictions,
   ecouterSellesHybrid as ecouterSelles,
@@ -24,10 +30,11 @@ import {
 } from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   FlatList,
@@ -38,8 +45,32 @@ import {
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+
+// ============================================
+// DELETE ACTION COMPONENT
+// ============================================
+
+const DeleteAction = React.memo(function DeleteAction({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Supprimer cette excrétion"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={styles.deleteActionText}>Supprimer</Text>
+    </Pressable>
+  );
+});
 
 // ============================================
 // TYPES
@@ -69,6 +100,72 @@ interface ExcretionGroup {
 }
 
 // ============================================
+// PURE HELPERS
+// ============================================
+
+function getExcretionTypeLabel(type?: DiapersType): string {
+  if (!type) return "Inconnu";
+  return type === "miction" ? "Miction" : "Selle";
+}
+
+function getExcretionIcon(type?: DiapersType): string {
+  if (type === "miction") return "water";
+  if (type === "selle") return "poop";
+  return "question";
+}
+
+function getExcretionColor(type?: DiapersType): string {
+  if (type === "miction") return eventColors.miction.dark;
+  if (type === "selle") return eventColors.selle.dark;
+  return eventColors.default.dark;
+}
+
+function groupExcretionsByDay(excretions: Excretion[]): ExcretionGroup[] {
+  const groups: { [key: string]: Excretion[] } = {};
+
+  excretions.forEach((excretion) => {
+    const date = new Date(excretion.date?.seconds * 1000);
+    const dateKey = `${date.getFullYear()}-${String(
+      date.getMonth() + 1
+    ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+    if (!groups[dateKey]) {
+      groups[dateKey] = [];
+    }
+    groups[dateKey].push(excretion);
+  });
+
+  return Object.entries(groups)
+    .map(([dateKey, items]) => {
+      const date = new Date(dateKey);
+      const mictionsCount = items.filter((e) => e.type === "miction").length;
+      const sellesCount = items.filter((e) => e.type === "selle").length;
+      const lastExcretion = items.reduce((latest, current) =>
+        (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+          ? current
+          : latest
+      );
+
+      return {
+        date: dateKey,
+        dateFormatted: date.toLocaleDateString("fr-FR", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        }),
+        excretions: items.sort(
+          (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+        ),
+        mictionsCount,
+        sellesCount,
+        lastExcretion,
+      };
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+// ============================================
 // COMPONENT
 // ============================================
 
@@ -78,6 +175,7 @@ export default function DiapersScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
+  const { showToast } = useToast();
   const headerOwnerId = useRef(
     `diapers-${Math.random().toString(36).slice(2)}`
   );
@@ -114,6 +212,11 @@ export default function DiapersScreen() {
     useState<DiapersEditData | null>(null);
   const [pendingDiapersType, setPendingDiapersType] =
     useState<DiapersType>("miction");
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    visible: boolean;
+    excretion: Excretion | null;
+  }>({ visible: false, excretion: null });
 
   // Récupérer les paramètres de l'URL
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
@@ -337,7 +440,7 @@ export default function DiapersScreen() {
       }
       if (prev >= endOfToday) return prev;
       const diffDays = Math.ceil(
-        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
+        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000)
       );
       setDaysWindow((window) => window + diffDays);
       return endOfToday;
@@ -501,14 +604,14 @@ export default function DiapersScreen() {
       pendingLoadMoreRef.current = 2;
       loadMoreVersionRef.current += 1;
 
-      if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
-        const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
-        endOfRange.setHours(23, 59, 59, 999);
-        const startOfRange = new Date(endOfRange);
-        startOfRange.setHours(0, 0, 0, 0);
-        startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-        const beforeDate = new Date(startOfRange.getTime() - 1);
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      const beforeDate = new Date(startOfRange.getTime() - 1);
 
+      if (!auto || autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
         const nextEventDate = await getNextEventDateBeforeHybrid(
           activeChild.id,
           ["miction", "selle"],
@@ -516,7 +619,14 @@ export default function DiapersScreen() {
         );
 
         if (nextEventDate) {
-          setDaysWindow(14);
+          const startOfNext = new Date(nextEventDate);
+          startOfNext.setHours(0, 0, 0, 0);
+          const diffDays =
+            Math.floor(
+              (endOfRange.getTime() - startOfNext.getTime()) /
+                (24 * 60 * 60 * 1000)
+            ) + 1;
+          setDaysWindow((prev) => Math.max(prev, diffDays));
           setRangeEndDate(nextEventDate);
         } else {
           setHasMore(false);
@@ -666,10 +776,10 @@ export default function DiapersScreen() {
     return marked;
   }, [excretions, selectedDate, colorScheme]);
 
-  const handleDateSelect = (day: DateData) => {
+  const handleDateSelect = useCallback((day: DateData) => {
     setSelectedDate(day.dateString);
     setExpandedDays(new Set([day.dateString]));
-  };
+  }, []);
 
   const applyTodayFilter = useCallback(() => {
     const today = new Date();
@@ -682,17 +792,20 @@ export default function DiapersScreen() {
     setExpandedDays(new Set([todayKey]));
   }, []);
 
-  const handleFilterPress = (filter: DateFilterValue) => {
-    if (filter === "today") {
-      applyTodayFilter();
-      return;
-    }
+  const handleFilterPress = useCallback(
+    (filter: DateFilterValue) => {
+      if (filter === "today") {
+        applyTodayFilter();
+        return;
+      }
 
-    setSelectedFilter(filter);
-    setSelectedDate(null);
-    setShowCalendar(false);
-    setExpandedDays(new Set());
-  };
+      setSelectedFilter(filter);
+      setSelectedDate(null);
+      setShowCalendar(false);
+      setExpandedDays(new Set());
+    },
+    [applyTodayFilter]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -701,57 +814,6 @@ export default function DiapersScreen() {
       }
     }, [applyTodayFilter, selectedDate])
   );
-
-  // ============================================
-  // HELPERS - GROUPING
-  // ============================================
-
-  const groupExcretionsByDay = (excretions: Excretion[]): ExcretionGroup[] => {
-    const groups: { [key: string]: Excretion[] } = {};
-
-    excretions.forEach((excretion) => {
-      const date = new Date(excretion.date?.seconds * 1000);
-      const dateKey = `${date.getFullYear()}-${String(
-        date.getMonth() + 1
-      ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-
-      if (!groups[dateKey]) {
-        groups[dateKey] = [];
-      }
-      groups[dateKey].push(excretion);
-    });
-
-    return Object.entries(groups)
-      .map(([dateKey, excretions]) => {
-        const date = new Date(dateKey);
-        const mictionsCount = excretions.filter(
-          (e) => e.type === "miction"
-        ).length;
-        const sellesCount = excretions.filter((e) => e.type === "selle").length;
-        const lastExcretion = excretions.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
-            ? current
-            : latest
-        );
-
-        return {
-          date: dateKey,
-          dateFormatted: date.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          }),
-          excretions: excretions.sort(
-            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
-          ),
-          mictionsCount,
-          sellesCount,
-          lastExcretion,
-        };
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  };
 
   // ============================================
   // HELPERS - UI
@@ -769,22 +831,34 @@ export default function DiapersScreen() {
     });
   }, []);
 
-  const getExcretionTypeLabel = (type?: DiapersType): string => {
-    if (!type) return "Inconnu";
-    return type === "miction" ? "Miction" : "Selle";
-  };
+  // ============================================
+  // HANDLERS - DELETE
+  // ============================================
 
-  const getExcretionIcon = (type?: DiapersType): string => {
-    if (type === "miction") return "water";
-    if (type === "selle") return "poop";
-    return "question";
-  };
+  const handleExcretionDelete = useCallback((excretion: Excretion) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setDeleteConfirm({ visible: true, excretion });
+  }, []);
 
-  const getExcretionColor = (type?: DiapersType): string => {
-    if (type === "miction") return eventColors.miction.dark;
-    if (type === "selle") return eventColors.selle.dark;
-    return eventColors.default.dark;
-  };
+  const confirmDelete = useCallback(async () => {
+    if (!activeChild?.id || !deleteConfirm.excretion?.id) return;
+    const { id, type } = deleteConfirm.excretion;
+    setDeleteConfirm({ visible: false, excretion: null });
+    try {
+      if (type === "selle") {
+        await supprimerSelle(activeChild.id, id);
+      } else {
+        await supprimerMiction(activeChild.id, id);
+      }
+      showToast("Excrétion supprimée");
+    } catch {
+      showToast("Impossible de supprimer cette excrétion");
+    }
+  }, [activeChild?.id, deleteConfirm.excretion, showToast]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirm({ visible: false, excretion: null });
+  }, []);
 
   // ============================================
   // RENDER - EXCRETION ITEM
@@ -833,57 +907,76 @@ export default function DiapersScreen() {
       const detailsText = detailParts.join(" · ");
 
       return (
-        <Pressable
+        <ReanimatedSwipeable
           key={excretion.id}
-          style={({ pressed }) => [
-            styles.sessionCard,
-            pressed && styles.sessionCardPressed,
-          ]}
-          onPress={() => openEditModal(excretion)}
+          renderRightActions={() => (
+            <DeleteAction onPress={() => handleExcretionDelete(excretion)} />
+          )}
+          friction={2}
+          rightThreshold={40}
+          overshootRight={false}
         >
-          {/* Time badge */}
-          <View style={styles.sessionTime}>
-            <Text
-              style={[
-                styles.sessionTimeText,
-                isLast && styles.sessionTimeTextLast,
-              ]}
-            >
-              {excretionTime.toLocaleTimeString("fr-FR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </View>
-
-          {/* Content */}
-          <View style={styles.sessionContent}>
-            <View
-              style={[
-                styles.sessionIconWrapper,
-                { backgroundColor: color + "20" },
-              ]}
-            >
-              <FontAwesome
-                name={getExcretionIcon(excretion.type)}
-                size={14}
-                color={color}
-              />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Modifier cette excrétion"
+            style={({ pressed }) => [
+              styles.sessionCard,
+              {
+                borderColor: nc.borderLight,
+                backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
+              },
+            ]}
+            onPress={() => openEditModal(excretion)}
+          >
+            {/* Time badge */}
+            <View style={styles.sessionTime}>
+              <Text
+                style={[
+                  styles.sessionTimeText,
+                  { color: nc.textMuted },
+                  isLast && { color: nc.textStrong, fontWeight: "600" },
+                ]}
+              >
+                {excretionTime.toLocaleTimeString("fr-FR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
             </View>
-            <View style={styles.sessionDetails}>
-              <Text style={styles.sessionType}>{typeLabel}</Text>
-              {detailsText.length > 0 && (
-                <Text style={styles.sessionDetailText}>{detailsText}</Text>
-              )}
-            </View>
-          </View>
 
-          {/* Chevron */}
-          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
-        </Pressable>
+            {/* Content */}
+            <View style={styles.sessionContent}>
+              <View
+                style={[
+                  styles.sessionIconWrapper,
+                  { backgroundColor: color + "20" },
+                ]}
+              >
+                <FontAwesome
+                  name={getExcretionIcon(excretion.type)}
+                  size={14}
+                  color={color}
+                />
+              </View>
+              <View style={styles.sessionDetails}>
+                <Text style={[styles.sessionType, { color: nc.textStrong }]}>
+                  {typeLabel}
+                </Text>
+                {detailsText.length > 0 && (
+                  <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>
+                    {detailsText}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            {/* Chevron */}
+            <Ionicons name="chevron-forward" size={18} color={nc.textMuted} />
+          </Pressable>
+        </ReanimatedSwipeable>
       );
     },
-    [openEditModal]
+    [nc, openEditModal, handleExcretionDelete]
   );
 
   // ============================================
@@ -895,14 +988,16 @@ export default function DiapersScreen() {
       const isExpanded = expandedDays.has(item.date);
       const hasMultipleExcretions = item.excretions.length > 1;
 
-      // Format date intelligently
       const formatDayLabel = () => {
         const today = new Date();
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         const itemDate = new Date(item.date);
 
-        if (itemDate.toDateString() === today.toDateString()) {
+        if (
+          itemDate.toDateString() === today.toDateString() &&
+          selectedFilter !== "today"
+        ) {
           return "Aujourd'hui";
         } else if (itemDate.toDateString() === yesterday.toDateString()) {
           return "Hier";
@@ -918,13 +1013,15 @@ export default function DiapersScreen() {
         <View style={styles.daySection}>
           {/* Day Header with stats */}
           <View style={styles.dayHeader}>
-            <Text style={styles.dayLabel}>{formatDayLabel()}</Text>
+            <Text style={[styles.dayLabel, { color: nc.textStrong }]}>
+              {formatDayLabel()}
+            </Text>
             <View style={styles.dayStats}>
               <View style={styles.dayStatItem}>
-                <Text style={styles.dayStatValue}>
+                <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>
                   {item.mictionsCount + item.sellesCount}
                 </Text>
-                <Text style={styles.dayStatLabel}>
+                <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
                   excrétion{item.mictionsCount + item.sellesCount > 1 ? "s" : ""}
                 </Text>
               </View>
@@ -941,10 +1038,10 @@ export default function DiapersScreen() {
                     { backgroundColor: eventColors.miction.dark },
                   ]}
                 />
-                <Text style={styles.statsBreakdownLabel}>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
                   Miction{item.mictionsCount > 1 ? "s" : ""}
                 </Text>
-                <Text style={styles.statsBreakdownValue}>
+                <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
                   {item.mictionsCount}
                 </Text>
               </View>
@@ -957,10 +1054,10 @@ export default function DiapersScreen() {
                     { backgroundColor: eventColors.selle.dark },
                   ]}
                 />
-                <Text style={styles.statsBreakdownLabel}>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
                   Selle{item.sellesCount > 1 ? "s" : ""}
                 </Text>
-                <Text style={styles.statsBreakdownValue}>
+                <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
                   {item.sellesCount}
                 </Text>
               </View>
@@ -981,10 +1078,29 @@ export default function DiapersScreen() {
                     .map((excretion) => renderExcretionItem(excretion, false))}
 
                 <Pressable
-                  style={styles.expandTrigger}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isExpanded
+                      ? "Masquer les excrétions"
+                      : "Voir toutes les excrétions"
+                  }
+                  style={({ pressed }) => [
+                    styles.expandTrigger,
+                    {
+                      borderColor: nc.borderLight,
+                      backgroundColor: pressed
+                        ? nc.backgroundPressed
+                        : nc.backgroundCard,
+                    },
+                  ]}
                   onPress={() => toggleExpand(item.date)}
                 >
-                  <Text style={styles.expandTriggerText}>
+                  <Text
+                    style={[
+                      styles.expandTriggerText,
+                      { color: Colors[colorScheme].tint },
+                    ]}
+                  >
                     {isExpanded
                       ? "Masquer"
                       : `${item.excretions.length - 1} autre${item.excretions.length > 2 ? "s" : ""} excrétion${item.excretions.length > 2 ? "s" : ""}`}
@@ -992,7 +1108,7 @@ export default function DiapersScreen() {
                   <Ionicons
                     name={isExpanded ? "chevron-up" : "chevron-down"}
                     size={14}
-                    color={eventColors.miction.dark}
+                    color={nc.textMuted}
                   />
                 </Pressable>
               </>
@@ -1001,7 +1117,7 @@ export default function DiapersScreen() {
         </View>
       );
     },
-    [expandedDays, renderExcretionItem, toggleExpand]
+    [expandedDays, nc, renderExcretionItem, toggleExpand, selectedFilter, colorScheme]
   );
 
   // ============================================
@@ -1009,9 +1125,9 @@ export default function DiapersScreen() {
   // ============================================
 
   return (
-    <View style={[styles.container, { backgroundColor: nc.background }]}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView
-        style={[{ flex: 1 }]}
+        style={{ flex: 1 }}
         edges={["bottom"]}
         onLayout={() => setLayoutReady(true)}
       >
@@ -1024,7 +1140,7 @@ export default function DiapersScreen() {
 
           {/* Calendrier */}
           {showCalendar && (
-            <View style={styles.calendarContainer}>
+            <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
               <Calendar
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
@@ -1056,7 +1172,7 @@ export default function DiapersScreen() {
         ) : groupedExcretions.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons
-              name="calendar-outline"
+              name="water-outline"
               size={64}
               color={Colors[colorScheme].tabIconDefault}
             />
@@ -1066,6 +1182,20 @@ export default function DiapersScreen() {
                 ? "Aucune excrétion"
                 : "Aucune excrétion pour ce filtre"}
             </ThemedText>
+
+            {excretions.length === 0 && (
+              <Pressable
+                style={[
+                  styles.emptyAddButton,
+                  { backgroundColor: Colors[colorScheme].tint },
+                ]}
+                onPress={() => openAddModal()}
+                accessibilityRole="button"
+                accessibilityLabel="Ajouter une excrétion"
+              >
+                <Text style={styles.emptyAddButtonText}>Ajouter une excrétion</Text>
+              </Pressable>
+            )}
 
             {!(selectedFilter === "today" || selectedDate) && (
               <LoadMoreButton
@@ -1083,8 +1213,7 @@ export default function DiapersScreen() {
             keyExtractor={(item) => item.date}
             renderItem={renderDayGroup}
             showsVerticalScrollIndicator={false}
-            style={styles.flatlistContent}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { flexGrow: 1 }]}
             ListFooterComponent={
               selectedFilter === "today" || selectedDate ? null : (
                 <LoadMoreButton
@@ -1099,7 +1228,18 @@ export default function DiapersScreen() {
           />
         )}
       </SafeAreaView>
-    </View>
+      <ConfirmModal
+        visible={deleteConfirm.visible}
+        title="Suppression"
+        message="Voulez-vous vraiment supprimer cette excrétion ?"
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onCancel={cancelDelete}
+        onConfirm={confirmDelete}
+      />
+    </GestureHandlerRootView>
   );
 }
 
@@ -1110,10 +1250,6 @@ export default function DiapersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  flatlistContent: {
-    paddingBottom: 8,
   },
   headerButton: {
     paddingVertical: 8,
@@ -1124,10 +1260,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
   },
   listContent: {
     paddingHorizontal: 16,
+    paddingTop: 8,
     paddingBottom: 20,
   },
   // Day Section
@@ -1143,7 +1279,6 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
   },
   dayStats: {
     flexDirection: "row",
@@ -1156,11 +1291,9 @@ const styles = StyleSheet.create({
   dayStatValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#374151",
   },
   dayStatLabel: {
     fontSize: 11,
-    color: "#9ca3af",
   },
   // Stats breakdown
   statsBreakdown: {
@@ -1182,23 +1315,14 @@ const styles = StyleSheet.create({
   },
   statsBreakdownLabel: {
     fontSize: 12,
-    color: "#6b7280",
   },
   statsBreakdownValue: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#374151",
   },
   // Sessions container
   sessionsContainer: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    gap: 2,
   },
   // Session Card
   sessionCard: {
@@ -1207,11 +1331,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  sessionCardPressed: {
-    backgroundColor: "#f9fafb",
+    borderRadius: 14,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   sessionTime: {
     width: 52,
@@ -1219,11 +1345,6 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#9ca3af",
-  },
-  sessionTimeTextLast: {
-    color: "#374151",
-    fontWeight: "600",
   },
   sessionContent: {
     flex: 1,
@@ -1244,11 +1365,9 @@ const styles = StyleSheet.create({
   sessionType: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
   },
   sessionDetailText: {
     fontSize: 12,
-    color: "#6b7280",
     marginTop: 2,
   },
   // Expand trigger
@@ -1258,24 +1377,48 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
+    borderRadius: 14,
+    borderWidth: 1,
   },
   expandTriggerText: {
     fontSize: 13,
     fontWeight: "500",
-    color: eventColors.miction.dark,
   },
   // Empty State
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
   },
   emptyText: {
     fontSize: 18,
-    color: "#666",
-    marginTop: 16,
     fontWeight: "600",
+  },
+  emptyAddButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  emptyAddButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  // Swipe-to-delete
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    marginVertical: 1,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
