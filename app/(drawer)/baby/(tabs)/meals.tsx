@@ -1,4 +1,4 @@
-import { ThemedText } from "@/components/themed-text";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
@@ -11,9 +11,12 @@ import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useChildPermissions } from "@/hooks/useChildPermissions";
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
   ecouterSolidesHybrid as ecouterSolides,
@@ -21,13 +24,14 @@ import {
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
-import { BiberonEvent, SolideEvent } from "@/services/eventsService";
+import { BiberonEvent, SolideEvent, supprimerEvenement } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   FlatList,
@@ -38,8 +42,34 @@ import {
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
+import {
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+
+// ============================================
+// DELETE ACTION COMPONENT
+// ============================================
+
+const DeleteAction = React.memo(function DeleteAction({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Supprimer ce repas"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={styles.deleteActionText}>Supprimer</Text>
+    </Pressable>
+  );
+});
 
 // ============================================
 // TYPES
@@ -84,10 +114,15 @@ interface MealGroup {
 
 export default function MealsScreen() {
   const { activeChild } = useBaby();
+  const { firebaseUser } = useAuth();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
+  const { showToast } = useToast();
+  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+  const canManageContent =
+    permissions.role === "owner" || permissions.role === "admin";
   const headerOwnerId = useRef(`meals-${Math.random().toString(36).slice(2)}`);
   const navigation = useNavigation();
   const { setHeaderLeft } = useHeaderLeft();
@@ -121,6 +156,11 @@ export default function MealsScreen() {
 
   // États spécifiques aux solides (pour le listener)
   const [solidesLoaded, setSolidesLoaded] = useState(false);
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    visible: boolean;
+    meal: Meal | null;
+  }>({ visible: false, meal: null });
 
   // Récupérer les paramètres de l'URL
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
@@ -636,7 +676,7 @@ export default function MealsScreen() {
 
     const grouped = groupMealsByDay(filtered);
     setGroupedMeals(grouped);
-  }, [meals, selectedFilter, selectedDate, showCalendar]);
+  }, [meals, selectedFilter, selectedDate]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -691,19 +731,16 @@ export default function MealsScreen() {
     setExpandedDays(new Set([todayKey]));
   }, []);
 
-  const handleFilterPress = (filter: FilterType) => {
-    // Si on clique sur "Aujourd'hui", déployer automatiquement la carte du jour
+  const handleFilterPress = useCallback((filter: FilterType) => {
     if (filter === "today") {
       applyTodayFilter();
       return;
     }
-
     setSelectedFilter(filter);
     setSelectedDate(null);
     setShowCalendar(false);
-    // Réinitialiser l'expansion pour les autres filtres
     setExpandedDays(new Set());
-  };
+  }, [applyTodayFilter]);
 
   useFocusEffect(
     useCallback(() => {
@@ -767,29 +804,31 @@ export default function MealsScreen() {
   // HELPERS - UI
   // ============================================
 
-  const toggleExpand = (dateKey: string) => {
-    const newExpandedDays = new Set(expandedDays);
-    if (newExpandedDays.has(dateKey)) {
-      newExpandedDays.delete(dateKey);
-    } else {
-      newExpandedDays.add(dateKey);
-    }
-    setExpandedDays(newExpandedDays);
-  };
+  const toggleExpand = useCallback((dateKey: string) => {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) {
+        next.delete(dateKey);
+      } else {
+        next.add(dateKey);
+      }
+      return next;
+    });
+  }, []);
 
   // ============================================
   // HANDLERS - MODAL
   // ============================================
 
-  const openEditModal = (meal: Meal) => {
+  const openEditModal = useCallback((meal: Meal) => {
     setPendingEditData(meal);
     setPendingOpen(true);
-  };
+  }, []);
 
   const normalizeParam = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value;
 
-  const stashReturnTo = () => {
+  const stashReturnTo = useCallback(() => {
     const target = normalizeParam(returnTo);
     if (!target) return;
     if (target === "home" || target === "chrono" || target === "journal") {
@@ -797,11 +836,11 @@ export default function MealsScreen() {
       return;
     }
     returnToRef.current = null;
-  };
+  }, [returnTo]);
 
   useEffect(() => {
     stashReturnTo();
-  }, [returnTo]);
+  }, [stashReturnTo]);
 
   const maybeReturnTo = useCallback((targetOverride?: string | null) => {
     const target = targetOverride ?? returnToRef.current;
@@ -834,10 +873,35 @@ export default function MealsScreen() {
   }, []);
 
   // ============================================
+  // HANDLERS - DELETE
+  // ============================================
+
+  const handleMealDelete = useCallback((meal: Meal) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setDeleteConfirm({ visible: true, meal });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!activeChild?.id || !deleteConfirm.meal?.id) return;
+    const mealId = deleteConfirm.meal.id;
+    setDeleteConfirm({ visible: false, meal: null });
+    try {
+      await supprimerEvenement(activeChild.id, mealId);
+      showToast("Repas supprimé");
+    } catch {
+      showToast("Impossible de supprimer ce repas");
+    }
+  }, [activeChild?.id, deleteConfirm.meal, showToast]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirm({ visible: false, meal: null });
+  }, []);
+
+  // ============================================
   // RENDER - MEAL ITEM
   // ============================================
 
-  const renderMealItem = (meal: Meal, isLast: boolean = false) => {
+  const renderMealItem = useCallback((meal: Meal, isLatest: boolean = false) => {
     const mealTime = new Date(meal.date?.seconds * 1000);
     const isTetee = meal.type === "tetee";
     const isBiberon = meal.type === "biberon";
@@ -879,8 +943,19 @@ export default function MealsScreen() {
     };
 
     return (
-      <Pressable
+      <ReanimatedSwipeable
         key={meal.id}
+        renderRightActions={
+          canManageContent && meal.id
+            ? () => <DeleteAction onPress={() => handleMealDelete(meal)} />
+            : undefined
+        }
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
+        enabled={canManageContent && !!meal.id}
+      >
+      <Pressable
         style={({ pressed }) => [
           styles.sessionCard,
           { borderBottomColor: nc.borderLight },
@@ -894,7 +969,7 @@ export default function MealsScreen() {
             style={[
               styles.sessionTimeText,
               { color: nc.textMuted },
-              isLast && { color: nc.textNormal, fontWeight: "600" },
+              isLatest && { color: nc.textNormal, fontWeight: "600" },
             ]}
           >
             {mealTime.toLocaleTimeString("fr-FR", {
@@ -910,7 +985,7 @@ export default function MealsScreen() {
             style={[
               styles.sessionIconWrapper,
               {
-                backgroundColor: isSolide ? "#e8f5e9" : eventColors.meal.light,
+                backgroundColor: isSolide ? "#8BC34A1A" : `${eventColors.meal.dark}1A`,
               },
             ]}
           >
@@ -918,6 +993,17 @@ export default function MealsScreen() {
           </View>
           <View style={styles.sessionDetails}>
             <Text style={[styles.sessionType, { color: nc.textStrong }]}>{getTypeLabel()}</Text>
+            {isTetee && !hasDuration && (
+              <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>
+                {meal.coteGauche && meal.coteDroit
+                  ? "Sein gauche · Sein droit"
+                  : meal.coteGauche
+                  ? "Sein gauche"
+                  : meal.coteDroit
+                  ? "Sein droit"
+                  : "Durée non renseignée"}
+              </Text>
+            )}
             {isTetee && hasDuration && (
               <>
                 <View style={styles.durationBar}>
@@ -965,16 +1051,7 @@ export default function MealsScreen() {
               </Text>
             )}
             {isSolide && (
-              <View
-                style={[
-                  styles.solideDetailsRow,
-                  {
-                    flexDirection: "column",
-                    justifyContent: "center",
-                    alignItems: "flex-start",
-                  },
-                ]}
-              >
+              <View style={styles.solideDetailsRow}>
                 {meal.momentRepas && (
                   <Text style={[styles.sessionDetailText, { color: nc.textLight }]}>
                     {MOMENT_REPAS_LABELS[meal.momentRepas]}
@@ -1028,17 +1105,18 @@ export default function MealsScreen() {
           </View>
         )}
 
-        {/* Chevron */}
-        <Ionicons name="chevron-forward" size={18} color={nc.textMuted} />
+        {/* Edit icon */}
+        <Ionicons name="create-outline" size={18} color={nc.textMuted} />
       </Pressable>
+      </ReanimatedSwipeable>
     );
-  };
+  }, [nc, canManageContent, handleMealDelete, openEditModal]);
 
   // ============================================
   // RENDER - DAY GROUP
   // ============================================
 
-  const renderDayGroup = ({ item }: { item: MealGroup }) => {
+  const renderDayGroup = useCallback(({ item }: { item: MealGroup }) => {
     const isExpanded = expandedDays.has(item.date);
     const hasMultipleMeals = item.meals.length > 1;
     const teteesCount = item.meals.filter((m) => m.type === "tetee").length;
@@ -1052,7 +1130,7 @@ export default function MealsScreen() {
       yesterday.setDate(yesterday.getDate() - 1);
       const itemDate = new Date(item.date);
 
-      if (itemDate.toDateString() === today.toDateString()) {
+      if (itemDate.toDateString() === today.toDateString() && selectedFilter !== "today") {
         return "Aujourd'hui";
       } else if (itemDate.toDateString() === yesterday.toDateString()) {
         return "Hier";
@@ -1146,6 +1224,8 @@ export default function MealsScreen() {
               <Pressable
                 style={[styles.expandTrigger, { borderTopColor: nc.borderLight }]}
                 onPress={() => toggleExpand(item.date)}
+                accessibilityRole="button"
+                accessibilityLabel={isExpanded ? "Masquer les repas" : `Voir ${item.meals.length - 1} autre${item.meals.length > 2 ? "s" : ""} repas`}
               >
                 <Text style={styles.expandTriggerText}>
                   {isExpanded
@@ -1163,18 +1243,16 @@ export default function MealsScreen() {
         </View>
       </View>
     );
-  };
+  }, [expandedDays, nc, renderMealItem, toggleExpand, selectedFilter]);
+
   // ============================================
   // RENDER - MAIN
   // ============================================
 
   return (
-    <View style={[styles.container, { backgroundColor: nc.background }]}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView
-        style={[
-          { flex: 1 },
-          // { backgroundColor: Colors[colorScheme].background },
-        ]}
+        style={{ flex: 1 }}
         edges={["bottom"]}
         onLayout={() => setLayoutReady(true)}
       >
@@ -1216,36 +1294,47 @@ export default function MealsScreen() {
           <View style={styles.emptyContainer}>
             <IconPulseDots color={Colors[colorScheme].tint} />
           </View>
-        ) : groupedMeals.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons
-              name="calendar-outline"
-              size={64}
-              color={Colors[colorScheme].tabIconDefault}
-            />
-            <ThemedText style={styles.emptyText}>
-              {meals.length === 0
-                ? "Aucun repas"
-                : "Aucun repas pour ce filtre"}
-            </ThemedText>
-            {!(selectedFilter === "today" || selectedDate) && (
-              <LoadMoreButton
-                hasMore={hasMore}
-                loading={isLoadingMore}
-                onPress={handleLoadMore}
-                text="Voir plus"
-                accentColor={Colors[colorScheme].tint}
-              />
-            )}
-          </View>
         ) : (
           <FlatList
             data={groupedMeals}
             keyExtractor={(item) => item.date}
             renderItem={renderDayGroup}
             showsVerticalScrollIndicator={false}
-            style={styles.flatlistContent}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { flexGrow: 1 }]}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons
+                  name="restaurant-outline"
+                  size={64}
+                  color={Colors[colorScheme].tabIconDefault}
+                />
+                <Text style={[styles.emptyText, { color: nc.textNormal }]}>
+                  {meals.length === 0
+                    ? "Aucun repas enregistré"
+                    : "Aucun repas pour ce filtre"}
+                </Text>
+                {meals.length === 0 && (
+                  <Pressable
+                    onPress={() => openAddModal()}
+                    style={[styles.emptyAddButton, { backgroundColor: Colors[colorScheme].tint }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Ajouter le premier repas"
+                  >
+                    <Ionicons name="add" size={16} color="#fff" />
+                    <Text style={styles.emptyAddButtonText}>Ajouter un repas</Text>
+                  </Pressable>
+                )}
+                {!(selectedFilter === "today" || selectedDate) && meals.length > 0 && (
+                  <LoadMoreButton
+                    hasMore={hasMore}
+                    loading={isLoadingMore}
+                    onPress={handleLoadMore}
+                    text="Voir plus"
+                    accentColor={Colors[colorScheme].tint}
+                  />
+                )}
+              </View>
+            }
             ListFooterComponent={
               selectedFilter === "today" || selectedDate ? null : (
                 <LoadMoreButton
@@ -1260,7 +1349,20 @@ export default function MealsScreen() {
           />
         )}
       </SafeAreaView>
-    </View>
+
+      <ConfirmModal
+        visible={deleteConfirm.visible}
+        title="Supprimer ce repas ?"
+        message="Cette action est irréversible."
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
+        confirmButtonColor="#ef4444"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
+    </GestureHandlerRootView>
   );
 }
 
@@ -1271,10 +1373,6 @@ export default function MealsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  flatlistContent: {
-    paddingBottom: 8,
   },
   headerButton: {
     paddingVertical: 8,
@@ -1282,33 +1380,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     // marginRight: 8,
   },
-  headerButtonPressed: {
-    opacity: 0.6,
-  },
   calendarContainer: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  // Filter Bar
-  addButton: {
-    backgroundColor: "#4A90E2",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
-  },
-  addButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
   },
   listContent: {
     paddingHorizontal: 16,
+    paddingTop: 8,
     paddingBottom: 20,
   },
 
@@ -1325,7 +1404,6 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
   },
   dayStats: {
     flexDirection: "row",
@@ -1341,14 +1419,7 @@ const styles = StyleSheet.create({
   },
   dayStatLabel: {
     fontSize: 11,
-    color: "#9ca3af",
   },
-  dayStatDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: "#e5e7eb",
-  },
-
   // Stats Breakdown
   statsBreakdown: {
     flexDirection: "row",
@@ -1369,17 +1440,14 @@ const styles = StyleSheet.create({
   },
   statsBreakdownLabel: {
     fontSize: 12,
-    color: "#6b7280",
   },
   statsBreakdownValue: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#374151",
   },
 
   // Sessions Container
   sessionsContainer: {
-    backgroundColor: "#ffffff",
     borderRadius: 16,
     overflow: "hidden",
     shadowColor: "#000",
@@ -1397,10 +1465,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  sessionCardPressed: {
-    backgroundColor: "#f9fafb",
   },
   sessionTime: {
     width: 52,
@@ -1408,11 +1472,6 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#9ca3af",
-  },
-  sessionTimeTextLast: {
-    color: "#374151",
-    fontWeight: "600",
   },
   sessionContent: {
     flex: 1,
@@ -1434,11 +1493,9 @@ const styles = StyleSheet.create({
   sessionType: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
   },
   sessionDetailText: {
     fontSize: 12,
-    color: "#6b7280",
   },
   durationBar: {
     flexDirection: "row",
@@ -1476,12 +1533,10 @@ const styles = StyleSheet.create({
   durationLabelText: {
     fontSize: 11,
     fontWeight: "500",
-    color: "#9ca3af",
   },
   durationLabelValue: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#4b5563",
   },
   sessionTotal: {
     flexDirection: "row",
@@ -1498,7 +1553,6 @@ const styles = StyleSheet.create({
   sessionTotalUnit: {
     fontSize: 11,
     fontWeight: "500",
-    color: "#9ca3af",
   },
 
   // Expand Trigger
@@ -1509,7 +1563,6 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
   },
   expandTriggerText: {
     fontSize: 13,
@@ -1517,33 +1570,55 @@ const styles = StyleSheet.create({
     color: eventColors.meal.dark,
   },
 
-  // Empty State
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
   emptyText: {
     fontSize: 18,
-    color: "#666",
-    marginTop: 16,
     fontWeight: "600",
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#999",
-    marginTop: 4,
   },
 
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
+  },
+
+  emptyAddButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 4,
+  },
+
+  emptyAddButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 
   // Solide list item
   solideDetailsRow: {
-    flexDirection: "row",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 2,
+  },
+
+  // Swipe-to-delete
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
     alignItems: "center",
+    width: 80,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    marginVertical: 4,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
