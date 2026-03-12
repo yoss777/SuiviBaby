@@ -111,9 +111,9 @@ export async function supprimerTetee(childId: string, id: string) {
 export async function ajouterCroissance(childId: string, data: any) {
   const eventData = removeUndefined({
     type: "croissance" as EventType,
-    poids: data.poids,
-    taille: data.taille,
-    perimetreCranien: data.perimetreCranien,
+    poidsKg: data.poidsKg,
+    tailleCm: data.tailleCm,
+    teteCm: data.teteCm,
     date: data.date || new Date(),
     note: data.note,
   });

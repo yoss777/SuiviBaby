@@ -1,7 +1,6 @@
 import { CroissanceEditData } from "@/components/forms/CroissanceForm";
 import { ThemedText } from "@/components/themed-text";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -9,13 +8,14 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterCroissancesHybrid,
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
-import { CroissanceEvent } from "@/services/eventsService";
+import { CroissanceEvent, obtenirEvenements } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -23,12 +23,16 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   BackHandler,
   FlatList,
   InteractionManager,
+  LayoutAnimation,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  UIManager,
   View
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -39,6 +43,14 @@ import { supprimerCroissance } from "@/migration/eventsDoubleWriteService";
 import * as Haptics from "expo-haptics";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // ============================================
 // TYPES
@@ -69,6 +81,12 @@ const toDate = (value: any) => {
   return new Date(value);
 };
 
+const formatSelectedDateLabel = (dateString: string) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
+
 // ============================================
 // DELETE ACTION COMPONENT
 // ============================================
@@ -92,6 +110,97 @@ const DeleteAction = React.memo(function DeleteAction({
 });
 
 // ============================================
+// SKELETON LOADING COMPONENT
+// ============================================
+
+const GrowthSkeleton = React.memo(function GrowthSkeleton({
+  colorScheme,
+}: {
+  colorScheme: "light" | "dark";
+}) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    shimmer.start();
+    return () => shimmer.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg =
+    colorScheme === "dark"
+      ? "rgba(255, 255, 255, 0.08)"
+      : "rgba(255, 255, 255, 0.4)";
+
+  const renderSkeletonCard = (key: number) => (
+    <View
+      key={key}
+      style={[
+        styles.sessionCard,
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+      ]}
+    >
+      <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={[styles.skeletonBlock, { width: 32, height: 32, borderRadius: 8, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={[styles.skeletonBlock, { width: 60, height: 14, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+        <View style={[styles.skeletonBlock, { width: 140, height: 12, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.skeletonContainer}>
+      <View style={styles.dayGroup}>
+        <View style={styles.dayHeader}>
+          <View style={[styles.skeletonBlock, { width: 80, height: 16, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+          <View style={[styles.skeletonBlock, { width: 40, height: 14, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+        </View>
+        <View style={styles.sessionsContainer}>
+          {renderSkeletonCard(1)}
+          {renderSkeletonCard(2)}
+          {renderSkeletonCard(3)}
+        </View>
+      </View>
+    </View>
+  );
+});
+
+// ============================================
 // COMPONENT
 // ============================================
 
@@ -102,6 +211,7 @@ export default function GrowthScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
+  const { showToast, showUndoToast } = useToast();
   const navigation = useNavigation();
   const headerOwnerId = useRef(`growth-${Math.random().toString(36).slice(2)}`);
 
@@ -136,6 +246,10 @@ export default function GrowthScreen() {
     visible: boolean;
     event: GrowthEventWithId | null;
   }>({ visible: false, event: null });
+
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+
+  const [precedingEvent, setPrecedingEvent] = useState<GrowthEventWithId | null>(null);
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -180,6 +294,58 @@ export default function GrowthScreen() {
       return endOfToday;
     });
   }, []);
+
+  // ============================================
+  // DELTA CALCULATION (P1 #4)
+  // Each event compares to its chronological predecessor.
+  // precedingEvent is prefetched from before the visible window so the
+  // oldest visible event still gets a delta.
+  // ============================================
+  const deltaMap = useMemo(() => {
+    const map = new Map<string, { label: string; value: string; positive: boolean }[]>();
+    if (events.length === 0) return map;
+
+    const allEvents: GrowthEventWithId[] = precedingEvent
+      ? [precedingEvent, ...events]
+      : [...events];
+    const sorted = allEvents.sort(
+      (a, b) => toDate(a.date).getTime() - toDate(b.date).getTime(),
+    );
+
+    for (let i = 1; i < sorted.length; i++) {
+      const current = sorted[i];
+      const prev = sorted[i - 1];
+      const deltas: { label: string; value: string; positive: boolean }[] = [];
+      if (current.poidsKg && prev.poidsKg) {
+        const diff = current.poidsKg - prev.poidsKg;
+        deltas.push({
+          label: "kg",
+          value: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}`,
+          positive: diff >= 0,
+        });
+      }
+      if (current.tailleCm && prev.tailleCm) {
+        const diff = current.tailleCm - prev.tailleCm;
+        deltas.push({
+          label: "cm",
+          value: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}`,
+          positive: diff >= 0,
+        });
+      }
+      if (current.teteCm && prev.teteCm) {
+        const diff = current.teteCm - prev.teteCm;
+        deltas.push({
+          label: "PC",
+          value: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}`,
+          positive: diff >= 0,
+        });
+      }
+      if (deltas.length > 0) {
+        map.set(current.id, deltas);
+      }
+    }
+    return map;
+  }, [events, precedingEvent]);
 
   // ============================================
   // BUILD EDIT DATA
@@ -234,6 +400,10 @@ export default function GrowthScreen() {
     setShowCalendar(false);
     setExpandedDays(new Set([todayKey]));
   }, []);
+
+  const clearSelectedDate = useCallback(() => {
+    applyTodayFilter();
+  }, [applyTodayFilter]);
 
   useFocusEffect(
     useCallback(() => {
@@ -352,6 +522,15 @@ export default function GrowthScreen() {
       );
       setEvents(merged);
 
+      // Clean up soft-deleted IDs that are no longer in the dataset
+      setSoftDeletedIds((prev) => {
+        if (prev.size === 0) return prev;
+        const mergedIds = new Set(merged.map((e) => e.id));
+        const next = new Set<string>();
+        prev.forEach((id) => { if (mergedIds.has(id)) next.add(id); });
+        return next.size === prev.size ? prev : next;
+      });
+
       if (
         pendingLoadMoreRef.current > 0 &&
         versionAtSubscribe === loadMoreVersionRef.current
@@ -389,6 +568,7 @@ export default function GrowthScreen() {
     setIsLoadingMore(false);
     setHasMore(true);
     setExpandedDays(new Set());
+    setPrecedingEvent(null);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
   }, [activeChild?.id]);
@@ -446,6 +626,40 @@ export default function GrowthScreen() {
       })
       .catch(() => {
         if (!cancelled) setHasMore(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChild?.id, daysWindow, rangeEndDate]);
+
+  // Prefetch the one event just before the visible window for delta calculation
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+    endOfRange.setHours(23, 59, 59, 999);
+    const startOfRange = new Date(endOfRange);
+    startOfRange.setHours(0, 0, 0, 0);
+    startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+    const beforeDate = new Date(startOfRange.getTime() - 1);
+
+    obtenirEvenements(activeChild.id, {
+      type: "croissance",
+      jusqu: beforeDate,
+      limite: 1,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.length > 0) {
+          const evt = result[0] as GrowthEventWithId;
+          setPrecedingEvent(evt);
+        } else {
+          setPrecedingEvent(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPrecedingEvent(null);
       });
 
     return () => {
@@ -518,6 +732,7 @@ export default function GrowthScreen() {
     const todayTime = today.getTime();
 
     const filtered = events.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
       const date = toDate(item.date);
       date.setHours(0, 0, 0, 0);
       const time = date.getTime();
@@ -556,7 +771,7 @@ export default function GrowthScreen() {
       .sort((a, b) => (a.date < b.date ? 1 : -1));
 
     setGroupedEvents(grouped);
-  }, [events, selectedFilter, selectedDate, showCalendar]);
+  }, [events, selectedFilter, selectedDate, showCalendar, softDeletedIds]);
 
   const loadMoreStep = useCallback(
     async (auto = false) => {
@@ -654,13 +869,19 @@ export default function GrowthScreen() {
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const returnTarget = returnTargetParam ?? returnToRef.current;
+    const isEditing = !!pendingEditData;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
       openSheet({
         ownerId: sheetOwnerId,
         formType: "croissance",
         editData: pendingEditData ?? undefined,
-        onSuccess: ensureTodayInRange,
+        onSuccess: () => {
+          ensureTodayInRange();
+          showToast(
+            isEditing ? "Mesure modifiee" : "Mesure enregistree",
+          );
+        },
         onDismiss: () => {
           editIdRef.current = null;
           maybeReturnTo(returnTarget);
@@ -683,6 +904,7 @@ export default function GrowthScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
+    showToast,
   ]);
 
   useEffect(() => {
@@ -703,15 +925,16 @@ export default function GrowthScreen() {
   // ============================================
   // RENDER HELPERS
   // ============================================
-  const buildDetails = (event: GrowthEventWithId) => {
-    const parts = [];
-    if (event.poidsKg) parts.push(`${event.poidsKg} kg`);
-    if (event.tailleCm) parts.push(`${event.tailleCm} cm`);
-    if (event.teteCm) parts.push(`PC ${event.teteCm} cm`);
-    return parts.length > 0 ? parts.join(" · ") : undefined;
+  const buildDetailParts = (event: GrowthEventWithId) => {
+    const parts: { value: string; unit: string }[] = [];
+    if (event.poidsKg) parts.push({ value: `${event.poidsKg}`, unit: "kg" });
+    if (event.tailleCm) parts.push({ value: `${event.tailleCm}`, unit: "cm" });
+    if (event.teteCm) parts.push({ value: `${event.teteCm}`, unit: "cm PC" });
+    return parts;
   };
 
   const toggleExpand = useCallback((date: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(date)) {
@@ -731,13 +954,39 @@ export default function GrowthScreen() {
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
     const eventId = deleteConfirm.event.id;
+    const childId = activeChild.id;
     setDeleteConfirm({ visible: false, event: null });
-    try {
-      await supprimerCroissance(activeChild.id, eventId);
-    } catch {
-      // silently fail — toast non disponible sur cet écran
-    }
-  }, [activeChild?.id, deleteConfirm.event]);
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
+
+    showUndoToast(
+      "Mesure supprimee",
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(eventId);
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          await supprimerCroissance(childId, eventId);
+        } catch {
+          // Restore if delete fails
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(eventId);
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -745,6 +994,8 @@ export default function GrowthScreen() {
 
   const renderEventItem = (event: GrowthEventWithId, isLast = false) => {
     const time = toDate(event.date);
+    const parts = buildDetailParts(event);
+    const deltas = deltaMap.get(event.id) ?? null;
     return (
       <ReanimatedSwipeable
         key={event.id}
@@ -771,7 +1022,8 @@ export default function GrowthScreen() {
             <Text
               style={[
                 styles.sessionTimeText,
-                isLast && styles.sessionTimeTextLast,
+                { color: nc.textMuted },
+                isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }],
               ]}
             >
               {formatTime(time)}
@@ -791,15 +1043,50 @@ export default function GrowthScreen() {
           </View>
           <View style={styles.sessionContent}>
             <View style={styles.sessionDetails}>
-              <Text style={styles.sessionType}>Mesure</Text>
-              {buildDetails(event) && (
-                <Text style={styles.sessionDetailText}>
-                  {buildDetails(event)}
-                </Text>
+              <Text style={[styles.sessionType, { color: nc.textStrong }]}>Mesure</Text>
+              {parts.length > 0 && (
+                <View style={styles.metricRow}>
+                  {parts.map((p, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 && (
+                        <Text style={[styles.metricSeparator, { color: nc.textMuted }]}> · </Text>
+                      )}
+                      <Text style={[styles.metricValue, { color: nc.textStrong }]}>{p.value}</Text>
+                      <Text style={[styles.metricUnit, { color: nc.textMuted }]}> {p.unit}</Text>
+                    </React.Fragment>
+                  ))}
+                </View>
+              )}
+              {deltas && (
+                <View style={styles.deltaRow}>
+                  {deltas.map((d, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.deltaBadge,
+                        { backgroundColor: d.positive ? "#dcfce7" : "#fef2f2" },
+                      ]}
+                    >
+                      <Ionicons
+                        name={d.positive ? "trending-up" : "trending-down"}
+                        size={10}
+                        color={d.positive ? "#16a34a" : "#dc2626"}
+                      />
+                      <Text
+                        style={[
+                          styles.deltaText,
+                          { color: d.positive ? "#16a34a" : "#dc2626" },
+                        ]}
+                      >
+                        {d.value} {d.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               )}
             </View>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+          <Ionicons name="chevron-forward" size={18} color={nc.border} />
         </Pressable>
       </ReanimatedSwipeable>
     );
@@ -830,11 +1117,11 @@ export default function GrowthScreen() {
     return (
       <View style={styles.dayGroup}>
         <View style={styles.dayHeader}>
-          <Text style={styles.dayLabel}>{dayLabel}</Text>
+          <Text style={[styles.dayLabel, { color: nc.textStrong }]}>{dayLabel}</Text>
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
-              <Text style={styles.dayStatValue}>{item.events.length}</Text>
-              <Text style={styles.dayStatLabel}>
+              <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.events.length}</Text>
+              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
                 mesure{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -850,7 +1137,7 @@ export default function GrowthScreen() {
                 .map((evt) => renderEventItem(evt, false))}
             {item.events.length > 1 && (
               <Pressable
-                style={styles.expandTrigger}
+                style={[styles.expandTrigger, { borderTopColor: nc.borderLight }]}
                 onPress={() => toggleExpand(item.date)}
                 accessibilityRole="button"
                 accessibilityLabel={isExpanded ? "Masquer les mesures" : "Voir les autres mesures"}
@@ -893,24 +1180,26 @@ export default function GrowthScreen() {
         <View>
           <View style={styles.filterRow}>
             <DateFilterBar
-              selected={selectedFilter}
+              selected={selectedDate ? ("past" as DateFilterValue) : selectedFilter}
               onSelect={handleFilterPress}
-            />
-            {/* <View style={styles.quickActionsRow}>
-              <TouchableOpacity
-                style={styles.quickActionButton}
-                onPress={openAddModal}
-              >
-                <FontAwesome
-                  name="seedling"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-            </View> */}
+            >
+              {selectedDate && (
+                <Pressable
+                  style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={clearSelectedDate}
+                  accessibilityRole="button"
+                  accessibilityLabel="Effacer la date sélectionnée"
+                >
+                  <Text style={styles.dateChipText}>
+                    {formatSelectedDateLabel(selectedDate)}
+                  </Text>
+                  <Ionicons name="close" size={14} color="#fff" />
+                </Pressable>
+              )}
+            </DateFilterBar>
           </View>
           {showCalendar && (
-            <View style={styles.calendarContainer}>
+            <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
               <Calendar
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
@@ -937,16 +1226,37 @@ export default function GrowthScreen() {
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons
-                name="calendar-outline"
-                size={64}
-                color={Colors[colorScheme].tabIconDefault}
-              />
-              <ThemedText style={styles.emptyText}>
+              <View
+                style={[
+                  styles.emptyIconWrapper,
+                  { backgroundColor: `${eventColors.croissance.dark}15` },
+                ]}
+              >
+                <FontAwesome
+                  name="seedling"
+                  size={36}
+                  color={eventColors.croissance.dark}
+                />
+              </View>
+              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
                 {events.length === 0
-                  ? "Aucune mesure enregistrée"
+                  ? "Aucune mesure enregistree"
                   : "Aucune mesure pour ce filtre"}
               </ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+                Suivez le poids, la taille et le perimetre cranien
+              </ThemedText>
+              {events.length === 0 && (
+                <Pressable
+                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={openAddModal}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter une mesure"
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                  <Text style={styles.emptyCtaText}>Ajouter une mesure</Text>
+                </Pressable>
+              )}
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   hasMore={hasMore}
@@ -978,12 +1288,10 @@ export default function GrowthScreen() {
             />
           )
         ) : (
-          <View style={styles.loadingContainer}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
-            <Text style={styles.loadingText}>Chargement des mesures…</Text>
-          </View>
+          <GrowthSkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
+
       <ConfirmModal
         visible={deleteConfirm.visible}
         title="Suppression"
@@ -1002,7 +1310,6 @@ export default function GrowthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   headerButtons: {
     flexDirection: "row",
@@ -1019,7 +1326,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
   },
   filterRow: {
     flexDirection: "row",
@@ -1027,19 +1333,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingRight: 16,
   },
-  quickActionsRow: {
+  dateChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginLeft: 8,
-  },
-  quickActionButton: {
-    width: 32,
-    height: 32,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f0f0f0",
+  },
+  dateChipText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
   },
   listContent: {
     paddingHorizontal: 16,
@@ -1057,7 +1362,6 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
   },
   dayStats: {
     flexDirection: "row",
@@ -1070,11 +1374,9 @@ const styles = StyleSheet.create({
   dayStatValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#374151",
   },
   dayStatLabel: {
     fontSize: 11,
-    color: "#9ca3af",
   },
   dayContent: {
     gap: 10,
@@ -1102,10 +1404,8 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#9ca3af",
   },
   sessionTimeTextLast: {
-    color: "#374151",
     fontWeight: "600",
   },
   sessionIconWrapper: {
@@ -1128,11 +1428,40 @@ const styles = StyleSheet.create({
   sessionType: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
   },
-  sessionDetailText: {
+  metricRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    flexWrap: "wrap",
+  },
+  metricValue: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  metricUnit: {
     fontSize: 12,
-    color: "#6b7280",
+    fontWeight: "400",
+  },
+  metricSeparator: {
+    fontSize: 12,
+  },
+  deltaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 2,
+  },
+  deltaBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  deltaText: {
+    fontSize: 10,
+    fontWeight: "600",
   },
   expandTrigger: {
     flexDirection: "row",
@@ -1141,32 +1470,47 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
   },
   expandTriggerText: {
     fontSize: 13,
     fontWeight: "500",
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 24,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6b7280",
-  },
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 32,
   },
-  emptyText: {
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
     fontSize: 18,
-    color: "#666",
-    marginTop: 16,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
+  },
+  emptyCtaText: {
+    color: "#fff",
+    fontSize: 15,
     fontWeight: "600",
   },
   deleteAction: {
@@ -1183,5 +1527,19 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "700",
+  },
+  skeletonContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  skeletonBlock: {
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 200,
   },
 });
