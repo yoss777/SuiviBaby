@@ -591,6 +591,8 @@ export default function PumpingScreen() {
 
   const handleDateSelect = useCallback((day: DateData) => {
     setSelectedDate(day.dateString);
+    setSelectedFilter(null);
+    setShowCalendar(false);
     setExpandedDays(new Set([day.dateString]));
   }, []);
 
@@ -681,6 +683,7 @@ export default function PumpingScreen() {
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
+    Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(dateKey)) {
@@ -948,7 +951,10 @@ export default function PumpingScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={isExpanded ? "Masquer les sessions" : "Voir toutes les sessions"}
-                style={[styles.expandTrigger, { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard }]}
+                style={({ pressed }) => [
+                  styles.expandTrigger,
+                  { borderColor: nc.borderLight, backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard },
+                ]}
                 onPress={() => toggleExpand(item.date)}
               >
                 <Text style={styles.expandTriggerText}>

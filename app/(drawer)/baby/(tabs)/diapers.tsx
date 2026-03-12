@@ -183,7 +183,7 @@ export default function DiapersScreen() {
   const { setHeaderLeft } = useHeaderLeft();
 
   const [showCalendar, setShowCalendar] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<DateFilterValue>("today");
+  const [selectedFilter, setSelectedFilter] = useState<DateFilterValue | null>("today");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
@@ -778,6 +778,8 @@ export default function DiapersScreen() {
 
   const handleDateSelect = useCallback((day: DateData) => {
     setSelectedDate(day.dateString);
+    setSelectedFilter(null);
+    setShowCalendar(false);
     setExpandedDays(new Set([day.dateString]));
   }, []);
 
@@ -820,6 +822,7 @@ export default function DiapersScreen() {
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
+    Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const newExpandedDays = new Set(prev);
       if (newExpandedDays.has(dateKey)) {
@@ -970,8 +973,7 @@ export default function DiapersScreen() {
               </View>
             </View>
 
-            {/* Chevron */}
-            <Ionicons name="chevron-forward" size={18} color={nc.textMuted} />
+            <Ionicons name="create-outline" size={18} color={nc.textMuted} />
           </Pressable>
         </ReanimatedSwipeable>
       );
@@ -1134,7 +1136,7 @@ export default function DiapersScreen() {
         <View>
           {/* Filtres */}
           <DateFilterBar
-            selected={selectedFilter}
+            selected={selectedFilter as any}
             onSelect={handleFilterPress}
           />
 

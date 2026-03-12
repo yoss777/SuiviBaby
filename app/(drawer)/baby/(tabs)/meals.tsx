@@ -714,11 +714,12 @@ export default function MealsScreen() {
     return marked;
   }, [meals, selectedDate, colorScheme]);
 
-  const handleDateSelect = (day: DateData) => {
+  const handleDateSelect = useCallback((day: DateData) => {
     setSelectedDate(day.dateString);
-    // Déployer automatiquement la carte du jour sélectionné
+    setSelectedFilter(null);
+    setShowCalendar(false);
     setExpandedDays(new Set([day.dateString]));
-  };
+  }, []);
 
   const applyTodayFilter = useCallback(() => {
     const today = new Date();
@@ -805,6 +806,7 @@ export default function MealsScreen() {
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
+    Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(dateKey)) {
@@ -1224,7 +1226,10 @@ export default function MealsScreen() {
                   .map((meal) => renderMealItem(meal, false))}
 
               <Pressable
-                style={[styles.expandTrigger, { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard }]}
+                style={({ pressed }) => [
+                  styles.expandTrigger,
+                  { borderColor: nc.borderLight, backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard },
+                ]}
                 onPress={() => toggleExpand(item.date)}
                 accessibilityRole="button"
                 accessibilityLabel={isExpanded ? "Masquer les repas" : `Voir ${item.meals.length - 1} autre${item.meals.length > 2 ? "s" : ""} repas`}
