@@ -883,7 +883,8 @@ export default function MealsScreen() {
         key={meal.id}
         style={({ pressed }) => [
           styles.sessionCard,
-          pressed && styles.sessionCardPressed,
+          { borderBottomColor: nc.borderLight },
+          pressed && { backgroundColor: nc.backgroundPressed },
         ]}
         onPress={() => openEditModal(meal)}
       >
@@ -892,7 +893,8 @@ export default function MealsScreen() {
           <Text
             style={[
               styles.sessionTimeText,
-              isLast && styles.sessionTimeTextLast,
+              { color: nc.textMuted },
+              isLast && { color: nc.textNormal, fontWeight: "600" },
             ]}
           >
             {mealTime.toLocaleTimeString("fr-FR", {
@@ -915,7 +917,7 @@ export default function MealsScreen() {
             {getIcon()}
           </View>
           <View style={styles.sessionDetails}>
-            <Text style={styles.sessionType}>{getTypeLabel()}</Text>
+            <Text style={[styles.sessionType, { color: nc.textStrong }]}>{getTypeLabel()}</Text>
             {isTetee && hasDuration && (
               <>
                 <View style={styles.durationBar}>
@@ -937,8 +939,8 @@ export default function MealsScreen() {
                     <View
                       style={[styles.durationDot, styles.durationDotLeft]}
                     />
-                    <Text style={styles.durationLabelText}>G</Text>
-                    <Text style={styles.durationLabelValue}>
+                    <Text style={[styles.durationLabelText, { color: nc.textMuted }]}>G</Text>
+                    <Text style={[styles.durationLabelValue, { color: nc.textNormal }]}>
                       {leftDuration} min
                     </Text>
                   </View>
@@ -946,8 +948,8 @@ export default function MealsScreen() {
                     <View
                       style={[styles.durationDot, styles.durationDotRight]}
                     />
-                    <Text style={styles.durationLabelText}>D</Text>
-                    <Text style={styles.durationLabelValue}>
+                    <Text style={[styles.durationLabelText, { color: nc.textMuted }]}>D</Text>
+                    <Text style={[styles.durationLabelValue, { color: nc.textNormal }]}>
                       {rightDuration} min
                     </Text>
                   </View>
@@ -955,7 +957,7 @@ export default function MealsScreen() {
               </>
             )}
             {isBiberon && (
-              <Text style={styles.sessionDetailText}>
+              <Text style={[styles.sessionDetailText, { color: nc.textLight }]}>
                 {meal.typeBiberon && BIBERON_TYPE_LABELS[meal.typeBiberon]
                   ? BIBERON_TYPE_LABELS[meal.typeBiberon]
                   : "lait infantile"}
@@ -974,7 +976,7 @@ export default function MealsScreen() {
                 ]}
               >
                 {meal.momentRepas && (
-                  <Text style={styles.sessionDetailText}>
+                  <Text style={[styles.sessionDetailText, { color: nc.textLight }]}>
                     {MOMENT_REPAS_LABELS[meal.momentRepas]}
                     {" · "}
                     {(meal as any).quantiteSolide ?? meal.quantite ?? ""}
@@ -1022,12 +1024,12 @@ export default function MealsScreen() {
         {isTetee && hasDuration && (
           <View style={styles.sessionTotal}>
             <Text style={styles.sessionTotalValue}>{totalDuration}</Text>
-            <Text style={styles.sessionTotalUnit}>min</Text>
+            <Text style={[styles.sessionTotalUnit, { color: nc.textMuted }]}>min</Text>
           </View>
         )}
 
         {/* Chevron */}
-        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+        <Ionicons name="chevron-forward" size={18} color={nc.textMuted} />
       </Pressable>
     );
   };
@@ -1066,11 +1068,11 @@ export default function MealsScreen() {
       <View style={styles.daySection}>
         {/* Day Header with stats */}
         <View style={styles.dayHeader}>
-          <Text style={styles.dayLabel}>{formatDayLabel()}</Text>
+          <Text style={[styles.dayLabel, { color: nc.textStrong }]}>{formatDayLabel()}</Text>
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
-              <Text style={styles.dayStatValue}>{item.meals.length}</Text>
-              <Text style={styles.dayStatLabel}>repas</Text>
+              <Text style={[styles.dayStatValue, { color: nc.textStrong }]}>{item.meals.length}</Text>
+              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>repas</Text>
             </View>
           </View>
         </View>
@@ -1085,10 +1087,10 @@ export default function MealsScreen() {
                   { backgroundColor: eventColors.meal.dark },
                 ]}
               />
-              <Text style={styles.statsBreakdownLabel}>
+              <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
                 Tétée{teteesCount > 1 ? "s" : ""}
               </Text>
-              <Text style={styles.statsBreakdownValue}>{teteesCount}</Text>
+              <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{teteesCount}</Text>
             </View>
           )}
           {biberonsCount > 0 && (
@@ -1099,11 +1101,11 @@ export default function MealsScreen() {
                   { backgroundColor: "#6366f1" },
                 ]}
               />
-              <Text style={styles.statsBreakdownLabel}>
+              <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
                 Biberon{biberonsCount > 1 ? "s" : ""}
               </Text>
-              <Text style={styles.statsBreakdownValue}>{biberonsCount}</Text>
-              <Text style={styles.statsBreakdownLabel}>·</Text>
+              <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{biberonsCount}</Text>
+              <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>·</Text>
               <Text
                 style={[
                   styles.statsBreakdownLabel,
@@ -1122,16 +1124,16 @@ export default function MealsScreen() {
                   { backgroundColor: "#8BC34A" },
                 ]}
               />
-              <Text style={styles.statsBreakdownLabel}>
+              <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
                 Solide{solidesCount > 1 ? "s" : ""}
               </Text>
-              <Text style={styles.statsBreakdownValue}>{solidesCount}</Text>
+              <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{solidesCount}</Text>
             </View>
           )}
         </View>
 
         {/* Sessions list */}
-        <View style={styles.sessionsContainer}>
+        <View style={[styles.sessionsContainer, { backgroundColor: nc.backgroundCard }]}>
           {renderMealItem(item.lastMeal, true)}
 
           {hasMultipleMeals && (
@@ -1142,7 +1144,7 @@ export default function MealsScreen() {
                   .map((meal) => renderMealItem(meal, false))}
 
               <Pressable
-                style={styles.expandTrigger}
+                style={[styles.expandTrigger, { borderTopColor: nc.borderLight }]}
                 onPress={() => toggleExpand(item.date)}
               >
                 <Text style={styles.expandTriggerText}>
@@ -1185,7 +1187,7 @@ export default function MealsScreen() {
 
           {/* Calendrier */}
           {showCalendar && (
-            <View style={styles.calendarContainer}>
+            <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
               <Calendar
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
