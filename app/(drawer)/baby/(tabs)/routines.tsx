@@ -5,7 +5,7 @@ import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getCategoryColors, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -27,7 +27,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   BackHandler,
+  Easing,
   FlatList,
   InteractionManager,
   Pressable,
@@ -522,6 +524,22 @@ export default function RoutinesScreen() {
     return Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
   }, [sommeilEnCours, now]);
 
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (sommeilEnCours) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.015, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ]),
+      );
+      pulse.start();
+      return () => pulse.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [sommeilEnCours, pulseAnim]);
+
   const handleDateSelect = useCallback((day: DateData) => {
     setSelectedDate(day.dateString);
     setSelectedFilter(null);
@@ -896,6 +914,7 @@ export default function RoutinesScreen() {
   }, []);
 
   const toggleExpand = useCallback((date: string) => {
+    Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(date)) {
@@ -1153,7 +1172,10 @@ export default function RoutinesScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={isExpanded ? "Masquer les routines" : "Voir toutes les routines"}
-              style={[styles.expandTrigger, { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard }]}
+              style={({ pressed }) => [
+                styles.expandTrigger,
+                { borderColor: nc.borderLight, backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard },
+              ]}
               onPress={() => toggleExpand(item.date)}
             >
               <Text style={[styles.expandTriggerText, { color: Colors[colorScheme].tint }]}>
@@ -1250,23 +1272,49 @@ export default function RoutinesScreen() {
         </View>
 
         {sommeilEnCours && (
-          <View style={[styles.timerCard, { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight }]}>
-            <Text style={[styles.timerTitle, { color: nc.textStrong }]}>
-              {sommeilEnCours.isNap ? "Sieste" : "Nuit"} en cours
-            </Text>
-            <Text style={[styles.timerValue, { color: eventColors.sommeil.dark }]}>
+          <Animated.View
+            style={[
+              styles.sleepWidgetWrapper,
+              {
+                backgroundColor: getCategoryColors(colorScheme).sommeil.background,
+                borderWidth: 2,
+                borderColor: getCategoryColors(colorScheme).sommeil.primary,
+                shadowColor: getCategoryColors(colorScheme).sommeil.primary,
+                shadowOpacity: 0.25,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 4,
+                transform: [{ scale: pulseAnim }],
+              },
+            ]}
+            accessibilityRole="timer"
+            accessibilityLabel={`${sommeilEnCours.isNap ? "Sieste" : "Nuit"} en cours depuis ${formatDuration(elapsedMinutes)}`}
+          >
+            <View style={styles.sleepWidgetHeaderRow}>
+              <FontAwesome
+                name={sommeilEnCours.isNap ? "bed" : "moon"}
+                size={14}
+                color={colorScheme === "dark" ? "#D4C8F0" : "#4A3D6B"}
+              />
+              <Text style={[styles.sleepWidgetTitle, { color: colorScheme === "dark" ? "#D4C8F0" : "#4A3D6B" }]}>
+                {sommeilEnCours.isNap ? "Sieste" : "Nuit"} en cours
+              </Text>
+            </View>
+            <Text style={[styles.sleepWidgetValue, { color: colorScheme === "dark" ? "#D4C8F0" : "#4A3D6B" }]}>
               {formatDuration(elapsedMinutes)}
             </Text>
-            <Text style={[styles.timerSubtitle, { color: nc.textMuted }]}>
+            <Text style={[styles.sleepWidgetSubtitle, { color: colorScheme === "dark" ? "#9B8CBF" : "#7A6B9A" }]}>
               Début {formatTime(toDate(sommeilEnCours.heureDebut))}
             </Text>
             <TouchableOpacity
-              style={[styles.timerButtonStop, { backgroundColor: eventColors.sommeil.dark }]}
+              style={[styles.sleepWidgetStop, { backgroundColor: getCategoryColors(colorScheme).sommeil.primary }]}
               onPress={handleStopSleep}
+              accessibilityRole="button"
+              accessibilityLabel="Terminer le sommeil"
             >
-              <Text style={styles.timerButtonText}>Terminer</Text>
+              <Text style={[styles.sleepWidgetStopText, { color: nc.backgroundCard }]}>Terminer</Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         )}
 
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
@@ -1282,7 +1330,7 @@ export default function RoutinesScreen() {
                   ? "Aucune routine enregistrée"
                   : "Aucune routine pour ce filtre"}
               </ThemedText>
-              {events.length === 0 && !selectedFilter && !selectedDate && (
+              {events.length === 0 && (
                 <Pressable
                   style={[styles.emptyAddButton, { backgroundColor: Colors[colorScheme].tint }]}
                   onPress={() => openAddModal("sommeil", "nap")}
@@ -1366,33 +1414,40 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
   },
-  timerCard: {
-    marginHorizontal: 20,
-    marginBottom: 16,
-    borderRadius: 18,
-    borderWidth: 1,
+  sleepWidgetWrapper: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 16,
     padding: 16,
-    gap: 8,
+    overflow: "hidden",
   },
-  timerTitle: {
-    fontSize: 16,
+  sleepWidgetHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  sleepWidgetTitle: {
+    fontSize: 14,
     fontWeight: "700",
   },
-  timerValue: {
-    fontSize: 28,
+  sleepWidgetValue: {
+    marginTop: 6,
+    fontSize: 26,
     fontWeight: "700",
   },
-  timerSubtitle: {
+  sleepWidgetSubtitle: {
+    marginTop: 4,
     fontSize: 12,
   },
-  timerButtonStop: {
-    marginTop: 8,
+  sleepWidgetStop: {
+    marginTop: 10,
+    minHeight: 44,
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
-  timerButtonText: {
-    color: "#fff",
+  sleepWidgetStopText: {
     fontWeight: "700",
   },
   filterRow: {
