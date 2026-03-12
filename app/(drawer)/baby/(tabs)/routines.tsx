@@ -1,5 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
@@ -8,8 +9,9 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { modifierSommeil } from "@/migration/eventsDoubleWriteService";
+import { modifierSommeil, supprimerSommeil, supprimerBain } from "@/migration/eventsDoubleWriteService";
 import {
   ecouterBainsHybrid,
   ecouterSommeilsHybrid,
@@ -22,7 +24,8 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   FlatList,
@@ -34,6 +37,8 @@ import {
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import {
@@ -41,7 +46,28 @@ import {
   RoutinesEditData,
   SleepMode,
 } from "@/components/forms/RoutinesForm";
-import { useModal } from "@/contexts/ModalContext";
+
+// ============================================
+// DELETE ACTION COMPONENT
+// ============================================
+
+const DeleteAction = React.memo(function DeleteAction({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Supprimer cet événement"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={styles.deleteActionText}>Supprimer</Text>
+    </Pressable>
+  );
+});
 
 // ============================================
 // TYPES
@@ -105,9 +131,8 @@ export default function RoutinesScreen() {
   const { setHeaderLeft } = useHeaderLeft();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const colors = Colors[colorScheme];
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showAlert } = useModal();
+  const { showToast } = useToast();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
     `routines-${Math.random().toString(36).slice(2)}`,
@@ -140,6 +165,11 @@ export default function RoutinesScreen() {
   const [pendingEditData, setPendingEditData] = useState<RoutinesEditData | null>(null);
   const [pendingRoutineType, setPendingRoutineType] = useState<RoutineType>("sommeil");
   const [pendingSleepMode, setPendingSleepMode] = useState<SleepMode>("nap");
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    visible: boolean;
+    event: RoutineEvent | null;
+  }>({ visible: false, event: null });
 
   const [now, setNow] = useState(new Date());
 
@@ -492,14 +522,14 @@ export default function RoutinesScreen() {
     return Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
   }, [sommeilEnCours, now]);
 
-  const handleDateSelect = (day: DateData) => {
+  const handleDateSelect = useCallback((day: DateData) => {
     setSelectedDate(day.dateString);
     setSelectedFilter(null);
     setShowCalendar(false);
     setExpandedDays(new Set([day.dateString]));
-  };
+  }, []);
 
-  const handleFilterPress = (filter: DateFilterValue) => {
+  const handleFilterPress = useCallback((filter: DateFilterValue) => {
     if (filter === "today") {
       applyTodayFilter();
       return;
@@ -508,7 +538,7 @@ export default function RoutinesScreen() {
     setSelectedDate(null);
     setShowCalendar(false);
     setExpandedDays(new Set());
-  };
+  }, [applyTodayFilter]);
 
   useFocusEffect(
     useCallback(() => {
@@ -579,13 +609,15 @@ export default function RoutinesScreen() {
       pendingLoadMoreRef.current = 2;
       loadMoreVersionRef.current += 1;
 
-      if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
-        const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
-        endOfRange.setHours(23, 59, 59, 999);
-        const startOfRange = new Date(endOfRange);
-        startOfRange.setHours(0, 0, 0, 0);
-        startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-        const beforeDate = new Date(startOfRange.getTime() - 1);
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      const beforeDate = new Date(startOfRange.getTime() - 1);
+
+      if (!auto || autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
+        // Clic manuel ou auto épuisé : sauter directement au prochain événement
         const nextEventDate = await getNextEventDateBeforeHybrid(
           activeChild.id,
           ["sommeil", "bain"],
@@ -593,7 +625,14 @@ export default function RoutinesScreen() {
         );
 
         if (nextEventDate) {
-          setDaysWindow(14);
+          const startOfNext = new Date(nextEventDate);
+          startOfNext.setHours(0, 0, 0, 0);
+          const diffDays =
+            Math.floor(
+              (endOfRange.getTime() - startOfNext.getTime()) /
+                (24 * 60 * 60 * 1000),
+            ) + 1;
+          setDaysWindow((prev) => Math.max(prev, diffDays));
           setRangeEndDate(nextEventDate);
         } else {
           setHasMore(false);
@@ -694,6 +733,32 @@ export default function RoutinesScreen() {
     setPendingOpen(true);
   }, [buildEditData]);
 
+  const handleEventDelete = useCallback((event: RoutineEvent) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setDeleteConfirm({ visible: true, event });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!activeChild?.id || !deleteConfirm.event?.id) return;
+    const { id, type } = deleteConfirm.event;
+    setDeleteConfirm({ visible: false, event: null });
+    try {
+      if (type === "sommeil") {
+        await supprimerSommeil(activeChild.id, id);
+        showToast("Sommeil supprimé");
+      } else {
+        await supprimerBain(activeChild.id, id);
+        showToast("Bain supprimé");
+      }
+    } catch {
+      showToast("Impossible de supprimer cet événement");
+    }
+  }, [activeChild?.id, deleteConfirm.event, showToast]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirm({ visible: false, event: null });
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
@@ -778,7 +843,7 @@ export default function RoutinesScreen() {
   // ============================================
   // STOP ONGOING SLEEP
   // ============================================
-  const handleStopSleep = async () => {
+  const handleStopSleep = useCallback(async () => {
     if (!activeChild?.id || !sommeilEnCours) return;
     try {
       const fin = new Date();
@@ -796,16 +861,15 @@ export default function RoutinesScreen() {
         heureFin: fin,
         duree,
       });
-    } catch (error) {
-      console.error("Erreur arrêt sommeil:", error);
-      showAlert("Erreur", "Impossible d'arrêter le sommeil.");
+    } catch {
+      showToast("Impossible d'arrêter le sommeil.");
     }
-  };
+  }, [activeChild?.id, sommeilEnCours, openEditModal, showToast]);
 
   // ============================================
   // RENDER HELPERS
   // ============================================
-  const buildDetails = (event: RoutineEvent) => {
+  const buildDetails = useCallback((event: RoutineEvent) => {
     if (event.type === "sommeil") {
       const start = event.heureDebut
         ? toDate(event.heureDebut)
@@ -829,7 +893,7 @@ export default function RoutinesScreen() {
       bath.produits,
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(" · ") : undefined;
-  };
+  }, []);
 
   const toggleExpand = useCallback((date: string) => {
     setExpandedDays((prev) => {
@@ -843,7 +907,7 @@ export default function RoutinesScreen() {
     });
   }, []);
 
-  const renderEventItem = (event: RoutineEvent, isLast = false) => {
+  const renderEventItem = useCallback((event: RoutineEvent, isLast = false) => {
     const time = toDate(event.date);
     const config = TYPE_CONFIG[event.type as RoutineType];
     const isSleep = event.type === "sommeil";
@@ -871,11 +935,24 @@ export default function RoutinesScreen() {
             ? (event.duree ?? 0)
             : 0;
     return (
-      <Pressable
+      <ReanimatedSwipeable
         key={event.id}
+        renderRightActions={() => (
+          <DeleteAction onPress={() => handleEventDelete(event)} />
+        )}
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
+      >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Modifier cet événement"
         style={({ pressed }) => [
           styles.sessionCard,
-          pressed && styles.sessionCardPressed,
+          {
+            borderColor: nc.borderLight,
+            backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
+          },
         ]}
         onPress={() => openEditModal(event)}
       >
@@ -885,13 +962,14 @@ export default function RoutinesScreen() {
               <Text
                 style={[
                   styles.sessionTimeText,
-                  isLast && styles.sessionTimeTextLast,
+                  { color: nc.textMuted },
+                  isLast && { color: nc.textStrong, fontWeight: "600" },
                 ]}
               >
                 {formatTime(time)}
               </Text>
-              <Text style={styles.sessionTimeArrow}>↓</Text>
-              <Text style={styles.sessionTimeTextSecondary}>
+              <Text style={[styles.sessionTimeArrow, { color: nc.textMuted }]}>↓</Text>
+              <Text style={[styles.sessionTimeTextSecondary, { color: nc.textMuted }]}>
                 {formatTime(sleepEnd)}
               </Text>
             </>
@@ -900,12 +978,13 @@ export default function RoutinesScreen() {
               <Text
                 style={[
                   styles.sessionTimeText,
-                  isLast && styles.sessionTimeTextLast,
+                  { color: nc.textMuted },
+                  isLast && { color: nc.textStrong, fontWeight: "600" },
                 ]}
               >
                 {formatTime(time)}
               </Text>
-              <Text style={styles.sessionTimeArrow}>↓</Text>
+              <Text style={[styles.sessionTimeArrow, { color: nc.textMuted }]}>↓</Text>
               <Text style={[styles.sessionTimeOngoing, { color: eventColors.sommeil.dark }]}>
                 en cours
               </Text>
@@ -914,7 +993,8 @@ export default function RoutinesScreen() {
             <Text
               style={[
                 styles.sessionTimeText,
-                isLast && styles.sessionTimeTextLast,
+                { color: nc.textMuted },
+                isLast && { color: nc.textStrong, fontWeight: "600" },
               ]}
             >
               {formatTime(time)}
@@ -943,7 +1023,7 @@ export default function RoutinesScreen() {
         </View>
         <View style={styles.sessionContent}>
           <View style={styles.sessionDetails}>
-            <Text style={styles.sessionType}>
+            <Text style={[styles.sessionType, { color: nc.textStrong }]}>
               {isSleep
                 ? event.isNap
                   ? "Sieste"
@@ -953,13 +1033,13 @@ export default function RoutinesScreen() {
             {isSleep ? (
               <>
                 {(sleepEnd || sleepIsOngoing) && sleepMeta.length > 0 && (
-                  <Text style={styles.sessionDetailText}>
+                  <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>
                     {sleepMeta.join(" · ")}
                   </Text>
                 )}
               </>
             ) : (
-              <Text style={styles.sessionDetailText}>
+              <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>
                 {buildDetails(event)}
               </Text>
             )}
@@ -967,17 +1047,18 @@ export default function RoutinesScreen() {
         </View>
         {isSleep && (
           <View style={styles.sessionTotal}>
-            <Text style={styles.sessionTotalValue}>
+            <Text style={[styles.sessionTotalValue, { color: eventColors.sommeil.dark }]}>
               {formatDuration(sleepDuration)}
             </Text>
           </View>
         )}
-        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+        <Ionicons name="create-outline" size={18} color={nc.textMuted} />
       </Pressable>
+      </ReanimatedSwipeable>
     );
-  };
+  }, [nc, openEditModal, handleEventDelete, buildDetails, now]);
 
-  const renderDayGroup = ({ item }: { item: RoutineGroup }) => {
+  const renderDayGroup = useCallback(({ item }: { item: RoutineGroup }) => {
     const [year, month, day] = item.date.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     const today = new Date();
@@ -985,7 +1066,7 @@ export default function RoutinesScreen() {
     yesterday.setDate(yesterday.getDate() - 1);
 
     const dayLabel =
-      date.toDateString() === today.toDateString()
+      date.toDateString() === today.toDateString() && selectedFilter !== "today"
         ? "Aujourd'hui"
         : date.toDateString() === yesterday.toDateString()
           ? "Hier"
@@ -1007,11 +1088,11 @@ export default function RoutinesScreen() {
     return (
       <View style={styles.dayGroup}>
         <View style={styles.dayHeader}>
-          <Text style={styles.dayLabel}>{dayLabel}</Text>
+          <Text style={[styles.dayLabel, { color: nc.textStrong }]}>{dayLabel}</Text>
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
-              <Text style={styles.dayStatValue}>{item.events.length}</Text>
-              <Text style={styles.dayStatLabel}>
+              <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.events.length}</Text>
+              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
                 routine{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -1026,10 +1107,10 @@ export default function RoutinesScreen() {
                   { backgroundColor: eventColors.sommeil.dark },
                 ]}
               />
-              <Text style={styles.statsBreakdownLabel}>
+              <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
                 Sieste{napCount > 1 ? "s" : ""}
               </Text>
-              <Text style={styles.statsBreakdownValue}>{napCount}</Text>
+              <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{napCount}</Text>
             </View>
           )}
           {nightCount > 0 && (
@@ -1040,10 +1121,10 @@ export default function RoutinesScreen() {
                   { backgroundColor: eventColors.sommeil.dark },
                 ]}
               />
-              <Text style={styles.statsBreakdownLabel}>
+              <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
                 Nuit{nightCount > 1 ? "s" : ""}
               </Text>
-              <Text style={styles.statsBreakdownValue}>{nightCount}</Text>
+              <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{nightCount}</Text>
             </View>
           )}
           {bainCount > 0 && (
@@ -1054,56 +1135,51 @@ export default function RoutinesScreen() {
                   { backgroundColor: eventColors.bain.dark },
                 ]}
               />
-              <Text style={styles.statsBreakdownLabel}>
+              <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
                 Bain{bainCount > 1 ? "s" : ""}
               </Text>
-              <Text style={styles.statsBreakdownValue}>{bainCount}</Text>
+              <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{bainCount}</Text>
             </View>
           )}
         </View>
-        <View style={styles.dayContent}>
-          <View style={styles.sessionsContainer}>
-            {renderEventItem(item.lastEvent, true)}
-            {item.events.length > 1 &&
-              isExpanded &&
-              item.events
-                .filter((evt) => evt.id !== item.lastEvent.id)
-                .map((evt) => renderEventItem(evt, false))}
-            {item.events.length > 1 && (
-              <Pressable
-                style={styles.expandTrigger}
-                onPress={() => toggleExpand(item.date)}
-              >
-                <Text
-                  style={[
-                    styles.expandTriggerText,
-                    { color: Colors[colorScheme].tint },
-                  ]}
-                >
-                  {isExpanded
-                    ? "Masquer"
-                    : `${item.events.length - 1} autre${
-                        item.events.length > 2 ? "s" : ""
-                      } routine${item.events.length > 2 ? "s" : ""}`}
-                </Text>
-                <Ionicons
-                  name={isExpanded ? "chevron-up" : "chevron-down"}
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </Pressable>
-            )}
-          </View>
+        <View style={styles.sessionsContainer}>
+          {renderEventItem(item.lastEvent, true)}
+          {item.events.length > 1 &&
+            isExpanded &&
+            item.events
+              .filter((evt) => evt.id !== item.lastEvent.id)
+              .map((evt) => renderEventItem(evt, false))}
+          {item.events.length > 1 && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={isExpanded ? "Masquer les routines" : "Voir toutes les routines"}
+              style={[styles.expandTrigger, { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard }]}
+              onPress={() => toggleExpand(item.date)}
+            >
+              <Text style={[styles.expandTriggerText, { color: Colors[colorScheme].tint }]}>
+                {isExpanded
+                  ? "Masquer"
+                  : `${item.events.length - 1} autre${
+                      item.events.length > 2 ? "s" : ""
+                    } routine${item.events.length > 2 ? "s" : ""}`}
+              </Text>
+              <Ionicons
+                name={isExpanded ? "chevron-up" : "chevron-down"}
+                size={14}
+                color={Colors[colorScheme].tint}
+              />
+            </Pressable>
+          )}
         </View>
       </View>
     );
-  };
+  }, [expandedDays, nc, renderEventItem, toggleExpand, selectedFilter, colorScheme]);
 
   // ============================================
   // RENDER
   // ============================================
   return (
-    <View style={[styles.container, { backgroundColor: nc.background }]}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={{ flex: 1 }}
         edges={["bottom"]}
@@ -1117,7 +1193,7 @@ export default function RoutinesScreen() {
             />
             <View style={styles.quickActionsRow}>
               <TouchableOpacity
-                style={styles.quickActionButton}
+                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => openAddModal("sommeil", "nap")}
               >
                 <FontAwesome
@@ -1127,7 +1203,7 @@ export default function RoutinesScreen() {
                 />
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.quickActionButton}
+                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => openAddModal("sommeil", "night")}
               >
                 <FontAwesome
@@ -1137,7 +1213,7 @@ export default function RoutinesScreen() {
                 />
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.quickActionButton}
+                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => openAddModal("bain")}
               >
                 <FontAwesome
@@ -1149,7 +1225,7 @@ export default function RoutinesScreen() {
             </View>
           </View>
           {showCalendar && (
-            <View style={styles.calendarContainer}>
+            <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
               <Calendar
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
@@ -1174,18 +1250,18 @@ export default function RoutinesScreen() {
         </View>
 
         {sommeilEnCours && (
-          <View style={styles.timerCard}>
-            <Text style={styles.timerTitle}>
+          <View style={[styles.timerCard, { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight }]}>
+            <Text style={[styles.timerTitle, { color: nc.textStrong }]}>
               {sommeilEnCours.isNap ? "Sieste" : "Nuit"} en cours
             </Text>
-            <Text style={styles.timerValue}>
+            <Text style={[styles.timerValue, { color: eventColors.sommeil.dark }]}>
               {formatDuration(elapsedMinutes)}
             </Text>
-            <Text style={styles.timerSubtitle}>
+            <Text style={[styles.timerSubtitle, { color: nc.textMuted }]}>
               Début {formatTime(toDate(sommeilEnCours.heureDebut))}
             </Text>
             <TouchableOpacity
-              style={styles.timerButtonStop}
+              style={[styles.timerButtonStop, { backgroundColor: eventColors.sommeil.dark }]}
               onPress={handleStopSleep}
             >
               <Text style={styles.timerButtonText}>Terminer</Text>
@@ -1197,7 +1273,7 @@ export default function RoutinesScreen() {
           groupedEvents.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons
-                name="calendar-outline"
+                name="moon-outline"
                 size={64}
                 color={Colors[colorScheme].tabIconDefault}
               />
@@ -1206,6 +1282,16 @@ export default function RoutinesScreen() {
                   ? "Aucune routine enregistrée"
                   : "Aucune routine pour ce filtre"}
               </ThemedText>
+              {events.length === 0 && !selectedFilter && !selectedDate && (
+                <Pressable
+                  style={[styles.emptyAddButton, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={() => openAddModal("sommeil", "nap")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter une routine"
+                >
+                  <Text style={styles.emptyAddButtonText}>Ajouter une routine</Text>
+                </Pressable>
+              )}
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   loading={isLoadingMore}
@@ -1221,7 +1307,7 @@ export default function RoutinesScreen() {
               keyExtractor={(item) => item.date}
               renderItem={renderDayGroup}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[styles.listContent, { flexGrow: 1 }]}
               ListFooterComponent={
                 selectedFilter === "today" || selectedDate ? null : (
                   <LoadMoreButton
@@ -1237,18 +1323,32 @@ export default function RoutinesScreen() {
         ) : (
           <View style={styles.loadingContainer}>
             <IconPulseDots color={Colors[colorScheme].tint} />
-            <Text style={styles.loadingText}>Chargement des routines…</Text>
+            <Text style={[styles.loadingText, { color: nc.textMuted }]}>Chargement des routines…</Text>
           </View>
         )}
       </SafeAreaView>
-    </View>
+      <ConfirmModal
+        visible={deleteConfirm.visible}
+        title="Suppression"
+        message={
+          deleteConfirm.event?.type === "sommeil"
+            ? "Voulez-vous vraiment supprimer ce sommeil ?"
+            : "Voulez-vous vraiment supprimer ce bain ?"
+        }
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onCancel={cancelDelete}
+        onConfirm={confirmDelete}
+      />
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   headerButtons: {
     flexDirection: "row",
@@ -1265,33 +1365,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
   },
   timerCard: {
     marginHorizontal: 20,
     marginBottom: 16,
     borderRadius: 18,
+    borderWidth: 1,
     padding: 16,
-    backgroundColor: "#f5f0ff",
     gap: 8,
   },
   timerTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#4c2c79",
   },
   timerValue: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#4c2c79",
   },
   timerSubtitle: {
     fontSize: 12,
-    color: "#6b5c85",
   },
   timerButtonStop: {
     marginTop: 8,
-    backgroundColor: "#6f42c1",
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: "center",
@@ -1318,10 +1413,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f0f0f0",
   },
   listContent: {
     paddingHorizontal: 16,
+    paddingTop: 8,
     paddingBottom: 40,
   },
   dayGroup: {
@@ -1336,7 +1431,6 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
   },
   dayStats: {
     flexDirection: "row",
@@ -1349,11 +1443,9 @@ const styles = StyleSheet.create({
   dayStatValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#374151",
   },
   dayStatLabel: {
     fontSize: 11,
-    color: "#9ca3af",
   },
   statsBreakdown: {
     flexDirection: "row",
@@ -1374,25 +1466,13 @@ const styles = StyleSheet.create({
   },
   statsBreakdownLabel: {
     fontSize: 12,
-    color: "#6b7280",
   },
   statsBreakdownValue: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#374151",
-  },
-  dayContent: {
-    gap: 10,
   },
   sessionsContainer: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    gap: 2,
   },
   sessionCard: {
     flexDirection: "row",
@@ -1400,11 +1480,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  sessionCardPressed: {
-    backgroundColor: "#f9fafb",
+    borderRadius: 14,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   sessionTime: {
     width: 52,
@@ -1412,26 +1494,19 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#9ca3af",
   },
   sessionTimeArrow: {
     fontSize: 12,
-    color: "#9ca3af",
     lineHeight: 12,
     alignSelf: "flex-start",
   },
   sessionTimeTextSecondary: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#9ca3af",
   },
   sessionTimeOngoing: {
     fontSize: 11,
     fontWeight: "700",
-  },
-  sessionTimeTextLast: {
-    color: "#374151",
-    fontWeight: "600",
   },
   sessionIconWrapper: {
     width: 32,
@@ -1453,11 +1528,9 @@ const styles = StyleSheet.create({
   sessionType: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
   },
   sessionDetailText: {
     fontSize: 12,
-    color: "#6b7280",
   },
   sessionTotal: {
     flexDirection: "row",
@@ -1469,7 +1542,6 @@ const styles = StyleSheet.create({
   sessionTotalValue: {
     fontSize: 18,
     fontWeight: "700",
-    color: eventColors.sommeil.dark,
   },
   expandTrigger: {
     flexDirection: "row",
@@ -1477,8 +1549,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
+    borderRadius: 14,
+    borderWidth: 1,
   },
   expandTriggerText: {
     fontSize: 13,
@@ -1489,21 +1561,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingTop: 24,
+    gap: 12,
   },
   loadingText: {
-    marginTop: 12,
     fontSize: 14,
-    color: "#6b7280",
   },
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
   },
   emptyText: {
     fontSize: 18,
-    color: "#666",
-    marginTop: 16,
     fontWeight: "600",
+  },
+  emptyAddButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  emptyAddButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    marginVertical: 1,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
