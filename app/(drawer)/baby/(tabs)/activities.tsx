@@ -803,7 +803,10 @@ export default function ActivitiesScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.sessionCard,
-            pressed && styles.sessionCardPressed,
+            {
+              borderColor: nc.borderLight,
+              backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
+            },
           ]}
           onPress={() => openEditModal(event)}
           accessibilityRole="button"
@@ -1185,14 +1188,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   sessionsContainer: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
     gap: 2,
   },
   sessionCard: {
@@ -1201,11 +1196,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  sessionCardPressed: {
-    backgroundColor: "#f9fafb",
+    borderRadius: 14,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   sessionTime: {
     width: 52,
