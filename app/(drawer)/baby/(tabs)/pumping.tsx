@@ -1,5 +1,6 @@
 import { PumpingEditData } from "@/components/forms/PumpingForm";
 import { ThemedText } from "@/components/themed-text";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
@@ -9,7 +10,9 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { supprimerPompage } from "@/migration/eventsDoubleWriteService";
 import {
   ecouterPompagesHybrid as ecouterPompages,
   getNextEventDateBeforeHybrid,
@@ -19,7 +22,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   FlatList,
@@ -30,8 +34,32 @@ import {
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+
+// ============================================
+// DELETE ACTION COMPONENT
+// ============================================
+
+const DeleteAction = React.memo(function DeleteAction({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Supprimer ce pompage"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={styles.deleteActionText}>Supprimer</Text>
+    </Pressable>
+  );
+});
 
 // ============================================
 // TYPES
@@ -48,7 +76,6 @@ interface Pompage {
 
 interface PompageGroup {
   date: string;
-  dateFormatted: string;
   pompages: Pompage[];
   totalQuantityLeft: number;
   totalQuantityRight: number;
@@ -66,6 +93,7 @@ export default function PumpingScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
+  const { showToast } = useToast();
   const headerOwnerId = useRef(
     `pumping-${Math.random().toString(36).slice(2)}`,
   );
@@ -94,6 +122,11 @@ export default function PumpingScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    visible: boolean;
+    pompage: Pompage | null;
+  }>({ visible: false, pompage: null });
 
   // Récupérer les paramètres de l'URL
   const { openModal, editId, returnTo } = useLocalSearchParams();
@@ -375,15 +408,15 @@ export default function PumpingScreen() {
       pendingLoadMoreRef.current = 1;
       loadMoreVersionRef.current += 1;
 
-      // Si on a déjà essayé plusieurs fois sans succès, on saute directement au prochain événement
-      if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
-        const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
-        endOfRange.setHours(23, 59, 59, 999);
-        const startOfRange = new Date(endOfRange);
-        startOfRange.setHours(0, 0, 0, 0);
-        startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-        const beforeDate = new Date(startOfRange.getTime() - 1);
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      const beforeDate = new Date(startOfRange.getTime() - 1);
 
+      if (!auto || autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
+        // Clic manuel ou auto qui a épuisé ses tentatives : sauter directement au prochain événement
         const nextEventDate = await getNextEventDateBeforeHybrid(
           activeChild.id,
           "pompage",
@@ -391,7 +424,14 @@ export default function PumpingScreen() {
         );
 
         if (nextEventDate) {
-          setDaysWindow(14);
+          const startOfNext = new Date(nextEventDate);
+          startOfNext.setHours(0, 0, 0, 0);
+          const diffDays =
+            Math.floor(
+              (endOfRange.getTime() - startOfNext.getTime()) /
+                (24 * 60 * 60 * 1000),
+            ) + 1;
+          setDaysWindow((prev) => Math.max(prev, diffDays));
           setRangeEndDate(nextEventDate);
         } else {
           setHasMore(false);
@@ -549,10 +589,10 @@ export default function PumpingScreen() {
     return marked;
   }, [pompages, selectedDate, colorScheme]);
 
-  const handleDateSelect = (day: DateData) => {
+  const handleDateSelect = useCallback((day: DateData) => {
     setSelectedDate(day.dateString);
     setExpandedDays(new Set([day.dateString]));
-  };
+  }, []);
 
   const applyTodayFilter = useCallback(() => {
     const today = new Date();
@@ -565,7 +605,7 @@ export default function PumpingScreen() {
     setExpandedDays(new Set([todayKey]));
   }, []);
 
-  const handleFilterPress = (filter: FilterType) => {
+  const handleFilterPress = useCallback((filter: FilterType) => {
     if (filter === "today") {
       applyTodayFilter();
       return;
@@ -575,7 +615,7 @@ export default function PumpingScreen() {
     setSelectedDate(null);
     setShowCalendar(false);
     setExpandedDays(new Set());
-  };
+  }, [applyTodayFilter]);
 
   useFocusEffect(
     useCallback(() => {
@@ -624,12 +664,6 @@ export default function PumpingScreen() {
 
         return {
           date: dateKey,
-          dateFormatted: date.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          }),
           pompages: pompages.sort(
             (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
           ),
@@ -646,15 +680,17 @@ export default function PumpingScreen() {
   // HELPERS - UI
   // ============================================
 
-  const toggleExpand = (dateKey: string) => {
-    const newExpandedDays = new Set(expandedDays);
-    if (newExpandedDays.has(dateKey)) {
-      newExpandedDays.delete(dateKey);
-    } else {
-      newExpandedDays.add(dateKey);
-    }
-    setExpandedDays(newExpandedDays);
-  };
+  const toggleExpand = useCallback((dateKey: string) => {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) {
+        next.delete(dateKey);
+      } else {
+        next.add(dateKey);
+      }
+      return next;
+    });
+  }, []);
 
   // ============================================
   // HANDLERS - MODAL
@@ -665,10 +701,31 @@ export default function PumpingScreen() {
     setPendingOpen(true);
   }, [buildEditData]);
 
+  const handlePompageDelete = useCallback((pompage: Pompage) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setDeleteConfirm({ visible: true, pompage });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!activeChild?.id || !deleteConfirm.pompage?.id) return;
+    const pompageId = deleteConfirm.pompage.id;
+    setDeleteConfirm({ visible: false, pompage: null });
+    try {
+      await supprimerPompage(activeChild.id, pompageId);
+      showToast("Pompage supprimé");
+    } catch {
+      showToast("Impossible de supprimer ce pompage");
+    }
+  }, [activeChild?.id, deleteConfirm.pompage, showToast]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirm({ visible: false, pompage: null });
+  }, []);
+
   const normalizeParam = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value;
 
-  const stashReturnTo = () => {
+  const stashReturnTo = useCallback(() => {
     const target = normalizeParam(returnTo);
     if (!target) return;
     if (target === "home" || target === "chrono" || target === "journal") {
@@ -676,11 +733,11 @@ export default function PumpingScreen() {
       return;
     }
     returnToRef.current = null;
-  };
+  }, [returnTo]);
 
   useEffect(() => {
     stashReturnTo();
-  }, [returnTo]);
+  }, [stashReturnTo]);
 
   const maybeReturnTo = (targetOverride?: string | null) => {
     const target = targetOverride ?? returnToRef.current;
@@ -716,20 +773,30 @@ export default function PumpingScreen() {
   // RENDER - POMPAGE ITEM
   // ============================================
 
-  const renderPompageItem = (pompage: Pompage, isLast: boolean = false) => {
+  const renderPompageItem = useCallback((pompage: Pompage, isLatest: boolean = false) => {
     const totalQty =
       (pompage.quantiteGauche || 0) + (pompage.quantiteDroite || 0);
-    const leftPercent =
-      totalQty > 0 ? (pompage.quantiteGauche / totalQty) * 100 : 50;
     const pompageTime = new Date(pompage.date?.seconds * 1000);
 
     return (
-      <Pressable
+      <ReanimatedSwipeable
         key={pompage.id}
+        renderRightActions={() => (
+          <DeleteAction onPress={() => handlePompageDelete(pompage)} />
+        )}
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
+      >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Modifier ce pompage"
         style={({ pressed }) => [
           styles.sessionCard,
-          // isLast && styles.sessionCardLast,
-          pressed && styles.sessionCardPressed,
+          {
+            borderColor: nc.borderLight,
+            backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
+          },
         ]}
         onPress={() => openEditModal(pompage)}
       >
@@ -738,7 +805,8 @@ export default function PumpingScreen() {
           <Text
             style={[
               styles.sessionTimeText,
-              isLast && styles.sessionTimeTextLast,
+              { color: nc.textMuted },
+              isLatest && { color: nc.textStrong, fontWeight: "600" },
             ]}
           >
             {pompageTime.toLocaleTimeString("fr-FR", {
@@ -770,15 +838,13 @@ export default function PumpingScreen() {
           <View style={styles.quantityLabels}>
             <View style={styles.quantityLabelItem}>
               <View style={[styles.quantityDot, styles.quantityDotLeft]} />
-              <Text style={styles.quantityLabelText}>G</Text>
-              <Text style={styles.quantityLabelValue}>
+              <Text style={[styles.quantityLabelValue, { color: nc.textNormal }]}>
                 {pompage.quantiteGauche} ml
               </Text>
             </View>
             <View style={styles.quantityLabelItem}>
               <View style={[styles.quantityDot, styles.quantityDotRight]} />
-              <Text style={styles.quantityLabelText}>D</Text>
-              <Text style={styles.quantityLabelValue}>
+              <Text style={[styles.quantityLabelValue, { color: nc.textNormal }]}>
                 {pompage.quantiteDroite} ml
               </Text>
             </View>
@@ -788,31 +854,31 @@ export default function PumpingScreen() {
         {/* Total */}
         <View style={styles.sessionTotal}>
           <Text style={styles.sessionTotalValue}>{totalQty}</Text>
-          <Text style={styles.sessionTotalUnit}>ml</Text>
+          <Text style={[styles.sessionTotalUnit, { color: nc.textMuted }]}>ml</Text>
         </View>
 
-        {/* Chevron */}
-        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+        {/* Edit icon */}
+        <Ionicons name="create-outline" size={18} color={nc.textMuted} />
       </Pressable>
+      </ReanimatedSwipeable>
     );
-  };
+  }, [nc, openEditModal, handlePompageDelete]);
 
   // ============================================
   // RENDER - DAY GROUP
   // ============================================
 
-  const renderDayGroup = ({ item }: { item: PompageGroup }) => {
+  const renderDayGroup = useCallback(({ item }: { item: PompageGroup }) => {
     const isExpanded = expandedDays.has(item.date);
     const hasMultiplePompages = item.pompages.length > 1;
 
-    // Format date intelligently
     const formatDayLabel = () => {
       const today = new Date();
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
       const itemDate = new Date(item.date);
 
-      if (itemDate.toDateString() === today.toDateString()) {
+      if (itemDate.toDateString() === today.toDateString() && selectedFilter !== "today") {
         return "Aujourd'hui";
       } else if (itemDate.toDateString() === yesterday.toDateString()) {
         return "Hier";
@@ -828,20 +894,20 @@ export default function PumpingScreen() {
       <View style={styles.daySection}>
         {/* Day Header with stats */}
         <View style={styles.dayHeader}>
-          <Text style={styles.dayLabel}>{formatDayLabel()}</Text>
+          <Text style={[styles.dayLabel, { color: nc.textStrong }]}>{formatDayLabel()}</Text>
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
-              <Text style={styles.dayStatValue}>{item.pompages.length}</Text>
-              <Text style={styles.dayStatLabel}>
+              <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.pompages.length}</Text>
+              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
                 session{item.pompages.length > 1 ? "s" : ""}
               </Text>
             </View>
-            <View style={styles.dayStatDivider} />
+            <View style={[styles.dayStatDivider, { backgroundColor: nc.border }]} />
             <View style={styles.dayStatItem}>
               <Text style={[styles.dayStatValue, styles.dayStatValueAccent]}>
                 {item.totalQuantity}
               </Text>
-              <Text style={styles.dayStatLabel}>ml total</Text>
+              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>ml total</Text>
             </View>
           </View>
         </View>
@@ -852,8 +918,8 @@ export default function PumpingScreen() {
             <View
               style={[styles.statsBreakdownDot, { backgroundColor: "#10b981" }]}
             />
-            <Text style={styles.statsBreakdownLabel}>Gauche</Text>
-            <Text style={styles.statsBreakdownValue}>
+            <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>Gauche</Text>
+            <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
               {item.totalQuantityLeft} ml
             </Text>
           </View>
@@ -861,8 +927,8 @@ export default function PumpingScreen() {
             <View
               style={[styles.statsBreakdownDot, { backgroundColor: "#6366f1" }]}
             />
-            <Text style={styles.statsBreakdownLabel}>Droite</Text>
-            <Text style={styles.statsBreakdownValue}>
+            <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>Droite</Text>
+            <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
               {item.totalQuantityRight} ml
             </Text>
           </View>
@@ -880,7 +946,9 @@ export default function PumpingScreen() {
                   .map((pompage) => renderPompageItem(pompage, false))}
 
               <Pressable
-                style={styles.expandTrigger}
+                accessibilityRole="button"
+                accessibilityLabel={isExpanded ? "Masquer les sessions" : "Voir toutes les sessions"}
+                style={[styles.expandTrigger, { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard }]}
                 onPress={() => toggleExpand(item.date)}
               >
                 <Text style={styles.expandTriggerText}>
@@ -899,19 +967,16 @@ export default function PumpingScreen() {
         </View>
       </View>
     );
-  };
+  }, [expandedDays, nc, renderPompageItem, toggleExpand, selectedFilter]);
 
   // ============================================
   // RENDER - MAIN
   // ============================================
 
   return (
-    <View style={[styles.container, { backgroundColor: nc.background }]}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView
-        style={[
-          { flex: 1 },
-          // { backgroundColor: Colors[colorScheme].background },
-        ]}
+        style={{ flex: 1 }}
         edges={["bottom"]}
         onLayout={() => setLayoutReady(true)}
       >
@@ -924,7 +989,7 @@ export default function PumpingScreen() {
 
           {/* Calendrier */}
           {showCalendar && (
-            <View style={styles.calendarContainer}>
+            <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
               <Calendar
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
@@ -953,7 +1018,7 @@ export default function PumpingScreen() {
           groupedPompages.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons
-                name="calendar-outline"
+                name="water-outline"
                 size={64}
                 color={Colors[colorScheme].tabIconDefault}
               />
@@ -962,6 +1027,16 @@ export default function PumpingScreen() {
                   ? "Aucune session enregistrée"
                   : "Aucune session pour ce filtre"}
               </ThemedText>
+              {pompages.length === 0 && !selectedFilter && !selectedDate && (
+                <Pressable
+                  style={[styles.emptyAddButton, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={openAddModal}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter une session de pompage"
+                >
+                  <Text style={styles.emptyAddButtonText}>Ajouter une session</Text>
+                </Pressable>
+              )}
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   hasMore={hasMore}
@@ -978,8 +1053,7 @@ export default function PumpingScreen() {
               keyExtractor={(item) => item.date}
               renderItem={renderDayGroup}
               showsVerticalScrollIndicator={false}
-              style={styles.flatlistContent}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[styles.listContent, { flexGrow: 1 }]}
               ListFooterComponent={
                 selectedFilter === "today" || selectedDate ? null : (
                   <LoadMoreButton
@@ -999,7 +1073,18 @@ export default function PumpingScreen() {
           </View>
         )}
       </SafeAreaView>
-    </View>
+      <ConfirmModal
+        visible={deleteConfirm.visible}
+        title="Suppression"
+        message="Voulez-vous vraiment supprimer ce pompage ?"
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onCancel={cancelDelete}
+        onConfirm={confirmDelete}
+      />
+    </GestureHandlerRootView>
   );
 }
 
@@ -1010,10 +1095,6 @@ export default function PumpingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  flatlistContent: {
-    paddingBottom: 8,
   },
   headerButton: {
     paddingVertical: 8,
@@ -1024,10 +1105,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
   },
   listContent: {
     paddingHorizontal: 16,
+    paddingTop: 8,
     paddingBottom: 20,
   },
 
@@ -1044,7 +1125,6 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
   },
   dayStats: {
     flexDirection: "row",
@@ -1057,19 +1137,16 @@ const styles = StyleSheet.create({
   dayStatValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#374151",
   },
   dayStatValueAccent: {
     color: eventColors.pumping.dark,
   },
   dayStatLabel: {
     fontSize: 11,
-    color: "#9ca3af",
   },
   dayStatDivider: {
     width: 1,
     height: 24,
-    backgroundColor: "#e5e7eb",
   },
 
   // Stats breakdown
@@ -1091,24 +1168,15 @@ const styles = StyleSheet.create({
   },
   statsBreakdownLabel: {
     fontSize: 12,
-    color: "#6b7280",
   },
   statsBreakdownValue: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#374151",
   },
 
   // Sessions container
   sessionsContainer: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    gap: 2,
   },
 
   // Session Card
@@ -1118,15 +1186,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  sessionCardLast: {
-    backgroundColor: eventColors.pumping.light + "40",
-    borderBottomWidth: 0,
-  },
-  sessionCardPressed: {
-    backgroundColor: "#f9fafb",
+    borderRadius: 14,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   sessionTime: {
     width: 52,
@@ -1134,11 +1200,6 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#9ca3af",
-  },
-  sessionTimeTextLast: {
-    color: "#374151",
-    fontWeight: "600",
   },
   sessionContent: {
     flex: 1,
@@ -1176,15 +1237,9 @@ const styles = StyleSheet.create({
   quantityDotRight: {
     backgroundColor: "#6366f1",
   },
-  quantityLabelText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#9ca3af",
-  },
   quantityLabelValue: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#4b5563",
   },
   sessionTotal: {
     flexDirection: "row",
@@ -1201,7 +1256,6 @@ const styles = StyleSheet.create({
   sessionTotalUnit: {
     fontSize: 11,
     fontWeight: "500",
-    color: "#9ca3af",
   },
 
   // Expand trigger
@@ -1211,24 +1265,51 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
+    borderRadius: 14,
+    borderWidth: 1,
   },
   expandTriggerText: {
     fontSize: 13,
     fontWeight: "500",
     color: eventColors.pumping.dark,
   },
+
   // Empty State
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
   },
   emptyText: {
     fontSize: 18,
-    color: "#666",
-    marginTop: 16,
     fontWeight: "600",
+  },
+  emptyAddButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  emptyAddButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  // Swipe-to-delete
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    marginVertical: 1,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
