@@ -770,6 +770,8 @@ export default function MilestonesScreen() {
           pressed && styles.sessionCardPressed,
         ]}
         onPress={() => openEditModal(event)}
+        accessibilityRole="button"
+        accessibilityLabel="Modifier ce jalon"
       >
         <View style={styles.sessionTime}>
           <Text
@@ -836,16 +838,18 @@ export default function MilestonesScreen() {
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    const dayLabel =
-      date.toDateString() === today.toDateString()
-        ? "Aujourd'hui"
-        : date.toDateString() === yesterday.toDateString()
-          ? "Hier"
-          : date.toLocaleDateString("fr-FR", {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-            });
+    const formatDayLabel = () => {
+      const shortDate = date.toLocaleDateString("fr-FR", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+      if (selectedFilter === "today") return shortDate;
+      if (date.toDateString() === today.toDateString()) return "Aujourd'hui";
+      if (date.toDateString() === yesterday.toDateString()) return "Hier";
+      return shortDate;
+    };
+    const dayLabel = formatDayLabel();
 
     const isExpanded = expandedDays.has(item.date);
     return (
@@ -896,6 +900,8 @@ export default function MilestonesScreen() {
               <Pressable
                 style={styles.expandTrigger}
                 onPress={() => toggleExpand(item.date)}
+                accessibilityRole="button"
+                accessibilityLabel={isExpanded ? "Masquer les jalons" : "Voir les autres jalons"}
               >
                 <Text
                   style={[
@@ -1046,7 +1052,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 40,
+    paddingBottom: 80,
   },
   loadingContainer: {
     flex: 1,
@@ -1139,6 +1145,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 1,
+    gap: 2,
   },
   sessionCard: {
     flexDirection: "row",

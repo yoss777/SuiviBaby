@@ -29,7 +29,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -747,6 +746,8 @@ export default function ActivitiesScreen() {
           pressed && styles.sessionCardPressed,
         ]}
         onPress={() => openEditModal(event)}
+        accessibilityRole="button"
+        accessibilityLabel="Modifier cette activité"
       >
         <View style={styles.sessionTime}>
           <Text
@@ -792,16 +793,18 @@ export default function ActivitiesScreen() {
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    const dayLabel =
-      date.toDateString() === today.toDateString()
-        ? "Aujourd'hui"
-        : date.toDateString() === yesterday.toDateString()
-          ? "Hier"
-          : date.toLocaleDateString("fr-FR", {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-            });
+    const formatDayLabel = () => {
+      const shortDate = date.toLocaleDateString("fr-FR", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+      if (selectedFilter === "today") return shortDate;
+      if (date.toDateString() === today.toDateString()) return "Aujourd'hui";
+      if (date.toDateString() === yesterday.toDateString()) return "Hier";
+      return shortDate;
+    };
+    const dayLabel = formatDayLabel();
 
     const isExpanded = expandedDays.has(item.date);
 
@@ -849,6 +852,8 @@ export default function ActivitiesScreen() {
               <Pressable
                 style={styles.expandTrigger}
                 onPress={() => toggleExpand(item.date)}
+                accessibilityRole="button"
+                accessibilityLabel={isExpanded ? "Masquer les activités" : "Voir les autres activités"}
               >
                 <Text
                   style={[
@@ -892,7 +897,7 @@ export default function ActivitiesScreen() {
               onSelect={handleFilterPress}
             />
             <View style={styles.quickActionsRow}>
-              <TouchableOpacity
+              <Pressable
                 style={styles.quickActionButton}
                 onPress={() => openAddModal("tummyTime")}
               >
@@ -901,8 +906,8 @@ export default function ActivitiesScreen() {
                   size={14}
                   color={Colors[colorScheme].tint}
                 />
-              </TouchableOpacity>
-              <TouchableOpacity
+              </Pressable>
+              <Pressable
                 style={styles.quickActionButton}
                 onPress={() => openAddModal("jeux")}
               >
@@ -911,8 +916,8 @@ export default function ActivitiesScreen() {
                   size={14}
                   color={Colors[colorScheme].tint}
                 />
-              </TouchableOpacity>
-              <TouchableOpacity
+              </Pressable>
+              <Pressable
                 style={styles.quickActionButton}
                 onPress={() => openAddModal("promenade")}
               >
@@ -921,7 +926,7 @@ export default function ActivitiesScreen() {
                   size={14}
                   color={Colors[colorScheme].tint}
                 />
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
           {showCalendar && (
@@ -962,6 +967,15 @@ export default function ActivitiesScreen() {
                   ? "Aucune activité enregistrée"
                   : "Aucune activité pour ce filtre"}
               </ThemedText>
+              {!(selectedFilter === "today" || selectedDate) && (
+                <LoadMoreButton
+                  hasMore={hasMore}
+                  loading={isLoadingMore}
+                  onPress={handleLoadMore}
+                  text="Voir plus"
+                  accentColor={Colors[colorScheme].tint}
+                />
+              )}
             </View>
           ) : (
             <FlatList
@@ -1036,7 +1050,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 40,
+    paddingBottom: 80,
   },
   dayGroup: {
     marginBottom: 24,
@@ -1107,6 +1121,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 1,
+    gap: 2,
   },
   sessionCard: {
     flexDirection: "row",
