@@ -10,6 +10,7 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterActivitesHybrid,
@@ -162,6 +163,7 @@ export default function ActivitiesScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
+  const { showToast, showUndoToast } = useToast();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
     `activities-${Math.random().toString(36).slice(2)}`,
@@ -197,6 +199,8 @@ export default function ActivitiesScreen() {
     visible: boolean;
     event: ActivityEventWithId | null;
   }>({ visible: false, event: null });
+
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -404,8 +408,18 @@ export default function ActivitiesScreen() {
     const unsubscribe = ecouterActivitesHybrid(
       activeChild.id,
       (data) => {
-        setEvents(data as ActivityEventWithId[]);
+        const evts = data as ActivityEventWithId[];
+        setEvents(evts);
         setLoaded({ activites: true });
+
+        // Clean up soft-deleted IDs that are no longer in the dataset
+        setSoftDeletedIds((prev) => {
+          if (prev.size === 0) return prev;
+          const ids = new Set(evts.map((e) => e.id));
+          const next = new Set<string>();
+          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+          return next.size === prev.size ? prev : next;
+        });
 
         if (
           pendingLoadMoreRef.current > 0 &&
@@ -540,6 +554,7 @@ export default function ActivitiesScreen() {
     const todayTime = today.getTime();
 
     const filtered = events.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
       const date = toDate(item.date);
       date.setHours(0, 0, 0, 0);
       const time = date.getTime();
@@ -593,7 +608,7 @@ export default function ActivitiesScreen() {
       .sort((a, b) => (a.date < b.date ? 1 : -1));
 
     setGroupedEvents(grouped);
-  }, [events, selectedFilter, selectedDate, showCalendar]);
+  }, [events, selectedFilter, selectedDate, showCalendar, softDeletedIds]);
 
   const loadMoreStep = useCallback(
     async (auto = false) => {
@@ -694,6 +709,7 @@ export default function ActivitiesScreen() {
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const returnTarget = returnTargetParam ?? returnToRef.current;
+    const isEditing = !!pendingEditData;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
       openSheet({
@@ -701,7 +717,10 @@ export default function ActivitiesScreen() {
         formType: "activities",
         activiteType: pendingActiviteType,
         editData: pendingEditData ?? undefined,
-        onSuccess: ensureTodayInRange,
+        onSuccess: () => {
+          ensureTodayInRange();
+          showToast(isEditing ? "Activite modifiee" : "Activite enregistree");
+        },
         onDismiss: () => {
           editIdRef.current = null;
           maybeReturnTo(returnTarget);
@@ -726,6 +745,7 @@ export default function ActivitiesScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
+    showToast,
   ]);
 
   useEffect(() => {
@@ -775,13 +795,39 @@ export default function ActivitiesScreen() {
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
     const eventId = deleteConfirm.event.id;
+    const childId = activeChild.id;
     setDeleteConfirm({ visible: false, event: null });
-    try {
-      await supprimerActivite(activeChild.id, eventId);
-    } catch {
-      // silently fail
-    }
-  }, [activeChild?.id, deleteConfirm.event]);
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
+
+    showUndoToast(
+      "Activite supprimee",
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(eventId);
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          await supprimerActivite(childId, eventId);
+        } catch {
+          // Restore if delete fails
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(eventId);
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -816,7 +862,8 @@ export default function ActivitiesScreen() {
             <Text
               style={[
                 styles.sessionTimeText,
-                isLast && styles.sessionTimeTextLast,
+                { color: nc.textMuted },
+                isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }],
               ]}
             >
               {formatTime(time)}
@@ -836,15 +883,15 @@ export default function ActivitiesScreen() {
           </View>
           <View style={styles.sessionContent}>
             <View style={styles.sessionDetails}>
-              <Text style={styles.sessionType}>{config.label}</Text>
+              <Text style={[styles.sessionType, { color: nc.textStrong }]}>{config.label}</Text>
               {buildDetails(event) && (
-                <Text style={styles.sessionDetailText}>
+                <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>
                   {buildDetails(event)}
                 </Text>
               )}
             </View>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+          <Ionicons name="chevron-forward" size={18} color={nc.border} />
         </Pressable>
       </ReanimatedSwipeable>
     );
@@ -875,11 +922,11 @@ export default function ActivitiesScreen() {
     return (
       <View style={styles.dayGroup}>
         <View style={styles.dayHeader}>
-          <Text style={styles.dayLabel}>{dayLabel}</Text>
+          <Text style={[styles.dayLabel, { color: nc.textStrong }]}>{dayLabel}</Text>
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
-              <Text style={styles.dayStatValue}>{item.events.length}</Text>
-              <Text style={styles.dayStatLabel}>
+              <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.events.length}</Text>
+              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
                 activité{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -898,8 +945,8 @@ export default function ActivitiesScreen() {
                     { backgroundColor: config.color },
                   ]}
                 />
-                <Text style={styles.statsBreakdownLabel}>{config.label}</Text>
-                <Text style={styles.statsBreakdownValue}>{count}</Text>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>{config.label}</Text>
+                <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{count}</Text>
               </View>
             );
           })}
@@ -914,7 +961,7 @@ export default function ActivitiesScreen() {
                 .map((evt) => renderEventItem(evt, false))}
             {item.events.length > 1 && (
               <Pressable
-                style={styles.expandTrigger}
+                style={[styles.expandTrigger, { borderTopColor: nc.borderLight }]}
                 onPress={() => toggleExpand(item.date)}
                 accessibilityRole="button"
                 accessibilityLabel={isExpanded ? "Masquer les activités" : "Voir les autres activités"}
@@ -962,7 +1009,7 @@ export default function ActivitiesScreen() {
             />
             <View style={styles.quickActionsRow}>
               <Pressable
-                style={styles.quickActionButton}
+                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => openAddModal("tummyTime")}
               >
                 <FontAwesome
@@ -972,7 +1019,7 @@ export default function ActivitiesScreen() {
                 />
               </Pressable>
               <Pressable
-                style={styles.quickActionButton}
+                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => openAddModal("jeux")}
               >
                 <FontAwesome
@@ -982,7 +1029,7 @@ export default function ActivitiesScreen() {
                 />
               </Pressable>
               <Pressable
-                style={styles.quickActionButton}
+                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => openAddModal("promenade")}
               >
                 <FontAwesome
@@ -994,7 +1041,7 @@ export default function ActivitiesScreen() {
             </View>
           </View>
           {showCalendar && (
-            <View style={styles.calendarContainer}>
+            <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
               <Calendar
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
@@ -1026,7 +1073,7 @@ export default function ActivitiesScreen() {
                 size={64}
                 color={Colors[colorScheme].tabIconDefault}
               />
-              <ThemedText style={styles.emptyText}>
+              <ThemedText style={[styles.emptyText, { color: nc.textMuted }]}>
                 {events.length === 0
                   ? "Aucune activité enregistrée"
                   : "Aucune activité pour ce filtre"}
@@ -1062,7 +1109,7 @@ export default function ActivitiesScreen() {
         ) : (
           <View style={styles.loadingContainer}>
             <IconPulseDots color={Colors[colorScheme].tint} />
-            <Text style={styles.loadingText}>Chargement des activités…</Text>
+            <Text style={[styles.loadingText, { color: nc.textMuted }]}>Chargement des activités…</Text>
           </View>
         )}
       </SafeAreaView>
@@ -1084,7 +1131,6 @@ export default function ActivitiesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   headerButtons: {
     flexDirection: "row",
@@ -1101,7 +1147,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
   },
   filterRow: {
     flexDirection: "row",
@@ -1121,7 +1166,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f0f0f0",
   },
   listContent: {
     paddingHorizontal: 16,
@@ -1139,7 +1183,6 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
   },
   dayStats: {
     flexDirection: "row",
@@ -1152,11 +1195,9 @@ const styles = StyleSheet.create({
   dayStatValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#374151",
   },
   dayStatLabel: {
     fontSize: 11,
-    color: "#9ca3af",
   },
   statsBreakdown: {
     flexDirection: "row",
@@ -1177,12 +1218,10 @@ const styles = StyleSheet.create({
   },
   statsBreakdownLabel: {
     fontSize: 12,
-    color: "#6b7280",
   },
   statsBreakdownValue: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#374151",
   },
   dayContent: {
     gap: 10,
@@ -1210,10 +1249,8 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#9ca3af",
   },
   sessionTimeTextLast: {
-    color: "#374151",
     fontWeight: "600",
   },
   sessionIconWrapper: {
@@ -1236,11 +1273,9 @@ const styles = StyleSheet.create({
   sessionType: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
   },
   sessionDetailText: {
     fontSize: 12,
-    color: "#6b7280",
   },
   expandTrigger: {
     flexDirection: "row",
@@ -1249,7 +1284,6 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
   },
   expandTriggerText: {
     fontSize: 13,
@@ -1264,7 +1298,6 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: "#6b7280",
   },
   emptyContainer: {
     flex: 1,
@@ -1273,7 +1306,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    color: "#666",
     marginTop: 16,
     fontWeight: "600",
   },
