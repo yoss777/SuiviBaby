@@ -1,6 +1,7 @@
 import { SoinsEditData, SoinsType } from "@/components/forms/SoinsForm";
 import { ThemedText } from "@/components/themed-text";
-import { DateFilterBar } from "@/components/ui/DateFilterBar";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
@@ -9,7 +10,15 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import {
+  supprimerTemperature,
+  supprimerMedicament,
+  supprimerSymptome,
+  supprimerVaccin,
+  supprimerVitamine,
+} from "@/migration/eventsDoubleWriteService";
 import {
   ecouterMedicamentsHybrid,
   ecouterSymptomesHybrid,
@@ -21,10 +30,11 @@ import {
 } from "@/migration/eventsHybridService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import * as Haptics from "expo-haptics";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   FlatList,
@@ -32,18 +42,40 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+
+// ============================================
+// DELETE ACTION COMPONENT
+// ============================================
+
+const DeleteAction = React.memo(function DeleteAction({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Supprimer cet événement"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={styles.deleteActionText}>Supprimer</Text>
+    </Pressable>
+  );
+});
 
 // ============================================
 // TYPES
 // ============================================
 type HealthType = SoinsType;
-type DateFilterValue = "today" | "past";
 
 type HealthEvent = {
   id: string;
@@ -137,6 +169,7 @@ export default function SoinsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
+  const { showToast } = useToast();
   const navigation = useNavigation();
   const headerOwnerId = useRef(`soins-${Math.random().toString(36).slice(2)}`);
 
@@ -145,7 +178,7 @@ export default function SoinsScreen() {
   const sheetOwnerId = "soins";
 
   const [showCalendar, setShowCalendar] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<DateFilterValue>("today");
+  const [selectedFilter, setSelectedFilter] = useState<DateFilterValue | null>("today");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
@@ -171,6 +204,9 @@ export default function SoinsScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteType, setConfirmDeleteType] = useState<HealthType | null>(null);
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -549,13 +585,14 @@ export default function SoinsScreen() {
     return marked;
   }, [events, selectedDate, colorScheme]);
 
-  const handleDateSelect = (day: DateData) => {
+  const handleDateSelect = useCallback((day: DateData) => {
+    setSelectedFilter(null);
     setSelectedDate(day.dateString);
     setShowCalendar(false);
     setExpandedDays(new Set([day.dateString]));
-  };
+  }, []);
 
-  const handleFilterPress = (filter: DateFilterValue) => {
+  const handleFilterPress = useCallback((filter: DateFilterValue) => {
     if (filter === "today") {
       applyTodayFilter();
       return;
@@ -564,14 +601,14 @@ export default function SoinsScreen() {
     setSelectedDate(null);
     setShowCalendar(false);
     setExpandedDays(new Set());
-  };
+  }, [applyTodayFilter]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!selectedDate) {
+      if (!selectedDate && !selectedFilter) {
         applyTodayFilter();
       }
-    }, [applyTodayFilter, selectedDate]),
+    }, [applyTodayFilter, selectedDate, selectedFilter]),
   );
 
   useEffect(() => {
@@ -638,7 +675,7 @@ export default function SoinsScreen() {
       pendingLoadMoreRef.current = 5;
       loadMoreVersionRef.current += 1;
 
-      if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
+      if (!auto || autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
         const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
         endOfRange.setHours(23, 59, 59, 999);
         const startOfRange = new Date(endOfRange);
@@ -790,7 +827,7 @@ export default function SoinsScreen() {
   // ============================================
   // RENDER HELPERS
   // ============================================
-  const buildDetails = (event: HealthEvent) => {
+  const buildDetails = useCallback((event: HealthEvent) => {
     if (event.type === "temperature") {
       return [formatTemperature(event.valeur), event.modePrise]
         .filter(Boolean)
@@ -812,9 +849,10 @@ export default function SoinsScreen() {
       return [event.nomVitamine, event.dosage].filter(Boolean).join(" · ");
     }
     return "";
-  };
+  }, []);
 
   const toggleExpand = useCallback((date: string) => {
+    Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(date)) {
@@ -826,66 +864,91 @@ export default function SoinsScreen() {
     });
   }, []);
 
-  const renderEventItem = (event: HealthEvent, isLast = false) => {
+  const handleDeleteRequest = useCallback((event: HealthEvent) => {
+    setConfirmDeleteId(event.id);
+    setConfirmDeleteType(event.type);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  }, []);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!confirmDeleteId || !confirmDeleteType || !activeChild?.id) return;
+    try {
+      const supprimerMap: Record<HealthType, (childId: string, id: string) => Promise<void>> = {
+        temperature: supprimerTemperature,
+        medicament: supprimerMedicament,
+        symptome: supprimerSymptome,
+        vaccin: supprimerVaccin,
+        vitamine: supprimerVitamine,
+      };
+      await supprimerMap[confirmDeleteType](activeChild.id, confirmDeleteId);
+      showToast("Événement supprimé");
+    } catch {
+      showToast("Erreur lors de la suppression");
+    } finally {
+      setConfirmDeleteId(null);
+      setConfirmDeleteType(null);
+    }
+  }, [confirmDeleteId, confirmDeleteType, activeChild?.id, showToast]);
+
+  const renderEventItem = useCallback((event: HealthEvent) => {
     const time = toDate(event.date);
     const config = TYPE_CONFIG[event.type];
     return (
-      <Pressable
+      <ReanimatedSwipeable
         key={event.id}
-        style={({ pressed }) => [
-          styles.sessionCard,
-          pressed && styles.sessionCardPressed,
-        ]}
-        onPress={() => openEditModal(event)}
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
+        renderRightActions={() => <DeleteAction onPress={() => handleDeleteRequest(event)} />}
       >
-        <View style={styles.sessionTime}>
-          <Text
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Modifier cet événement"
+          style={({ pressed }) => [
+            styles.sessionCard,
+            { backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard },
+            { borderColor: nc.borderLight },
+          ]}
+          onPress={() => openEditModal(event)}
+        >
+          <View style={styles.sessionTime}>
+            <Text style={[styles.sessionTimeText, { color: nc.textMuted }]}>
+              {formatTime(time)}
+            </Text>
+          </View>
+          <View
             style={[
-              styles.sessionTimeText,
-              isLast && styles.sessionTimeTextLast,
+              styles.sessionIconWrapper,
+              { backgroundColor: `${config.color}20` },
             ]}
           >
-            {formatTime(time)}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.sessionIconWrapper,
-            { backgroundColor: `${config.color}20` },
-          ]}
-        >
-          <FontAwesome
-            name={config.icon as any}
-            size={14}
-            color={config.color}
-          />
-        </View>
-        <View style={styles.sessionDetails}>
-          <Text style={styles.sessionType}>{config.label}</Text>
-          <Text style={styles.sessionDetailText}>{buildDetails(event)}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
-      </Pressable>
+            <FontAwesome name={config.icon as any} size={14} color={config.color} />
+          </View>
+          <View style={styles.sessionDetails}>
+            <Text style={[styles.sessionType, { color: nc.textStrong }]}>{config.label}</Text>
+            <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>{buildDetails(event)}</Text>
+          </View>
+          <Ionicons name="create-outline" size={18} color={nc.textMuted} />
+        </Pressable>
+      </ReanimatedSwipeable>
     );
-  };
+  }, [nc, openEditModal, buildDetails, handleDeleteRequest]);
 
-  const renderDayGroup = ({ item }: { item: HealthGroup }) => {
+  const renderDayGroup = useCallback(({ item }: { item: HealthGroup }) => {
     const [year, month, day] = item.date.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    const dayLabel =
-      date.toDateString() === today.toDateString()
-        ? "Aujourd'hui"
-        : date.toDateString() === yesterday.toDateString()
-          ? "Hier"
-          : date.toLocaleDateString("fr-FR", {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-            });
+    const formatDayLabel = () => {
+      if (date.toDateString() === today.toDateString() && selectedFilter !== "today") {
+        return "Aujourd'hui";
+      } else if (date.toDateString() === yesterday.toDateString()) {
+        return "Hier";
+      }
+      return date.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+    };
 
     const isExpanded = expandedDays.has(item.date);
     const hasMultiple = item.events.length > 1;
@@ -893,11 +956,11 @@ export default function SoinsScreen() {
     return (
       <View style={styles.daySection}>
         <View style={styles.dayHeader}>
-          <Text style={styles.dayLabel}>{dayLabel}</Text>
+          <Text style={[styles.dayLabel, { color: nc.textStrong }]}>{formatDayLabel()}</Text>
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
-              <Text style={styles.dayStatValue}>{item.events.length}</Text>
-              <Text style={styles.dayStatLabel}>
+              <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.events.length}</Text>
+              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
                 évènement{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -916,26 +979,31 @@ export default function SoinsScreen() {
                     { backgroundColor: TYPE_CONFIG[type].color },
                   ]}
                 />
-                <Text style={styles.statsBreakdownLabel}>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
                   {TYPE_CONFIG[type].label}
                   {count > 1 ? "s" : ""}
                 </Text>
-                <Text style={styles.statsBreakdownValue}>{count}</Text>
+                <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{count}</Text>
               </View>
             );
           })}
         </View>
 
         <View style={styles.sessionsContainer}>
-          {renderEventItem(item.lastEvent, true)}
+          {renderEventItem(item.lastEvent)}
           {hasMultiple && (
             <>
               {isExpanded &&
                 item.events
                   .filter((evt) => evt.id !== item.lastEvent.id)
-                  .map((evt) => renderEventItem(evt, false))}
+                  .map((evt) => renderEventItem(evt))}
               <Pressable
-                style={styles.expandTrigger}
+                accessibilityRole="button"
+                accessibilityLabel={isExpanded ? "Masquer les événements" : `Voir ${item.events.length - 1} autre${item.events.length > 2 ? "s" : ""} événement${item.events.length > 2 ? "s" : ""}`}
+                style={({ pressed }) => [
+                  styles.expandTrigger,
+                  { borderColor: nc.borderLight, backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard },
+                ]}
                 onPress={() => toggleExpand(item.date)}
               >
                 <Text
@@ -959,140 +1027,142 @@ export default function SoinsScreen() {
         </View>
       </View>
     );
-  };
+  }, [expandedDays, nc, colorScheme, selectedFilter, renderEventItem, toggleExpand]);
 
   // ============================================
   // RENDER
   // ============================================
   return (
-    <View style={[styles.container, { backgroundColor: nc.background }]}>
-      <SafeAreaView
-        style={{ flex: 1 }}
-        edges={["bottom"]}
-        onLayout={() => setLayoutReady(true)}
-      >
-        <View>
-          <View style={styles.filterRow}>
-            <DateFilterBar
-              selected={selectedFilter}
-              onSelect={handleFilterPress}
-            />
-            <View style={styles.quickActionsRow}>
-              <TouchableOpacity
-                style={styles.quickActionButton}
-                onPress={() => openAddModal("temperature")}
-              >
-                <FontAwesome
-                  name="temperature-half"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickActionButton}
-                onPress={() => openAddModal("vitamine")}
-              >
-                <FontAwesome
-                  name="pills"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickActionButton}
-                onPress={() => openAddModal("vaccin")}
-              >
-                <FontAwesome
-                  name="syringe"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-          {showCalendar && (
-            <View style={styles.calendarContainer}>
-              <Calendar
-                onDayPress={handleDateSelect}
-                markedDates={markedDates}
-                theme={{
-                  backgroundColor: Colors[colorScheme].background,
-                  calendarBackground: Colors[colorScheme].background,
-                  textSectionTitleColor: Colors[colorScheme].text,
-                  selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: "#ffffff",
-                  todayTextColor: Colors[colorScheme].tint,
-                  dayTextColor: Colors[colorScheme].text,
-                  textDisabledColor: Colors[colorScheme].tabIconDefault,
-                  dotColor: Colors[colorScheme].tint,
-                  selectedDotColor: "#ffffff",
-                  arrowColor: Colors[colorScheme].tint,
-                  monthTextColor: Colors[colorScheme].text,
-                  indicatorColor: Colors[colorScheme].tint,
-                }}
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={[styles.container, { backgroundColor: nc.background }]}>
+        <SafeAreaView
+          style={{ flex: 1 }}
+          edges={["bottom"]}
+          onLayout={() => setLayoutReady(true)}
+        >
+          <View>
+            <View style={styles.filterRow}>
+              <DateFilterBar
+                selected={selectedFilter as any}
+                onSelect={handleFilterPress}
               />
+              <View style={styles.quickActionsRow}>
+                <Pressable
+                  style={({ pressed }) => [styles.quickActionButton, { backgroundColor: pressed ? nc.border : nc.backgroundPressed }]}
+                  onPress={() => openAddModal("temperature")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter une température"
+                >
+                  <FontAwesome name="temperature-half" size={14} color={Colors[colorScheme].tint} />
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.quickActionButton, { backgroundColor: pressed ? nc.border : nc.backgroundPressed }]}
+                  onPress={() => openAddModal("vitamine")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter une vitamine"
+                >
+                  <FontAwesome name="pills" size={14} color={Colors[colorScheme].tint} />
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.quickActionButton, { backgroundColor: pressed ? nc.border : nc.backgroundPressed }]}
+                  onPress={() => openAddModal("vaccin")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter un vaccin"
+                >
+                  <FontAwesome name="syringe" size={14} color={Colors[colorScheme].tint} />
+                </Pressable>
+              </View>
+            </View>
+            {showCalendar && (
+              <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
+                <Calendar
+                  onDayPress={handleDateSelect}
+                  markedDates={markedDates}
+                  theme={{
+                    backgroundColor: Colors[colorScheme].background,
+                    calendarBackground: Colors[colorScheme].background,
+                    textSectionTitleColor: Colors[colorScheme].text,
+                    selectedDayBackgroundColor: Colors[colorScheme].tint,
+                    selectedDayTextColor: "#ffffff",
+                    todayTextColor: Colors[colorScheme].tint,
+                    dayTextColor: Colors[colorScheme].text,
+                    textDisabledColor: Colors[colorScheme].tabIconDefault,
+                    dotColor: Colors[colorScheme].tint,
+                    selectedDotColor: "#ffffff",
+                    arrowColor: Colors[colorScheme].tint,
+                    monthTextColor: Colors[colorScheme].text,
+                    indicatorColor: Colors[colorScheme].tint,
+                  }}
+                />
+              </View>
+            )}
+          </View>
+
+          {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
+            groupedEvents.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="medkit-outline" size={64} color={nc.textMuted} />
+                <ThemedText style={[styles.emptyText, { color: nc.textMuted }]}>
+                  {events.length === 0
+                    ? "Aucun soin enregistré"
+                    : "Aucun soin pour ce filtre"}
+                </ThemedText>
+                {events.length === 0 && (
+                  <Pressable
+                    style={[styles.emptyAction, { backgroundColor: Colors[colorScheme].tint }]}
+                    onPress={() => openAddModal("temperature")}
+                    accessibilityRole="button"
+                    accessibilityLabel="Enregistrer un soin"
+                  >
+                    <Text style={styles.emptyActionText}>Enregistrer un soin</Text>
+                  </Pressable>
+                )}
+              </View>
+            ) : (
+              <FlatList
+                data={groupedEvents}
+                keyExtractor={(item) => item.date}
+                renderItem={renderDayGroup}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.listContent}
+                ListFooterComponent={
+                  selectedFilter === "today" || selectedDate ? null : (
+                    <LoadMoreButton
+                      hasMore={hasMore}
+                      loading={isLoadingMore}
+                      onPress={handleLoadMore}
+                      text="Voir plus"
+                      accentColor={Colors[colorScheme].tint}
+                    />
+                  )
+                }
+              />
+            )
+          ) : (
+            <View style={styles.emptyContainer}>
+              <IconPulseDots color={Colors[colorScheme].tint} />
             </View>
           )}
-        </View>
-
-        {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
-          groupedEvents.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Ionicons
-                name="calendar-outline"
-                size={64}
-                color={Colors[colorScheme].tabIconDefault}
-              />
-              <ThemedText style={styles.emptyText}>
-                {events.length === 0
-                  ? "Aucun événement enregistré"
-                  : "Aucun événement pour ce filtre"}
-              </ThemedText>
-              {!(selectedFilter === "today" || selectedDate) && (
-                <LoadMoreButton
-                  hasMore={hasMore}
-                  loading={isLoadingMore}
-                  onPress={handleLoadMore}
-                  text="Voir plus"
-                  accentColor={Colors[colorScheme].tint}
-                />
-              )}
-            </View>
-          ) : (
-            <FlatList
-              data={groupedEvents}
-              keyExtractor={(item) => item.date}
-              renderItem={renderDayGroup}
-              showsVerticalScrollIndicator={false}
-              style={styles.flatlistContent}
-              contentContainerStyle={styles.listContent}
-              ListFooterComponent={
-                selectedFilter === "today" || selectedDate ? null : (
-                  <LoadMoreButton
-                    hasMore={hasMore}
-                    loading={isLoadingMore}
-                    onPress={handleLoadMore}
-                    text="Voir plus"
-                    accentColor={Colors[colorScheme].tint}
-                  />
-                )
-              }
-            />
-          )
-        ) : (
-          <View style={styles.emptyContainer}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
-          </View>
-        )}
-      </SafeAreaView>
-    </View>
+        </SafeAreaView>
+        <ConfirmModal
+          visible={confirmDeleteId !== null}
+          title="Supprimer cet événement ?"
+          message="Cette action est irréversible."
+          confirmText="Supprimer"
+          backgroundColor={Colors[colorScheme].background}
+          textColor={Colors[colorScheme].text}
+          confirmButtonColor="#ef4444"
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => { setConfirmDeleteId(null); setConfirmDeleteType(null); }}
+        />
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   headerButtons: {
     flexDirection: "row",
@@ -1109,7 +1179,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
   },
   filterRow: {
     flexDirection: "row",
@@ -1129,14 +1198,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f0f0f0",
-  },
-  flatlistContent: {
-    paddingBottom: 8,
   },
   listContent: {
     paddingHorizontal: 16,
+    paddingTop: 8,
     paddingBottom: 20,
+    flexGrow: 1,
   },
   daySection: {
     marginBottom: 24,
@@ -1150,7 +1217,6 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
   },
   dayStats: {
     flexDirection: "row",
@@ -1163,11 +1229,9 @@ const styles = StyleSheet.create({
   dayStatValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#374151",
   },
   dayStatLabel: {
     fontSize: 11,
-    color: "#9ca3af",
   },
   statsBreakdown: {
     flexDirection: "row",
@@ -1188,22 +1252,13 @@ const styles = StyleSheet.create({
   },
   statsBreakdownLabel: {
     fontSize: 12,
-    color: "#6b7280",
   },
   statsBreakdownValue: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#374151",
   },
   sessionsContainer: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    gap: 2,
   },
   sessionCard: {
     flexDirection: "row",
@@ -1211,11 +1266,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  sessionCardPressed: {
-    backgroundColor: "#f9fafb",
+    borderRadius: 14,
+    borderWidth: 1,
   },
   sessionTime: {
     width: 52,
@@ -1223,11 +1275,6 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#9ca3af",
-  },
-  sessionTimeTextLast: {
-    color: "#374151",
-    fontWeight: "600",
   },
   sessionIconWrapper: {
     width: 32,
@@ -1242,11 +1289,9 @@ const styles = StyleSheet.create({
   sessionType: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
   },
   sessionDetailText: {
     fontSize: 12,
-    color: "#6b7280",
     marginTop: 2,
   },
   expandTrigger: {
@@ -1255,8 +1300,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 2,
   },
   expandTriggerText: {
     fontSize: 13,
@@ -1266,11 +1312,35 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
   },
   emptyText: {
     fontSize: 18,
-    color: "#666",
-    marginTop: 16,
     fontWeight: "600",
+  },
+  emptyAction: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  emptyActionText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    marginVertical: 1,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

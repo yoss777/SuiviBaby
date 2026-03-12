@@ -958,6 +958,8 @@ export default function MealsScreen() {
         enabled={canManageContent && !!meal.id}
       >
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Modifier ce repas"
         style={({ pressed }) => [
           styles.sessionCard,
           {
