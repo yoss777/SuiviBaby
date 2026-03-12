@@ -5,6 +5,7 @@ import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -133,6 +134,7 @@ export default function ActivitiesScreen() {
   const { setHeaderRight } = useHeaderRight();
   const { setHeaderLeft } = useHeaderLeft();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
@@ -877,7 +879,7 @@ export default function ActivitiesScreen() {
   // RENDER
   // ============================================
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={{ flex: 1 }}
         edges={["bottom"]}

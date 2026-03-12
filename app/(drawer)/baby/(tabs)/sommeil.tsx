@@ -5,6 +5,7 @@ import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -104,6 +105,7 @@ export default function SommeilScreen() {
   const { setHeaderRight } = useHeaderRight();
   const { setHeaderLeft } = useHeaderLeft();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const colors = Colors[colorScheme];
   const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
   const { showAlert } = useModal();
@@ -1341,7 +1343,7 @@ export default function SommeilScreen() {
   ]);
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={styles.safeArea}
         edges={["bottom"]}

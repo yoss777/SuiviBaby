@@ -7,6 +7,7 @@ import {
 } from "@/components/forms/MilestonesForm";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -134,6 +135,7 @@ export default function MilestonesScreen() {
   const { setHeaderRight } = useHeaderRight();
   const { setHeaderLeft } = useHeaderLeft();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
@@ -924,7 +926,7 @@ export default function MilestonesScreen() {
   // RENDER
   // ============================================
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={styles.safeArea}
         edges={["bottom"]}

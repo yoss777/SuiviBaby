@@ -5,6 +5,7 @@ import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -63,6 +64,7 @@ export default function PumpingScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
   const headerOwnerId = useRef(
     `pumping-${Math.random().toString(36).slice(2)}`,
@@ -904,7 +906,7 @@ export default function PumpingScreen() {
   // ============================================
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={[
           { flex: 1 },
