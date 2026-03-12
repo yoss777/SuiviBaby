@@ -1573,7 +1573,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingBottom: 80,
   },
   daySection: {
     marginBottom: 24,
