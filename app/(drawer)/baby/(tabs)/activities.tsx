@@ -3,6 +3,8 @@ import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
+import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -275,7 +277,7 @@ export default function ActivitiesScreen() {
   const { openSheet, closeSheet, isOpen } = useSheet();
   const { showToast, showUndoToast } = useToast();
   const navigation = useNavigation();
-  const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId } = useBatchSelect();
+  const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId, selectAll, clearSelection } = useBatchSelect();
   const headerOwnerId = useRef(
     `activities-${Math.random().toString(36).slice(2)}`,
   );
@@ -413,29 +415,24 @@ export default function ActivitiesScreen() {
     applyTodayFilter();
   }, [applyTodayFilter]);
 
+  const menuItems: HeaderMenuItem[] = useMemo(() => [
+    { label: "Ajouter", icon: "add-circle-outline", onPress: () => openAddModal("tummyTime") },
+    {
+      label: selectionMode ? "Annuler sélection" : "Sélectionner",
+      icon: selectionMode ? "close-outline" : "checkmark-done-outline",
+      onPress: toggleSelectionMode,
+    },
+  ], [openAddModal, selectionMode, toggleSelectionMode]);
+
   useFocusEffect(
     useCallback(() => {
       const headerButtons = (
         <View style={styles.headerButtons}>
           <Pressable
-            onPress={toggleSelectionMode}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.headerButton}
-            accessibilityRole="button"
-            accessibilityLabel={selectionMode ? "Annuler la sélection" : "Mode sélection"}
-          >
-            {selectionMode ? (
-              <Text style={{ color: Colors[colorScheme].tint, fontSize: 14, fontWeight: "600" }}>Annuler</Text>
-            ) : (
-              <Ionicons name="checkmark-done-outline" size={22} color={Colors[colorScheme].tint} />
-            )}
-          </Pressable>
-          <Pressable
             onPress={handleCalendarPress}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[
               styles.headerButton,
-              { paddingLeft: 12 },
               showCalendar && {
                 backgroundColor: Colors[colorScheme].tint + "20",
               },
@@ -447,13 +444,7 @@ export default function ActivitiesScreen() {
               color={Colors[colorScheme].tint}
             />
           </Pressable>
-          <Pressable
-              onPress={() => openAddModal("tummyTime")}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              style={styles.headerButton}
-            >
-            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-          </Pressable>
+          <HeaderMenu items={menuItems} />
         </View>
       );
       setHeaderRight(headerButtons, headerOwnerId.current);
@@ -462,13 +453,10 @@ export default function ActivitiesScreen() {
       };
     }, [
       handleCalendarPress,
-      openAddModal,
       showCalendar,
       colorScheme,
       setHeaderRight,
-      selectionMode,
-      toggleSelectionMode,
-      selectedCount,
+      menuItems,
     ]),
   );
 
@@ -1283,6 +1271,17 @@ export default function ActivitiesScreen() {
           )}
         </View>
 
+        {/* Barre de sélection */}
+        {selectionMode && (
+          <SelectionToolbar
+            selectedCount={selectedCount}
+            totalCount={groupedEvents.reduce((n, g) => n + g.events.length, 0)}
+            onSelectAll={() => selectAll(groupedEvents.flatMap((g) => g.events.map((e) => e.id)))}
+            onClearSelection={clearSelection}
+            onDelete={handleBatchDelete}
+          />
+        )}
+
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -1358,22 +1357,6 @@ export default function ActivitiesScreen() {
           <ActivitySkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
-      {selectionMode && selectedCount > 0 && (
-        <View style={styles.batchDeleteBar}>
-          <Pressable
-            style={styles.batchDeleteButton}
-            onPress={handleBatchDelete}
-            accessibilityRole="button"
-            accessibilityLabel={`Supprimer ${selectedCount} élément${selectedCount > 1 ? "s" : ""}`}
-          >
-            <Ionicons name="trash-outline" size={18} color="#fff" />
-            <Text style={styles.batchDeleteText}>
-              Supprimer ({selectedCount})
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
       <ConfirmModal
         visible={deleteConfirm.visible}
         title="Suppression"
@@ -1643,30 +1626,6 @@ const styles = StyleSheet.create({
   deleteActionText: {
     color: "#fff",
     fontSize: 11,
-    fontWeight: "700",
-  },
-  batchDeleteBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingBottom: 32,
-    backgroundColor: "rgba(0,0,0,0.02)",
-  },
-  batchDeleteButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: "#ef4444",
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  batchDeleteText: {
-    color: "#fff",
-    fontSize: 15,
     fontWeight: "700",
   },
 });
