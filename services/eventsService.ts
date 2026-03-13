@@ -480,11 +480,6 @@ export async function modifierEvenement(
   id: string,
   data: Partial<Event>,
 ): Promise<void> {
-  const updateEvent = httpsCallable<
-    Record<string, unknown>,
-    { success: boolean }
-  >(functions, "validateAndUpdateEvent");
-
   const payload = {
     ...data,
     childId,
@@ -496,6 +491,18 @@ export async function modifierEvenement(
     (payload as any).date = Timestamp.fromDate(data.date);
   }
 
+  // Si offline, mettre en queue
+  const online = await isOnline();
+  if (!online) {
+    await enqueueEvent("update", payload as Record<string, unknown>);
+    return;
+  }
+
+  const updateEvent = httpsCallable<
+    Record<string, unknown>,
+    { success: boolean }
+  >(functions, "validateAndUpdateEvent");
+
   await updateEvent(payload);
 }
 
@@ -506,6 +513,13 @@ export async function supprimerEvenement(
   childId: string,
   id: string,
 ): Promise<void> {
+  // Si offline, mettre en queue
+  const online = await isOnline();
+  if (!online) {
+    await enqueueEvent("delete", { childId, eventId: id });
+    return;
+  }
+
   const deleteEvent = httpsCallable<
     { childId: string; eventId: string },
     { success: boolean; deleted: { event: number; likes: number; comments: number } }

@@ -10,13 +10,16 @@ import {
 } from "react";
 import {
   ActivityIndicator,
+  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
+import { BabySwitcherModal } from "@/components/ui/BabySwitcherModal";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -43,21 +46,61 @@ export const useHeaderRight = () => useContext(HeaderRightContext);
 export const useHeaderLeft = () => useContext(HeaderLeftContext);
 
 function BabyHeaderTitle() {
-  const { activeChild } = useBaby();
+  const { activeChild, children, setActiveChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
+  const [showSwitcher, setShowSwitcher] = useState(false);
+
+  const hasMultiple = children.length > 1;
+
+  const titleContent = (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+      <Text
+        numberOfLines={1}
+        ellipsizeMode="tail"
+        style={{
+          color: Colors[colorScheme].text,
+          fontSize: 17,
+          fontWeight: "600",
+          maxWidth: 200,
+        }}
+      >
+        {activeChild?.name || "Suivi Enfant"}
+      </Text>
+      {hasMultiple && (
+        <FontAwesome
+          name="chevron-down"
+          size={10}
+          color={Colors[colorScheme].tabIconDefault}
+        />
+      )}
+    </View>
+  );
+
+  if (!hasMultiple) {
+    return titleContent;
+  }
 
   return (
-    <Text
-      numberOfLines={1}
-      ellipsizeMode="tail"
-      style={{
-        color: Colors[colorScheme].text,
-        fontSize: 17,
-        fontWeight: "600",
-      }}
-    >
-      {activeChild?.name || "Suivi Enfant"}
-    </Text>
+    <>
+      <Pressable
+        onPress={() => setShowSwitcher(true)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        accessibilityRole="button"
+        accessibilityLabel="Changer d'enfant"
+      >
+        {titleContent}
+      </Pressable>
+      <BabySwitcherModal
+        visible={showSwitcher}
+        children={children}
+        activeChild={activeChild}
+        onSelect={(child) => {
+          setActiveChild(child);
+          setShowSwitcher(false);
+        }}
+        onClose={() => setShowSwitcher(false)}
+      />
+    </>
   );
 }
 

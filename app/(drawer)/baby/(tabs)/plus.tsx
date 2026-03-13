@@ -9,14 +9,17 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { exportAllEventsCSV } from "@/services/exportService";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type ItemIcon = string | { lib: "mci"; name: string };
@@ -154,6 +157,7 @@ export default function PlusScreen() {
   const { activeChild } = useBaby();
   const { firebaseUser } = useAuth();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
+  const [exporting, setExporting] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -179,6 +183,21 @@ export default function PlusScreen() {
     },
     [activeChild?.id],
   );
+
+  const handleExport = useCallback(async () => {
+    if (!activeChild?.id || !activeChild?.name || exporting) return;
+    setExporting(true);
+    try {
+      await exportAllEventsCSV(activeChild.id, activeChild.name);
+    } catch (e: any) {
+      Alert.alert(
+        "Erreur d'export",
+        e?.message || "Impossible d'exporter les données.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [activeChild?.id, activeChild?.name, exporting]);
 
   const isDark = colorScheme === "dark";
 
@@ -295,6 +314,80 @@ export default function PlusScreen() {
                 </View>
               </View>
             ))
+          )}
+
+          {activeChild && (
+            <View style={styles.section}>
+              <Text
+                style={[styles.sectionLabel, { color: nc.textMuted }]}
+                accessibilityRole="header"
+              >
+                Outils
+              </Text>
+              <View style={styles.sectionItems}>
+                <TouchableOpacity
+                  style={[
+                    styles.row,
+                    {
+                      backgroundColor: nc.backgroundCard,
+                      borderColor: nc.border,
+                      shadowOpacity: isDark ? 0 : 0.04,
+                      elevation: isDark ? 0 : 1,
+                    },
+                  ]}
+                  onPress={handleExport}
+                  activeOpacity={0.7}
+                  disabled={exporting}
+                  accessibilityRole="button"
+                  accessibilityLabel="Exporter les données en CSV"
+                >
+                  <View
+                    style={[
+                      styles.iconWrap,
+                      {
+                        backgroundColor: `#607D8B${iconBgOpacity}`,
+                      },
+                    ]}
+                    importantForAccessibility="no"
+                  >
+                    {exporting ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={isDark ? "#90A4AE" : "#607D8B"}
+                      />
+                    ) : (
+                      <FontAwesome
+                        name="file-csv"
+                        size={18}
+                        color={isDark ? "#90A4AE" : "#607D8B"}
+                      />
+                    )}
+                  </View>
+                  <View style={styles.textBlock}>
+                    <Text
+                      style={[styles.rowTitle, { color: nc.textStrong }]}
+                    >
+                      Exporter les données
+                    </Text>
+                    <Text
+                      style={[styles.rowSubtitle, { color: nc.textLight }]}
+                    >
+                      {exporting
+                        ? "Export en cours..."
+                        : "Télécharger un fichier CSV"}
+                    </Text>
+                  </View>
+                  {!exporting && (
+                    <FontAwesome
+                      name="download"
+                      size={14}
+                      color={nc.textMuted}
+                      importantForAccessibility="no"
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
         </ScrollView>
       </SafeAreaView>
