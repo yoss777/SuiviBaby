@@ -328,6 +328,8 @@ export default function SoinsScreen() {
     event: HealthEvent | null;
   }>({ visible: false, event: null });
 
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
+
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
   const editIdRef = useRef<string | null>(null);
@@ -1071,17 +1073,57 @@ export default function SoinsScreen() {
     setDeleteConfirm({ visible: false, event: null });
   }, []);
 
-  const handleBatchDelete = useCallback(async () => {
+  const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
-    const ids = Array.from(selectedIds);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setBatchDeleteConfirm({ visible: true, ids: Array.from(selectedIds) });
+  }, [activeChild?.id, selectedIds, selectedCount]);
+
+  const confirmBatchDelete = useCallback(() => {
+    if (!activeChild?.id || batchDeleteConfirm.ids.length === 0) return;
+    const ids = batchDeleteConfirm.ids;
+    const childId = activeChild.id;
+    const count = ids.length;
+    setBatchDeleteConfirm({ visible: false, ids: [] });
     exitSelectionMode();
-    try {
-      await Promise.all(ids.map((id) => supprimerEvenement(activeChild.id, id)));
-      showToast(`${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`);
-    } catch {
-      showToast("Erreur lors de la suppression");
-    }
-  }, [activeChild?.id, selectedIds, selectedCount, exitSelectionMode, showToast]);
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+
+    showUndoToast(
+      `${count} soin${count > 1 ? "s" : ""} supprimé${count > 1 ? "s" : ""}`,
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          ids.forEach((id) => next.delete(id));
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          await Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
+        } catch {
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            ids.forEach((id) => next.delete(id));
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showToast]);
+
+  const cancelBatchDelete = useCallback(() => {
+    setBatchDeleteConfirm({ visible: false, ids: [] });
+  }, []);
 
   const renderEventItem = useCallback((event: HealthEvent) => {
     const time = toDate(event.date);
@@ -1269,6 +1311,7 @@ export default function SoinsScreen() {
                 <Pressable
                   style={({ pressed }) => [styles.quickActionButton, { backgroundColor: pressed ? nc.border : nc.backgroundPressed }]}
                   onPress={() => openAddModal("temperature")}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   accessibilityRole="button"
                   accessibilityLabel="Ajouter une température"
                 >
@@ -1277,6 +1320,7 @@ export default function SoinsScreen() {
                 <Pressable
                   style={({ pressed }) => [styles.quickActionButton, { backgroundColor: pressed ? nc.border : nc.backgroundPressed }]}
                   onPress={() => openAddModal("vitamine")}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   accessibilityRole="button"
                   accessibilityLabel="Ajouter une vitamine"
                 >
@@ -1285,6 +1329,7 @@ export default function SoinsScreen() {
                 <Pressable
                   style={({ pressed }) => [styles.quickActionButton, { backgroundColor: pressed ? nc.border : nc.backgroundPressed }]}
                   onPress={() => openAddModal("vaccin")}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   accessibilityRole="button"
                   accessibilityLabel="Ajouter un vaccin"
                 >
@@ -1413,6 +1458,17 @@ export default function SoinsScreen() {
           textColor={Colors[colorScheme].text}
           onCancel={cancelDelete}
           onConfirm={confirmDelete}
+        />
+        <ConfirmModal
+          visible={batchDeleteConfirm.visible}
+          title="Suppression groupée"
+          message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} soin${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          backgroundColor={Colors[colorScheme].background}
+          textColor={Colors[colorScheme].text}
+          onCancel={cancelBatchDelete}
+          onConfirm={confirmBatchDelete}
         />
       </View>
     </GestureHandlerRootView>

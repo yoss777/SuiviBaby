@@ -320,6 +320,8 @@ export default function ActivitiesScreen() {
 
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
+
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
 
@@ -984,17 +986,57 @@ export default function ActivitiesScreen() {
     );
   }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
 
-  const handleBatchDelete = useCallback(async () => {
+  const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
-    const ids = Array.from(selectedIds);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setBatchDeleteConfirm({ visible: true, ids: Array.from(selectedIds) });
+  }, [activeChild?.id, selectedIds, selectedCount]);
+
+  const confirmBatchDelete = useCallback(() => {
+    if (!activeChild?.id || batchDeleteConfirm.ids.length === 0) return;
+    const ids = batchDeleteConfirm.ids;
+    const childId = activeChild.id;
+    setBatchDeleteConfirm({ visible: false, ids: [] });
     exitSelectionMode();
-    try {
-      await Promise.all(ids.map((id) => supprimerActivite(activeChild.id, id)));
-      showToast(`${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`);
-    } catch {
-      showToast("Erreur lors de la suppression");
-    }
-  }, [activeChild?.id, selectedIds, selectedCount, exitSelectionMode, showToast]);
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+
+    showUndoToast(
+      `${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`,
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          ids.forEach((id) => next.delete(id));
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          await Promise.all(ids.map((id) => supprimerActivite(childId, id)));
+        } catch {
+          // Restore if delete fails
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            ids.forEach((id) => next.delete(id));
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showToast]);
+
+  const cancelBatchDelete = useCallback(() => {
+    setBatchDeleteConfirm({ visible: false, ids: [] });
+  }, []);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -1371,6 +1413,17 @@ export default function ActivitiesScreen() {
         textColor={Colors[colorScheme].text}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
+      />
+      <ConfirmModal
+        visible={batchDeleteConfirm.visible}
+        title="Suppression groupée"
+        message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} élément${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onCancel={cancelBatchDelete}
+        onConfirm={confirmBatchDelete}
       />
     </GestureHandlerRootView>
   );

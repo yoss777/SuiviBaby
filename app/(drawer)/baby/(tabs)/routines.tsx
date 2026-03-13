@@ -291,6 +291,7 @@ export default function RoutinesScreen() {
   }>({ visible: false, event: null });
 
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
   const [now, setNow] = useState(new Date());
 
@@ -944,6 +945,52 @@ export default function RoutinesScreen() {
     setDeleteConfirm({ visible: false, event: null });
   }, []);
 
+  const confirmBatchDelete = useCallback(() => {
+    if (!activeChild?.id) return;
+    const ids = batchDeleteConfirm.ids;
+    const childId = activeChild.id;
+    setBatchDeleteConfirm({ visible: false, ids: [] });
+    exitSelectionMode();
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+
+    showUndoToast(
+      `${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`,
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          ids.forEach((id) => next.delete(id));
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          await Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
+        } catch {
+          // Restore if delete fails
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            ids.forEach((id) => next.delete(id));
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showToast]);
+
+  const cancelBatchDelete = useCallback(() => {
+    setBatchDeleteConfirm({ visible: false, ids: [] });
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
@@ -1101,17 +1148,11 @@ export default function RoutinesScreen() {
     });
   }, []);
 
-  const handleBatchDelete = useCallback(async () => {
+  const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
     const ids = Array.from(selectedIds);
-    exitSelectionMode();
-    try {
-      await Promise.all(ids.map((id) => supprimerEvenement(activeChild.id, id)));
-      showToast(`${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`);
-    } catch {
-      showToast("Erreur lors de la suppression");
-    }
-  }, [activeChild?.id, selectedIds, selectedCount, exitSelectionMode, showToast]);
+    setBatchDeleteConfirm({ visible: true, ids });
+  }, [activeChild?.id, selectedIds, selectedCount]);
 
   const renderEventItem = useCallback((event: RoutineEvent, isLast = false) => {
     const time = toDate(event.date);
@@ -1629,6 +1670,17 @@ export default function RoutinesScreen() {
         textColor={Colors[colorScheme].text}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
+      />
+      <ConfirmModal
+        visible={batchDeleteConfirm.visible}
+        title="Suppression groupée"
+        message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} élément${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onCancel={cancelBatchDelete}
+        onConfirm={confirmBatchDelete}
       />
     </GestureHandlerRootView>
   );

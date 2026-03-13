@@ -339,6 +339,7 @@ export default function DiapersScreen() {
   }>({ visible: false, excretion: null });
 
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
   // URL params
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
@@ -1050,17 +1051,28 @@ export default function DiapersScreen() {
     setDeleteConfirm({ visible: false, excretion: null });
   }, []);
 
-  const handleBatchDelete = useCallback(async () => {
+  const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
-    const ids = Array.from(selectedIds);
+    setBatchDeleteConfirm({ visible: true, ids: Array.from(selectedIds) });
+  }, [activeChild?.id, selectedCount, selectedIds]);
+
+  const confirmBatchDelete = useCallback(() => {
+    const ids = batchDeleteConfirm.ids;
+    const childId = activeChild?.id;
+    if (!childId || ids.length === 0) return;
+    setBatchDeleteConfirm({ visible: false, ids: [] });
     exitSelectionMode();
-    try {
-      await Promise.all(ids.map((id) => supprimerEvenement(activeChild.id, id)));
-      showToast(`${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`);
-    } catch {
-      showToast("Erreur lors de la suppression");
-    }
-  }, [activeChild?.id, selectedIds, selectedCount, exitSelectionMode, showToast]);
+    setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next; });
+    const msg = `${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`;
+    showUndoToast(msg,
+      () => { setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; }); },
+      async () => {
+        try { await Promise.all(ids.map((id) => supprimerEvenement(childId, id))); }
+        catch { setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; }); showToast("Erreur lors de la suppression"); }
+      }, 4000);
+  }, [batchDeleteConfirm.ids, activeChild?.id, exitSelectionMode, showUndoToast, showToast]);
+
+  const cancelBatchDelete = useCallback(() => { setBatchDeleteConfirm({ visible: false, ids: [] }); }, []);
 
   // ============================================
   // RENDER - EXCRETION ITEM
@@ -1494,6 +1506,17 @@ export default function DiapersScreen() {
         textColor={Colors[colorScheme].text}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
+      />
+      <ConfirmModal
+        visible={batchDeleteConfirm.visible}
+        title="Suppression groupée"
+        message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} élément${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onCancel={cancelBatchDelete}
+        onConfirm={confirmBatchDelete}
       />
     </GestureHandlerRootView>
   );

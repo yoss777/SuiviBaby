@@ -50,6 +50,8 @@
 | P22 | Realtime auto-refresh (onSnapshot) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
 | P23 | Header ellipsis menu (HeaderMenu) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
 | P21 | Theme tokens (hardcoded colors) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
+| P24 | Batch delete confirm + undo | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
+| P25 | Touch targets 44px (quick actions) | n/a | n/a | n/a | ✅ | n/a | n/a | n/a | n/a | Done (soins) |
 
 ## Légende
 
@@ -68,4 +70,4 @@
 
 ## Score
 
-**30/30 améliorations déployées** (P13b retiré)
+**32/32 améliorations déployées** (P13b retiré)
