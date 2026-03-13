@@ -16,7 +16,7 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { CroissanceEvent, obtenirEvenements } from "@/services/eventsService";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -64,6 +64,7 @@ type GrowthGroup = {
   date: string;
   events: GrowthEventWithId[];
   lastEvent: GrowthEventWithId;
+  counts: { poids: number; taille: number; tete: number };
 };
 
 const formatDateKey = (date: Date) =>
@@ -762,10 +763,17 @@ export default function GrowthScreen() {
         const sorted = items.sort(
           (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
         );
+        const counts = { poids: 0, taille: 0, tete: 0 };
+        sorted.forEach((e) => {
+          if (e.poidsKg) counts.poids++;
+          if (e.tailleCm) counts.taille++;
+          if (e.teteCm) counts.tete++;
+        });
         return {
           date,
           events: sorted,
           lastEvent: sorted[0],
+          counts,
         };
       })
       .sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -1044,46 +1052,71 @@ export default function GrowthScreen() {
           <View style={styles.sessionContent}>
             <View style={styles.sessionDetails}>
               <Text style={[styles.sessionType, { color: nc.textStrong }]}>Mesure</Text>
-              {parts.length > 0 && (
-                <View style={styles.metricRow}>
-                  {parts.map((p, i) => (
-                    <React.Fragment key={i}>
-                      {i > 0 && (
-                        <Text style={[styles.metricSeparator, { color: nc.textMuted }]}> · </Text>
+              <View style={styles.metricLines}>
+                {event.poidsKg != null && (() => {
+                  const delta = deltas?.find((d) => d.label === "kg");
+                  return (
+                    <View style={styles.metricLineRow}>
+                      <View style={[styles.metricPill, { backgroundColor: "rgba(124, 58, 237, 0.1)" }]}>
+                        <FontAwesome name="weight-scale" size={10} color="#7c3aed" />
+                        <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
+                          {event.poidsKg} kg
+                        </Text>
+                      </View>
+                      {delta && (
+                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? "#dcfce7" : "#fef2f2" }]}>
+                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? "#16a34a" : "#dc2626"} />
+                          <Text style={[styles.deltaText, { color: delta.positive ? "#16a34a" : "#dc2626" }]}>
+                            {delta.value} {delta.label}
+                          </Text>
+                        </View>
                       )}
-                      <Text style={[styles.metricValue, { color: nc.textStrong }]}>{p.value}</Text>
-                      <Text style={[styles.metricUnit, { color: nc.textMuted }]}> {p.unit}</Text>
-                    </React.Fragment>
-                  ))}
-                </View>
-              )}
-              {deltas && (
-                <View style={styles.deltaRow}>
-                  {deltas.map((d, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.deltaBadge,
-                        { backgroundColor: d.positive ? "#dcfce7" : "#fef2f2" },
-                      ]}
-                    >
-                      <Ionicons
-                        name={d.positive ? "trending-up" : "trending-down"}
-                        size={10}
-                        color={d.positive ? "#16a34a" : "#dc2626"}
-                      />
-                      <Text
-                        style={[
-                          styles.deltaText,
-                          { color: d.positive ? "#16a34a" : "#dc2626" },
-                        ]}
-                      >
-                        {d.value} {d.label}
-                      </Text>
                     </View>
-                  ))}
-                </View>
-              )}
+                  );
+                })()}
+                {event.tailleCm != null && (() => {
+                  const delta = deltas?.find((d) => d.label === "cm");
+                  return (
+                    <View style={styles.metricLineRow}>
+                      <View style={[styles.metricPill, { backgroundColor: "rgba(47, 128, 237, 0.1)" }]}>
+                        <FontAwesome name="ruler-vertical" size={10} color="#2f80ed" />
+                        <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
+                          {event.tailleCm} cm
+                        </Text>
+                      </View>
+                      {delta && (
+                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? "#dcfce7" : "#fef2f2" }]}>
+                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? "#16a34a" : "#dc2626"} />
+                          <Text style={[styles.deltaText, { color: delta.positive ? "#16a34a" : "#dc2626" }]}>
+                            {delta.value} {delta.label}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
+                {event.teteCm != null && (() => {
+                  const delta = deltas?.find((d) => d.label === "PC");
+                  return (
+                    <View style={styles.metricLineRow}>
+                      <View style={[styles.metricPill, { backgroundColor: "rgba(245, 158, 11, 0.1)" }]}>
+                        <MaterialCommunityIcons name="baby-face-outline" size={12} color="#f59e0b" />
+                        <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
+                          {event.teteCm} cm
+                        </Text>
+                      </View>
+                      {delta && (
+                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? "#dcfce7" : "#fef2f2" }]}>
+                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? "#16a34a" : "#dc2626"} />
+                          <Text style={[styles.deltaText, { color: delta.positive ? "#16a34a" : "#dc2626" }]}>
+                            {delta.value} {delta.label}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
+              </View>
             </View>
           </View>
           <Ionicons name="chevron-forward" size={18} color={nc.border} />
@@ -1126,6 +1159,23 @@ export default function GrowthScreen() {
               </Text>
             </View>
           </View>
+        </View>
+        <View style={styles.statsBreakdown}>
+          {[
+            { key: "poids", label: "Poids", color: "#7c3aed" },
+            { key: "taille", label: "Taille", color: "#2f80ed" },
+            { key: "tete", label: "PC", color: "#f59e0b" },
+          ].map(({ key, label, color }) => {
+            const count = item.counts[key as keyof typeof item.counts];
+            if (count === 0) return null;
+            return (
+              <View key={key} style={styles.statsBreakdownItem}>
+                <View style={[styles.statsBreakdownDot, { backgroundColor: color }]} />
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>{label}</Text>
+                <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{count}</Text>
+              </View>
+            );
+          })}
         </View>
         <View style={styles.dayContent}>
           <View style={styles.sessionsContainer}>
@@ -1429,21 +1479,30 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-  metricRow: {
+  metricLines: {
+    gap: 4,
+  },
+  metricLineRow: {
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "center",
+    gap: 6,
+  },
+  metricPillRow: {
+    flexDirection: "row",
     flexWrap: "wrap",
+    gap: 6,
   },
-  metricValue: {
-    fontSize: 13,
-    fontWeight: "700",
+  metricPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  metricUnit: {
+  metricPillText: {
     fontSize: 12,
-    fontWeight: "400",
-  },
-  metricSeparator: {
-    fontSize: 12,
+    fontWeight: "600",
   },
   deltaRow: {
     flexDirection: "row",
@@ -1541,5 +1600,29 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 200,
+  },
+  statsBreakdown: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  statsBreakdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  statsBreakdownDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statsBreakdownLabel: {
+    fontSize: 12,
+  },
+  statsBreakdownValue: {
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

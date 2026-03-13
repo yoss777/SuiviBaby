@@ -1,6 +1,6 @@
+import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import {
   BIBERON_TYPE_LABELS,
@@ -33,12 +33,16 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   BackHandler,
   FlatList,
   InteractionManager,
+  LayoutAnimation,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  UIManager,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -48,6 +52,20 @@ import {
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const formatSelectedDateLabel = (dateString: string) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
 
 // ============================================
 // DELETE ACTION COMPONENT
@@ -68,6 +86,97 @@ const DeleteAction = React.memo(function DeleteAction({
       <Ionicons name="trash-outline" size={20} color="#fff" />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
+  );
+});
+
+// ============================================
+// SKELETON LOADING COMPONENT
+// ============================================
+
+const MealsSkeleton = React.memo(function MealsSkeleton({
+  colorScheme,
+}: {
+  colorScheme: "light" | "dark";
+}) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    shimmer.start();
+    return () => shimmer.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg =
+    colorScheme === "dark"
+      ? "rgba(255, 255, 255, 0.08)"
+      : "rgba(255, 255, 255, 0.4)";
+
+  const renderSkeletonCard = (key: number) => (
+    <View
+      key={key}
+      style={[
+        styles.sessionCard,
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+      ]}
+    >
+      <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={[styles.skeletonBlock, { width: 32, height: 32, borderRadius: 8, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={[styles.skeletonBlock, { width: 60, height: 14, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+        <View style={[styles.skeletonBlock, { width: 140, height: 12, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.skeletonContainer}>
+      <View style={styles.daySection}>
+        <View style={styles.dayHeader}>
+          <View style={[styles.skeletonBlock, { width: 80, height: 16, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+          <View style={[styles.skeletonBlock, { width: 40, height: 14, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+        </View>
+        <View style={styles.sessionsContainer}>
+          {renderSkeletonCard(1)}
+          {renderSkeletonCard(2)}
+          {renderSkeletonCard(3)}
+        </View>
+      </View>
+    </View>
   );
 });
 
@@ -119,7 +228,7 @@ export default function MealsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast } = useToast();
+  const { showToast, showUndoToast } = useToast();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
@@ -161,6 +270,8 @@ export default function MealsScreen() {
     visible: boolean;
     meal: Meal | null;
   }>({ visible: false, meal: null });
+
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
   // Récupérer les paramètres de l'URL
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
@@ -443,6 +554,15 @@ export default function MealsScreen() {
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
       setMeals(merged);
+
+      // Clean up soft-deleted IDs that are no longer in the dataset
+      setSoftDeletedIds((prev) => {
+        if (prev.size === 0) return prev;
+        const ids = new Set(merged.map((e) => e.id));
+        const next = new Set<string>();
+        prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+        return next.size === prev.size ? prev : next;
+      });
       if (
         pendingLoadMoreRef.current > 0 &&
         versionAtSubscribe === loadMoreVersionRef.current
@@ -650,6 +770,7 @@ export default function MealsScreen() {
 
     // Filtrer les repas en fonction du filtre sélectionné ou de la date du calendrier
     const filtered = meals.filter((meal) => {
+      if (softDeletedIds.has(meal.id)) return false;
       const mealDate = new Date(meal.date.seconds * 1000);
       mealDate.setHours(0, 0, 0, 0);
       const mealTime = mealDate.getTime();
@@ -676,7 +797,7 @@ export default function MealsScreen() {
 
     const grouped = groupMealsByDay(filtered);
     setGroupedMeals(grouped);
-  }, [meals, selectedFilter, selectedDate]);
+  }, [meals, selectedFilter, selectedDate, softDeletedIds]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -731,6 +852,10 @@ export default function MealsScreen() {
     setShowCalendar(false);
     setExpandedDays(new Set([todayKey]));
   }, []);
+
+  const clearSelectedDate = useCallback(() => {
+    applyTodayFilter();
+  }, [applyTodayFilter]);
 
   const handleFilterPress = useCallback((filter: FilterType) => {
     if (filter === "today") {
@@ -806,6 +931,7 @@ export default function MealsScreen() {
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
@@ -886,14 +1012,39 @@ export default function MealsScreen() {
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.meal?.id) return;
     const mealId = deleteConfirm.meal.id;
+    const childId = activeChild.id;
     setDeleteConfirm({ visible: false, meal: null });
-    try {
-      await supprimerEvenement(activeChild.id, mealId);
-      showToast("Repas supprimé");
-    } catch {
-      showToast("Impossible de supprimer ce repas");
-    }
-  }, [activeChild?.id, deleteConfirm.meal, showToast]);
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => new Set(prev).add(mealId));
+
+    showUndoToast(
+      "Repas supprimé",
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(mealId);
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          await supprimerEvenement(childId, mealId);
+        } catch {
+          // Restore if delete fails
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(mealId);
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, deleteConfirm.meal, showUndoToast, showToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, meal: null });
@@ -1267,10 +1418,26 @@ export default function MealsScreen() {
       >
         <View>
           {/* Filtres */}
-          <DateFilterBar
-            selected={selectedFilter as any}
-            onSelect={handleFilterPress}
-          />
+          <View style={styles.filterRow}>
+            <DateFilterBar
+              selected={selectedDate ? "past" : (selectedFilter ?? "today")}
+              onSelect={handleFilterPress}
+            >
+              {selectedDate && (
+                <Pressable
+                  style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={clearSelectedDate}
+                  accessibilityRole="button"
+                  accessibilityLabel="Effacer la date sélectionnée"
+                >
+                  <Text style={styles.dateChipText}>
+                    {formatSelectedDateLabel(selectedDate)}
+                  </Text>
+                  <Ionicons name="close" size={14} color="#fff" />
+                </Pressable>
+              )}
+            </DateFilterBar>
+          </View>
 
           {/* Calendrier */}
           {showCalendar && (
@@ -1299,53 +1466,41 @@ export default function MealsScreen() {
         </View>
 
         {/* Liste des repas */}
-        {isMealsLoading || !emptyDelayDone ? (
-          <View style={styles.emptyContainer}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
-          </View>
-        ) : (
-          <FlatList
-            data={groupedMeals}
-            keyExtractor={(item) => item.date}
-            renderItem={renderDayGroup}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[styles.listContent, { flexGrow: 1 }]}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
+        {mealsLoaded && emptyDelayDone ? (
+          groupedMeals.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <View
+                style={[
+                  styles.emptyIconWrapper,
+                  { backgroundColor: `${eventColors.meal.dark}15` },
+                ]}
+              >
                 <Ionicons
                   name="restaurant-outline"
-                  size={64}
-                  color={Colors[colorScheme].tabIconDefault}
+                  size={36}
+                  color={eventColors.meal.dark}
                 />
-                <Text style={[styles.emptyText, { color: nc.textNormal }]}>
-                  {meals.length === 0
-                    ? "Aucun repas enregistré"
-                    : "Aucun repas pour ce filtre"}
-                </Text>
-                {meals.length === 0 && (
-                  <Pressable
-                    onPress={() => openAddModal()}
-                    style={[styles.emptyAddButton, { backgroundColor: Colors[colorScheme].tint }]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Ajouter le premier repas"
-                  >
-                    <Ionicons name="add" size={16} color="#fff" />
-                    <Text style={styles.emptyAddButtonText}>Ajouter un repas</Text>
-                  </Pressable>
-                )}
-                {!(selectedFilter === "today" || selectedDate) && meals.length > 0 && (
-                  <LoadMoreButton
-                    hasMore={hasMore}
-                    loading={isLoadingMore}
-                    onPress={handleLoadMore}
-                    text="Voir plus"
-                    accentColor={Colors[colorScheme].tint}
-                  />
-                )}
               </View>
-            }
-            ListFooterComponent={
-              selectedFilter === "today" || selectedDate ? null : (
+              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
+                {meals.length === 0
+                  ? "Aucun repas enregistré"
+                  : "Aucun repas pour ce filtre"}
+              </ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+                Suivez les repas et biberons
+              </ThemedText>
+              {meals.length === 0 && (
+                <Pressable
+                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={() => openAddModal()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter un repas"
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                  <Text style={styles.emptyCtaText}>Ajouter un repas</Text>
+                </Pressable>
+              )}
+              {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   hasMore={hasMore}
                   loading={isLoadingMore}
@@ -1353,9 +1508,30 @@ export default function MealsScreen() {
                   text="Voir plus"
                   accentColor={Colors[colorScheme].tint}
                 />
-              )
-            }
-          />
+              )}
+            </View>
+          ) : (
+            <FlatList
+              data={groupedMeals}
+              keyExtractor={(item) => item.date}
+              renderItem={renderDayGroup}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+              ListFooterComponent={
+                selectedFilter === "today" || selectedDate ? null : (
+                  <LoadMoreButton
+                    hasMore={hasMore}
+                    loading={isLoadingMore}
+                    onPress={handleLoadMore}
+                    text="Voir plus"
+                    accentColor={Colors[colorScheme].tint}
+                  />
+                )
+              }
+            />
+          )
+        ) : (
+          <MealsSkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
 
@@ -1580,8 +1756,23 @@ const styles = StyleSheet.create({
     color: eventColors.meal.dark,
   },
 
-  emptyText: {
-    fontSize: 18,
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingRight: 16,
+  },
+  dateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  dateChipText: {
+    color: "#fff",
+    fontSize: 13,
     fontWeight: "600",
   },
 
@@ -1589,23 +1780,54 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    paddingHorizontal: 32,
   },
-
-  emptyAddButton: {
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyCta: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 24,
-    marginTop: 4,
+    marginTop: 20,
+  },
+  emptyCtaText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
   },
 
-  emptyAddButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
+  skeletonContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  skeletonBlock: {
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 200,
   },
 
   // Solide list item

@@ -2,7 +2,6 @@ import { SoinsEditData, SoinsType } from "@/components/forms/SoinsForm";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -36,12 +35,16 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   BackHandler,
   FlatList,
   InteractionManager,
+  LayoutAnimation,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  UIManager,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -49,6 +52,20 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const formatSelectedDateLabel = (dateString: string) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
 
 // ============================================
 // DELETE ACTION COMPONENT
@@ -69,6 +86,97 @@ const DeleteAction = React.memo(function DeleteAction({
       <Ionicons name="trash-outline" size={20} color="#fff" />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
+  );
+});
+
+// ============================================
+// SKELETON LOADING COMPONENT
+// ============================================
+
+const SoinsSkeleton = React.memo(function SoinsSkeleton({
+  colorScheme,
+}: {
+  colorScheme: "light" | "dark";
+}) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    shimmer.start();
+    return () => shimmer.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg =
+    colorScheme === "dark"
+      ? "rgba(255, 255, 255, 0.08)"
+      : "rgba(255, 255, 255, 0.4)";
+
+  const renderSkeletonCard = (key: number) => (
+    <View
+      key={key}
+      style={[
+        styles.sessionCard,
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+      ]}
+    >
+      <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={[styles.skeletonBlock, { width: 32, height: 32, borderRadius: 8, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={[styles.skeletonBlock, { width: 60, height: 14, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+        <View style={[styles.skeletonBlock, { width: 140, height: 12, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.skeletonContainer}>
+      <View style={styles.daySection}>
+        <View style={styles.dayHeader}>
+          <View style={[styles.skeletonBlock, { width: 80, height: 16, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+          <View style={[styles.skeletonBlock, { width: 40, height: 14, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+        </View>
+        <View style={styles.sessionsContainer}>
+          {renderSkeletonCard(1)}
+          {renderSkeletonCard(2)}
+          {renderSkeletonCard(3)}
+        </View>
+      </View>
+    </View>
   );
 });
 
@@ -169,7 +277,7 @@ export default function SoinsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast } = useToast();
+  const { showToast, showUndoToast } = useToast();
   const navigation = useNavigation();
   const headerOwnerId = useRef(`soins-${Math.random().toString(36).slice(2)}`);
 
@@ -205,8 +313,12 @@ export default function SoinsScreen() {
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
 
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [confirmDeleteType, setConfirmDeleteType] = useState<HealthType | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    visible: boolean;
+    event: HealthEvent | null;
+  }>({ visible: false, event: null });
+
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -309,6 +421,10 @@ export default function SoinsScreen() {
     setShowCalendar(false);
     setExpandedDays(new Set([todayKey]));
   }, []);
+
+  const clearSelectedDate = useCallback(() => {
+    applyTodayFilter();
+  }, [applyTodayFilter]);
 
   useFocusEffect(
     useCallback(() => {
@@ -429,6 +545,15 @@ export default function SoinsScreen() {
         ...vitaminesData,
       ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
       setEvents(merged);
+
+      // Clean up soft-deleted IDs that are no longer in the dataset
+      setSoftDeletedIds((prev) => {
+        if (prev.size === 0) return prev;
+        const dataIds = new Set(merged.map((e: any) => e.id));
+        const next = new Set<string>();
+        prev.forEach((id) => { if (dataIds.has(id)) next.add(id); });
+        return next.size === prev.size ? prev : next;
+      });
 
       if (
         pendingLoadMoreRef.current > 0 &&
@@ -617,6 +742,7 @@ export default function SoinsScreen() {
     const todayTime = today.getTime();
 
     const filtered = events.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
       const date = toDate(item.date);
       date.setHours(0, 0, 0, 0);
       const time = date.getTime();
@@ -666,7 +792,7 @@ export default function SoinsScreen() {
       .sort((a, b) => (a.date < b.date ? 1 : -1));
 
     setGroupedEvents(grouped);
-  }, [events, selectedFilter, selectedDate, showCalendar]);
+  }, [events, selectedFilter, selectedDate, showCalendar, softDeletedIds]);
 
   const loadMoreStep = useCallback(
     async (auto = false) => {
@@ -775,6 +901,7 @@ export default function SoinsScreen() {
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const returnTarget = returnTargetParam ?? returnToRef.current;
+    const isEditing = !!pendingEditData;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
       openSheet({
@@ -782,7 +909,10 @@ export default function SoinsScreen() {
         formType: "soins",
         soinsType: pendingSoinsType,
         editData: pendingEditData ?? undefined,
-        onSuccess: ensureTodayInRange,
+        onSuccess: () => {
+          ensureTodayInRange();
+          showToast(isEditing ? "Soin modifié" : "Soin enregistré");
+        },
         onDismiss: () => {
           editIdRef.current = null;
           maybeReturnTo(returnTarget);
@@ -803,6 +933,7 @@ export default function SoinsScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
+    showToast,
   ]);
 
   useEffect(() => {
@@ -852,6 +983,7 @@ export default function SoinsScreen() {
   }, []);
 
   const toggleExpand = useCallback((date: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
@@ -864,31 +996,59 @@ export default function SoinsScreen() {
     });
   }, []);
 
-  const handleDeleteRequest = useCallback((event: HealthEvent) => {
-    setConfirmDeleteId(event.id);
-    setConfirmDeleteType(event.type);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  const handleEventDelete = useCallback((event: HealthEvent) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setDeleteConfirm({ visible: true, event });
   }, []);
 
-  const handleDeleteConfirm = useCallback(async () => {
-    if (!confirmDeleteId || !confirmDeleteType || !activeChild?.id) return;
-    try {
-      const supprimerMap: Record<HealthType, (childId: string, id: string) => Promise<void>> = {
-        temperature: supprimerTemperature,
-        medicament: supprimerMedicament,
-        symptome: supprimerSymptome,
-        vaccin: supprimerVaccin,
-        vitamine: supprimerVitamine,
-      };
-      await supprimerMap[confirmDeleteType](activeChild.id, confirmDeleteId);
-      showToast("Événement supprimé");
-    } catch {
-      showToast("Erreur lors de la suppression");
-    } finally {
-      setConfirmDeleteId(null);
-      setConfirmDeleteType(null);
-    }
-  }, [confirmDeleteId, confirmDeleteType, activeChild?.id, showToast]);
+  const confirmDelete = useCallback(async () => {
+    if (!activeChild?.id || !deleteConfirm.event?.id) return;
+    const eventId = deleteConfirm.event.id;
+    const eventType = deleteConfirm.event.type;
+    const childId = activeChild.id;
+    setDeleteConfirm({ visible: false, event: null });
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
+
+    showUndoToast(
+      "Soin supprimé",
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(eventId);
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          const supprimerMap: Record<HealthType, (childId: string, id: string) => Promise<void>> = {
+            temperature: supprimerTemperature,
+            medicament: supprimerMedicament,
+            symptome: supprimerSymptome,
+            vaccin: supprimerVaccin,
+            vitamine: supprimerVitamine,
+          };
+          await supprimerMap[eventType](childId, eventId);
+        } catch {
+          // Restore if delete fails
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(eventId);
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirm({ visible: false, event: null });
+  }, []);
 
   const renderEventItem = useCallback((event: HealthEvent) => {
     const time = toDate(event.date);
@@ -899,7 +1059,7 @@ export default function SoinsScreen() {
         friction={2}
         rightThreshold={40}
         overshootRight={false}
-        renderRightActions={() => <DeleteAction onPress={() => handleDeleteRequest(event)} />}
+        renderRightActions={() => <DeleteAction onPress={() => handleEventDelete(event)} />}
       >
         <Pressable
           accessibilityRole="button"
@@ -932,7 +1092,7 @@ export default function SoinsScreen() {
         </Pressable>
       </ReanimatedSwipeable>
     );
-  }, [nc, openEditModal, buildDetails, handleDeleteRequest]);
+  }, [nc, openEditModal, buildDetails, handleEventDelete]);
 
   const renderDayGroup = useCallback(({ item }: { item: HealthGroup }) => {
     const [year, month, day] = item.date.split("-").map(Number);
@@ -1043,9 +1203,23 @@ export default function SoinsScreen() {
           <View>
             <View style={styles.filterRow}>
               <DateFilterBar
-                selected={selectedFilter as any}
+                selected={selectedDate ? ("past" as DateFilterValue) : (selectedFilter as DateFilterValue)}
                 onSelect={handleFilterPress}
-              />
+              >
+                {selectedDate && (
+                  <Pressable
+                    style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                    onPress={clearSelectedDate}
+                    accessibilityRole="button"
+                    accessibilityLabel="Effacer la date sélectionnée"
+                  >
+                    <Text style={styles.dateChipText}>
+                      {formatSelectedDateLabel(selectedDate)}
+                    </Text>
+                    <Ionicons name="close" size={14} color="#fff" />
+                  </Pressable>
+                )}
+              </DateFilterBar>
               <View style={styles.quickActionsRow}>
                 <Pressable
                   style={({ pressed }) => [styles.quickActionButton, { backgroundColor: pressed ? nc.border : nc.backgroundPressed }]}
@@ -1101,21 +1275,45 @@ export default function SoinsScreen() {
           {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
             groupedEvents.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Ionicons name="medkit-outline" size={64} color={nc.textMuted} />
-                <ThemedText style={[styles.emptyText, { color: nc.textMuted }]}>
+                <View
+                  style={[
+                    styles.emptyIconWrapper,
+                    { backgroundColor: `${eventColors.temperature.dark}15` },
+                  ]}
+                >
+                  <Ionicons
+                    name="medkit-outline"
+                    size={36}
+                    color={eventColors.temperature.dark}
+                  />
+                </View>
+                <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
                   {events.length === 0
                     ? "Aucun soin enregistré"
                     : "Aucun soin pour ce filtre"}
                 </ThemedText>
+                <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+                  Suivez les soins et traitements
+                </ThemedText>
                 {events.length === 0 && (
                   <Pressable
-                    style={[styles.emptyAction, { backgroundColor: Colors[colorScheme].tint }]}
+                    style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
                     onPress={() => openAddModal("temperature")}
                     accessibilityRole="button"
                     accessibilityLabel="Enregistrer un soin"
                   >
-                    <Text style={styles.emptyActionText}>Enregistrer un soin</Text>
+                    <Ionicons name="add" size={20} color="#fff" />
+                    <Text style={styles.emptyCtaText}>Enregistrer un soin</Text>
                   </Pressable>
+                )}
+                {!(selectedFilter === "today" || selectedDate) && (
+                  <LoadMoreButton
+                    hasMore={hasMore}
+                    loading={isLoadingMore}
+                    onPress={handleLoadMore}
+                    text="Voir plus"
+                    accentColor={Colors[colorScheme].tint}
+                  />
                 )}
               </View>
             ) : (
@@ -1139,21 +1337,19 @@ export default function SoinsScreen() {
               />
             )
           ) : (
-            <View style={styles.emptyContainer}>
-              <IconPulseDots color={Colors[colorScheme].tint} />
-            </View>
+            <SoinsSkeleton colorScheme={colorScheme} />
           )}
         </SafeAreaView>
         <ConfirmModal
-          visible={confirmDeleteId !== null}
-          title="Supprimer cet événement ?"
-          message="Cette action est irréversible."
+          visible={deleteConfirm.visible}
+          title="Suppression"
+          message="Voulez-vous vraiment supprimer ce soin ?"
           confirmText="Supprimer"
+          cancelText="Annuler"
           backgroundColor={Colors[colorScheme].background}
           textColor={Colors[colorScheme].text}
-          confirmButtonColor="#ef4444"
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => { setConfirmDeleteId(null); setConfirmDeleteType(null); }}
+          onCancel={cancelDelete}
+          onConfirm={confirmDelete}
         />
       </View>
     </GestureHandlerRootView>
@@ -1312,21 +1508,66 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    paddingHorizontal: 32,
   },
-  emptyText: {
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
     fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
+  },
+  emptyCtaText: {
+    color: "#fff",
+    fontSize: 15,
     fontWeight: "600",
   },
-  emptyAction: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
+  dateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
-  emptyActionText: {
+  dateChipText: {
     color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  skeletonContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  skeletonBlock: {
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 200,
   },
   deleteAction: {
     backgroundColor: "#ef4444",

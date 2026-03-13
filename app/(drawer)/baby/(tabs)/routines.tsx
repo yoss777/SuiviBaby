@@ -1,7 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -32,10 +31,13 @@ import {
   Easing,
   FlatList,
   InteractionManager,
+  LayoutAnimation,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -48,6 +50,20 @@ import {
   RoutinesEditData,
   SleepMode,
 } from "@/components/forms/RoutinesForm";
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const formatSelectedDateLabel = (dateString: string) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
 
 // ============================================
 // DELETE ACTION COMPONENT
@@ -68,6 +84,97 @@ const DeleteAction = React.memo(function DeleteAction({
       <Ionicons name="trash-outline" size={20} color="#fff" />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
+  );
+});
+
+// ============================================
+// SKELETON LOADING COMPONENT
+// ============================================
+
+const RoutinesSkeleton = React.memo(function RoutinesSkeleton({
+  colorScheme,
+}: {
+  colorScheme: "light" | "dark";
+}) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    shimmer.start();
+    return () => shimmer.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg =
+    colorScheme === "dark"
+      ? "rgba(255, 255, 255, 0.08)"
+      : "rgba(255, 255, 255, 0.4)";
+
+  const renderSkeletonCard = (key: number) => (
+    <View
+      key={key}
+      style={[
+        styles.sessionCard,
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+      ]}
+    >
+      <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={[styles.skeletonBlock, { width: 32, height: 32, borderRadius: 8, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={[styles.skeletonBlock, { width: 60, height: 14, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+        <View style={[styles.skeletonBlock, { width: 140, height: 12, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.skeletonContainer}>
+      <View style={styles.dayGroup}>
+        <View style={styles.dayHeader}>
+          <View style={[styles.skeletonBlock, { width: 80, height: 16, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+          <View style={[styles.skeletonBlock, { width: 40, height: 14, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+        </View>
+        <View style={styles.sessionsContainer}>
+          {renderSkeletonCard(1)}
+          {renderSkeletonCard(2)}
+          {renderSkeletonCard(3)}
+        </View>
+      </View>
+    </View>
   );
 });
 
@@ -134,7 +241,7 @@ export default function RoutinesScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast } = useToast();
+  const { showToast, showUndoToast } = useToast();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
     `routines-${Math.random().toString(36).slice(2)}`,
@@ -172,6 +279,8 @@ export default function RoutinesScreen() {
     visible: boolean;
     event: RoutineEvent | null;
   }>({ visible: false, event: null });
+
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
   const [now, setNow] = useState(new Date());
 
@@ -245,6 +354,10 @@ export default function RoutinesScreen() {
     setShowCalendar(false);
     setExpandedDays(new Set([todayKey]));
   }, []);
+
+  const clearSelectedDate = useCallback(() => {
+    applyTodayFilter();
+  }, [applyTodayFilter]);
 
   const openAddModal = useCallback((routineType: RoutineType, sleepMode: SleepMode = "nap") => {
     setPendingEditData(null);
@@ -375,6 +488,15 @@ export default function RoutinesScreen() {
         (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
       );
       setEvents(merged);
+
+      // Clean up soft-deleted IDs that are no longer in the dataset
+      setSoftDeletedIds((prev) => {
+        if (prev.size === 0) return prev;
+        const ids = new Set(merged.map((e) => e.id));
+        const next = new Set<string>();
+        prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+        return next.size === prev.size ? prev : next;
+      });
 
       if (
         pendingLoadMoreRef.current > 0 &&
@@ -572,6 +694,7 @@ export default function RoutinesScreen() {
     const todayTime = today.getTime();
 
     const filtered = events.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
       const date = toDate(item.date);
       date.setHours(0, 0, 0, 0);
       const time = date.getTime();
@@ -618,7 +741,7 @@ export default function RoutinesScreen() {
       .sort((a, b) => (a.date < b.date ? 1 : -1));
 
     setGroupedEvents(grouped);
-  }, [events, selectedFilter, selectedDate, showCalendar]);
+  }, [events, selectedFilter, selectedDate, showCalendar, softDeletedIds]);
 
   const loadMoreStep = useCallback(
     async (auto = false) => {
@@ -758,20 +881,45 @@ export default function RoutinesScreen() {
 
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const { id, type } = deleteConfirm.event;
+    const eventId = deleteConfirm.event.id;
+    const eventType = deleteConfirm.event.type;
+    const childId = activeChild.id;
     setDeleteConfirm({ visible: false, event: null });
-    try {
-      if (type === "sommeil") {
-        await supprimerSommeil(activeChild.id, id);
-        showToast("Sommeil supprimé");
-      } else {
-        await supprimerBain(activeChild.id, id);
-        showToast("Bain supprimé");
-      }
-    } catch {
-      showToast("Impossible de supprimer cet événement");
-    }
-  }, [activeChild?.id, deleteConfirm.event, showToast]);
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
+
+    showUndoToast(
+      "Événement supprimé",
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(eventId);
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          if (eventType === "sommeil") {
+            await supprimerSommeil(childId, eventId);
+          } else {
+            await supprimerBain(childId, eventId);
+          }
+        } catch {
+          // Restore if delete fails
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(eventId);
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -800,6 +948,7 @@ export default function RoutinesScreen() {
     if (!pendingOpen || !layoutReady) return;
     const returnTarget = returnTargetParam ?? returnToRef.current;
 
+    const isEditing = !!pendingEditData;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
 
@@ -810,7 +959,10 @@ export default function RoutinesScreen() {
         sleepMode: pendingSleepMode,
         editData: pendingEditData ?? undefined,
         sommeilEnCours: sommeilEnCours ? { id: sommeilEnCours.id } : null,
-        onSuccess: ensureTodayInRange,
+        onSuccess: () => {
+          ensureTodayInRange();
+          showToast(isEditing ? "Routine modifiée" : "Routine enregistrée");
+        },
         onDismiss: () => {
           editIdRef.current = null;
           maybeReturnTo(returnTarget);
@@ -839,6 +991,7 @@ export default function RoutinesScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
+    showToast,
   ]);
 
   useEffect(() => {
@@ -914,6 +1067,7 @@ export default function RoutinesScreen() {
   }, []);
 
   const toggleExpand = useCallback((date: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
@@ -1210,9 +1364,23 @@ export default function RoutinesScreen() {
         <View>
           <View style={styles.filterRow}>
             <DateFilterBar
-              selected={selectedFilter as any}
+              selected={selectedDate ? ("past" as DateFilterValue) : (selectedFilter ?? "today")}
               onSelect={handleFilterPress}
-            />
+            >
+              {selectedDate && (
+                <Pressable
+                  style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={clearSelectedDate}
+                  accessibilityRole="button"
+                  accessibilityLabel="Effacer la date sélectionnée"
+                >
+                  <Text style={styles.dateChipText}>
+                    {formatSelectedDateLabel(selectedDate)}
+                  </Text>
+                  <Ionicons name="close" size={14} color="#fff" />
+                </Pressable>
+              )}
+            </DateFilterBar>
             <View style={styles.quickActionsRow}>
               <TouchableOpacity
                 style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
@@ -1320,24 +1488,35 @@ export default function RoutinesScreen() {
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons
-                name="moon-outline"
-                size={64}
-                color={Colors[colorScheme].tabIconDefault}
-              />
-              <ThemedText style={styles.emptyText}>
+              <View
+                style={[
+                  styles.emptyIconWrapper,
+                  { backgroundColor: `${eventColors.sommeil.dark}15` },
+                ]}
+              >
+                <Ionicons
+                  name="bed-outline"
+                  size={36}
+                  color={eventColors.sommeil.dark}
+                />
+              </View>
+              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
                 {events.length === 0
                   ? "Aucune routine enregistrée"
                   : "Aucune routine pour ce filtre"}
               </ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+                Suivez le sommeil et les bains
+              </ThemedText>
               {events.length === 0 && (
                 <Pressable
-                  style={[styles.emptyAddButton, { backgroundColor: Colors[colorScheme].tint }]}
+                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
                   onPress={() => openAddModal("sommeil", "nap")}
                   accessibilityRole="button"
                   accessibilityLabel="Ajouter une routine"
                 >
-                  <Text style={styles.emptyAddButtonText}>Ajouter une routine</Text>
+                  <Ionicons name="add" size={20} color="#fff" />
+                  <Text style={styles.emptyCtaText}>Ajouter une routine</Text>
                 </Pressable>
               )}
               {!(selectedFilter === "today" || selectedDate) && (
@@ -1369,10 +1548,7 @@ export default function RoutinesScreen() {
             />
           )
         ) : (
-          <View style={styles.loadingContainer}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
-            <Text style={[styles.loadingText, { color: nc.textMuted }]}>Chargement des routines…</Text>
-          </View>
+          <RoutinesSkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
       <ConfirmModal
@@ -1611,35 +1787,70 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 24,
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-  },
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    paddingHorizontal: 32,
   },
-  emptyText: {
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
+    textAlign: "center",
   },
-  emptyAddButton: {
+  emptySubtitle: {
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
   },
-  emptyAddButtonText: {
-    color: "#ffffff",
+  emptyCtaText: {
+    color: "#fff",
     fontSize: 15,
     fontWeight: "600",
+  },
+  dateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  dateChipText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  skeletonContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  skeletonBlock: {
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 200,
   },
   deleteAction: {
     backgroundColor: "#ef4444",

@@ -1,7 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import {
   DiapersEditData,
@@ -36,12 +35,16 @@ import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
+  Animated,
   BackHandler,
   FlatList,
   InteractionManager,
+  LayoutAnimation,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  UIManager,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -49,6 +52,20 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const formatSelectedDateLabel = (dateString: string) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
 
 // ============================================
 // DELETE ACTION COMPONENT
@@ -69,6 +86,97 @@ const DeleteAction = React.memo(function DeleteAction({
       <Ionicons name="trash-outline" size={20} color="#fff" />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
+  );
+});
+
+// ============================================
+// SKELETON LOADING COMPONENT
+// ============================================
+
+const DiapersSkeleton = React.memo(function DiapersSkeleton({
+  colorScheme,
+}: {
+  colorScheme: "light" | "dark";
+}) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    shimmer.start();
+    return () => shimmer.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg =
+    colorScheme === "dark"
+      ? "rgba(255, 255, 255, 0.08)"
+      : "rgba(255, 255, 255, 0.4)";
+
+  const renderSkeletonCard = (key: number) => (
+    <View
+      key={key}
+      style={[
+        styles.sessionCard,
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+      ]}
+    >
+      <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={[styles.skeletonBlock, { width: 32, height: 32, borderRadius: 8, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={[styles.skeletonBlock, { width: 60, height: 14, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+        <View style={[styles.skeletonBlock, { width: 140, height: 12, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.skeletonContainer}>
+      <View style={styles.dayGroup}>
+        <View style={styles.dayHeader}>
+          <View style={[styles.skeletonBlock, { width: 80, height: 16, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+          <View style={[styles.skeletonBlock, { width: 40, height: 14, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+        </View>
+        <View style={styles.sessionsContainer}>
+          {renderSkeletonCard(1)}
+          {renderSkeletonCard(2)}
+          {renderSkeletonCard(3)}
+        </View>
+      </View>
+    </View>
   );
 });
 
@@ -175,7 +283,7 @@ export default function DiapersScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast } = useToast();
+  const { showToast, showUndoToast } = useToast();
   const headerOwnerId = useRef(
     `diapers-${Math.random().toString(36).slice(2)}`
   );
@@ -189,7 +297,7 @@ export default function DiapersScreen() {
   const [pendingOpen, setPendingOpen] = useState(false);
   const sheetOwnerId = "diapers";
 
-  // États des données
+  // Data states
   const [excretions, setExcretions] = useState<Excretion[]>([]);
   const [groupedExcretions, setGroupedExcretions] = useState<ExcretionGroup[]>(
     []
@@ -218,7 +326,9 @@ export default function DiapersScreen() {
     excretion: Excretion | null;
   }>({ visible: false, excretion: null });
 
-  // Récupérer les paramètres de l'URL
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+
+  // URL params
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
   const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
 
@@ -453,6 +563,7 @@ export default function DiapersScreen() {
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const returnTarget = returnTargetParam ?? returnToRef.current;
+    const isEditing = !!pendingEditData;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
       openSheet({
@@ -460,7 +571,10 @@ export default function DiapersScreen() {
         formType: "diapers",
         diapersType: pendingDiapersType,
         editData: pendingEditData ?? undefined,
-        onSuccess: ensureTodayInRange,
+        onSuccess: () => {
+          ensureTodayInRange();
+          showToast(isEditing ? "Couche modifiee" : "Couche enregistree");
+        },
         onDismiss: () => {
           editIdRef.current = null;
           maybeReturnTo(returnTarget);
@@ -484,6 +598,7 @@ export default function DiapersScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
+    showToast,
   ]);
 
   useEffect(() => {
@@ -524,6 +639,16 @@ export default function DiapersScreen() {
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
       );
       setExcretions(merged);
+
+      // Clean up soft-deleted IDs that are no longer in the dataset
+      setSoftDeletedIds((prev) => {
+        if (prev.size === 0) return prev;
+        const ids = new Set(merged.map((e) => e.id));
+        const next = new Set<string>();
+        prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+        return next.size === prev.size ? prev : next;
+      });
+
       if (
         pendingLoadMoreRef.current > 0 &&
         versionAtSubscribe === loadMoreVersionRef.current
@@ -718,13 +843,56 @@ export default function DiapersScreen() {
     };
   }, [activeChild?.id, daysWindow, rangeEndDate]);
 
-  // Filtrage et regroupement par jour
-  useEffect(() => {
+  // ============================================
+  // FILTERS + GROUPING
+  // ============================================
+
+  const applyTodayFilter = useCallback(() => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    setSelectedFilter("today");
+    setSelectedDate(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set([todayKey]));
+  }, []);
+
+  const clearSelectedDate = useCallback(() => {
+    applyTodayFilter();
+  }, [applyTodayFilter]);
+
+  const handleFilterPress = useCallback(
+    (filter: DateFilterValue) => {
+      if (filter === "today") {
+        applyTodayFilter();
+        return;
+      }
+
+      setSelectedFilter(filter);
+      setSelectedDate(null);
+      setShowCalendar(false);
+      setExpandedDays(new Set());
+    },
+    [applyTodayFilter]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedDate) {
+        applyTodayFilter();
+      }
+    }, [applyTodayFilter, selectedDate])
+  );
+
+  // Filtering (memoized)
+  const filteredExcretions = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
-    const filtered = excretions.filter((excretion) => {
+    return excretions.filter((excretion) => {
+      if (softDeletedIds.has(excretion.id)) return false;
       const excretionDate = new Date(excretion.date.seconds * 1000);
       excretionDate.setHours(0, 0, 0, 0);
       const excretionTime = excretionDate.getTime();
@@ -740,10 +908,13 @@ export default function DiapersScreen() {
       if (selectedFilter === "past") return excretionTime < todayTime;
       return true;
     });
+  }, [excretions, selectedFilter, selectedDate, softDeletedIds]);
 
-    const grouped = groupExcretionsByDay(filtered);
+  // Grouping by day
+  useEffect(() => {
+    const grouped = groupExcretionsByDay(filteredExcretions);
     setGroupedExcretions(grouped);
-  }, [excretions, selectedFilter, selectedDate]);
+  }, [filteredExcretions]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -783,45 +954,12 @@ export default function DiapersScreen() {
     setExpandedDays(new Set([day.dateString]));
   }, []);
 
-  const applyTodayFilter = useCallback(() => {
-    const today = new Date();
-    const todayKey = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
-    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    setSelectedFilter("today");
-    setSelectedDate(null);
-    setShowCalendar(false);
-    setExpandedDays(new Set([todayKey]));
-  }, []);
-
-  const handleFilterPress = useCallback(
-    (filter: DateFilterValue) => {
-      if (filter === "today") {
-        applyTodayFilter();
-        return;
-      }
-
-      setSelectedFilter(filter);
-      setSelectedDate(null);
-      setShowCalendar(false);
-      setExpandedDays(new Set());
-    },
-    [applyTodayFilter]
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!selectedDate) {
-        applyTodayFilter();
-      }
-    }, [applyTodayFilter, selectedDate])
-  );
-
   // ============================================
   // HELPERS - UI
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const newExpandedDays = new Set(prev);
@@ -846,18 +984,43 @@ export default function DiapersScreen() {
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.excretion?.id) return;
     const { id, type } = deleteConfirm.excretion;
+    const childId = activeChild.id;
     setDeleteConfirm({ visible: false, excretion: null });
-    try {
-      if (type === "selle") {
-        await supprimerSelle(activeChild.id, id);
-      } else {
-        await supprimerMiction(activeChild.id, id);
-      }
-      showToast("Excrétion supprimée");
-    } catch {
-      showToast("Impossible de supprimer cette excrétion");
-    }
-  }, [activeChild?.id, deleteConfirm.excretion, showToast]);
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => new Set(prev).add(id));
+
+    showUndoToast(
+      "Couche supprimee",
+      // onUndo - restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      },
+      // onExpire - actually delete from Firestore
+      async () => {
+        try {
+          if (type === "selle") {
+            await supprimerSelle(childId, id);
+          } else {
+            await supprimerMiction(childId, id);
+          }
+        } catch {
+          // Restore if delete fails
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, deleteConfirm.excretion, showUndoToast, showToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, excretion: null });
@@ -881,7 +1044,7 @@ export default function DiapersScreen() {
             : excretion.couleur === "jaune"
               ? "Jaune"
               : excretion.couleur === "foncee"
-                ? "Foncée"
+                ? "Foncee"
                 : "Autre";
         detailParts.push(couleurLabel);
       }
@@ -921,7 +1084,7 @@ export default function DiapersScreen() {
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Modifier cette excrétion"
+            accessibilityLabel="Modifier cette excretion"
             style={({ pressed }) => [
               styles.sessionCard,
               {
@@ -1012,7 +1175,7 @@ export default function DiapersScreen() {
       };
 
       return (
-        <View style={styles.daySection}>
+        <View style={styles.dayGroup}>
           {/* Day Header with stats */}
           <View style={styles.dayHeader}>
             <Text style={[styles.dayLabel, { color: nc.textStrong }]}>
@@ -1024,7 +1187,7 @@ export default function DiapersScreen() {
                   {item.mictionsCount + item.sellesCount}
                 </Text>
                 <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
-                  excrétion{item.mictionsCount + item.sellesCount > 1 ? "s" : ""}
+                  excretion{item.mictionsCount + item.sellesCount > 1 ? "s" : ""}
                 </Text>
               </View>
             </View>
@@ -1083,8 +1246,8 @@ export default function DiapersScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={
                     isExpanded
-                      ? "Masquer les excrétions"
-                      : "Voir toutes les excrétions"
+                      ? "Masquer les excretions"
+                      : "Voir toutes les excretions"
                   }
                   style={({ pressed }) => [
                     styles.expandTrigger,
@@ -1105,7 +1268,7 @@ export default function DiapersScreen() {
                   >
                     {isExpanded
                       ? "Masquer"
-                      : `${item.excretions.length - 1} autre${item.excretions.length > 2 ? "s" : ""} excrétion${item.excretions.length > 2 ? "s" : ""}`}
+                      : `${item.excretions.length - 1} autre${item.excretions.length > 2 ? "s" : ""} excretion${item.excretions.length > 2 ? "s" : ""}`}
                   </Text>
                   <Ionicons
                     name={isExpanded ? "chevron-up" : "chevron-down"}
@@ -1134,13 +1297,29 @@ export default function DiapersScreen() {
         onLayout={() => setLayoutReady(true)}
       >
         <View>
-          {/* Filtres */}
-          <DateFilterBar
-            selected={selectedFilter as any}
-            onSelect={handleFilterPress}
-          />
+          {/* Filters with date chip */}
+          <View style={styles.filterRow}>
+            <DateFilterBar
+              selected={selectedDate ? ("past" as DateFilterValue) : (selectedFilter as DateFilterValue)}
+              onSelect={handleFilterPress}
+            >
+              {selectedDate && (
+                <Pressable
+                  style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={clearSelectedDate}
+                  accessibilityRole="button"
+                  accessibilityLabel="Effacer la date selectionnee"
+                >
+                  <Text style={styles.dateChipText}>
+                    {formatSelectedDateLabel(selectedDate)}
+                  </Text>
+                  <Ionicons name="close" size={14} color="#fff" />
+                </Pressable>
+              )}
+            </DateFilterBar>
+          </View>
 
-          {/* Calendrier */}
+          {/* Calendar */}
           {showCalendar && (
             <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
               <Calendar
@@ -1166,36 +1345,44 @@ export default function DiapersScreen() {
           )}
         </View>
 
-        {/* Liste des excrétions */}
+        {/* Excretions list */}
         {isExcretionsLoading || !emptyDelayDone ? (
-          <View style={styles.emptyContainer}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
-          </View>
+          <DiapersSkeleton colorScheme={colorScheme} />
         ) : groupedExcretions.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons
-              name="water-outline"
-              size={64}
-              color={Colors[colorScheme].tabIconDefault}
-            />
-
-            <ThemedText style={styles.emptyText}>
+            <View
+              style={[
+                styles.emptyIconWrapper,
+                { backgroundColor: `${eventColors.miction.dark}15` },
+              ]}
+            >
+              <FontAwesome
+                name="tint"
+                size={36}
+                color={eventColors.miction.dark}
+              />
+            </View>
+            <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
               {excretions.length === 0
-                ? "Aucune excrétion"
-                : "Aucune excrétion pour ce filtre"}
+                ? "Aucune couche enregistree"
+                : "Aucune couche pour ce filtre"}
+            </ThemedText>
+            <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+              Suivez les changes de bebe
             </ThemedText>
 
             {excretions.length === 0 && (
               <Pressable
                 style={[
-                  styles.emptyAddButton,
+                  styles.emptyCta,
                   { backgroundColor: Colors[colorScheme].tint },
                 ]}
                 onPress={() => openAddModal()}
                 accessibilityRole="button"
-                accessibilityLabel="Ajouter une excrétion"
+                accessibilityLabel="Ajouter une couche"
               >
-                <Text style={styles.emptyAddButtonText}>Ajouter une excrétion</Text>
+                <Ionicons name="add" size={20} color="#fff" />
+                <Text style={styles.emptyCtaText}>Ajouter une couche</Text>
               </Pressable>
             )}
 
@@ -1233,7 +1420,7 @@ export default function DiapersScreen() {
       <ConfirmModal
         visible={deleteConfirm.visible}
         title="Suppression"
-        message="Voulez-vous vraiment supprimer cette excrétion ?"
+        message="Voulez-vous vraiment supprimer cette couche ?"
         confirmText="Supprimer"
         cancelText="Annuler"
         backgroundColor={Colors[colorScheme].background}
@@ -1263,13 +1450,32 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
   },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingRight: 16,
+  },
+  dateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  dateChipText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 80,
   },
-  // Day Section
-  daySection: {
+  // Day Group
+  dayGroup: {
     marginBottom: 24,
   },
   dayHeader: {
@@ -1391,21 +1597,54 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    paddingHorizontal: 32,
   },
-  emptyText: {
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
+    textAlign: "center",
   },
-  emptyAddButton: {
+  emptySubtitle: {
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
   },
-  emptyAddButtonText: {
-    color: "#ffffff",
+  emptyCtaText: {
+    color: "#fff",
     fontSize: 15,
     fontWeight: "600",
+  },
+  // Skeleton
+  skeletonContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  skeletonBlock: {
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 200,
   },
   // Swipe-to-delete
   deleteAction: {

@@ -2,7 +2,6 @@ import { PumpingEditData } from "@/components/forms/PumpingForm";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -25,12 +24,16 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   BackHandler,
   FlatList,
   InteractionManager,
+  LayoutAnimation,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  UIManager,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -38,6 +41,20 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const formatSelectedDateLabel = (dateString: string) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
 
 // ============================================
 // DELETE ACTION COMPONENT
@@ -58,6 +75,97 @@ const DeleteAction = React.memo(function DeleteAction({
       <Ionicons name="trash-outline" size={20} color="#fff" />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
+  );
+});
+
+// ============================================
+// SKELETON LOADING COMPONENT
+// ============================================
+
+const PumpingSkeleton = React.memo(function PumpingSkeleton({
+  colorScheme,
+}: {
+  colorScheme: "light" | "dark";
+}) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    shimmer.start();
+    return () => shimmer.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg =
+    colorScheme === "dark"
+      ? "rgba(255, 255, 255, 0.08)"
+      : "rgba(255, 255, 255, 0.4)";
+
+  const renderSkeletonCard = (key: number) => (
+    <View
+      key={key}
+      style={[
+        styles.sessionCard,
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+      ]}
+    >
+      <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={[styles.skeletonBlock, { width: 120, height: 6, borderRadius: 3, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+        <View style={[styles.skeletonBlock, { width: 80, height: 12, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+      </View>
+      <View style={[styles.skeletonBlock, { width: 40, height: 18, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.skeletonContainer}>
+      <View style={styles.daySection}>
+        <View style={styles.dayHeader}>
+          <View style={[styles.skeletonBlock, { width: 80, height: 16, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+          <View style={[styles.skeletonBlock, { width: 40, height: 14, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+        </View>
+        <View style={styles.sessionsContainer}>
+          {renderSkeletonCard(1)}
+          {renderSkeletonCard(2)}
+          {renderSkeletonCard(3)}
+        </View>
+      </View>
+    </View>
   );
 });
 
@@ -93,7 +201,7 @@ export default function PumpingScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast } = useToast();
+  const { showToast, showUndoToast } = useToast();
   const headerOwnerId = useRef(
     `pumping-${Math.random().toString(36).slice(2)}`,
   );
@@ -122,6 +230,8 @@ export default function PumpingScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
@@ -300,13 +410,17 @@ export default function PumpingScreen() {
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const returnTarget = returnTargetParam ?? returnToRef.current;
+    const isEditing = !!pendingEditData;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
       openSheet({
         ownerId: sheetOwnerId,
         formType: "pumping",
         editData: pendingEditData ?? undefined,
-        onSuccess: ensureTodayInRange,
+        onSuccess: () => {
+          ensureTodayInRange();
+          showToast(isEditing ? "Pompage modifié" : "Pompage enregistré");
+        },
         onDismiss: () => {
           editIdRef.current = null;
           maybeReturnTo(returnTarget);
@@ -359,6 +473,16 @@ export default function PumpingScreen() {
       (data) => {
         setPompages(data);
         setPompagesLoaded(true);
+
+        // Clean up soft-deleted IDs that are no longer in the dataset
+        setSoftDeletedIds((prev) => {
+          if (prev.size === 0) return prev;
+          const dataIds = new Set(data.map((e: Pompage) => e.id));
+          const next = new Set<string>();
+          prev.forEach((id) => { if (dataIds.has(id)) next.add(id); });
+          return next.size === prev.size ? prev : next;
+        });
+
         if (
           pendingLoadMoreRef.current > 0 &&
           versionAtSubscribe === loadMoreVersionRef.current
@@ -386,6 +510,30 @@ export default function PumpingScreen() {
     setHasMore(true);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
+  }, [activeChild?.id]);
+
+  // P7: Jump to most recent event date at mount
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    getNextEventDateBeforeHybrid(activeChild.id, "pompage", endOfToday)
+      .then((nextDate) => {
+        if (cancelled) return;
+        setDaysWindow(14);
+        setRangeEndDate(nextDate ?? endOfToday);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDaysWindow(14);
+        setRangeEndDate(endOfToday);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeChild?.id]);
 
   useEffect(() => {
@@ -531,6 +679,7 @@ export default function PumpingScreen() {
     const todayTime = today.getTime();
 
     const filtered = pompages.filter((pompage) => {
+      if (softDeletedIds.has(pompage.id)) return false;
       const pompageDate = new Date(pompage.date.seconds * 1000);
       pompageDate.setHours(0, 0, 0, 0);
       const pompageTime = pompageDate.getTime();
@@ -555,7 +704,7 @@ export default function PumpingScreen() {
 
     const grouped = groupPompagesByDay(filtered);
     setGroupedPompages(grouped);
-  }, [pompages, selectedFilter, selectedDate, showCalendar]);
+  }, [pompages, selectedFilter, selectedDate, showCalendar, softDeletedIds]);
 
   // ============================================
   // HELPERS - CALENDAR
@@ -606,6 +755,10 @@ export default function PumpingScreen() {
     setShowCalendar(false);
     setExpandedDays(new Set([todayKey]));
   }, []);
+
+  const clearSelectedDate = useCallback(() => {
+    applyTodayFilter();
+  }, [applyTodayFilter]);
 
   const handleFilterPress = useCallback((filter: FilterType) => {
     if (filter === "today") {
@@ -683,7 +836,7 @@ export default function PumpingScreen() {
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
-    Haptics.selectionAsync();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(dateKey)) {
@@ -712,14 +865,38 @@ export default function PumpingScreen() {
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.pompage?.id) return;
     const pompageId = deleteConfirm.pompage.id;
+    const childId = activeChild.id;
     setDeleteConfirm({ visible: false, pompage: null });
-    try {
-      await supprimerPompage(activeChild.id, pompageId);
-      showToast("Pompage supprimé");
-    } catch {
-      showToast("Impossible de supprimer ce pompage");
-    }
-  }, [activeChild?.id, deleteConfirm.pompage, showToast]);
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => new Set(prev).add(pompageId));
+
+    showUndoToast(
+      "Pompage supprimé",
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(pompageId);
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          await supprimerPompage(childId, pompageId);
+        } catch {
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(pompageId);
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, deleteConfirm.pompage, showUndoToast, showToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, pompage: null });
@@ -988,10 +1165,26 @@ export default function PumpingScreen() {
       >
         <View>
           {/* Filtres */}
-          <DateFilterBar
-            selected={selectedFilter as any}
-            onSelect={handleFilterPress}
-          />
+          <View style={styles.filterRow}>
+            <DateFilterBar
+              selected={selectedDate ? "past" : selectedFilter ?? "today"}
+              onSelect={handleFilterPress}
+            >
+              {selectedDate && (
+                <Pressable
+                  style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={clearSelectedDate}
+                  accessibilityRole="button"
+                  accessibilityLabel="Effacer la date sélectionnée"
+                >
+                  <Text style={styles.dateChipText}>
+                    {formatSelectedDateLabel(selectedDate)}
+                  </Text>
+                  <Ionicons name="close" size={14} color="#fff" />
+                </Pressable>
+              )}
+            </DateFilterBar>
+          </View>
 
           {/* Calendrier */}
           {showCalendar && (
@@ -1023,24 +1216,35 @@ export default function PumpingScreen() {
         {pompagesLoaded && emptyDelayDone ? (
           groupedPompages.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons
-                name="water-outline"
-                size={64}
-                color={Colors[colorScheme].tabIconDefault}
-              />
-              <ThemedText style={styles.emptyText}>
+              <View
+                style={[
+                  styles.emptyIconWrapper,
+                  { backgroundColor: `${eventColors.pumping.dark}15` },
+                ]}
+              >
+                <Ionicons
+                  name="water-outline"
+                  size={36}
+                  color={eventColors.pumping.dark}
+                />
+              </View>
+              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
                 {pompages.length === 0
                   ? "Aucune session enregistrée"
                   : "Aucune session pour ce filtre"}
               </ThemedText>
-              {pompages.length === 0 && !selectedFilter && !selectedDate && (
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+                Suivez vos sessions de tire-lait
+              </ThemedText>
+              {pompages.length === 0 && (
                 <Pressable
-                  style={[styles.emptyAddButton, { backgroundColor: Colors[colorScheme].tint }]}
+                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
                   onPress={openAddModal}
                   accessibilityRole="button"
                   accessibilityLabel="Ajouter une session de pompage"
                 >
-                  <Text style={styles.emptyAddButtonText}>Ajouter une session</Text>
+                  <Ionicons name="add" size={20} color="#fff" />
+                  <Text style={styles.emptyCtaText}>Ajouter une session</Text>
                 </Pressable>
               )}
               {!(selectedFilter === "today" || selectedDate) && (
@@ -1074,9 +1278,7 @@ export default function PumpingScreen() {
             />
           )
         ) : (
-          <View style={styles.emptyContainer}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
-          </View>
+          <PumpingSkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
       <ConfirmModal
@@ -1280,24 +1482,58 @@ const styles = StyleSheet.create({
     color: eventColors.pumping.dark,
   },
 
+  // Filter row & date chip
+  filterRow: {},
+  dateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  dateChipText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
   // Empty State
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    paddingHorizontal: 32,
   },
-  emptyText: {
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
+    textAlign: "center",
   },
-  emptyAddButton: {
+  emptySubtitle: {
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
   },
-  emptyAddButtonText: {
-    color: "#ffffff",
+  emptyCtaText: {
+    color: "#fff",
     fontSize: 15,
     fontWeight: "600",
   },
@@ -1317,5 +1553,21 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "700",
+  },
+
+  // Skeleton
+  skeletonContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  skeletonBlock: {
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 200,
   },
 });
