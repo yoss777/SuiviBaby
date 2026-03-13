@@ -10,6 +10,7 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterActivitesHybrid,
@@ -33,6 +34,7 @@ import {
   LayoutAnimation,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   UIManager,
@@ -273,6 +275,7 @@ export default function ActivitiesScreen() {
   const { openSheet, closeSheet, isOpen } = useSheet();
   const { showToast, showUndoToast } = useToast();
   const navigation = useNavigation();
+  const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId } = useBatchSelect();
   const headerOwnerId = useRef(
     `activities-${Math.random().toString(36).slice(2)}`,
   );
@@ -300,6 +303,8 @@ export default function ActivitiesScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [autoLoadMore, setAutoLoadMore] = useState(false);
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
 
@@ -413,6 +418,19 @@ export default function ActivitiesScreen() {
       const headerButtons = (
         <View style={styles.headerButtons}>
           <Pressable
+            onPress={toggleSelectionMode}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel={selectionMode ? "Annuler la sélection" : "Mode sélection"}
+          >
+            {selectionMode ? (
+              <Text style={{ color: Colors[colorScheme].tint, fontSize: 14, fontWeight: "600" }}>Annuler</Text>
+            ) : (
+              <Ionicons name="checkmark-done-outline" size={22} color={Colors[colorScheme].tint} />
+            )}
+          </Pressable>
+          <Pressable
             onPress={handleCalendarPress}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[
@@ -448,6 +466,9 @@ export default function ActivitiesScreen() {
       showCalendar,
       colorScheme,
       setHeaderRight,
+      selectionMode,
+      toggleSelectionMode,
+      selectedCount,
     ]),
   );
 
@@ -523,6 +544,7 @@ export default function ActivitiesScreen() {
         const evts = data as ActivityEventWithId[];
         setEvents(evts);
         setLoaded({ activites: true });
+        setIsRefreshing(false);
 
         // Clean up soft-deleted IDs that are no longer in the dataset
         setSoftDeletedIds((prev) => {
@@ -547,7 +569,7 @@ export default function ActivitiesScreen() {
     return () => {
       unsubscribe();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -785,6 +807,11 @@ export default function ActivitiesScreen() {
     [hasMore, activeChild?.id, autoLoadMoreAttempts, daysWindow, rangeEndDate],
   );
 
+  const handlePullToRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setRefreshKey((k) => k + 1);
+  }, []);
+
   const handleLoadMore = useCallback(() => {
     loadMoreStep(false);
   }, [loadMoreStep]);
@@ -853,6 +880,7 @@ export default function ActivitiesScreen() {
         editData: pendingEditData ?? undefined,
         onSuccess: () => {
           ensureTodayInRange();
+          applyTodayFilter();
           showToast(isEditing ? "Activite modifiee" : "Activite enregistree");
         },
         onDismiss: () => {
@@ -879,6 +907,7 @@ export default function ActivitiesScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
+    applyTodayFilter,
     showToast,
   ]);
 
@@ -909,6 +938,7 @@ export default function ActivitiesScreen() {
   };
 
   const toggleExpand = useCallback((date: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
@@ -963,6 +993,18 @@ export default function ActivitiesScreen() {
     );
   }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
 
+  const handleBatchDelete = useCallback(async () => {
+    if (!activeChild?.id || selectedCount === 0) return;
+    const ids = Array.from(selectedIds);
+    exitSelectionMode();
+    try {
+      await Promise.all(ids.map((id) => supprimerActivite(activeChild.id, id)));
+      showToast(`${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`);
+    } catch {
+      showToast("Erreur lors de la suppression");
+    }
+  }, [activeChild?.id, selectedIds, selectedCount, exitSelectionMode, showToast]);
+
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
   }, []);
@@ -988,10 +1030,22 @@ export default function ActivitiesScreen() {
               backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
             },
           ]}
-          onPress={() => openEditModal(event)}
+          onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
           accessibilityRole="button"
           accessibilityLabel="Modifier cette activité"
         >
+          {selectionMode && (
+            <Pressable
+              onPress={() => toggleId(event.id)}
+              style={{ marginRight: 8 }}
+            >
+              <Ionicons
+                name={selectedIds.has(event.id) ? "checkbox" : "square-outline"}
+                size={22}
+                color={selectedIds.has(event.id) ? Colors[colorScheme].tint : nc.textMuted}
+              />
+            </Pressable>
+          )}
           <View style={styles.sessionTime}>
             <Text
               style={[
@@ -1291,12 +1345,35 @@ export default function ActivitiesScreen() {
                   />
                 )
               }
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handlePullToRefresh}
+                  tintColor={Colors[colorScheme].tint}
+                />
+              }
             />
           )
         ) : (
           <ActivitySkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
+      {selectionMode && selectedCount > 0 && (
+        <View style={styles.batchDeleteBar}>
+          <Pressable
+            style={styles.batchDeleteButton}
+            onPress={handleBatchDelete}
+            accessibilityRole="button"
+            accessibilityLabel={`Supprimer ${selectedCount} élément${selectedCount > 1 ? "s" : ""}`}
+          >
+            <Ionicons name="trash-outline" size={18} color="#fff" />
+            <Text style={styles.batchDeleteText}>
+              Supprimer ({selectedCount})
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       <ConfirmModal
         visible={deleteConfirm.visible}
         title="Suppression"
@@ -1566,6 +1643,30 @@ const styles = StyleSheet.create({
   deleteActionText: {
     color: "#fff",
     fontSize: 11,
+    fontWeight: "700",
+  },
+  batchDeleteBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 32,
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  batchDeleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#ef4444",
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  batchDeleteText: {
+    color: "#fff",
+    fontSize: 15,
     fontWeight: "700",
   },
 });

@@ -10,6 +10,7 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { supprimerPompage } from "@/migration/eventsDoubleWriteService";
 import {
@@ -31,6 +32,7 @@ import {
   LayoutAnimation,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   UIManager,
@@ -202,6 +204,7 @@ export default function PumpingScreen() {
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
   const { showToast, showUndoToast } = useToast();
+  const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId } = useBatchSelect();
   const headerOwnerId = useRef(
     `pumping-${Math.random().toString(36).slice(2)}`,
   );
@@ -228,6 +231,8 @@ export default function PumpingScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [autoLoadMore, setAutoLoadMore] = useState(false);
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
 
@@ -285,6 +290,19 @@ export default function PumpingScreen() {
           }}
         >
           <Pressable
+            onPress={toggleSelectionMode}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel={selectionMode ? "Annuler la sélection" : "Mode sélection"}
+          >
+            {selectionMode ? (
+              <Text style={{ color: Colors[colorScheme].tint, fontSize: 14, fontWeight: "600" }}>Annuler</Text>
+            ) : (
+              <Ionicons name="checkmark-done-outline" size={22} color={Colors[colorScheme].tint} />
+            )}
+          </Pressable>
+          <Pressable
             onPress={handleCalendarPress}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[
@@ -322,6 +340,9 @@ export default function PumpingScreen() {
       colorScheme,
       setHeaderRight,
       openAddModal,
+      selectionMode,
+      toggleSelectionMode,
+      selectedCount,
     ]),
   );
 
@@ -419,6 +440,7 @@ export default function PumpingScreen() {
         editData: pendingEditData ?? undefined,
         onSuccess: () => {
           ensureTodayInRange();
+          applyTodayFilter();
           showToast(isEditing ? "Pompage modifié" : "Pompage enregistré");
         },
         onDismiss: () => {
@@ -439,6 +461,8 @@ export default function PumpingScreen() {
     openSheet,
     // @ts-expect-error — ensureTodayInRange is a useCallback declared later in the component
     ensureTodayInRange,
+    // @ts-expect-error — applyTodayFilter is a useCallback declared later in the component
+    applyTodayFilter,
   ]);
 
   useEffect(() => {
@@ -473,6 +497,7 @@ export default function PumpingScreen() {
       (data) => {
         setPompages(data);
         setPompagesLoaded(true);
+        setIsRefreshing(false);
 
         // Clean up soft-deleted IDs that are no longer in the dataset
         setSoftDeletedIds((prev) => {
@@ -496,7 +521,7 @@ export default function PumpingScreen() {
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
     return () => unsubscribe();
-  }, [activeChild, daysWindow, rangeEndDate]);
+  }, [activeChild, daysWindow, rangeEndDate, refreshKey]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -598,6 +623,11 @@ export default function PumpingScreen() {
     },
     [hasMore, activeChild?.id, autoLoadMoreAttempts, daysWindow, rangeEndDate],
   );
+
+  const handlePullToRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   const handleLoadMore = useCallback(() => {
     loadMoreStep(false);
@@ -836,6 +866,7 @@ export default function PumpingScreen() {
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
@@ -897,6 +928,18 @@ export default function PumpingScreen() {
       4000,
     );
   }, [activeChild?.id, deleteConfirm.pompage, showUndoToast, showToast]);
+
+  const handleBatchDelete = useCallback(async () => {
+    if (!activeChild?.id || selectedCount === 0) return;
+    const ids = Array.from(selectedIds);
+    exitSelectionMode();
+    try {
+      await Promise.all(ids.map((id) => supprimerPompage(activeChild.id, id)));
+      showToast(`${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`);
+    } catch {
+      showToast("Erreur lors de la suppression");
+    }
+  }, [activeChild?.id, selectedIds, selectedCount, exitSelectionMode, showToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, pompage: null });
@@ -978,8 +1021,20 @@ export default function PumpingScreen() {
             backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
           },
         ]}
-        onPress={() => openEditModal(pompage)}
+        onPress={selectionMode ? () => toggleId(pompage.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(pompage); }}
       >
+        {selectionMode && (
+          <Pressable
+            onPress={() => toggleId(pompage.id)}
+            style={{ marginRight: 8 }}
+          >
+            <Ionicons
+              name={selectedIds.has(pompage.id) ? "checkbox" : "square-outline"}
+              size={22}
+              color={selectedIds.has(pompage.id) ? Colors[colorScheme].tint : nc.textMuted}
+            />
+          </Pressable>
+        )}
         {/* Time badge */}
         <View style={styles.sessionTime}>
           <Text
@@ -1042,7 +1097,7 @@ export default function PumpingScreen() {
       </Pressable>
       </ReanimatedSwipeable>
     );
-  }, [nc, openEditModal, handlePompageDelete]);
+  }, [nc, openEditModal, handlePompageDelete, selectionMode, selectedIds, toggleId, colorScheme]);
 
   // ============================================
   // RENDER - DAY GROUP
@@ -1275,12 +1330,35 @@ export default function PumpingScreen() {
                   />
                 )
               }
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handlePullToRefresh}
+                  tintColor={Colors[colorScheme].tint}
+                />
+              }
             />
           )
         ) : (
           <PumpingSkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
+      {selectionMode && selectedCount > 0 && (
+        <View style={styles.batchDeleteBar}>
+          <Pressable
+            style={styles.batchDeleteButton}
+            onPress={handleBatchDelete}
+            accessibilityRole="button"
+            accessibilityLabel={`Supprimer ${selectedCount} élément${selectedCount > 1 ? "s" : ""}`}
+          >
+            <Ionicons name="trash-outline" size={18} color="#fff" />
+            <Text style={styles.batchDeleteText}>
+              Supprimer ({selectedCount})
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       <ConfirmModal
         visible={deleteConfirm.visible}
         title="Suppression"
@@ -1569,5 +1647,29 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 200,
+  },
+  batchDeleteBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 32,
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  batchDeleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#ef4444",
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  batchDeleteText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });

@@ -23,6 +23,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PortalProvider } from "@gorhom/portal";
 import { GlobalSheetManager } from "@/components/ui/GlobalSheetManager";
 import { InvitationListener } from "@/components/ui/InvitationListener";
+import { OfflineBanner } from "@/components/ui/OfflineBanner";
 
 import { startAutoSync } from "@/services/offlineQueueService";
 
@@ -80,6 +81,7 @@ function RootLayout() {
       <AppNavigation />
       <GlobalSheetManager />
       <InvitationListener />
+      <OfflineBanner />
     </AppProviders>
   );
 }

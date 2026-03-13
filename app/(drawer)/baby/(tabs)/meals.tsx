@@ -16,6 +16,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
@@ -40,6 +41,7 @@ import {
   LayoutAnimation,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   UIManager,
@@ -233,11 +235,14 @@ export default function MealsScreen() {
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
   const headerOwnerId = useRef(`meals-${Math.random().toString(36).slice(2)}`);
+  const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId } = useBatchSelect();
   const navigation = useNavigation();
   const { setHeaderLeft } = useHeaderLeft();
   const sheetOwnerId = "meals";
 
   const [showCalendar, setShowCalendar] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -328,12 +333,19 @@ export default function MealsScreen() {
             gap: 0,
           }}
         >
-          {/* <VoiceCommandButton
-          size={18}
-          color={Colors[colorScheme].tint}
-          showTestToggle={false}
-        /> */}
-
+          <Pressable
+            onPress={toggleSelectionMode}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel={selectionMode ? "Annuler la sélection" : "Mode sélection"}
+          >
+            {selectionMode ? (
+              <Text style={{ color: Colors[colorScheme].tint, fontSize: 14, fontWeight: "600" }}>Annuler</Text>
+            ) : (
+              <Ionicons name="checkmark-done-outline" size={22} color={Colors[colorScheme].tint} />
+            )}
+          </Pressable>
           <Pressable
             onPress={handleCalendarPress}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -372,6 +384,9 @@ export default function MealsScreen() {
       colorScheme,
       setHeaderRight,
       openAddModal,
+      selectionMode,
+      toggleSelectionMode,
+      selectedCount,
     ]),
   );
 
@@ -495,7 +510,10 @@ export default function MealsScreen() {
         formType: "meals",
         mealType: pendingEditData?.type || mealType,
         editData: pendingEditData ? buildEditData(pendingEditData) : undefined,
-        onSuccess: ensureTodayInRange,
+        onSuccess: () => {
+          ensureTodayInRange();
+          applyTodayFilter();
+        },
         onDismiss: () => {
           editIdRef.current = null;
           maybeReturnTo(returnTarget);
@@ -516,6 +534,8 @@ export default function MealsScreen() {
     buildEditData,
     // @ts-expect-error — ensureTodayInRange is a useCallback declared later in the component
     ensureTodayInRange,
+    // @ts-expect-error — applyTodayFilter is a useCallback declared later in the component
+    applyTodayFilter,
   ]);
 
   useEffect(() => {
@@ -530,6 +550,11 @@ export default function MealsScreen() {
     setPendingOpen(true);
     navigation.setParams({ openModal: undefined, editId: undefined } as any);
   }, [editId, layoutReady, meals, navigation]);
+
+  const handlePullToRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -554,6 +579,7 @@ export default function MealsScreen() {
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
       setMeals(merged);
+      setIsRefreshing(false);
 
       // Clean up soft-deleted IDs that are no longer in the dataset
       setSoftDeletedIds((prev) => {
@@ -609,7 +635,7 @@ export default function MealsScreen() {
       unsubscribeBiberons();
       unsubscribeSolides();
     };
-  }, [activeChild, daysWindow, rangeEndDate]);
+  }, [activeChild, daysWindow, rangeEndDate, refreshKey]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -931,8 +957,8 @@ export default function MealsScreen() {
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(dateKey)) {
@@ -1050,6 +1076,18 @@ export default function MealsScreen() {
     setDeleteConfirm({ visible: false, meal: null });
   }, []);
 
+  const handleBatchDelete = useCallback(async () => {
+    if (!activeChild?.id || selectedCount === 0) return;
+    const ids = Array.from(selectedIds);
+    exitSelectionMode();
+    try {
+      await Promise.all(ids.map((id) => supprimerEvenement(activeChild.id, id)));
+      showToast(`${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`);
+    } catch {
+      showToast("Erreur lors de la suppression");
+    }
+  }, [activeChild?.id, selectedIds, selectedCount, exitSelectionMode, showToast]);
+
   // ============================================
   // RENDER - MEAL ITEM
   // ============================================
@@ -1118,8 +1156,20 @@ export default function MealsScreen() {
             backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
           },
         ]}
-        onPress={() => openEditModal(meal)}
+        onPress={selectionMode ? () => toggleId(meal.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(meal); }}
       >
+        {selectionMode && (
+          <Pressable
+            onPress={() => toggleId(meal.id)}
+            style={{ marginRight: 8 }}
+          >
+            <Ionicons
+              name={selectedIds.has(meal.id) ? "checkbox" : "square-outline"}
+              size={22}
+              color={selectedIds.has(meal.id) ? Colors[colorScheme].tint : nc.textMuted}
+            />
+          </Pressable>
+        )}
         {/* Time badge */}
         <View style={styles.sessionTime}>
           <Text
@@ -1267,7 +1317,7 @@ export default function MealsScreen() {
       </Pressable>
       </ReanimatedSwipeable>
     );
-  }, [nc, canManageContent, handleMealDelete, openEditModal]);
+  }, [nc, canManageContent, handleMealDelete, openEditModal, selectionMode, selectedIds, toggleId, colorScheme]);
 
   // ============================================
   // RENDER - DAY GROUP
@@ -1517,6 +1567,13 @@ export default function MealsScreen() {
               renderItem={renderDayGroup}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listContent}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handlePullToRefresh}
+                  tintColor={Colors[colorScheme].tint}
+                />
+              }
               ListFooterComponent={
                 selectedFilter === "today" || selectedDate ? null : (
                   <LoadMoreButton
@@ -1535,6 +1592,21 @@ export default function MealsScreen() {
         )}
       </SafeAreaView>
 
+      {selectionMode && selectedCount > 0 && (
+        <View style={styles.batchDeleteBar}>
+          <Pressable
+            style={styles.batchDeleteButton}
+            onPress={handleBatchDelete}
+            accessibilityRole="button"
+            accessibilityLabel={`Supprimer ${selectedCount} élément${selectedCount > 1 ? "s" : ""}`}
+          >
+            <Ionicons name="trash-outline" size={18} color="#fff" />
+            <Text style={styles.batchDeleteText}>
+              Supprimer ({selectedCount})
+            </Text>
+          </Pressable>
+        </View>
+      )}
       <ConfirmModal
         visible={deleteConfirm.visible}
         title="Supprimer ce repas ?"
@@ -1851,6 +1923,30 @@ const styles = StyleSheet.create({
   deleteActionText: {
     color: "#fff",
     fontSize: 11,
+    fontWeight: "700",
+  },
+  batchDeleteBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 32,
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  batchDeleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#ef4444",
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  batchDeleteText: {
+    color: "#fff",
+    fontSize: 15,
     fontWeight: "700",
   },
 });

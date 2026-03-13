@@ -9,6 +9,7 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterCroissancesHybrid,
@@ -30,6 +31,7 @@ import {
   LayoutAnimation,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   UIManager,
@@ -214,6 +216,7 @@ export default function GrowthScreen() {
   const { openSheet, closeSheet, isOpen } = useSheet();
   const { showToast, showUndoToast } = useToast();
   const navigation = useNavigation();
+  const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId } = useBatchSelect();
   const headerOwnerId = useRef(`growth-${Math.random().toString(36).slice(2)}`);
 
   const { openModal, editId, returnTo } = useLocalSearchParams();
@@ -240,6 +243,8 @@ export default function GrowthScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [autoLoadMore, setAutoLoadMore] = useState(false);
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
 
@@ -411,6 +416,19 @@ export default function GrowthScreen() {
       const headerButtons = (
         <View style={styles.headerButtons}>
           <Pressable
+            onPress={toggleSelectionMode}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel={selectionMode ? "Annuler la sélection" : "Mode sélection"}
+          >
+            {selectionMode ? (
+              <Text style={{ color: Colors[colorScheme].tint, fontSize: 14, fontWeight: "600" }}>Annuler</Text>
+            ) : (
+              <Ionicons name="checkmark-done-outline" size={22} color={Colors[colorScheme].tint} />
+            )}
+          </Pressable>
+          <Pressable
             onPress={handleCalendarPress}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[
@@ -446,6 +464,9 @@ export default function GrowthScreen() {
       showCalendar,
       colorScheme,
       setHeaderRight,
+      selectionMode,
+      toggleSelectionMode,
+      selectedCount,
     ]),
   );
 
@@ -548,6 +569,7 @@ export default function GrowthScreen() {
       (data) => {
         croissanceData = data as GrowthEventWithId[];
         setLoaded({ croissance: true });
+        setIsRefreshing(false);
         merge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
@@ -556,7 +578,7 @@ export default function GrowthScreen() {
     return () => {
       unsubscribe();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -824,6 +846,11 @@ export default function GrowthScreen() {
     [hasMore, activeChild?.id, daysWindow, rangeEndDate],
   );
 
+  const handlePullToRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setRefreshKey((k) => k + 1);
+  }, []);
+
   const handleLoadMore = useCallback(() => {
     loadMoreStep(false);
   }, [loadMoreStep]);
@@ -886,6 +913,7 @@ export default function GrowthScreen() {
         editData: pendingEditData ?? undefined,
         onSuccess: () => {
           ensureTodayInRange();
+          applyTodayFilter();
           showToast(
             isEditing ? "Mesure modifiee" : "Mesure enregistree",
           );
@@ -912,6 +940,7 @@ export default function GrowthScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
+    applyTodayFilter,
     showToast,
   ]);
 
@@ -942,6 +971,7 @@ export default function GrowthScreen() {
   };
 
   const toggleExpand = useCallback((date: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
@@ -996,6 +1026,18 @@ export default function GrowthScreen() {
     );
   }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
 
+  const handleBatchDelete = useCallback(async () => {
+    if (!activeChild?.id || selectedCount === 0) return;
+    const ids = Array.from(selectedIds);
+    exitSelectionMode();
+    try {
+      await Promise.all(ids.map((id) => supprimerCroissance(activeChild.id, id)));
+      showToast(`${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`);
+    } catch {
+      showToast("Erreur lors de la suppression");
+    }
+  }, [activeChild?.id, selectedIds, selectedCount, exitSelectionMode, showToast]);
+
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
   }, []);
@@ -1022,10 +1064,22 @@ export default function GrowthScreen() {
               backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
             },
           ]}
-          onPress={() => openEditModal(event)}
+          onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
           accessibilityRole="button"
           accessibilityLabel="Modifier cette mesure"
         >
+          {selectionMode && (
+            <Pressable
+              onPress={() => toggleId(event.id)}
+              style={{ marginRight: 8 }}
+            >
+              <Ionicons
+                name={selectedIds.has(event.id) ? "checkbox" : "square-outline"}
+                size={22}
+                color={selectedIds.has(event.id) ? Colors[colorScheme].tint : nc.textMuted}
+              />
+            </Pressable>
+          )}
           <View style={styles.sessionTime}>
             <Text
               style={[
@@ -1335,12 +1389,35 @@ export default function GrowthScreen() {
                   />
                 )
               }
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handlePullToRefresh}
+                  tintColor={Colors[colorScheme].tint}
+                />
+              }
             />
           )
         ) : (
           <GrowthSkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
+
+      {selectionMode && selectedCount > 0 && (
+        <View style={styles.batchDeleteBar}>
+          <Pressable
+            style={styles.batchDeleteButton}
+            onPress={handleBatchDelete}
+            accessibilityRole="button"
+            accessibilityLabel={`Supprimer ${selectedCount} élément${selectedCount > 1 ? "s" : ""}`}
+          >
+            <Ionicons name="trash-outline" size={18} color="#fff" />
+            <Text style={styles.batchDeleteText}>
+              Supprimer ({selectedCount})
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       <ConfirmModal
         visible={deleteConfirm.visible}
@@ -1624,5 +1701,29 @@ const styles = StyleSheet.create({
   statsBreakdownValue: {
     fontSize: 12,
     fontWeight: "600",
+  },
+  batchDeleteBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 32,
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  batchDeleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#ef4444",
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  batchDeleteText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });

@@ -11,6 +11,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useBatchSelect } from "@/hooks/useBatchSelect";
 import {
   supprimerTemperature,
   supprimerMedicament,
@@ -18,6 +19,7 @@ import {
   supprimerVaccin,
   supprimerVitamine,
 } from "@/migration/eventsDoubleWriteService";
+import { supprimerEvenement } from "@/services/eventsService";
 import {
   ecouterMedicamentsHybrid,
   ecouterSymptomesHybrid,
@@ -42,6 +44,7 @@ import {
   LayoutAnimation,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   UIManager,
@@ -280,12 +283,15 @@ export default function SoinsScreen() {
   const { showToast, showUndoToast } = useToast();
   const navigation = useNavigation();
   const headerOwnerId = useRef(`soins-${Math.random().toString(36).slice(2)}`);
+  const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId } = useBatchSelect();
 
   const { openModal, editId, returnTo, type } = useLocalSearchParams();
   const returnTargetParam = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const sheetOwnerId = "soins";
 
   const [showCalendar, setShowCalendar] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [selectedFilter, setSelectedFilter] = useState<DateFilterValue | null>("today");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
@@ -431,6 +437,19 @@ export default function SoinsScreen() {
       const headerButtons = (
         <View style={styles.headerButtons}>
           <Pressable
+            onPress={toggleSelectionMode}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel={selectionMode ? "Annuler la sélection" : "Mode sélection"}
+          >
+            {selectionMode ? (
+              <Text style={{ color: Colors[colorScheme].tint, fontSize: 14, fontWeight: "600" }}>Annuler</Text>
+            ) : (
+              <Ionicons name="checkmark-done-outline" size={22} color={Colors[colorScheme].tint} />
+            )}
+          </Pressable>
+          <Pressable
             onPress={handleCalendarPress}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[
@@ -460,7 +479,7 @@ export default function SoinsScreen() {
       return () => {
         setHeaderRight(null, headerOwnerId.current);
       };
-    }, [handleCalendarPress, showCalendar, colorScheme, setHeaderRight, openAddModal]),
+    }, [handleCalendarPress, showCalendar, colorScheme, setHeaderRight, openAddModal, selectionMode, toggleSelectionMode, selectedCount]),
   );
 
   useFocusEffect(
@@ -518,6 +537,11 @@ export default function SoinsScreen() {
     }, [closeSheet, isOpen, returnTargetParam]),
   );
 
+  const handlePullToRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setRefreshKey((k) => k + 1);
+  }, []);
+
   // ============================================
   // DATA LISTENERS
   // ============================================
@@ -545,6 +569,7 @@ export default function SoinsScreen() {
         ...vitaminesData,
       ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
       setEvents(merged);
+      setIsRefreshing(false);
 
       // Clean up soft-deleted IDs that are no longer in the dataset
       setSoftDeletedIds((prev) => {
@@ -619,7 +644,7 @@ export default function SoinsScreen() {
       unsubscribeVaccins();
       unsubscribeVitamines();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -911,6 +936,7 @@ export default function SoinsScreen() {
         editData: pendingEditData ?? undefined,
         onSuccess: () => {
           ensureTodayInRange();
+          applyTodayFilter();
           showToast(isEditing ? "Soin modifié" : "Soin enregistré");
         },
         onDismiss: () => {
@@ -933,6 +959,7 @@ export default function SoinsScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
+    applyTodayFilter,
     showToast,
   ]);
 
@@ -983,8 +1010,8 @@ export default function SoinsScreen() {
   }, []);
 
   const toggleExpand = useCallback((date: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(date)) {
@@ -1050,6 +1077,18 @@ export default function SoinsScreen() {
     setDeleteConfirm({ visible: false, event: null });
   }, []);
 
+  const handleBatchDelete = useCallback(async () => {
+    if (!activeChild?.id || selectedCount === 0) return;
+    const ids = Array.from(selectedIds);
+    exitSelectionMode();
+    try {
+      await Promise.all(ids.map((id) => supprimerEvenement(activeChild.id, id)));
+      showToast(`${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`);
+    } catch {
+      showToast("Erreur lors de la suppression");
+    }
+  }, [activeChild?.id, selectedIds, selectedCount, exitSelectionMode, showToast]);
+
   const renderEventItem = useCallback((event: HealthEvent) => {
     const time = toDate(event.date);
     const config = TYPE_CONFIG[event.type];
@@ -1069,8 +1108,20 @@ export default function SoinsScreen() {
             { backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard },
             { borderColor: nc.borderLight },
           ]}
-          onPress={() => openEditModal(event)}
+          onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
         >
+          {selectionMode && (
+            <Pressable
+              onPress={() => toggleId(event.id)}
+              style={{ marginRight: 8 }}
+            >
+              <Ionicons
+                name={selectedIds.has(event.id) ? "checkbox" : "square-outline"}
+                size={22}
+                color={selectedIds.has(event.id) ? Colors[colorScheme].tint : nc.textMuted}
+              />
+            </Pressable>
+          )}
           <View style={styles.sessionTime}>
             <Text style={[styles.sessionTimeText, { color: nc.textMuted }]}>
               {formatTime(time)}
@@ -1092,7 +1143,7 @@ export default function SoinsScreen() {
         </Pressable>
       </ReanimatedSwipeable>
     );
-  }, [nc, openEditModal, buildDetails, handleEventDelete]);
+  }, [nc, openEditModal, buildDetails, handleEventDelete, selectionMode, selectedIds, toggleId, colorScheme]);
 
   const renderDayGroup = useCallback(({ item }: { item: HealthGroup }) => {
     const [year, month, day] = item.date.split("-").map(Number);
@@ -1323,6 +1374,13 @@ export default function SoinsScreen() {
                 renderItem={renderDayGroup}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.listContent}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={isRefreshing}
+                    onRefresh={handlePullToRefresh}
+                    tintColor={Colors[colorScheme].tint}
+                  />
+                }
                 ListFooterComponent={
                   selectedFilter === "today" || selectedDate ? null : (
                     <LoadMoreButton
@@ -1340,6 +1398,21 @@ export default function SoinsScreen() {
             <SoinsSkeleton colorScheme={colorScheme} />
           )}
         </SafeAreaView>
+        {selectionMode && selectedCount > 0 && (
+          <View style={styles.batchDeleteBar}>
+            <Pressable
+              style={styles.batchDeleteButton}
+              onPress={handleBatchDelete}
+              accessibilityRole="button"
+              accessibilityLabel={`Supprimer ${selectedCount} élément${selectedCount > 1 ? "s" : ""}`}
+            >
+              <Ionicons name="trash-outline" size={18} color="#fff" />
+              <Text style={styles.batchDeleteText}>
+                Supprimer ({selectedCount})
+              </Text>
+            </Pressable>
+          </View>
+        )}
         <ConfirmModal
           visible={deleteConfirm.visible}
           title="Suppression"
@@ -1582,6 +1655,30 @@ const styles = StyleSheet.create({
   deleteActionText: {
     color: "#fff",
     fontSize: 11,
+    fontWeight: "700",
+  },
+  batchDeleteBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 32,
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  batchDeleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#ef4444",
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  batchDeleteText: {
+    color: "#fff",
+    fontSize: 15,
     fontWeight: "700",
   },
 });

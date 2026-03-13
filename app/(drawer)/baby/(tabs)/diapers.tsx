@@ -17,6 +17,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useBatchSelect } from "@/hooks/useBatchSelect";
 import {
   supprimerMiction,
   supprimerSelle,
@@ -27,6 +28,7 @@ import {
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
+import { supprimerEvenement } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
@@ -42,6 +44,7 @@ import {
   LayoutAnimation,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   UIManager,
@@ -287,10 +290,13 @@ export default function DiapersScreen() {
   const headerOwnerId = useRef(
     `diapers-${Math.random().toString(36).slice(2)}`
   );
+  const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId } = useBatchSelect();
   const navigation = useNavigation();
   const { setHeaderLeft } = useHeaderLeft();
 
   const [showCalendar, setShowCalendar] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [selectedFilter, setSelectedFilter] = useState<DateFilterValue | null>("today");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
@@ -397,6 +403,19 @@ export default function DiapersScreen() {
           }}
         >
           <Pressable
+            onPress={toggleSelectionMode}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel={selectionMode ? "Annuler la sélection" : "Mode sélection"}
+          >
+            {selectionMode ? (
+              <Text style={{ color: Colors[colorScheme].tint, fontSize: 14, fontWeight: "600" }}>Annuler</Text>
+            ) : (
+              <Ionicons name="checkmark-done-outline" size={22} color={Colors[colorScheme].tint} />
+            )}
+          </Pressable>
+          <Pressable
             onPress={handleCalendarPress}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[
@@ -434,6 +453,9 @@ export default function DiapersScreen() {
       colorScheme,
       setHeaderRight,
       openAddModal,
+      selectionMode,
+      toggleSelectionMode,
+      selectedCount,
     ])
   );
 
@@ -573,6 +595,7 @@ export default function DiapersScreen() {
         editData: pendingEditData ?? undefined,
         onSuccess: () => {
           ensureTodayInRange();
+          applyTodayFilter();
           showToast(isEditing ? "Couche modifiee" : "Couche enregistree");
         },
         onDismiss: () => {
@@ -598,6 +621,8 @@ export default function DiapersScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
+    // @ts-expect-error — applyTodayFilter is a useCallback declared later in the component
+    applyTodayFilter,
     showToast,
   ]);
 
@@ -617,6 +642,11 @@ export default function DiapersScreen() {
       editId: undefined,
     });
   }, [editId, layoutReady, excretions, navigation, openEditModal, stashReturnTo]);
+
+  const handlePullToRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   // ============================================
   // EFFECTS - DATA LISTENERS
@@ -639,6 +669,7 @@ export default function DiapersScreen() {
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
       );
       setExcretions(merged);
+      setIsRefreshing(false);
 
       // Clean up soft-deleted IDs that are no longer in the dataset
       setSoftDeletedIds((prev) => {
@@ -690,7 +721,7 @@ export default function DiapersScreen() {
       unsubscribeMictions();
       unsubscribeSelles();
     };
-  }, [activeChild, daysWindow, rangeEndDate]);
+  }, [activeChild, daysWindow, rangeEndDate, refreshKey]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -959,8 +990,8 @@ export default function DiapersScreen() {
   // ============================================
 
   const toggleExpand = useCallback((dateKey: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const newExpandedDays = new Set(prev);
       if (newExpandedDays.has(dateKey)) {
@@ -1025,6 +1056,18 @@ export default function DiapersScreen() {
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, excretion: null });
   }, []);
+
+  const handleBatchDelete = useCallback(async () => {
+    if (!activeChild?.id || selectedCount === 0) return;
+    const ids = Array.from(selectedIds);
+    exitSelectionMode();
+    try {
+      await Promise.all(ids.map((id) => supprimerEvenement(activeChild.id, id)));
+      showToast(`${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`);
+    } catch {
+      showToast("Erreur lors de la suppression");
+    }
+  }, [activeChild?.id, selectedIds, selectedCount, exitSelectionMode, showToast]);
 
   // ============================================
   // RENDER - EXCRETION ITEM
@@ -1092,8 +1135,20 @@ export default function DiapersScreen() {
                 backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
               },
             ]}
-            onPress={() => openEditModal(excretion)}
+            onPress={selectionMode ? () => toggleId(excretion.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(excretion); }}
           >
+            {selectionMode && (
+              <Pressable
+                onPress={() => toggleId(excretion.id)}
+                style={{ marginRight: 8 }}
+              >
+                <Ionicons
+                  name={selectedIds.has(excretion.id) ? "checkbox" : "square-outline"}
+                  size={22}
+                  color={selectedIds.has(excretion.id) ? Colors[colorScheme].tint : nc.textMuted}
+                />
+              </Pressable>
+            )}
             {/* Time badge */}
             <View style={styles.sessionTime}>
               <Text
@@ -1141,7 +1196,7 @@ export default function DiapersScreen() {
         </ReanimatedSwipeable>
       );
     },
-    [nc, openEditModal, handleExcretionDelete]
+    [nc, openEditModal, handleExcretionDelete, selectionMode, selectedIds, toggleId, colorScheme]
   );
 
   // ============================================
@@ -1403,6 +1458,13 @@ export default function DiapersScreen() {
             renderItem={renderDayGroup}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[styles.listContent, { flexGrow: 1 }]}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handlePullToRefresh}
+                tintColor={Colors[colorScheme].tint}
+              />
+            }
             ListFooterComponent={
               selectedFilter === "today" || selectedDate ? null : (
                 <LoadMoreButton
@@ -1417,6 +1479,21 @@ export default function DiapersScreen() {
           />
         )}
       </SafeAreaView>
+      {selectionMode && selectedCount > 0 && (
+        <View style={styles.batchDeleteBar}>
+          <Pressable
+            style={styles.batchDeleteButton}
+            onPress={handleBatchDelete}
+            accessibilityRole="button"
+            accessibilityLabel={`Supprimer ${selectedCount} élément${selectedCount > 1 ? "s" : ""}`}
+          >
+            <Ionicons name="trash-outline" size={18} color="#fff" />
+            <Text style={styles.batchDeleteText}>
+              Supprimer ({selectedCount})
+            </Text>
+          </Pressable>
+        </View>
+      )}
       <ConfirmModal
         visible={deleteConfirm.visible}
         title="Suppression"
@@ -1660,6 +1737,30 @@ const styles = StyleSheet.create({
   deleteActionText: {
     color: "#fff",
     fontSize: 11,
+    fontWeight: "700",
+  },
+  batchDeleteBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 32,
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  batchDeleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#ef4444",
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  batchDeleteText: {
+    color: "#fff",
+    fontSize: 15,
     fontWeight: "700",
   },
 });
