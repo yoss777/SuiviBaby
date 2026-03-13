@@ -1,47 +1,60 @@
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import {
   JalonType,
   MilestonesEditData,
 } from "@/components/forms/MilestonesForm";
+import { ThemedText } from "@/components/themed-text";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterJalonsHybrid,
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
+import { supprimerJalon } from "@/migration/eventsDoubleWriteService";
 import { JalonEvent } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
+import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   BackHandler,
   FlatList,
   Image,
   InteractionManager,
+  LayoutAnimation,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  UIManager,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { supprimerJalon } from "@/migration/eventsDoubleWriteService";
-import * as Haptics from "expo-haptics";
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // ============================================
 // TYPES
@@ -131,6 +144,12 @@ const toDate = (value: any) => {
   return new Date(value);
 };
 
+const formatSelectedDateLabel = (dateString: string) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
+
 // ============================================
 // DELETE ACTION COMPONENT
 // ============================================
@@ -154,6 +173,97 @@ const DeleteAction = React.memo(function DeleteAction({
 });
 
 // ============================================
+// SKELETON LOADING COMPONENT
+// ============================================
+
+const MilestoneSkeleton = React.memo(function MilestoneSkeleton({
+  colorScheme,
+}: {
+  colorScheme: "light" | "dark";
+}) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    shimmer.start();
+    return () => shimmer.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg =
+    colorScheme === "dark"
+      ? "rgba(255, 255, 255, 0.08)"
+      : "rgba(255, 255, 255, 0.4)";
+
+  const renderSkeletonCard = (key: number) => (
+    <View
+      key={key}
+      style={[
+        styles.sessionCard,
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+      ]}
+    >
+      <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={[styles.skeletonBlock, { width: 32, height: 32, borderRadius: 8, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={[styles.skeletonBlock, { width: 80, height: 14, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+        <View style={[styles.skeletonBlock, { width: 120, height: 12, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.skeletonContainer}>
+      <View style={styles.dayGroup}>
+        <View style={styles.dayHeader}>
+          <View style={[styles.skeletonBlock, { width: 80, height: 16, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+          <View style={[styles.skeletonBlock, { width: 40, height: 14, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+        </View>
+        <View style={styles.sessionsContainer}>
+          {renderSkeletonCard(1)}
+          {renderSkeletonCard(2)}
+          {renderSkeletonCard(3)}
+        </View>
+      </View>
+    </View>
+  );
+});
+
+// ============================================
 // COMPONENT
 // ============================================
 
@@ -164,6 +274,7 @@ export default function MilestonesScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
+  const { showToast, showUndoToast } = useToast();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
     `milestones-${Math.random().toString(36).slice(2)}`
@@ -197,6 +308,8 @@ export default function MilestonesScreen() {
     visible: boolean;
     event: MilestoneEventWithId | null;
   }>({ visible: false, event: null });
+
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
   // Form pattern states
   const [pendingEditData, setPendingEditData] =
@@ -313,6 +426,10 @@ export default function MilestonesScreen() {
     setShowCalendar(false);
     setExpandedDays(new Set([todayKey]));
   }, []);
+
+  const clearSelectedDate = useCallback(() => {
+    applyTodayFilter();
+  }, [applyTodayFilter]);
 
   const handleAddPress = useCallback(() => {
     openAddModal("dent");
@@ -439,8 +556,18 @@ export default function MilestonesScreen() {
     const unsubscribe = ecouterJalonsHybrid(
       activeChild.id,
       (data) => {
-        setEvents(data as MilestoneEventWithId[]);
+        const evts = data as MilestoneEventWithId[];
+        setEvents(evts);
         setLoaded({ jalons: true });
+
+        // Clean up soft-deleted IDs that are no longer in the dataset
+        setSoftDeletedIds((prev) => {
+          if (prev.size === 0) return prev;
+          const ids = new Set(evts.map((e) => e.id));
+          const next = new Set<string>();
+          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+          return next.size === prev.size ? prev : next;
+        });
 
         if (
           pendingLoadMoreRef.current > 0 &&
@@ -470,6 +597,28 @@ export default function MilestonesScreen() {
     setExpandedDays(new Set());
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
+  }, [activeChild?.id]);
+
+  // Jump to most recent event date at mount
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    getNextEventDateBeforeHybrid(activeChild.id, ["jalon"], endOfToday)
+      .then((nextDate) => {
+        if (cancelled) return;
+        setDaysWindow(14);
+        setRangeEndDate(nextDate ?? endOfToday);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDaysWindow(14);
+        setRangeEndDate(endOfToday);
+      });
+
+    return () => { cancelled = true; };
   }, [activeChild?.id]);
 
   useEffect(() => {
@@ -514,22 +663,21 @@ export default function MilestonesScreen() {
   };
 
   const filteredEvents = useMemo(() => {
-    if (!selectedFilter && !selectedDate) return events;
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayTime = today.getTime();
 
     return events.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
       const date = toDate(item.date);
       date.setHours(0, 0, 0, 0);
       const time = date.getTime();
+      if (selectedDate) return formatDateKey(date) === selectedDate;
       if (selectedFilter === "today") return time === todayTime;
       if (selectedFilter === "past") return time < todayTime;
-      if (selectedDate) return formatDateKey(date) === selectedDate;
       return true;
     });
-  }, [events, selectedFilter, selectedDate]);
+  }, [events, selectedFilter, selectedDate, softDeletedIds]);
 
   useEffect(() => {
     const groups: Record<string, MilestoneGroup> = {};
@@ -699,6 +847,7 @@ export default function MilestonesScreen() {
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const returnTarget = returnTargetParam ?? returnToRef.current;
+    const isEditing = !!pendingEditData;
     const task = InteractionManager.runAfterInteractions(() => {
       stashReturnTo();
       openSheet({
@@ -706,7 +855,10 @@ export default function MilestonesScreen() {
         formType: "milestones",
         jalonType: pendingJalonType,
         editData: pendingEditData ?? undefined,
-        onSuccess: ensureTodayInRange,
+        onSuccess: () => {
+          ensureTodayInRange();
+          showToast(isEditing ? "Jalon modifie" : "Jalon enregistre");
+        },
         onDismiss: () => {
           editIdRef.current = null;
           maybeReturnTo(returnTarget);
@@ -732,6 +884,7 @@ export default function MilestonesScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
+    showToast,
   ]);
 
   useEffect(() => {
@@ -820,7 +973,8 @@ export default function MilestonesScreen() {
             <Text
               style={[
                 styles.sessionTimeText,
-                isLast && styles.sessionTimeTextLast,
+                { color: nc.textMuted },
+                isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }],
               ]}
             >
               {formatTime(date)}
@@ -841,10 +995,10 @@ export default function MilestonesScreen() {
           <View style={styles.sessionContent}>
             <View style={styles.sessionDetails}>
               {titleText ? (
-                <Text style={styles.sessionType}>{titleText}</Text>
+                <Text style={[styles.sessionType, { color: nc.textStrong }]}>{titleText}</Text>
               ) : null}
               {event.description ? (
-                <Text style={styles.sessionDetailText}>{event.description}</Text>
+                <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>{event.description}</Text>
               ) : null}
               {event.typeJalon === "humeur" && moodEmoji ? (
                 <Text style={styles.sessionMood}>{moodEmoji}</Text>
@@ -853,17 +1007,18 @@ export default function MilestonesScreen() {
             {event.photos?.[0] ? (
               <Image
                 source={{ uri: event.photos[0] }}
-                style={styles.sessionPhoto}
+                style={[styles.sessionPhoto, { backgroundColor: nc.backgroundPressed }]}
               />
             ) : null}
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+          <Ionicons name="chevron-forward" size={18} color={nc.border} />
         </Pressable>
       </ReanimatedSwipeable>
     );
   };
 
-  const toggleExpand = (dateKey: string) => {
+  const toggleExpand = useCallback((dateKey: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(dateKey)) {
@@ -873,7 +1028,7 @@ export default function MilestonesScreen() {
       }
       return next;
     });
-  };
+  }, []);
 
   const handleEventDelete = useCallback((event: MilestoneEventWithId) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -883,13 +1038,39 @@ export default function MilestonesScreen() {
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
     const eventId = deleteConfirm.event.id;
+    const childId = activeChild.id;
     setDeleteConfirm({ visible: false, event: null });
-    try {
-      await supprimerJalon(activeChild.id, eventId);
-    } catch {
-      // silently fail
-    }
-  }, [activeChild?.id, deleteConfirm.event]);
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
+
+    showUndoToast(
+      "Jalon supprime",
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(eventId);
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          await supprimerJalon(childId, eventId);
+        } catch {
+          // Restore if delete fails
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(eventId);
+            return next;
+          });
+          showToast("Erreur lors de la suppression");
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -919,11 +1100,11 @@ export default function MilestonesScreen() {
     return (
       <View style={styles.dayGroup}>
         <View style={styles.dayHeader}>
-          <Text style={styles.dayLabel}>{dayLabel}</Text>
+          <Text style={[styles.dayLabel, { color: nc.textStrong }]}>{dayLabel}</Text>
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
-              <Text style={styles.dayStatValue}>{item.events.length}</Text>
-              <Text style={styles.dayStatLabel}>
+              <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.events.length}</Text>
+              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
                 jalon{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -941,11 +1122,11 @@ export default function MilestonesScreen() {
                     { backgroundColor: TYPE_CONFIG[type].color },
                   ]}
                 />
-                <Text style={styles.statsBreakdownLabel}>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
                   {TYPE_CONFIG[type].label}
                   {item.counts[type] > 1 ? "s" : ""}
                 </Text>
-                <Text style={styles.statsBreakdownValue}>
+                <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
                   {item.counts[type]}
                 </Text>
               </View>
@@ -962,7 +1143,7 @@ export default function MilestonesScreen() {
                 .map((evt) => renderEventItem(evt, false))}
             {item.events.length > 1 && (
               <Pressable
-                style={styles.expandTrigger}
+                style={[styles.expandTrigger, { borderTopColor: nc.borderLight }]}
                 onPress={() => toggleExpand(item.date)}
                 accessibilityRole="button"
                 accessibilityLabel={isExpanded ? "Masquer les jalons" : "Voir les autres jalons"}
@@ -1003,12 +1184,28 @@ export default function MilestonesScreen() {
         onLayout={() => setLayoutReady(true)}
       >
         <View>
-          <DateFilterBar
-            selected={selectedFilter}
-            onSelect={handleFilterPress}
-          />
+          <View style={styles.filterRow}>
+            <DateFilterBar
+              selected={selectedDate ? ("past" as DateFilterValue) : selectedFilter}
+              onSelect={handleFilterPress}
+            >
+              {selectedDate && (
+                <Pressable
+                  style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={clearSelectedDate}
+                  accessibilityRole="button"
+                  accessibilityLabel="Effacer la date sélectionnée"
+                >
+                  <Text style={styles.dateChipText}>
+                    {formatSelectedDateLabel(selectedDate)}
+                  </Text>
+                  <Ionicons name="close" size={14} color="#fff" />
+                </Pressable>
+              )}
+            </DateFilterBar>
+          </View>
           {showCalendar && (
-            <View style={styles.calendarContainer}>
+            <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
               <Calendar
                 current={selectedDate || undefined}
                 onDayPress={handleDateSelect}
@@ -1036,16 +1233,37 @@ export default function MilestonesScreen() {
         {loaded.jalons && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons
-                name="calendar-outline"
-                size={64}
-                color={Colors[colorScheme].tabIconDefault}
-              />
-              <Text style={styles.emptyText}>
+              <View
+                style={[
+                  styles.emptyIconWrapper,
+                  { backgroundColor: `${eventColors.jalon.dark}15` },
+                ]}
+              >
+                <FontAwesome
+                  name="star"
+                  size={36}
+                  color={eventColors.jalon.dark}
+                />
+              </View>
+              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
                 {events.length === 0
                   ? "Aucun jalon enregistré"
                   : "Aucun jalon pour ce filtre"}
-              </Text>
+              </ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+                Capturez les premiers pas, sourires et moments importants
+              </ThemedText>
+              {events.length === 0 && (
+                <Pressable
+                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={() => openAddModal("dent")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter un jalon"
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                  <Text style={styles.emptyCtaText}>Ajouter un jalon</Text>
+                </Pressable>
+              )}
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   loading={isLoadingMore || autoLoadMore}
@@ -1075,10 +1293,7 @@ export default function MilestonesScreen() {
             />
           )
         ) : (
-          <View style={styles.loadingContainer}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
-            <Text style={styles.loadingText}>Chargement des jalons…</Text>
-          </View>
+          <MilestoneSkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
       <ConfirmModal
@@ -1103,7 +1318,6 @@ export default function MilestonesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   safeArea: {
     flex: 1,
@@ -1123,32 +1337,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+  },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingRight: 16,
+  },
+  dateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  dateChipText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
   },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 80,
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 24,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6b7280",
-  },
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 32,
   },
-  emptyText: {
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
     fontSize: 18,
-    color: "#666",
-    marginTop: 16,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
+  },
+  emptyCtaText: {
+    color: "#fff",
+    fontSize: 15,
     fontWeight: "600",
   },
   dayGroup: {
@@ -1163,7 +1411,6 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
   },
   dayStats: {
     flexDirection: "row",
@@ -1176,11 +1423,9 @@ const styles = StyleSheet.create({
   dayStatValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#374151",
   },
   dayStatLabel: {
     fontSize: 11,
-    color: "#9ca3af",
   },
   statsBreakdown: {
     flexDirection: "row",
@@ -1201,12 +1446,10 @@ const styles = StyleSheet.create({
   },
   statsBreakdownLabel: {
     fontSize: 12,
-    color: "#6b7280",
   },
   statsBreakdownValue: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#374151",
   },
   dayContent: {
     gap: 10,
@@ -1234,10 +1477,8 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#9ca3af",
   },
   sessionTimeTextLast: {
-    color: "#374151",
     fontWeight: "600",
   },
   sessionIconWrapper: {
@@ -1260,11 +1501,9 @@ const styles = StyleSheet.create({
   sessionType: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
   },
   sessionDetailText: {
     fontSize: 12,
-    color: "#6b7280",
   },
   expandTrigger: {
     flexDirection: "row",
@@ -1273,7 +1512,6 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
   },
   expandTriggerText: {
     fontSize: 13,
@@ -1286,7 +1524,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: "#f3f4f6",
   },
   deleteAction: {
     backgroundColor: "#ef4444",
@@ -1302,5 +1539,19 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "700",
+  },
+  skeletonContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  skeletonBlock: {
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 200,
   },
 });

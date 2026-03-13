@@ -2,7 +2,6 @@ import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesF
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -27,12 +26,16 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   BackHandler,
   FlatList,
   InteractionManager,
+  LayoutAnimation,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  UIManager,
   View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -40,6 +43,14 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // ============================================
 // TYPES
@@ -130,6 +141,12 @@ const toDate = (value: any) => {
   return new Date(value);
 };
 
+const formatSelectedDateLabel = (dateString: string) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
+
 // ============================================
 // DELETE ACTION COMPONENT
 // ============================================
@@ -149,6 +166,97 @@ const DeleteAction = React.memo(function DeleteAction({
       <Ionicons name="trash-outline" size={20} color="#fff" />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
+  );
+});
+
+// ============================================
+// SKELETON LOADING COMPONENT
+// ============================================
+
+const ActivitySkeleton = React.memo(function ActivitySkeleton({
+  colorScheme,
+}: {
+  colorScheme: "light" | "dark";
+}) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    shimmer.start();
+    return () => shimmer.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg =
+    colorScheme === "dark"
+      ? "rgba(255, 255, 255, 0.08)"
+      : "rgba(255, 255, 255, 0.4)";
+
+  const renderSkeletonCard = (key: number) => (
+    <View
+      key={key}
+      style={[
+        styles.sessionCard,
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+      ]}
+    >
+      <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={[styles.skeletonBlock, { width: 32, height: 32, borderRadius: 8, backgroundColor: nc.borderLight }]}>
+        <Animated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={[styles.skeletonBlock, { width: 60, height: 14, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+        <View style={[styles.skeletonBlock, { width: 140, height: 12, backgroundColor: nc.borderLight }]}>
+          <Animated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.skeletonContainer}>
+      <View style={styles.dayGroup}>
+        <View style={styles.dayHeader}>
+          <View style={[styles.skeletonBlock, { width: 80, height: 16, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+          <View style={[styles.skeletonBlock, { width: 40, height: 14, backgroundColor: nc.borderLight }]}>
+            <Animated.View
+              style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+            />
+          </View>
+        </View>
+        <View style={styles.sessionsContainer}>
+          {renderSkeletonCard(1)}
+          {renderSkeletonCard(2)}
+          {renderSkeletonCard(3)}
+        </View>
+      </View>
+    </View>
   );
 });
 
@@ -295,6 +403,10 @@ export default function ActivitiesScreen() {
     setShowCalendar(false);
     setExpandedDays(new Set([todayKey]));
   }, []);
+
+  const clearSelectedDate = useCallback(() => {
+    applyTodayFilter();
+  }, [applyTodayFilter]);
 
   useFocusEffect(
     useCallback(() => {
@@ -450,6 +562,28 @@ export default function ActivitiesScreen() {
     setExpandedDays(new Set());
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
+  }, [activeChild?.id]);
+
+  // Jump to most recent event date at mount
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    getNextEventDateBeforeHybrid(activeChild.id, ["activite"], endOfToday)
+      .then((nextDate) => {
+        if (cancelled) return;
+        setDaysWindow(14);
+        setRangeEndDate(nextDate ?? endOfToday);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDaysWindow(14);
+        setRangeEndDate(endOfToday);
+      });
+
+    return () => { cancelled = true; };
   }, [activeChild?.id]);
 
   useEffect(() => {
@@ -767,15 +901,15 @@ export default function ActivitiesScreen() {
   // ============================================
   // RENDER HELPERS
   // ============================================
-  const buildDetails = (event: ActivityEventWithId) => {
-    const parts = [
-      event.duree ? formatDuration(event.duree) : null,
-      event.description,
-    ].filter(Boolean);
-    return parts.length > 0 ? parts.join(" · ") : undefined;
+  const buildDetails = (event: ActivityEventWithId): { duration?: string; description?: string } | null => {
+    const duration = event.duree ? formatDuration(event.duree) : undefined;
+    const description = event.description || undefined;
+    if (!duration && !description) return null;
+    return { duration, description };
   };
 
   const toggleExpand = useCallback((date: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(date)) {
@@ -884,11 +1018,27 @@ export default function ActivitiesScreen() {
           <View style={styles.sessionContent}>
             <View style={styles.sessionDetails}>
               <Text style={[styles.sessionType, { color: nc.textStrong }]}>{config.label}</Text>
-              {buildDetails(event) && (
-                <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>
-                  {buildDetails(event)}
-                </Text>
-              )}
+              {(() => {
+                const details = buildDetails(event);
+                if (!details) return null;
+                return (
+                  <View style={styles.sessionMetricRow}>
+                    {details.duration && (
+                      <Text style={[styles.sessionMetricBold, { color: nc.textNormal }]}>
+                        {details.duration}
+                      </Text>
+                    )}
+                    {details.duration && details.description && (
+                      <Text style={[styles.sessionMetricSep, { color: nc.textMuted }]}> · </Text>
+                    )}
+                    {details.description && (
+                      <Text style={[styles.sessionMetricLight, { color: nc.textMuted }]} numberOfLines={1}>
+                        {details.description}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })()}
             </View>
           </View>
           <Ionicons name="chevron-forward" size={18} color={nc.border} />
@@ -1004,9 +1154,23 @@ export default function ActivitiesScreen() {
         <View>
           <View style={styles.filterRow}>
             <DateFilterBar
-              selected={selectedFilter}
+              selected={selectedDate ? ("past" as DateFilterValue) : selectedFilter}
               onSelect={handleFilterPress}
-            />
+            >
+              {selectedDate && (
+                <Pressable
+                  style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={clearSelectedDate}
+                  accessibilityRole="button"
+                  accessibilityLabel="Effacer la date sélectionnée"
+                >
+                  <Text style={styles.dateChipText}>
+                    {formatSelectedDateLabel(selectedDate)}
+                  </Text>
+                  <Ionicons name="close" size={14} color="#fff" />
+                </Pressable>
+              )}
+            </DateFilterBar>
             <View style={styles.quickActionsRow}>
               <Pressable
                 style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
@@ -1068,16 +1232,37 @@ export default function ActivitiesScreen() {
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons
-                name="calendar-outline"
-                size={64}
-                color={Colors[colorScheme].tabIconDefault}
-              />
-              <ThemedText style={[styles.emptyText, { color: nc.textMuted }]}>
+              <View
+                style={[
+                  styles.emptyIconWrapper,
+                  { backgroundColor: `${eventColors.activite.dark}15` },
+                ]}
+              >
+                <FontAwesome
+                  name="baby"
+                  size={36}
+                  color={eventColors.activite.dark}
+                />
+              </View>
+              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
                 {events.length === 0
                   ? "Aucune activité enregistrée"
                   : "Aucune activité pour ce filtre"}
               </ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+                Suivez les activités et le temps d'éveil
+              </ThemedText>
+              {events.length === 0 && (
+                <Pressable
+                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
+                  onPress={() => openAddModal("tummyTime")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter une activité"
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                  <Text style={styles.emptyCtaText}>Ajouter une activité</Text>
+                </Pressable>
+              )}
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   hasMore={hasMore}
@@ -1096,21 +1281,20 @@ export default function ActivitiesScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listContent}
               ListFooterComponent={
-                <LoadMoreButton
-                  hasMore={hasMore}
-                  loading={isLoadingMore}
-                  onPress={handleLoadMore}
-                  text="Voir plus"
-                  accentColor={Colors[colorScheme].tint}
-                />
+                selectedFilter === "today" || selectedDate ? null : (
+                  <LoadMoreButton
+                    hasMore={hasMore}
+                    loading={isLoadingMore}
+                    onPress={handleLoadMore}
+                    text="Voir plus"
+                    accentColor={Colors[colorScheme].tint}
+                  />
+                )
               }
             />
           )
         ) : (
-          <View style={styles.loadingContainer}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
-            <Text style={[styles.loadingText, { color: nc.textMuted }]}>Chargement des activités…</Text>
-          </View>
+          <ActivitySkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
       <ConfirmModal
@@ -1289,25 +1473,85 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 24,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-  },
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 32,
   },
-  emptyText: {
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
     fontSize: 18,
-    marginTop: 16,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
+  },
+  emptyCtaText: {
+    color: "#fff",
+    fontSize: 15,
     fontWeight: "600",
+  },
+  dateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  dateChipText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  sessionMetricRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sessionMetricBold: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  sessionMetricSep: {
+    fontSize: 12,
+  },
+  sessionMetricLight: {
+    fontSize: 12,
+    flex: 1,
+  },
+  skeletonContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  skeletonBlock: {
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 200,
   },
   deleteAction: {
     backgroundColor: "#ef4444",
