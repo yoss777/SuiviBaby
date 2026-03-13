@@ -94,6 +94,22 @@ export const neutralColors = {
 
   // Accents
   todayAccent: "#6366f1", // indigo-500
+
+  // UI
+  white: "#ffffff",
+  shadow: "#000000",
+  shimmerDark: "rgba(255, 255, 255, 0.08)",
+  shimmerLight: "rgba(255, 255, 255, 0.4)",
+  pressedLight: "rgba(0, 0, 0, 0.04)",
+  pressedDark: "rgba(255, 255, 255, 0.08)",
+  borderLightAlpha: "rgba(0, 0, 0, 0.08)",
+  borderDarkAlpha: "rgba(255, 255, 255, 0.1)",
+
+  // Metrics
+  successBg: "#dcfce7",
+  errorBg: "#fef2f2",
+  successText: "#16a34a",
+  errorText: "#dc2626",
 } as const;
 
 // ============================================
@@ -118,6 +134,20 @@ export const neutralColorsDark = {
   error: "#ef4444",
 
   todayAccent: "#818cf8", // indigo-400 (brighter for dark bg)
+
+  white: "#ffffff",
+  shadow: "#000000",
+  shimmerDark: "rgba(255, 255, 255, 0.08)",
+  shimmerLight: "rgba(255, 255, 255, 0.4)",
+  pressedLight: "rgba(255, 255, 255, 0.08)",
+  pressedDark: "rgba(0, 0, 0, 0.04)",
+  borderLightAlpha: "rgba(255, 255, 255, 0.1)",
+  borderDarkAlpha: "rgba(0, 0, 0, 0.08)",
+
+  successBg: "#052e16",
+  errorBg: "#450a0a",
+  successText: "#4ade80",
+  errorText: "#f87171",
 } as const;
 
 export const categoryColorsDark = {

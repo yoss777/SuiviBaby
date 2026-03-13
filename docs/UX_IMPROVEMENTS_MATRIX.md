@@ -49,7 +49,7 @@
 | P20 | Race condition guards | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
 | P22 | Realtime auto-refresh (onSnapshot) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
 | P23 | Header ellipsis menu (HeaderMenu) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
-| P21 | Hardcoded colors / Unit tests | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | Backlog |
+| P21 | Theme tokens (hardcoded colors) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
 
 ## Légende
 
@@ -68,4 +68,4 @@
 
 ## Score
 
-**29/30 améliorations déployées** (P21 en backlog, P13b retiré)
+**30/30 améliorations déployées** (P13b retiré)

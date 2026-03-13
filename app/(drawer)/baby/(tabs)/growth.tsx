@@ -6,7 +6,7 @@ import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, getBackgroundTint } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -144,8 +144,8 @@ const GrowthSkeleton = React.memo(function GrowthSkeleton({
   });
   const shimmerBg =
     colorScheme === "dark"
-      ? "rgba(255, 255, 255, 0.08)"
-      : "rgba(255, 255, 255, 0.4)";
+      ? nc.shimmerDark
+      : nc.shimmerLight;
 
   const renderSkeletonCard = (key: number) => (
     <View
@@ -698,7 +698,7 @@ export default function GrowthScreen() {
         ...marked[selectedDate],
         selected: true,
         selectedColor: Colors[colorScheme].tint,
-        selectedTextColor: "#ffffff",
+        selectedTextColor: nc.white,
       };
     }
     if (selectedFilter === "today" && !selectedDate) {
@@ -707,7 +707,7 @@ export default function GrowthScreen() {
         ...marked[todayKey],
         selected: true,
         selectedColor: Colors[colorScheme].tint,
-        selectedTextColor: "#ffffff",
+        selectedTextColor: nc.white,
       };
     }
     return marked;
@@ -1100,16 +1100,16 @@ export default function GrowthScreen() {
                   const delta = deltas?.find((d) => d.label === "kg");
                   return (
                     <View style={styles.metricLineRow}>
-                      <View style={[styles.metricPill, { backgroundColor: "rgba(124, 58, 237, 0.1)" }]}>
+                      <View style={[styles.metricPill, { backgroundColor: getBackgroundTint("#7c3aed", 0.1) }]}>
                         <FontAwesome name="weight-scale" size={10} color="#7c3aed" />
                         <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
                           {event.poidsKg} kg
                         </Text>
                       </View>
                       {delta && (
-                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? "#dcfce7" : "#fef2f2" }]}>
-                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? "#16a34a" : "#dc2626"} />
-                          <Text style={[styles.deltaText, { color: delta.positive ? "#16a34a" : "#dc2626" }]}>
+                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? nc.successBg : nc.errorBg }]}>
+                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? nc.successText : nc.errorText} />
+                          <Text style={[styles.deltaText, { color: delta.positive ? nc.successText : nc.errorText }]}>
                             {delta.value} {delta.label}
                           </Text>
                         </View>
@@ -1121,16 +1121,16 @@ export default function GrowthScreen() {
                   const delta = deltas?.find((d) => d.label === "cm");
                   return (
                     <View style={styles.metricLineRow}>
-                      <View style={[styles.metricPill, { backgroundColor: "rgba(47, 128, 237, 0.1)" }]}>
+                      <View style={[styles.metricPill, { backgroundColor: getBackgroundTint("#2f80ed", 0.1) }]}>
                         <FontAwesome name="ruler-vertical" size={10} color="#2f80ed" />
                         <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
                           {event.tailleCm} cm
                         </Text>
                       </View>
                       {delta && (
-                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? "#dcfce7" : "#fef2f2" }]}>
-                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? "#16a34a" : "#dc2626"} />
-                          <Text style={[styles.deltaText, { color: delta.positive ? "#16a34a" : "#dc2626" }]}>
+                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? nc.successBg : nc.errorBg }]}>
+                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? nc.successText : nc.errorText} />
+                          <Text style={[styles.deltaText, { color: delta.positive ? nc.successText : nc.errorText }]}>
                             {delta.value} {delta.label}
                           </Text>
                         </View>
@@ -1142,16 +1142,16 @@ export default function GrowthScreen() {
                   const delta = deltas?.find((d) => d.label === "PC");
                   return (
                     <View style={styles.metricLineRow}>
-                      <View style={[styles.metricPill, { backgroundColor: "rgba(245, 158, 11, 0.1)" }]}>
-                        <MaterialCommunityIcons name="baby-face-outline" size={12} color="#f59e0b" />
+                      <View style={[styles.metricPill, { backgroundColor: getBackgroundTint(nc.warning, 0.1) }]}>
+                        <MaterialCommunityIcons name="baby-face-outline" size={12} color={nc.warning} />
                         <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
                           {event.teteCm} cm
                         </Text>
                       </View>
                       {delta && (
-                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? "#dcfce7" : "#fef2f2" }]}>
-                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? "#16a34a" : "#dc2626"} />
-                          <Text style={[styles.deltaText, { color: delta.positive ? "#16a34a" : "#dc2626" }]}>
+                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? nc.successBg : nc.errorBg }]}>
+                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? nc.successText : nc.errorText} />
+                          <Text style={[styles.deltaText, { color: delta.positive ? nc.successText : nc.errorText }]}>
                             {delta.value} {delta.label}
                           </Text>
                         </View>
@@ -1207,7 +1207,7 @@ export default function GrowthScreen() {
           {[
             { key: "poids", label: "Poids", color: "#7c3aed" },
             { key: "taille", label: "Taille", color: "#2f80ed" },
-            { key: "tete", label: "PC", color: "#f59e0b" },
+            { key: "tete", label: "PC", color: nc.warning },
           ].map(({ key, label, color }) => {
             const count = item.counts[key as keyof typeof item.counts];
             if (count === 0) return null;
@@ -1286,7 +1286,7 @@ export default function GrowthScreen() {
                   <Text style={styles.dateChipText}>
                     {formatSelectedDateLabel(selectedDate)}
                   </Text>
-                  <Ionicons name="close" size={14} color="#fff" />
+                  <Ionicons name="close" size={14} color={nc.white} />
                 </Pressable>
               )}
             </DateFilterBar>
@@ -1301,12 +1301,12 @@ export default function GrowthScreen() {
                   calendarBackground: Colors[colorScheme].background,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: "#ffffff",
+                  selectedDayTextColor: nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
                   dotColor: Colors[colorScheme].tint,
-                  selectedDotColor: "#ffffff",
+                  selectedDotColor: nc.white,
                   arrowColor: Colors[colorScheme].tint,
                   monthTextColor: Colors[colorScheme].text,
                   indicatorColor: Colors[colorScheme].tint,
@@ -1357,7 +1357,7 @@ export default function GrowthScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Ajouter une mesure"
                 >
-                  <Ionicons name="add" size={20} color="#fff" />
+                  <Ionicons name="add" size={20} color={nc.white} />
                   <Text style={styles.emptyCtaText}>Ajouter une mesure</Text>
                 </Pressable>
               )}

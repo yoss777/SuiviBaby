@@ -7,7 +7,7 @@ import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -76,7 +76,7 @@ const DeleteAction = React.memo(function DeleteAction({
       accessibilityRole="button"
       accessibilityLabel="Supprimer ce pompage"
     >
-      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Ionicons name="trash-outline" size={20} color={neutralColors.white} />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
   );
@@ -112,8 +112,8 @@ const PumpingSkeleton = React.memo(function PumpingSkeleton({
   });
   const shimmerBg =
     colorScheme === "dark"
-      ? "rgba(255, 255, 255, 0.08)"
-      : "rgba(255, 255, 255, 0.4)";
+      ? nc.shimmerDark
+      : nc.shimmerLight;
 
   const renderSkeletonCard = (key: number) => (
     <View
@@ -1140,7 +1140,7 @@ export default function PumpingScreen() {
         <View style={styles.statsBreakdown}>
           <View style={styles.statsBreakdownItem}>
             <View
-              style={[styles.statsBreakdownDot, { backgroundColor: "#10b981" }]}
+              style={[styles.statsBreakdownDot, { backgroundColor: nc.success }]}
             />
             <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>Gauche</Text>
             <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
@@ -1149,7 +1149,7 @@ export default function PumpingScreen() {
           </View>
           <View style={styles.statsBreakdownItem}>
             <View
-              style={[styles.statsBreakdownDot, { backgroundColor: "#6366f1" }]}
+              style={[styles.statsBreakdownDot, { backgroundColor: nc.todayAccent }]}
             />
             <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>Droite</Text>
             <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
@@ -1224,7 +1224,7 @@ export default function PumpingScreen() {
                   <Text style={styles.dateChipText}>
                     {formatSelectedDateLabel(selectedDate)}
                   </Text>
-                  <Ionicons name="close" size={14} color="#fff" />
+                  <Ionicons name="close" size={14} color={nc.white} />
                 </Pressable>
               )}
             </DateFilterBar>
@@ -1241,12 +1241,12 @@ export default function PumpingScreen() {
                   calendarBackground: Colors[colorScheme].background,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: "#ffffff",
+                  selectedDayTextColor: nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
                   dotColor: Colors[colorScheme].tint,
-                  selectedDotColor: "#ffffff",
+                  selectedDotColor: nc.white,
                   arrowColor: Colors[colorScheme].tint,
                   monthTextColor: Colors[colorScheme].text,
                   indicatorColor: Colors[colorScheme].tint,
@@ -1298,7 +1298,7 @@ export default function PumpingScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Ajouter une session de pompage"
                 >
-                  <Ionicons name="add" size={20} color="#fff" />
+                  <Ionicons name="add" size={20} color={nc.white} />
                   <Text style={styles.emptyCtaText}>Ajouter une session</Text>
                 </Pressable>
               )}
@@ -1458,7 +1458,7 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 14,
     borderWidth: 1,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
@@ -1482,10 +1482,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   quantityBarLeft: {
-    backgroundColor: "#10b981",
+    backgroundColor: neutralColors.success,
   },
   quantityBarRight: {
-    backgroundColor: "#6366f1",
+    backgroundColor: neutralColors.todayAccent,
   },
   quantityLabels: {
     flexDirection: "row",
@@ -1502,10 +1502,10 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   quantityDotLeft: {
-    backgroundColor: "#10b981",
+    backgroundColor: neutralColors.success,
   },
   quantityDotRight: {
-    backgroundColor: "#6366f1",
+    backgroundColor: neutralColors.todayAccent,
   },
   quantityLabelValue: {
     fontSize: 11,
@@ -1555,7 +1555,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   dateChipText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -1595,14 +1595,14 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   emptyCtaText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 15,
     fontWeight: "600",
   },
 
   // Swipe-to-delete
   deleteAction: {
-    backgroundColor: "#ef4444",
+    backgroundColor: neutralColors.error,
     justifyContent: "center",
     alignItems: "center",
     width: 80,
@@ -1612,7 +1612,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 11,
     fontWeight: "700",
   },

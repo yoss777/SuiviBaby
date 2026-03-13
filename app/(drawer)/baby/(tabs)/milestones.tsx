@@ -9,7 +9,7 @@ import {
 import { ThemedText } from "@/components/themed-text";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -160,18 +160,21 @@ const formatSelectedDateLabel = (dateString: string) => {
 
 const DeleteAction = React.memo(function DeleteAction({
   onPress,
+  colorScheme,
 }: {
   onPress: () => void;
+  colorScheme: "light" | "dark";
 }) {
+  const nc = getNeutralColors(colorScheme);
   return (
     <Pressable
-      style={styles.deleteAction}
+      style={[styles.deleteAction, { backgroundColor: nc.error }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer ce jalon"
     >
-      <Ionicons name="trash-outline" size={20} color="#fff" />
-      <Text style={styles.deleteActionText}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={nc.white} />
+      <Text style={[styles.deleteActionText, { color: nc.white }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -206,8 +209,8 @@ const MilestoneSkeleton = React.memo(function MilestoneSkeleton({
   });
   const shimmerBg =
     colorScheme === "dark"
-      ? "rgba(255, 255, 255, 0.08)"
-      : "rgba(255, 255, 255, 0.4)";
+      ? nc.shimmerDark
+      : nc.shimmerLight;
 
   const renderSkeletonCard = (key: number) => (
     <View
@@ -936,7 +939,7 @@ export default function MilestonesScreen() {
         ...marked[selectedDate],
         selected: true,
         selectedColor: Colors[colorScheme].tint,
-        selectedTextColor: "#ffffff",
+        selectedTextColor: nc.white,
       };
     }
     if (selectedFilter === "today") {
@@ -945,7 +948,7 @@ export default function MilestonesScreen() {
         ...marked[todayKey],
         selected: true,
         selectedColor: Colors[colorScheme].tint,
-        selectedTextColor: "#ffffff",
+        selectedTextColor: nc.white,
       };
     }
     return marked;
@@ -969,7 +972,7 @@ export default function MilestonesScreen() {
       <ReanimatedSwipeable
         key={event.id}
         renderRightActions={() => (
-          <DeleteAction onPress={() => handleEventDelete(event)} />
+          <DeleteAction onPress={() => handleEventDelete(event)} colorScheme={colorScheme} />
         )}
         friction={2}
         rightThreshold={40}
@@ -1239,10 +1242,10 @@ export default function MilestonesScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Effacer la date sélectionnée"
                 >
-                  <Text style={styles.dateChipText}>
+                  <Text style={[styles.dateChipText, { color: nc.white }]}>
                     {formatSelectedDateLabel(selectedDate)}
                   </Text>
-                  <Ionicons name="close" size={14} color="#fff" />
+                  <Ionicons name="close" size={14} color={nc.white} />
                 </Pressable>
               )}
             </DateFilterBar>
@@ -1258,12 +1261,12 @@ export default function MilestonesScreen() {
                   calendarBackground: Colors[colorScheme].background,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: "#ffffff",
+                  selectedDayTextColor: nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
                   dotColor: Colors[colorScheme].tint,
-                  selectedDotColor: "#ffffff",
+                  selectedDotColor: nc.white,
                   arrowColor: Colors[colorScheme].tint,
                   monthTextColor: Colors[colorScheme].text,
                   indicatorColor: Colors[colorScheme].tint,
@@ -1314,8 +1317,8 @@ export default function MilestonesScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Ajouter un jalon"
                 >
-                  <Ionicons name="add" size={20} color="#fff" />
-                  <Text style={styles.emptyCtaText}>Ajouter un jalon</Text>
+                  <Ionicons name="add" size={20} color={nc.white} />
+                  <Text style={[styles.emptyCtaText, { color: nc.white }]}>Ajouter un jalon</Text>
                 </Pressable>
               )}
               {!(selectedFilter === "today" || selectedDate) && (
@@ -1414,7 +1417,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   dateChipText: {
-    color: "#fff",
     fontSize: 13,
     fontWeight: "600",
   },
@@ -1456,7 +1458,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   emptyCtaText: {
-    color: "#fff",
     fontSize: 15,
     fontWeight: "600",
   },
@@ -1526,7 +1527,7 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 14,
     borderWidth: 1,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
@@ -1587,7 +1588,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   deleteAction: {
-    backgroundColor: "#ef4444",
     justifyContent: "center",
     alignItems: "center",
     width: 80,
@@ -1597,7 +1597,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    color: "#fff",
     fontSize: 11,
     fontWeight: "700",
   },

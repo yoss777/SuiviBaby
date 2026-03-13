@@ -1,3 +1,4 @@
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,6 +24,7 @@ interface HeaderMenuProps {
 
 export function HeaderMenu({ items }: HeaderMenuProps) {
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const [visible, setVisible] = useState(false);
   const anchorRef = useRef<View>(null);
   const [anchorPos, setAnchorPos] = useState({ x: 0, y: 0 });
@@ -82,9 +84,8 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
               {
                 top: anchorPos.y,
                 right: 16,
-                backgroundColor:
-                  colorScheme === "dark" ? "#2c2c2e" : "#ffffff",
-                shadowColor: "#000",
+                backgroundColor: nc.backgroundCard,
+                shadowColor: nc.shadow,
               },
             ]}
           >
@@ -94,18 +95,12 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
                 style={({ pressed }) => [
                   styles.menuItem,
                   pressed && {
-                    backgroundColor:
-                      colorScheme === "dark"
-                        ? "rgba(255,255,255,0.08)"
-                        : "rgba(0,0,0,0.04)",
+                    backgroundColor: nc.pressedLight,
                   },
                   index < items.length - 1 && [
                     styles.menuItemBorder,
                     {
-                      borderBottomColor:
-                        colorScheme === "dark"
-                          ? "rgba(255,255,255,0.1)"
-                          : "rgba(0,0,0,0.08)",
+                      borderBottomColor: nc.borderLightAlpha,
                     },
                   ],
                 ]}
@@ -118,10 +113,8 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
                   size={18}
                   color={
                     item.destructive
-                      ? "#ef4444"
-                      : colorScheme === "dark"
-                        ? "#fff"
-                        : "#333"
+                      ? nc.error
+                      : nc.textStrong
                   }
                 />
                 <Text
@@ -129,10 +122,8 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
                     styles.menuItemText,
                     {
                       color: item.destructive
-                        ? "#ef4444"
-                        : colorScheme === "dark"
-                          ? "#fff"
-                          : "#333",
+                        ? nc.error
+                        : nc.textStrong,
                     },
                   ]}
                 >

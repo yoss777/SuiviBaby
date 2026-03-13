@@ -75,18 +75,21 @@ const formatSelectedDateLabel = (dateString: string) => {
 
 const DeleteAction = React.memo(function DeleteAction({
   onPress,
+  colorScheme,
 }: {
   onPress: () => void;
+  colorScheme: "light" | "dark";
 }) {
+  const nc = getNeutralColors(colorScheme);
   return (
     <Pressable
-      style={styles.deleteAction}
+      style={[styles.deleteAction, { backgroundColor: nc.error }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cet événement"
     >
-      <Ionicons name="trash-outline" size={20} color="#fff" />
-      <Text style={styles.deleteActionText}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={nc.white} />
+      <Text style={[styles.deleteActionText, { color: nc.white }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -121,15 +124,15 @@ const RoutinesSkeleton = React.memo(function RoutinesSkeleton({
   });
   const shimmerBg =
     colorScheme === "dark"
-      ? "rgba(255, 255, 255, 0.08)"
-      : "rgba(255, 255, 255, 0.4)";
+      ? nc.shimmerDark
+      : nc.shimmerLight;
 
   const renderSkeletonCard = (key: number) => (
     <View
       key={key}
       style={[
         styles.sessionCard,
-        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard, shadowColor: nc.shadow },
       ]}
     >
       <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
@@ -625,7 +628,7 @@ export default function RoutinesScreen() {
         ...marked[selectedDate],
         selected: true,
         selectedColor: Colors[colorScheme].tint,
-        selectedTextColor: "#ffffff",
+        selectedTextColor: nc.white,
       };
     }
     if (selectedFilter === "today") {
@@ -634,7 +637,7 @@ export default function RoutinesScreen() {
         ...marked[todayKey],
         selected: true,
         selectedColor: Colors[colorScheme].tint,
-        selectedTextColor: "#ffffff",
+        selectedTextColor: nc.white,
       };
     }
     return marked;
@@ -1141,7 +1144,7 @@ export default function RoutinesScreen() {
       <ReanimatedSwipeable
         key={event.id}
         renderRightActions={() => (
-          <DeleteAction onPress={() => handleEventDelete(event)} />
+          <DeleteAction onPress={() => handleEventDelete(event)} colorScheme={colorScheme} />
         )}
         friction={2}
         rightThreshold={40}
@@ -1155,6 +1158,7 @@ export default function RoutinesScreen() {
           {
             borderColor: nc.borderLight,
             backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
+            shadowColor: nc.shadow,
           },
         ]}
         onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
@@ -1416,10 +1420,10 @@ export default function RoutinesScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Effacer la date sélectionnée"
                 >
-                  <Text style={styles.dateChipText}>
+                  <Text style={[styles.dateChipText, { color: nc.white }]}>
                     {formatSelectedDateLabel(selectedDate)}
                   </Text>
-                  <Ionicons name="close" size={14} color="#fff" />
+                  <Ionicons name="close" size={14} color={nc.white} />
                 </Pressable>
               )}
             </DateFilterBar>
@@ -1466,12 +1470,12 @@ export default function RoutinesScreen() {
                   calendarBackground: Colors[colorScheme].background,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: "#ffffff",
+                  selectedDayTextColor: nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
                   dotColor: Colors[colorScheme].tint,
-                  selectedDotColor: "#ffffff",
+                  selectedDotColor: nc.white,
                   arrowColor: Colors[colorScheme].tint,
                   monthTextColor: Colors[colorScheme].text,
                   indicatorColor: Colors[colorScheme].tint,
@@ -1568,8 +1572,8 @@ export default function RoutinesScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Ajouter une routine"
                 >
-                  <Ionicons name="add" size={20} color="#fff" />
-                  <Text style={styles.emptyCtaText}>Ajouter une routine</Text>
+                  <Ionicons name="add" size={20} color={nc.white} />
+                  <Text style={[styles.emptyCtaText, { color: nc.white }]}>Ajouter une routine</Text>
                 </Pressable>
               )}
               {!(selectedFilter === "today" || selectedDate) && (
@@ -1773,7 +1777,6 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 14,
     borderWidth: 1,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
@@ -1881,7 +1884,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   emptyCtaText: {
-    color: "#fff",
     fontSize: 15,
     fontWeight: "600",
   },
@@ -1894,7 +1896,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   dateChipText: {
-    color: "#fff",
     fontSize: 13,
     fontWeight: "600",
   },
@@ -1913,7 +1914,6 @@ const styles = StyleSheet.create({
     width: 200,
   },
   deleteAction: {
-    backgroundColor: "#ef4444",
     justifyContent: "center",
     alignItems: "center",
     width: 80,
@@ -1923,7 +1923,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    color: "#fff",
     fontSize: 11,
     fontWeight: "700",
   },

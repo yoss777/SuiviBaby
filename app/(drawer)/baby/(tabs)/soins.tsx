@@ -78,18 +78,20 @@ const formatSelectedDateLabel = (dateString: string) => {
 
 const DeleteAction = React.memo(function DeleteAction({
   onPress,
+  nc,
 }: {
   onPress: () => void;
+  nc: ReturnType<typeof getNeutralColors>;
 }) {
   return (
     <Pressable
-      style={styles.deleteAction}
+      style={[styles.deleteAction, { backgroundColor: nc.error }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cet événement"
     >
-      <Ionicons name="trash-outline" size={20} color="#fff" />
-      <Text style={styles.deleteActionText}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={nc.white} />
+      <Text style={[styles.deleteActionText, { color: nc.white }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -124,8 +126,8 @@ const SoinsSkeleton = React.memo(function SoinsSkeleton({
   });
   const shimmerBg =
     colorScheme === "dark"
-      ? "rgba(255, 255, 255, 0.08)"
-      : "rgba(255, 255, 255, 0.4)";
+      ? nc.shimmerDark
+      : nc.shimmerLight;
 
   const renderSkeletonCard = (key: number) => (
     <View
@@ -1090,7 +1092,7 @@ export default function SoinsScreen() {
         friction={2}
         rightThreshold={40}
         overshootRight={false}
-        renderRightActions={() => <DeleteAction onPress={() => handleEventDelete(event)} />}
+        renderRightActions={() => <DeleteAction onPress={() => handleEventDelete(event)} nc={nc} />}
       >
         <Pressable
           accessibilityRole="button"
@@ -1256,10 +1258,10 @@ export default function SoinsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Effacer la date sélectionnée"
                   >
-                    <Text style={styles.dateChipText}>
+                    <Text style={[styles.dateChipText, { color: nc.white }]}>
                       {formatSelectedDateLabel(selectedDate)}
                     </Text>
-                    <Ionicons name="close" size={14} color="#fff" />
+                    <Ionicons name="close" size={14} color={nc.white} />
                   </Pressable>
                 )}
               </DateFilterBar>
@@ -1300,12 +1302,12 @@ export default function SoinsScreen() {
                     calendarBackground: Colors[colorScheme].background,
                     textSectionTitleColor: Colors[colorScheme].text,
                     selectedDayBackgroundColor: Colors[colorScheme].tint,
-                    selectedDayTextColor: "#ffffff",
+                    selectedDayTextColor: nc.white,
                     todayTextColor: Colors[colorScheme].tint,
                     dayTextColor: Colors[colorScheme].text,
                     textDisabledColor: Colors[colorScheme].tabIconDefault,
                     dotColor: Colors[colorScheme].tint,
-                    selectedDotColor: "#ffffff",
+                    selectedDotColor: nc.white,
                     arrowColor: Colors[colorScheme].tint,
                     monthTextColor: Colors[colorScheme].text,
                     indicatorColor: Colors[colorScheme].tint,
@@ -1356,8 +1358,8 @@ export default function SoinsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Enregistrer un soin"
                   >
-                    <Ionicons name="add" size={20} color="#fff" />
-                    <Text style={styles.emptyCtaText}>Enregistrer un soin</Text>
+                    <Ionicons name="add" size={20} color={nc.white} />
+                    <Text style={[styles.emptyCtaText, { color: nc.white }]}>Enregistrer un soin</Text>
                   </Pressable>
                 )}
                 {!(selectedFilter === "today" || selectedDate) && (
@@ -1599,7 +1601,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   emptyCtaText: {
-    color: "#fff",
     fontSize: 15,
     fontWeight: "600",
   },
@@ -1612,7 +1613,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   dateChipText: {
-    color: "#fff",
     fontSize: 13,
     fontWeight: "600",
   },
@@ -1631,7 +1631,6 @@ const styles = StyleSheet.create({
     width: 200,
   },
   deleteAction: {
-    backgroundColor: "#ef4444",
     justifyContent: "center",
     alignItems: "center",
     width: 80,
@@ -1641,7 +1640,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    color: "#fff",
     fontSize: 11,
     fontWeight: "700",
   },

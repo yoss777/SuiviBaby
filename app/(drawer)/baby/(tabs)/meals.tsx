@@ -11,7 +11,7 @@ import {
 } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, itemColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -123,15 +123,15 @@ const MealsSkeleton = React.memo(function MealsSkeleton({
   });
   const shimmerBg =
     colorScheme === "dark"
-      ? "rgba(255, 255, 255, 0.08)"
-      : "rgba(255, 255, 255, 0.4)";
+      ? nc.shimmerDark
+      : nc.shimmerLight;
 
   const renderSkeletonCard = (key: number) => (
     <View
       key={key}
       style={[
         styles.sessionCard,
-        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard, shadowColor: nc.shadow },
       ]}
     >
       <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
@@ -1110,7 +1110,7 @@ export default function MealsScreen() {
           />
         );
       }
-      return <FontAwesome name="bowl-food" size={14} color="#8BC34A" />;
+      return <FontAwesome name="bowl-food" size={14} color={itemColors.solide} />;
     };
 
     const getTypeLabel = () => {
@@ -1143,6 +1143,7 @@ export default function MealsScreen() {
           {
             borderColor: nc.borderLight,
             backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
+            shadowColor: nc.shadow,
           },
         ]}
         onPress={selectionMode ? () => toggleId(meal.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(meal); }}
@@ -1181,7 +1182,7 @@ export default function MealsScreen() {
             style={[
               styles.sessionIconWrapper,
               {
-                backgroundColor: isSolide ? "#8BC34A1A" : `${eventColors.meal.dark}1A`,
+                backgroundColor: isSolide ? `${itemColors.solide}1A` : `${eventColors.meal.dark}1A`,
               },
             ]}
           >
@@ -1206,20 +1207,20 @@ export default function MealsScreen() {
                   <View
                     style={[
                       styles.durationBarLeft,
-                      { flex: leftDuration || 1 },
+                      { flex: leftDuration || 1, backgroundColor: nc.success },
                     ]}
                   />
                   <View
                     style={[
                       styles.durationBarRight,
-                      { flex: rightDuration || 1 },
+                      { flex: rightDuration || 1, backgroundColor: nc.todayAccent },
                     ]}
                   />
                 </View>
                 <View style={styles.durationLabels}>
                   <View style={styles.durationLabelItem}>
                     <View
-                      style={[styles.durationDot, styles.durationDotLeft]}
+                      style={[styles.durationDot, styles.durationDotLeft, { backgroundColor: nc.success }]}
                     />
                     <Text style={[styles.durationLabelText, { color: nc.textMuted }]}>G</Text>
                     <Text style={[styles.durationLabelValue, { color: nc.textNormal }]}>
@@ -1228,7 +1229,7 @@ export default function MealsScreen() {
                   </View>
                   <View style={styles.durationLabelItem}>
                     <View
-                      style={[styles.durationDot, styles.durationDotRight]}
+                      style={[styles.durationDot, styles.durationDotRight, { backgroundColor: nc.todayAccent }]}
                     />
                     <Text style={[styles.durationLabelText, { color: nc.textMuted }]}>D</Text>
                     <Text style={[styles.durationLabelValue, { color: nc.textNormal }]}>
@@ -1269,7 +1270,7 @@ export default function MealsScreen() {
                         style={[
                           styles.sessionDetailText,
                           {
-                            color: meal.aime ? "#16a34a" : "#dc2626",
+                            color: meal.aime ? nc.successText : nc.errorText,
                           },
                         ]}
                       >
@@ -1372,7 +1373,7 @@ export default function MealsScreen() {
               <View
                 style={[
                   styles.statsBreakdownDot,
-                  { backgroundColor: "#6366f1" },
+                  { backgroundColor: nc.todayAccent },
                 ]}
               />
               <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
@@ -1395,7 +1396,7 @@ export default function MealsScreen() {
               <View
                 style={[
                   styles.statsBreakdownDot,
-                  { backgroundColor: "#8BC34A" },
+                  { backgroundColor: itemColors.solide },
                 ]}
               />
               <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
@@ -1469,10 +1470,10 @@ export default function MealsScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Effacer la date sélectionnée"
                 >
-                  <Text style={styles.dateChipText}>
+                  <Text style={[styles.dateChipText, { color: nc.white }]}>
                     {formatSelectedDateLabel(selectedDate)}
                   </Text>
-                  <Ionicons name="close" size={14} color="#fff" />
+                  <Ionicons name="close" size={14} color={nc.white} />
                 </Pressable>
               )}
             </DateFilterBar>
@@ -1489,12 +1490,12 @@ export default function MealsScreen() {
                   calendarBackground: Colors[colorScheme].background,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: "#ffffff",
+                  selectedDayTextColor: nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
                   dotColor: Colors[colorScheme].tint,
-                  selectedDotColor: "#ffffff",
+                  selectedDotColor: nc.white,
                   arrowColor: Colors[colorScheme].tint,
                   monthTextColor: Colors[colorScheme].text,
                   indicatorColor: Colors[colorScheme].tint,
@@ -1546,8 +1547,8 @@ export default function MealsScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Ajouter un repas"
                 >
-                  <Ionicons name="add" size={20} color="#fff" />
-                  <Text style={styles.emptyCtaText}>Ajouter un repas</Text>
+                  <Ionicons name="add" size={20} color={nc.white} />
+                  <Text style={[styles.emptyCtaText, { color: nc.white }]}>Ajouter un repas</Text>
                 </Pressable>
               )}
               {!(selectedFilter === "today" || selectedDate) && (
@@ -1600,7 +1601,7 @@ export default function MealsScreen() {
         cancelText="Annuler"
         backgroundColor={nc.backgroundCard}
         textColor={nc.textStrong}
-        confirmButtonColor="#ef4444"
+        confirmButtonColor={nc.error}
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
       />

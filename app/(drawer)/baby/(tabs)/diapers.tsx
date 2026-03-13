@@ -78,18 +78,22 @@ const formatSelectedDateLabel = (dateString: string) => {
 
 const DeleteAction = React.memo(function DeleteAction({
   onPress,
+  errorColor,
+  whiteColor,
 }: {
   onPress: () => void;
+  errorColor: string;
+  whiteColor: string;
 }) {
   return (
     <Pressable
-      style={styles.deleteAction}
+      style={[styles.deleteAction, { backgroundColor: errorColor }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cette excrétion"
     >
-      <Ionicons name="trash-outline" size={20} color="#fff" />
-      <Text style={styles.deleteActionText}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={whiteColor} />
+      <Text style={[styles.deleteActionText, { color: whiteColor }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -124,15 +128,15 @@ const DiapersSkeleton = React.memo(function DiapersSkeleton({
   });
   const shimmerBg =
     colorScheme === "dark"
-      ? "rgba(255, 255, 255, 0.08)"
-      : "rgba(255, 255, 255, 0.4)";
+      ? nc.shimmerDark
+      : nc.shimmerLight;
 
   const renderSkeletonCard = (key: number) => (
     <View
       key={key}
       style={[
         styles.sessionCard,
-        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard, shadowColor: nc.shadow },
       ]}
     >
       <View style={[styles.skeletonBlock, { width: 44, height: 14, backgroundColor: nc.borderLight }]}>
@@ -1108,7 +1112,7 @@ export default function DiapersScreen() {
         <ReanimatedSwipeable
           key={excretion.id}
           renderRightActions={() => (
-            <DeleteAction onPress={() => handleExcretionDelete(excretion)} />
+            <DeleteAction onPress={() => handleExcretionDelete(excretion)} errorColor={nc.error} whiteColor={nc.white} />
           )}
           friction={2}
           rightThreshold={40}
@@ -1122,6 +1126,7 @@ export default function DiapersScreen() {
               {
                 borderColor: nc.borderLight,
                 backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
+                shadowColor: nc.shadow,
               },
             ]}
             onPress={selectionMode ? () => toggleId(excretion.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(excretion); }}
@@ -1354,10 +1359,10 @@ export default function DiapersScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Effacer la date selectionnee"
                 >
-                  <Text style={styles.dateChipText}>
+                  <Text style={[styles.dateChipText, { color: nc.white }]}>
                     {formatSelectedDateLabel(selectedDate)}
                   </Text>
-                  <Ionicons name="close" size={14} color="#fff" />
+                  <Ionicons name="close" size={14} color={nc.white} />
                 </Pressable>
               )}
             </DateFilterBar>
@@ -1374,12 +1379,12 @@ export default function DiapersScreen() {
                   calendarBackground: Colors[colorScheme].background,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: "#ffffff",
+                  selectedDayTextColor: nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
                   dotColor: Colors[colorScheme].tint,
-                  selectedDotColor: "#ffffff",
+                  selectedDotColor: nc.white,
                   arrowColor: Colors[colorScheme].tint,
                   monthTextColor: Colors[colorScheme].text,
                   indicatorColor: Colors[colorScheme].tint,
@@ -1436,8 +1441,8 @@ export default function DiapersScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Ajouter une couche"
               >
-                <Ionicons name="add" size={20} color="#fff" />
-                <Text style={styles.emptyCtaText}>Ajouter une couche</Text>
+                <Ionicons name="add" size={20} color={nc.white} />
+                <Text style={[styles.emptyCtaText, { color: nc.white }]}>Ajouter une couche</Text>
               </Pressable>
             )}
 
@@ -1527,7 +1532,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   dateChipText: {
-    color: "#fff",
     fontSize: 13,
     fontWeight: "600",
   },
@@ -1603,7 +1607,6 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 14,
     borderWidth: 1,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
@@ -1689,7 +1692,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   emptyCtaText: {
-    color: "#fff",
     fontSize: 15,
     fontWeight: "600",
   },
@@ -1710,7 +1712,6 @@ const styles = StyleSheet.create({
   },
   // Swipe-to-delete
   deleteAction: {
-    backgroundColor: "#ef4444",
     justifyContent: "center",
     alignItems: "center",
     width: 80,
@@ -1720,7 +1721,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    color: "#fff",
     fontSize: 11,
     fontWeight: "700",
   },
