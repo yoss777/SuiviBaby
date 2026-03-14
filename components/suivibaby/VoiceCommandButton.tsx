@@ -2,6 +2,7 @@
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { InfoModal } from '@/components/ui/InfoModal';
 import { PromptModal } from '@/components/ui/PromptModal';
+import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
 import { useBaby } from '@/contexts/BabyContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -17,14 +18,16 @@ interface VoiceCommandButtonProps {
   accessibilityLabel?: string;
 }
 
-export function VoiceCommandButton({ 
-  size = 18, 
-  color = "#4A90E2",
+export function VoiceCommandButton({
+  size = 18,
+  color: colorProp,
   showTestToggle = false,
   accessibilityLabel = "Commande vocale",
 }: VoiceCommandButtonProps) {
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
+  const color = colorProp ?? Colors[colorScheme].tint;
   const { 
     isRecording, 
     isProcessing,
@@ -113,27 +116,29 @@ export function VoiceCommandButton({
         accessibilityLabel={accessibilityLabel}
         style={[
           styles.mainButton,
-          isRecording && styles.recording
+          isRecording && [styles.recording, { backgroundColor: getBackgroundTint(nc.error, 0.15) }],
         ]}
       >
         <FontAwesome 
           name="microphone" 
           size={size} 
-          color={isRecording ? "#E74C3C" : color} 
+          color={isRecording ? nc.error : color}
           solid={isRecording}
         />
         {isRecording && (
-          <View style={styles.recordingDot} />
+          <View style={[styles.recordingDot, { backgroundColor: nc.error }]} />
         )}
       </Pressable>
 
       {/* Badge indicateur mode test (optionnel) */}
       {showTestToggle && (
-        <Pressable 
+        <Pressable
           onPress={toggleTestMode}
           style={[
             styles.modeBadge,
-            testMode ? styles.testModeBadge : styles.prodModeBadge
+            testMode
+              ? { backgroundColor: getBackgroundTint(nc.warning, 0.1), borderColor: nc.warning }
+              : { backgroundColor: getBackgroundTint(nc.success, 0.1), borderColor: nc.success },
           ]}
         >
           <Text style={styles.modeText}>
@@ -183,7 +188,7 @@ export function VoiceCommandButton({
                     { borderColor: choiceBorder },
                     excretionSelection.pipi && [
                       styles.choiceButtonActive,
-                      { borderColor: choiceAccent },
+                      { borderColor: choiceAccent, backgroundColor: getBackgroundTint(choiceAccent, 0.12) },
                     ],
                   ]}
                   onPress={() =>
@@ -211,7 +216,7 @@ export function VoiceCommandButton({
                     { borderColor: choiceBorder },
                     excretionSelection.popo && [
                       styles.choiceButtonActive,
-                      { borderColor: choiceAccent },
+                      { borderColor: choiceAccent, backgroundColor: getBackgroundTint(choiceAccent, 0.12) },
                     ],
                   ]}
                   onPress={() =>
@@ -251,7 +256,7 @@ export function VoiceCommandButton({
                     { borderColor: choiceBorder },
                     !diaperChoice && [
                       styles.choiceButtonActive,
-                      { borderColor: choiceAccent },
+                      { borderColor: choiceAccent, backgroundColor: getBackgroundTint(choiceAccent, 0.12) },
                     ],
                   ]}
                   onPress={() => setDiaperChoice(false)}
@@ -274,7 +279,7 @@ export function VoiceCommandButton({
                     { borderColor: choiceBorder },
                     diaperChoice && [
                       styles.choiceButtonActive,
-                      { borderColor: choiceAccent },
+                      { borderColor: choiceAccent, backgroundColor: getBackgroundTint(choiceAccent, 0.12) },
                     ],
                   ]}
                   onPress={() => setDiaperChoice(true)}
@@ -301,7 +306,7 @@ export function VoiceCommandButton({
         cancelText="Annuler"
         backgroundColor={Colors[colorScheme].background}
         textColor={Colors[colorScheme].text}
-        confirmButtonColor="#28a745"
+        confirmButtonColor={nc.success}
         onConfirm={async () => {
           if (
             pendingCommand?.type === "couche" &&
@@ -339,7 +344,7 @@ export function VoiceCommandButton({
         cancelText="Annuler"
         backgroundColor={Colors[colorScheme].background}
         textColor={Colors[colorScheme].text}
-        confirmButtonColor="#28a745"
+        confirmButtonColor={nc.success}
         onConfirm={() => {
           setPermissionModal(false);
           if (Platform.OS === "ios") {
@@ -359,7 +364,7 @@ export function VoiceCommandButton({
         cancelText="Annuler"
         backgroundColor={Colors[colorScheme].background}
         textColor={Colors[colorScheme].text}
-        confirmButtonColor="#28a745"
+        confirmButtonColor={nc.success}
         onConfirm={() => {
           setTranscriptionErrorModal(false);
           toggleTestMode();
@@ -388,7 +393,6 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   recording: {
-    backgroundColor: 'rgba(231, 76, 60, 0.15)',
     borderRadius: 20,
     padding: 8,
   },
@@ -399,7 +403,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#E74C3C',
   },
   modeBadge: {
     paddingHorizontal: 6,
@@ -407,14 +410,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
   },
-  testModeBadge: {
-    backgroundColor: 'rgba(255, 152, 0, 0.1)',
-    borderColor: '#FF9800',
-  },
-  prodModeBadge: {
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-    borderColor: '#4CAF50',
-  },
+  // testModeBadge/prodModeBadge: dynamic via nc.warning/nc.success inline
   modeText: {
     fontSize: 10,
     fontWeight: '600',
@@ -444,7 +440,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   choiceButtonActive: {
-    backgroundColor: "rgba(74, 144, 226, 0.12)",
+    // backgroundColor applied inline via getBackgroundTint
   },
   choiceButtonText: {
     fontSize: 13,

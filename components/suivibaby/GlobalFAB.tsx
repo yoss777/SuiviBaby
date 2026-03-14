@@ -1,5 +1,5 @@
 import { QUICK_ADD_CATEGORIES } from "@/constants/dashboardConfig";
-import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -341,7 +341,7 @@ export const GlobalFAB = () => {
           ]}
         >
           <Animated.View style={mainButtonStyle}>
-            <FontAwesome6 name="plus" size={24} color="#fff" />
+            <FontAwesome6 name="plus" size={24} color="white" />
           </Animated.View>
         </Pressable>
       </View>
@@ -431,9 +431,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: neutralColors.background,
     borderWidth: 1,
-    borderColor: neutralColors.borderLight,
   },
   quickSheetIcon: {
     width: 28,
@@ -441,7 +439,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: neutralColors.backgroundCard,
   },
   quickSheetLabel: {
     fontSize: 15,

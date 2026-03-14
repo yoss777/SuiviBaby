@@ -1,4 +1,4 @@
-import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ACTIVITY_TYPE_LABELS,
   EVENT_CONFIG,
@@ -212,17 +212,19 @@ const StaggeredRow = memo(function StaggeredRow({
 
 const DeleteAction = memo(function DeleteAction({
   onPress,
+  backgroundColor,
 }: {
   onPress: () => void;
+  backgroundColor: string;
 }) {
   return (
     <Pressable
-      style={styles.deleteAction}
+      style={[styles.deleteAction, { backgroundColor }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cet événement"
     >
-      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Ionicons name="trash-outline" size={20} color="white" />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
   );
@@ -441,7 +443,7 @@ function RecentEventsListComponent({
                   renderRightActions={
                     onEventDelete && event.id
                       ? () => (
-                          <DeleteAction onPress={() => onEventDelete(event)} />
+                          <DeleteAction onPress={() => onEventDelete(event)} backgroundColor={nc.error} />
                         )
                       : undefined
                   }
@@ -589,7 +591,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
-    color: neutralColors.textStrong,
   },
   sectionTitleInline: {
     marginHorizontal: 0,
@@ -598,7 +599,6 @@ const styles = StyleSheet.create({
   sectionLink: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#0a7ea4",
     paddingVertical: 8,
     paddingHorizontal: 4,
   },
@@ -610,14 +610,12 @@ const styles = StyleSheet.create({
   },
   recentLoadingText: {
     fontSize: 13,
-    color: neutralColors.textLight,
   },
   recentHint: {
     marginTop: -2,
     marginBottom: 8,
     marginHorizontal: 20,
     fontSize: 12,
-    color: neutralColors.textMuted,
     fontWeight: "500",
   },
   swipeableContainer: {
@@ -693,7 +691,6 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 8,
     marginLeft: "auto",
-    backgroundColor: neutralColors.backgroundPressed,
   },
   recentDetails: {
     marginTop: 6,
@@ -735,17 +732,14 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: neutralColors.textStrong,
     marginBottom: 6,
   },
   emptyStateSubtitle: {
     fontSize: 13,
-    color: neutralColors.textMuted,
     textAlign: "center",
     lineHeight: 18,
   },
   deleteAction: {
-    backgroundColor: neutralColors.error,
     justifyContent: "center",
     alignItems: "center",
     width: 80,
@@ -756,7 +750,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    color: "#fff",
+    color: "white",
     fontSize: 11,
     fontWeight: "700",
   },

@@ -1,7 +1,8 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { DrawerContentComponentProps, DrawerContentScrollView } from "@react-navigation/drawer";
+import * as Haptics from "expo-haptics";
 import { usePathname, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -16,10 +17,11 @@ import { doc, getDoc } from "firebase/firestore";
 import { AddChildModal } from "@/components/suivibaby/AddChildModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { masquerEnfant } from "@/services/userPreferencesService";
@@ -34,6 +36,8 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const { width } = useWindowDimensions();
   const { activeChild, children, childrenLoaded, setActiveChild } = useBaby();
   const { signOut, user, userName, email, firebaseUser } = useAuth();
+  const { showToast } = useToast();
+  const isMountedRef = useRef(true);
   const [showHideModal, setShowHideModal] = useState(false);
   const [childToHide, setChildToHide] = useState<{
     id: string;
@@ -46,6 +50,11 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canAddChild =
     permissions.role === "owner" || permissions.role === "admin";
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -92,7 +101,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   }, [children.length, childrenLoaded, pathname]);
 
   // Calculate baby's age in years and months
-  const calculateAge = (birthDate: string) => {
+  const calculateAge = useCallback((birthDate: string) => {
     const [day, month, year] = birthDate.split("/").map(Number);
     const birth = new Date(year, month - 1, day);
     const today = new Date();
@@ -115,33 +124,37 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
       const yearText = years === 1 ? "an" : "ans";
       return `${years} ${yearText} ${months} mois`;
     }
-  };
+  }, []);
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(() => {
     setShowSignOutModal(true);
-  };
+  }, []);
 
-  const handleHideChild = (childId: string, childName: string) => {
+  const handleHideChild = useCallback((childId: string, childName: string) => {
     setChildToHide({ id: childId, name: childName });
     setShowHideModal(true);
-  };
+  }, []);
 
-  const confirmHideChild = async () => {
+  const confirmHideChild = useCallback(async () => {
     if (!childToHide) return;
 
     try {
+      // P8b: Haptic feedback
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       await masquerEnfant(childToHide.id);
+      if (!isMountedRef.current) return;
       setShowHideModal(false);
       setChildToHide(null);
-
-      // Si c'était le dernier enfant visible, la redirection se fera via useEffect
+      // P6: Success toast
+      showToast(`${childToHide.name} masqué`);
     } catch (error) {
+      if (!isMountedRef.current) return;
       setErrorModal({
         visible: true,
         message: "Impossible de masquer l'enfant.",
       });
     }
-  };
+  }, [childToHide, showToast]);
 
   return (
     <DrawerContentScrollView
@@ -294,7 +307,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
         <TouchableOpacity
           style={[
             styles.settingsButton,
-            { borderColor: Colors[colorScheme].tint, backgroundColor: colorScheme === "dark" ? "rgba(99, 102, 241, 0.1)" : "#f0f8ff" },
+            { borderColor: Colors[colorScheme].tint, backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.08) },
           ]}
           onPress={() => router.push("/(drawer)/settings")}
           accessibilityRole="button"
@@ -308,7 +321,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.signOutButton, { borderColor: nc.error, backgroundColor: colorScheme === "dark" ? "rgba(239, 68, 68, 0.1)" : "#fff5f5" }]}
+          style={[styles.signOutButton, { borderColor: nc.error, backgroundColor: getBackgroundTint(nc.error, 0.08) }]}
           onPress={handleSignOut}
           accessibilityRole="button"
           accessibilityLabel="Se déconnecter"
@@ -372,7 +385,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
                 accessibilityRole="button"
                 accessibilityLabel="Confirmer masquer l'enfant"
               >
-                <Text style={styles.deleteButtonText}>Masquer</Text>
+                <Text style={[styles.deleteButtonText, { color: nc.white }]}>Masquer</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -580,7 +593,7 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#fff",
+    color: undefined as unknown as string,
   },
   childNameInModal: {
     fontWeight: "700",

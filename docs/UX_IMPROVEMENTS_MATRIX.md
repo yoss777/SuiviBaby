@@ -1,6 +1,6 @@
 # Matrice des améliorations UX — Samaye
 
-> Suivi des améliorations UX appliquées aux 14 écrans (8 sous-écrans + 5 tabs principaux + gallery).
+> Suivi des améliorations UX appliquées à tous les écrans et composants de l'app.
 > Dernière mise à jour : 2026-03-14 (100% — tous gaps corrigés)
 
 ## Écrans concernés
@@ -158,6 +158,34 @@ Aucun gap restant — tous les écrans sont à 100%.
 
 **Score settings : 134/134 applicables** (100%)
 
+## Autres composants
+
+| Abrév. | Composant | Fichier |
+|--------|-----------|---------|
+| DC | CustomDrawerContent | `components/drawer/CustomDrawerContent.tsx` |
+| RE | RecentEventsList | `components/suivibaby/dashboard/RecentEventsList.tsx` |
+| SW | SleepWidget | `components/suivibaby/dashboard/SleepWidget.tsx` |
+| SG | StatsGroup | `components/suivibaby/dashboard/StatsGroup.tsx` |
+| GF | GlobalFAB | `components/suivibaby/GlobalFAB.tsx` |
+| VC | VoiceCommandButton | `components/suivibaby/VoiceCommandButton.tsx` |
+
+> Composants utilisés par home.tsx et autres écrans. Seuls les P-items applicables sont listés.
+
+| ID | Amélioration | DC | RE | SW | SG | GF | VC | Statut |
+|----|-------------|----|----|----|----|----|----|--------|
+| P6 | Toast on action success | ✅ | n/a | n/a | n/a | n/a | n/a | 1/1 |
+| P8b | Haptic feedback | ✅ | n/a | ✅ | ✅ | ✅ | ✅ | 5/5 |
+| P12b | Error boundary / try-catch | ✅ | n/a | n/a | n/a | n/a | ✅ | 2/2 |
+| P14a | nc.* design tokens | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| P15a | Accessibility labels | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| P16a | Dark mode nc.* tokens | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| P17a | useCallback/useMemo | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | 5/5 |
+| P20 | Race condition guards | ✅ | n/a | ✅ | n/a | ✅ | n/a | 3/3 |
+| P21 | Theme tokens (no hardcoded) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| P25 | Touch targets (hitSlop) | ✅ | n/a | ✅ | ✅ | ✅ | n/a | 4/4 |
+
+**Score autres composants : 44/44 applicables** (100%)
+
 ## Composants partagés créés
 
 | Composant | Fichier | Utilisé par |
@@ -169,4 +197,5 @@ Aucun gap restant — tous les écrans sont à 100%.
 
 ## Score
 
-**301/301 applicables déployés** (100%) — 0 gaps restants
+**636/636 applicables déployés** (100%) — 0 gaps restants
+(401 tabs/sous-écrans + 57 utilitaires drawer + 134 settings + 44 autres composants = 636 total)

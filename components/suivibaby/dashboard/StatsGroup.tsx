@@ -1,4 +1,4 @@
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
@@ -178,10 +178,7 @@ export const StatsGroup = memo(function StatsGroup({
       inputRange: [0, 1],
       outputRange: [-200, 200],
     });
-    const shimmerBg =
-      colorScheme === "dark"
-        ? "rgba(255, 255, 255, 0.08)"
-        : "rgba(255, 255, 255, 0.4)";
+    const shimmerBg = colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
 
     return (
       <View style={[styles.container, { backgroundColor: nc.backgroundCard }]}>
@@ -236,7 +233,7 @@ export const StatsGroup = memo(function StatsGroup({
         accessibilityLabel={`${title}: ${summary}`}
         accessibilityHint="Appuyez pour voir les détails"
       >
-        <View style={[styles.iconContainer, { backgroundColor: `${color}15` }]}>
+        <View style={[styles.iconContainer, { backgroundColor: getBackgroundTint(color, 0.08) }]}>
           {renderIcon(icon, iconType, 22, color)}
         </View>
 
@@ -331,7 +328,7 @@ export const StatsGroup = memo(function StatsGroup({
                 <View
                   style={[
                     styles.itemIcon,
-                    { backgroundColor: `${item.color}10` },
+                    { backgroundColor: getBackgroundTint(item.color, 0.06) },
                   ]}
                 >
                   {renderIcon(item.icon, item.iconType, 16, item.color)}

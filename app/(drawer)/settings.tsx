@@ -18,11 +18,14 @@ import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { PromptModal } from "@/components/ui/PromptModal";
 import { db } from "@/config/firebase";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import {
+  getBackgroundTint,
+  getNeutralColors,
+} from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
-// import { useThemePreference } from '@/contexts/ThemeContext';
+import { useThemePreference } from "@/contexts/ThemeContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { deleteAccountAndData } from "@/services/accountDeletionService";
 
@@ -44,7 +47,7 @@ export default function SettingsScreen() {
   const nc = getNeutralColors(colorScheme);
   const { user, signOut } = useAuth();
   const { activeChild } = useBaby();
-  // const { preference: themePreference } = useThemePreference();
+  const { preference: themePreference } = useThemePreference();
   const router = useRouter();
   const { delete: deleteParam } = useLocalSearchParams();
   const [hasHiddenChildren, setHasHiddenChildren] = useState(false);
@@ -104,288 +107,308 @@ export default function SettingsScreen() {
     }
   }, [deleteParam, router]);
 
-  const accountSettings: SettingItem[] = useMemo(() => [
-    {
-      id: "profile",
-      icon: "person-outline",
-      label: "Profil",
-      description: "Modifier vos informations personnelles",
-      onPress: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/settings/profile");
-      },
-    },
-    {
-      id: "password",
-      icon: "lock-closed-outline",
-      label: "Mot de passe",
-      description: "Changer votre mot de passe",
-      onPress: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/settings/password");
-      },
-    },
-  ], [router]);
-
-  const appSettings: SettingItem[] = useMemo(() => [
-    {
-      id: "hidden-children",
-      icon: "eye-off-outline",
-      label: "Enfants masqués",
-      value: `${hiddenChildrenCount}`,
-      description: hasHiddenChildren
-        ? "Gérer les enfants masqués"
-        : "Aucun enfant masqué",
-      disabled: !hasHiddenChildren,
-      onPress: () => {
-        if (hasHiddenChildren) {
+  const accountSettings: SettingItem[] = useMemo(
+    () => [
+      {
+        id: "profile",
+        icon: "person-outline",
+        label: "Profil",
+        description: "Modifier vos informations personnelles",
+        onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/hidden-children");
-        }
+          router.push("/settings/profile");
+        },
       },
-    },
-    {
-      id: "join-child",
-      icon: "person-add-outline",
-      label: "Ajouter un enfant",
-      description: "Entrer un code ou accepter une invitation",
-      onPress: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/settings/join-child");
+      {
+        id: "password",
+        icon: "lock-closed-outline",
+        label: "Mot de passe",
+        description: "Changer votre mot de passe",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/settings/password");
+        },
       },
-    },
-    {
-      id: "notifications",
-      icon: "notifications-outline",
-      label: "Notifications",
-      description: "Gérer les notifications",
-      onPress: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/settings/notifications");
-      },
-    },
-    // {
-    //   id: 'theme',
-    //   icon: 'moon-outline',
-    //   label: 'Thème',
-    //   value:
-    //     themePreference === 'auto'
-    //       ? 'Automatique'
-    //       : themePreference === 'dark'
-    //       ? 'Sombre'
-    //       : 'Clair',
-    //   onPress: () => {
-    //     router.push('/settings/theme');
-    //   },
-    // },
-    // {
-    //   id: 'language',
-    //   icon: 'language-outline',
-    //   label: 'Langue',
-    //   value:
-    //     {
-    //       fr: 'Français',
-    //       en: 'English',
-    //       es: 'Español',
-    //       de: 'Deutsch',
-    //       it: 'Italiano',
-    //       pt: 'Português',
-    //       ar: 'العربية',
-    //     }[languagePreference] || languagePreference.toUpperCase(),
-    //   onPress: () => {
-    //     router.push('/settings/language');
-    //   },
-    // },
-  ], [hiddenChildrenCount, hasHiddenChildren, router]);
+    ],
+    [router],
+  );
 
-  const dataSettings: SettingItem[] = useMemo(() => [
-    // {
-    //   id: 'migration',
-    //   icon: 'rocket-outline',
-    //   label: 'Migration des données',
-    //   description: 'Gérer la migration vers la nouvelle structure',
-    //   color: Colors.light.primary,
-    //   onPress: () => {
-    //     router.push('/settings/migration');
-    //   },
-    // },
-    {
-      id: "export",
-      icon: "cloud-download-outline",
-      label: "Export",
-      description: "Télécharger vos données",
-      onPress: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/settings/export");
+  const appSettings: SettingItem[] = useMemo(
+    () => [
+      {
+        id: "hidden-children",
+        icon: "eye-off-outline",
+        label: "Enfants masqués",
+        value: `${hiddenChildrenCount}`,
+        description: hasHiddenChildren
+          ? "Gérer les enfants masqués"
+          : "Aucun enfant masqué",
+        disabled: !hasHiddenChildren,
+        onPress: () => {
+          if (hasHiddenChildren) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push("/settings/hidden-children");
+          }
+        },
       },
-    },
-    // {
-    //   id: 'backup',
-    //   icon: 'cloud-upload-outline',
-    //   label: 'Sauvegarde',
-    //   description: 'Sauvegarder vos données',
-    //   onPress: () => {
-    //     router.push('/settings/backup');
-    //   },
-    // },
-  ], [router]);
+      {
+        id: "join-child",
+        icon: "person-add-outline",
+        label: "Ajouter un enfant",
+        description: "Entrer un code ou accepter une invitation",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/settings/join-child");
+        },
+      },
+      {
+        id: "notifications",
+        icon: "notifications-outline",
+        label: "Notifications",
+        description: "Gérer les notifications",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/settings/notifications");
+        },
+      },
+      {
+        id: "theme",
+        icon: "moon-outline",
+        label: "Thème",
+        value:
+          themePreference === "auto"
+            ? "Automatique"
+            : themePreference === "dark"
+              ? "Sombre"
+              : "Clair",
+        onPress: () => {
+          router.push("/settings/theme");
+        },
+      },
+      // {
+      //   id: 'language',
+      //   icon: 'language-outline',
+      //   label: 'Langue',
+      //   value:
+      //     {
+      //       fr: 'Français',
+      //       en: 'English',
+      //       es: 'Español',
+      //       de: 'Deutsch',
+      //       it: 'Italiano',
+      //       pt: 'Português',
+      //       ar: 'العربية',
+      //     }[languagePreference] || languagePreference.toUpperCase(),
+      //   onPress: () => {
+      //     router.push('/settings/language');
+      //   },
+      // },
+    ],
+    [hiddenChildrenCount, hasHiddenChildren, router, themePreference],
+  );
 
-  const otherSettings: SettingItem[] = useMemo(() => [
-    {
-      id: "privacy",
-      icon: "shield-outline",
-      label: "Confidentialité",
-      description: "Politique de confidentialité",
-      onPress: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/settings/privacy");
+  const dataSettings: SettingItem[] = useMemo(
+    () => [
+      // {
+      //   id: 'migration',
+      //   icon: 'rocket-outline',
+      //   label: 'Migration des données',
+      //   description: 'Gérer la migration vers la nouvelle structure',
+      //   color: Colors.light.primary,
+      //   onPress: () => {
+      //     router.push('/settings/migration');
+      //   },
+      // },
+      {
+        id: "export",
+        icon: "cloud-download-outline",
+        label: "Export",
+        description: "Télécharger vos données",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/settings/export");
+        },
       },
-    },
-    {
-      id: "terms",
-      icon: "document-text-outline",
-      label: "Conditions d'utilisation",
-      onPress: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/settings/terms");
-      },
-    },
-    {
-      id: "about",
-      icon: "information-circle-outline",
-      label: "À propos",
-      value: "Version 1.0.0",
-      onPress: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setModalConfig({
-          visible: true,
-          title: "SuiviBaby",
-          message:
-            "Version 1.0.0\n\nSystème de suivi d'événements bébé pour les parents.",
-        });
-      },
-    },
-    {
-      id: "help",
-      icon: "help-circle-outline",
-      label: "Aide & Support",
-      onPress: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/settings/help");
-      },
-    },
-  ], [router]);
+      // {
+      //   id: 'backup',
+      //   icon: 'cloud-upload-outline',
+      //   label: 'Sauvegarde',
+      //   description: 'Sauvegarder vos données',
+      //   onPress: () => {
+      //     router.push('/settings/backup');
+      //   },
+      // },
+    ],
+    [router],
+  );
 
-  const dangerSettings: SettingItem[] = useMemo(() => [
-    {
-      id: "delete",
-      icon: "trash-outline",
-      label: "Supprimer le compte",
-      description: "Cette action est irréversible",
-      onPress: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setShowDeleteExportModal(true);
+  const otherSettings: SettingItem[] = useMemo(
+    () => [
+      {
+        id: "privacy",
+        icon: "shield-outline",
+        label: "Confidentialité",
+        description: "Politique de confidentialité",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/settings/privacy");
+        },
       },
-      color: nc.error,
-    },
-  ], [nc.error]);
+      {
+        id: "terms",
+        icon: "document-text-outline",
+        label: "Conditions d'utilisation",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/settings/terms");
+        },
+      },
+      {
+        id: "about",
+        icon: "information-circle-outline",
+        label: "À propos",
+        value: "Version 1.0.0",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setModalConfig({
+            visible: true,
+            title: "SuiviBaby",
+            message:
+              "Version 1.0.0\n\nSystème de suivi d'événements bébé pour les parents.",
+          });
+        },
+      },
+      {
+        id: "help",
+        icon: "help-circle-outline",
+        label: "Aide & Support",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/settings/help");
+        },
+      },
+    ],
+    [router],
+  );
 
-  const renderSettingItem = useCallback((item: SettingItem) => {
-    const isDisabled = !!item.disabled;
-    const showChevron = item.showChevron ?? !isDisabled;
+  const dangerSettings: SettingItem[] = useMemo(
+    () => [
+      {
+        id: "delete",
+        icon: "trash-outline",
+        label: "Supprimer le compte",
+        description: "Cette action est irréversible",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setShowDeleteExportModal(true);
+        },
+        color: nc.error,
+      },
+    ],
+    [nc.error],
+  );
 
-    return (
-      <TouchableOpacity
-        key={item.id}
-        style={[
-          styles.settingItem,
-          { borderBottomColor: nc.borderLight },
-        ]}
-        onPress={item.onPress}
-        activeOpacity={isDisabled ? 1 : 0.7}
-        disabled={isDisabled}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: isDisabled }}
-      >
-        <View style={styles.settingItemLeft}>
-          <View
-            style={[
-              styles.iconContainer,
-              {
-                backgroundColor:
-                  (item.color || Colors[colorScheme].tint) + "15",
-              },
-              isDisabled && { opacity: 0.35 },
-            ]}
-          >
-            <Ionicons
-              name={item.icon}
-              size={22}
-              color={item.color || Colors[colorScheme].tint}
-            />
-          </View>
-          <View style={styles.settingTextContainer}>
-            <Text
+  const renderSettingItem = useCallback(
+    (item: SettingItem) => {
+      const isDisabled = !!item.disabled;
+      const showChevron = item.showChevron ?? !isDisabled;
+
+      return (
+        <TouchableOpacity
+          key={item.id}
+          style={[styles.settingItem, { borderBottomColor: nc.borderLight }]}
+          onPress={item.onPress}
+          activeOpacity={isDisabled ? 1 : 0.7}
+          disabled={isDisabled}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: isDisabled }}
+        >
+          <View style={styles.settingItemLeft}>
+            <View
               style={[
-                styles.settingLabel,
-                { color: item.color || nc.textStrong },
+                styles.iconContainer,
+                {
+                  backgroundColor: getBackgroundTint(
+                    item.color || Colors[colorScheme].tint,
+                    0.08,
+                  ),
+                },
                 isDisabled && { opacity: 0.35 },
               ]}
             >
-              {item.label}
-            </Text>
-            {item.description && (
+              <Ionicons
+                name={item.icon}
+                size={22}
+                color={item.color || Colors[colorScheme].tint}
+              />
+            </View>
+            <View style={styles.settingTextContainer}>
               <Text
                 style={[
-                  styles.settingDescription,
-                  { color: nc.textLight },
+                  styles.settingLabel,
+                  { color: item.color || nc.textStrong },
                   isDisabled && { opacity: 0.35 },
                 ]}
               >
-                {item.description}
+                {item.label}
               </Text>
-            )}
-          </View>
-        </View>
-        <View style={styles.settingItemRight}>
-          {item.value ? (
-            <Text
-              style={[
-                styles.settingValue,
-                { color: nc.textMuted },
-                isDisabled && { opacity: 0.35 },
-              ]}
-              numberOfLines={1}
-            >
-              {item.value}
-            </Text>
-          ) : null}
-          {item.tag ? (
-            <View style={[styles.tag, { backgroundColor: nc.backgroundPressed }, isDisabled && { opacity: 0.35 }]}>
-              <Text style={[styles.tagText, { color: nc.textLight }]}>{item.tag}</Text>
+              {item.description && (
+                <Text
+                  style={[
+                    styles.settingDescription,
+                    { color: nc.textLight },
+                    isDisabled && { opacity: 0.35 },
+                  ]}
+                >
+                  {item.description}
+                </Text>
+              )}
             </View>
-          ) : null}
-          {showChevron ? (
-            <Ionicons
-              name="chevron-forward"
-              size={20}
-              color={nc.textMuted}
-              style={isDisabled && { opacity: 0.35 }}
-            />
-          ) : null}
-        </View>
-      </TouchableOpacity>
-    );
-  }, [nc, colorScheme]);
+          </View>
+          <View style={styles.settingItemRight}>
+            {item.value ? (
+              <Text
+                style={[
+                  styles.settingValue,
+                  { color: nc.textMuted },
+                  isDisabled && { opacity: 0.35 },
+                ]}
+                numberOfLines={1}
+              >
+                {item.value}
+              </Text>
+            ) : null}
+            {item.tag ? (
+              <View
+                style={[
+                  styles.tag,
+                  { backgroundColor: nc.backgroundPressed },
+                  isDisabled && { opacity: 0.35 },
+                ]}
+              >
+                <Text style={[styles.tagText, { color: nc.textLight }]}>
+                  {item.tag}
+                </Text>
+              </View>
+            ) : null}
+            {showChevron ? (
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={nc.textMuted}
+                style={isDisabled && { opacity: 0.35 }}
+              />
+            ) : null}
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [nc, colorScheme],
+  );
 
   const renderSection = (title: string, items: SettingItem[]) => (
     <View style={styles.section}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          { color: nc.textMuted },
-        ]}
-      >
+      <Text style={[styles.sectionTitle, { color: nc.textMuted }]}>
         {title}
       </Text>
       <ThemedView style={styles.sectionContent}>
@@ -396,10 +419,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView
-      style={[
-        styles.container,
-        { backgroundColor: nc.background },
-      ]}
+      style={[styles.container, { backgroundColor: nc.background }]}
       edges={["top", "bottom"]}
     >
       <ScrollView
@@ -413,12 +433,7 @@ export default function SettingsScreen() {
         {renderSection("Zone dangereuse", dangerSettings)}
 
         <View style={styles.footer}>
-          <Text
-            style={[
-              styles.footerText,
-              { color: nc.textMuted },
-            ]}
-          >
+          <Text style={[styles.footerText, { color: nc.textMuted }]}>
             SuiviBaby © 2026
           </Text>
         </View>
@@ -452,23 +467,18 @@ export default function SettingsScreen() {
       <PromptModal
         visible={showDeletePasswordModal}
         title="Confirmer la suppression"
-        message={(
-          isDeleting ? (
+        message={
+          (isDeleting ? (
             <View style={styles.deleteLoader}>
               <IconPulseDots />
-              <Text
-                style={[
-                  styles.deleteLoaderText,
-                  { color: nc.textStrong },
-                ]}
-              >
+              <Text style={[styles.deleteLoaderText, { color: nc.textStrong }]}>
                 Suppression en cours...
               </Text>
             </View>
           ) : (
-            "Votre compte et vos donnees seront supprimes immediatement."
-          )
-        ) as any}
+            "Votre compte et vos donnees seront supprimés immédiatement."
+          )) as any
+        }
         value={deletePassword}
         placeholder="Mot de passe"
         secureTextEntry
@@ -502,7 +512,11 @@ export default function SettingsScreen() {
             setDeletePassword("");
             // L'utilisateur Auth est supprimé côté serveur par la CF,
             // signOut peut échouer — on navigue quand même.
-            try { await signOut(); } catch (_) { /* user already deleted */ }
+            try {
+              await signOut();
+            } catch (_) {
+              /* user already deleted */
+            }
             router.replace("/(auth)/login");
           } catch (error: any) {
             const code = error?.code || "";
