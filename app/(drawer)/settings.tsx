@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { doc, onSnapshot } from "firebase/firestore";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -17,6 +18,7 @@ import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { PromptModal } from "@/components/ui/PromptModal";
 import { db } from "@/config/firebase";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -39,6 +41,7 @@ interface SettingItem {
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const { user, signOut } = useAuth();
   const { activeChild } = useBaby();
   // const { preference: themePreference } = useThemePreference();
@@ -101,13 +104,14 @@ export default function SettingsScreen() {
     }
   }, [deleteParam, router]);
 
-  const accountSettings: SettingItem[] = [
+  const accountSettings: SettingItem[] = useMemo(() => [
     {
       id: "profile",
       icon: "person-outline",
       label: "Profil",
       description: "Modifier vos informations personnelles",
       onPress: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push("/settings/profile");
       },
     },
@@ -117,12 +121,13 @@ export default function SettingsScreen() {
       label: "Mot de passe",
       description: "Changer votre mot de passe",
       onPress: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push("/settings/password");
       },
     },
-  ];
+  ], [router]);
 
-  const appSettings: SettingItem[] = [
+  const appSettings: SettingItem[] = useMemo(() => [
     {
       id: "hidden-children",
       icon: "eye-off-outline",
@@ -134,6 +139,7 @@ export default function SettingsScreen() {
       disabled: !hasHiddenChildren,
       onPress: () => {
         if (hasHiddenChildren) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           router.push("/settings/hidden-children");
         }
       },
@@ -144,6 +150,7 @@ export default function SettingsScreen() {
       label: "Ajouter un enfant",
       description: "Entrer un code ou accepter une invitation",
       onPress: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push("/settings/join-child");
       },
     },
@@ -153,6 +160,7 @@ export default function SettingsScreen() {
       label: "Notifications",
       description: "Gérer les notifications",
       onPress: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push("/settings/notifications");
       },
     },
@@ -188,9 +196,9 @@ export default function SettingsScreen() {
     //     router.push('/settings/language');
     //   },
     // },
-  ];
+  ], [hiddenChildrenCount, hasHiddenChildren, router]);
 
-  const dataSettings: SettingItem[] = [
+  const dataSettings: SettingItem[] = useMemo(() => [
     // {
     //   id: 'migration',
     //   icon: 'rocket-outline',
@@ -207,6 +215,7 @@ export default function SettingsScreen() {
       label: "Export",
       description: "Télécharger vos données",
       onPress: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push("/settings/export");
       },
     },
@@ -219,15 +228,16 @@ export default function SettingsScreen() {
     //     router.push('/settings/backup');
     //   },
     // },
-  ];
+  ], [router]);
 
-  const otherSettings: SettingItem[] = [
+  const otherSettings: SettingItem[] = useMemo(() => [
     {
       id: "privacy",
       icon: "shield-outline",
       label: "Confidentialité",
       description: "Politique de confidentialité",
       onPress: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push("/settings/privacy");
       },
     },
@@ -236,6 +246,7 @@ export default function SettingsScreen() {
       icon: "document-text-outline",
       label: "Conditions d'utilisation",
       onPress: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push("/settings/terms");
       },
     },
@@ -245,6 +256,7 @@ export default function SettingsScreen() {
       label: "À propos",
       value: "Version 1.0.0",
       onPress: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setModalConfig({
           visible: true,
           title: "SuiviBaby",
@@ -258,23 +270,27 @@ export default function SettingsScreen() {
       icon: "help-circle-outline",
       label: "Aide & Support",
       onPress: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push("/settings/help");
       },
     },
-  ];
+  ], [router]);
 
-  const dangerSettings: SettingItem[] = [
+  const dangerSettings: SettingItem[] = useMemo(() => [
     {
       id: "delete",
       icon: "trash-outline",
       label: "Supprimer le compte",
       description: "Cette action est irréversible",
-      onPress: () => setShowDeleteExportModal(true),
-      color: "#dc3545",
+      onPress: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setShowDeleteExportModal(true);
+      },
+      color: nc.error,
     },
-  ];
+  ], [nc.error]);
 
-  const renderSettingItem = (item: SettingItem) => {
+  const renderSettingItem = useCallback((item: SettingItem) => {
     const isDisabled = !!item.disabled;
     const showChevron = item.showChevron ?? !isDisabled;
 
@@ -283,7 +299,7 @@ export default function SettingsScreen() {
         key={item.id}
         style={[
           styles.settingItem,
-          { borderBottomColor: Colors[colorScheme].tabIconDefault + "20" },
+          { borderBottomColor: nc.borderLight },
         ]}
         onPress={item.onPress}
         activeOpacity={isDisabled ? 1 : 0.7}
@@ -312,7 +328,7 @@ export default function SettingsScreen() {
             <Text
               style={[
                 styles.settingLabel,
-                { color: item.color || Colors[colorScheme].text },
+                { color: item.color || nc.textStrong },
                 isDisabled && { opacity: 0.35 },
               ]}
             >
@@ -322,7 +338,7 @@ export default function SettingsScreen() {
               <Text
                 style={[
                   styles.settingDescription,
-                  { color: Colors[colorScheme].tabIconDefault },
+                  { color: nc.textLight },
                   isDisabled && { opacity: 0.35 },
                 ]}
               >
@@ -336,7 +352,7 @@ export default function SettingsScreen() {
             <Text
               style={[
                 styles.settingValue,
-                { color: Colors[colorScheme].tabIconDefault },
+                { color: nc.textMuted },
                 isDisabled && { opacity: 0.35 },
               ]}
               numberOfLines={1}
@@ -345,29 +361,29 @@ export default function SettingsScreen() {
             </Text>
           ) : null}
           {item.tag ? (
-            <View style={[styles.tag, isDisabled && { opacity: 0.35 }]}>
-              <Text style={styles.tagText}>{item.tag}</Text>
+            <View style={[styles.tag, { backgroundColor: nc.backgroundPressed }, isDisabled && { opacity: 0.35 }]}>
+              <Text style={[styles.tagText, { color: nc.textLight }]}>{item.tag}</Text>
             </View>
           ) : null}
           {showChevron ? (
             <Ionicons
               name="chevron-forward"
               size={20}
-              color={Colors[colorScheme].tabIconDefault}
+              color={nc.textMuted}
               style={isDisabled && { opacity: 0.35 }}
             />
           ) : null}
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [nc, colorScheme]);
 
   const renderSection = (title: string, items: SettingItem[]) => (
     <View style={styles.section}>
       <Text
         style={[
           styles.sectionTitle,
-          { color: Colors[colorScheme].tabIconDefault },
+          { color: nc.textMuted },
         ]}
       >
         {title}
@@ -382,7 +398,7 @@ export default function SettingsScreen() {
     <SafeAreaView
       style={[
         styles.container,
-        { backgroundColor: Colors[colorScheme].background },
+        { backgroundColor: nc.background },
       ]}
       edges={["top", "bottom"]}
     >
@@ -400,7 +416,7 @@ export default function SettingsScreen() {
           <Text
             style={[
               styles.footerText,
-              { color: Colors[colorScheme].tabIconDefault },
+              { color: nc.textMuted },
             ]}
           >
             SuiviBaby © 2026
@@ -411,8 +427,8 @@ export default function SettingsScreen() {
         visible={modalConfig.visible}
         title={modalConfig.title}
         message={modalConfig.message}
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
         onClose={() => setModalConfig((prev) => ({ ...prev, visible: false }))}
       />
       <ConfirmModal
@@ -421,8 +437,8 @@ export default function SettingsScreen() {
         message="Pour garder une copie, exportez vos donnees avant la suppression."
         confirmText="Exporter"
         cancelText="Supprimer"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
         confirmButtonColor={Colors[colorScheme].tint}
         onConfirm={() => {
           setShowDeleteExportModal(false);
@@ -443,7 +459,7 @@ export default function SettingsScreen() {
               <Text
                 style={[
                   styles.deleteLoaderText,
-                  { color: Colors[colorScheme].text },
+                  { color: nc.textStrong },
                 ]}
               >
                 Suppression en cours...
@@ -459,11 +475,11 @@ export default function SettingsScreen() {
         multiline={false}
         autoCapitalize="none"
         confirmText={isDeleting ? "Suppression..." : "Supprimer"}
-        confirmButtonColor="#dc3545"
+        confirmButtonColor={nc.error}
         confirmDisabled={isDeleting}
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
         onChangeText={(value) => {
           if (isDeleting) return;
           setDeletePassword(value);
@@ -587,7 +603,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   tag: {
-    backgroundColor: "#f2f2f2",
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -595,7 +610,6 @@ const styles = StyleSheet.create({
   tagText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#555",
     textTransform: "uppercase",
   },
   footer: {

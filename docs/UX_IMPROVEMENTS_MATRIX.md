@@ -88,6 +88,35 @@
 
 Aucun gap restant — tous les écrans sont à 100%.
 
+## Écrans utilitaires / formulaires (drawer)
+
+| Abrév. | Écran | Fichier |
+|--------|-------|---------|
+| SE | Settings (Paramètres) | `app/(drawer)/settings.tsx` |
+| AB | Add Baby (Ajout enfant) | `app/(drawer)/add-baby.tsx` |
+| SC | Share Child (Partage) | `app/(drawer)/share-child.tsx` |
+| ST | Stats (Statistiques) | `app/(drawer)/baby/(tabs)/stats.tsx` |
+| MA | Manage Access (Accès) | `app/(drawer)/baby/manage-access.tsx` |
+
+> Ces écrans sont des formulaires/utilitaires. Seuls les P-items applicables sont listés.
+
+| ID | Amélioration | SE | AB | SC | ST | MA | Statut |
+|----|-------------|----|----|----|----|----|----|
+| P6 | Toast on action success | ✅ | ✅ | ✅ | n/a | ✅ | 4/4 |
+| P8b | Haptic feedback | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
+| P12b | Error boundary / try-catch | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
+| P14a | nc.* design tokens | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
+| P15a | Accessibility labels | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
+| P15b | Multi-baby switcher | ✅ | n/a | n/a | ✅ | ✅ | 3/3 |
+| P16a | Dark mode nc.* tokens | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
+| P17a | useMemo optimizations | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
+| P20 | Race condition guards | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
+| P21 | Theme tokens (no hardcoded) | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
+| P22 | Realtime auto-refresh | ✅ | n/a | ✅ | ✅ | ✅ | 4/4 |
+| P25 | Touch targets 44px | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
+
+**Score utilitaires : 57/57 applicables** (100%)
+
 ## Composants partagés créés
 
 | Composant | Fichier | Utilisé par |

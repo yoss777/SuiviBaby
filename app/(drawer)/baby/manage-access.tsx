@@ -3,7 +3,7 @@
  * Accessible uniquement par le owner
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -30,47 +30,66 @@ import { HeaderBackButton } from "@react-navigation/elements";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useModal } from "@/contexts/ModalContext";
+import { getNeutralColors } from "@/constants/dashboardColors";
+import * as Haptics from "expo-haptics";
 
 /**
  * Composant pour afficher un item d'accès avec les infos utilisateur
  */
-function AccessListItem({ item }: { item: [string, ChildAccessDocument] }) {
+function AccessListItem({
+  item,
+  nc,
+  tintColor,
+}: {
+  item: [string, ChildAccessDocument];
+  nc: ReturnType<typeof getNeutralColors>;
+  tintColor: string;
+}) {
   const [userId, access] = item;
   const { firebaseUser } = useAuth();
   const { childId } = useLocalSearchParams<{ childId: string }>();
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const { showAlert, hide } = useModal();
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const { displayName, loading: userLoading } = useUserInfo(userId);
   const isMe = userId === firebaseUser?.uid;
   const isOwner = access.role === 'owner';
 
-  const handleChangeRole = (userId: string, currentRole: ChildRole) => {
-    setSelectedUserId(userId);
+  const handleChangeRole = useCallback((uid: string, currentRole: ChildRole) => {
+    setSelectedUserId(uid);
 
     showAlert(
       'Changer le rôle',
       (
-        <View style={styles.roleChoiceList}>
+        <View style={dynamicStyles(nc, tintColor).roleChoiceList}>
           {(Object.keys(ROLE_LABELS) as ChildRole[]).map((role) => {
             const isCurrent = role === currentRole;
             return (
               <TouchableOpacity
                 key={role}
                 style={[
-                  styles.roleChoiceItem,
-                  isCurrent && styles.roleChoiceItemActive,
+                  dynamicStyles(nc, tintColor).roleChoiceItem,
+                  isCurrent && dynamicStyles(nc, tintColor).roleChoiceItemActive,
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Sélectionner le rôle ${ROLE_LABELS[role]}${isCurrent ? ', rôle actuel' : ''}`}
                 onPress={() => {
                   hide();
-                  confirmRoleChange(userId, role);
+                  confirmRoleChange(uid, role);
                 }}
               >
-                <Text style={styles.roleChoiceLabel}>
+                <Text style={dynamicStyles(nc, tintColor).roleChoiceLabel}>
                   {getRoleIcon(role)} {ROLE_LABELS[role]}
                   {isCurrent ? " (actuel)" : ""}
                 </Text>
-                <Text style={styles.roleChoiceDescription}>
+                <Text style={dynamicStyles(nc, tintColor).roleChoiceDescription}>
                   {ROLE_DESCRIPTIONS[role]}
                 </Text>
               </TouchableOpacity>
@@ -78,29 +97,38 @@ function AccessListItem({ item }: { item: [string, ChildAccessDocument] }) {
           })}
         </View>
       ),
-      [{ text: 'Fermer', onPress: () => setSelectedUserId(null), style: 'cancel' }],
+      [{ text: 'Fermer', onPress: () => { if (isMountedRef.current) setSelectedUserId(null); }, style: 'cancel' }],
     );
-  };
+  }, [childId, nc, tintColor, showAlert, hide]);
 
-  const confirmRoleChange = async (userId: string, newRole: ChildRole) => {
+  const confirmRoleChange = async (uid: string, newRole: ChildRole) => {
     if (!childId) return;
 
     try {
-      await updateChildAccess(childId, userId, { role: newRole });
-      showAlert(
-        '✅ Succès',
-        `Rôle mis à jour vers ${ROLE_LABELS[newRole]}`,
-        [{ text: '' }],
-      );
+      await updateChildAccess(childId, uid, { role: newRole });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (isMountedRef.current) {
+        showAlert(
+          'Succès',
+          `Rôle mis à jour vers ${ROLE_LABELS[newRole]}`,
+          [{ text: 'OK' }],
+        );
+      }
     } catch (error) {
       console.error('Erreur lors de la mise à jour du rôle:', error);
-      showAlert('❌ Erreur', 'Impossible de mettre à jour le rôle');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (isMountedRef.current) {
+        showAlert('Erreur', 'Impossible de mettre à jour le rôle');
+      }
     } finally {
-      setSelectedUserId(null);
+      if (isMountedRef.current) {
+        setSelectedUserId(null);
+      }
     }
   };
 
-  const handleRevoke = (userId: string, userName: string) => {
+  const handleRevoke = useCallback((uid: string, userName: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     showAlert(
       'Révoquer l\'accès',
       `Êtes-vous sûr de vouloir révoquer l'accès de ${userName || 'cet utilisateur'} ?`,
@@ -112,50 +140,62 @@ function AccessListItem({ item }: { item: [string, ChildAccessDocument] }) {
           onPress: async () => {
             if (!childId) return;
             try {
-              await revokeChildAccess(childId, userId);
-              showAlert('✅ Succès', 'Accès révoqué', [{ text: '' }]);
+              await revokeChildAccess(childId, uid);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              if (isMountedRef.current) {
+                showAlert('Succès', 'Accès révoqué', [{ text: 'OK' }]);
+              }
             } catch (error) {
               console.error('Erreur lors de la révocation:', error);
-              showAlert('❌ Erreur', 'Impossible de révoquer l\'accès');
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              if (isMountedRef.current) {
+                showAlert('Erreur', 'Impossible de révoquer l\'accès');
+              }
             }
           },
         },
       ],
     );
-  };
+  }, [childId, showAlert]);
+
+  const ds = dynamicStyles(nc, tintColor);
 
   return (
-    <View style={styles.accessItem}>
-      <View style={styles.accessItemHeader}>
-        <View style={styles.accessItemInfo}>
-          <Text style={styles.accessItemName}>
+    <View style={ds.accessItem}>
+      <View style={ds.accessItemHeader}>
+        <View style={ds.accessItemInfo}>
+          <Text style={ds.accessItemName}>
             {userLoading ? 'Chargement...' : displayName}
-            {isMe && <Text style={styles.meBadge}> (Vous)</Text>}
+            {isMe && <Text style={ds.meBadge}> (Vous)</Text>}
           </Text>
-          <Text style={styles.accessItemRole}>
+          <Text style={ds.accessItemRole}>
             {getRoleIcon(access.role)} {ROLE_LABELS[access.role]}
           </Text>
-          <Text style={styles.accessItemDescription}>
+          <Text style={ds.accessItemDescription}>
             {ROLE_DESCRIPTIONS[access.role]}
           </Text>
         </View>
 
         {!isMe && (
-          <View style={styles.accessItemActions}>
+          <View style={ds.accessItemActions}>
             <TouchableOpacity
-              style={styles.actionButton}
+              style={ds.actionButton}
               onPress={() => handleChangeRole(userId, access.role)}
               disabled={selectedUserId === userId}
+              accessibilityRole="button"
+              accessibilityLabel={`Changer le rôle de ${displayName}`}
             >
-              <Ionicons name="swap-horizontal" size={20} color="#007AFF" />
+              <Ionicons name="swap-horizontal" size={20} color={tintColor} />
             </TouchableOpacity>
 
             {!isOwner && (
               <TouchableOpacity
-                style={[styles.actionButton, styles.deleteButton]}
+                style={[ds.actionButton, ds.deleteButton]}
                 onPress={() => handleRevoke(userId, displayName)}
+                accessibilityRole="button"
+                accessibilityLabel={`Révoquer l'accès de ${displayName}`}
               >
-                <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                <Ionicons name="trash-outline" size={20} color={nc.error} />
               </TouchableOpacity>
             )}
           </View>
@@ -174,14 +214,27 @@ export default function ManageAccessScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const headerOwnerId = useRef(`manage-access-${Math.random().toString(36).slice(2)}`);
 
-  const child = children.find((c) => c.id === childId);
+  const nc = useMemo(() => getNeutralColors(colorScheme), [colorScheme]);
+  const tintColor = Colors[colorScheme].tint;
+
+  const child = useMemo(
+    () => children.find((c) => c.id === childId),
+    [children, childId]
+  );
   const myPermissions = useChildPermissions(childId, firebaseUser?.uid);
   const { accesses, loading } = useChildAccesses(childId);
+
+  const ds = useMemo(() => dynamicStyles(nc, tintColor), [nc, tintColor]);
+
+  const accessList = useMemo(
+    () => Object.entries(accesses),
+    [accesses]
+  );
 
   // Vérifier les permissions
   if (!myPermissions.loading && !myPermissions.canManageAccess) {
     return (
-      <View style={styles.container}>
+      <View style={ds.container}>
         <Stack.Screen
           options={{
             title: 'Accès interdit',
@@ -189,22 +242,26 @@ export default function ManageAccessScreen() {
               <TouchableOpacity
                 style={{ paddingHorizontal: 12 }}
                 onPress={() => router.replace('/baby/plus')}
+                accessibilityRole="button"
+                accessibilityLabel="Retour"
               >
-                <Ionicons name="arrow-back" size={24} color="#007AFF" />
+                <Ionicons name="arrow-back" size={24} color={tintColor} />
               </TouchableOpacity>
             ),
           }}
         />
-        <View style={styles.centeredContainer}>
-          <Ionicons name="lock-closed" size={64} color="#999" />
-          <Text style={styles.errorText}>
+        <View style={ds.centeredContainer}>
+          <Ionicons name="lock-closed" size={64} color={nc.textMuted} />
+          <Text style={ds.errorText}>
             Vous n'avez pas la permission de gérer les accès
           </Text>
           <TouchableOpacity
-            style={styles.backButton}
+            style={ds.backButton}
             onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Retour à l'écran précédent"
           >
-            <Text style={styles.backButtonText}>Retour</Text>
+            <Text style={ds.backButtonText}>Retour</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -213,6 +270,7 @@ export default function ManageAccessScreen() {
 
   const handleInvite = () => {
     if (!childId) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
       pathname: '/(drawer)/share-child',
       params: { childId, returnTo: `/baby/manage-access?childId=${childId}` },
@@ -234,7 +292,7 @@ export default function ManageAccessScreen() {
 
   if (loading || myPermissions.loading) {
     return (
-      <View style={styles.container}>
+      <View style={ds.container}>
         <Stack.Screen
           options={{
             title: 'Gestion des accès',
@@ -242,24 +300,24 @@ export default function ManageAccessScreen() {
               <TouchableOpacity
                 style={{ paddingHorizontal: 12 }}
                 onPress={() => router.replace('/baby/plus')}
+                accessibilityRole="button"
+                accessibilityLabel="Retour"
               >
-                <Ionicons name="arrow-back" size={24} color="#007AFF" />
+                <Ionicons name="arrow-back" size={24} color={tintColor} />
               </TouchableOpacity>
             ),
           }}
         />
-        <View style={styles.centeredContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Chargement...</Text>
+        <View style={ds.centeredContainer}>
+          <ActivityIndicator size="large" color={tintColor} />
+          <Text style={ds.loadingText}>Chargement...</Text>
         </View>
       </View>
     );
   }
 
-  const accessList = Object.entries(accesses);
-
   return (
-    <View style={styles.container}>
+    <View style={ds.container}>
       <Stack.Screen
         options={{
           title: `Accès - ${child?.name || 'Enfant'}`,
@@ -267,16 +325,18 @@ export default function ManageAccessScreen() {
             <TouchableOpacity
               style={{ paddingHorizontal: 12 }}
               onPress={() => router.replace('/baby/plus')}
+              accessibilityRole="button"
+              accessibilityLabel="Retour"
             >
-              <Ionicons name="arrow-back" size={24} color="#007AFF" />
+              <Ionicons name="arrow-back" size={24} color={tintColor} />
             </TouchableOpacity>
           ),
         }}
       />
 
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Parents ayant accès</Text>
-        <Text style={styles.headerSubtitle}>
+      <View style={ds.header}>
+        <Text style={ds.headerTitle}>Parents ayant accès</Text>
+        <Text style={ds.headerSubtitle}>
           {accessList.length} personne{accessList.length > 1 ? 's' : ''}
         </Text>
       </View>
@@ -284,20 +344,27 @@ export default function ManageAccessScreen() {
       <FlatList
         data={accessList}
         keyExtractor={([userId]) => userId}
-        renderItem={({ item }) => <AccessListItem item={item} />}
-        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => (
+          <AccessListItem item={item} nc={nc} tintColor={tintColor} />
+        )}
+        contentContainerStyle={ds.listContent}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="people-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>Aucun accès défini</Text>
+          <View style={ds.emptyContainer}>
+            <Ionicons name="people-outline" size={64} color={nc.textMuted} />
+            <Text style={ds.emptyText}>Aucun accès défini</Text>
           </View>
         }
       />
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.inviteButton} onPress={handleInvite}>
-          <Ionicons name="person-add" size={20} color="white" />
-          <Text style={styles.inviteButtonText}>Inviter un parent</Text>
+      <View style={ds.footer}>
+        <TouchableOpacity
+          style={ds.inviteButton}
+          onPress={handleInvite}
+          accessibilityRole="button"
+          accessibilityLabel="Inviter un parent à accéder au profil de l'enfant"
+        >
+          <Ionicons name="person-add" size={20} color={nc.white} />
+          <Text style={ds.inviteButtonText}>Inviter un parent</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -319,166 +386,170 @@ function getRoleIcon(role: ChildRole): string {
   }
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  centeredContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  header: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  listContent: {
-    padding: 16,
-  },
-  accessItem: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  accessItemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  accessItemInfo: {
-    flex: 1,
-  },
-  accessItemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  meBadge: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: 'normal',
-  },
-  accessItemRole: {
-    fontSize: 15,
-    color: '#007AFF',
-    marginBottom: 4,
-  },
-  accessItemDescription: {
-    fontSize: 13,
-    color: '#666',
-  },
-  accessItemActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteButton: {
-    backgroundColor: '#ffe5e5',
-  },
-  footer: {
-    padding: 16,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-  },
-  inviteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#007AFF',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-  },
-  inviteButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 16,
-  },
-  backButton: {
-    marginTop: 24,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-  },
-  backButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 64,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#999',
-    marginTop: 16,
-  },
-  roleChoiceList: {
-    gap: 12,
-    marginTop: 12,
-  },
-  roleChoiceItem: {
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#f6f7fb',
-  },
-  roleChoiceItemActive: {
-    borderWidth: 1,
-    borderColor: '#007AFF',
-    backgroundColor: '#eef6ff',
-  },
-  roleChoiceLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 2,
-  },
-  roleChoiceDescription: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
-});
+const dynamicStyles = (
+  nc: ReturnType<typeof getNeutralColors>,
+  tintColor: string
+) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: nc.background,
+    },
+    centeredContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 24,
+    },
+    header: {
+      backgroundColor: nc.backgroundCard,
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: nc.border,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: nc.textStrong,
+    },
+    headerSubtitle: {
+      fontSize: 14,
+      color: nc.textLight,
+      marginTop: 4,
+    },
+    listContent: {
+      padding: 16,
+    },
+    accessItem: {
+      backgroundColor: nc.backgroundCard,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      shadowColor: nc.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    accessItemHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+    },
+    accessItemInfo: {
+      flex: 1,
+    },
+    accessItemName: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: nc.textStrong,
+      marginBottom: 4,
+    },
+    meBadge: {
+      color: tintColor,
+      fontSize: 14,
+      fontWeight: 'normal',
+    },
+    accessItemRole: {
+      fontSize: 15,
+      color: tintColor,
+      marginBottom: 4,
+    },
+    accessItemDescription: {
+      fontSize: 13,
+      color: nc.textLight,
+    },
+    accessItemActions: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    actionButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: nc.backgroundPressed,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    deleteButton: {
+      backgroundColor: nc.error + "15",
+    },
+    footer: {
+      padding: 16,
+      backgroundColor: nc.backgroundCard,
+      borderTopWidth: 1,
+      borderTopColor: nc.border,
+    },
+    inviteButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: tintColor,
+      paddingVertical: 14,
+      borderRadius: 12,
+      gap: 8,
+    },
+    inviteButtonText: {
+      color: nc.white,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    errorText: {
+      fontSize: 16,
+      color: nc.textLight,
+      textAlign: 'center',
+      marginTop: 16,
+    },
+    backButton: {
+      marginTop: 24,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      backgroundColor: tintColor,
+      borderRadius: 8,
+    },
+    backButtonText: {
+      color: nc.white,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    loadingText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: nc.textLight,
+    },
+    emptyContainer: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 64,
+    },
+    emptyText: {
+      fontSize: 16,
+      color: nc.textMuted,
+      marginTop: 16,
+    },
+    roleChoiceList: {
+      gap: 12,
+      marginTop: 12,
+    },
+    roleChoiceItem: {
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      backgroundColor: nc.backgroundPressed,
+    },
+    roleChoiceItemActive: {
+      borderWidth: 1,
+      borderColor: tintColor,
+      backgroundColor: tintColor + "15",
+    },
+    roleChoiceLabel: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: nc.textStrong,
+      marginBottom: 2,
+    },
+    roleChoiceDescription: {
+      fontSize: 13,
+      color: nc.textLight,
+    },
+  });

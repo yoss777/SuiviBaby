@@ -1,5 +1,6 @@
 import { ThemedView } from "@/components/themed-view";
 import { db } from "@/config/firebase";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -10,9 +11,10 @@ import {
   listenToActiveShareCode,
 } from "@/services/childSharingService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import * as Haptics from "expo-haptics";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Clipboard,
@@ -31,7 +33,8 @@ import { useHeaderLeft } from "./_layout";
 import { HeaderBackButton } from "@react-navigation/elements";
 
 export default function ShareChildScreen() {
-  const colorScheme = useColorScheme();
+  const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const { showAlert } = useModal();
   const { user } = useAuth();
   const router = useRouter();
@@ -49,6 +52,182 @@ export default function ShareChildScreen() {
   const [isLoadingInvite, setIsLoadingInvite] = useState(false);
   const [isLoadingChild, setIsLoadingChild] = useState(true);
   const isSendingInviteRef = useRef(false);
+
+  const dynamicStyles = useMemo(
+    () =>
+      StyleSheet.create({
+        header: {
+          alignItems: "center",
+          padding: 32,
+          paddingTop: 48,
+          backgroundColor: nc.backgroundCard,
+          borderBottomLeftRadius: 24,
+          borderBottomRightRadius: 24,
+          shadowColor: nc.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 3,
+          marginBottom: 24,
+        },
+        title: {
+          fontSize: 28,
+          fontWeight: "700",
+          color: nc.textStrong,
+          marginTop: 16,
+          marginBottom: 8,
+        },
+        subtitle: {
+          fontSize: 15,
+          color: nc.textLight,
+          textAlign: "center",
+          paddingHorizontal: 16,
+          lineHeight: 22,
+        },
+        section: {
+          marginHorizontal: 20,
+          marginBottom: 32,
+          backgroundColor: nc.backgroundCard,
+          borderRadius: 16,
+          padding: 20,
+          shadowColor: nc.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 3,
+        },
+        methodTitle: {
+          fontSize: 20,
+          fontWeight: "700",
+          color: nc.textStrong,
+        },
+        methodDescription: {
+          fontSize: 14,
+          color: nc.textLight,
+          lineHeight: 20,
+          marginBottom: 20,
+        },
+        codeBox: {
+          backgroundColor: nc.backgroundPressed,
+          borderWidth: 2,
+          borderColor: Colors[colorScheme].tint,
+          borderRadius: 12,
+          paddingVertical: 20,
+          paddingHorizontal: 32,
+          marginBottom: 16,
+        },
+        codeText: {
+          fontSize: 32,
+          fontWeight: "700",
+          color: Colors[colorScheme].tint,
+          letterSpacing: 4,
+        },
+        codeButton: {
+          flexDirection: "row" as const,
+          alignItems: "center" as const,
+          gap: 8,
+          paddingVertical: 12,
+          paddingHorizontal: 20,
+          minHeight: 44,
+          borderRadius: 10,
+          borderWidth: 2,
+          borderColor: nc.todayAccent,
+          backgroundColor: nc.todayAccent + "15",
+        },
+        codeButtonText: {
+          fontSize: 16,
+          fontWeight: "600",
+          color: nc.todayAccent,
+        },
+        codeHelper: {
+          fontSize: 13,
+          color: nc.textLight,
+          textAlign: "center" as const,
+          fontStyle: "italic" as const,
+        },
+        generateButton: {
+          backgroundColor: Colors[colorScheme].tint,
+          flexDirection: "row" as const,
+          alignItems: "center" as const,
+          justifyContent: "center" as const,
+          paddingVertical: 14,
+          minHeight: 48,
+          gap: 12,
+          borderRadius: 12,
+          shadowColor: Colors[colorScheme].tint,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 5,
+        },
+        generateButtonText: {
+          color: nc.white,
+          fontSize: 16,
+          fontWeight: "600",
+        },
+        inputContainer: {
+          flexDirection: "row" as const,
+          alignItems: "center" as const,
+          backgroundColor: nc.backgroundPressed,
+          borderRadius: 12,
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+          minHeight: 48,
+          borderWidth: 1,
+          borderColor: nc.borderLight,
+          gap: 12,
+        },
+        input: {
+          flex: 1,
+          fontSize: 16,
+          color: nc.textStrong,
+        },
+        inviteButton: {
+          backgroundColor: nc.success,
+          flexDirection: "row" as const,
+          alignItems: "center" as const,
+          justifyContent: "center" as const,
+          paddingVertical: 14,
+          minHeight: 48,
+          gap: 12,
+          borderRadius: 12,
+          shadowColor: nc.success,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 5,
+        },
+        inviteButtonText: {
+          color: nc.white,
+          fontSize: 16,
+          fontWeight: "600",
+        },
+        inviteHelper: {
+          fontSize: 13,
+          color: nc.textLight,
+          textAlign: "center" as const,
+          fontStyle: "italic" as const,
+        },
+        infoBox: {
+          flexDirection: "row" as const,
+          backgroundColor: nc.todayAccent + "15",
+          padding: 16,
+          marginHorizontal: 20,
+          marginBottom: 32,
+          borderRadius: 12,
+          gap: 12,
+          borderLeftWidth: 4,
+          borderLeftColor: nc.todayAccent,
+        },
+        infoText: {
+          flex: 1,
+          fontSize: 14,
+          color: nc.todayAccent,
+          lineHeight: 20,
+        },
+      }),
+    [nc, colorScheme],
+  );
 
   // Charger les infos de l'enfant et le code existant
   useEffect(() => {
@@ -73,7 +252,7 @@ export default function ShareChildScreen() {
       const backButton = (
         <HeaderBackButton
           onPress={() => router.replace(returnTo as any)}
-          tintColor={Colors[colorScheme ?? "light"].text}
+          tintColor={Colors[colorScheme].text}
         />
       );
       setHeaderLeft(backButton, childId);
@@ -99,9 +278,11 @@ export default function ShareChildScreen() {
     try {
       const code = await createShareCode(childId, childName);
       setShareCode(code);
-      showAlert("Succès", "Code de partage créé avec succès !", [{ text: "" }]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showAlert("Succes", "Code de partage cree avec succes !", [{ text: "" }]);
     } catch (error: any) {
-      showAlert("Erreur", error.message || "Impossible de créer le code");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showAlert("Erreur", error.message || "Impossible de creer le code");
     } finally {
       setIsLoadingCode(false);
     }
@@ -110,16 +291,18 @@ export default function ShareChildScreen() {
   const handleCopyCode = () => {
     if (shareCode) {
       Clipboard.setString(shareCode);
-      showAlert("✅", "Code copié dans le presse-papier", [{ text: "" }]);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      showAlert("\u2705", "Code copie dans le presse-papier", [{ text: "" }]);
     }
   };
 
   const handleShareCode = async () => {
     if (!shareCode) return;
 
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await RNShare.share({
-        message: `Voici le code pour accéder au suivi de ${childName} : ${shareCode}\n\nUtilise ce code dans l'app Suivi Baby pour voir les informations de notre enfant. Le code est valide pendant 7 jours.`,
+        message: `Voici le code pour acceder au suivi de ${childName} : ${shareCode}\n\nUtilise ce code dans l'app Suivi Baby pour voir les informations de notre enfant. Le code est valide pendant 7 jours.`,
       });
     } catch (error) {
       console.error("Erreur partage:", error);
@@ -151,18 +334,20 @@ export default function ShareChildScreen() {
         invitedEmail: trimmedEmail,
       });
       await createEmailInvitation(childId, childName, trimmedEmail);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showAlert(
-        "Invitation envoyée",
-        `Une invitation a été envoyée à ${trimmedEmail}. L'autre parent recevra une notification dans l'app.`,
+        "Invitation envoyee",
+        `Une invitation a ete envoyee a ${trimmedEmail}. L'autre parent recevra une notification dans l'app.`,
         [{ text: "" }],
       );
       setInviteEmail("");
     } catch (error: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (error?.code === "already-linked") {
         const email = error?.email ?? trimmedEmail;
         showAlert(
-          "Déjà lié",
-          `Cet enfant est déjà lié au destinataire ${email}.`,
+          "Deja lie",
+          `Cet enfant est deja lie au destinataire ${email}.`,
           [{ text: "" }],
         );
       } else {
@@ -218,52 +403,70 @@ export default function ShareChildScreen() {
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
           >
-            <View style={styles.header}>
-              <FontAwesome name="share-alt" size={48} color="#4A90E2" />
-              <Text style={styles.title}>Partager {childName}</Text>
-              <Text style={styles.subtitle}>
-                Donnez accès au suivi de votre enfant à un autre parent
+            <View style={dynamicStyles.header}>
+              <FontAwesome name="share-alt" size={48} color={nc.todayAccent} />
+              <Text style={dynamicStyles.title}>Partager {childName}</Text>
+              <Text style={dynamicStyles.subtitle}>
+                Donnez acces au suivi de votre enfant a un autre parent
               </Text>
             </View>
 
-            {/* Méthode 1 : Code de partage rapide */}
-            <View style={styles.section}>
+            {/* Methode 1 : Code de partage rapide */}
+            <View style={dynamicStyles.section}>
               <View style={styles.methodHeader}>
-                <FontAwesome name="qrcode" size={24} color="#9C27B0" />
-                <Text style={styles.methodTitle}>Code de partage rapide</Text>
+                <FontAwesome
+                  name="qrcode"
+                  size={24}
+                  color={Colors[colorScheme].tint}
+                />
+                <Text style={dynamicStyles.methodTitle}>
+                  Code de partage rapide
+                </Text>
               </View>
-              <Text style={styles.methodDescription}>
-                Générez un code à partager par SMS, WhatsApp ou autre. Valide
+              <Text style={dynamicStyles.methodDescription}>
+                Generez un code a partager par SMS, WhatsApp ou autre. Valide
                 pendant 7 jours.
               </Text>
 
               {shareCode ? (
                 <View style={styles.codeContainer}>
-                  <View style={styles.codeBox}>
-                    <Text style={styles.codeText}>{shareCode}</Text>
+                  <View style={dynamicStyles.codeBox}>
+                    <Text style={dynamicStyles.codeText}>{shareCode}</Text>
                   </View>
 
                   <View style={styles.codeActions}>
                     <TouchableOpacity
-                      style={styles.codeButton}
+                      style={dynamicStyles.codeButton}
                       onPress={handleCopyCode}
                       activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel="Copier le code de partage"
                     >
-                      <FontAwesome name="copy" size={18} color="#4A90E2" />
-                      <Text style={styles.codeButtonText}>Copier</Text>
+                      <FontAwesome
+                        name="copy"
+                        size={18}
+                        color={nc.todayAccent}
+                      />
+                      <Text style={dynamicStyles.codeButtonText}>Copier</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.codeButton}
+                      style={dynamicStyles.codeButton}
                       onPress={handleShareCode}
                       activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel="Partager le code via une autre application"
                     >
-                      <FontAwesome name="share" size={18} color="#4A90E2" />
-                      <Text style={styles.codeButtonText}>Partager</Text>
+                      <FontAwesome
+                        name="share"
+                        size={18}
+                        color={nc.todayAccent}
+                      />
+                      <Text style={dynamicStyles.codeButtonText}>Partager</Text>
                     </TouchableOpacity>
                   </View>
 
-                  <Text style={styles.codeHelper}>
+                  <Text style={dynamicStyles.codeHelper}>
                     L'autre parent devra aller dans "Ajouter un enfant" puis
                     "J'ai un code"
                   </Text>
@@ -271,20 +474,26 @@ export default function ShareChildScreen() {
               ) : (
                 <TouchableOpacity
                   style={[
-                    styles.generateButton,
+                    dynamicStyles.generateButton,
                     isLoadingCode && styles.buttonDisabled,
                   ]}
                   onPress={handleGenerateCode}
                   disabled={isLoadingCode}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Generer un code de partage"
                 >
                   {isLoadingCode ? (
-                    <ActivityIndicator size="small" color="white" />
+                    <ActivityIndicator size="small" color={nc.white} />
                   ) : (
                     <>
-                      <FontAwesome name="plus-circle" size={18} color="white" />
-                      <Text style={styles.generateButtonText}>
-                        Générer un code
+                      <FontAwesome
+                        name="plus-circle"
+                        size={18}
+                        color={nc.white}
+                      />
+                      <Text style={dynamicStyles.generateButtonText}>
+                        Generer un code
                       </Text>
                     </>
                   )}
@@ -292,66 +501,84 @@ export default function ShareChildScreen() {
               )}
             </View>
 
-            {/* Méthode 2 : Invitation par email */}
-            <View style={styles.section}>
+            {/* Methode 2 : Invitation par email */}
+            <View style={dynamicStyles.section}>
               <View style={styles.methodHeader}>
-                <FontAwesome name="envelope" size={24} color="#28a745" />
-                <Text style={styles.methodTitle}>Invitation par email</Text>
+                <FontAwesome name="envelope" size={24} color={nc.success} />
+                <Text style={dynamicStyles.methodTitle}>
+                  Invitation par email
+                </Text>
               </View>
-              <Text style={styles.methodDescription}>
+              <Text style={dynamicStyles.methodDescription}>
                 Invitez directement un autre parent en saisissant son adresse
                 email.
               </Text>
 
               <View style={styles.inviteForm}>
-                <View style={styles.inputContainer}>
-                  <FontAwesome name="at" size={16} color="#666" />
+                <View style={dynamicStyles.inputContainer}>
+                  <FontAwesome name="at" size={16} color={nc.textLight} />
                   <TextInput
-                    style={styles.input}
+                    style={dynamicStyles.input}
                     placeholder="email@exemple.com"
+                    placeholderTextColor={nc.textMuted}
                     value={inviteEmail}
                     onChangeText={setInviteEmail}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     editable={!isLoadingInvite}
+                    accessibilityLabel="Adresse email du parent a inviter"
                   />
                 </View>
 
                 <TouchableOpacity
                   style={[
-                    styles.inviteButton,
+                    dynamicStyles.inviteButton,
                     isLoadingInvite && styles.buttonDisabled,
                   ]}
                   onPress={handleSendInvitation}
                   disabled={isLoadingInvite}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Envoyer l'invitation par email"
                 >
                   {isLoadingInvite ? (
-                    <ActivityIndicator size="small" color="white" />
+                    <ActivityIndicator size="small" color={nc.white} />
                   ) : (
                     <>
-                      <FontAwesome name="paper-plane" size={18} color="white" />
-                      <Text style={styles.inviteButtonText}>
+                      <FontAwesome
+                        name="paper-plane"
+                        size={18}
+                        color={nc.white}
+                      />
+                      <Text style={dynamicStyles.inviteButtonText}>
                         Envoyer l'invitation
                       </Text>
                     </>
                   )}
                 </TouchableOpacity>
 
-                <Text style={styles.inviteHelper}>
+                <Text style={dynamicStyles.inviteHelper}>
                   L'autre parent recevra une notification dans l'app et pourra
                   accepter l'invitation
                 </Text>
               </View>
             </View>
 
-            {/* Information de sécurité */}
-            <View style={styles.infoBox}>
-              <FontAwesome name="shield-alt" size={20} color="#17a2b8" />
-              <Text style={styles.infoText}>
-                Les deux parents auront un accès complet au suivi de l'enfant.
-                Vous pourrez retirer l'accès à tout moment depuis les
-                paramètres.
+            {/* Information de securite */}
+            <View
+              style={dynamicStyles.infoBox}
+              accessibilityRole="text"
+              accessibilityLabel="Information de securite : les deux parents auront un acces complet au suivi de l'enfant"
+            >
+              <FontAwesome
+                name="shield-alt"
+                size={20}
+                color={nc.todayAccent}
+              />
+              <Text style={dynamicStyles.infoText}>
+                Les deux parents auront un acces complet au suivi de l'enfant.
+                Vous pourrez retirer l'acces a tout moment depuis les
+                parametres.
               </Text>
             </View>
           </ScrollView>
@@ -379,189 +606,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  header: {
-    alignItems: "center",
-    padding: 32,
-    paddingTop: 48,
-    backgroundColor: "white",
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#212529",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: "#6c757d",
-    textAlign: "center",
-    paddingHorizontal: 16,
-    lineHeight: 22,
-  },
-  section: {
-    marginHorizontal: 20,
-    marginBottom: 32,
-    backgroundColor: "white",
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
   methodHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     marginBottom: 8,
   },
-  methodTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#212529",
-  },
-  methodDescription: {
-    fontSize: 14,
-    color: "#6c757d",
-    lineHeight: 20,
-    marginBottom: 20,
-  },
   codeContainer: {
     alignItems: "center",
-  },
-  codeBox: {
-    backgroundColor: "#f8f9fa",
-    borderWidth: 2,
-    borderColor: "#9C27B0",
-    borderRadius: 12,
-    paddingVertical: 20,
-    paddingHorizontal: 32,
-    marginBottom: 16,
-  },
-  codeText: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#9C27B0",
-    letterSpacing: 4,
   },
   codeActions: {
     flexDirection: "row",
     gap: 12,
     marginBottom: 12,
   },
-  codeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#4A90E2",
-    backgroundColor: "#f0f8ff",
-  },
-  codeButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#4A90E2",
-  },
-  codeHelper: {
-    fontSize: 13,
-    color: "#6c757d",
-    textAlign: "center",
-    fontStyle: "italic",
-  },
-  generateButton: {
-    backgroundColor: "#9C27B0",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    gap: 12,
-    borderRadius: 12,
-    shadowColor: "#9C27B0",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  generateButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
   inviteForm: {
     gap: 16,
   },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-    gap: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: "#333",
-  },
-  inviteButton: {
-    backgroundColor: "#28a745",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    gap: 12,
-    borderRadius: 12,
-    shadowColor: "#28a745",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  inviteButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  inviteHelper: {
-    fontSize: 13,
-    color: "#6c757d",
-    textAlign: "center",
-    fontStyle: "italic",
-  },
   buttonDisabled: {
     opacity: 0.5,
-  },
-  infoBox: {
-    flexDirection: "row",
-    backgroundColor: "#d1ecf1",
-    padding: 16,
-    marginHorizontal: 20,
-    marginBottom: 32,
-    borderRadius: 12,
-    gap: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: "#17a2b8",
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 14,
-    color: "#0c5460",
-    lineHeight: 20,
   },
 });
