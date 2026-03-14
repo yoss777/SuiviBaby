@@ -1,5 +1,4 @@
 import { SwipeGallery } from "@/components/moments";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,9 +28,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BackHandler,
   Dimensions,
+  Animated as RNAnimated,
   FlatList,
   Image,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -103,6 +104,267 @@ const getDayLabel = (date: Date): string => {
     month: "long",
   });
 };
+
+// ============================================
+// STYLES (moved before components that reference them)
+// ============================================
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+  },
+  headerBlock: {
+    marginBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "800",
+  },
+  subtitle: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingRight: 16,
+  },
+  headerButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
+  dayGroup: {
+    marginTop: 8,
+  },
+  daySeparator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 12,
+  },
+  daySeparatorLine: {
+    flex: 1,
+    height: 1,
+  },
+  daySeparatorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  photoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  polaroidWrapper: {
+    width: POLAROID_WIDTH,
+  },
+  polaroid: {
+    borderRadius: 4,
+    padding: 8,
+    paddingBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  newBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    zIndex: 10,
+  },
+  polaroidImageContainer: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  polaroidImage: {
+    width: "100%",
+    height: "100%",
+  },
+  imagePlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  polaroidCaption: {
+    marginTop: 10,
+    alignItems: "center",
+  },
+  captionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    position: "relative",
+  },
+  iconsRow: {
+    position: "absolute",
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  polaroidDate: {
+    fontSize: 11,
+    fontStyle: "italic",
+  },
+  polaroidTitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 16,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  emptyStateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: eventColors.jalon.dark,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 24,
+  },
+  emptyStateButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 12,
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: eventColors.jalon.dark,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  skeletonBlock: {
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 120,
+  },
+});
+
+// ============================================
+// SKELETON LOADING (P1)
+// ============================================
+
+function GallerySkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = React.useRef(new RNAnimated.Value(0)).current;
+
+  React.useEffect(() => {
+    const loop = RNAnimated.loop(
+      RNAnimated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg = colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
+
+  const Block = ({ width, height }: { width: number | string; height: number }) => (
+    <View style={[styles.skeletonBlock, { width: width as number, height, backgroundColor: nc.borderLight, marginBottom: 10 }]}>
+      <RNAnimated.View style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]} />
+    </View>
+  );
+
+  return (
+    <View style={[styles.loadingContainer, { backgroundColor: nc.backgroundWarm }]}>
+      <View style={{ width: "100%", padding: 20 }}>
+        <Block width="50%" height={26} />
+        <Block width="30%" height={14} />
+        <View style={{ height: 20 }} />
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          <View style={{ flex: 1 }}>
+            <Block width="100%" height={POLAROID_WIDTH} />
+            <Block width="60%" height={12} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Block width="100%" height={POLAROID_WIDTH} />
+            <Block width="60%" height={12} />
+          </View>
+        </View>
+        <View style={{ height: 16 }} />
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          <View style={{ flex: 1 }}>
+            <Block width="100%" height={POLAROID_WIDTH} />
+            <Block width="60%" height={12} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Block width="100%" height={POLAROID_WIDTH} />
+            <Block width="60%" height={12} />
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
 
 // ============================================
 // POLAROID CARD COMPONENT
@@ -278,8 +540,9 @@ export default function GalleryScreen() {
       ownerId: sheetOwnerId,
       formType: "milestones",
       jalonType: "photo",
+      onSuccess: () => showToast("Souvenir enregistré"),
     });
-  }, [canManageContent, openSheet]);
+  }, [canManageContent, openSheet, showToast]);
 
   // Header left - back button
   useFocusEffect(
@@ -525,9 +788,10 @@ export default function GalleryScreen() {
           photos: event.photos,
           date: toDate(event.date),
         },
+        onSuccess: () => showToast("Souvenir modifié"),
       });
     },
-    [events, openSheet, canManageContent],
+    [events, openSheet, canManageContent, showToast],
   );
 
   // Social handlers
@@ -656,14 +920,17 @@ export default function GalleryScreen() {
     </View>
   ), [handlePhotoPress, canManageContent, handleEditPhoto, likesInfo, commentCounts, newEventIds, nc]);
 
-  // Loading state
+  // P9b: Pull-to-refresh
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setRetryCount((c) => c + 1);
+    setTimeout(() => setIsRefreshing(false), 800);
+  }, []);
+
+  // Loading state - P1: skeleton shimmer
   if (!loaded) {
-    return (
-      <View style={[styles.loadingContainer, { backgroundColor: nc.backgroundWarm }]}>
-        <IconPulseDots color={eventColors.jalon.dark} />
-        <Text style={[styles.loadingText, { color: nc.textLight }]}>Chargement des souvenirs...</Text>
-      </View>
-    );
+    return <GallerySkeleton colorScheme={colorScheme} />;
   }
 
   // Error state with retry
@@ -723,6 +990,9 @@ export default function GalleryScreen() {
             maxToRenderPerBatch={3}
             windowSize={5}
             removeClippedSubviews={true}
+            refreshControl={
+              <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+            }
           />
         )}
       </SafeAreaView>
@@ -749,189 +1019,3 @@ export default function GalleryScreen() {
   );
 }
 
-// ============================================
-// STYLES
-// ============================================
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-  },
-  headerBlock: {
-    marginBottom: 12,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "800",
-  },
-  subtitle: {
-    fontSize: 13,
-    marginTop: 4,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingRight: 16,
-  },
-  headerButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
-  dayGroup: {
-    marginTop: 8,
-  },
-  daySeparator: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    gap: 12,
-  },
-  daySeparatorLine: {
-    flex: 1,
-    height: 1,
-  },
-  daySeparatorText: {
-    fontSize: 13,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  photoGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  polaroidWrapper: {
-    width: POLAROID_WIDTH,
-  },
-  polaroid: {
-    borderRadius: 4,
-    padding: 8,
-    paddingBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  newBadge: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
-    zIndex: 10,
-  },
-  polaroidImageContainer: {
-    width: "100%",
-    aspectRatio: 1,
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  polaroidImage: {
-    width: "100%",
-    height: "100%",
-  },
-  imagePlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  polaroidCaption: {
-    marginTop: 10,
-    alignItems: "center",
-  },
-  captionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    position: "relative",
-  },
-  iconsRow: {
-    position: "absolute",
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  polaroidDate: {
-    fontSize: 11,
-    fontStyle: "italic",
-  },
-  polaroidTitle: {
-    fontSize: 12,
-    fontWeight: "500",
-    marginTop: 2,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 16,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: "center",
-  },
-  emptyStateButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: eventColors.jalon.dark,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 24,
-  },
-  emptyStateButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  errorTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: 12,
-  },
-  retryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: eventColors.jalon.dark,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginTop: 16,
-  },
-  retryButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-});
