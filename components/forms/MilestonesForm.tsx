@@ -81,28 +81,28 @@ const TYPE_CONFIG: Record<
   { label: string; color: string; icon: string; defaultTitle: string }
 > = {
   dent: {
-    label: "Première dent",
+    label: "Nouvelle dent",
     color: eventColors.jalon.dark,
     icon: "tooth",
-    defaultTitle: "Première dent",
+    defaultTitle: "Nouvelle dent",
   },
   pas: {
-    label: "Premiers pas",
+    label: "Nouveau pas",
     color: eventColors.jalon.dark,
     icon: "shoe-prints",
-    defaultTitle: "Premiers pas",
+    defaultTitle: "Nouveau pas",
   },
   sourire: {
-    label: "Premier sourire",
+    label: "Nouveau sourire",
     color: eventColors.jalon.dark,
     icon: "face-smile",
-    defaultTitle: "Premier sourire",
+    defaultTitle: "Nouveau sourire",
   },
   mot: {
-    label: "Premiers mots",
+    label: "Nouveau mot",
     color: eventColors.jalon.dark,
     icon: "comment-dots",
-    defaultTitle: "Premiers mots",
+    defaultTitle: "Nouveau mot",
   },
   humeur: {
     label: "Humeur",
@@ -228,7 +228,6 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
-  const colors = Colors[colorScheme];
   const nc = getNeutralColors(colorScheme);
 
   const isEditing = !!editData;
@@ -520,44 +519,37 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       {/* Photo */}
       <View style={styles.inputGroup}>
         <Text style={[styles.inputLabel, { color: nc.textLight }]}>Photo</Text>
-        <View style={styles.photoRow}>
-          {photoUri ? (
+        {photoUri ? (
+          <View style={styles.photoPreviewContainer}>
             <Image source={{ uri: photoUri }} style={[styles.photoPreview, { backgroundColor: nc.background }]} />
-          ) : (
-            <View style={[styles.photoPlaceholder, { borderColor: nc.border, backgroundColor: nc.background }]}>
-              <FontAwesome name="image" size={18} color={nc.textMuted} />
-              <Text style={[styles.photoPlaceholderText, { color: nc.textMuted }]}>Aucune photo</Text>
-            </View>
-          )}
-          <View style={styles.photoActions}>
             <TouchableOpacity
-              style={[styles.photoButton, { borderColor: nc.border, backgroundColor: nc.backgroundCard }]}
-              onPress={handlePickPhoto}
+              style={[styles.photoRemoveButton, { backgroundColor: nc.backgroundCard }]}
+              onPress={() => setPhotoUri(null)}
               activeOpacity={0.8}
               disabled={isSubmitting}
-              accessibilityLabel="Ajouter une photo"
+              accessibilityLabel="Retirer la photo"
+              hitSlop={8}
             >
-              <FontAwesome5 name="camera" size={14} color={colors.text} />
-              <Text style={[styles.photoButtonText, { color: nc.textStrong }]}>Ajouter</Text>
+              <FontAwesome name="xmark" size={12} color="#dc3545" />
             </TouchableOpacity>
-            {photoUri && (
-              <TouchableOpacity
-                style={styles.photoButtonSecondary}
-                onPress={() => setPhotoUri(null)}
-                activeOpacity={0.8}
-                disabled={isSubmitting}
-                accessibilityLabel="Retirer la photo"
-              >
-                <Text style={[styles.photoButtonSecondaryText, { color: nc.textMuted }]}>Retirer</Text>
-              </TouchableOpacity>
-            )}
             {photoUploading && (
-              <Text style={styles.photoUploading}>
+              <Text style={[styles.photoUploading, { color: eventColors.jalon.dark }]}>
                 Téléversement... {uploadProgress > 0 ? `${uploadProgress}%` : ""}
               </Text>
             )}
           </View>
-        </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.photoPlaceholder, { borderColor: nc.border, backgroundColor: nc.background }]}
+            onPress={handlePickPhoto}
+            activeOpacity={0.8}
+            disabled={isSubmitting}
+            accessibilityLabel="Ajouter une photo"
+          >
+            <FontAwesome5 name="camera" size={20} color={nc.textMuted} />
+            <Text style={[styles.photoPlaceholderText, { color: nc.textMuted }]}>Ajouter une photo</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Note */}
@@ -840,54 +832,47 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
   },
-  photoRow: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
+  photoPreviewContainer: {
+    position: "relative" as const,
+    alignSelf: "center",
   },
   photoPreview: {
-    width: 88,
-    height: 66,
+    width: 160,
+    height: 120,
     borderRadius: 12,
+  },
+  photoRemoveButton: {
+    position: "absolute" as const,
+    top: -8,
+    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
   photoPlaceholder: {
-    width: 88,
-    height: 66,
+    height: 80,
     borderRadius: 12,
     borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
+    borderStyle: "dashed" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 6,
   },
   photoPlaceholderText: {
-    fontSize: 11,
-  },
-  photoActions: {
-    gap: 8,
-    flex: 1,
-  },
-  photoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  photoButtonText: {
     fontSize: 13,
-    fontWeight: "600",
-  },
-  photoButtonSecondary: {
-    alignSelf: "flex-start",
-  },
-  photoButtonSecondaryText: {
-    fontSize: 12,
+    fontWeight: "500" as const,
   },
   photoUploading: {
     fontSize: 12,
-    color: eventColors.jalon.dark,
+    textAlign: "center" as const,
+    marginTop: 6,
   },
   buttonsContainer: {
     gap: 12,

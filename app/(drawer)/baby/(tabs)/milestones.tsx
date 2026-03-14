@@ -79,28 +79,28 @@ const TYPE_CONFIG: Record<
   { label: string; color: string; icon: string; defaultTitle: string }
 > = {
   dent: {
-    label: "Première dent",
+    label: "Nouvelle dent",
     color: eventColors.jalon.dark,
     icon: "tooth",
-    defaultTitle: "Première dent",
+    defaultTitle: "Nouvelle dent",
   },
   pas: {
-    label: "Premiers pas",
+    label: "Nouveau pas",
     color: eventColors.jalon.dark,
     icon: "shoe-prints",
-    defaultTitle: "Premiers pas",
+    defaultTitle: "Nouveau pas",
   },
   sourire: {
-    label: "Premier sourire",
+    label: "Nouveau sourire",
     color: eventColors.jalon.dark,
     icon: "face-smile",
-    defaultTitle: "Premier sourire",
+    defaultTitle: "Nouveau sourire",
   },
   mot: {
-    label: "Premiers mots",
+    label: "Nouveau mot",
     color: eventColors.jalon.dark,
     icon: "comment-dots",
-    defaultTitle: "Premiers mots",
+    defaultTitle: "Nouveau mot",
   },
   humeur: {
     label: "Humeur",

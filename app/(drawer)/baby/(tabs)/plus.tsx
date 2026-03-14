@@ -125,7 +125,7 @@ const SECTIONS: Section[] = [
       },
       {
         title: "Jalons",
-        subtitle: "Premiers pas, premiers mots...",
+        subtitle: "Dents, pas, sourires, mots...",
         icon: "star",
         color: "#ec4899",
         route: "/baby/milestones",

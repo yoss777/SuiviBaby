@@ -217,10 +217,10 @@ export const ACTIVITY_TYPE_LABELS: Record<string, string> = {
 // ============================================
 
 export const JALON_TYPE_LABELS: Record<string, string> = {
-  dent: "Première dent",
-  pas: "Premiers pas",
-  sourire: "Premier sourire",
-  mot: "Premiers mots",
+  dent: "Nouvelle dent",
+  pas: "Nouveau pas",
+  sourire: "Nouveau sourire",
+  mot: "Nouveau mot",
   humeur: "Humeur du jour",
   photo: "Moment photo",
   autre: "Autre moment",

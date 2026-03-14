@@ -164,8 +164,8 @@ export const categoryColorsDark = {
   },
   sante: {
     primary: "#5BA4A4",
-    background: "#0f2020",
-    border: "#172b2b",
+    background: "#162a2a",
+    border: "#1f3636",
   },
   sommeil: {
     primary: "#7C6BA4",

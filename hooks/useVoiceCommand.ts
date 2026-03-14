@@ -670,10 +670,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
 
       case "jalon":
         const jalonLabels: Record<string, string> = {
-          dent: "Première dent",
-          pas: "Premiers pas",
-          sourire: "Premier sourire",
-          mot: "Premiers mots",
+          dent: "Nouvelle dent",
+          pas: "Nouveau pas",
+          sourire: "Nouveau sourire",
+          mot: "Nouveau mot",
           humeur: "Humeur du jour",
           autre: "Autre moment",
         };
