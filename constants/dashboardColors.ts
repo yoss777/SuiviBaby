@@ -110,6 +110,9 @@ export const neutralColors = {
   errorBg: "#fef2f2",
   successText: "#16a34a",
   errorText: "#dc2626",
+
+  // Emotional screens (moments, gallery)
+  backgroundWarm: "#FDF8F3",
 } as const;
 
 // ============================================
@@ -148,6 +151,9 @@ export const neutralColorsDark = {
   errorBg: "#450a0a",
   successText: "#4ade80",
   errorText: "#f87171",
+
+  // Emotional screens (moments, gallery)
+  backgroundWarm: "#1A1714",
 } as const;
 
 export const categoryColorsDark = {

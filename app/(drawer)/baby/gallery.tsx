@@ -659,7 +659,7 @@ export default function GalleryScreen() {
   // Loading state
   if (!loaded) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: nc.background }]}>
+      <View style={[styles.loadingContainer, { backgroundColor: nc.backgroundWarm }]}>
         <IconPulseDots color={eventColors.jalon.dark} />
         <Text style={[styles.loadingText, { color: nc.textLight }]}>Chargement des souvenirs...</Text>
       </View>
@@ -669,7 +669,7 @@ export default function GalleryScreen() {
   // Error state with retry
   if (loadError && events.length === 0) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: nc.background }]}>
+      <View style={[styles.loadingContainer, { backgroundColor: nc.backgroundWarm }]}>
         <FontAwesome6 name="triangle-exclamation" size={32} color={nc.warning} />
         <Text style={[styles.errorTitle, { color: nc.textStrong }]}>Impossible de charger</Text>
         <Text style={[styles.loadingText, { color: nc.textLight }]}>Vérifiez votre connexion</Text>
@@ -682,7 +682,7 @@ export default function GalleryScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: nc.background }]}>
+    <View style={[styles.container, { backgroundColor: nc.backgroundWarm }]}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         {/* Header block - aligned with croissance.tsx */}
         <View style={styles.headerBlock}>

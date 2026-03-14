@@ -497,7 +497,7 @@ export default function MomentsScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: nc.background }]}>
+    <View style={[styles.container, { backgroundColor: nc.backgroundWarm }]}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         <ScrollView
           showsVerticalScrollIndicator={false}
