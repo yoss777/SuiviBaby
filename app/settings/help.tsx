@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import { useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -83,7 +84,11 @@ export default function HelpScreen() {
     },
   ];
 
-  const handleSendMessage = () => {
+  // P17a: Memoize FAQs and support options
+  const faqsMemo = useMemo(() => faqs, []);
+  const supportOptionsMemo = useMemo(() => supportOptions, []);
+
+  const handleSendMessage = useCallback(() => {
     setSendError(false);
     if (!subject || !message) {
       setSendError(true);
@@ -95,6 +100,8 @@ export default function HelpScreen() {
       return;
     }
 
+    // P8b: Haptic feedback on send
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setModalConfig({
       visible: true,
       title: 'Message envoye',
@@ -102,7 +109,7 @@ export default function HelpScreen() {
     });
     setSubject('');
     setMessage('');
-  };
+  }, [subject, message]);
 
   const renderFAQItem = (item: FAQItem, index: number) => {
     const isExpanded = expandedIndex === index;
@@ -200,7 +207,7 @@ export default function HelpScreen() {
             QUESTIONS FRÉQUENTES
           </ThemedText>
           <View style={styles.faqContainer}>
-            {faqs.map(renderFAQItem)}
+            {faqsMemo.map(renderFAQItem)}
           </View>
         </ThemedView>
 
@@ -209,7 +216,7 @@ export default function HelpScreen() {
             NOUS CONTACTER
           </ThemedText>
           <View style={styles.supportContainer}>
-            {supportOptions.map(renderSupportOption)}
+            {supportOptionsMemo.map(renderSupportOption)}
           </View>
         </ThemedView>
 
@@ -266,8 +273,8 @@ export default function HelpScreen() {
               accessibilityRole="button"
               accessibilityLabel="Envoyer le message"
             >
-              <Ionicons name="send" size={20} color="#fff" />
-              <Text style={styles.sendButtonText}>Envoyer le message</Text>
+              <Ionicons name="send" size={20} color={nc.white} />
+              <Text style={[styles.sendButtonText, { color: nc.white }]}>Envoyer le message</Text>
             </TouchableOpacity>
           </View>
         </ThemedView>
@@ -409,7 +416,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   sendButtonText: {
-    color: '#fff',
+    color: undefined as unknown as string, // set dynamically
     fontSize: 16,
     fontWeight: '600',
   },

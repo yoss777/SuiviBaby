@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { InfoModal } from '@/components/ui/InfoModal';
 import { auth } from '@/config/firebase';
+import { getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
 import { useToast } from '@/contexts/ToastContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -21,6 +22,7 @@ import {
 
 export default function PasswordScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const nc = getNeutralColors(colorScheme);
   const router = useRouter();
   const { showToast, showActionToast } = useToast();
   const isMountedRef = useRef(true);
@@ -306,7 +308,7 @@ export default function PasswordScreen() {
                   {unmetRules.map((rule) => rule.label).join(', ')}
                 </Text>
               )}
-              <View style={[styles.strengthBarTrack, newPassword.length === 0 && styles.strengthBarTrackEmpty]}>
+              <View style={[styles.strengthBarTrack, { backgroundColor: nc.borderLight }, newPassword.length === 0 && styles.strengthBarTrackEmpty]}>
                 <View
                   style={[
                     styles.strengthBarFill,
@@ -314,10 +316,10 @@ export default function PasswordScreen() {
                       width: `${strengthPercent}%`,
                       backgroundColor:
                         unmetRules.length === 0
-                          ? '#28a745'
+                          ? nc.success
                           : unmetRules.length === 1
-                          ? '#f0ad4e'
-                          : '#dc3545',
+                          ? nc.warning
+                          : nc.error,
                     },
                   ]}
                 />
@@ -369,7 +371,7 @@ export default function PasswordScreen() {
               </View>
             </View>
             {!!errorMessage && (
-              <Text style={styles.errorText}>{errorMessage}</Text>
+              <Text style={[styles.errorText, { color: nc.error }]}>{errorMessage}</Text>
             )}
           </ThemedView>
 
@@ -392,8 +394,8 @@ export default function PasswordScreen() {
             accessibilityRole="button"
             accessibilityState={{ disabled: isSaveDisabled }}
           >
-            <Ionicons name="checkmark" size={20} color="#fff" />
-            <Text style={styles.saveButtonText}>
+            <Ionicons name="checkmark" size={20} color={nc.white} />
+            <Text style={[styles.saveButtonText, { color: nc.white }]}>
               {isSaving ? 'Enregistrement...' : 'Changer le mot de passe'}
             </Text>
           </TouchableOpacity>
@@ -454,7 +456,7 @@ const styles = StyleSheet.create({
   strengthBarTrack: {
     height: 6,
     borderRadius: 999,
-    backgroundColor: '#e9ecef',
+    backgroundColor: undefined as unknown as string, // set dynamically
     marginTop: 10,
     overflow: 'hidden',
   },
@@ -487,7 +489,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   errorText: {
-    color: '#d9534f',
+    color: undefined as unknown as string, // set dynamically
     fontSize: 12,
     marginTop: 4,
   },
@@ -516,7 +518,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   saveButtonText: {
-    color: '#fff',
+    color: undefined as unknown as string, // set dynamically
     fontSize: 16,
     fontWeight: '600',
   },

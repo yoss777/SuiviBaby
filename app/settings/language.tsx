@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -83,7 +83,7 @@ export default function LanguageScreen() {
     setModalConfig((prev) => ({ ...prev, visible: false }));
   };
 
-  const handleSelect = async (language: LanguagePreference) => {
+  const handleSelect = useCallback(async (language: LanguagePreference) => {
     if (isSaving || isLoading) return;
     if (language === selectedLanguage) return;
 
@@ -103,7 +103,7 @@ export default function LanguageScreen() {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [isSaving, isLoading, selectedLanguage]);
 
   const renderLanguageOption = (language: Language) => {
     const isSelected = selectedLanguage === language.code;

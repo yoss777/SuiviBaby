@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { InfoModal } from '@/components/ui/InfoModal';
+import { getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -16,6 +17,7 @@ import { modifierNomUtilisateur } from '@/services/usersService';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const nc = getNeutralColors(colorScheme);
   const { userName, email, refreshUser } = useAuth();
   const { showToast, showActionToast } = useToast();
   const [displayName, setDisplayName] = useState(userName ?? '');
@@ -124,7 +126,7 @@ export default function ProfileScreen() {
             </View>
 
             {!!errorMessage && (
-              <Text style={styles.errorText}>{errorMessage}</Text>
+              <Text style={[styles.errorText, { color: nc.error }]}>{errorMessage}</Text>
             )}
 
             <View style={styles.inputGroup}>
@@ -159,8 +161,8 @@ export default function ProfileScreen() {
             accessibilityRole="button"
             accessibilityState={{ disabled: isSaveDisabled }}
           >
-            <Ionicons name="checkmark" size={20} color="#fff" />
-            <Text style={styles.saveButtonText}>
+            <Ionicons name="checkmark" size={20} color={nc.white} />
+            <Text style={[styles.saveButtonText, { color: nc.white }]}>
               {isSaving ? 'Enregistrement...' : 'Enregistrer'}
             </Text>
           </TouchableOpacity>
@@ -221,7 +223,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   errorText: {
-    color: '#d9534f',
+    color: undefined as unknown as string, // set dynamically
     fontSize: 12,
     marginBottom: 12,
   },
@@ -238,7 +240,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   saveButtonText: {
-    color: '#fff',
+    color: undefined as unknown as string, // set dynamically
     fontSize: 16,
     fontWeight: '600',
   },

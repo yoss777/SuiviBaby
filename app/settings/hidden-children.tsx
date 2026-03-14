@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 
 import { ThemedView } from "@/components/themed-view";
 import { db } from "@/config/firebase";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { Child } from "@/contexts/BabyContext";
@@ -33,6 +34,7 @@ const { width } = Dimensions.get("window");
 
 export default function HiddenChildrenScreen() {
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const router = useRouter();
   const { showAlert } = useModal();
   const { user } = useAuth();
@@ -244,7 +246,7 @@ export default function HiddenChildrenScreen() {
                     accessibilityLabel={`${child.name}, ${ageText}, né le ${child.birthDate}`}
                   >
                     <ThemedView style={styles.childCard}>
-                      <View style={styles.childAvatar}>
+                      <View style={[styles.childAvatar, { backgroundColor: nc.borderLight }]}>
                         <Text style={styles.childAvatarEmoji}>
                           {child.gender === "male" ? "👶" : "👧"}
                         </Text>
@@ -276,7 +278,7 @@ export default function HiddenChildrenScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={`Restaurer ${child.name}`}
                     >
-                      <FontAwesome name="eye" size={20} color="#28a745" />
+                      <FontAwesome name="eye" size={20} color={nc.success} />
                     </TouchableOpacity>
                   </View>
                 );
@@ -323,18 +325,18 @@ export default function HiddenChildrenScreen() {
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
+                  style={[styles.modalButton, styles.cancelButton, { backgroundColor: nc.borderLight }]}
                   onPress={() => setShowRestoreModal(false)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.cancelButtonText}>Annuler</Text>
+                  <Text style={[styles.cancelButtonText, { color: nc.textMuted }]}>Annuler</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.confirmButton]}
+                  style={[styles.modalButton, styles.confirmButton, { backgroundColor: nc.success }]}
                   onPress={confirmRestoreChild}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.confirmButtonText}>Restaurer</Text>
+                  <Text style={[styles.confirmButtonText, { color: nc.white }]}>Restaurer</Text>
                 </TouchableOpacity>
               </View>
             </Pressable>
@@ -411,7 +413,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: undefined as unknown as string, // set dynamically
     justifyContent: "center",
     alignItems: "center",
   },
@@ -477,20 +479,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   cancelButton: {
-    backgroundColor: "#f0f0f0",
+    backgroundColor: undefined as unknown as string, // set dynamically
   },
   confirmButton: {
-    backgroundColor: "#28a745",
+    backgroundColor: undefined as unknown as string, // set dynamically
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#666",
+    color: undefined as unknown as string, // set dynamically
   },
   confirmButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#fff",
+    color: undefined as unknown as string, // set dynamically
   },
   childNameInModal: {
     fontWeight: "700",

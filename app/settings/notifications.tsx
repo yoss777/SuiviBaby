@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -28,6 +29,7 @@ import * as Notifications from "expo-notifications";
 
 export default function NotificationsScreen() {
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const { showToast, showActionToast } = useToast();
 
   const [pushEnabled, setPushEnabled] = useState(true);
@@ -205,7 +207,7 @@ export default function NotificationsScreen() {
         false: Colors[colorScheme].tabIconDefault + "30",
         true: Colors[colorScheme].tint + "50",
       }}
-      thumbColor={value ? Colors[colorScheme].tint : "#f4f3f4"}
+      thumbColor={value ? Colors[colorScheme].tint : nc.backgroundCard}
       ios_backgroundColor={Colors[colorScheme].tabIconDefault + "30"}
       accessibilityRole="switch"
       accessibilityLabel={label}

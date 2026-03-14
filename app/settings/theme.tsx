@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -26,6 +26,11 @@ export default function ThemeScreen() {
   const nc = getNeutralColors(colorScheme);
   const { preference, isLoading, setPreference } = useThemePreference();
   const [isSaving, setIsSaving] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => { isMountedRef.current = false; };
+  }, []);
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     title: "",
@@ -67,7 +72,7 @@ export default function ThemeScreen() {
     setModalConfig((prev) => ({ ...prev, visible: false }));
   };
 
-  const handleSelect = async (value: ThemeOption) => {
+  const handleSelect = useCallback(async (value: ThemeOption) => {
     if (isSaving || isLoading) return;
     if (value === preference) return;
 
@@ -75,15 +80,16 @@ export default function ThemeScreen() {
       setIsSaving(true);
       await setPreference(value);
     } catch (error) {
+      if (!isMountedRef.current) return;
       setModalConfig({
         visible: true,
         title: "Erreur",
         message: "Impossible de mettre a jour le theme.",
       });
     } finally {
-      setIsSaving(false);
+      if (isMountedRef.current) setIsSaving(false);
     }
-  };
+  }, [isSaving, isLoading, preference, setPreference]);
 
   const renderThemeOption = (option: (typeof themeOptions)[0]) => {
     const isSelected = preference === option.value;

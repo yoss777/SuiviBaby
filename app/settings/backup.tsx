@@ -215,7 +215,7 @@ export default function BackupScreen() {
             accessibilityState={{ disabled: isBackingUp }}
           >
             <Ionicons name="cloud-upload" size={20} color={nc.white} />
-            <Text style={styles.primaryButtonText}>
+            <Text style={[styles.primaryButtonText, { color: nc.white }]}>
               {isBackingUp ? 'Sauvegarde en cours...' : 'Sauvegarder maintenant'}
             </Text>
           </TouchableOpacity>
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     // backgroundColor set dynamically
   },
   primaryButtonText: {
-    color: '#fff',
+    color: undefined as unknown as string, // set dynamically
     fontSize: 16,
     fontWeight: '600',
   },
