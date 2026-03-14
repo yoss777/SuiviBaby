@@ -181,6 +181,11 @@ interface MealsStats {
     lastTime?: string;
     lastTimestamp?: number;
   };
+  solides: {
+    count: number;
+    lastTime?: string;
+    lastTimestamp?: number;
+  };
   /** Last meal timestamp across all days (not just today) */
   lastAbsoluteTimestamp?: number;
 }
@@ -580,6 +585,7 @@ export default function HomeDashboard() {
       total: { count: 0, quantity: 0 },
       seins: { count: 0 },
       biberons: { count: 0, quantity: 0 },
+      solides: { count: 0 },
     },
     pompages: { count: 0, quantity: 0 },
     sommeil: { count: 0, totalMinutes: 0 },
@@ -1114,6 +1120,18 @@ export default function HomeDashboard() {
           lastTimestamp: todayStats.meals.biberons.lastTimestamp,
           onPress: canManageContent
             ? () => router.push("/baby/stats?tab=biberons&returnTo=home" as any)
+            : undefined,
+        },
+        {
+          key: "solides",
+          label: "Solides",
+          value: todayStats.meals.solides.count,
+          unit: "fois",
+          icon: "bowl-food",
+          color: itemColors.solide,
+          lastTimestamp: todayStats.meals.solides.lastTimestamp,
+          onPress: canManageContent
+            ? () => router.push("/baby/stats?tab=solides&returnTo=home" as any)
             : undefined,
         },
         {
@@ -1782,6 +1800,16 @@ export default function HomeDashboard() {
           )
         : null;
 
+    // Calculer les statistiques pour les solides
+    const lastSolide =
+      todaySolides.length > 0
+        ? todaySolides.reduce((latest, current) =>
+            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+              ? current
+              : latest,
+          )
+        : null;
+
     // Calculer les statistiques totales pour tous les repas
     const allMeals = [...todayTetees, ...todayBiberons, ...todaySolides];
     const totalMealsQuantity = biberonsQuantity; // Seuls les biberons ont une quantité mesurable
@@ -1935,6 +1963,11 @@ export default function HomeDashboard() {
           quantity: biberonsQuantity,
           lastTime: formatTime(lastBiberons),
           lastTimestamp: getTimestamp(lastBiberons),
+        },
+        solides: {
+          count: todaySolides.length,
+          lastTime: formatTime(lastSolide),
+          lastTimestamp: getTimestamp(lastSolide),
         },
         lastAbsoluteTimestamp: getTimestamp(lastMealAbsolute),
       },

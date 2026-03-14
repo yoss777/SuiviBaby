@@ -9,6 +9,7 @@ import {
 } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
@@ -37,13 +38,16 @@ export function DateFilterBar({
   children,
 }: DateFilterBarProps) {
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const tintColor = Colors[colorScheme].tint;
+  // Active text must contrast with tint background (dark mode tint is white)
+  const activeTextColor = colorScheme === "dark" ? Colors[colorScheme].background : nc.white;
 
   const mergedContainerStyle = [styles.container, containerStyle];
   const mergedContentStyle = [styles.content, contentContainerStyle];
   const mergedButtonStyle = [styles.button, buttonStyle];
   const mergedTextStyle = [styles.text, textStyle];
-  const mergedActiveTextStyle = [styles.textActive, activeTextStyle];
+  const mergedActiveTextStyle = [styles.textActive, { color: activeTextColor }, activeTextStyle];
   const resolvedActiveButtonStyle = activeButtonStyle || {
     backgroundColor: tintColor,
   };
@@ -110,6 +114,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   textActive: {
-    color: "#fff",
+    // color applied dynamically via activeTextColor
   },
 });

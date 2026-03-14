@@ -1,5 +1,6 @@
 import { Colors } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -128,6 +129,7 @@ export function ImmunizationForm({
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
 
   const isEditing = !!editData;
 
@@ -333,22 +335,24 @@ export function ImmunizationForm({
           <Pressable
             style={styles.sheetBackButton}
             onPress={() => setFormStep("form")}
+            accessibilityLabel="Retour"
           >
-            <FontAwesome5 name="chevron-left" size={14} color="#666" />
-            <Text style={styles.sheetBackText}>Retour</Text>
+            <FontAwesome5 name="chevron-left" size={14} color={nc.textLight} />
+            <Text style={[styles.sheetBackText, { color: nc.textLight }]}>Retour</Text>
           </Pressable>
-          <Text style={styles.sheetBreadcrumbText}>Choisir un vaccin</Text>
+          <Text style={[styles.sheetBreadcrumbText, { color: nc.textMuted }]}>Choisir un vaccin</Text>
         </View>
-        <View style={styles.searchContainer}>
+        <View style={[styles.searchContainer, { backgroundColor: nc.background, borderColor: nc.border }]}>
           <FontAwesome5
             name="search"
             size={16}
-            color="#999"
+            color={nc.textMuted}
             style={styles.searchIcon}
           />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: nc.textStrong }]}
             placeholder="Rechercher un vaccin..."
+            placeholderTextColor={nc.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoFocus
@@ -357,8 +361,9 @@ export function ImmunizationForm({
             <TouchableOpacity
               style={styles.clearButton}
               onPress={() => setSearchQuery("")}
+              accessibilityLabel="Effacer la recherche"
             >
-              <FontAwesome5 name="times-circle" size={16} color="#999" />
+              <FontAwesome5 name="times-circle" size={16} color={nc.textMuted} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -373,29 +378,32 @@ export function ImmunizationForm({
                   key={`${vaccin.nomVaccin}-${vaccin.dosage}-${index}`}
                   style={[
                     styles.vaccinListItem,
+                    { borderBottomColor: nc.backgroundPressed },
                     isSelected && {
                       backgroundColor: Colors[colorScheme].tint + "20",
                     },
                   ]}
                   onPress={() => selectVaccin(vaccin)}
+                  accessibilityLabel={getVaccinDisplay(vaccin.nomVaccin, vaccin.dosage)}
                 >
                   <FontAwesome5
                     name="syringe"
                     size={16}
-                    color={isSelected ? Colors[colorScheme].tint : "#666"}
+                    color={isSelected ? Colors[colorScheme].tint : nc.textLight}
                     style={styles.vaccinListItemIcon}
                   />
                   <View style={styles.vaccinListItemTextWrap}>
                     <Text
                       style={[
                         styles.vaccinListItemText,
+                        { color: nc.textStrong },
                         isSelected && styles.vaccinListItemTextSelected,
                       ]}
                     >
                       {vaccin.nomVaccin}
                     </Text>
                     {vaccin.dosage ? (
-                      <Text style={styles.vaccinListItemSubtext}>
+                      <Text style={[styles.vaccinListItemSubtext, { color: nc.textLight }]}>
                         {vaccin.dosage}
                       </Text>
                     ) : null}
@@ -411,7 +419,7 @@ export function ImmunizationForm({
               );
             })
           ) : (
-            <Text style={styles.noResultsText}>Aucun vaccin trouvé</Text>
+            <Text style={[styles.noResultsText, { color: nc.textLight }]}>Aucun vaccin trouvé</Text>
           )}
         </ScrollView>
       </View>
@@ -429,22 +437,24 @@ export function ImmunizationForm({
           <Pressable
             style={styles.sheetBackButton}
             onPress={() => setFormStep("form")}
+            accessibilityLabel="Retour"
           >
-            <FontAwesome5 name="chevron-left" size={14} color="#666" />
-            <Text style={styles.sheetBackText}>Retour</Text>
+            <FontAwesome5 name="chevron-left" size={14} color={nc.textLight} />
+            <Text style={[styles.sheetBackText, { color: nc.textLight }]}>Retour</Text>
           </Pressable>
-          <Text style={styles.sheetBreadcrumbText}>Choisir une vitamine</Text>
+          <Text style={[styles.sheetBreadcrumbText, { color: nc.textMuted }]}>Choisir une vitamine</Text>
         </View>
-        <View style={styles.searchContainer}>
+        <View style={[styles.searchContainer, { backgroundColor: nc.background, borderColor: nc.border }]}>
           <FontAwesome5
             name="search"
             size={16}
-            color="#999"
+            color={nc.textMuted}
             style={styles.searchIcon}
           />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: nc.textStrong }]}
             placeholder="Rechercher une vitamine..."
+            placeholderTextColor={nc.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoFocus
@@ -453,8 +463,9 @@ export function ImmunizationForm({
             <TouchableOpacity
               style={styles.clearButton}
               onPress={() => setSearchQuery("")}
+              accessibilityLabel="Effacer la recherche"
             >
-              <FontAwesome5 name="times-circle" size={16} color="#999" />
+              <FontAwesome5 name="times-circle" size={16} color={nc.textMuted} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -467,21 +478,24 @@ export function ImmunizationForm({
                   key={vitamine}
                   style={[
                     styles.vaccinListItem,
+                    { borderBottomColor: nc.backgroundPressed },
                     isSelected && {
                       backgroundColor: Colors[colorScheme].tint + "20",
                     },
                   ]}
                   onPress={() => selectVitamine(vitamine)}
+                  accessibilityLabel={vitamine}
                 >
                   <FontAwesome5
                     name="pills"
                     size={16}
-                    color={isSelected ? Colors[colorScheme].tint : "#666"}
+                    color={isSelected ? Colors[colorScheme].tint : nc.textLight}
                     style={styles.vaccinListItemIcon}
                   />
                   <Text
                     style={[
                       styles.vaccinListItemText,
+                      { color: nc.textStrong },
                       isSelected && styles.vaccinListItemTextSelected,
                     ]}
                   >
@@ -498,7 +512,7 @@ export function ImmunizationForm({
               );
             })
           ) : (
-            <Text style={styles.noResultsText}>Aucune vitamine trouvée</Text>
+            <Text style={[styles.noResultsText, { color: nc.textLight }]}>Aucune vitamine trouvée</Text>
           )}
         </ScrollView>
       </View>
@@ -517,6 +531,7 @@ export function ImmunizationForm({
           <TouchableOpacity
             style={[
               styles.vaccinSelector,
+              { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.vaccinSelectorDisabled,
             ]}
             onPress={() => {
@@ -525,27 +540,30 @@ export function ImmunizationForm({
               setFormStep("vaccinPicker");
             }}
             disabled={isSubmitting}
+            accessibilityLabel="Sélectionner un vaccin"
           >
-            <FontAwesome5 name="syringe" size={16} color="#666" />
+            <FontAwesome5 name="syringe" size={16} color={nc.textLight} />
             <Text
               style={[
                 styles.vaccinSelectorText,
-                vaccinName && styles.vaccinSelectorTextSelected,
+                { color: nc.textMuted },
+                vaccinName && { color: nc.textStrong, fontWeight: "500" as const },
               ]}
             >
               {vaccinName || "Sélectionner un vaccin"}
             </Text>
-            <FontAwesome5 name="chevron-right" size={14} color="#999" />
+            <FontAwesome5 name="chevron-right" size={14} color={nc.textMuted} />
           </TouchableOpacity>
 
           {vaccinName === "Autre vaccin" && (
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Nom du vaccin</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Nom du vaccin</Text>
               <TextInput
                 value={vaccinCustomName}
                 onChangeText={setVaccinCustomName}
                 placeholder="Nom du vaccin"
-                style={styles.input}
+                placeholderTextColor={nc.textMuted}
+                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
                 editable={!isSubmitting}
               />
             </View>
@@ -553,19 +571,20 @@ export function ImmunizationForm({
 
           {vaccinName && vaccinName !== "Autre vaccin" && vaccinDosage ? (
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Dose</Text>
-              <Text style={styles.readOnlyValue}>{vaccinDosage}</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dose</Text>
+              <Text style={[styles.readOnlyValue, { borderColor: nc.border, color: nc.textNormal, backgroundColor: nc.background }]}>{vaccinDosage}</Text>
             </View>
           ) : null}
 
           {vaccinName === "Autre vaccin" && (
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Dose</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dose</Text>
               <TextInput
                 value={vaccinDosage}
                 onChangeText={setVaccinDosage}
                 placeholder="1ère injection"
-                style={styles.input}
+                placeholderTextColor={nc.textMuted}
+                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
                 editable={!isSubmitting}
               />
             </View>
@@ -579,6 +598,7 @@ export function ImmunizationForm({
           <TouchableOpacity
             style={[
               styles.vaccinSelector,
+              { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.vaccinSelectorDisabled,
             ]}
             onPress={() => {
@@ -587,27 +607,30 @@ export function ImmunizationForm({
               setFormStep("vitaminePicker");
             }}
             disabled={isSubmitting}
+            accessibilityLabel="Sélectionner une vitamine"
           >
-            <FontAwesome5 name="pills" size={16} color="#666" />
+            <FontAwesome5 name="pills" size={16} color={nc.textLight} />
             <Text
               style={[
                 styles.vaccinSelectorText,
-                vitamineName && styles.vaccinSelectorTextSelected,
+                { color: nc.textMuted },
+                vitamineName && { color: nc.textStrong, fontWeight: "500" as const },
               ]}
             >
               {vitamineName || "Sélectionner une vitamine"}
             </Text>
-            <FontAwesome5 name="chevron-right" size={14} color="#999" />
+            <FontAwesome5 name="chevron-right" size={14} color={nc.textMuted} />
           </TouchableOpacity>
 
           {vitamineName === "Autre vitamine" && (
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Nom de la vitamine</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Nom de la vitamine</Text>
               <TextInput
                 value={vitamineCustomName}
                 onChangeText={setVitamineCustomName}
                 placeholder="Nom de la vitamine"
-                style={styles.input}
+                placeholderTextColor={nc.textMuted}
+                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
                 editable={!isSubmitting}
               />
             </View>
@@ -615,11 +638,12 @@ export function ImmunizationForm({
 
           {(vitamineName === "Vitamine D" || vitamineName === "Vitamine K") && (
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Quantité</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Quantité</Text>
               <View style={styles.quantityPickerRow}>
                 <TouchableOpacity
                   style={[
                     styles.quantityButton,
+                    { backgroundColor: nc.backgroundPressed },
                     isSubmitting && styles.quantityButtonDisabled,
                   ]}
                   onPressIn={() =>
@@ -629,15 +653,17 @@ export function ImmunizationForm({
                   }
                   onPressOut={handlePressOut}
                   disabled={isSubmitting}
+                  accessibilityLabel="Diminuer les gouttes"
                 >
-                  <Text style={styles.quantityButtonText}>-</Text>
+                  <Text style={[styles.quantityButtonText, { color: nc.textStrong }]}>-</Text>
                 </TouchableOpacity>
-                <Text style={styles.quantityPickerValue}>
+                <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
                   {gouttesCount} gouttes
                 </Text>
                 <TouchableOpacity
                   style={[
                     styles.quantityButton,
+                    { backgroundColor: nc.backgroundPressed },
                     isSubmitting && styles.quantityButtonDisabled,
                   ]}
                   onPressIn={() =>
@@ -645,8 +671,9 @@ export function ImmunizationForm({
                   }
                   onPressOut={handlePressOut}
                   disabled={isSubmitting}
+                  accessibilityLabel="Augmenter les gouttes"
                 >
-                  <Text style={styles.quantityButtonText}>+</Text>
+                  <Text style={[styles.quantityButtonText, { color: nc.textStrong }]}>+</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -657,12 +684,13 @@ export function ImmunizationForm({
             vitamineName !== "Vitamine K" &&
             vitamineName !== "Autre vitamine" && (
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Dosage</Text>
+                <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dosage</Text>
                 <TextInput
                   value={vitamineDosage}
                   onChangeText={setVitamineDosage}
                   placeholder="1 goutte"
-                  style={styles.input}
+                  placeholderTextColor={nc.textMuted}
+                  style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
                   editable={!isSubmitting}
                 />
               </View>
@@ -674,33 +702,37 @@ export function ImmunizationForm({
       <View style={styles.dateTimeSection}>
         <View style={styles.dateTimeContainer}>
           <TouchableOpacity
-            style={styles.dateButton}
+            style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
             onPress={() => setShowDate(true)}
             disabled={isSubmitting}
+            accessibilityLabel="Choisir la date"
+            hitSlop={8}
           >
             <FontAwesome5
               name="calendar-alt"
               size={16}
               color={Colors[colorScheme].tint}
             />
-            <Text style={styles.dateButtonText}>Date</Text>
+            <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.dateButton}
+            style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
             onPress={() => setShowTime(true)}
             disabled={isSubmitting}
+            accessibilityLabel="Choisir l'heure"
+            hitSlop={8}
           >
             <FontAwesome5
               name="clock"
               size={16}
               color={Colors[colorScheme].tint}
             />
-            <Text style={styles.dateButtonText}>Heure</Text>
+            <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.selectedDateTime}>
-          <Text style={styles.selectedDate} numberOfLines={1} adjustsFontSizeToFit>
+          <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
             {dateHeure.toLocaleDateString("fr-FR", {
               weekday: "long",
               year: "numeric",
@@ -708,7 +740,7 @@ export function ImmunizationForm({
               day: "numeric",
             })}
           </Text>
-          <Text style={styles.selectedTime}>
+          <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
             {dateHeure.toLocaleTimeString("fr-FR", {
               hour: "2-digit",
               minute: "2-digit",
@@ -741,11 +773,16 @@ export function ImmunizationForm({
       <View style={styles.buttonsContainer}>
         <View style={styles.primaryRow}>
           <TouchableOpacity
-            style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.cancelButton,
+              { backgroundColor: nc.background, borderColor: nc.border },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={onCancel}
             disabled={isSubmitting}
+            accessibilityLabel="Annuler"
           >
-            <Text style={styles.cancelText}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -756,11 +793,12 @@ export function ImmunizationForm({
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
+            accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color="white" />
+              <ActivityIndicator size="small" color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
             ) : (
-              <Text style={styles.validateText}>
+              <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
                 {isEditing ? "Enregistrer" : "Ajouter"}
               </Text>
             )}
@@ -769,9 +807,14 @@ export function ImmunizationForm({
 
         {isEditing && onDelete && (
           <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.deleteButton,
+              { borderColor: "#f1b1b1", backgroundColor: nc.errorBg },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
+            accessibilityLabel="Supprimer"
           >
             <FontAwesome5 name="trash" size={14} color="#dc3545" />
             <Text style={styles.deleteText}>Supprimer</Text>
@@ -808,47 +851,34 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6b7280",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   readOnlyValue: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: "#4b5563",
-    backgroundColor: "#f9fafb",
   },
   vaccinSelector: {
-    backgroundColor: "#f8f9fa",
     padding: 16,
     borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     borderWidth: 1,
-    borderColor: "#e9ecef",
     marginBottom: 8,
   },
   vaccinSelectorDisabled: {
-    backgroundColor: "#f5f5f5",
     opacity: 0.5,
   },
   vaccinSelectorText: {
     flex: 1,
     fontSize: 16,
-    color: "#999",
-  },
-  vaccinSelectorTextSelected: {
-    color: "#333",
-    fontWeight: "500",
   },
   quantityPickerRow: {
     flexDirection: "row",
@@ -860,7 +890,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -870,12 +899,10 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#333",
   },
   quantityPickerValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
     minWidth: 100,
     textAlign: "center",
   },
@@ -897,13 +924,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
   },
   dateButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#4a4f55",
   },
   selectedDateTime: {
     alignItems: "center",
@@ -912,13 +936,11 @@ const styles = StyleSheet.create({
   selectedDate: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
     marginBottom: 4,
   },
   selectedTime: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#374151",
   },
   sheetBreadcrumb: {
     flexDirection: "row",
@@ -935,29 +957,24 @@ const styles = StyleSheet.create({
   },
   sheetBackText: {
     fontSize: 14,
-    color: "#666",
     fontWeight: "600",
   },
   sheetBreadcrumbText: {
     fontSize: 12,
-    color: "#999",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
     borderRadius: 12,
     paddingHorizontal: 12,
     marginVertical: 12,
     borderWidth: 1,
-    borderColor: "#e9ecef",
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: "#333",
     paddingVertical: 10,
   },
   searchIcon: {
@@ -975,7 +992,6 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
     borderRadius: 12,
   },
   vaccinListItemIcon: {
@@ -985,7 +1001,6 @@ const styles = StyleSheet.create({
   vaccinListItemText: {
     flex: 1,
     fontSize: 16,
-    color: "#333",
   },
   vaccinListItemTextWrap: {
     flex: 1,
@@ -993,14 +1008,12 @@ const styles = StyleSheet.create({
   },
   vaccinListItemSubtext: {
     fontSize: 12,
-    color: "#6b7280",
   },
   vaccinListItemTextSelected: {
     fontWeight: "600",
   },
   noResultsText: {
     fontSize: 16,
-    color: "#666",
     textAlign: "center",
     padding: 20,
   },
@@ -1014,9 +1027,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#f5f6f8",
     borderWidth: 1,
-    borderColor: "#d7dbe0",
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
@@ -1025,7 +1036,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 16,
-    color: "#4a4f55",
     fontWeight: "600",
   },
   validateButton: {
@@ -1038,7 +1048,6 @@ const styles = StyleSheet.create({
   },
   validateText: {
     fontSize: 16,
-    color: "#fff",
     fontWeight: "700",
   },
   buttonDisabled: {
@@ -1051,8 +1060,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#f1b1b1",
-    backgroundColor: "#fff5f5",
     gap: 8,
   },
   deleteText: {

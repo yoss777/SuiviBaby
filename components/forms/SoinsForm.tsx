@@ -1,5 +1,6 @@
 import { Colors } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -192,6 +193,7 @@ export function SoinsForm({
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
 
   const isEditing = !!editData;
 
@@ -752,22 +754,24 @@ export function SoinsForm({
           <Pressable
             style={styles.backButton}
             onPress={() => setFormStep("form")}
+            accessibilityLabel="Retour"
           >
-            <FontAwesome5 name="chevron-left" size={14} color="#666" />
-            <Text style={styles.backText}>Retour</Text>
+            <FontAwesome5 name="chevron-left" size={14} color={nc.textLight} />
+            <Text style={[styles.backText, { color: nc.textLight }]}>Retour</Text>
           </Pressable>
-          <Text style={styles.breadcrumbText}>Soins / Vaccins / Choisir</Text>
+          <Text style={[styles.breadcrumbText, { color: nc.textMuted }]}>Soins / Vaccins / Choisir</Text>
         </View>
-        <View style={styles.searchContainer}>
+        <View style={[styles.searchContainer, { backgroundColor: nc.background, borderColor: nc.border }]}>
           <FontAwesome5
             name="search"
             size={16}
-            color="#999"
+            color={nc.textMuted}
             style={styles.searchIcon}
           />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: nc.textStrong }]}
             placeholder="Rechercher un vaccin..."
+            placeholderTextColor={nc.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoFocus={true}
@@ -776,8 +780,9 @@ export function SoinsForm({
             <TouchableOpacity
               style={styles.clearButton}
               onPress={() => setSearchQuery("")}
+              accessibilityLabel="Effacer la recherche"
             >
-              <FontAwesome5 name="times-circle" size={16} color="#999" />
+              <FontAwesome5 name="times-circle" size={16} color={nc.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -792,6 +797,7 @@ export function SoinsForm({
                   key={`${vaccin.nomVaccin}-${index}`}
                   style={[
                     styles.pickerItem,
+                    { borderBottomColor: nc.backgroundPressed },
                     isSelected && {
                       backgroundColor: Colors[colorScheme].tint + "20",
                     },
@@ -806,24 +812,26 @@ export function SoinsForm({
                     setSearchQuery("");
                   }}
                   activeOpacity={0.7}
+                  accessibilityLabel={getVaccinDisplay(vaccin.nomVaccin, vaccin.dosage)}
                 >
                   <FontAwesome5
                     name="syringe"
                     size={16}
-                    color={isSelected ? Colors[colorScheme].tint : "#666"}
+                    color={isSelected ? Colors[colorScheme].tint : nc.textLight}
                     style={styles.pickerItemIcon}
                   />
                   <View style={styles.pickerItemTextWrap}>
                     <Text
                       style={[
                         styles.pickerItemText,
-                        isSelected && { color: "#000000", fontWeight: "600" },
+                        { color: nc.textStrong },
+                        isSelected && { fontWeight: "600" },
                       ]}
                     >
                       {vaccin.nomVaccin}
                     </Text>
                     {!!vaccin.dosage && (
-                      <Text style={styles.pickerItemSubtext}>
+                      <Text style={[styles.pickerItemSubtext, { color: nc.textLight }]}>
                         Dose : {vaccin.dosage}
                       </Text>
                     )}
@@ -839,7 +847,7 @@ export function SoinsForm({
               );
             })
           ) : (
-            <Text style={styles.noResultsText}>Aucun vaccin trouvé</Text>
+            <Text style={[styles.noResultsText, { color: nc.textLight }]}>Aucun vaccin trouvé</Text>
           )}
         </ScrollView>
       </View>
@@ -856,22 +864,24 @@ export function SoinsForm({
           <Pressable
             style={styles.backButton}
             onPress={() => setFormStep("form")}
+            accessibilityLabel="Retour"
           >
-            <FontAwesome5 name="chevron-left" size={14} color="#666" />
-            <Text style={styles.backText}>Retour</Text>
+            <FontAwesome5 name="chevron-left" size={14} color={nc.textLight} />
+            <Text style={[styles.backText, { color: nc.textLight }]}>Retour</Text>
           </Pressable>
-          <Text style={styles.breadcrumbText}>Soins / Vitamines / Choisir</Text>
+          <Text style={[styles.breadcrumbText, { color: nc.textMuted }]}>Soins / Vitamines / Choisir</Text>
         </View>
-        <View style={styles.searchContainer}>
+        <View style={[styles.searchContainer, { backgroundColor: nc.background, borderColor: nc.border }]}>
           <FontAwesome5
             name="search"
             size={16}
-            color="#999"
+            color={nc.textMuted}
             style={styles.searchIcon}
           />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: nc.textStrong }]}
             placeholder="Rechercher une vitamine..."
+            placeholderTextColor={nc.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoFocus={true}
@@ -880,8 +890,9 @@ export function SoinsForm({
             <TouchableOpacity
               style={styles.clearButton}
               onPress={() => setSearchQuery("")}
+              accessibilityLabel="Effacer la recherche"
             >
-              <FontAwesome5 name="times-circle" size={16} color="#999" />
+              <FontAwesome5 name="times-circle" size={16} color={nc.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -892,6 +903,7 @@ export function SoinsForm({
                 key={vitamine}
                 style={[
                   styles.pickerItem,
+                  { borderBottomColor: nc.backgroundPressed },
                   vitamineName === vitamine && {
                     backgroundColor: Colors[colorScheme].tint + "20",
                   },
@@ -905,6 +917,7 @@ export function SoinsForm({
                   setSearchQuery("");
                 }}
                 activeOpacity={0.7}
+                accessibilityLabel={vitamine}
               >
                 <FontAwesome5
                   name="pills"
@@ -912,14 +925,15 @@ export function SoinsForm({
                   color={
                     vitamineName === vitamine
                       ? Colors[colorScheme].tint
-                      : "#666"
+                      : nc.textLight
                   }
                   style={styles.pickerItemIcon}
                 />
                 <Text
                   style={[
                     styles.pickerItemText,
-                    vitamineName === vitamine && { color: "#000000", fontWeight: "600" },
+                    { color: nc.textStrong },
+                    vitamineName === vitamine && { fontWeight: "600" },
                   ]}
                 >
                   {vitamine}
@@ -934,7 +948,7 @@ export function SoinsForm({
               </TouchableOpacity>
             ))
           ) : (
-            <Text style={styles.noResultsText}>Aucune vitamine trouvée</Text>
+            <Text style={[styles.noResultsText, { color: nc.textLight }]}>Aucune vitamine trouvée</Text>
           )}
         </ScrollView>
       </View>
@@ -965,11 +979,14 @@ export function SoinsForm({
               key={type}
               style={[
                 styles.typeChip,
+                { borderColor: nc.border, backgroundColor: nc.background },
                 active && styles.typeChipActive,
                 isDisabled && styles.typeChipDisabled,
               ]}
               disabled={isDisabled}
               activeOpacity={1}
+              accessibilityLabel={`Type ${TYPE_CONFIG[type].label}`}
+              hitSlop={8}
               onPress={() => {
                 if (isEditing) return;
                 if (type === "temperature") {
@@ -1009,6 +1026,7 @@ export function SoinsForm({
               <Text
                 style={[
                   styles.typeChipText,
+                  { color: nc.textLight },
                   active && styles.typeChipTextActive,
                 ]}
               >
@@ -1031,21 +1049,23 @@ export function SoinsForm({
       {/* Templates */}
       {templates.length > 0 && (
         <View style={styles.templatesSection}>
-          <Text style={styles.templatesTitle}>Templates rapides</Text>
+          <Text style={[styles.templatesTitle, { color: nc.textNormal }]}>Templates rapides</Text>
           {templates.map((section, index) => (
             <View key={`${section.title ?? "default"}-${index}`} style={styles.templatesGroup}>
               {section.title && (
-                <Text style={styles.templatesSubtitle}>{section.title}</Text>
+                <Text style={[styles.templatesSubtitle, { color: nc.textLight }]}>{section.title}</Text>
               )}
               <View style={styles.templatesRow}>
                 {section.items.map((template) => (
                   <TouchableOpacity
                     key={template.label}
-                    style={styles.templateChip}
+                    style={[styles.templateChip, { backgroundColor: nc.backgroundPressed }]}
                     onPress={template.onPress}
                     activeOpacity={0.8}
+                    accessibilityLabel={`Template ${template.label}`}
+                    hitSlop={8}
                   >
-                    <Text style={styles.templateChipText}>{template.label}</Text>
+                    <Text style={[styles.templateChipText, { color: nc.textNormal }]}>{template.label}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -1058,11 +1078,12 @@ export function SoinsForm({
       {includeTemperature && (
         <>
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Température (°C)</Text>
+            <Text style={[styles.inputLabel, { color: nc.textLight }]}>Température (°C)</Text>
             <View style={styles.quantityPickerRow}>
               <TouchableOpacity
                 style={[
                   styles.quantityButton,
+                  { backgroundColor: nc.backgroundPressed },
                   isSubmitting && styles.quantityButtonDisabled,
                 ]}
                 onPressIn={() =>
@@ -1074,22 +1095,25 @@ export function SoinsForm({
                 }
                 onPressOut={handlePressOut}
                 disabled={isSubmitting || temperatureValue <= 34}
+                accessibilityLabel="Diminuer la température"
               >
                 <Text
                   style={[
                     styles.quantityButtonText,
+                    { color: nc.textStrong },
                     isSubmitting && styles.quantityButtonTextDisabled,
                   ]}
                 >
                   -
                 </Text>
               </TouchableOpacity>
-              <Text style={styles.quantityPickerValue}>
+              <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
                 {temperatureValue.toFixed(1)}°C
               </Text>
               <TouchableOpacity
                 style={[
                   styles.quantityButton,
+                  { backgroundColor: nc.backgroundPressed },
                   isSubmitting && styles.quantityButtonDisabled,
                 ]}
                 onPressIn={() =>
@@ -1101,10 +1125,12 @@ export function SoinsForm({
                 }
                 onPressOut={handlePressOut}
                 disabled={isSubmitting || temperatureValue >= 45}
+                accessibilityLabel="Augmenter la température"
               >
                 <Text
                   style={[
                     styles.quantityButtonText,
+                    { color: nc.textStrong },
                     isSubmitting && styles.quantityButtonTextDisabled,
                   ]}
                 >
@@ -1114,20 +1140,24 @@ export function SoinsForm({
             </View>
           </View>
           <View style={styles.chipSection}>
-            <Text style={styles.chipLabel}>Mode de prise</Text>
+            <Text style={[styles.chipLabel, { color: nc.textLight }]}>Mode de prise</Text>
             <View style={styles.chipRow}>
               {MODE_TEMPERATURE.map((mode) => (
                 <TouchableOpacity
                   key={mode}
                   style={[
                     styles.chip,
+                    { borderColor: nc.border, backgroundColor: nc.background },
                     temperatureMode === mode && styles.chipActive,
                   ]}
                   onPress={() => setTemperatureMode(mode)}
+                  accessibilityLabel={`Mode ${mode}`}
+                  hitSlop={8}
                 >
                   <Text
                     style={[
                       styles.chipText,
+                      { color: nc.textLight },
                       temperatureMode === mode && styles.chipTextActive,
                     ]}
                   >
@@ -1144,40 +1174,46 @@ export function SoinsForm({
       {selectedType === "medicament" && (
         <>
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Médicament</Text>
+            <Text style={[styles.inputLabel, { color: nc.textLight }]}>Médicament</Text>
             <TextInput
               value={medicamentName}
               onChangeText={setMedicamentName}
               placeholder="Paracétamol"
-              style={styles.input}
+              placeholderTextColor={nc.textMuted}
+              style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
             />
           </View>
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Dosage</Text>
+            <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dosage</Text>
             <TextInput
               value={medicamentDosage}
               onChangeText={setMedicamentDosage}
               placeholder="5 ml"
-              style={styles.input}
+              placeholderTextColor={nc.textMuted}
+              style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
             />
           </View>
           <View style={styles.chipSection}>
-            <Text style={styles.chipLabel}>Voie</Text>
+            <Text style={[styles.chipLabel, { color: nc.textLight }]}>Voie</Text>
             <View style={styles.chipRow}>
               {VOIES_MEDICAMENT.map((voie) => (
                 <TouchableOpacity
                   key={voie}
                   style={[
                     styles.chip,
+                    { borderColor: nc.border, backgroundColor: nc.background },
                     medicamentVoie === voie && styles.chipActive,
                   ]}
                   onPress={() =>
                     setMedicamentVoie(medicamentVoie === voie ? undefined : voie)
                   }
+                  accessibilityLabel={`Voie ${voie}`}
+                  hitSlop={8}
                 >
                   <Text
                     style={[
                       styles.chipText,
+                      { color: nc.textLight },
                       medicamentVoie === voie && styles.chipTextActive,
                     ]}
                   >
@@ -1194,14 +1230,16 @@ export function SoinsForm({
       {includeSymptome && (
         <>
           <View style={[styles.chipSection, { marginTop: 6 }]}>
-            <Text style={styles.chipLabel}>Symptômes</Text>
+            <Text style={[styles.chipLabel, { color: nc.textLight }]}>Symptômes</Text>
             <View style={styles.chipRow}>
               {SYMPTOMES_OPTIONS.map((symptome) => {
                 const active = symptomes.includes(symptome);
                 return (
                   <TouchableOpacity
                     key={symptome}
-                    style={[styles.chip, active && styles.chipActive]}
+                    style={[styles.chip, { borderColor: nc.border, backgroundColor: nc.background }, active && styles.chipActive]}
+                    accessibilityLabel={`Symptôme ${symptome}`}
+                    hitSlop={8}
                     onPress={() => {
                       setSymptomes((prev) => {
                         const next = prev.includes(symptome)
@@ -1217,6 +1255,7 @@ export function SoinsForm({
                     <Text
                       style={[
                         styles.chipText,
+                        { color: nc.textLight },
                         active && styles.chipTextActive,
                       ]}
                     >
@@ -1229,23 +1268,25 @@ export function SoinsForm({
           </View>
           {symptomes.includes("autre") && (
             <View style={[styles.inputGroup, { marginTop: 6 }]}>
-              <Text style={styles.inputLabel}>Autre(s) symptôme(s)</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Autre(s) symptôme(s)</Text>
               <TextInput
                 value={symptomeAutre}
                 onChangeText={setSymptomeAutre}
                 placeholder="Préciser"
-                style={styles.input}
+                placeholderTextColor={nc.textMuted}
+                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
               />
             </View>
           )}
           <View style={[styles.chipSection, { marginTop: 6 }]}>
-            <Text style={styles.chipLabel}>Intensité</Text>
+            <Text style={[styles.chipLabel, { color: nc.textLight }]}>Intensité</Text>
             <View style={styles.chipRow}>
               {INTENSITES.map((item) => (
                 <TouchableOpacity
                   key={item}
                   style={[
                     styles.chip,
+                    { borderColor: nc.border, backgroundColor: nc.background },
                     symptomeIntensite === item && styles.chipActive,
                   ]}
                   onPress={() =>
@@ -1259,10 +1300,13 @@ export function SoinsForm({
                   }
                   disabled={symptomes.length === 0}
                   activeOpacity={symptomes.length === 0 ? 1 : 0.7}
+                  accessibilityLabel={`Intensité ${item}`}
+                  hitSlop={8}
                 >
                   <Text
                     style={[
                       styles.chipText,
+                      { color: nc.textLight },
                       symptomeIntensite === item && styles.chipTextActive,
                       symptomes.length === 0 && styles.chipTextDisabled,
                     ]}
@@ -1282,6 +1326,7 @@ export function SoinsForm({
           <TouchableOpacity
             style={[
               styles.selectorButton,
+              { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.selectorButtonDisabled,
             ]}
             onPress={() => {
@@ -1290,50 +1335,54 @@ export function SoinsForm({
               setFormStep("vaccinPicker");
             }}
             activeOpacity={0.7}
+            accessibilityLabel="Sélectionner un vaccin"
           >
             <FontAwesome5
               name="syringe"
               size={16}
-              color="#666"
+              color={nc.textLight}
               style={styles.selectorIcon}
             />
             <Text
               style={[
                 styles.selectorText,
-                vaccinName && styles.selectorTextSelected,
+                { color: nc.textMuted },
+                vaccinName && { color: nc.textStrong, fontWeight: "500" as const },
                 isSubmitting && styles.selectorTextDisabled,
               ]}
             >
               {vaccinName ? vaccinName : "Sélectionner un vaccin"}
             </Text>
-            <FontAwesome5 name="chevron-right" size={14} color="#999" />
+            <FontAwesome5 name="chevron-right" size={14} color={nc.textMuted} />
           </TouchableOpacity>
           {vaccinName === "Autre vaccin" && (
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Nom du vaccin</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Nom du vaccin</Text>
               <TextInput
                 value={vaccinCustomName}
                 onChangeText={setVaccinCustomName}
                 placeholder="Nom du vaccin"
-                style={styles.input}
+                placeholderTextColor={nc.textMuted}
+                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
               />
             </View>
           )}
           {vaccinName ? (
             vaccinName === "Autre vaccin" ? (
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Dose</Text>
+                <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dose</Text>
                 <TextInput
                   value={vaccinDosage}
                   onChangeText={setVaccinDosage}
                   placeholder="1ère injection"
-                  style={styles.input}
+                  placeholderTextColor={nc.textMuted}
+                  style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
                 />
               </View>
             ) : (
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Dose</Text>
-                <Text style={styles.readOnlyValue}>{vaccinDosage || "—"}</Text>
+                <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dose</Text>
+                <Text style={[styles.readOnlyValue, { borderColor: nc.border, color: nc.textNormal, backgroundColor: nc.background }]}>{vaccinDosage || "—"}</Text>
               </View>
             )
           ) : null}
@@ -1346,6 +1395,7 @@ export function SoinsForm({
           <TouchableOpacity
             style={[
               styles.selectorButton,
+              { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.selectorButtonDisabled,
             ]}
             onPress={() => {
@@ -1354,42 +1404,46 @@ export function SoinsForm({
               setFormStep("vitaminePicker");
             }}
             activeOpacity={0.7}
+            accessibilityLabel="Sélectionner une vitamine"
           >
             <FontAwesome5
               name="pills"
               size={16}
-              color="#666"
+              color={nc.textLight}
               style={styles.selectorIcon}
             />
             <Text
               style={[
                 styles.selectorText,
-                vitamineName && styles.selectorTextSelected,
+                { color: nc.textMuted },
+                vitamineName && { color: nc.textStrong, fontWeight: "500" as const },
                 isSubmitting && styles.selectorTextDisabled,
               ]}
             >
               {vitamineName ? vitamineName : "Sélectionner une vitamine"}
             </Text>
-            <FontAwesome5 name="chevron-right" size={14} color="#999" />
+            <FontAwesome5 name="chevron-right" size={14} color={nc.textMuted} />
           </TouchableOpacity>
           {vitamineName === "Autre vitamine" && (
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Nom de la vitamine</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Nom de la vitamine</Text>
               <TextInput
                 value={vitamineCustomName}
                 onChangeText={setVitamineCustomName}
                 placeholder="Nom de la vitamine"
-                style={styles.input}
+                placeholderTextColor={nc.textMuted}
+                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
               />
             </View>
           )}
           {(vitamineName === "Vitamine D" || vitamineName === "Vitamine K") && (
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Quantité</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Quantité</Text>
               <View style={styles.quantityPickerRow}>
                 <TouchableOpacity
                   style={[
                     styles.quantityButton,
+                    { backgroundColor: nc.backgroundPressed },
                     isSubmitting && styles.quantityButtonDisabled,
                   ]}
                   onPressIn={() =>
@@ -1399,22 +1453,25 @@ export function SoinsForm({
                   }
                   onPressOut={handlePressOut}
                   disabled={isSubmitting}
+                  accessibilityLabel="Diminuer les gouttes"
                 >
                   <Text
                     style={[
                       styles.quantityButtonText,
+                      { color: nc.textStrong },
                       isSubmitting && styles.quantityButtonTextDisabled,
                     ]}
                   >
                     -
                   </Text>
                 </TouchableOpacity>
-                <Text style={styles.quantityPickerValue}>
+                <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
                   {gouttesCount} gouttes
                 </Text>
                 <TouchableOpacity
                   style={[
                     styles.quantityButton,
+                    { backgroundColor: nc.backgroundPressed },
                     isSubmitting && styles.quantityButtonDisabled,
                   ]}
                   onPressIn={() =>
@@ -1422,10 +1479,12 @@ export function SoinsForm({
                   }
                   onPressOut={handlePressOut}
                   disabled={isSubmitting}
+                  accessibilityLabel="Augmenter les gouttes"
                 >
                   <Text
                     style={[
                       styles.quantityButtonText,
+                      { color: nc.textStrong },
                       isSubmitting && styles.quantityButtonTextDisabled,
                     ]}
                   >
@@ -1437,12 +1496,13 @@ export function SoinsForm({
           )}
           {vitamineName !== "Vitamine D" && vitamineName !== "Vitamine K" && vitamineName && (
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Dosage</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dosage</Text>
               <TextInput
                 value={vitamineDosage}
                 onChangeText={setVitamineDosage}
                 placeholder="1 goutte"
-                style={styles.input}
+                placeholderTextColor={nc.textMuted}
+                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
               />
             </View>
           )}
@@ -1451,43 +1511,48 @@ export function SoinsForm({
 
       {/* Note */}
       <View style={[styles.inputGroup, { marginTop: 12 }]}>
-        <Text style={styles.inputLabel}>Note</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Note</Text>
         <TextInput
           value={note}
           onChangeText={setNote}
           placeholder="Ajouter une note"
-          style={styles.input}
+          placeholderTextColor={nc.textMuted}
+          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
         />
       </View>
 
       {/* Date/Time */}
       <View style={styles.dateTimeContainerWithPadding}>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => setShowDate(true)}
+          accessibilityLabel="Choisir la date"
+          hitSlop={8}
         >
           <FontAwesome5
             name="calendar-alt"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Date</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => setShowTime(true)}
+          accessibilityLabel="Choisir l'heure"
+          hitSlop={8}
         >
           <FontAwesome5
             name="clock"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Heure</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate} numberOfLines={1} adjustsFontSizeToFit>
+        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
           {dateHeure.toLocaleDateString("fr-FR", {
             weekday: "long",
             year: "numeric",
@@ -1495,7 +1560,7 @@ export function SoinsForm({
             day: "numeric",
           })}
         </Text>
-        <Text style={styles.selectedTime}>
+        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
           {dateHeure.toLocaleTimeString("fr-FR", {
             hour: "2-digit",
             minute: "2-digit",
@@ -1549,11 +1614,16 @@ export function SoinsForm({
       <View style={styles.buttonsContainer}>
         <View style={styles.primaryRow}>
           <TouchableOpacity
-            style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.cancelButton,
+              { backgroundColor: nc.background, borderColor: nc.border },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={onCancel}
             disabled={isSubmitting}
+            accessibilityLabel="Annuler"
           >
-            <Text style={styles.cancelText}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1564,11 +1634,12 @@ export function SoinsForm({
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
+            accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color="white" />
+              <ActivityIndicator size="small" color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
             ) : (
-              <Text style={styles.validateText}>
+              <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
                 {isEditing ? "Enregistrer" : "Ajouter"}
               </Text>
             )}
@@ -1577,9 +1648,14 @@ export function SoinsForm({
 
         {isEditing && onDelete && (
           <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.deleteButton,
+              { borderColor: "#f1b1b1", backgroundColor: nc.errorBg },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
+            accessibilityLabel="Supprimer"
           >
             <FontAwesome5 name="trash" size={14} color="#dc3545" />
             <Text style={styles.deleteText}>Supprimer</Text>
@@ -1615,12 +1691,10 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontSize: 14,
-    color: "#666",
     fontWeight: "600",
   },
   breadcrumbText: {
     fontSize: 12,
-    color: "#999",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -1628,12 +1702,10 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
     borderRadius: 12,
     paddingHorizontal: 12,
     marginVertical: 12,
     borderWidth: 1,
-    borderColor: "#e9ecef",
   },
   searchIcon: {
     marginRight: 8,
@@ -1641,7 +1713,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: "#333",
     paddingVertical: 10,
   },
   clearButton: {
@@ -1657,7 +1728,6 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
     borderRadius: 12,
   },
   pickerItemIcon: {
@@ -1673,18 +1743,15 @@ const styles = StyleSheet.create({
   },
   pickerItemText: {
     fontSize: 16,
-    color: "#333",
   },
   pickerItemTextSelected: {
     fontWeight: "600",
   },
   pickerItemSubtext: {
     fontSize: 12,
-    color: "#6b7280",
   },
   noResultsText: {
     fontSize: 16,
-    color: "#666",
     textAlign: "center",
     padding: 20,
   },
@@ -1698,13 +1765,11 @@ const styles = StyleSheet.create({
   typeChip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "#f9fafb",
   },
   typeChipActive: {
-    backgroundColor: "#fff",
+    backgroundColor: "#ede7f6",
     borderColor: "#6f42c1",
   },
   typeChipDisabled: {
@@ -1712,7 +1777,6 @@ const styles = StyleSheet.create({
   },
   typeChipText: {
     fontSize: 12,
-    color: "#6b7280",
     fontWeight: "600",
   },
   typeChipTextActive: {
@@ -1721,7 +1785,6 @@ const styles = StyleSheet.create({
   },
   toggleHint: {
     fontSize: 13,
-    color: "#999",
     textAlign: "center",
     marginBottom: 12,
   },
@@ -1733,7 +1796,6 @@ const styles = StyleSheet.create({
   templatesTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#4b5563",
     marginBottom: 8,
   },
   templatesGroup: {
@@ -1742,7 +1804,6 @@ const styles = StyleSheet.create({
   templatesSubtitle: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#6b7280",
     marginBottom: 6,
   },
   templatesRow: {
@@ -1752,14 +1813,12 @@ const styles = StyleSheet.create({
   },
   templateChip: {
     borderRadius: 999,
-    backgroundColor: "#f0f0f0",
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
   templateChipText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#4a4f55",
   },
   // Input groups
   inputGroup: {
@@ -1768,23 +1827,18 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6b7280",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   readOnlyValue: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: "#4b5563",
-    backgroundColor: "#f9fafb",
   },
   // Chips
   chipSection: {
@@ -1793,7 +1847,6 @@ const styles = StyleSheet.create({
   chipLabel: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6b7280",
   },
   chipRow: {
     flexDirection: "row",
@@ -1803,10 +1856,8 @@ const styles = StyleSheet.create({
   chip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "#f9fafb",
   },
   chipActive: {
     borderColor: "#6f42c1",
@@ -1814,14 +1865,13 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 12,
-    color: "#6b7280",
     fontWeight: "600",
   },
   chipTextActive: {
     color: "#4c2c79",
   },
   chipTextDisabled: {
-    color: "#c4c4c4",
+    opacity: 0.5,
   },
   // Quantity picker
   quantityPickerRow: {
@@ -1835,7 +1885,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1845,30 +1894,25 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#333",
   },
   quantityButtonTextDisabled: {
-    color: "#999",
+    opacity: 0.5,
   },
   quantityPickerValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
   },
   // Selector button (for vaccin/vitamine)
   selectorButton: {
-    backgroundColor: "#f8f9fa",
     padding: 16,
     borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     borderWidth: 1,
-    borderColor: "#e9ecef",
     marginBottom: 8,
   },
   selectorButtonDisabled: {
-    backgroundColor: "#f5f5f5",
     opacity: 0.5,
   },
   selectorIcon: {
@@ -1877,14 +1921,9 @@ const styles = StyleSheet.create({
   selectorText: {
     flex: 1,
     fontSize: 16,
-    color: "#999",
-  },
-  selectorTextSelected: {
-    color: "#333",
-    fontWeight: "500",
   },
   selectorTextDisabled: {
-    color: "#ccc",
+    opacity: 0.5,
   },
   // Date/Time
   dateTimeContainer: {
@@ -1909,13 +1948,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
   },
   dateButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#4a4f55",
   },
   selectedDateTime: {
     alignItems: "center",
@@ -1924,13 +1960,11 @@ const styles = StyleSheet.create({
   selectedDate: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
     marginBottom: 4,
   },
   selectedTime: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#374151",
   },
   // Action buttons
   buttonsContainer: {
@@ -1943,9 +1977,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#f5f6f8",
     borderWidth: 1,
-    borderColor: "#d7dbe0",
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
@@ -1954,7 +1986,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 16,
-    color: "#4a4f55",
     fontWeight: "600",
   },
   validateButton: {
@@ -1967,7 +1998,6 @@ const styles = StyleSheet.create({
   },
   validateText: {
     fontSize: 16,
-    color: "#fff",
     fontWeight: "700",
   },
   buttonDisabled: {
@@ -1980,8 +2010,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#f1b1b1",
-    backgroundColor: "#fff5f5",
     gap: 8,
   },
   deleteText: {

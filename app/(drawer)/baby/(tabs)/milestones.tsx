@@ -1316,10 +1316,10 @@ export default function MilestonesScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Effacer la date sélectionnée"
                 >
-                  <Text style={[styles.dateChipText, { color: nc.white }]}>
+                  <Text style={[styles.dateChipText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
                     {formatSelectedDateLabel(selectedDate)}
                   </Text>
-                  <Ionicons name="close" size={14} color={nc.white} />
+                  <Ionicons name="close" size={14} color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
                 </Pressable>
               )}
             </DateFilterBar>
@@ -1335,7 +1335,7 @@ export default function MilestonesScreen() {
                   calendarBackground: Colors[colorScheme].background,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: nc.white,
+                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].background : nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,

@@ -23,6 +23,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ajouterJalon,
   modifierJalon,
@@ -228,6 +229,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
+  const nc = getNeutralColors(colorScheme);
 
   const isEditing = !!editData;
 
@@ -419,13 +421,20 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           return (
             <TouchableOpacity
               key={type}
-              style={[styles.typeChip, active && styles.typeChipActive]}
+              style={[
+                styles.typeChip,
+                { borderColor: nc.border, backgroundColor: nc.background },
+                active && { backgroundColor: nc.backgroundCard, borderColor: eventColors.jalon.dark },
+              ]}
               onPress={() => handleTypeChange(type)}
               disabled={isSubmitting}
+              accessibilityLabel={`Type ${config.label}`}
+              hitSlop={8}
             >
               <Text
                 style={[
                   styles.typeChipText,
+                  { color: nc.textLight },
                   active && styles.typeChipTextActive,
                 ]}
               >
@@ -439,7 +448,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       {/* Titre (seulement pour Autre moment) */}
       {typeJalon === "autre" && (
         <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Titre</Text>
+          <Text style={[styles.inputLabel, { color: nc.textLight }]}>Titre</Text>
           <TextInput
             value={title}
             onChangeText={(value) => {
@@ -450,7 +459,8 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
               }
             }}
             placeholder="Ajouter un titre"
-            style={[styles.input, titleError && styles.inputError]}
+            placeholderTextColor={nc.textMuted}
+            style={[styles.input, { borderColor: nc.border, color: nc.textStrong }, titleError && styles.inputError]}
             editable={!isSubmitting}
           />
         </View>
@@ -458,12 +468,13 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
       {/* Description */}
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Description</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Description</Text>
         <TextInput
           value={description}
           onChangeText={setDescription}
           placeholder="Ajouter un détail ou un souvenir..."
-          style={styles.noteInput}
+          placeholderTextColor={nc.textMuted}
+          style={[styles.noteInput, { borderColor: nc.border, color: nc.textStrong }]}
           multiline
           editable={!isSubmitting}
         />
@@ -472,21 +483,28 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       {/* Humeur (si type humeur) */}
       {typeJalon === "humeur" && (
         <View style={styles.chipSection}>
-          <Text style={styles.chipLabel}>Humeur</Text>
+          <Text style={[styles.chipLabel, { color: nc.textLight }]}>Humeur</Text>
           <View style={styles.chipRow}>
             {MOOD_OPTIONS.map((option) => {
               const active = mood === option.value;
               return (
                 <TouchableOpacity
                   key={option.value}
-                  style={[styles.moodChip, active && styles.moodChipActive]}
+                  style={[
+                    styles.moodChip,
+                    { borderColor: nc.border, backgroundColor: nc.background },
+                    active && styles.moodChipActive,
+                  ]}
                   onPress={() => setMood(option.value)}
                   disabled={isSubmitting}
+                  accessibilityLabel={`Humeur ${option.label}`}
+                  hitSlop={8}
                 >
                   <Text style={styles.moodEmoji}>{option.emoji}</Text>
                   <Text
                     style={[
                       styles.moodLabel,
+                      { color: nc.textLight },
                       active && styles.moodLabelActive,
                     ]}
                   >
@@ -501,25 +519,26 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
       {/* Photo */}
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Photo</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Photo</Text>
         <View style={styles.photoRow}>
           {photoUri ? (
-            <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+            <Image source={{ uri: photoUri }} style={[styles.photoPreview, { backgroundColor: nc.background }]} />
           ) : (
-            <View style={styles.photoPlaceholder}>
-              <FontAwesome name="image" size={18} color="#c7cbd1" />
-              <Text style={styles.photoPlaceholderText}>Aucune photo</Text>
+            <View style={[styles.photoPlaceholder, { borderColor: nc.border, backgroundColor: nc.background }]}>
+              <FontAwesome name="image" size={18} color={nc.textMuted} />
+              <Text style={[styles.photoPlaceholderText, { color: nc.textMuted }]}>Aucune photo</Text>
             </View>
           )}
           <View style={styles.photoActions}>
             <TouchableOpacity
-              style={styles.photoButton}
+              style={[styles.photoButton, { borderColor: nc.border, backgroundColor: nc.backgroundCard }]}
               onPress={handlePickPhoto}
               activeOpacity={0.8}
               disabled={isSubmitting}
+              accessibilityLabel="Ajouter une photo"
             >
               <FontAwesome5 name="camera" size={14} color={colors.text} />
-              <Text style={styles.photoButtonText}>Ajouter</Text>
+              <Text style={[styles.photoButtonText, { color: nc.textStrong }]}>Ajouter</Text>
             </TouchableOpacity>
             {photoUri && (
               <TouchableOpacity
@@ -527,8 +546,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
                 onPress={() => setPhotoUri(null)}
                 activeOpacity={0.8}
                 disabled={isSubmitting}
+                accessibilityLabel="Retirer la photo"
               >
-                <Text style={styles.photoButtonSecondaryText}>Retirer</Text>
+                <Text style={[styles.photoButtonSecondaryText, { color: nc.textMuted }]}>Retirer</Text>
               </TouchableOpacity>
             )}
             {photoUploading && (
@@ -542,12 +562,13 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
       {/* Note */}
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Note</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Note</Text>
         <TextInput
           value={note}
           onChangeText={setNote}
           placeholder="Ajouter une note personnelle..."
-          style={styles.noteInput}
+          placeholderTextColor={nc.textMuted}
+          style={[styles.noteInput, { borderColor: nc.border, color: nc.textStrong }]}
           multiline
           editable={!isSubmitting}
         />
@@ -556,41 +577,45 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       {/* Date et Heure */}
       <View style={styles.dateTimeContainerWithPadding}>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => handleShowDate(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir la date"
+          hitSlop={8}
         >
           <FontAwesome5
             name="calendar-alt"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Date</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => handleShowTime(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir l'heure"
+          hitSlop={8}
         >
           <FontAwesome5
             name="clock"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Heure</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
         </TouchableOpacity>
       </View>
 
       {/* Date/heure sélectionnée */}
       <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate} numberOfLines={1} adjustsFontSizeToFit>
+        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
           {`${dateHeure.toLocaleDateString("fr-FR", {
             weekday: "long",
             day: "numeric",
             month: "long",
           })} ${dateHeure.getFullYear()}`}
         </Text>
-        <Text style={styles.selectedTime}>
+        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
           {dateHeure.toLocaleTimeString("fr-FR", {
             hour: "2-digit",
             minute: "2-digit",
@@ -644,11 +669,16 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       <View style={styles.buttonsContainer}>
         <View style={styles.primaryRow}>
           <TouchableOpacity
-            style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.cancelButton,
+              { backgroundColor: nc.background, borderColor: nc.border },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={onCancel}
             disabled={isSubmitting}
+            accessibilityLabel="Annuler"
           >
-            <Text style={styles.cancelText}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -659,8 +689,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
+            accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
-            <Text style={styles.validateText}>
+            <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
           </TouchableOpacity>
@@ -668,9 +699,14 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
         {isEditing && (
           <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.deleteButton,
+              { borderColor: "#f1b1b1", backgroundColor: nc.errorBg },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
+            accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color="#dc3545" />
             <Text style={styles.deleteText}>Supprimer</Text>
@@ -695,28 +731,23 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6b7280",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: "#111827",
   },
   inputError: {
     borderColor: "#dc3545",
   },
   noteInput: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: "#111827",
     minHeight: 80,
     textAlignVertical: "top",
   },
@@ -729,19 +760,12 @@ const styles = StyleSheet.create({
   typeChip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "#f9fafb",
-  },
-  typeChipActive: {
-    backgroundColor: "#fff",
-    borderColor: eventColors.jalon.dark,
   },
   typeChipText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#6b7280",
   },
   typeChipTextActive: {
     color: eventColors.jalon.dark,
@@ -753,7 +777,6 @@ const styles = StyleSheet.create({
   chipLabel: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6b7280",
   },
   chipRow: {
     flexDirection: "row",
@@ -766,8 +789,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f9fafb",
     minWidth: 68,
   },
   moodChipActive: {
@@ -779,7 +800,6 @@ const styles = StyleSheet.create({
   },
   moodLabel: {
     fontSize: 11,
-    color: "#6b7280",
     fontWeight: "600",
   },
   moodLabelActive: {
@@ -798,8 +818,6 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
     paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -807,7 +825,6 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#4a4f55",
   },
   selectedDateTime: {
     alignItems: "center",
@@ -815,14 +832,12 @@ const styles = StyleSheet.create({
   },
   selectedDate: {
     fontSize: 16,
-    color: "#333",
     fontWeight: "600",
     marginBottom: 4,
     textTransform: "capitalize",
   },
   selectedTime: {
     fontSize: 20,
-    color: "#374151",
     fontWeight: "600",
   },
   photoRow: {
@@ -834,22 +849,18 @@ const styles = StyleSheet.create({
     width: 88,
     height: 66,
     borderRadius: 12,
-    backgroundColor: "#f3f4f6",
   },
   photoPlaceholder: {
     width: 88,
     height: 66,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#f9fafb",
   },
   photoPlaceholderText: {
     fontSize: 11,
-    color: "#9ca3af",
   },
   photoActions: {
     gap: 8,
@@ -863,12 +874,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#fff",
   },
   photoButtonText: {
     fontSize: 13,
-    color: "#111827",
     fontWeight: "600",
   },
   photoButtonSecondary: {
@@ -876,7 +884,6 @@ const styles = StyleSheet.create({
   },
   photoButtonSecondaryText: {
     fontSize: 12,
-    color: "#9ca3af",
   },
   photoUploading: {
     fontSize: 12,
@@ -892,9 +899,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#f5f6f8",
     borderWidth: 1,
-    borderColor: "#d7dbe0",
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
@@ -903,7 +908,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 16,
-    color: "#4a4f55",
     fontWeight: "600",
   },
   validateButton: {
@@ -916,7 +920,6 @@ const styles = StyleSheet.create({
   },
   validateText: {
     fontSize: 16,
-    color: "#fff",
     fontWeight: "700",
   },
   buttonDisabled: {
@@ -929,8 +932,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#f1b1b1",
-    backgroundColor: "#fff5f5",
     gap: 8,
   },
   deleteText: {

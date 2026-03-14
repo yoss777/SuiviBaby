@@ -1,5 +1,6 @@
 // components/forms/RoutinesForm.tsx
 import { Colors } from "@/constants/theme";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -137,6 +138,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
 
   const isEditing = !!editData;
   const isEditingBain = isEditing && editData.type === "bain";
@@ -471,15 +473,24 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             key={item.key}
             style={[
               styles.typeChip,
-              active && styles.typeChipActive,
+              {
+                backgroundColor: active ? nc.backgroundCard : nc.background,
+                borderColor: active ? "#6f42c1" : nc.border,
+              },
               isDisabled && styles.typeChipDisabled,
             ]}
             disabled={isDisabled || isSubmitting}
             activeOpacity={0.7}
             onPress={() => handleSelectType(item.key as any)}
+            accessibilityLabel={item.label}
+            hitSlop={8}
           >
             <Text
-              style={[styles.typeChipText, active && styles.typeChipTextActive]}
+              style={[
+                styles.typeChipText,
+                { color: active ? "#4c2c79" : nc.textLight },
+                active && styles.typeChipTextActive,
+              ]}
             >
               {item.label}
             </Text>
@@ -496,21 +507,29 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const renderSommeilForm = () => (
     <>
       <View style={styles.chipSection}>
-        <Text style={styles.chipLabel}>Lieu</Text>
+        <Text style={[styles.chipLabel, { color: nc.textLight }]}>Lieu</Text>
         <View style={styles.chipRow}>
           {LOCATION_OPTIONS.map((option) => (
             <TouchableOpacity
               key={option}
-              style={[styles.chip, location === option && styles.chipActive]}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: location === option ? "#ede7f6" : nc.background,
+                  borderColor: location === option ? "#6f42c1" : nc.border,
+                },
+              ]}
               onPress={() =>
                 setLocation(location === option ? undefined : option)
               }
               disabled={isSubmitting}
+              accessibilityLabel={option}
+              hitSlop={8}
             >
               <Text
                 style={[
                   styles.chipText,
-                  location === option && styles.chipTextActive,
+                  { color: location === option ? "#4c2c79" : nc.textLight },
                 ]}
               >
                 {option}
@@ -521,21 +540,29 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       </View>
 
       <View style={styles.chipSection}>
-        <Text style={styles.chipLabel}>Qualité</Text>
+        <Text style={[styles.chipLabel, { color: nc.textLight }]}>Qualité</Text>
         <View style={styles.chipRow}>
           {QUALITY_OPTIONS.map((option) => (
             <TouchableOpacity
               key={option}
-              style={[styles.chip, quality === option && styles.chipActive]}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: quality === option ? "#ede7f6" : nc.background,
+                  borderColor: quality === option ? "#6f42c1" : nc.border,
+                },
+              ]}
               onPress={() =>
                 setQuality(quality === option ? undefined : option)
               }
               disabled={isSubmitting}
+              accessibilityLabel={option}
+              hitSlop={8}
             >
               <Text
                 style={[
                   styles.chipText,
-                  quality === option && styles.chipTextActive,
+                  { color: quality === option ? "#4c2c79" : nc.textLight },
                 ]}
               >
                 {option}
@@ -546,46 +573,61 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Note</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Note</Text>
         <TextInput
           value={noteSommeil}
           onChangeText={setNoteSommeil}
           placeholder="Ajouter une note"
-          style={styles.input}
+          placeholderTextColor={nc.textMuted}
+          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
           editable={!isSubmitting}
         />
       </View>
 
       <View style={styles.rowBetween}>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[
+            styles.dateButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
+          ]}
           onPress={() => handleShowDateStart(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir la date de début"
+          hitSlop={8}
         >
           <FontAwesome5
             name="calendar-alt"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Date début</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date début</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[
+            styles.dateButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
+          ]}
           onPress={() => handleShowTimeStart(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir l'heure de début"
+          hitSlop={8}
         >
           <FontAwesome5
             name="clock"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Heure début</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure début</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.rowBetween}>
         <TouchableOpacity
-          style={[styles.dateButton, isOngoing && styles.dateButtonDisabled]}
+          style={[
+            styles.dateButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
+            isOngoing && styles.dateButtonDisabled,
+          ]}
           onPress={() => {
             if (!isOngoing) {
               setHeureFin((prev) => prev ?? new Date());
@@ -593,16 +635,22 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             }
           }}
           disabled={isSubmitting || isOngoing}
+          accessibilityLabel="Choisir la date de fin"
+          hitSlop={8}
         >
           <FontAwesome5
             name="calendar-alt"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Date fin</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date fin</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.dateButton, isOngoing && styles.dateButtonDisabled]}
+          style={[
+            styles.dateButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
+            isOngoing && styles.dateButtonDisabled,
+          ]}
           onPress={() => {
             if (!isOngoing) {
               setHeureFin((prev) => prev ?? new Date());
@@ -610,13 +658,15 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             }
           }}
           disabled={isSubmitting || isOngoing}
+          accessibilityLabel="Choisir l'heure de fin"
+          hitSlop={8}
         >
           <FontAwesome5
             name="clock"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Heure fin</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure fin</Text>
         </TouchableOpacity>
       </View>
 
@@ -624,26 +674,31 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         style={styles.checkboxRow}
         onPress={() => setIsOngoing((prev) => !prev)}
         disabled={isSubmitting}
+        accessibilityLabel="Sommeil en cours"
       >
-        <View style={[styles.checkbox, isOngoing && styles.checkboxChecked]}>
+        <View style={[
+          styles.checkbox,
+          { borderColor: nc.border },
+          isOngoing && styles.checkboxChecked,
+        ]}>
           {isOngoing && <FontAwesome name="check" size={12} color="#fff" />}
         </View>
-        <Text style={styles.checkboxLabel}>Sommeil en cours</Text>
+        <Text style={[styles.checkboxLabel, { color: nc.textLight }]}>Sommeil en cours</Text>
       </TouchableOpacity>
 
       <View style={styles.sleepSelectedDateTime}>
-        <Text style={styles.sleepSelectedDate}>
+        <Text style={[styles.sleepSelectedDate, { color: nc.textStrong }]}>
           {formatDateLabel(heureDebut)}
         </Text>
-        <Text style={styles.sleepSelectedTime}>{formatTime(heureDebut)}</Text>
+        <Text style={[styles.sleepSelectedTime, { color: nc.textStrong }]}>{formatTime(heureDebut)}</Text>
         {!isOngoing && heureFin && (
           <>
             {formatDateLabel(heureFin) !== formatDateLabel(heureDebut) && (
-              <Text style={styles.sleepSelectedDate}>
+              <Text style={[styles.sleepSelectedDate, { color: nc.textStrong }]}>
                 {formatDateLabel(heureFin)}
               </Text>
             )}
-            <Text style={styles.sleepSelectedTime}>
+            <Text style={[styles.sleepSelectedTime, { color: nc.textStrong }]}>
               → {formatTime(heureFin)}
             </Text>
           </>
@@ -744,37 +799,43 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const renderBainForm = () => (
     <>
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Durée (minutes)</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Durée (minutes)</Text>
         <View style={styles.quantityPickerRow}>
           <TouchableOpacity
             style={[
               styles.quantityButton,
+              { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
             onPress={() => setDureeBain((value) => Math.max(0, value - 5))}
             disabled={isSubmitting}
+            accessibilityLabel="Diminuer"
           >
             <Text
               style={[
                 styles.quantityButtonText,
+                { color: nc.textStrong },
                 isSubmitting && styles.quantityButtonTextDisabled,
               ]}
             >
               -
             </Text>
           </TouchableOpacity>
-          <Text style={styles.quantityPickerValue}>{dureeBain} min</Text>
+          <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>{dureeBain} min</Text>
           <TouchableOpacity
             style={[
               styles.quantityButton,
+              { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
             onPress={() => setDureeBain((value) => value + 5)}
             disabled={isSubmitting}
+            accessibilityLabel="Augmenter"
           >
             <Text
               style={[
                 styles.quantityButtonText,
+                { color: nc.textStrong },
                 isSubmitting && styles.quantityButtonTextDisabled,
               ]}
             >
@@ -785,43 +846,49 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Température de l'eau (°C)</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Température de l'eau (°C)</Text>
         <View style={styles.quantityPickerRow}>
           <TouchableOpacity
             style={[
               styles.quantityButton,
+              { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
             onPress={() =>
               setTemperatureEau((value) => Math.max(35, value - 0.5))
             }
             disabled={isSubmitting}
+            accessibilityLabel="Diminuer"
           >
             <Text
               style={[
                 styles.quantityButtonText,
+                { color: nc.textStrong },
                 isSubmitting && styles.quantityButtonTextDisabled,
               ]}
             >
               -
             </Text>
           </TouchableOpacity>
-          <Text style={styles.quantityPickerValue}>
+          <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
             {temperatureEau.toFixed(1)}°C
           </Text>
           <TouchableOpacity
             style={[
               styles.quantityButton,
+              { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
             onPress={() =>
               setTemperatureEau((value) => Math.min(40, value + 0.5))
             }
             disabled={isSubmitting}
+            accessibilityLabel="Augmenter"
           >
             <Text
               style={[
                 styles.quantityButtonText,
+                { color: nc.textStrong },
                 isSubmitting && styles.quantityButtonTextDisabled,
               ]}
             >
@@ -832,56 +899,68 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Produits</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Produits</Text>
         <TextInput
           value={produits}
           onChangeText={setProduits}
           placeholder="Gel lavant, huile..."
-          style={styles.input}
+          placeholderTextColor={nc.textMuted}
+          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
           editable={!isSubmitting}
         />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Note</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Note</Text>
         <TextInput
           value={noteBain}
           onChangeText={setNoteBain}
           placeholder="Ajouter une note"
-          style={styles.input}
+          placeholderTextColor={nc.textMuted}
+          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
           editable={!isSubmitting}
         />
       </View>
 
       <View style={styles.dateTimeContainerWithPadding}>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[
+            styles.dateButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
+          ]}
           onPress={() => handleShowDate(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir la date"
+          hitSlop={8}
         >
           <FontAwesome5
             name="calendar-alt"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Date</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[
+            styles.dateButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
+          ]}
           onPress={() => handleShowTime(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir l'heure"
+          hitSlop={8}
         >
           <FontAwesome5
             name="clock"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Heure</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate} numberOfLines={1} adjustsFontSizeToFit>
+        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
           {dateHeure.toLocaleDateString("fr-FR", {
             weekday: "long",
             year: "numeric",
@@ -889,7 +968,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             day: "numeric",
           })}
         </Text>
-        <Text style={styles.selectedTime}>
+        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
           {dateHeure.toLocaleTimeString("fr-FR", {
             hour: "2-digit",
             minute: "2-digit",
@@ -955,11 +1034,16 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       <View style={styles.buttonsContainer}>
         <View style={styles.primaryRow}>
           <TouchableOpacity
-            style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.cancelButton,
+              { backgroundColor: nc.background, borderColor: nc.border },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={onCancel}
             disabled={isSubmitting}
+            accessibilityLabel="Annuler"
           >
-            <Text style={styles.cancelText}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -970,8 +1054,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
+            accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
-            <Text style={styles.validateText}>
+            <Text style={[
+              styles.validateText,
+              { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white },
+            ]}>
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
           </TouchableOpacity>
@@ -979,9 +1067,14 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
         {isEditing && (
           <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.deleteButton,
+              { backgroundColor: nc.errorBg },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
+            accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color="#dc3545" />
             <Text style={styles.deleteText}>Supprimer</Text>
@@ -1010,14 +1103,11 @@ const styles = StyleSheet.create({
   typeChip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "#f9fafb",
   },
   typeChipActive: {
-    backgroundColor: "#fff",
-    borderColor: "#6f42c1",
+    // backgroundColor and borderColor applied inline
   },
   typeChipDisabled: {
     opacity: 0.5,
@@ -1025,10 +1115,8 @@ const styles = StyleSheet.create({
   typeChipText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#6b7280",
   },
   typeChipTextActive: {
-    color: "#4c2c79",
     fontWeight: "700",
   },
   // Input group
@@ -1038,11 +1126,9 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6b7280",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -1054,7 +1140,6 @@ const styles = StyleSheet.create({
   chipLabel: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6b7280",
   },
   chipRow: {
     flexDirection: "row",
@@ -1064,22 +1149,18 @@ const styles = StyleSheet.create({
   chip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "#f9fafb",
   },
   chipActive: {
-    borderColor: "#6f42c1",
-    backgroundColor: "#ede7f6",
+    // backgroundColor and borderColor applied inline
   },
   chipText: {
     fontSize: 12,
-    color: "#6b7280",
     fontWeight: "600",
   },
   chipTextActive: {
-    color: "#4c2c79",
+    // color applied inline
   },
   // Quantity picker
   quantityPickerRow: {
@@ -1093,7 +1174,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1103,15 +1183,13 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#333",
   },
   quantityButtonTextDisabled: {
-    color: "#999",
+    opacity: 0.5,
   },
   quantityPickerValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
   },
   // Date/Time
   rowBetween: {
@@ -1134,8 +1212,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
   },
   dateButtonDisabled: {
     opacity: 0.5,
@@ -1143,7 +1219,6 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#4a4f55",
   },
   selectedDateTime: {
     alignItems: "center",
@@ -1155,25 +1230,21 @@ const styles = StyleSheet.create({
   },
   selectedDate: {
     fontSize: 16,
-    color: "#333",
     fontWeight: "600",
     marginBottom: 4,
   },
   sleepSelectedDate: {
     fontSize: 16,
-    color: "#333",
     fontWeight: "600",
     marginBottom: 4,
     textTransform: "capitalize",
   },
   selectedTime: {
     fontSize: 20,
-    color: "#374151",
     fontWeight: "600",
   },
   sleepSelectedTime: {
     fontSize: 20,
-    color: "#374151",
     fontWeight: "600",
   },
   // Checkbox
@@ -1187,7 +1258,6 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#d1d5db",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1197,7 +1267,6 @@ const styles = StyleSheet.create({
   },
   checkboxLabel: {
     fontSize: 12,
-    color: "#6b7280",
     fontWeight: "600",
   },
   // Action buttons
@@ -1211,9 +1280,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#f5f6f8",
     borderWidth: 1,
-    borderColor: "#d7dbe0",
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
@@ -1222,7 +1289,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 16,
-    color: "#4a4f55",
     fontWeight: "600",
   },
   validateButton: {
@@ -1235,7 +1301,6 @@ const styles = StyleSheet.create({
   },
   validateText: {
     fontSize: 16,
-    color: "#fff",
     fontWeight: "700",
   },
   buttonDisabled: {
@@ -1249,7 +1314,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#f1b1b1",
-    backgroundColor: "#fff5f5",
     gap: 8,
   },
   deleteText: {

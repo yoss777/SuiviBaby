@@ -186,6 +186,35 @@ Aucun gap restant — tous les écrans sont à 100%.
 
 **Score autres composants : 44/44 applicables** (100%)
 
+## Formulaires (Bottom Sheet Forms)
+
+| Abrév. | Formulaire | Fichier |
+|--------|-----------|---------|
+| MF | MealsForm | `components/forms/MealsForm.tsx` |
+| DF | DiapersForm | `components/forms/DiapersForm.tsx` |
+| PF | PumpingForm | `components/forms/PumpingForm.tsx` |
+| SF | SoinsForm | `components/forms/SoinsForm.tsx` |
+| RF | RoutinesForm | `components/forms/RoutinesForm.tsx` |
+| CF | CroissanceForm | `components/forms/CroissanceForm.tsx` |
+| AF | ActivitiesForm | `components/forms/ActivitiesForm.tsx` |
+| MIF | MilestonesForm | `components/forms/MilestonesForm.tsx` |
+| IF | ImmunizationForm | `components/forms/ImmunizationForm.tsx` |
+
+> Formulaires rendus dans des bottom sheets via SheetContext. Seuls les P-items applicables sont listés.
+
+| ID | Amélioration | MF | DF | PF | SF | RF | CF | AF | MIF | IF | Statut |
+|----|-------------|----|----|----|----|----|----|----|----|-----|--------|
+| P6 | Toast/success animation | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 9/9 |
+| P12b | Error boundary / try-catch | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 9/9 |
+| P15a | Accessibility labels | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 9/9 |
+| P16a | Dark mode nc.* tokens | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 9/9 |
+| P17a | useCallback/useMemo | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 9/9 |
+| P20 | Race condition guards (isSubmitting) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 9/9 |
+| P21 | Theme tokens (no hardcoded) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 9/9 |
+| P25 | Touch targets (hitSlop) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 9/9 |
+
+**Score formulaires : 72/72 applicables** (100%)
+
 ## Composants partagés créés
 
 | Composant | Fichier | Utilisé par |
@@ -197,5 +226,5 @@ Aucun gap restant — tous les écrans sont à 100%.
 
 ## Score
 
-**636/636 applicables déployés** (100%) — 0 gaps restants
-(401 tabs/sous-écrans + 57 utilitaires drawer + 134 settings + 44 autres composants = 636 total)
+**708/708 applicables déployés** (100%)
+(401 tabs/sous-écrans + 57 utilitaires drawer + 134 settings + 44 autres composants + 72/72 formulaires = 708/708 total)

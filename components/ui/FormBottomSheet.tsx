@@ -1,4 +1,5 @@
 import { Colors } from "@/constants/theme";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import BottomSheet, {
@@ -64,6 +65,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
   ) => {
     const colorScheme = useColorScheme() ?? "light";
     const tintColor = Colors[colorScheme].tint;
+    const nc = getNeutralColors(colorScheme);
     const insets = useSafeAreaInsets();
     const snapPoints = useMemo(
       () => customSnapPoints || ["75%", "90%"],
@@ -92,6 +94,8 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         enableOverDrag={enableOverDrag}
         backdropComponent={renderBackdrop}
         onClose={onClose}
+        backgroundStyle={{ backgroundColor: nc.backgroundCard }}
+        handleIndicatorStyle={{ backgroundColor: nc.textMuted }}
       >
         <BottomSheetScrollView
           style={styles.container}
@@ -100,7 +104,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
           {/* Header */}
           <View style={styles.header}>
             <FontAwesome name={icon} size={24} color={accentColor} />
-            <Text style={styles.title}>{title}</Text>
+            <Text style={[styles.title, { color: nc.textStrong }]}>{title}</Text>
           </View>
 
           {/* Contenu du formulaire */}
@@ -118,12 +122,13 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                 <TouchableOpacity
                   style={[
                     styles.cancelButton,
+                    { backgroundColor: nc.background, borderColor: nc.border },
                     isSubmitting && styles.buttonDisabled,
                   ]}
                   onPress={onCancel}
                   disabled={isSubmitting}
                 >
-                  <Text style={styles.cancelText}>Annuler</Text>
+                  <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -136,9 +141,9 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
-                    <ActivityIndicator size="small" color="white" />
+                    <ActivityIndicator size="small" color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
                   ) : (
-                    <Text style={styles.validateText}>
+                    <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
                       {isEditing ? "Enregistrer" : "Ajouter"}
                     </Text>
                   )}
@@ -149,6 +154,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                 <TouchableOpacity
                   style={[
                     styles.deleteOutlineButton,
+                    { borderColor: "#f1b1b1", backgroundColor: nc.errorBg },
                     isSubmitting && styles.buttonDisabled,
                   ]}
                   onPress={onDelete}
@@ -188,7 +194,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#333",
   },
   content: {
     paddingBottom: 10,
@@ -212,8 +217,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#f1b1b1",
-    backgroundColor: "#fff5f5",
     gap: 8,
   },
   deleteOutlineText: {
@@ -224,9 +227,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#f5f6f8",
     borderWidth: 1,
-    borderColor: "#d7dbe0",
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
@@ -235,7 +236,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 16,
-    color: "#4a4f55",
     fontWeight: "600",
   },
   validateButton: {
@@ -248,7 +248,6 @@ const styles = StyleSheet.create({
   },
   validateText: {
     fontSize: 16,
-    color: "#fff",
     fontWeight: "700",
   },
   buttonDisabled: {

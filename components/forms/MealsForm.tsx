@@ -8,6 +8,7 @@ import {
   SOLIDE_TYPE_OPTIONS,
 } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -115,6 +116,7 @@ export function MealsForm({
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
 
   const isEditing = !!editData;
 
@@ -408,25 +410,28 @@ export function MealsForm({
   return (
     <View style={styles.container}>
       {/* Type selector */}
-      <Text style={styles.categoryLabel}>Type de repas</Text>
+      <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Type de repas</Text>
       <View style={styles.typeRow}>
         <TouchableOpacity
           style={[
             styles.typeChip,
+            { backgroundColor: nc.backgroundPressed },
             mealType === "tetee" && styles.typeChipActive,
             isSubmitting && styles.typeChipDisabled,
           ]}
           onPress={() => setMealType("tetee")}
           disabled={isSubmitting}
+          accessibilityLabel="Type tétée"
         >
           <FontAwesome
             name="person-breastfeeding"
             size={16}
-            color={mealType === "tetee" ? "white" : "#666"}
+            color={mealType === "tetee" ? "white" : nc.textLight}
           />
           <Text
             style={[
               styles.typeChipText,
+              { color: nc.textLight },
               mealType === "tetee" && styles.typeChipTextActive,
             ]}
           >
@@ -437,6 +442,7 @@ export function MealsForm({
         <TouchableOpacity
           style={[
             styles.typeChip,
+            { backgroundColor: nc.backgroundPressed },
             mealType === "biberon" && styles.typeChipActive,
             isSubmitting && styles.typeChipDisabled,
           ]}
@@ -445,15 +451,17 @@ export function MealsForm({
             setRunningSide(null);
           }}
           disabled={isSubmitting}
+          accessibilityLabel="Type biberon"
         >
           <MaterialCommunityIcons
             name="baby-bottle"
             size={18}
-            color={mealType === "biberon" ? "white" : "#666"}
+            color={mealType === "biberon" ? "white" : nc.textLight}
           />
           <Text
             style={[
               styles.typeChipText,
+              { color: nc.textLight },
               mealType === "biberon" && styles.typeChipTextActive,
             ]}
           >
@@ -464,6 +472,7 @@ export function MealsForm({
         <TouchableOpacity
           style={[
             styles.typeChip,
+            { backgroundColor: nc.backgroundPressed },
             mealType === "solide" && styles.typeChipActive,
             isSubmitting && styles.typeChipDisabled,
           ]}
@@ -472,15 +481,17 @@ export function MealsForm({
             setRunningSide(null);
           }}
           disabled={isSubmitting}
+          accessibilityLabel="Type solide"
         >
           <FontAwesome
             name="bowl-food"
             size={16}
-            color={mealType === "solide" ? "white" : "#666"}
+            color={mealType === "solide" ? "white" : nc.textLight}
           />
           <Text
             style={[
               styles.typeChipText,
+              { color: nc.textLight },
               mealType === "solide" && styles.typeChipTextActive,
             ]}
           >
@@ -492,22 +503,26 @@ export function MealsForm({
       {/* BIBERON FORM */}
       {mealType === "biberon" && (
         <>
-          <Text style={styles.categoryLabel}>Type de biberon</Text>
+          <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Type de biberon</Text>
           <View style={styles.biberonTypeGrid}>
             {BIBERON_TYPE_OPTIONS.map((option) => (
               <TouchableOpacity
                 key={option.value}
                 style={[
                   styles.biberonTypeChip,
+                  { backgroundColor: nc.backgroundPressed },
                   typeBiberon === option.value && styles.biberonTypeChipActive,
                   isSubmitting && styles.chipDisabled,
                 ]}
                 onPress={() => setTypeBiberon(option.value)}
                 disabled={isSubmitting}
+                accessibilityLabel={`Type ${option.label}`}
+                hitSlop={8}
               >
                 <Text
                   style={[
                     styles.biberonTypeChipText,
+                    { color: nc.textLight },
                     typeBiberon === option.value && styles.biberonTypeChipTextActive,
                   ]}
                 >
@@ -517,24 +532,26 @@ export function MealsForm({
             ))}
           </View>
 
-          <Text style={styles.categoryLabel}>Quantité</Text>
+          <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Quantité</Text>
           <View style={styles.quantityRow}>
             <TouchableOpacity
-              style={[styles.quantityButton, isSubmitting && styles.buttonDisabled]}
+              style={[styles.quantityButton, { backgroundColor: nc.backgroundPressed }, isSubmitting && styles.buttonDisabled]}
               onPressIn={() => handlePressIn(() => setQuantite((q) => Math.max(0, q - 5)))}
               onPressOut={handlePressOut}
               disabled={isSubmitting}
+              accessibilityLabel="Diminuer la quantité"
             >
-              <Text style={styles.quantityButtonText}>-</Text>
+              <Text style={[styles.quantityButtonText, { color: nc.textStrong }]}>-</Text>
             </TouchableOpacity>
-            <Text style={styles.quantityValue}>{quantite} ml</Text>
+            <Text style={[styles.quantityValue, { color: nc.textStrong }]}>{quantite} ml</Text>
             <TouchableOpacity
-              style={[styles.quantityButton, isSubmitting && styles.buttonDisabled]}
+              style={[styles.quantityButton, { backgroundColor: nc.backgroundPressed }, isSubmitting && styles.buttonDisabled]}
               onPressIn={() => handlePressIn(() => setQuantite((q) => q + 5))}
               onPressOut={handlePressOut}
               disabled={isSubmitting}
+              accessibilityLabel="Augmenter la quantité"
             >
-              <Text style={styles.quantityButtonText}>+</Text>
+              <Text style={[styles.quantityButtonText, { color: nc.textStrong }]}>+</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -543,30 +560,30 @@ export function MealsForm({
       {/* TETEE FORM */}
       {mealType === "tetee" && (
         <>
-          <Text style={styles.categoryLabel}>Chronomètre tétée</Text>
+          <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Chronomètre tétée</Text>
           <View style={styles.chronoContainer}>
             {/* Left side */}
-            <View style={styles.chronoCard}>
-              <Text style={styles.chronoLabel}>Gauche</Text>
-              <Text style={styles.chronoTime}>{formatDuration(leftSeconds)}</Text>
+            <View style={[styles.chronoCard, { backgroundColor: nc.background, borderColor: nc.border }]}>
+              <Text style={[styles.chronoLabel, { color: nc.textLight }]}>Gauche</Text>
+              <Text style={[styles.chronoTime, { color: nc.textStrong }]}>{formatDuration(leftSeconds)}</Text>
               {isEditing ? (
                 <View style={styles.chronoAdjustRow}>
                   <TouchableOpacity
-                    style={[styles.chronoAdjustButton, isSubmitting && styles.buttonDisabled]}
+                    style={[styles.chronoAdjustButton, { backgroundColor: nc.backgroundCard, borderColor: nc.border }, isSubmitting && styles.buttonDisabled]}
                     onPressIn={() => handlePressIn(() => setLeftSeconds((prev) => Math.max(0, prev - 60)))}
                     onPressOut={handlePressOut}
                     disabled={isSubmitting}
                   >
-                    <Text style={styles.chronoAdjustButtonText}>-</Text>
+                    <Text style={[styles.chronoAdjustButtonText, { color: nc.textStrong }]}>-</Text>
                   </TouchableOpacity>
-                  <Text style={styles.chronoAdjustValue}>{Math.round(leftSeconds / 60)} min</Text>
+                  <Text style={[styles.chronoAdjustValue, { color: nc.textStrong }]}>{Math.round(leftSeconds / 60)} min</Text>
                   <TouchableOpacity
-                    style={[styles.chronoAdjustButton, isSubmitting && styles.buttonDisabled]}
+                    style={[styles.chronoAdjustButton, { backgroundColor: nc.backgroundCard, borderColor: nc.border }, isSubmitting && styles.buttonDisabled]}
                     onPressIn={() => handlePressIn(() => setLeftSeconds((prev) => prev + 60))}
                     onPressOut={handlePressOut}
                     disabled={isSubmitting}
                   >
-                    <Text style={styles.chronoAdjustButtonText}>+</Text>
+                    <Text style={[styles.chronoAdjustButtonText, { color: nc.textStrong }]}>+</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -574,6 +591,7 @@ export function MealsForm({
                   <TouchableOpacity
                     style={[
                       styles.chronoControlButton,
+                      { backgroundColor: nc.backgroundCard, borderColor: nc.border },
                       runningSide === "left" && styles.chronoControlButtonActive,
                     ]}
                     onPress={() => toggleChrono("left")}
@@ -582,45 +600,46 @@ export function MealsForm({
                     <Ionicons
                       name={runningSide === "left" ? "pause" : "play"}
                       size={16}
-                      color={runningSide === "left" ? "white" : "#333"}
+                      color={runningSide === "left" ? "white" : nc.textStrong}
                     />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[
                       styles.chronoControlButton,
+                      { backgroundColor: nc.backgroundCard, borderColor: nc.border },
                       leftSeconds === 0 && styles.chronoControlButtonDisabled,
                     ]}
                     onPress={() => resetChrono("left")}
                     disabled={isSubmitting || leftSeconds === 0}
                   >
-                    <Ionicons name="refresh" size={16} color={leftSeconds === 0 ? "#999" : "#333"} />
+                    <Ionicons name="refresh" size={16} color={leftSeconds === 0 ? nc.textMuted : nc.textStrong} />
                   </TouchableOpacity>
                 </View>
               )}
             </View>
 
             {/* Right side */}
-            <View style={styles.chronoCard}>
-              <Text style={styles.chronoLabel}>Droit</Text>
-              <Text style={styles.chronoTime}>{formatDuration(rightSeconds)}</Text>
+            <View style={[styles.chronoCard, { backgroundColor: nc.background, borderColor: nc.border }]}>
+              <Text style={[styles.chronoLabel, { color: nc.textLight }]}>Droit</Text>
+              <Text style={[styles.chronoTime, { color: nc.textStrong }]}>{formatDuration(rightSeconds)}</Text>
               {isEditing ? (
                 <View style={styles.chronoAdjustRow}>
                   <TouchableOpacity
-                    style={[styles.chronoAdjustButton, isSubmitting && styles.buttonDisabled]}
+                    style={[styles.chronoAdjustButton, { backgroundColor: nc.backgroundCard, borderColor: nc.border }, isSubmitting && styles.buttonDisabled]}
                     onPressIn={() => handlePressIn(() => setRightSeconds((prev) => Math.max(0, prev - 60)))}
                     onPressOut={handlePressOut}
                     disabled={isSubmitting}
                   >
-                    <Text style={styles.chronoAdjustButtonText}>-</Text>
+                    <Text style={[styles.chronoAdjustButtonText, { color: nc.textStrong }]}>-</Text>
                   </TouchableOpacity>
-                  <Text style={styles.chronoAdjustValue}>{Math.round(rightSeconds / 60)} min</Text>
+                  <Text style={[styles.chronoAdjustValue, { color: nc.textStrong }]}>{Math.round(rightSeconds / 60)} min</Text>
                   <TouchableOpacity
-                    style={[styles.chronoAdjustButton, isSubmitting && styles.buttonDisabled]}
+                    style={[styles.chronoAdjustButton, { backgroundColor: nc.backgroundCard, borderColor: nc.border }, isSubmitting && styles.buttonDisabled]}
                     onPressIn={() => handlePressIn(() => setRightSeconds((prev) => prev + 60))}
                     onPressOut={handlePressOut}
                     disabled={isSubmitting}
                   >
-                    <Text style={styles.chronoAdjustButtonText}>+</Text>
+                    <Text style={[styles.chronoAdjustButtonText, { color: nc.textStrong }]}>+</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -628,6 +647,7 @@ export function MealsForm({
                   <TouchableOpacity
                     style={[
                       styles.chronoControlButton,
+                      { backgroundColor: nc.backgroundCard, borderColor: nc.border },
                       runningSide === "right" && styles.chronoControlButtonActive,
                     ]}
                     onPress={() => toggleChrono("right")}
@@ -636,18 +656,19 @@ export function MealsForm({
                     <Ionicons
                       name={runningSide === "right" ? "pause" : "play"}
                       size={16}
-                      color={runningSide === "right" ? "white" : "#333"}
+                      color={runningSide === "right" ? "white" : nc.textStrong}
                     />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[
                       styles.chronoControlButton,
+                      { backgroundColor: nc.backgroundCard, borderColor: nc.border },
                       rightSeconds === 0 && styles.chronoControlButtonDisabled,
                     ]}
                     onPress={() => resetChrono("right")}
                     disabled={isSubmitting || rightSeconds === 0}
                   >
-                    <Ionicons name="refresh" size={16} color={rightSeconds === 0 ? "#999" : "#333"} />
+                    <Ionicons name="refresh" size={16} color={rightSeconds === 0 ? nc.textMuted : nc.textStrong} />
                   </TouchableOpacity>
                 </View>
               )}
@@ -655,8 +676,8 @@ export function MealsForm({
           </View>
 
           <View style={styles.chronoTotalRow}>
-            <Text style={styles.chronoTotalLabel}>Total</Text>
-            <Text style={styles.chronoTotalValue}>{formatDuration(totalSeconds)}</Text>
+            <Text style={[styles.chronoTotalLabel, { color: nc.textLight }]}>Total</Text>
+            <Text style={[styles.chronoTotalValue, { color: nc.textStrong }]}>{formatDuration(totalSeconds)}</Text>
           </View>
         </>
       )}
@@ -665,13 +686,14 @@ export function MealsForm({
       {mealType === "solide" && (
         <>
           {/* Type de solide */}
-          <Text style={styles.categoryLabel}>Type d&apos;aliment</Text>
+          <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Type d&apos;aliment</Text>
           <View style={styles.solideTypeGrid}>
             {SOLIDE_TYPE_OPTIONS.map((option) => (
               <TouchableOpacity
                 key={option.value}
                 style={[
                   styles.solideTypeChip,
+                  { backgroundColor: nc.backgroundPressed },
                   typeSolide === option.value && styles.solideTypeChipActive,
                   isSubmitting && styles.chipDisabled,
                 ]}
@@ -681,11 +703,12 @@ export function MealsForm({
                 <FontAwesome
                   name={option.icon as any}
                   size={14}
-                  color={typeSolide === option.value ? "white" : "#666"}
+                  color={typeSolide === option.value ? "white" : nc.textLight}
                 />
                 <Text
                   style={[
                     styles.solideTypeChipText,
+                    { color: nc.textLight },
                     typeSolide === option.value && styles.solideTypeChipTextActive,
                   ]}
                 >
@@ -696,13 +719,14 @@ export function MealsForm({
           </View>
 
           {/* Moment du repas */}
-          <Text style={styles.categoryLabel}>Moment du repas</Text>
+          <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Moment du repas</Text>
           <View style={styles.momentRepasGrid}>
             {MOMENT_REPAS_OPTIONS.map((option) => (
               <TouchableOpacity
                 key={option.value}
                 style={[
                   styles.momentRepasChip,
+                  { backgroundColor: nc.backgroundPressed },
                   momentRepas === option.value && styles.momentRepasChipActive,
                   isSubmitting && styles.chipDisabled,
                 ]}
@@ -712,11 +736,12 @@ export function MealsForm({
                 <FontAwesome
                   name={option.icon as any}
                   size={12}
-                  color={momentRepas === option.value ? "white" : "#666"}
+                  color={momentRepas === option.value ? "white" : nc.textLight}
                 />
                 <Text
                   style={[
                     styles.momentRepasChipText,
+                    { color: nc.textLight },
                     momentRepas === option.value && styles.momentRepasChipTextActive,
                   ]}
                 >
@@ -727,13 +752,14 @@ export function MealsForm({
           </View>
 
           {/* Quantité mangée */}
-          <Text style={styles.categoryLabel}>Quantité mangée</Text>
+          <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Quantité mangée</Text>
           <View style={styles.quantiteSolideRow}>
             {QUANTITE_SOLIDE_OPTIONS.map((option) => (
               <TouchableOpacity
                 key={option.value}
                 style={[
                   styles.quantiteSolideChip,
+                  { backgroundColor: nc.backgroundPressed },
                   quantiteSolide === option.value && styles.quantiteSolideChipActive,
                   isSubmitting && styles.chipDisabled,
                 ]}
@@ -743,6 +769,7 @@ export function MealsForm({
                 <Text
                   style={[
                     styles.quantiteSolideChipText,
+                    { color: nc.textStrong },
                     quantiteSolide === option.value && styles.quantiteSolideChipTextActive,
                   ]}
                 >
@@ -751,6 +778,7 @@ export function MealsForm({
                 <Text
                   style={[
                     styles.quantiteSolideDesc,
+                    { color: nc.textMuted },
                     quantiteSolide === option.value && styles.quantiteSolideDescActive,
                   ]}
                 >
@@ -761,11 +789,11 @@ export function MealsForm({
           </View>
 
           {/* Ingrédients */}
-          <Text style={styles.categoryLabel}>Ingrédients</Text>
+          <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Ingrédients</Text>
           <TextInput
-            style={[styles.ingredientsInput, isSubmitting && styles.ingredientsInputDisabled]}
+            style={[styles.ingredientsInput, { backgroundColor: nc.background, borderColor: nc.border, color: nc.textStrong }, isSubmitting && styles.ingredientsInputDisabled]}
             placeholder="Ex: carottes, pommes de terre..."
-            placeholderTextColor="#999"
+            placeholderTextColor={nc.textMuted}
             value={ingredients}
             onChangeText={setIngredients}
             editable={!isSubmitting}
@@ -780,9 +808,9 @@ export function MealsForm({
                   <FontAwesome
                     name="star"
                     size={16}
-                    color={nouveauAliment ? eventColors.meal.dark : "#9ca3af"}
+                    color={nouveauAliment ? eventColors.meal.dark : nc.textMuted}
                   />
-                  <Text style={[styles.nouveauAlimentText, nouveauAliment && styles.nouveauAlimentTextActive]}>
+                  <Text style={[styles.nouveauAlimentText, { color: nc.textLight }, nouveauAliment && styles.nouveauAlimentTextActive]}>
                     Nouvel aliment ?
                   </Text>
                 </View>
@@ -790,23 +818,23 @@ export function MealsForm({
                   value={nouveauAliment}
                   onValueChange={setNouveauAliment}
                   disabled={isSubmitting}
-                  trackColor={{ false: "#d1d5db", true: `${eventColors.meal.dark}80` }}
-                  thumbColor={nouveauAliment ? eventColors.meal.dark : "#9ca3af"}
+                  trackColor={{ false: nc.border, true: `${eventColors.meal.dark}80` }}
+                  thumbColor={nouveauAliment ? eventColors.meal.dark : nc.textMuted}
                 />
               </View>
 
               {nouveauAliment && (
                 <>
                   <TextInput
-                    style={styles.ingredientsInput}
+                    style={[styles.ingredientsInput, { backgroundColor: nc.background, borderColor: nc.border, color: nc.textStrong }]}
                     placeholder="Nom de l'aliment (ex: avocat, fraise...)"
-                    placeholderTextColor="#9ca3af"
+                    placeholderTextColor={nc.textMuted}
                     value={nomNouvelAliment}
                     onChangeText={setNomNouvelAliment}
                     editable={!isSubmitting}
                   />
 
-                  <Text style={styles.categoryLabel}>Allergènes potentiels</Text>
+                  <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Allergènes potentiels</Text>
                   <View style={styles.allergenesGrid}>
                     {ALLERGENES_OPTIONS.map((option) => {
                       const isSelected = allergenes.includes(option.value);
@@ -815,6 +843,7 @@ export function MealsForm({
                           key={option.value}
                           style={[
                             styles.allergeneChip,
+                            { backgroundColor: nc.backgroundPressed, borderColor: nc.border },
                             isSelected && styles.allergeneChipActive,
                             isSubmitting && styles.chipDisabled,
                           ]}
@@ -828,7 +857,7 @@ export function MealsForm({
                           disabled={isSubmitting}
                         >
                           <Text style={styles.allergeneEmoji}>{option.emoji}</Text>
-                          <Text style={[styles.allergeneText, isSelected && styles.allergeneTextActive]}>
+                          <Text style={[styles.allergeneText, { color: nc.textLight }, isSelected && styles.allergeneTextActive]}>
                             {option.label}
                           </Text>
                         </TouchableOpacity>
@@ -836,13 +865,14 @@ export function MealsForm({
                     })}
                   </View>
 
-                  <Text style={styles.categoryLabel}>Réaction observée</Text>
+                  <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Réaction observée</Text>
                   <View style={styles.reactionRow}>
                     {REACTION_OPTIONS.map((option) => (
                       <TouchableOpacity
                         key={option.value}
                         style={[
                           styles.reactionChip,
+                          { backgroundColor: nc.backgroundPressed, borderColor: nc.border },
                           reaction === option.value && {
                             backgroundColor: option.color,
                             borderColor: option.color,
@@ -855,6 +885,7 @@ export function MealsForm({
                         <Text
                           style={[
                             styles.reactionChipText,
+                            { color: nc.textLight },
                             reaction === option.value && styles.reactionChipTextActive,
                           ]}
                         >
@@ -869,11 +900,12 @@ export function MealsForm({
           )}
 
           {/* A aimé ? */}
-          <Text style={styles.categoryLabel}>A aimé ?</Text>
+          <Text style={[styles.categoryLabel, { color: nc.textLight }]}>A aimé ?</Text>
           <View style={styles.aimeRow}>
             <TouchableOpacity
               style={[
                 styles.aimeButton,
+                { backgroundColor: nc.backgroundPressed },
                 aime === true && styles.aimeButtonActiveYes,
                 isSubmitting && styles.buttonDisabled,
               ]}
@@ -881,13 +913,14 @@ export function MealsForm({
               disabled={isSubmitting}
             >
               <FontAwesome name="thumbs-up" size={20} color={aime === true ? "white" : "#22c55e"} />
-              <Text style={[styles.aimeButtonText, aime === true && styles.aimeButtonTextActive]}>
+              <Text style={[styles.aimeButtonText, { color: nc.textLight }, aime === true && styles.aimeButtonTextActive]}>
                 Oui
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.aimeButton,
+                { backgroundColor: nc.backgroundPressed },
                 aime === false && styles.aimeButtonActiveNo,
                 isSubmitting && styles.buttonDisabled,
               ]}
@@ -895,7 +928,7 @@ export function MealsForm({
               disabled={isSubmitting}
             >
               <FontAwesome name="thumbs-down" size={20} color={aime === false ? "white" : "#ef4444"} />
-              <Text style={[styles.aimeButtonText, aime === false && styles.aimeButtonTextActive]}>
+              <Text style={[styles.aimeButtonText, { color: nc.textLight }, aime === false && styles.aimeButtonTextActive]}>
                 Non
               </Text>
             </TouchableOpacity>
@@ -906,33 +939,37 @@ export function MealsForm({
       {/* DATE/TIME PICKER */}
       <View style={styles.dateTimeContainer}>
         <TouchableOpacity
-          style={[styles.dateButton, isSubmitting && styles.buttonDisabled]}
+          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }, isSubmitting && styles.buttonDisabled]}
           onPress={() => setShowDate(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir la date"
+          hitSlop={8}
         >
           <FontAwesome
             name="calendar-alt"
             size={16}
-            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+            color={isSubmitting ? nc.textMuted : Colors[colorScheme].tint}
           />
-          <Text style={[styles.dateButtonText, isSubmitting && styles.textDisabled]}>Date</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }, isSubmitting && styles.textDisabled]}>Date</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.dateButton, isSubmitting && styles.buttonDisabled]}
+          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }, isSubmitting && styles.buttonDisabled]}
           onPress={() => setShowTime(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir l'heure"
+          hitSlop={8}
         >
           <FontAwesome
             name="clock"
             size={16}
-            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+            color={isSubmitting ? nc.textMuted : Colors[colorScheme].tint}
           />
-          <Text style={[styles.dateButtonText, isSubmitting && styles.textDisabled]}>Heure</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }, isSubmitting && styles.textDisabled]}>Heure</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate} numberOfLines={1} adjustsFontSizeToFit>
+        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
           {dateHeure.toLocaleDateString("fr-FR", {
             weekday: "long",
             year: "numeric",
@@ -940,7 +977,7 @@ export function MealsForm({
             day: "numeric",
           })}
         </Text>
-        <Text style={styles.selectedTime}>
+        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
           {dateHeure.toLocaleTimeString("fr-FR", {
             hour: "2-digit",
             minute: "2-digit",
@@ -972,11 +1009,16 @@ export function MealsForm({
       <View style={styles.buttonsContainer}>
         <View style={styles.primaryRow}>
           <TouchableOpacity
-            style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.cancelButton,
+              { backgroundColor: nc.background, borderColor: nc.border },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={onCancel}
             disabled={isSubmitting}
+            accessibilityLabel="Annuler"
           >
-            <Text style={styles.cancelText}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -987,20 +1029,26 @@ export function MealsForm({
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
+            accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color="white" />
+              <ActivityIndicator size="small" color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
             ) : (
-              <Text style={styles.validateText}>{isEditing ? "Enregistrer" : "Ajouter"}</Text>
+              <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>{isEditing ? "Enregistrer" : "Ajouter"}</Text>
             )}
           </TouchableOpacity>
         </View>
 
         {isEditing && onDelete && (
           <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.deleteButton,
+              { borderColor: "#f1b1b1", backgroundColor: nc.errorBg },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
+            accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color="#dc3545" />
             <Text style={styles.deleteText}>Supprimer</Text>
@@ -1023,7 +1071,6 @@ const styles = StyleSheet.create({
   categoryLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#6b7280",
     marginBottom: 8,
     marginTop: 16,
     textTransform: "uppercase",
@@ -1041,19 +1088,16 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 12,
     paddingHorizontal: 8,
-    backgroundColor: "#f0f0f0",
     borderRadius: 20,
   },
   typeChipActive: {
     backgroundColor: eventColors.meal.dark,
   },
   typeChipDisabled: {
-    backgroundColor: "#f8f8f8",
     opacity: 0.5,
   },
   typeChipText: {
     fontSize: 13,
-    color: "#666",
     fontWeight: "600",
   },
   typeChipTextActive: {
@@ -1070,7 +1114,6 @@ const styles = StyleSheet.create({
   biberonTypeChip: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    backgroundColor: "#f0f0f0",
     borderRadius: 16,
   },
   biberonTypeChipActive: {
@@ -1081,7 +1124,6 @@ const styles = StyleSheet.create({
   },
   biberonTypeChipText: {
     fontSize: 13,
-    color: "#666",
     fontWeight: "500",
   },
   biberonTypeChipTextActive: {
@@ -1106,7 +1148,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1116,15 +1157,13 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#333",
   },
   quantityButtonTextDisabled: {
-    color: "#999",
+    opacity: 0.5,
   },
   quantityValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
   },
 
   // Chrono (tétée)
@@ -1135,24 +1174,20 @@ const styles = StyleSheet.create({
   },
   chronoCard: {
     flex: 1,
-    backgroundColor: "#f7f7f8",
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 10,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
   },
   chronoLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#6b7280",
     marginBottom: 6,
   },
   chronoTime: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#111827",
     marginBottom: 8,
   },
   chronoControlRow: {
@@ -1163,9 +1198,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1174,8 +1207,7 @@ const styles = StyleSheet.create({
     borderColor: eventColors.meal.dark,
   },
   chronoControlButtonDisabled: {
-    backgroundColor: "#f3f4f6",
-    borderColor: "#e5e7eb",
+    opacity: 0.5,
   },
   chronoAdjustRow: {
     flexDirection: "row",
@@ -1186,9 +1218,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1198,12 +1228,10 @@ const styles = StyleSheet.create({
   chronoAdjustButtonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#333",
   },
   chronoAdjustValue: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#374151",
   },
   chronoTotalRow: {
     flexDirection: "row",
@@ -1215,12 +1243,10 @@ const styles = StyleSheet.create({
   chronoTotalLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#6b7280",
   },
   chronoTotalValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#111827",
   },
 
   // Solide Form Styles
@@ -1236,7 +1262,6 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    backgroundColor: "#f0f0f0",
     borderRadius: 20,
   },
   solideTypeChipActive: {
@@ -1247,7 +1272,6 @@ const styles = StyleSheet.create({
   },
   solideTypeChipText: {
     fontSize: 13,
-    color: "#666",
     fontWeight: "600",
   },
   solideTypeChipTextActive: {
@@ -1266,7 +1290,6 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: "#f0f0f0",
     borderRadius: 16,
   },
   momentRepasChipActive: {
@@ -1277,7 +1300,6 @@ const styles = StyleSheet.create({
   },
   momentRepasChipText: {
     fontSize: 12,
-    color: "#666",
     fontWeight: "500",
   },
   momentRepasChipTextActive: {
@@ -1294,7 +1316,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 8,
-    backgroundColor: "#f0f0f0",
     borderRadius: 12,
   },
   quantiteSolideChipActive: {
@@ -1305,7 +1326,6 @@ const styles = StyleSheet.create({
   },
   quantiteSolideChipText: {
     fontSize: 14,
-    color: "#333",
     fontWeight: "600",
   },
   quantiteSolideChipTextActive: {
@@ -1313,7 +1333,6 @@ const styles = StyleSheet.create({
   },
   quantiteSolideDesc: {
     fontSize: 10,
-    color: "#999",
     marginTop: 2,
   },
   quantiteSolideDescActive: {
@@ -1321,14 +1340,11 @@ const styles = StyleSheet.create({
   },
 
   ingredientsInput: {
-    backgroundColor: "#f7f7f8",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
-    color: "#333",
     minHeight: 60,
     textAlignVertical: "top",
     marginBottom: 8,
@@ -1353,7 +1369,6 @@ const styles = StyleSheet.create({
   nouveauAlimentText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#666",
   },
   nouveauAlimentTextActive: {
     color: eventColors.meal.dark,
@@ -1371,10 +1386,8 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: "#f0f0f0",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
   },
   allergeneChipActive: {
     backgroundColor: "#fef3c7",
@@ -1388,7 +1401,6 @@ const styles = StyleSheet.create({
   },
   allergeneText: {
     fontSize: 12,
-    color: "#666",
     fontWeight: "500",
   },
   allergeneTextActive: {
@@ -1406,17 +1418,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 10,
     paddingHorizontal: 8,
-    backgroundColor: "#f0f0f0",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
   },
   reactionChipDisabled: {
     opacity: 0.5,
   },
   reactionChipText: {
     fontSize: 12,
-    color: "#666",
     fontWeight: "500",
   },
   reactionChipTextActive: {
@@ -1436,7 +1445,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingVertical: 14,
-    backgroundColor: "#f0f0f0",
     borderRadius: 12,
     borderWidth: 2,
     borderColor: "transparent",
@@ -1455,7 +1463,6 @@ const styles = StyleSheet.create({
   aimeButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#666",
   },
   aimeButtonTextActive: {
     color: "white",
@@ -1478,20 +1485,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
   },
   dateButtonDisabled: {
-    backgroundColor: "#f5f5f5",
     opacity: 0.5,
   },
   dateButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#4a4f55",
   },
   dateButtonTextDisabled: {
-    color: "#ccc",
+    opacity: 0.5,
   },
   selectedDateTime: {
     alignItems: "center",
@@ -1499,13 +1502,11 @@ const styles = StyleSheet.create({
   },
   selectedDate: {
     fontSize: 16,
-    color: "#333",
     fontWeight: "600",
     marginBottom: 4,
   },
   selectedTime: {
     fontSize: 20,
-    color: "#374151",
     fontWeight: "600",
   },
 
@@ -1520,9 +1521,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#f5f6f8",
     borderWidth: 1,
-    borderColor: "#d7dbe0",
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
@@ -1531,7 +1530,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 16,
-    color: "#4a4f55",
     fontWeight: "600",
   },
   validateButton: {
@@ -1544,14 +1542,13 @@ const styles = StyleSheet.create({
   },
   validateText: {
     fontSize: 16,
-    color: "#fff",
     fontWeight: "700",
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   textDisabled: {
-    color: "#ccc",
+    opacity: 0.5,
   },
   deleteButton: {
     flexDirection: "row",
@@ -1560,8 +1557,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#f1b1b1",
-    backgroundColor: "#fff5f5",
     gap: 8,
   },
   deleteText: {

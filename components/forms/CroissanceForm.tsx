@@ -17,6 +17,7 @@ import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ajouterCroissance,
   modifierCroissance,
@@ -88,6 +89,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
 
   const isEditing = !!editData;
 
@@ -197,39 +199,42 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
     <View style={styles.sheetContent}>
       {/* Taille */}
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Taille (cm)</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Taille (cm)</Text>
         <TextInput
           value={tailleCm}
           onChangeText={setTailleCm}
           placeholder="ex: 62.5"
+          placeholderTextColor={nc.textMuted}
           keyboardType="decimal-pad"
-          style={styles.input}
+          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
           editable={!isSubmitting}
         />
       </View>
 
       {/* Poids */}
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Poids (kg)</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Poids (kg)</Text>
         <TextInput
           value={poidsKg}
           onChangeText={setPoidsKg}
           placeholder="ex: 5.8"
+          placeholderTextColor={nc.textMuted}
           keyboardType="decimal-pad"
-          style={styles.input}
+          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
           editable={!isSubmitting}
         />
       </View>
 
       {/* Tour de tête */}
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Tour de tête (cm)</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Tour de tête (cm)</Text>
         <TextInput
           value={teteCm}
           onChangeText={setTeteCm}
           placeholder="ex: 41"
+          placeholderTextColor={nc.textMuted}
           keyboardType="decimal-pad"
-          style={styles.input}
+          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
           editable={!isSubmitting}
         />
       </View>
@@ -237,33 +242,37 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
       {/* Date & Time */}
       <View style={styles.dateTimeContainer}>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => handleShowDate(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir la date"
+          hitSlop={8}
         >
           <FontAwesome5
             name="calendar-alt"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Date</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => handleShowTime(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir l'heure"
+          hitSlop={8}
         >
           <FontAwesome5
             name="clock"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Heure</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate} numberOfLines={1} adjustsFontSizeToFit>
+        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
           {dateHeure.toLocaleDateString("fr-FR", {
             weekday: "long",
             year: "numeric",
@@ -271,7 +280,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
             day: "numeric",
           })}
         </Text>
-        <Text style={styles.selectedTime}>
+        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
           {dateHeure.toLocaleTimeString("fr-FR", {
             hour: "2-digit",
             minute: "2-digit",
@@ -325,11 +334,16 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
       <View style={styles.buttonsContainer}>
         <View style={styles.primaryRow}>
           <TouchableOpacity
-            style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.cancelButton,
+              { backgroundColor: nc.background, borderColor: nc.border },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={onCancel}
             disabled={isSubmitting}
+            accessibilityLabel="Annuler"
           >
-            <Text style={styles.cancelText}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -340,8 +354,9 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
+            accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
-            <Text style={styles.validateText}>
+            <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
           </TouchableOpacity>
@@ -349,9 +364,14 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
 
         {isEditing && (
           <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.deleteButton,
+              { borderColor: "#f1b1b1", backgroundColor: nc.errorBg },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
+            accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color="#dc3545" />
             <Text style={styles.deleteText}>Supprimer</Text>
@@ -377,11 +397,9 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6b7280",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -404,13 +422,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
   },
   dateButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#4a4f55",
   },
   selectedDateTime: {
     alignItems: "center",
@@ -418,13 +433,11 @@ const styles = StyleSheet.create({
   },
   selectedDate: {
     fontSize: 16,
-    color: "#333",
     fontWeight: "600",
     marginBottom: 4,
   },
   selectedTime: {
     fontSize: 20,
-    color: "#374151",
     fontWeight: "600",
   },
   // Action buttons
@@ -438,9 +451,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#f5f6f8",
     borderWidth: 1,
-    borderColor: "#d7dbe0",
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
@@ -449,7 +460,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 16,
-    color: "#4a4f55",
     fontWeight: "600",
   },
   validateButton: {
@@ -462,7 +472,6 @@ const styles = StyleSheet.create({
   },
   validateText: {
     fontSize: 16,
-    color: "#fff",
     fontWeight: "700",
   },
   buttonDisabled: {
@@ -475,8 +484,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#f1b1b1",
-    backgroundColor: "#fff5f5",
     gap: 8,
   },
   deleteText: {

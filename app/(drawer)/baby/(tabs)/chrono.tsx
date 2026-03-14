@@ -24,6 +24,7 @@ import { supprimerEvenement } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import React, {
@@ -51,6 +52,7 @@ import {
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
+import { useHeaderRight } from "../../_layout";
 
 // P11: Enable LayoutAnimation on Android
 if (
@@ -703,13 +705,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   // P4: Calendar & date chip styles
-  headerRightControls: {
+  headerButtons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    paddingRight: 16,
+    gap: 0,
   },
-  calendarButton: {
-    padding: 6,
+  headerButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
     borderRadius: 8,
   },
   dateChipRow: {
@@ -1277,20 +1281,20 @@ const ChronoSkeleton = React.memo(function ChronoSkeleton({
     inputRange: [0, 1],
     outputRange: [-200, 200],
   });
-  const shimmerBg =
-    colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
+  const shimmerBg = colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
 
   const shimmerStyle = [
     styles.shimmerOverlay,
-    { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] },
+    {
+      backgroundColor: shimmerBg,
+      transform: [{ translateX: shimmerTranslate }],
+    },
   ];
 
   const renderSkeletonCard = (key: number) => (
     <View key={key} style={styles.skeletonItemRow}>
       <View style={styles.timelineColumn}>
-        <View
-          style={[styles.skeletonDot, { backgroundColor: nc.borderLight }]}
-        >
+        <View style={[styles.skeletonDot, { backgroundColor: nc.borderLight }]}>
           <Animated.View style={shimmerStyle} />
         </View>
         <View
@@ -1323,7 +1327,12 @@ const ChronoSkeleton = React.memo(function ChronoSkeleton({
           <View
             style={[
               styles.skeletonBlock,
-              { width: 14, height: 14, borderRadius: 7, backgroundColor: nc.borderLight },
+              {
+                width: 14,
+                height: 14,
+                borderRadius: 7,
+                backgroundColor: nc.borderLight,
+              },
             ]}
           >
             <Animated.View style={shimmerStyle} />
@@ -1340,7 +1349,12 @@ const ChronoSkeleton = React.memo(function ChronoSkeleton({
         <View
           style={[
             styles.skeletonBlock,
-            { width: 80, height: 12, marginTop: 6, backgroundColor: nc.borderLight },
+            {
+              width: 80,
+              height: 12,
+              marginTop: 6,
+              backgroundColor: nc.borderLight,
+            },
           ]}
         >
           <Animated.View style={shimmerStyle} />
@@ -1367,7 +1381,12 @@ const ChronoSkeleton = React.memo(function ChronoSkeleton({
         <View
           style={[
             styles.skeletonBlock,
-            { width: 30, height: 20, borderRadius: 10, backgroundColor: nc.borderLight },
+            {
+              width: 30,
+              height: 20,
+              borderRadius: 10,
+              backgroundColor: nc.borderLight,
+            },
           ]}
         >
           <Animated.View style={shimmerStyle} />
@@ -1390,7 +1409,12 @@ const ChronoSkeleton = React.memo(function ChronoSkeleton({
         <View
           style={[
             styles.skeletonBlock,
-            { width: 30, height: 20, borderRadius: 10, backgroundColor: nc.borderLight },
+            {
+              width: 30,
+              height: 20,
+              borderRadius: 10,
+              backgroundColor: nc.borderLight,
+            },
           ]}
         >
           <Animated.View style={shimmerStyle} />
@@ -1410,7 +1434,9 @@ export default function ChronoScreen() {
   const { activeChild } = useBaby();
   const { firebaseUser } = useAuth();
   const { openSheet: openSheetRaw } = useSheet();
+  const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
+  const headerOwnerId = useRef(`chrono-${Math.random().toString(36).slice(2)}`);
   const sheetOwnerId = "chrono";
   const [refreshTick, setRefreshTick] = useState(0);
   const [range, setRange] = useState<RangeOption>(14);
@@ -1551,7 +1577,9 @@ export default function ChronoScreen() {
           if (prev.size === 0) return prev;
           const dataIds = new Set(data.map((e: Event) => e.id));
           const next = new Set<string>();
-          prev.forEach((id) => { if (id && dataIds.has(id)) next.add(id); });
+          prev.forEach((id) => {
+            if (id && dataIds.has(id)) next.add(id);
+          });
           return next.size === prev.size ? prev : next;
         });
 
@@ -1746,6 +1774,40 @@ export default function ChronoScreen() {
   const handleCalendarToggle = useCallback(() => {
     setShowCalendar((prev) => !prev);
   }, []);
+
+  // Calendar button in navigation header right (same pattern as routines)
+  useFocusEffect(
+    useCallback(() => {
+      const headerButton = (
+        <View style={styles.headerButtons}>
+          <Pressable
+            onPress={handleCalendarToggle}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={[
+              styles.headerButton,
+              showCalendar && {
+                backgroundColor: `${Colors[colorScheme].tint}20`,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={
+              showCalendar ? "Fermer le calendrier" : "Ouvrir le calendrier"
+            }
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={24}
+              color={Colors[colorScheme].tint}
+            />
+          </Pressable>
+        </View>
+      );
+      setHeaderRight(headerButton, headerOwnerId.current);
+      return () => {
+        setHeaderRight(null, headerOwnerId.current);
+      };
+    }, [handleCalendarToggle, showCalendar, colorScheme, setHeaderRight]),
+  );
 
   const handleDateSelect = useCallback((dateString: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -2052,16 +2114,26 @@ export default function ChronoScreen() {
           });
           showActionToast("Erreur lors de la suppression", "Réessayer", () => {
             supprimerEvenement(childId, eventId).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerEvenement(childId, eventId);
-              });
+              showActionToast(
+                "Erreur lors de la suppression",
+                "Réessayer",
+                () => {
+                  supprimerEvenement(childId, eventId);
+                },
+              );
             });
           });
         }
       },
       4000,
     );
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast, triggerRefresh]);
+  }, [
+    activeChild?.id,
+    deleteConfirm.event,
+    showUndoToast,
+    showActionToast,
+    triggerRefresh,
+  ]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -2185,59 +2257,51 @@ export default function ChronoScreen() {
                       <Text style={[styles.title, { color: colors.text }]}>
                         Chronologie
                       </Text>
-                      <View style={styles.headerRightControls}>
-                        {/* P4: Calendar toggle button */}
-                        <Pressable
-                          onPress={handleCalendarToggle}
-                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                          style={[
-                            styles.calendarButton,
-                            showCalendar && {
-                              backgroundColor: `${colors.tint}20`,
-                            },
-                          ]}
-                          accessibilityRole="button"
-                          accessibilityLabel={showCalendar ? "Fermer le calendrier" : "Ouvrir le calendrier"}
-                        >
-                          <Ionicons
-                            name="calendar-outline"
-                            size={20}
-                            color={colors.tint}
+                      <View
+                        style={[
+                          styles.rangeRow,
+                          {
+                            borderColor: colors.border,
+                            backgroundColor: colors.background,
+                          },
+                        ]}
+                      >
+                        {RANGE_OPTIONS.map((value) => (
+                          <RangeChip
+                            key={value}
+                            value={value}
+                            isActive={range === value}
+                            tintColor={colors.tint}
+                            mutedColor={colors.secondaryText}
+                            activeBg={colors.surface}
+                            onPress={() => handleRangeChange(value)}
                           />
-                        </Pressable>
-                        <View
-                          style={[
-                            styles.rangeRow,
-                            {
-                              borderColor: colors.border,
-                              backgroundColor: colors.background,
-                            },
-                          ]}
-                        >
-                          {RANGE_OPTIONS.map((value) => (
-                            <RangeChip
-                              key={value}
-                              value={value}
-                              isActive={range === value}
-                              tintColor={colors.tint}
-                              mutedColor={colors.secondary}
-                              activeBg={colors.surface}
-                              onPress={() => handleRangeChange(value)}
-                            />
-                          ))}
-                        </View>
+                        ))}
                       </View>
                     </View>
                     {/* P4: Date chip with clear button */}
                     {selectedDate && (
                       <View style={styles.dateChipRow}>
                         <Pressable
-                          style={[styles.dateChip, { backgroundColor: colors.tint }]}
+                          style={[
+                            styles.dateChip,
+                            { backgroundColor: colors.tint },
+                          ]}
                           onPress={handleClearDate}
                           accessibilityRole="button"
                           accessibilityLabel="Effacer la date sélectionnée"
                         >
-                          <Text style={styles.dateChipText}>
+                          <Text
+                            style={[
+                              styles.dateChipText,
+                              {
+                                color:
+                                  colorScheme === "dark"
+                                    ? Colors[colorScheme].background
+                                    : "#fff",
+                              },
+                            ]}
+                          >
                             {formatSelectedDateLabel(selectedDate)}
                           </Text>
                           <Ionicons name="close" size={14} color="#fff" />
@@ -2246,7 +2310,12 @@ export default function ChronoScreen() {
                     )}
                     {/* P4: Inline calendar picker */}
                     {showCalendar && (
-                      <View style={[styles.calendarContainer, { borderBottomColor: colors.border }]}>
+                      <View
+                        style={[
+                          styles.calendarContainer,
+                          { borderBottomColor: colors.border },
+                        ]}
+                      >
                         <ScrollView style={{ maxHeight: 320 }}>
                           {/* Simple date grid - using day buttons for the current month */}
                           <View style={styles.calendarGrid}>
@@ -2260,17 +2329,29 @@ export default function ChronoScreen() {
                                 daysInRange.push(key);
                               }
                               return daysInRange.map((dateKey) => {
-                                const [y, m, d] = dateKey.split("-").map(Number);
+                                const [y, m, d] = dateKey
+                                  .split("-")
+                                  .map(Number);
                                 const date = new Date(y, m - 1, d);
                                 const isSelected = selectedDate === dateKey;
-                                const dayLabel = date.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+                                const dayLabel = date.toLocaleDateString(
+                                  "fr-FR",
+                                  {
+                                    weekday: "short",
+                                    day: "numeric",
+                                    month: "short",
+                                  },
+                                );
                                 return (
                                   <Pressable
                                     key={dateKey}
                                     style={[
                                       styles.calendarDayButton,
                                       { borderColor: colors.border },
-                                      isSelected && { backgroundColor: colors.tint, borderColor: colors.tint },
+                                      isSelected && {
+                                        backgroundColor: colors.tint,
+                                        borderColor: colors.tint,
+                                      },
                                     ]}
                                     onPress={() => handleDateSelect(dateKey)}
                                   >
@@ -2278,7 +2359,12 @@ export default function ChronoScreen() {
                                       style={[
                                         styles.calendarDayText,
                                         { color: colors.text },
-                                        isSelected && { color: "#fff" },
+                                        isSelected && {
+                                          color:
+                                            colorScheme === "dark"
+                                              ? Colors[colorScheme].background
+                                              : "#fff",
+                                        },
                                       ]}
                                     >
                                       {dayLabel}

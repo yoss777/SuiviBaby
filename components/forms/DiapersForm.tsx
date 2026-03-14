@@ -17,6 +17,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ajouterMiction,
   ajouterSelle,
@@ -94,6 +95,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
 
   const isEditing = !!editData;
 
@@ -252,20 +254,23 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       {/* Type selection - only in add mode */}
       {!isEditing && (
         <>
-          <Text style={styles.inputLabel}>Type d'excrétion</Text>
-          <Text style={styles.toggleSubtitle}>
+          <Text style={[styles.inputLabel, { color: nc.textStrong }]}>Type d'excrétion</Text>
+          <Text style={[styles.toggleSubtitle, { color: nc.textMuted }]}>
             Vous pouvez sélectionner les deux si nécessaire
           </Text>
           <View style={styles.typeRow}>
             <TouchableOpacity
               style={[
                 styles.typeButton,
+                { backgroundColor: nc.backgroundPressed },
                 includeMiction && styles.typeButtonActiveMiction,
                 isSubmitting && styles.typeButtonDisabled,
               ]}
               onPress={() => setIncludeMiction((prev) => !prev)}
               disabled={isSubmitting}
               activeOpacity={0.7}
+              accessibilityLabel="Miction"
+              hitSlop={8}
             >
               <FontAwesome5
                 name="water"
@@ -275,8 +280,9 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
               <Text
                 style={[
                   styles.typeText,
+                  { color: nc.textLight },
                   includeMiction && styles.typeTextActive,
-                  isSubmitting && styles.typeTextDisabled,
+                  isSubmitting && { color: nc.textMuted },
                 ]}
               >
                 Miction
@@ -286,12 +292,15 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             <TouchableOpacity
               style={[
                 styles.typeButton,
+                { backgroundColor: nc.backgroundPressed },
                 includeSelle && styles.typeButtonActiveSelle,
                 isSubmitting && styles.typeButtonDisabled,
               ]}
               onPress={() => setIncludeSelle((prev) => !prev)}
               disabled={isSubmitting}
               activeOpacity={0.7}
+              accessibilityLabel="Selle"
+              hitSlop={8}
             >
               <FontAwesome5
                 name="poop"
@@ -301,8 +310,9 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
               <Text
                 style={[
                   styles.typeText,
+                  { color: nc.textLight },
                   includeSelle && styles.typeTextActive,
-                  isSubmitting && styles.typeTextDisabled,
+                  isSubmitting && { color: nc.textMuted },
                 ]}
               >
                 Selle
@@ -315,8 +325,8 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       {/* Miction options */}
       {includeMiction && (
         <>
-          <Text style={styles.inputLabel}>Couleur de l'urine</Text>
-          <Text style={styles.toggleSubtitle}>Optionnel</Text>
+          <Text style={[styles.inputLabel, { color: nc.textStrong }]}>Couleur de l'urine</Text>
+          <Text style={[styles.toggleSubtitle, { color: nc.textMuted }]}>Optionnel</Text>
           <View style={styles.optionsRow}>
             {(
               [
@@ -330,8 +340,9 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 key={option.value}
                 style={[
                   styles.optionButton,
-                  { backgroundColor: option.color },
-                  mictionCouleur === option.value && styles.optionButtonSelected,
+                  styles.optionButtonSelle,
+                  { backgroundColor: nc.background, borderColor: nc.border },
+                  mictionCouleur === option.value && { backgroundColor: option.color, borderColor: option.color, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
                   isSubmitting && styles.optionButtonDisabled,
                 ]}
                 onPress={() =>
@@ -341,8 +352,9 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 }
                 disabled={isSubmitting}
                 activeOpacity={0.7}
+                accessibilityLabel={option.label}
               >
-                <Text style={styles.optionText}>{option.label}</Text>
+                <Text style={[styles.optionText, { color: mictionCouleur === option.value ? "#333" : nc.textNormal }]}>{option.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -352,8 +364,8 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       {/* Selle options */}
       {includeSelle && (
         <>
-          <Text style={styles.inputLabel}>Consistance</Text>
-          <Text style={styles.toggleSubtitle}>Optionnel</Text>
+          <Text style={[styles.inputLabel, { color: nc.textStrong }]}>Consistance</Text>
+          <Text style={[styles.toggleSubtitle, { color: nc.textMuted }]}>Optionnel</Text>
           <View style={styles.optionsRow}>
             {(
               [
@@ -368,6 +380,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 style={[
                   styles.optionButton,
                   styles.optionButtonSelle,
+                  { backgroundColor: nc.background, borderColor: nc.border },
                   selleConsistance === option.value && styles.optionButtonSelectedSelle,
                   isSubmitting && styles.optionButtonDisabled,
                 ]}
@@ -378,6 +391,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 }
                 disabled={isSubmitting}
                 activeOpacity={0.7}
+                accessibilityLabel={option.label}
               >
                 <FontAwesome5
                   name={option.icon}
@@ -388,6 +402,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 <Text
                   style={[
                     styles.optionText,
+                    { color: nc.textStrong },
                     selleConsistance === option.value && styles.optionTextSelected,
                   ]}
                 >
@@ -397,8 +412,8 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             ))}
           </View>
 
-          <Text style={styles.inputLabel}>Quantité</Text>
-          <Text style={styles.toggleSubtitle}>Optionnel</Text>
+          <Text style={[styles.inputLabel, { color: nc.textStrong }]}>Quantité</Text>
+          <Text style={[styles.toggleSubtitle, { color: nc.textMuted }]}>Optionnel</Text>
           <View style={styles.optionsRow}>
             {(
               [
@@ -412,6 +427,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 style={[
                   styles.optionButton,
                   styles.optionButtonSelle,
+                  { backgroundColor: nc.background, borderColor: nc.border },
                   selleQuantite === option.value && styles.optionButtonSelectedSelle,
                   isSubmitting && styles.optionButtonDisabled,
                 ]}
@@ -422,10 +438,12 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 }
                 disabled={isSubmitting}
                 activeOpacity={0.7}
+                accessibilityLabel={option.label}
               >
                 <Text
                   style={[
                     styles.optionText,
+                    { color: nc.textStrong },
                     selleQuantite === option.value && styles.optionTextSelected,
                   ]}
                 >
@@ -438,36 +456,40 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       )}
 
       {/* Date & Time */}
-      <Text style={styles.inputLabel}>Date & Heure</Text>
+      <Text style={[styles.inputLabel, { color: nc.textStrong }]}>Date & Heure</Text>
       <View style={styles.dateTimeContainer}>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[styles.dateButton, { backgroundColor: nc.background, borderColor: nc.border }]}
           onPress={() => handleShowDate(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir la date"
+          hitSlop={8}
         >
           <FontAwesome5
             name="calendar-alt"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Date</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.dateButton}
+          style={[styles.dateButton, { backgroundColor: nc.background, borderColor: nc.border }]}
           onPress={() => handleShowTime(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir l'heure"
+          hitSlop={8}
         >
           <FontAwesome5
             name="clock"
             size={16}
             color={Colors[colorScheme].tint}
           />
-          <Text style={styles.dateButtonText}>Heure</Text>
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate} numberOfLines={1} adjustsFontSizeToFit>
+        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
           {dateHeure.toLocaleDateString("fr-FR", {
             weekday: "long",
             year: "numeric",
@@ -475,7 +497,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             day: "numeric",
           })}
         </Text>
-        <Text style={styles.selectedTime}>
+        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
           {dateHeure.toLocaleTimeString("fr-FR", {
             hour: "2-digit",
             minute: "2-digit",
@@ -529,11 +551,16 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       <View style={styles.buttonsContainer}>
         <View style={styles.primaryRow}>
           <TouchableOpacity
-            style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.cancelButton,
+              { backgroundColor: nc.background, borderColor: nc.border },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={onCancel}
             disabled={isSubmitting}
+            accessibilityLabel="Annuler"
           >
-            <Text style={styles.cancelText}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -544,8 +571,9 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
+            accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
-            <Text style={styles.validateText}>
+            <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
           </TouchableOpacity>
@@ -553,9 +581,14 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
 
         {isEditing && (
           <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.deleteButton,
+              { backgroundColor: nc.errorBg },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
+            accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color="#dc3545" />
             <Text style={styles.deleteText}>Supprimer</Text>
@@ -578,12 +611,10 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
     paddingTop: 8,
   },
   toggleSubtitle: {
     fontSize: 13,
-    color: "#999",
     textAlign: "center",
     marginBottom: 8,
   },
@@ -600,7 +631,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     padding: 16,
-    backgroundColor: "#f0f0f0",
     borderRadius: 12,
   },
   typeButtonActiveMiction: {
@@ -610,20 +640,15 @@ const styles = StyleSheet.create({
     backgroundColor: eventColors.selle.dark,
   },
   typeButtonDisabled: {
-    backgroundColor: "#f8f8f8",
     opacity: 0.5,
   },
   typeText: {
     fontSize: 16,
-    color: "#666",
     fontWeight: "500",
   },
   typeTextActive: {
     color: "white",
     fontWeight: "bold",
-  },
-  typeTextDisabled: {
-    color: "#ccc",
   },
   // Options Row
   optionsRow: {
@@ -644,17 +669,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   optionButtonSelle: {
-    backgroundColor: "#f8f9fa",
-    borderColor: "#e0e0e0",
-  },
-  optionButtonSelected: {
-    borderColor: eventColors.miction.dark,
     borderWidth: 2,
-    shadowColor: eventColors.miction.dark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 3,
   },
   optionButtonSelectedSelle: {
     backgroundColor: eventColors.selle.dark,
@@ -666,7 +681,6 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#333",
   },
   optionTextSelected: {
     color: "white",
@@ -688,13 +702,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
   },
   dateButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#4a4f55",
   },
   selectedDateTime: {
     alignItems: "center",
@@ -702,13 +713,11 @@ const styles = StyleSheet.create({
   },
   selectedDate: {
     fontSize: 16,
-    color: "#333",
     fontWeight: "600",
     marginBottom: 4,
   },
   selectedTime: {
     fontSize: 20,
-    color: "#374151",
     fontWeight: "600",
   },
   // Action buttons
@@ -722,9 +731,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#f5f6f8",
     borderWidth: 1,
-    borderColor: "#d7dbe0",
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
@@ -733,7 +740,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 16,
-    color: "#4a4f55",
     fontWeight: "600",
   },
   validateButton: {
@@ -746,7 +752,6 @@ const styles = StyleSheet.create({
   },
   validateText: {
     fontSize: 16,
-    color: "#fff",
     fontWeight: "700",
   },
   buttonDisabled: {
@@ -760,7 +765,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#f1b1b1",
-    backgroundColor: "#fff5f5",
     gap: 8,
   },
   deleteText: {

@@ -341,7 +341,7 @@ export const GlobalFAB = () => {
           ]}
         >
           <Animated.View style={mainButtonStyle}>
-            <FontAwesome6 name="plus" size={24} color="white" />
+            <FontAwesome6 name="plus" size={24} color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
           </Animated.View>
         </Pressable>
       </View>

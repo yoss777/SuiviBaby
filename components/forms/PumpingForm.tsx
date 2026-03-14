@@ -1,4 +1,5 @@
 import { Colors } from "@/constants/theme";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -64,6 +65,7 @@ export function PumpingForm({
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
 
   const isEditing = !!editData;
 
@@ -235,11 +237,12 @@ export function PumpingForm({
   return (
     <View style={styles.container}>
       {/* Breast selection */}
-      <Text style={styles.categoryLabel}>Seins</Text>
+      <Text style={[styles.categoryLabel, { color: nc.textStrong }]}>Seins</Text>
       <View style={styles.breastToggleRow}>
         <TouchableOpacity
           style={[
             styles.breastToggleButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
             useLeftBreast && {
               backgroundColor: Colors[colorScheme].tint,
               borderColor: Colors[colorScheme].tint,
@@ -247,11 +250,18 @@ export function PumpingForm({
           ]}
           onPress={toggleLeftBreast}
           disabled={isSubmitting}
+          accessibilityLabel="Sein gauche"
         >
           <Text
             style={[
               styles.breastToggleText,
-              useLeftBreast && styles.breastToggleTextActive,
+              { color: nc.textLight },
+              useLeftBreast && {
+                color:
+                  colorScheme === "dark"
+                    ? Colors[colorScheme].background
+                    : nc.white,
+              },
             ]}
           >
             Gauche
@@ -260,6 +270,7 @@ export function PumpingForm({
         <TouchableOpacity
           style={[
             styles.breastToggleButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
             useRightBreast && {
               backgroundColor: Colors[colorScheme].tint,
               borderColor: Colors[colorScheme].tint,
@@ -267,11 +278,18 @@ export function PumpingForm({
           ]}
           onPress={toggleRightBreast}
           disabled={isSubmitting}
+          accessibilityLabel="Sein droit"
         >
           <Text
             style={[
               styles.breastToggleText,
-              useRightBreast && styles.breastToggleTextActive,
+              { color: nc.textLight },
+              useRightBreast && {
+                color:
+                  colorScheme === "dark"
+                    ? Colors[colorScheme].background
+                    : nc.white,
+              },
             ]}
           >
             Droit
@@ -282,11 +300,14 @@ export function PumpingForm({
       {/* Left breast quantity */}
       {useLeftBreast && (
         <>
-          <Text style={styles.categoryLabel}>Quantité Sein Gauche</Text>
+          <Text style={[styles.categoryLabel, { color: nc.textStrong }]}>
+            Quantité Sein Gauche
+          </Text>
           <View style={styles.quantityPickerRow}>
             <TouchableOpacity
               style={[
                 styles.quantityButton,
+                { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
               onPressIn={() =>
@@ -296,20 +317,25 @@ export function PumpingForm({
               }
               onPressOut={handlePressOut}
               disabled={isSubmitting}
+              accessibilityLabel="Diminuer quantité gauche"
             >
               <Text
                 style={[
                   styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
+                  { color: nc.textStrong },
+                  isSubmitting && { color: nc.textMuted },
                 ]}
               >
                 -
               </Text>
             </TouchableOpacity>
-            <Text style={styles.quantityPickerValue}>{quantiteGauche} ml</Text>
+            <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
+              {quantiteGauche} ml
+            </Text>
             <TouchableOpacity
               style={[
                 styles.quantityButton,
+                { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
               onPressIn={() =>
@@ -317,11 +343,13 @@ export function PumpingForm({
               }
               onPressOut={handlePressOut}
               disabled={isSubmitting}
+              accessibilityLabel="Augmenter quantité gauche"
             >
               <Text
                 style={[
                   styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
+                  { color: nc.textStrong },
+                  isSubmitting && { color: nc.textMuted },
                 ]}
               >
                 +
@@ -334,11 +362,14 @@ export function PumpingForm({
       {/* Right breast quantity */}
       {useRightBreast && (
         <>
-          <Text style={styles.categoryLabel}>Quantité Sein Droit</Text>
+          <Text style={[styles.categoryLabel, { color: nc.textStrong }]}>
+            Quantité Sein Droit
+          </Text>
           <View style={styles.quantityPickerRow}>
             <TouchableOpacity
               style={[
                 styles.quantityButton,
+                { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
               onPressIn={() =>
@@ -348,20 +379,25 @@ export function PumpingForm({
               }
               onPressOut={handlePressOut}
               disabled={isSubmitting}
+              accessibilityLabel="Diminuer quantité droite"
             >
               <Text
                 style={[
                   styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
+                  { color: nc.textStrong },
+                  isSubmitting && { color: nc.textMuted },
                 ]}
               >
                 -
               </Text>
             </TouchableOpacity>
-            <Text style={styles.quantityPickerValue}>{quantiteDroite} ml</Text>
+            <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
+              {quantiteDroite} ml
+            </Text>
             <TouchableOpacity
               style={[
                 styles.quantityButton,
+                { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
               onPressIn={() =>
@@ -369,11 +405,13 @@ export function PumpingForm({
               }
               onPressOut={handlePressOut}
               disabled={isSubmitting}
+              accessibilityLabel="Augmenter quantité droite"
             >
               <Text
                 style={[
                   styles.quantityButtonText,
-                  isSubmitting && styles.quantityButtonTextDisabled,
+                  { color: nc.textStrong },
+                  isSubmitting && { color: nc.textMuted },
                 ]}
               >
                 +
@@ -384,25 +422,31 @@ export function PumpingForm({
       )}
 
       {/* Date/Time */}
-      <Text style={styles.categoryLabel}>Date & Heure</Text>
+      <Text style={[styles.categoryLabel, { color: nc.textStrong }]}>
+        Date & Heure
+      </Text>
       <View style={styles.dateTimeContainer}>
         <TouchableOpacity
           style={[
             styles.dateButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
             isSubmitting && styles.dateButtonDisabled,
           ]}
           onPress={() => setShowDate(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir la date"
+          hitSlop={8}
         >
           <FontAwesome5
             name="calendar-alt"
             size={16}
-            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+            color={isSubmitting ? nc.textMuted : Colors[colorScheme].tint}
           />
           <Text
             style={[
               styles.dateButtonText,
-              isSubmitting && styles.dateButtonTextDisabled,
+              { color: nc.textNormal },
+              isSubmitting && { color: nc.textMuted },
             ]}
           >
             Date
@@ -411,20 +455,24 @@ export function PumpingForm({
         <TouchableOpacity
           style={[
             styles.dateButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
             isSubmitting && styles.dateButtonDisabled,
           ]}
           onPress={() => setShowTime(true)}
           disabled={isSubmitting}
+          accessibilityLabel="Choisir l'heure"
+          hitSlop={8}
         >
           <FontAwesome5
             name="clock"
             size={16}
-            color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+            color={isSubmitting ? nc.textMuted : Colors[colorScheme].tint}
           />
           <Text
             style={[
               styles.dateButtonText,
-              isSubmitting && styles.dateButtonTextDisabled,
+              { color: nc.textNormal },
+              isSubmitting && { color: nc.textMuted },
             ]}
           >
             Heure
@@ -433,7 +481,11 @@ export function PumpingForm({
       </View>
 
       <View style={styles.selectedDateTime}>
-        <Text style={styles.selectedDate} numberOfLines={1} adjustsFontSizeToFit>
+        <Text
+          style={[styles.selectedDate, { color: nc.textStrong }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
           {dateHeure.toLocaleDateString("fr-FR", {
             weekday: "long",
             year: "numeric",
@@ -441,7 +493,7 @@ export function PumpingForm({
             day: "numeric",
           })}
         </Text>
-        <Text style={styles.selectedTime}>
+        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
           {dateHeure.toLocaleTimeString("fr-FR", {
             hour: "2-digit",
             minute: "2-digit",
@@ -473,11 +525,18 @@ export function PumpingForm({
       <View style={styles.buttonsContainer}>
         <View style={styles.primaryRow}>
           <TouchableOpacity
-            style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
+            style={[
+              styles.cancelButton,
+              { backgroundColor: nc.background, borderColor: nc.border },
+              isSubmitting && styles.buttonDisabled,
+            ]}
             onPress={onCancel}
             disabled={isSubmitting}
+            accessibilityLabel="Annuler"
           >
-            <Text style={styles.cancelText}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+              Annuler
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
@@ -487,11 +546,29 @@ export function PumpingForm({
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
+            accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
             {isSubmitting ? (
-              <ActivityIndicator color="#fff" size="small" />
+              <ActivityIndicator
+                color={
+                  colorScheme === "dark"
+                    ? Colors[colorScheme].background
+                    : nc.white
+                }
+                size="small"
+              />
             ) : (
-              <Text style={styles.validateText}>
+              <Text
+                style={[
+                  styles.validateText,
+                  {
+                    color:
+                      colorScheme === "dark"
+                        ? Colors[colorScheme].background
+                        : nc.white,
+                  },
+                ]}
+              >
                 {isEditing ? "Enregistrer" : "Ajouter"}
               </Text>
             )}
@@ -503,6 +580,7 @@ export function PumpingForm({
             style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
             onPress={handleDelete}
             disabled={isSubmitting}
+            accessibilityLabel="Supprimer"
           >
             <FontAwesome5 name="trash" size={14} color="#dc3545" />
             <Text style={styles.deleteText}>Supprimer</Text>
@@ -526,7 +604,6 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
     paddingTop: 20,
     marginBottom: 10,
   },
@@ -542,16 +619,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
   },
   breastToggleText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#666",
-  },
-  breastToggleTextActive: {
-    color: "#fff",
   },
   // Quantity picker
   quantityPickerRow: {
@@ -565,7 +636,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -575,15 +645,10 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#333",
-  },
-  quantityButtonTextDisabled: {
-    color: "#999",
   },
   quantityPickerValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
   },
   // Date/Time
   dateTimeContainer: {
@@ -601,20 +666,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d7dbe0",
-    backgroundColor: "#f5f6f8",
   },
   dateButtonDisabled: {
-    backgroundColor: "#f5f5f5",
     opacity: 0.5,
   },
   dateButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#4a4f55",
-  },
-  dateButtonTextDisabled: {
-    color: "#ccc",
   },
   selectedDateTime: {
     alignItems: "center",
@@ -622,13 +680,11 @@ const styles = StyleSheet.create({
   },
   selectedDate: {
     fontSize: 16,
-    color: "#333",
     fontWeight: "600",
     marginBottom: 4,
   },
   selectedTime: {
     fontSize: 20,
-    color: "#374151",
     fontWeight: "600",
   },
   // Action buttons
@@ -642,9 +698,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#f5f6f8",
     borderWidth: 1,
-    borderColor: "#d7dbe0",
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
@@ -653,7 +707,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 16,
-    color: "#4a4f55",
     fontWeight: "600",
   },
   validateButton: {
@@ -666,7 +719,6 @@ const styles = StyleSheet.create({
   },
   validateText: {
     fontSize: 16,
-    color: "#fff",
     fontWeight: "700",
   },
   buttonDisabled: {

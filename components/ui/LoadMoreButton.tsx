@@ -1,3 +1,5 @@
+import { getNeutralColors } from "@/constants/dashboardColors";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   ActivityIndicator,
@@ -31,13 +33,16 @@ export function LoadMoreButton({
   endText = "📅 Fin de l'historique",
   accentColor = "#4A90E2",
 }: LoadMoreButtonProps) {
+  const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
+
   if (!hasMore) {
     return null;
   }
 
   return (
     <TouchableOpacity
-      style={[styles.loadMoreButton, { borderColor: accentColor }]}
+      style={[styles.loadMoreButton, { borderColor: accentColor, backgroundColor: nc.backgroundCard }]}
       onPress={onPress}
       disabled={loading}
     >
@@ -74,7 +79,7 @@ const styles = StyleSheet.create({
     // marginHorizontal: 16,
     borderWidth: 1,
     borderRadius: 12,
-    backgroundColor: "white",
+    // backgroundColor applied dynamically via nc.backgroundCard
   },
   loadMoreText: {
     fontSize: 16,
