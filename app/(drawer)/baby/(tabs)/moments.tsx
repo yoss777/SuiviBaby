@@ -129,6 +129,11 @@ export default function MomentsScreen() {
     setRefreshTick((prev) => prev + 1);
   }, []);
 
+  const handleSheetSuccess = useCallback(() => {
+    refreshToday();
+    showToast("Souvenir enregistré");
+  }, [refreshToday, showToast]);
+
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     setRefreshTick((prev) => prev + 1);
@@ -206,9 +211,9 @@ export default function MomentsScreen() {
       ownerId: sheetOwnerId,
       formType: "milestones",
       jalonType: "autre",
-      onSuccess: refreshToday,
+      onSuccess: handleSheetSuccess,
     });
-  }, [canManageContent, openSheet, refreshToday]);
+  }, [canManageContent, openSheet, handleSheetSuccess]);
 
   // Header setup
   useFocusEffect(
@@ -347,11 +352,11 @@ export default function MomentsScreen() {
           ownerId: sheetOwnerId,
           formType: "milestones",
           jalonType: "humeur",
-          onSuccess: refreshToday,
+          onSuccess: handleSheetSuccess,
         });
       }
     },
-    [activeChild?.id, isMoodSaving, showToast, openSheet, refreshToday],
+    [activeChild?.id, isMoodSaving, showToast, openSheet, handleSheetSuccess],
   );
 
   const handleAddPhoto = useCallback(() => {
@@ -359,9 +364,9 @@ export default function MomentsScreen() {
       ownerId: sheetOwnerId,
       formType: "milestones",
       jalonType: "photo",
-      onSuccess: refreshToday,
+      onSuccess: handleSheetSuccess,
     });
-  }, [openSheet, refreshToday]);
+  }, [openSheet, handleSheetSuccess]);
 
   const handlePhotoPress = useCallback(
     (photo: PhotoMilestone) => {
@@ -400,7 +405,7 @@ export default function MomentsScreen() {
           | "humeur"
           | "photo"
           | "autre",
-        onSuccess: refreshToday,
+        onSuccess: handleSheetSuccess,
         onCancel: reopenGallery,
         editData: {
           id: event.id,
@@ -421,7 +426,7 @@ export default function MomentsScreen() {
         },
       });
     },
-    [events, openSheet, refreshToday],
+    [events, openSheet, handleSheetSuccess],
   );
 
   // Social handlers

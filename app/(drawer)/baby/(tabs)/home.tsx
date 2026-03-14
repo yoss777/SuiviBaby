@@ -7,7 +7,6 @@ import {
 import { GlobalFAB } from "@/components/suivibaby/GlobalFAB";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import {
   categoryColors,
   getCategoryColors,
@@ -25,6 +24,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Ionicons } from "@expo/vector-icons";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import {
   ajouterJalon,
@@ -54,6 +54,56 @@ import {
   View,
 } from "react-native";
 import { useHeaderRight } from "../../_layout";
+
+// ============================================
+// SKELETON LOADING (P1)
+// ============================================
+
+function HomeSkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg = colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
+
+  const Block = ({ width, height }: { width: number | string; height: number }) => (
+    <View style={{ width: width as number, height, backgroundColor: nc.borderLight, borderRadius: 8, overflow: "hidden", marginBottom: 10 }}>
+      <Animated.View style={{ position: "absolute", top: 0, bottom: 0, width: 120, backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }} />
+    </View>
+  );
+
+  return (
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: nc.background }}>
+      <View style={{ width: "100%", padding: 20 }}>
+        <Block width="60%" height={24} />
+        <Block width="40%" height={14} />
+        <View style={{ height: 16 }} />
+        <Block width="100%" height={80} />
+        <View style={{ height: 12 }} />
+        <Block width="100%" height={80} />
+        <View style={{ height: 12 }} />
+        <Block width="100%" height={60} />
+        <View style={{ height: 12 }} />
+        <Block width="100%" height={60} />
+      </View>
+    </View>
+  );
+}
 
 // ============================================
 // STAGGERED ENTRANCE
@@ -473,7 +523,7 @@ export default function HomeDashboard() {
   const cat = getCategoryColors(colorScheme);
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
   const { openSheet: openSheetRaw } = useSheet();
-  const { showToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
   const warningStateRef = useRef<
     Record<string, { miction?: number; selle?: number }>
   >({});
@@ -503,6 +553,7 @@ export default function HomeDashboard() {
     visible: boolean;
     event: any | null;
   }>({ visible: false, event: null });
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
   // États des données
   const [data, setData] = useState<DashboardData>({
@@ -597,6 +648,7 @@ export default function HomeDashboard() {
         onSuccess: () => {
           (props as any).onSuccess?.();
           triggerRefresh();
+          showToast("Enregistré ✓");
         },
       });
     },
@@ -611,14 +663,35 @@ export default function HomeDashboard() {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
     const eventId = deleteConfirm.event.id;
     setDeleteConfirm({ visible: false, event: null });
-    try {
-      await supprimerEvenement(activeChild.id, eventId);
-      showToast("Événement supprimé");
-      triggerRefresh();
-    } catch {
-      showToast("Impossible de supprimer cet événement");
-    }
-  }, [activeChild?.id, deleteConfirm.event, showToast, triggerRefresh]);
+    // P5: soft-delete + undo
+    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
+    const timer = setTimeout(async () => {
+      try {
+        await supprimerEvenement(activeChild.id!, eventId);
+        triggerRefresh();
+      } catch {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(eventId);
+          return next;
+        });
+        // P27: error retry toast
+        showActionToast(
+          "Erreur lors de la suppression",
+          "Réessayer",
+          () => confirmDelete(),
+        );
+      }
+    }, 3000);
+    showUndoToast("Événement supprimé", () => {
+      clearTimeout(timer);
+      setSoftDeletedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(eventId);
+        return next;
+      });
+    });
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast, triggerRefresh]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -841,7 +914,7 @@ export default function HomeDashboard() {
     }));
 
     return merged
-      .filter((event) => toDate(event.date) >= cutoff)
+      .filter((event) => toDate(event.date) >= cutoff && !softDeletedIds.has(event.id))
       .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime())
       .slice(0, RECENT_EVENTS_MAX);
   }, [
@@ -863,7 +936,20 @@ export default function HomeDashboard() {
     data.jalons,
     currentTime,
     toDate,
+    softDeletedIds,
   ]);
+
+  // P3: detect empty state (no events at all today)
+  const hasAnyTodayData = useMemo(() => {
+    return (
+      todayStats.meals.total.count > 0 ||
+      todayStats.pompages.count > 0 ||
+      todayStats.sommeil.count > 0 ||
+      todayStats.mictions.count > 0 ||
+      todayStats.selles.count > 0 ||
+      recentEvents.length > 0
+    );
+  }, [todayStats, recentEvents]);
 
   const todayJalons = useMemo(() => {
     const today = new Date();
@@ -1905,14 +1991,9 @@ export default function HomeDashboard() {
   // RENDER
   // ============================================
 
-  // Loading state - show spinner until data is ready
+  // Loading state - skeleton shimmer (P1)
   if (!isDataLoaded) {
-    return (
-      <View style={[styles.loadingContainer, { backgroundColor: nc.background }]}>
-        <IconPulseDots color={cat.alimentation.primary} />
-        <Text style={[styles.loadingText, { color: nc.textLight }]}>Chargement...</Text>
-      </View>
-    );
+    return <HomeSkeleton colorScheme={colorScheme} />;
   }
 
   return (
@@ -2077,6 +2158,19 @@ export default function HomeDashboard() {
             </StaggeredCard>
           )}
         </View>
+
+        {/* P3: Enhanced empty state */}
+        {!hasAnyTodayData && isDataLoaded && (
+          <View style={{ alignItems: "center", paddingVertical: 24, paddingHorizontal: 20 }}>
+            <Ionicons name="sunny-outline" size={48} color={nc.textLight} style={{ marginBottom: 12 }} />
+            <Text style={{ fontSize: 17, fontWeight: "600", color: nc.textStrong, textAlign: "center", marginBottom: 6 }}>
+              Rien encore aujourd'hui
+            </Text>
+            <Text style={{ fontSize: 14, color: nc.textLight, textAlign: "center", lineHeight: 20 }}>
+              Appuyez sur + pour enregistrer le premier événement de la journée
+            </Text>
+          </View>
+        )}
 
         {/* Chronologie récente */}
         <View>

@@ -1,6 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import {
@@ -38,17 +37,35 @@ import {
   Animated,
   AppState,
   Image,
+  LayoutAnimation,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
+
+// P11: Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// P10: Format selected date label for date chip
+const formatSelectedDateLabel = (dateString: string) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
 
 // ============================================
 // TYPES
@@ -396,6 +413,391 @@ const EventIcon = React.memo(({ type, color, size }: EventIconProps) => {
   );
 });
 EventIcon.displayName = "EventIcon";
+
+// ============================================
+// STYLES
+// ============================================
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  stickyContainer: {
+    paddingTop: 0,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: HEADER_SPACING,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "800",
+  },
+  rangeRow: {
+    flexDirection: "row",
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rangeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  rangeChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  listPadding: {
+    paddingTop: 0,
+  },
+  filterRow: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  stickyFilters: {
+    height: FILTERS_HEIGHT + FILTERS_TOP_OFFSET,
+    justifyContent: "flex-end",
+    paddingTop: FILTERS_TOP_OFFSET,
+  },
+  filterScrollContainer: {
+    flex: 1,
+    position: "relative",
+    justifyContent: "center",
+  },
+  filterFadeRight: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 32,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  filterChipBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+    marginLeft: 2,
+  },
+  filterChipBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  content: {
+    flex: 1,
+  },
+  listWrapper: {
+    flex: 1,
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    paddingTop: LIST_PADDING_TOP,
+  },
+  sectionHeader: {
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    gap: 6,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  countBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  summaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  summaryPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  summaryText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  itemRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 14,
+  },
+  timelineColumn: {
+    width: 20,
+    alignItems: "center",
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    marginTop: 6,
+  },
+  line: {
+    width: 2,
+    flex: 1,
+    marginTop: 4,
+  },
+  lineLast: {
+    backgroundColor: "transparent",
+  },
+  card: {
+    flex: 1,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  cardThumb: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: "#f3f4f6",
+  },
+  cardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  cardTimeLeft: {
+    width: 42,
+    marginTop: 6,
+  },
+  cardTimeText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  cardTimeArrow: {
+    fontSize: 10,
+    lineHeight: 10,
+    fontWeight: "600",
+  },
+  cardTimeTextSecondary: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  cardTimeOngoing: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  cardDetails: {
+    marginTop: 6,
+    fontSize: 12,
+  },
+  solideDetails: {
+    marginTop: 6,
+  },
+  solideDetailsText: {
+    fontSize: 12,
+  },
+  noteContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+  },
+  cardNote: {
+    flex: 1,
+    fontSize: 13,
+  },
+  loading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 13,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 13,
+    textAlign: "center",
+  },
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    marginBottom: 15,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    marginVertical: 1,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  // P4: Calendar & date chip styles
+  headerRightControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  calendarButton: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  dateChipRow: {
+    flexDirection: "row",
+    marginTop: 8,
+  },
+  dateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  dateChipText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  calendarContainer: {
+    marginTop: 12,
+    borderBottomWidth: 1,
+    paddingBottom: 12,
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  calendarDayButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  calendarDayText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  // P1: Skeleton styles
+  skeletonContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+  },
+  skeletonSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  skeletonItemRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 14,
+  },
+  skeletonDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    marginTop: 6,
+    overflow: "hidden",
+  },
+  skeletonLine: {
+    width: 2,
+    height: 40,
+    marginTop: 4,
+  },
+  skeletonCard: {
+    flex: 1,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+  },
+  skeletonBlock: {
+    borderRadius: 7,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 100,
+  },
+});
 
 interface FilterChipProps {
   type: FilterType;
@@ -848,6 +1250,159 @@ const DeleteAction = React.memo(function DeleteAction({
 });
 
 // ============================================
+// P1: SKELETON SHIMMER COMPONENT
+// ============================================
+
+const ChronoSkeleton = React.memo(function ChronoSkeleton({
+  colorScheme,
+}: {
+  colorScheme: "light" | "dark";
+}) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    shimmer.start();
+    return () => shimmer.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg =
+    colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
+
+  const shimmerStyle = [
+    styles.shimmerOverlay,
+    { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] },
+  ];
+
+  const renderSkeletonCard = (key: number) => (
+    <View key={key} style={styles.skeletonItemRow}>
+      <View style={styles.timelineColumn}>
+        <View
+          style={[styles.skeletonDot, { backgroundColor: nc.borderLight }]}
+        >
+          <Animated.View style={shimmerStyle} />
+        </View>
+        <View
+          style={[styles.skeletonLine, { backgroundColor: nc.borderLight }]}
+        />
+      </View>
+      <View
+        style={[
+          styles.skeletonBlock,
+          {
+            width: 42,
+            height: 14,
+            marginTop: 6,
+            backgroundColor: nc.borderLight,
+          },
+        ]}
+      >
+        <Animated.View style={shimmerStyle} />
+      </View>
+      <View
+        style={[
+          styles.skeletonCard,
+          {
+            backgroundColor: nc.backgroundCard,
+            borderColor: nc.borderLight,
+          },
+        ]}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View
+            style={[
+              styles.skeletonBlock,
+              { width: 14, height: 14, borderRadius: 7, backgroundColor: nc.borderLight },
+            ]}
+          >
+            <Animated.View style={shimmerStyle} />
+          </View>
+          <View
+            style={[
+              styles.skeletonBlock,
+              { width: 100, height: 14, backgroundColor: nc.borderLight },
+            ]}
+          >
+            <Animated.View style={shimmerStyle} />
+          </View>
+        </View>
+        <View
+          style={[
+            styles.skeletonBlock,
+            { width: 80, height: 12, marginTop: 6, backgroundColor: nc.borderLight },
+          ]}
+        >
+          <Animated.View style={shimmerStyle} />
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View
+      style={styles.skeletonContainer}
+      accessibilityLabel="Chargement en cours"
+    >
+      {/* Section header skeleton */}
+      <View style={styles.skeletonSectionHeader}>
+        <View
+          style={[
+            styles.skeletonBlock,
+            { width: 120, height: 20, backgroundColor: nc.borderLight },
+          ]}
+        >
+          <Animated.View style={shimmerStyle} />
+        </View>
+        <View
+          style={[
+            styles.skeletonBlock,
+            { width: 30, height: 20, borderRadius: 10, backgroundColor: nc.borderLight },
+          ]}
+        >
+          <Animated.View style={shimmerStyle} />
+        </View>
+      </View>
+      {renderSkeletonCard(1)}
+      {renderSkeletonCard(2)}
+      {renderSkeletonCard(3)}
+
+      {/* Second section */}
+      <View style={[styles.skeletonSectionHeader, { marginTop: 16 }]}>
+        <View
+          style={[
+            styles.skeletonBlock,
+            { width: 80, height: 20, backgroundColor: nc.borderLight },
+          ]}
+        >
+          <Animated.View style={shimmerStyle} />
+        </View>
+        <View
+          style={[
+            styles.skeletonBlock,
+            { width: 30, height: 20, borderRadius: 10, backgroundColor: nc.borderLight },
+          ]}
+        >
+          <Animated.View style={shimmerStyle} />
+        </View>
+      </View>
+      {renderSkeletonCard(4)}
+      {renderSkeletonCard(5)}
+    </View>
+  );
+});
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -874,11 +1429,18 @@ export default function ChronoScreen() {
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
-  const { showToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
     event: Event | null;
   }>({ visible: false, event: null });
+
+  // P4: Calendar date picker state
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  // P5: Soft-delete state
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
   const triggerRefresh = useCallback(() => {
     setRefreshTick((prev) => prev + 1);
@@ -891,10 +1453,12 @@ export default function ChronoScreen() {
         onSuccess: () => {
           (props as any).onSuccess?.();
           triggerRefresh();
+          // P6: Toast on sheet success
+          showToast("Événement enregistré");
         },
       });
     },
-    [openSheetRaw, triggerRefresh],
+    [openSheetRaw, triggerRefresh, showToast],
   );
 
   // Fade animation
@@ -981,6 +1545,16 @@ export default function ChronoScreen() {
         hasInitialLoad.current = true;
         setLoading(false);
         setIsRefreshing(false);
+
+        // P5: Clean up soft-deleted IDs that are no longer in the dataset
+        setSoftDeletedIds((prev) => {
+          if (prev.size === 0) return prev;
+          const dataIds = new Set(data.map((e: Event) => e.id));
+          const next = new Set<string>();
+          prev.forEach((id) => { if (id && dataIds.has(id)) next.add(id); });
+          return next.size === prev.size ? prev : next;
+        });
+
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 300,
@@ -1007,6 +1581,9 @@ export default function ChronoScreen() {
     setMaxRange(14);
     hasInitialLoad.current = false;
     hasPrefetchedMore.current = false;
+    setSoftDeletedIds(new Set());
+    setSelectedDate(null);
+    setShowCalendar(false);
   }, [activeChild?.id]);
 
   // Load preferences
@@ -1070,11 +1647,23 @@ export default function ChronoScreen() {
     const rangeStart = startOfDay(new Date());
     rangeStart.setDate(rangeStart.getDate() - (range - 1));
 
-    return events.filter(
-      (event) =>
-        effectiveTypes.has(event.type) && toDate(event.date) >= rangeStart,
-    );
-  }, [events, selectedTypes, range, currentDay]);
+    return events.filter((event) => {
+      // P5: Filter out soft-deleted events
+      if (event.id && softDeletedIds.has(event.id)) return false;
+
+      if (!effectiveTypes.has(event.type)) return false;
+      if (toDate(event.date) < rangeStart) return false;
+
+      // P4: Filter by selected date if set
+      if (selectedDate) {
+        const eventDate = toDate(event.date);
+        const eventDay = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, "0")}-${String(eventDate.getDate()).padStart(2, "0")}`;
+        return eventDay === selectedDate;
+      }
+
+      return true;
+    });
+  }, [events, selectedTypes, range, currentDay, softDeletedIds, selectedDate]);
 
   // Sections
   const sections = useMemo(
@@ -1098,6 +1687,8 @@ export default function ChronoScreen() {
   // Handlers with useCallback
   const handleRangeChange = useCallback(
     (value: RangeOption) => {
+      // P2: Animate section transitions
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       if (value > maxRange) {
         setMaxRange(value);
         setIsRefreshing(true);
@@ -1131,10 +1722,14 @@ export default function ChronoScreen() {
   const allSelected = selectedTypes.length === ALL_FILTERS.length;
 
   const handleToggleAll = useCallback(() => {
+    // P2: Animate section transitions
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedTypes(allSelected ? [] : [...ALL_FILTERS]);
   }, [allSelected]);
 
   const handleFilterToggle = useCallback((type: FilterType) => {
+    // P2: Animate section transitions
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedTypes((prev) =>
       prev.includes(type)
         ? prev.filter((value) => value !== type)
@@ -1146,6 +1741,23 @@ export default function ChronoScreen() {
     setIsRefreshing(true);
     triggerRefresh();
   }, [triggerRefresh]);
+
+  // P4: Calendar date picker handlers
+  const handleCalendarToggle = useCallback(() => {
+    setShowCalendar((prev) => !prev);
+  }, []);
+
+  const handleDateSelect = useCallback((dateString: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedDate(dateString);
+    setShowCalendar(false);
+  }, []);
+
+  const handleClearDate = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedDate(null);
+    setShowCalendar(false);
+  }, []);
 
   const handleEdit = useCallback(
     (event: Event) => {
@@ -1409,15 +2021,47 @@ export default function ChronoScreen() {
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
     const eventId = deleteConfirm.event.id;
+    const childId = activeChild.id;
     setDeleteConfirm({ visible: false, event: null });
-    try {
-      await supprimerEvenement(activeChild.id, eventId);
-      showToast("Événement supprimé");
-      triggerRefresh();
-    } catch {
-      showToast("Impossible de supprimer cet événement");
-    }
-  }, [activeChild?.id, deleteConfirm.event, showToast, triggerRefresh]);
+
+    // P5: Soft-delete — hide immediately from UI
+    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
+
+    // P5: Show undo toast
+    showUndoToast(
+      "Événement supprimé",
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(eventId);
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          await supprimerEvenement(childId, eventId);
+          triggerRefresh();
+        } catch {
+          // P27: Restore on error + retry action toast
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(eventId);
+            return next;
+          });
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            supprimerEvenement(childId, eventId).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                supprimerEvenement(childId, eventId);
+              });
+            });
+          });
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast, triggerRefresh]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -1506,12 +2150,7 @@ export default function ChronoScreen() {
         {/* Content */}
         <View style={styles.content}>
           {loading || (!emptyDelayDone && sections.length === 0) ? (
-            <View style={styles.loading}>
-              <IconPulseDots color={colors.tint} />
-              <Text style={[styles.loadingText, { color: colors.secondary }]}>
-                Chargement de la timeline...
-              </Text>
-            </View>
+            <ChronoSkeleton colorScheme={colorScheme} />
           ) : (
             <Animated.View style={[styles.listWrapper, { opacity: fadeAnim }]}>
               <StickyHeaderSectionList
@@ -1546,28 +2185,112 @@ export default function ChronoScreen() {
                       <Text style={[styles.title, { color: colors.text }]}>
                         Chronologie
                       </Text>
-                      <View
-                        style={[
-                          styles.rangeRow,
-                          {
-                            borderColor: colors.border,
-                            backgroundColor: colors.background,
-                          },
-                        ]}
-                      >
-                        {RANGE_OPTIONS.map((value) => (
-                          <RangeChip
-                            key={value}
-                            value={value}
-                            isActive={range === value}
-                            tintColor={colors.tint}
-                            mutedColor={colors.secondary}
-                            activeBg={colors.surface}
-                            onPress={() => handleRangeChange(value)}
+                      <View style={styles.headerRightControls}>
+                        {/* P4: Calendar toggle button */}
+                        <Pressable
+                          onPress={handleCalendarToggle}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          style={[
+                            styles.calendarButton,
+                            showCalendar && {
+                              backgroundColor: `${colors.tint}20`,
+                            },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={showCalendar ? "Fermer le calendrier" : "Ouvrir le calendrier"}
+                        >
+                          <Ionicons
+                            name="calendar-outline"
+                            size={20}
+                            color={colors.tint}
                           />
-                        ))}
+                        </Pressable>
+                        <View
+                          style={[
+                            styles.rangeRow,
+                            {
+                              borderColor: colors.border,
+                              backgroundColor: colors.background,
+                            },
+                          ]}
+                        >
+                          {RANGE_OPTIONS.map((value) => (
+                            <RangeChip
+                              key={value}
+                              value={value}
+                              isActive={range === value}
+                              tintColor={colors.tint}
+                              mutedColor={colors.secondary}
+                              activeBg={colors.surface}
+                              onPress={() => handleRangeChange(value)}
+                            />
+                          ))}
+                        </View>
                       </View>
                     </View>
+                    {/* P4: Date chip with clear button */}
+                    {selectedDate && (
+                      <View style={styles.dateChipRow}>
+                        <Pressable
+                          style={[styles.dateChip, { backgroundColor: colors.tint }]}
+                          onPress={handleClearDate}
+                          accessibilityRole="button"
+                          accessibilityLabel="Effacer la date sélectionnée"
+                        >
+                          <Text style={styles.dateChipText}>
+                            {formatSelectedDateLabel(selectedDate)}
+                          </Text>
+                          <Ionicons name="close" size={14} color="#fff" />
+                        </Pressable>
+                      </View>
+                    )}
+                    {/* P4: Inline calendar picker */}
+                    {showCalendar && (
+                      <View style={[styles.calendarContainer, { borderBottomColor: colors.border }]}>
+                        <ScrollView style={{ maxHeight: 320 }}>
+                          {/* Simple date grid - using day buttons for the current month */}
+                          <View style={styles.calendarGrid}>
+                            {(() => {
+                              const now = new Date();
+                              const daysInRange: string[] = [];
+                              for (let i = 0; i < range; i++) {
+                                const d = new Date(now);
+                                d.setDate(d.getDate() - i);
+                                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                                daysInRange.push(key);
+                              }
+                              return daysInRange.map((dateKey) => {
+                                const [y, m, d] = dateKey.split("-").map(Number);
+                                const date = new Date(y, m - 1, d);
+                                const isSelected = selectedDate === dateKey;
+                                const dayLabel = date.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+                                return (
+                                  <Pressable
+                                    key={dateKey}
+                                    style={[
+                                      styles.calendarDayButton,
+                                      { borderColor: colors.border },
+                                      isSelected && { backgroundColor: colors.tint, borderColor: colors.tint },
+                                    ]}
+                                    onPress={() => handleDateSelect(dateKey)}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.calendarDayText,
+                                        { color: colors.text },
+                                        isSelected && { color: "#fff" },
+                                      ]}
+                                    >
+                                      {dayLabel}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              });
+                            })()}
+                          </View>
+                        </ScrollView>
+                      </View>
+                    )}
                   </View>
                 )}
                 renderTabs={() => (
@@ -1695,293 +2418,3 @@ export default function ChronoScreen() {
     </ThemedView>
   );
 }
-
-// ============================================
-// STYLES
-// ============================================
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  stickyContainer: {
-    paddingTop: 0,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: HEADER_SPACING,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "800",
-  },
-  rangeRow: {
-    flexDirection: "row",
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 4,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rangeChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  rangeChipText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  listPadding: {
-    paddingTop: 0,
-  },
-  filterRow: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    gap: 8,
-  },
-  stickyFilters: {
-    height: FILTERS_HEIGHT + FILTERS_TOP_OFFSET,
-    justifyContent: "flex-end",
-    paddingTop: FILTERS_TOP_OFFSET,
-  },
-  filterScrollContainer: {
-    flex: 1,
-    position: "relative",
-    justifyContent: "center",
-  },
-  filterFadeRight: {
-    position: "absolute",
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 32,
-  },
-  filterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  filterChipText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  filterChipBadge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 5,
-    marginLeft: 2,
-  },
-  filterChipBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  content: {
-    flex: 1,
-  },
-  listWrapper: {
-    flex: 1,
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    paddingTop: LIST_PADDING_TOP,
-  },
-  sectionHeader: {
-    marginHorizontal: -20,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
-    gap: 6,
-  },
-  sectionTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  countBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  countText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  summaryRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  summaryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  summaryText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  itemRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 14,
-  },
-  timelineColumn: {
-    width: 20,
-    alignItems: "center",
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    marginTop: 6,
-  },
-  line: {
-    width: 2,
-    flex: 1,
-    marginTop: 4,
-  },
-  lineLast: {
-    backgroundColor: "transparent",
-  },
-  card: {
-    flex: 1,
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cardThumb: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: "#f3f4f6",
-  },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  cardTimeLeft: {
-    width: 42,
-    marginTop: 6,
-  },
-  cardTimeText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  cardTimeArrow: {
-    fontSize: 10,
-    lineHeight: 10,
-    fontWeight: "600",
-  },
-  cardTimeTextSecondary: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  cardTimeOngoing: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  cardDetails: {
-    marginTop: 6,
-    fontSize: 12,
-  },
-  solideDetails: {
-    marginTop: 6,
-  },
-  solideDetailsText: {
-    fontSize: 12,
-  },
-  noteContainer: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-  },
-  cardNote: {
-    flex: 1,
-    fontSize: 13,
-  },
-  loading: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 13,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 13,
-    textAlign: "center",
-  },
-  deleteAction: {
-    backgroundColor: "#ef4444",
-    justifyContent: "center",
-    alignItems: "center",
-    width: 80,
-    marginBottom: 15,
-    borderRadius: 14,
-    marginHorizontal: 4,
-    marginVertical: 1,
-    gap: 4,
-  },
-  deleteActionText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-});

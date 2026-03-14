@@ -1,6 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   OMS_MAX_DAY,
@@ -16,7 +15,6 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { ecouterCroissancesHybrid } from "@/migration/eventsHybridService";
-import { supprimerEvenement } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -43,15 +41,19 @@ import React, {
   useState,
 } from "react";
 import {
+  Animated as RNAnimated,
   Dimensions,
   FlatList,
   InteractionManager,
+  LayoutAnimation,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
 import {
@@ -68,7 +70,16 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { supprimerCroissance } from "@/migration/eventsDoubleWriteService";
 import { useHeaderRight } from "../../_layout";
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 type CroissanceEntry = {
   id: string;
@@ -155,6 +166,410 @@ function getAgeInDays(birthDate: Date, target: Date) {
   return Math.round(ms / 86_400_000);
 }
 
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  headerBlock: {
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "800",
+  },
+  subtitle: {
+    marginTop: 4,
+    fontSize: 13,
+  },
+  listContent: {
+    paddingBottom: 40,
+    gap: 12,
+  },
+  listWindow: {
+    flex: 1,
+    minHeight: 0,
+  },
+  body: {
+    flex: 1,
+    minHeight: 0,
+  },
+  chartCard: {
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+    overflow: "visible",
+    zIndex: 10,
+  },
+  metricTabs: {
+    flexDirection: "row",
+    borderRadius: 12,
+    padding: 4,
+    gap: 6,
+    marginBottom: 12,
+  },
+  metricTabIndicator: {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    borderRadius: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  metricTab: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
+    alignItems: "center",
+    zIndex: 1,
+  },
+  metricTabText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  metricsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+  metricLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  metricValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 6,
+  },
+  summaryCard: {
+    flex: 1,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 6,
+  },
+  chartRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    position: "relative",
+    overflow: "visible",
+  },
+  yAxisColumn: {
+    position: "relative",
+    width: CHART_AXIS_WIDTH,
+    height: CHART_HEIGHT,
+  },
+  yAxisLabelWrap: {
+    position: "absolute",
+    left: 0,
+    width: CHART_AXIS_WIDTH - 6,
+    alignItems: "flex-end",
+  },
+  yAxisLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  chartWrapper: {
+    position: "relative",
+  },
+  chartScroll: {
+    flex: 1,
+  },
+  chartEmpty: {
+    alignItems: "center",
+    paddingVertical: 18,
+  },
+  emptyText: {
+    fontSize: 13,
+  },
+  tooltip: {
+    position: "absolute",
+    borderRadius: 10,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+    elevation: 6,
+    zIndex: 1000,
+    width: 90,
+    height: 54,
+  },
+  tooltipContent: {
+    padding: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tooltipTime: {
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  tooltipValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  tooltipArrow: {
+    position: "absolute",
+    bottom: -8,
+    left: "50%",
+    marginLeft: -8,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 8,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+  },
+  itemRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginVertical: 7,
+  },
+  timelineColumn: {
+    width: 20,
+    alignItems: "center",
+  },
+  timeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    width: 42,
+    marginTop: 6,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    marginTop: 6,
+  },
+  line: {
+    width: 2,
+    flex: 1,
+    marginTop: 4,
+  },
+  lineLast: {
+    backgroundColor: "transparent",
+  },
+  daySeparator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+    gap: 12,
+  },
+  daySeparatorLine: {
+    flex: 1,
+    height: 1,
+  },
+  daySeparatorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  card: {
+    flex: 1,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  cardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  metricPillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  metricPill: {
+    flexGrow: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  metricHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  emptyState: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    paddingVertical: 40,
+  },
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
+  },
+  emptyCtaText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  skeletonContainer: {
+    paddingHorizontal: 0,
+    paddingTop: 8,
+  },
+  skeletonBlock: {
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 200,
+    opacity: 0.5,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingRight: 16,
+    gap: 0,
+  },
+  headerButton: {
+    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+  },
+  omsLegend: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+  },
+  omsLegendTitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  omsLegendRow: {
+    flexDirection: "row",
+    gap: 16,
+    flexWrap: "wrap",
+  },
+  omsLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  omsLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  omsLegendBox: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+  },
+  omsLegendText: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  cardSwipeWrapper: {
+    flex: 1,
+  },
+  deleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    marginVertical: 7,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  showMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 14,
+    marginTop: 4,
+    borderWidth: 1,
+    borderRadius: 14,
+    borderStyle: "dashed",
+  },
+  showMoreText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+});
+
 const DeleteAction = React.memo(function DeleteAction({
   onPress,
 }: {
@@ -170,6 +585,91 @@ const DeleteAction = React.memo(function DeleteAction({
       <Ionicons name="trash-outline" size={20} color="#fff" />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
+  );
+});
+
+// ============================================
+// SKELETON LOADING COMPONENT
+// ============================================
+
+const CroissanceSkeleton = React.memo(function CroissanceSkeleton({
+  colorScheme,
+}: {
+  colorScheme: "light" | "dark";
+}) {
+  const nc = getNeutralColors(colorScheme);
+  const shimmerAnim = React.useRef(new RNAnimated.Value(0)).current;
+
+  React.useEffect(() => {
+    const shimmer = RNAnimated.loop(
+      RNAnimated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    );
+    shimmer.start();
+    return () => shimmer.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 200],
+  });
+  const shimmerBg =
+    colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
+
+  const renderSkeletonCard = (key: number) => (
+    <View
+      key={key}
+      style={[
+        styles.card,
+        { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
+      ]}
+    >
+      <View style={[styles.skeletonBlock, { width: 80, height: 14, backgroundColor: nc.borderLight }]}>
+        <RNAnimated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+        <View style={[styles.skeletonBlock, { width: 80, height: 32, borderRadius: 12, backgroundColor: nc.borderLight }]}>
+          <RNAnimated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+        <View style={[styles.skeletonBlock, { width: 80, height: 32, borderRadius: 12, backgroundColor: nc.borderLight }]}>
+          <RNAnimated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+        <View style={[styles.skeletonBlock, { width: 80, height: 32, borderRadius: 12, backgroundColor: nc.borderLight }]}>
+          <RNAnimated.View
+            style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.skeletonContainer}>
+      <View style={[styles.skeletonBlock, { width: 100, height: 16, marginBottom: 12, backgroundColor: nc.borderLight }]}>
+        <RNAnimated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      {renderSkeletonCard(1)}
+      <View style={{ height: 12 }} />
+      <View style={[styles.skeletonBlock, { width: 60, height: 16, marginBottom: 12, backgroundColor: nc.borderLight }]}>
+        <RNAnimated.View
+          style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]}
+        />
+      </View>
+      {renderSkeletonCard(2)}
+      <View style={{ height: 12 }} />
+      {renderSkeletonCard(3)}
+    </View>
   );
 });
 
@@ -193,7 +693,7 @@ export default function CroissanceScreen() {
     [nc],
   );
   const { openSheet } = useSheet();
-  const { showToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
   const { openModal, returnTo } = useLocalSearchParams();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
@@ -213,6 +713,7 @@ export default function CroissanceScreen() {
     visible: boolean;
     event: CroissanceEntry | null;
   }>({ visible: false, event: null });
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
   const [metric, setMetric] = useState<MetricKey>("poids");
   const metricKeys: MetricKey[] = ["taille", "poids", "tete"];
   const [tabsWidth, setTabsWidth] = useState(0);
@@ -375,13 +876,16 @@ export default function CroissanceScreen() {
     openSheet({
       ownerId: sheetOwnerId,
       formType: "croissance",
-      onSuccess: triggerRefresh,
+      onSuccess: () => {
+        triggerRefresh();
+        showToast("Mesure enregistrée");
+      },
       onDismiss: () => {
         const returnTarget = normalizeParam(returnTo) ?? returnToRef.current;
         maybeReturnTo(returnTarget);
       },
     });
-  }, [openSheet, returnTo, maybeReturnTo, triggerRefresh]);
+  }, [openSheet, returnTo, maybeReturnTo, triggerRefresh, showToast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -402,7 +906,10 @@ export default function CroissanceScreen() {
       openSheet({
         ownerId: sheetOwnerId,
         formType: "croissance",
-        onSuccess: triggerRefresh,
+        onSuccess: () => {
+          triggerRefresh();
+          showToast("Mesure enregistrée");
+        },
         editData: {
           id: entry.id,
           date: toDate(entry.date),
@@ -413,7 +920,7 @@ export default function CroissanceScreen() {
         onDismiss: () => maybeReturnTo(returnToRef.current),
       });
     },
-    [openSheet, maybeReturnTo, triggerRefresh],
+    [openSheet, maybeReturnTo, triggerRefresh, showToast],
   );
 
   const handleEventDelete = useCallback((event: CroissanceEntry) => {
@@ -424,15 +931,45 @@ export default function CroissanceScreen() {
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
     const eventId = deleteConfirm.event.id;
+    const childId = activeChild.id;
     setDeleteConfirm({ visible: false, event: null });
-    try {
-      await supprimerEvenement(activeChild.id, eventId);
-      showToast("Événement supprimé");
-      triggerRefresh();
-    } catch {
-      showToast("Impossible de supprimer cet événement");
-    }
-  }, [activeChild?.id, deleteConfirm.event, showToast, triggerRefresh]);
+
+    // Soft-delete: hide immediately from UI
+    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
+
+    showUndoToast(
+      "Mesure supprimée",
+      // onUndo — restore visibility
+      () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(eventId);
+          return next;
+        });
+      },
+      // onExpire — actually delete from Firestore
+      async () => {
+        try {
+          await supprimerCroissance(childId, eventId);
+        } catch {
+          // Restore if delete fails
+          setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(eventId);
+            return next;
+          });
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            supprimerCroissance(childId, eventId).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                supprimerCroissance(childId, eventId);
+              });
+            });
+          });
+        }
+      },
+      4000,
+    );
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -464,10 +1001,12 @@ export default function CroissanceScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
+    let cancelled = false;
     setLoading(true);
     const unsubscribe = ecouterCroissancesHybrid(
       activeChild.id,
       (data) => {
+        if (cancelled) return;
         const normalized = data
           .map((entry) => ({
             ...entry,
@@ -480,7 +1019,10 @@ export default function CroissanceScreen() {
       },
       { waitForServer: true },
     );
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [activeChild?.id, refreshTick]);
 
   useEffect(() => {
@@ -488,13 +1030,18 @@ export default function CroissanceScreen() {
     setVisibleCount(PAGE_SIZE);
   }, [metric, entries]);
 
-  const visibleEntries = useMemo(
-    () => entries.slice(0, visibleCount),
-    [entries, visibleCount],
+  const filteredEntries = useMemo(
+    () => softDeletedIds.size === 0 ? entries : entries.filter((e) => !softDeletedIds.has(e.id)),
+    [entries, softDeletedIds],
   );
-  const hasMore = visibleCount < entries.length;
+  const visibleEntries = useMemo(
+    () => filteredEntries.slice(0, visibleCount),
+    [filteredEntries, visibleCount],
+  );
+  const hasMore = visibleCount < filteredEntries.length;
 
   const handleShowMore = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setVisibleCount((prev) => prev + PAGE_SIZE);
   }, []);
 
@@ -707,7 +1254,7 @@ export default function CroissanceScreen() {
   );
 
   const metricEntries = useMemo(() => {
-    return entries
+    return filteredEntries
       .map((entry) => ({
         date: toDate(entry.date),
         value:
@@ -719,7 +1266,7 @@ export default function CroissanceScreen() {
       }))
       .filter((entry) => typeof entry.value === "number")
       .sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [entries, metric]);
+  }, [filteredEntries, metric]);
 
   const birthDate = useMemo(
     () => parseBirthDate(activeChild?.birthDate),
@@ -991,9 +1538,7 @@ export default function CroissanceScreen() {
           </View>
 
           {loading ? (
-            <View style={styles.fullScreenLoading}>
-              <IconPulseDots color={palette.tint} />
-            </View>
+            <CroissanceSkeleton colorScheme={colorScheme} />
           ) : (
             <View style={styles.body}>
               <FlatList
@@ -1467,10 +2012,36 @@ export default function CroissanceScreen() {
                   </View>
                 }
                 ListEmptyComponent={
-                  <View style={styles.emptyState}>
-                    <Text style={[styles.emptyText, { color: palette.muted }]}>
-                      Aucune mesure pour le moment.
+                  <View style={styles.emptyContainer}>
+                    <View
+                      style={[
+                        styles.emptyIconWrapper,
+                        { backgroundColor: `${palette.green}15` },
+                      ]}
+                    >
+                      <FontAwesome
+                        name="seedling"
+                        size={36}
+                        color={palette.green}
+                      />
+                    </View>
+                    <Text style={[styles.emptyTitle, { color: palette.ink }]}>
+                      Aucune mesure enregistrée
                     </Text>
+                    <Text style={[styles.emptySubtitle, { color: palette.muted }]}>
+                      Suivez le poids, la taille et le périmètre crânien
+                    </Text>
+                    {canManageContent && (
+                      <Pressable
+                        style={[styles.emptyCta, { backgroundColor: palette.tint }]}
+                        onPress={openAddModal}
+                        accessibilityRole="button"
+                        accessibilityLabel="Ajouter une mesure"
+                      >
+                        <Ionicons name="add" size={20} color="#fff" />
+                        <Text style={styles.emptyCtaText}>Ajouter une mesure</Text>
+                      </Pressable>
+                    )}
                   </View>
                 }
                 ListFooterComponent={
@@ -1483,13 +2054,13 @@ export default function CroissanceScreen() {
                       onPress={handleShowMore}
                       activeOpacity={0.7}
                       accessibilityRole="button"
-                      accessibilityLabel={`Afficher ${Math.min(PAGE_SIZE, entries.length - visibleCount)} mesures supplémentaires`}
+                      accessibilityLabel={`Afficher ${Math.min(PAGE_SIZE, filteredEntries.length - visibleCount)} mesures supplémentaires`}
                     >
                       <Text
                         style={[styles.showMoreText, { color: palette.tint }]}
                       >
-                        Voir plus ({entries.length - visibleCount} restant
-                        {entries.length - visibleCount > 1 ? "s" : ""})
+                        Voir plus ({filteredEntries.length - visibleCount} restant
+                        {filteredEntries.length - visibleCount > 1 ? "s" : ""})
                       </Text>
                       <Ionicons
                         name="chevron-down"
@@ -1520,358 +2091,3 @@ export default function CroissanceScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  headerBlock: {
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "800",
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 13,
-  },
-  listContent: {
-    paddingBottom: 40,
-    gap: 12,
-  },
-  listWindow: {
-    flex: 1,
-    minHeight: 0,
-  },
-  body: {
-    flex: 1,
-    minHeight: 0,
-  },
-  chartCard: {
-    borderRadius: 18,
-    padding: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-    overflow: "visible",
-    zIndex: 10,
-  },
-  metricTabs: {
-    flexDirection: "row",
-    borderRadius: 12,
-    padding: 4,
-    gap: 6,
-    marginBottom: 12,
-  },
-  metricTabIndicator: {
-    position: "absolute",
-    top: 4,
-    bottom: 4,
-    borderRadius: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  metricTab: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
-    alignItems: "center",
-    zIndex: 1,
-  },
-  metricTabText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  metricsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 12,
-  },
-  metricLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  metricValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    marginTop: 6,
-  },
-  summaryCard: {
-    flex: 1,
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-  },
-  summaryLabel: {
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginTop: 6,
-  },
-  chartRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    position: "relative",
-    overflow: "visible",
-  },
-  yAxisColumn: {
-    position: "relative",
-    width: CHART_AXIS_WIDTH,
-    height: CHART_HEIGHT,
-  },
-  yAxisLabelWrap: {
-    position: "absolute",
-    left: 0,
-    width: CHART_AXIS_WIDTH - 6,
-    alignItems: "flex-end",
-  },
-  yAxisLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  chartWrapper: {
-    position: "relative",
-  },
-  chartScroll: {
-    flex: 1,
-  },
-  chartEmpty: {
-    alignItems: "center",
-    paddingVertical: 18,
-  },
-  emptyText: {
-    fontSize: 13,
-  },
-  tooltip: {
-    position: "absolute",
-    borderRadius: 10,
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.14,
-    shadowRadius: 6,
-    elevation: 6,
-    zIndex: 1000,
-    width: 90,
-    height: 54,
-  },
-  tooltipContent: {
-    padding: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tooltipTime: {
-    fontSize: 10,
-    fontWeight: "500",
-  },
-  tooltipValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    marginTop: 2,
-  },
-  tooltipArrow: {
-    position: "absolute",
-    bottom: -8,
-    left: "50%",
-    marginLeft: -8,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderTopWidth: 8,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-  },
-  itemRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    marginVertical: 7,
-  },
-  timelineColumn: {
-    width: 20,
-    alignItems: "center",
-  },
-  timeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    width: 42,
-    marginTop: 6,
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    marginTop: 6,
-  },
-  line: {
-    width: 2,
-    flex: 1,
-    marginTop: 4,
-  },
-  lineLast: {
-    backgroundColor: "transparent",
-  },
-  daySeparator: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 14,
-    gap: 12,
-  },
-  daySeparatorLine: {
-    flex: 1,
-    height: 1,
-  },
-  daySeparatorText: {
-    fontSize: 13,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  fullScreenLoading: {
-    alignItems: "center",
-    justifyContent: "center",
-    flex: 1,
-    paddingVertical: 32,
-  },
-  card: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  metricPillRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  metricPill: {
-    flexGrow: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  metricHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  emptyState: {
-    paddingVertical: 24,
-    alignItems: "center",
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingRight: 16,
-    gap: 0,
-  },
-  headerButton: {
-    paddingVertical: 8,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-  },
-  omsLegend: {
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-  },
-  omsLegendTitle: {
-    fontSize: 11,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  omsLegendRow: {
-    flexDirection: "row",
-    gap: 16,
-    flexWrap: "wrap",
-  },
-  omsLegendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  omsLegendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  omsLegendBox: {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
-  },
-  omsLegendText: {
-    fontSize: 11,
-    fontWeight: "500",
-  },
-  cardSwipeWrapper: {
-    flex: 1,
-  },
-  deleteAction: {
-    backgroundColor: "#ef4444",
-    justifyContent: "center",
-    alignItems: "center",
-    width: 80,
-    borderRadius: 14,
-    marginHorizontal: 4,
-    marginVertical: 7,
-    gap: 4,
-  },
-  deleteActionText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  showMoreButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 14,
-    marginTop: 4,
-    borderWidth: 1,
-    borderRadius: 14,
-    borderStyle: "dashed",
-  },
-  showMoreText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-});

@@ -1,7 +1,7 @@
 # Matrice des améliorations UX — Samaye
 
 > Suivi des améliorations UX appliquées aux 13 écrans tabs (8 sous-écrans + 5 tabs principaux).
-> Dernière mise à jour : 2026-03-14 (audit code réel v2)
+> Dernière mise à jour : 2026-03-14 (100% — tous gaps corrigés)
 
 ## Écrans concernés
 
@@ -35,19 +35,19 @@
 
 | ID | Amélioration | PU | DI | ME | SO | RO | GR | AC | MI | HO | CR | MO | CH | PL | Statut |
 |----|-------------|----|----|----|----|----|----|----|----|----|----|----|----|-----|--------|
-| P1 | Skeleton shimmer loading | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🔴 | 🔴 | ✅ | 🔴 | n/a | 9/12 |
-| P2 | LayoutAnimation expand/collapse par jour | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | 🔴 | n/a | 🔴 | n/a | 8/10 |
-| P3 | Enhanced empty state | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🔴 | 🔴 | n/a | ✅ | ✅ | 10/12 |
-| P4 | Date chip + clearDate | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | 🔴 | n/a | 8/9 |
-| P5 | Soft-delete + undo toast | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🔴 | 🔴 | n/a | 🔴 | n/a | 8/11 |
-| P6 | Toast on sheet success | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🔴 | 🔴 | 🔴 | 🔴 | n/a | 8/12 |
-| P7 | rangeEndDate init mount | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | 🔴 | n/a | 8/9 |
+| P1 | Skeleton shimmer loading | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | 12/12 |
+| P2 | LayoutAnimation expand/collapse par jour | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | n/a | ✅ | n/a | 10/10 |
+| P3 | Enhanced empty state | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | ✅ | 12/12 |
+| P4 | Date chip + clearDate | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | ✅ | n/a | 9/9 |
+| P5 | Soft-delete + undo toast | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | n/a | 11/11 |
+| P6 | Toast on sheet success | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | 12/12 |
+| P7 | rangeEndDate init mount | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | ✅ | n/a | 9/9 |
 | P8a | Conditional footer | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | n/a | ✅ | n/a | 10/10 |
 | P8b | Haptic feedback | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 13/13 |
 | P9a | Structured metrics (stats sous dayHeader) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | n/a | ✅ | n/a | 8/8 |
 | P9b | Pull-to-refresh | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 13/13 |
-| P10 | formatSelectedDateLabel | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | 🔴 | n/a | 8/9 |
-| P11 | Android LayoutAnimation enabler | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | 🔴 | n/a | 🔴 | n/a | 8/10 |
+| P10 | formatSelectedDateLabel | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | ✅ | n/a | 9/9 |
+| P11 | Android LayoutAnimation enabler | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | n/a | ✅ | n/a | 10/10 |
 | P12a | Swipe-to-delete | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | n/a | ✅ | n/a | 10/10 |
 | P12b | Error boundary | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 13/13 |
 | P13a | Delete confirm modal / soft delete | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | n/a | 11/11 |
@@ -61,14 +61,14 @@
 | P17b | Batch delete (SelectionToolbar) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | n/a | n/a | 8/8 |
 | P18a | Pagination / virtualisation | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | n/a | ✅ | n/a | 10/10 |
 | P19 | Offline queue (SQLite) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | 12/12 |
-| P20 | Race condition guards | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🔴 | ✅ | ✅ | ✅ | 12/13 |
+| P20 | Race condition guards | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 13/13 |
 | P22 | Realtime auto-refresh (onSnapshot) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 13/13 |
 | P23 | Header ellipsis menu (HeaderMenu) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | n/a | n/a | 8/8 |
 | P21 | Theme tokens (hardcoded colors) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 13/13 |
 | P24 | Batch delete confirm + undo | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | n/a | n/a | 8/8 |
 | P25 | Touch targets 44px (quick actions) | n/a | n/a | n/a | ✅ | n/a | n/a | n/a | n/a | n/a | ✅ | ✅ | n/a | n/a | 3/3 |
 | P26 | Swipe hint (peek animation) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | n/a | n/a | 8/8 |
-| P27 | Error retry toast (showActionToast) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🔴 | 🔴 | n/a | 🔴 | n/a | 8/11 |
+| P27 | Error retry toast (showActionToast) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | n/a | 11/11 |
 | P28 | Selection mode visual highlight | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | n/a | n/a | n/a | n/a | 8/8 |
 
 ## Légende
@@ -80,13 +80,7 @@
 
 ## Gaps identifiés (🔴)
 
-| Écran | Améliorations manquantes | Count |
-|-------|--------------------------|-------|
-| **HO** (Home) | P1 (skeleton), P3 (empty state), P5 (soft-delete+undo), P6 (toast sheet), P27 (error retry) | 5 |
-| **CR** (Croissance) | P1 (skeleton), P2 (LayoutAnimation), P3 (empty state), P5 (soft-delete+undo), P6 (toast sheet), P11 (Android LA), P20 (race guards), P27 (error retry) | 8 |
-| **MO** (Moments) | P6 (toast sheet) | 1 |
-| **CH** (Chrono) | P1 (skeleton), P2 (LayoutAnimation), P4 (date chip), P5 (soft-delete+undo), P6 (toast sheet), P7 (rangeEndDate), P10 (formatDateLabel), P11 (Android LA), P27 (error retry) | 9 |
-| **PL** (Plus/Stats) | — | 0 |
+Aucun gap restant — tous les écrans sont à 100%.
 
 ## Composants partagés créés
 
@@ -99,4 +93,4 @@
 
 ## Score
 
-**278/301 applicables déployés** (92%) — 23 gaps restants sur 4 tabs principaux (HO, CR, MO, CH)
+**301/301 applicables déployés** (100%) — 0 gaps restants
