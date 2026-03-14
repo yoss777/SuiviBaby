@@ -14,6 +14,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   supprimerTemperature,
   supprimerMedicament,
@@ -284,7 +285,8 @@ export default function SoinsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { swipeableRef, triggerHint } = useSwipeHint();
   const navigation = useNavigation();
   const headerOwnerId = useRef(`soins-${Math.random().toString(36).slice(2)}`);
   const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId, selectAll, clearSelection } = useBatchSelect();
@@ -1046,14 +1048,14 @@ export default function SoinsScreen() {
       },
       // onExpire — actually delete from Firestore
       async () => {
+        const supprimerMap: Record<HealthType, (childId: string, id: string) => Promise<void>> = {
+          temperature: supprimerTemperature,
+          medicament: supprimerMedicament,
+          symptome: supprimerSymptome,
+          vaccin: supprimerVaccin,
+          vitamine: supprimerVitamine,
+        };
         try {
-          const supprimerMap: Record<HealthType, (childId: string, id: string) => Promise<void>> = {
-            temperature: supprimerTemperature,
-            medicament: supprimerMedicament,
-            symptome: supprimerSymptome,
-            vaccin: supprimerVaccin,
-            vitamine: supprimerVitamine,
-          };
           await supprimerMap[eventType](childId, eventId);
         } catch {
           // Restore if delete fails
@@ -1062,12 +1064,20 @@ export default function SoinsScreen() {
             next.delete(eventId);
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            supprimerMap[eventType](childId, eventId).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                supprimerMap[eventType](childId, eventId).catch(() => {
+                  showToast("Échec de la suppression");
+                });
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast, showToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -1114,22 +1124,38 @@ export default function SoinsScreen() {
             ids.forEach((id) => next.delete(id));
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            Promise.all(ids.map((id) => supprimerEvenement(childId, id))).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                Promise.all(ids.map((id) => supprimerEvenement(childId, id))).catch(() => {
+                  showToast("Échec de la suppression");
+                });
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showToast]);
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showActionToast, showToast]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });
   }, []);
 
-  const renderEventItem = useCallback((event: HealthEvent) => {
+  // Swipe hint: trigger on first load when data is available
+  useEffect(() => {
+    if (Object.values(loaded).every(Boolean) && groupedEvents.length > 0) {
+      triggerHint();
+    }
+  }, [loaded, groupedEvents.length, triggerHint]);
+
+  const renderEventItem = useCallback((event: HealthEvent, isFirstInList: boolean = false) => {
     const time = toDate(event.date);
     const config = TYPE_CONFIG[event.type];
     return (
       <ReanimatedSwipeable
+        ref={isFirstInList ? swipeableRef : undefined}
         key={event.id}
         friction={2}
         rightThreshold={40}
@@ -1141,8 +1167,20 @@ export default function SoinsScreen() {
           accessibilityLabel="Modifier cet événement"
           style={({ pressed }) => [
             styles.sessionCard,
-            { backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard },
+            {
+              backgroundColor: pressed
+                ? nc.backgroundPressed
+                : selectionMode && selectedIds.has(event.id)
+                  ? Colors[colorScheme ?? "light"].tint + "15"
+                  : nc.backgroundCard,
+            },
             { borderColor: nc.borderLight },
+            {
+              borderLeftWidth: selectionMode && selectedIds.has(event.id) ? 3 : 0,
+              borderLeftColor: selectionMode && selectedIds.has(event.id)
+                ? Colors[colorScheme ?? "light"].tint
+                : "transparent",
+            },
           ]}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
         >
@@ -1179,9 +1217,9 @@ export default function SoinsScreen() {
         </Pressable>
       </ReanimatedSwipeable>
     );
-  }, [nc, openEditModal, buildDetails, handleEventDelete, selectionMode, selectedIds, toggleId, colorScheme]);
+  }, [nc, openEditModal, buildDetails, handleEventDelete, selectionMode, selectedIds, toggleId, colorScheme, swipeableRef]);
 
-  const renderDayGroup = useCallback(({ item }: { item: HealthGroup }) => {
+  const renderDayGroup = useCallback(({ item, index }: { item: HealthGroup; index: number }) => {
     const [year, month, day] = item.date.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     const today = new Date();
@@ -1237,13 +1275,13 @@ export default function SoinsScreen() {
         </View>
 
         <View style={styles.sessionsContainer}>
-          {renderEventItem(item.lastEvent)}
+          {renderEventItem(item.lastEvent, index === 0)}
           {hasMultiple && (
             <>
               {isExpanded &&
                 item.events
                   .filter((evt) => evt.id !== item.lastEvent.id)
-                  .map((evt) => renderEventItem(evt))}
+                  .map((evt) => renderEventItem(evt, false))}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={isExpanded ? "Masquer les événements" : `Voir ${item.events.length - 1} autre${item.events.length > 2 ? "s" : ""} événement${item.events.length > 2 ? "s" : ""}`}

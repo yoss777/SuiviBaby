@@ -13,6 +13,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   ecouterCroissancesHybrid,
   getNextEventDateBeforeHybrid,
@@ -216,7 +217,8 @@ export default function GrowthScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { swipeableRef, triggerHint } = useSwipeHint();
   const navigation = useNavigation();
   const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId, selectAll, clearSelection } = useBatchSelect();
   const headerOwnerId = useRef(`growth-${Math.random().toString(36).slice(2)}`);
@@ -623,6 +625,13 @@ export default function GrowthScreen() {
     return () => clearTimeout(timer);
   }, [loaded, groupedEvents.length]);
 
+  // Swipe hint: trigger on first load when data is available
+  useEffect(() => {
+    if (loaded.croissance && events.length > 0) {
+      triggerHint();
+    }
+  }, [loaded.croissance, events.length, triggerHint]);
+
   useEffect(() => {
     if (!activeChild?.id) return;
     let cancelled = false;
@@ -1010,12 +1019,18 @@ export default function GrowthScreen() {
             next.delete(eventId);
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            supprimerCroissance(childId, eventId).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                supprimerCroissance(childId, eventId);
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1058,12 +1073,18 @@ export default function GrowthScreen() {
             ids.forEach((id) => next.delete(id));
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            Promise.all(ids.map((id) => supprimerCroissance(childId, id))).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                Promise.all(ids.map((id) => supprimerCroissance(childId, id)));
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showToast]);
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showActionToast]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });
@@ -1073,12 +1094,13 @@ export default function GrowthScreen() {
     setDeleteConfirm({ visible: false, event: null });
   }, []);
 
-  const renderEventItem = (event: GrowthEventWithId, isLast = false) => {
+  const renderEventItem = (event: GrowthEventWithId, isLast = false, isFirstInList = false) => {
     const time = toDate(event.date);
     const parts = buildDetailParts(event);
     const deltas = deltaMap.get(event.id) ?? null;
     return (
       <ReanimatedSwipeable
+        ref={isFirstInList ? swipeableRef : undefined}
         key={event.id}
         renderRightActions={() => (
           <DeleteAction onPress={() => handleEventDelete(event)} />
@@ -1088,13 +1110,24 @@ export default function GrowthScreen() {
         overshootRight={false}
       >
         <Pressable
-          style={({ pressed }) => [
-            styles.sessionCard,
-            {
-              borderColor: nc.borderLight,
-              backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
-            },
-          ]}
+          style={({ pressed }) => {
+            const isSelected = selectionMode && selectedIds.has(event.id);
+            return [
+              styles.sessionCard,
+              {
+                borderColor: nc.borderLight,
+                backgroundColor: pressed
+                  ? nc.backgroundPressed
+                  : isSelected
+                    ? Colors[colorScheme ?? "light"].tint + "15"
+                    : nc.backgroundCard,
+                borderLeftWidth: isSelected ? 3 : 0,
+                borderLeftColor: isSelected
+                  ? Colors[colorScheme ?? "light"].tint
+                  : "transparent",
+              },
+            ];
+          }}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
           accessibilityRole="button"
           accessibilityLabel="Modifier cette mesure"
@@ -1210,7 +1243,7 @@ export default function GrowthScreen() {
     );
   };
 
-  const renderDayGroup = ({ item }: { item: GrowthGroup }) => {
+  const renderDayGroup = ({ item, index }: { item: GrowthGroup; index: number }) => {
     const [year, month, day] = item.date.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     const today = new Date();
@@ -1264,7 +1297,7 @@ export default function GrowthScreen() {
         </View>
         <View style={styles.dayContent}>
           <View style={styles.sessionsContainer}>
-            {renderEventItem(item.lastEvent, true)}
+            {renderEventItem(item.lastEvent, true, index === 0)}
             {item.events.length > 1 &&
               isExpanded &&
               item.events

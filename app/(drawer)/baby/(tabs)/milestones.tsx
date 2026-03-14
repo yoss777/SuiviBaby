@@ -15,6 +15,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterJalonsHybrid,
@@ -281,7 +282,8 @@ export default function MilestonesScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { swipeableRef, triggerHint } = useSwipeHint();
   const navigation = useNavigation();
   const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId, selectAll, clearSelection } = useBatchSelect();
   const headerOwnerId = useRef(
@@ -650,6 +652,12 @@ export default function MilestonesScreen() {
     return () => clearTimeout(timer);
   }, [loaded.jalons, groupedEvents.length]);
 
+  useEffect(() => {
+    if (loaded.jalons && groupedEvents.length > 0) {
+      triggerHint();
+    }
+  }, [loaded.jalons, groupedEvents.length, triggerHint]);
+
   // ============================================
   // FILTERS
   // ============================================
@@ -959,7 +967,7 @@ export default function MilestonesScreen() {
   // ============================================
   // RENDER HELPERS
   // ============================================
-  const renderEventItem = (event: MilestoneEventWithId, isLast = false) => {
+  const renderEventItem = (event: MilestoneEventWithId, isLast = false, isFirstInList = false) => {
     const config = TYPE_CONFIG[event.typeJalon];
     const date = toDate(event.date);
     const moodEmoji =
@@ -973,6 +981,7 @@ export default function MilestonesScreen() {
     return (
       <ReanimatedSwipeable
         key={event.id}
+        ref={isFirstInList ? swipeableRef : undefined}
         renderRightActions={() => (
           <DeleteAction onPress={() => handleEventDelete(event)} colorScheme={colorScheme} />
         )}
@@ -981,13 +990,24 @@ export default function MilestonesScreen() {
         overshootRight={false}
       >
         <Pressable
-          style={({ pressed }) => [
-            styles.sessionCard,
-            {
-              borderColor: nc.borderLight,
-              backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
-            },
-          ]}
+          style={({ pressed }) => {
+            const isSelected = selectionMode && selectedIds.has(event.id);
+            return [
+              styles.sessionCard,
+              {
+                borderColor: nc.borderLight,
+                backgroundColor: pressed
+                  ? nc.backgroundPressed
+                  : isSelected
+                    ? Colors[colorScheme ?? "light"].tint + "15"
+                    : nc.backgroundCard,
+                borderLeftWidth: isSelected ? 3 : 0,
+                borderLeftColor: isSelected
+                  ? Colors[colorScheme ?? "light"].tint
+                  : "transparent",
+              },
+            ];
+          }}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
           accessibilityRole="button"
           accessibilityLabel="Modifier ce jalon"
@@ -1113,11 +1133,17 @@ export default function MilestonesScreen() {
             ids.forEach((id) => next.delete(id));
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            Promise.all(ids.map((id) => supprimerJalon(childId, id))).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                Promise.all(ids.map((id) => supprimerJalon(childId, id)));
+              });
+            });
+          });
         }
       }
     );
-  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showToast]);
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showActionToast]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });
@@ -1153,18 +1179,24 @@ export default function MilestonesScreen() {
             next.delete(eventId);
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            supprimerJalon(childId, eventId).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                supprimerJalon(childId, eventId);
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
   }, []);
 
-  const renderDayGroup = ({ item }: { item: MilestoneGroup }) => {
+  const renderDayGroup = ({ item, index }: { item: MilestoneGroup; index: number }) => {
     const [year, month, day] = item.date.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     const today = new Date();
@@ -1223,7 +1255,7 @@ export default function MilestonesScreen() {
 
         <View style={styles.dayContent}>
           <View style={styles.sessionsContainer}>
-            {renderEventItem(item.lastEvent, true)}
+            {renderEventItem(item.lastEvent, true, index === 0)}
             {item.events.length > 1 &&
               isExpanded &&
               item.events

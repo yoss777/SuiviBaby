@@ -20,6 +20,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
   ecouterSolidesHybrid as ecouterSolides,
@@ -232,7 +233,8 @@ export default function MealsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast } = useToast();
+  const { showUndoToast, showActionToast } = useToast();
+  const { swipeableRef, triggerHint } = useSwipeHint();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
@@ -659,6 +661,13 @@ export default function MealsScreen() {
     return () => clearTimeout(timer);
   }, [mealsLoaded, groupedMeals.length]);
 
+  // Swipe hint: trigger on first load when data is available
+  useEffect(() => {
+    if (!isMealsLoading && groupedMeals.length > 0) {
+      triggerHint();
+    }
+  }, [isMealsLoading, groupedMeals.length, triggerHint]);
+
   const loadMoreStep = useCallback(
     async (auto = false) => {
       if (!hasMore || !activeChild?.id) return;
@@ -1055,12 +1064,18 @@ export default function MealsScreen() {
             next.delete(mealId);
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            supprimerEvenement(childId, mealId).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                supprimerEvenement(childId, mealId);
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, deleteConfirm.meal, showUndoToast, showToast]);
+  }, [activeChild?.id, deleteConfirm.meal, showUndoToast, showActionToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, meal: null });
@@ -1106,12 +1121,18 @@ export default function MealsScreen() {
             ids.forEach((id) => next.delete(id));
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            Promise.all(ids.map((id) => supprimerEvenement(childId, id))).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showToast]);
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showActionToast]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });
@@ -1121,7 +1142,7 @@ export default function MealsScreen() {
   // RENDER - MEAL ITEM
   // ============================================
 
-  const renderMealItem = useCallback((meal: Meal, isLatest: boolean = false) => {
+  const renderMealItem = useCallback((meal: Meal, isLatest: boolean = false, isFirstInList: boolean = false) => {
     const mealTime = new Date(meal.date?.seconds * 1000);
     const isTetee = meal.type === "tetee";
     const isBiberon = meal.type === "biberon";
@@ -1165,6 +1186,7 @@ export default function MealsScreen() {
     return (
       <ReanimatedSwipeable
         key={meal.id}
+        ref={isFirstInList ? swipeableRef : undefined}
         renderRightActions={
           canManageContent && meal.id
             ? () => <DeleteAction onPress={() => handleMealDelete(meal)} />
@@ -1178,14 +1200,25 @@ export default function MealsScreen() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Modifier ce repas"
-        style={({ pressed }) => [
-          styles.sessionCard,
-          {
-            borderColor: nc.borderLight,
-            backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
-            shadowColor: nc.shadow,
-          },
-        ]}
+        style={({ pressed }) => {
+          const isSelected = selectionMode && selectedIds.has(meal.id);
+          return [
+            styles.sessionCard,
+            {
+              borderColor: nc.borderLight,
+              backgroundColor: pressed
+                ? nc.backgroundPressed
+                : isSelected
+                ? Colors[colorScheme ?? "light"].tint + "15"
+                : nc.backgroundCard,
+              shadowColor: nc.shadow,
+              borderLeftWidth: isSelected ? 3 : 0,
+              borderLeftColor: isSelected
+                ? Colors[colorScheme ?? "light"].tint
+                : "transparent",
+            },
+          ];
+        }}
         onPress={selectionMode ? () => toggleId(meal.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(meal); }}
       >
         {selectionMode && (
@@ -1347,13 +1380,13 @@ export default function MealsScreen() {
       </Pressable>
       </ReanimatedSwipeable>
     );
-  }, [nc, canManageContent, handleMealDelete, openEditModal, selectionMode, selectedIds, toggleId, colorScheme]);
+  }, [nc, canManageContent, handleMealDelete, openEditModal, selectionMode, selectedIds, toggleId, colorScheme, swipeableRef]);
 
   // ============================================
   // RENDER - DAY GROUP
   // ============================================
 
-  const renderDayGroup = useCallback(({ item }: { item: MealGroup }) => {
+  const renderDayGroup = useCallback(({ item, index }: { item: MealGroup; index: number }) => {
     const isExpanded = expandedDays.has(item.date);
     const hasMultipleMeals = item.meals.length > 1;
     const teteesCount = item.meals.filter((m) => m.type === "tetee").length;
@@ -1449,7 +1482,7 @@ export default function MealsScreen() {
 
         {/* Sessions list */}
         <View style={styles.sessionsContainer}>
-          {renderMealItem(item.lastMeal, true)}
+          {renderMealItem(item.lastMeal, true, index === 0)}
 
           {hasMultipleMeals && (
             <>

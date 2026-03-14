@@ -13,6 +13,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { modifierSommeil, supprimerSommeil, supprimerBain } from "@/migration/eventsDoubleWriteService";
 import {
   ecouterBainsHybrid,
@@ -248,7 +249,8 @@ export default function RoutinesScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { swipeableRef, triggerHint } = useSwipeHint();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
     `routines-${Math.random().toString(36).slice(2)}`,
@@ -582,6 +584,13 @@ export default function RoutinesScreen() {
     const timer = setTimeout(() => setEmptyDelayDone(true), 300);
     return () => clearTimeout(timer);
   }, [loaded, groupedEvents.length]);
+
+  // Swipe hint: trigger on first load when data is available
+  useEffect(() => {
+    if (Object.values(loaded).every(Boolean) && events.length > 0) {
+      triggerHint();
+    }
+  }, [loaded, events.length, triggerHint]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -934,12 +943,21 @@ export default function RoutinesScreen() {
             next.delete(eventId);
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          const retryDelete = eventType === "sommeil"
+            ? () => supprimerSommeil(childId, eventId)
+            : () => supprimerBain(childId, eventId);
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            retryDelete().catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                retryDelete();
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -980,12 +998,18 @@ export default function RoutinesScreen() {
             ids.forEach((id) => next.delete(id));
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            Promise.all(ids.map((id) => supprimerEvenement(childId, id))).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showToast]);
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showActionToast]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });
@@ -1154,7 +1178,7 @@ export default function RoutinesScreen() {
     setBatchDeleteConfirm({ visible: true, ids });
   }, [activeChild?.id, selectedIds, selectedCount]);
 
-  const renderEventItem = useCallback((event: RoutineEvent, isLast = false) => {
+  const renderEventItem = useCallback((event: RoutineEvent, isLast = false, isFirstInList = false) => {
     const time = toDate(event.date);
     const config = TYPE_CONFIG[event.type as RoutineType];
     const isSleep = event.type === "sommeil";
@@ -1183,6 +1207,7 @@ export default function RoutinesScreen() {
             : 0;
     return (
       <ReanimatedSwipeable
+        ref={isFirstInList ? swipeableRef : undefined}
         key={event.id}
         renderRightActions={() => (
           <DeleteAction onPress={() => handleEventDelete(event)} colorScheme={colorScheme} />
@@ -1194,14 +1219,25 @@ export default function RoutinesScreen() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Modifier cet événement"
-        style={({ pressed }) => [
-          styles.sessionCard,
-          {
-            borderColor: nc.borderLight,
-            backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
-            shadowColor: nc.shadow,
-          },
-        ]}
+        style={({ pressed }) => {
+          const isSelected = selectionMode && selectedIds.has(event.id);
+          return [
+            styles.sessionCard,
+            {
+              borderColor: nc.borderLight,
+              backgroundColor: pressed
+                ? nc.backgroundPressed
+                : isSelected
+                  ? Colors[colorScheme ?? "light"].tint + "15"
+                  : nc.backgroundCard,
+              shadowColor: nc.shadow,
+              borderLeftWidth: isSelected ? 3 : 0,
+              borderLeftColor: isSelected
+                ? Colors[colorScheme ?? "light"].tint
+                : "transparent",
+            },
+          ];
+        }}
         onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
       >
         {selectionMode && (
@@ -1316,9 +1352,9 @@ export default function RoutinesScreen() {
       </Pressable>
       </ReanimatedSwipeable>
     );
-  }, [nc, openEditModal, handleEventDelete, buildDetails, now, selectionMode, selectedIds, toggleId, colorScheme]);
+  }, [nc, openEditModal, handleEventDelete, buildDetails, now, selectionMode, selectedIds, toggleId, colorScheme, swipeableRef]);
 
-  const renderDayGroup = useCallback(({ item }: { item: RoutineGroup }) => {
+  const renderDayGroup = useCallback(({ item, index }: { item: RoutineGroup; index: number }) => {
     const [year, month, day] = item.date.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     const today = new Date();
@@ -1403,7 +1439,7 @@ export default function RoutinesScreen() {
           )}
         </View>
         <View style={styles.sessionsContainer}>
-          {renderEventItem(item.lastEvent, true)}
+          {renderEventItem(item.lastEvent, true, index === 0)}
           {item.events.length > 1 &&
             isExpanded &&
             item.events

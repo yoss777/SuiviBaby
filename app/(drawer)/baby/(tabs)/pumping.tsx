@@ -14,6 +14,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { supprimerPompage } from "@/migration/eventsDoubleWriteService";
 import {
   ecouterPompagesHybrid as ecouterPompages,
@@ -205,7 +206,8 @@ export default function PumpingScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { swipeableRef, triggerHint } = useSwipeHint();
   const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId, selectAll, clearSelection } = useBatchSelect();
   const headerOwnerId = useRef(
     `pumping-${Math.random().toString(36).slice(2)}`,
@@ -568,6 +570,13 @@ export default function PumpingScreen() {
     return () => clearTimeout(timer);
   }, [pompagesLoaded, groupedPompages.length]);
 
+  // Swipe hint: trigger on first load when data is available
+  useEffect(() => {
+    if (pompagesLoaded && pompages.length > 0) {
+      triggerHint();
+    }
+  }, [pompagesLoaded, pompages.length, triggerHint]);
+
   const loadMoreStep = useCallback(
     async (auto = false) => {
       if (!hasMore || !activeChild?.id) return;
@@ -916,12 +925,18 @@ export default function PumpingScreen() {
             next.delete(pompageId);
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            supprimerPompage(childId, pompageId).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                supprimerPompage(childId, pompageId);
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, deleteConfirm.pompage, showUndoToast, showToast]);
+  }, [activeChild?.id, deleteConfirm.pompage, showUndoToast, showActionToast]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -963,12 +978,18 @@ export default function PumpingScreen() {
             ids.forEach((id) => next.delete(id));
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            Promise.all(ids.map((id) => supprimerPompage(childId, id))).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                Promise.all(ids.map((id) => supprimerPompage(childId, id)));
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [batchDeleteConfirm.ids, activeChild?.id, exitSelectionMode, showUndoToast, showToast]);
+  }, [batchDeleteConfirm.ids, activeChild?.id, exitSelectionMode, showUndoToast, showActionToast]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });
@@ -1029,13 +1050,14 @@ export default function PumpingScreen() {
   // RENDER - POMPAGE ITEM
   // ============================================
 
-  const renderPompageItem = useCallback((pompage: Pompage, isLatest: boolean = false) => {
+  const renderPompageItem = useCallback((pompage: Pompage, isLatest: boolean = false, isFirstInList: boolean = false) => {
     const totalQty =
       (pompage.quantiteGauche || 0) + (pompage.quantiteDroite || 0);
     const pompageTime = new Date(pompage.date?.seconds * 1000);
 
     return (
       <ReanimatedSwipeable
+        ref={isFirstInList ? swipeableRef : undefined}
         key={pompage.id}
         renderRightActions={() => (
           <DeleteAction onPress={() => handlePompageDelete(pompage)} />
@@ -1051,7 +1073,13 @@ export default function PumpingScreen() {
           styles.sessionCard,
           {
             borderColor: nc.borderLight,
-            backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
+            backgroundColor: pressed
+              ? nc.backgroundPressed
+              : selectionMode && selectedIds.has(pompage.id)
+                ? Colors[colorScheme ?? "light"].tint + "15"
+                : nc.backgroundCard,
+            borderLeftWidth: selectionMode && selectedIds.has(pompage.id) ? 3 : 0,
+            borderLeftColor: selectionMode && selectedIds.has(pompage.id) ? Colors[colorScheme ?? "light"].tint : "transparent",
           },
         ]}
         onPress={selectionMode ? () => toggleId(pompage.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(pompage); }}
@@ -1130,13 +1158,13 @@ export default function PumpingScreen() {
       </Pressable>
       </ReanimatedSwipeable>
     );
-  }, [nc, openEditModal, handlePompageDelete, selectionMode, selectedIds, toggleId, colorScheme]);
+  }, [nc, openEditModal, handlePompageDelete, selectionMode, selectedIds, toggleId, colorScheme, swipeableRef]);
 
   // ============================================
   // RENDER - DAY GROUP
   // ============================================
 
-  const renderDayGroup = useCallback(({ item }: { item: PompageGroup }) => {
+  const renderDayGroup = useCallback(({ item, index }: { item: PompageGroup; index: number }) => {
     const isExpanded = expandedDays.has(item.date);
     const hasMultiplePompages = item.pompages.length > 1;
 
@@ -1204,7 +1232,7 @@ export default function PumpingScreen() {
 
         {/* Sessions list */}
         <View style={styles.sessionsContainer}>
-          {renderPompageItem(item.lastPompage, true)}
+          {renderPompageItem(item.lastPompage, true, index === 0)}
 
           {hasMultiplePompages && (
             <>

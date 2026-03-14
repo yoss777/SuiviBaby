@@ -13,6 +13,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterActivitesHybrid,
@@ -278,7 +279,8 @@ export default function ActivitiesScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { swipeableRef, triggerHint } = useSwipeHint();
   const navigation = useNavigation();
   const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId, selectAll, clearSelection } = useBatchSelect();
   const headerOwnerId = useRef(
@@ -613,6 +615,13 @@ export default function ActivitiesScreen() {
     const timer = setTimeout(() => setEmptyDelayDone(true), 300);
     return () => clearTimeout(timer);
   }, [loaded, groupedEvents.length]);
+
+  // Swipe hint: trigger on first load when data is available
+  useEffect(() => {
+    if (Object.values(loaded).every(Boolean) && groupedEvents.length > 0) {
+      triggerHint();
+    }
+  }, [loaded, groupedEvents.length, triggerHint]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -979,12 +988,18 @@ export default function ActivitiesScreen() {
             next.delete(eventId);
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            supprimerActivite(childId, eventId).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                supprimerActivite(childId, eventId);
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showToast]);
+  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1027,12 +1042,18 @@ export default function ActivitiesScreen() {
             ids.forEach((id) => next.delete(id));
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            Promise.all(ids.map((id) => supprimerActivite(childId, id))).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                Promise.all(ids.map((id) => supprimerActivite(childId, id)));
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showToast]);
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showActionToast]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });
@@ -1042,12 +1063,13 @@ export default function ActivitiesScreen() {
     setDeleteConfirm({ visible: false, event: null });
   }, []);
 
-  const renderEventItem = (event: ActivityEventWithId, isLast = false) => {
+  const renderEventItem = (event: ActivityEventWithId, isLast = false, isFirstInList = false) => {
     const time = toDate(event.date);
     const config = TYPE_CONFIG[event.typeActivite as ActiviteType];
     return (
       <ReanimatedSwipeable
         key={event.id}
+        ref={isFirstInList ? swipeableRef : undefined}
         renderRightActions={() => (
           <DeleteAction onPress={() => handleEventDelete(event)} colorScheme={colorScheme} />
         )}
@@ -1056,14 +1078,25 @@ export default function ActivitiesScreen() {
         overshootRight={false}
       >
         <Pressable
-          style={({ pressed }) => [
-            styles.sessionCard,
-            {
-              borderColor: nc.borderLight,
-              backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
-              shadowColor: nc.shadow,
-            },
-          ]}
+          style={({ pressed }) => {
+            const isSelected = selectionMode && selectedIds.has(event.id);
+            return [
+              styles.sessionCard,
+              {
+                borderColor: nc.borderLight,
+                backgroundColor: pressed
+                  ? nc.backgroundPressed
+                  : isSelected
+                    ? Colors[colorScheme ?? "light"].tint + "15"
+                    : nc.backgroundCard,
+                shadowColor: nc.shadow,
+                borderLeftWidth: isSelected ? 3 : 0,
+                borderLeftColor: isSelected
+                  ? Colors[colorScheme ?? "light"].tint
+                  : "transparent",
+              },
+            ];
+          }}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
           accessibilityRole="button"
           accessibilityLabel="Modifier cette activité"
@@ -1135,7 +1168,7 @@ export default function ActivitiesScreen() {
     );
   };
 
-  const renderDayGroup = ({ item }: { item: ActivityGroup }) => {
+  const renderDayGroup = ({ item, index }: { item: ActivityGroup; index: number }) => {
     const [year, month, day] = item.date.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     const today = new Date();
@@ -1191,7 +1224,7 @@ export default function ActivitiesScreen() {
         </View>
         <View style={styles.dayContent}>
           <View style={styles.sessionsContainer}>
-            {renderEventItem(item.lastEvent, true)}
+            {renderEventItem(item.lastEvent, true, index === 0)}
             {item.events.length > 1 &&
               isExpanded &&
               item.events

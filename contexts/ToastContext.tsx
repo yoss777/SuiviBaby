@@ -20,12 +20,19 @@ type ToastContextValue = {
     onExpire?: () => void,
     durationMs?: number
   ) => void;
+  showActionToast: (
+    message: string,
+    actionLabel: string,
+    onAction: () => void,
+    durationMs?: number
+  ) => void;
   dismissToast: () => void;
 };
 
 const ToastContext = createContext<ToastContextValue>({
   showToast: () => {},
   showUndoToast: () => {},
+  showActionToast: () => {},
   dismissToast: () => {},
 });
 
@@ -93,8 +100,30 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }, durationMs);
   }, [clearTimer]);
 
+  const showActionToast = useCallback(
+    (text: string, actionLabel: string, onAction: () => void, durationMs = 4000) => {
+    onExpireRef.current = null;
+    setMessage(text);
+    setAction({
+      label: actionLabel,
+      onPress: () => {
+        clearTimer();
+        onAction();
+        setMessage(null);
+        setAction(null);
+      },
+    });
+    setPosition("bottom");
+    clearTimer();
+    timeoutRef.current = setTimeout(() => {
+      setMessage(null);
+      setAction(null);
+      timeoutRef.current = null;
+    }, durationMs);
+  }, [clearTimer]);
+
   return (
-    <ToastContext.Provider value={{ showToast, showUndoToast, dismissToast: dismiss }}>
+    <ToastContext.Provider value={{ showToast, showUndoToast, showActionToast, dismissToast: dismiss }}>
       {children}
       {message && (
         <Portal>

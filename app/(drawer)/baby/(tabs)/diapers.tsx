@@ -20,6 +20,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   supprimerMiction,
   supprimerSelle,
@@ -292,7 +293,8 @@ export default function DiapersScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { swipeableRef, triggerHint } = useSwipeHint();
   const headerOwnerId = useRef(
     `diapers-${Math.random().toString(36).slice(2)}`
   );
@@ -734,6 +736,13 @@ export default function DiapersScreen() {
 
   const isExcretionsLoading = !(mictionsLoaded && sellesLoaded);
 
+  // Swipe hint: trigger on first load when data is available
+  useEffect(() => {
+    if (!isExcretionsLoading && excretions.length > 0) {
+      triggerHint();
+    }
+  }, [isExcretionsLoading, excretions.length, triggerHint]);
+
   useEffect(() => {
     if (isExcretionsLoading) {
       setEmptyDelayDone(false);
@@ -1040,12 +1049,19 @@ export default function DiapersScreen() {
             next.delete(id);
             return next;
           });
-          showToast("Erreur lors de la suppression");
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            const deleteFn = type === "selle" ? supprimerSelle : supprimerMiction;
+            deleteFn(childId, id).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                deleteFn(childId, id);
+              });
+            });
+          });
         }
       },
       4000,
     );
-  }, [activeChild?.id, deleteConfirm.excretion, showUndoToast, showToast]);
+  }, [activeChild?.id, deleteConfirm.excretion, showUndoToast, showActionToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, excretion: null });
@@ -1068,9 +1084,18 @@ export default function DiapersScreen() {
       () => { setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; }); },
       async () => {
         try { await Promise.all(ids.map((id) => supprimerEvenement(childId, id))); }
-        catch { setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; }); showToast("Erreur lors de la suppression"); }
+        catch {
+          setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; });
+          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+            Promise.all(ids.map((id) => supprimerEvenement(childId, id))).catch(() => {
+              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
+                Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
+              });
+            });
+          });
+        }
       }, 4000);
-  }, [batchDeleteConfirm.ids, activeChild?.id, exitSelectionMode, showUndoToast, showToast]);
+  }, [batchDeleteConfirm.ids, activeChild?.id, exitSelectionMode, showUndoToast, showActionToast]);
 
   const cancelBatchDelete = useCallback(() => { setBatchDeleteConfirm({ visible: false, ids: [] }); }, []);
 
@@ -1079,7 +1104,7 @@ export default function DiapersScreen() {
   // ============================================
 
   const renderExcretionItem = useCallback(
-    (excretion: Excretion, isLast: boolean = false) => {
+    (excretion: Excretion, isLast: boolean = false, isFirstInList: boolean = false) => {
       const typeLabel = getExcretionTypeLabel(excretion.type);
       const color = getExcretionColor(excretion.type);
       const excretionTime = new Date(excretion.date?.seconds * 1000);
@@ -1122,6 +1147,7 @@ export default function DiapersScreen() {
 
       return (
         <ReanimatedSwipeable
+          ref={isFirstInList ? swipeableRef : undefined}
           key={excretion.id}
           renderRightActions={() => (
             <DeleteAction onPress={() => handleExcretionDelete(excretion)} errorColor={nc.error} whiteColor={nc.white} />
@@ -1137,8 +1163,16 @@ export default function DiapersScreen() {
               styles.sessionCard,
               {
                 borderColor: nc.borderLight,
-                backgroundColor: pressed ? nc.backgroundPressed : nc.backgroundCard,
+                backgroundColor: pressed
+                  ? nc.backgroundPressed
+                  : selectionMode && selectedIds.has(excretion.id)
+                    ? Colors[colorScheme ?? "light"].tint + "15"
+                    : nc.backgroundCard,
                 shadowColor: nc.shadow,
+                borderLeftWidth: selectionMode && selectedIds.has(excretion.id) ? 3 : 0,
+                borderLeftColor: selectionMode && selectedIds.has(excretion.id)
+                  ? Colors[colorScheme ?? "light"].tint
+                  : "transparent",
               },
             ]}
             onPress={selectionMode ? () => toggleId(excretion.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(excretion); }}
@@ -1202,7 +1236,7 @@ export default function DiapersScreen() {
         </ReanimatedSwipeable>
       );
     },
-    [nc, openEditModal, handleExcretionDelete, selectionMode, selectedIds, toggleId, colorScheme]
+    [nc, openEditModal, handleExcretionDelete, selectionMode, selectedIds, toggleId, colorScheme, swipeableRef]
   );
 
   // ============================================
@@ -1210,7 +1244,7 @@ export default function DiapersScreen() {
   // ============================================
 
   const renderDayGroup = useCallback(
-    ({ item }: { item: ExcretionGroup }) => {
+    ({ item, index }: { item: ExcretionGroup; index: number }) => {
       const isExpanded = expandedDays.has(item.date);
       const hasMultipleExcretions = item.excretions.length > 1;
 
@@ -1292,7 +1326,7 @@ export default function DiapersScreen() {
 
           {/* Sessions list */}
           <View style={styles.sessionsContainer}>
-            {renderExcretionItem(item.lastExcretion, true)}
+            {renderExcretionItem(item.lastExcretion, true, index === 0)}
 
             {hasMultipleExcretions && (
               <>

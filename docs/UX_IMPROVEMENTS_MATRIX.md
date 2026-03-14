@@ -52,6 +52,9 @@
 | P21 | Theme tokens (hardcoded colors) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
 | P24 | Batch delete confirm + undo | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
 | P25 | Touch targets 44px (quick actions) | n/a | n/a | n/a | ✅ | n/a | n/a | n/a | n/a | Done (soins) |
+| P26 | Swipe hint (peek animation) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
+| P27 | Error retry toast (showActionToast) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
+| P28 | Selection mode visual highlight | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
 
 ## Légende
 
@@ -67,7 +70,8 @@
 | SelectionToolbar | `components/ui/SelectionToolbar.tsx` | P17b — 8 écrans |
 | HeaderMenu | `components/ui/HeaderMenu.tsx` | P23 — 8 écrans |
 | useBatchSelect | `hooks/useBatchSelect.ts` | P17b — 8 écrans |
+| useSwipeHint | `hooks/useSwipeHint.ts` | P26 — 8 écrans |
 
 ## Score
 
-**32/32 améliorations déployées** (P13b retiré)
+**35/35 améliorations déployées** (P13b retiré)
