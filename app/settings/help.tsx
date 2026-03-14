@@ -10,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { InfoModal } from '@/components/ui/InfoModal';
 import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
+import { useToast } from '@/contexts/ToastContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface FAQItem {
@@ -21,6 +22,7 @@ interface FAQItem {
 export default function HelpScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const nc = getNeutralColors(colorScheme);
+  const { showToast } = useToast();
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
@@ -102,6 +104,8 @@ export default function HelpScreen() {
 
     // P8b: Haptic feedback on send
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // P6: Success toast
+    showToast('Message envoyé avec succès');
     setModalConfig({
       visible: true,
       title: 'Message envoye',

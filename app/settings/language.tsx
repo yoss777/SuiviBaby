@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -15,6 +16,7 @@ import { ThemedView } from "@/components/themed-view";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import type { LanguagePreference } from "@/services/userPreferencesService";
 import {
@@ -32,6 +34,7 @@ interface Language {
 export default function LanguageScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const { showToast } = useToast();
   const [selectedLanguage, setSelectedLanguage] =
     useState<LanguagePreference>("fr");
   const [isSaving, setIsSaving] = useState(false);
@@ -92,7 +95,11 @@ export default function LanguageScreen() {
 
     try {
       setIsSaving(true);
+      // P8b: Haptic feedback
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       await mettreAJourPreferenceLanguage(language);
+      // P6: Success toast
+      showToast("Langue mise à jour");
     } catch (error) {
       setSelectedLanguage(previous);
       setModalConfig({

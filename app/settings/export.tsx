@@ -122,7 +122,7 @@ const getEventTypes = (hideExtra: boolean) => [
 export default function ExportScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const { showToast } = useToast();
+  const { showToast, showActionToast } = useToast();
   const { userName, email, user } = useAuth();
   const { afterDelete } = useLocalSearchParams();
   const router = useRouter();
@@ -760,7 +760,11 @@ export default function ExportScreen() {
       });
     } catch (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast("Impossible d'exporter vos données. Réessayez.");
+      showActionToast(
+        "Impossible d'exporter vos données.",
+        "Réessayer",
+        () => { handleExport(); }
+      );
       setModalConfig({
         visible: true,
         title: "Erreur",

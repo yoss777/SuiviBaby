@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -16,6 +17,7 @@ import { InfoModal } from "@/components/ui/InfoModal";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useThemePreference } from "@/contexts/ThemeContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import type { ThemePreference } from "@/services/userPreferencesService";
 
@@ -25,6 +27,7 @@ export default function ThemeScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { preference, isLoading, setPreference } = useThemePreference();
+  const { showToast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const isMountedRef = useRef(true);
 
@@ -78,7 +81,12 @@ export default function ThemeScreen() {
 
     try {
       setIsSaving(true);
+      // P8b: Haptic feedback
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       await setPreference(value);
+      if (!isMountedRef.current) return;
+      // P6: Success toast
+      showToast("Thème mis à jour");
     } catch (error) {
       if (!isMountedRef.current) return;
       setModalConfig({

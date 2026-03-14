@@ -552,7 +552,7 @@ export default function JoinChildScreen() {
           cancelText="Plus tard"
           confirmButtonColor={Colors[colorScheme].tint}
           confirmTextColor={
-            Colors[colorScheme].tint === "#fff" ? "#1b1b1b" : "#fff"
+            colorScheme === "dark" ? nc.textStrong : nc.white
           }
           cancelButtonColor={`${Colors[colorScheme].tabIconDefault}20`}
           cancelTextColor={Colors[colorScheme].text}

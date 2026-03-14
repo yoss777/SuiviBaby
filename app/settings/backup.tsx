@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Stack } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
@@ -9,12 +10,14 @@ import { ThemedView } from '@/components/themed-view';
 import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
 import { useModal } from '@/contexts/ModalContext';
+import { useToast } from '@/contexts/ToastContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function BackupScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const nc = getNeutralColors(colorScheme);
   const { showAlert } = useModal();
+  const { showToast } = useToast();
   const isMountedRef = useRef(true);
 
   const [autoBackup, setAutoBackup] = useState(true);
@@ -109,7 +112,13 @@ export default function BackupScreen() {
           {description}
         </Text>
       </View>
-      {renderSwitch(value, onValueChange, title)}
+      {renderSwitch(value, (v) => {
+        // P8b: Haptic feedback on toggle
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onValueChange(v);
+        // P6: Success toast
+        showToast('Préférence mise à jour');
+      }, title)}
     </View>
   );
 
