@@ -64,7 +64,7 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
           accessibilityLabel="Menu"
         >
           <Ionicons
-            name="ellipsis-horizontal"
+            name="ellipsis-vertical"
             size={22}
             color={Colors[colorScheme].tint}
           />

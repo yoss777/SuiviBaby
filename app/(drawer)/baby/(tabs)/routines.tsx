@@ -385,12 +385,12 @@ export default function RoutinesScreen() {
 
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: handleAddPress },
-    {
+    ...(groupedEvents.length > 0 || selectionMode ? [{
       label: selectionMode ? "Annuler sélection" : "Sélectionner",
-      icon: selectionMode ? "close-outline" : "checkmark-done-outline",
+      icon: (selectionMode ? "close-outline" : "checkmark-done-outline") as keyof typeof Ionicons.glyphMap,
       onPress: toggleSelectionMode,
-    },
-  ], [handleAddPress, selectionMode, toggleSelectionMode]);
+    }] : []),
+  ], [handleAddPress, selectionMode, toggleSelectionMode, groupedEvents.length]);
 
   useFocusEffect(
     useCallback(() => {

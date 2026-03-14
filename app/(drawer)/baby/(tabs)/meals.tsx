@@ -328,12 +328,12 @@ export default function MealsScreen() {
 
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: openAddModal },
-    {
+    ...(groupedMeals.length > 0 || selectionMode ? [{
       label: selectionMode ? "Annuler sélection" : "Sélectionner",
-      icon: selectionMode ? "close-outline" : "checkmark-done-outline",
+      icon: (selectionMode ? "close-outline" : "checkmark-done-outline") as keyof typeof Ionicons.glyphMap,
       onPress: toggleSelectionMode,
-    },
-  ], [openAddModal, selectionMode, toggleSelectionMode]);
+    }] : []),
+  ], [openAddModal, selectionMode, toggleSelectionMode, groupedMeals.length]);
 
   // Définir les boutons du header (calendrier + ellipsis menu)
   useFocusEffect(

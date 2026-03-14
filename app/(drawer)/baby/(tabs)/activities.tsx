@@ -424,12 +424,12 @@ export default function ActivitiesScreen() {
 
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: () => openAddModal("tummyTime") },
-    {
+    ...(groupedEvents.length > 0 || selectionMode ? [{
       label: selectionMode ? "Annuler sélection" : "Sélectionner",
-      icon: selectionMode ? "close-outline" : "checkmark-done-outline",
+      icon: (selectionMode ? "close-outline" : "checkmark-done-outline") as keyof typeof Ionicons.glyphMap,
       onPress: toggleSelectionMode,
-    },
-  ], [openAddModal, selectionMode, toggleSelectionMode]);
+    }] : []),
+  ], [openAddModal, selectionMode, toggleSelectionMode, groupedEvents.length]);
 
   useFocusEffect(
     useCallback(() => {
