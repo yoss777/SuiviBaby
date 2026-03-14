@@ -2,9 +2,11 @@ import { ThemedView } from "@/components/themed-view";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DotsLoader } from "@/components/ui/DotsLoader";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby, type Child } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { obtenirEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import {
@@ -21,8 +23,9 @@ import {
   setTodayEventsCache,
 } from "@/services/todayEventsCache";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import * as Haptics from "expo-haptics";
 import { Stack, router } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -37,8 +40,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function JoinChildScreen() {
-  const colorScheme = useColorScheme();
+  const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const { showAlert } = useModal();
+  const { showToast } = useToast();
   const {
     activeChild,
     children,
@@ -138,7 +143,7 @@ export default function JoinChildScreen() {
     prepareChildAndNavigate,
   ]);
 
-  const handleUseCode = async () => {
+  const handleUseCode = useCallback(async () => {
     if (!shareCode.trim()) {
       showAlert("Erreur", "Veuillez saisir un code");
       return;
@@ -147,61 +152,82 @@ export default function JoinChildScreen() {
     setIsLoadingCode(true);
     try {
       const result = await useShareCode(shareCode.trim().toUpperCase());
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Code validé avec succès");
       queueNavigateToChild(result.childId);
       setShareCode("");
     } catch (error: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast(error.message || "Code invalide. Réessayez.");
       showAlert("Erreur", error.message || "Code invalide");
     } finally {
       setIsLoadingCode(false);
     }
-  };
+  }, [shareCode, showAlert, showToast, queueNavigateToChild]);
 
-  const handleAcceptInvitation = async (
-    invitationId: string,
-    childName: string,
-  ) => {
-    setProcessingInvitation(invitationId);
-    try {
-      await acceptInvitation(invitationId);
-      const accepted = pendingInvitations.find(
-        (invite) => invite.id === invitationId,
-      );
-      if (accepted?.childId) {
-        queueNavigateToChild(accepted.childId);
+  const handleAcceptInvitation = useCallback(
+    async (invitationId: string, childName: string) => {
+      setProcessingInvitation(invitationId);
+      try {
+        await acceptInvitation(invitationId);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        showToast(`Invitation pour ${childName} acceptée`);
+        const accepted = pendingInvitations.find(
+          (invite) => invite.id === invitationId,
+        );
+        if (accepted?.childId) {
+          queueNavigateToChild(accepted.childId);
+        }
+      } catch (error: any) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        showToast(
+          error.message || "Impossible d'accepter l'invitation. Réessayez.",
+        );
+        showAlert(
+          "Erreur",
+          error.message || "Impossible d'accepter l'invitation",
+        );
+      } finally {
+        setProcessingInvitation(null);
       }
-    } catch (error: any) {
-      showAlert(
-        "Erreur",
-        error.message || "Impossible d'accepter l'invitation",
-      );
-    } finally {
-      setProcessingInvitation(null);
-    }
-  };
+    },
+    [pendingInvitations, queueNavigateToChild, showAlert, showToast],
+  );
 
-  const handleRejectInvitation = async (invitationId: string) => {
-    showAlert(
-      "Refuser l'invitation",
-      "Êtes-vous sûr de vouloir refuser cette invitation ?",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Refuser",
-          style: "destructive",
-          onPress: async () => {
-            setProcessingInvitation(invitationId);
-            try {
-              await rejectInvitation(invitationId);
-            } catch (error) {
-              showAlert("Erreur", "Impossible de refuser l'invitation");
-            } finally {
-              setProcessingInvitation(null);
-            }
+  const handleRejectInvitation = useCallback(
+    async (invitationId: string) => {
+      showAlert(
+        "Refuser l'invitation",
+        "Êtes-vous sûr de vouloir refuser cette invitation ?",
+        [
+          { text: "Annuler", style: "cancel" },
+          {
+            text: "Refuser",
+            style: "destructive",
+            onPress: async () => {
+              setProcessingInvitation(invitationId);
+              try {
+                await rejectInvitation(invitationId);
+                Haptics.notificationAsync(
+                  Haptics.NotificationFeedbackType.Success,
+                );
+                showToast("Invitation refusée");
+              } catch (error) {
+                Haptics.notificationAsync(
+                  Haptics.NotificationFeedbackType.Error,
+                );
+                showToast("Impossible de refuser l'invitation. Réessayez.");
+                showAlert("Erreur", "Impossible de refuser l'invitation");
+              } finally {
+                setProcessingInvitation(null);
+              }
+            },
           },
-        },
-      ],
-    );
-  };
+        ],
+      );
+    },
+    [showAlert, showToast],
+  );
 
   const handleSwitchConfirm = useCallback(() => {
     if (!switchTarget) return;
@@ -215,6 +241,37 @@ export default function JoinChildScreen() {
     setSwitchTarget(null);
     router.replace("/(drawer)/baby" as any);
   }, []);
+
+  const headerStyle = useMemo(
+    () => [styles.header, { backgroundColor: nc.backgroundCard }],
+    [nc.backgroundCard],
+  );
+
+  const sectionStyle = useMemo(
+    () => [styles.section, { backgroundColor: nc.backgroundCard }],
+    [nc.backgroundCard],
+  );
+
+  const invitationCardStyle = useMemo(
+    () => [
+      styles.invitationCard,
+      { backgroundColor: nc.backgroundPressed, borderLeftColor: nc.success },
+    ],
+    [nc.backgroundPressed, nc.success],
+  );
+
+  const inputContainerStyle = useMemo(
+    () => [
+      styles.inputContainer,
+      { backgroundColor: nc.backgroundPressed, borderColor: nc.borderLight },
+    ],
+    [nc.backgroundPressed, nc.borderLight],
+  );
+
+  const submitButtonStyle = useMemo(
+    () => [styles.submitButton, { backgroundColor: nc.todayAccent, shadowColor: nc.todayAccent }],
+    [nc.todayAccent],
+  );
 
   return (
     <ThemedView style={styles.screen}>
@@ -242,34 +299,54 @@ export default function JoinChildScreen() {
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
           >
-            <View style={styles.header}>
-              <FontAwesome name="user-plus" size={48} color="#4A90E2" />
-              <Text style={styles.title}>Rejoindre un suivi</Text>
-              <Text style={styles.subtitle}>
+            <View style={headerStyle}>
+              <FontAwesome
+                name="user-plus"
+                size={48}
+                color={Colors[colorScheme].tint}
+              />
+              <Text style={[styles.title, { color: nc.textStrong }]}>
+                Rejoindre un suivi
+              </Text>
+              <Text style={[styles.subtitle, { color: nc.textLight }]}>
                 Accédez au suivi d'un enfant partagé avec vous
               </Text>
             </View>
 
             {/* Invitations en attente */}
             {!loadingInvitations && pendingInvitations.length > 0 && (
-              <View style={styles.section}>
+              <View style={sectionStyle}>
                 <View style={styles.sectionHeader}>
-                  <FontAwesome name="envelope" size={20} color="#28a745" />
-                  <Text style={styles.sectionTitle}>
+                  <FontAwesome name="envelope" size={20} color={nc.success} />
+                  <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>
                     Invitation{pendingInvitations.length > 1 ? "s" : ""} en
                     attente
                   </Text>
                 </View>
 
                 {pendingInvitations.map((invitation) => (
-                  <View key={invitation.id} style={styles.invitationCard}>
+                  <View key={invitation.id} style={invitationCardStyle}>
                     <View style={styles.invitationHeader}>
-                      <FontAwesome name="baby" size={24} color="#4A90E2" />
+                      <FontAwesome
+                        name="baby"
+                        size={24}
+                        color={Colors[colorScheme].tint}
+                      />
                       <View style={styles.invitationInfo}>
-                        <Text style={styles.invitationChildName}>
+                        <Text
+                          style={[
+                            styles.invitationChildName,
+                            { color: nc.textStrong },
+                          ]}
+                        >
                           {invitation.childName}
                         </Text>
-                        <Text style={styles.invitationFrom}>
+                        <Text
+                          style={[
+                            styles.invitationFrom,
+                            { color: nc.textLight },
+                          ]}
+                        >
                           De : {invitation.inviterEmail}
                         </Text>
                       </View>
@@ -277,27 +354,47 @@ export default function JoinChildScreen() {
 
                     <View style={styles.invitationActions}>
                       <TouchableOpacity
-                        style={[styles.invitationButton, styles.rejectButton]}
+                        style={[
+                          styles.invitationButton,
+                          styles.rejectButton,
+                          { borderColor: nc.error, backgroundColor: nc.errorBg },
+                        ]}
                         onPress={() => handleRejectInvitation(invitation.id!)}
                         disabled={processingInvitation === invitation.id}
                         activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Refuser l'invitation de ${invitation.childName}`}
                       >
                         {processingInvitation === invitation.id ? (
-                          <ActivityIndicator size="small" color="#dc3545" />
+                          <ActivityIndicator size="small" color={nc.error} />
                         ) : (
                           <>
                             <FontAwesome
                               name="times"
                               size={16}
-                              color="#dc3545"
+                              color={nc.error}
                             />
-                            <Text style={styles.rejectButtonText}>Refuser</Text>
+                            <Text
+                              style={[
+                                styles.rejectButtonText,
+                                { color: nc.error },
+                              ]}
+                            >
+                              Refuser
+                            </Text>
                           </>
                         )}
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        style={[styles.invitationButton, styles.acceptButton]}
+                        style={[
+                          styles.invitationButton,
+                          styles.acceptButton,
+                          {
+                            backgroundColor: nc.success,
+                            shadowColor: nc.success,
+                          },
+                        ]}
                         onPress={() =>
                           handleAcceptInvitation(
                             invitation.id!,
@@ -306,13 +403,27 @@ export default function JoinChildScreen() {
                         }
                         disabled={processingInvitation === invitation.id}
                         activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Accepter l'invitation de ${invitation.childName}`}
                       >
                         {processingInvitation === invitation.id ? (
-                          <ActivityIndicator size="small" color="white" />
+                          <ActivityIndicator
+                            size="small"
+                            color={nc.backgroundCard}
+                          />
                         ) : (
                           <>
-                            <FontAwesome name="check" size={16} color="white" />
-                            <Text style={styles.acceptButtonText}>
+                            <FontAwesome
+                              name="check"
+                              size={16}
+                              color={nc.backgroundCard}
+                            />
+                            <Text
+                              style={[
+                                styles.acceptButtonText,
+                                { color: nc.backgroundCard },
+                              ]}
+                            >
                               Accepter
                             </Text>
                           </>
@@ -324,45 +435,85 @@ export default function JoinChildScreen() {
               </View>
             )}
 
-            {/* Utiliser un code */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <FontAwesome name="qrcode" size={20} color="#9C27B0" />
-                <Text style={styles.sectionTitle}>Code de partage</Text>
+            {/* Empty state invitations */}
+            {!loadingInvitations && pendingInvitations.length === 0 && (
+              <View style={sectionStyle}>
+                <View style={styles.sectionHeader}>
+                  <FontAwesome
+                    name="envelope"
+                    size={20}
+                    color={nc.textLight}
+                  />
+                  <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>
+                    Invitations
+                  </Text>
+                </View>
+                <Text style={[styles.emptyStateText, { color: nc.textLight }]}>
+                  Aucune invitation en attente. Si quelqu'un partage un enfant
+                  avec vous, l'invitation apparaîtra ici.
+                </Text>
               </View>
-              <Text style={styles.sectionDescription}>
+            )}
+
+            {/* Utiliser un code */}
+            <View style={sectionStyle}>
+              <View style={styles.sectionHeader}>
+                <FontAwesome name="qrcode" size={20} color={nc.todayAccent} />
+                <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>
+                  Code de partage
+                </Text>
+              </View>
+              <Text
+                style={[styles.sectionDescription, { color: nc.textLight }]}
+              >
                 Saisissez le code de 6 caractères qui vous a été partagé
               </Text>
 
               <View style={styles.codeForm}>
-                <View style={styles.inputContainer}>
-                  <FontAwesome name="key" size={16} color="#666" />
+                <View style={inputContainerStyle}>
+                  <FontAwesome name="key" size={16} color={nc.textLight} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: nc.textStrong }]}
                     placeholder="ABC123"
+                    placeholderTextColor={nc.textLight}
                     value={shareCode}
                     onChangeText={(text) => setShareCode(text.toUpperCase())}
                     autoCapitalize="characters"
                     maxLength={6}
                     editable={!isLoadingCode}
+                    accessibilityLabel="Code de partage"
                   />
                 </View>
 
                 <TouchableOpacity
                   style={[
-                    styles.submitButton,
+                    submitButtonStyle,
                     isLoadingCode && styles.buttonDisabled,
                   ]}
                   onPress={handleUseCode}
                   disabled={isLoadingCode}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Valider le code de partage"
                 >
                   {isLoadingCode ? (
-                    <ActivityIndicator size="small" color="white" />
+                    <ActivityIndicator
+                      size="small"
+                      color={nc.backgroundCard}
+                    />
                   ) : (
                     <>
-                      <FontAwesome name="unlock" size={18} color="white" />
-                      <Text style={styles.submitButtonText}>
+                      <FontAwesome
+                        name="unlock"
+                        size={18}
+                        color={nc.backgroundCard}
+                      />
+                      <Text
+                        style={[
+                          styles.submitButtonText,
+                          { color: nc.backgroundCard },
+                        ]}
+                      >
                         Valider le code
                       </Text>
                     </>
@@ -372,9 +523,21 @@ export default function JoinChildScreen() {
             </View>
 
             {/* Information */}
-            <View style={styles.infoBox}>
-              <FontAwesome name="info-circle" size={20} color="#17a2b8" />
-              <Text style={styles.infoText}>
+            <View
+              style={[
+                styles.infoBox,
+                {
+                  backgroundColor: nc.todayAccent + "15",
+                  borderLeftColor: nc.todayAccent,
+                },
+              ]}
+            >
+              <FontAwesome
+                name="info-circle"
+                size={20}
+                color={nc.todayAccent}
+              />
+              <Text style={[styles.infoText, { color: nc.textStrong }]}>
                 Une fois l'accès validé, vous pourrez voir toutes les
                 informations et le suivi de l'enfant partagé avec vous.
               </Text>
@@ -440,7 +603,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 32,
     paddingTop: 48,
-    backgroundColor: "white",
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     shadowColor: "#000",
@@ -453,13 +615,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#212529",
     marginTop: 16,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
-    color: "#6c757d",
     textAlign: "center",
     paddingHorizontal: 16,
     lineHeight: 22,
@@ -467,7 +627,6 @@ const styles = StyleSheet.create({
   section: {
     marginHorizontal: 20,
     marginBottom: 24,
-    backgroundColor: "white",
     borderRadius: 16,
     padding: 20,
     shadowColor: "#000",
@@ -485,21 +644,23 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#212529",
   },
   sectionDescription: {
     fontSize: 14,
-    color: "#6c757d",
     lineHeight: 20,
     marginBottom: 20,
   },
+  emptyStateText: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    paddingVertical: 12,
+  },
   invitationCard: {
-    backgroundColor: "#f8f9fa",
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderLeftWidth: 4,
-    borderLeftColor: "#28a745",
   },
   invitationHeader: {
     flexDirection: "row",
@@ -513,11 +674,9 @@ const styles = StyleSheet.create({
   invitationChildName: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#212529",
   },
   invitationFrom: {
     fontSize: 14,
-    color: "#6c757d",
     marginTop: 4,
   },
   invitationActions: {
@@ -534,25 +693,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rejectButton: {
-    backgroundColor: "#fff5f5",
     borderWidth: 2,
-    borderColor: "#dc3545",
   },
   rejectButtonText: {
-    color: "#dc3545",
     fontSize: 16,
     fontWeight: "600",
   },
   acceptButton: {
-    backgroundColor: "#28a745",
-    shadowColor: "#28a745",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
   },
   acceptButtonText: {
-    color: "white",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -562,37 +715,31 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderWidth: 1,
-    borderColor: "#e9ecef",
     gap: 12,
   },
   input: {
     flex: 1,
     fontSize: 20,
     fontWeight: "700",
-    color: "#333",
     letterSpacing: 4,
   },
   submitButton: {
-    backgroundColor: "#9C27B0",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 16,
     gap: 12,
     borderRadius: 12,
-    shadowColor: "#9C27B0",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
   },
   submitButtonText: {
-    color: "white",
     fontSize: 18,
     fontWeight: "600",
   },
@@ -601,19 +748,16 @@ const styles = StyleSheet.create({
   },
   infoBox: {
     flexDirection: "row",
-    backgroundColor: "#d1ecf1",
     padding: 16,
     marginHorizontal: 20,
     marginBottom: 32,
     borderRadius: 12,
     gap: 12,
     borderLeftWidth: 4,
-    borderLeftColor: "#17a2b8",
   },
   infoText: {
     flex: 1,
     fontSize: 14,
-    color: "#0c5460",
     lineHeight: 20,
   },
   prepOverlay: {
@@ -629,7 +773,6 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     paddingHorizontal: 20,
     borderRadius: 16,
-    backgroundColor: "#ffffff",
     alignItems: "center",
     gap: 12,
   },

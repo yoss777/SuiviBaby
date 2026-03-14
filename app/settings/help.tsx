@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { InfoModal } from '@/components/ui/InfoModal';
+import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -18,9 +19,11 @@ interface FAQItem {
 
 export default function HelpScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const nc = getNeutralColors(colorScheme);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [sendError, setSendError] = useState(false);
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     title: '',
@@ -81,11 +84,13 @@ export default function HelpScreen() {
   ];
 
   const handleSendMessage = () => {
+    setSendError(false);
     if (!subject || !message) {
+      setSendError(true);
       setModalConfig({
         visible: true,
-        title: 'Erreur',
-        message: 'Veuillez remplir tous les champs',
+        title: 'Champs requis',
+        message: 'Veuillez remplir tous les champs avant d\'envoyer votre message.',
       });
       return;
     }
@@ -107,16 +112,19 @@ export default function HelpScreen() {
         key={index}
         style={[
           styles.faqItem,
-          { borderBottomColor: Colors[colorScheme].tabIconDefault + '20' },
+          { borderBottomColor: nc.borderLightAlpha },
         ]}
         onPress={() => setExpandedIndex(isExpanded ? null : index)}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={item.question}
+        accessibilityState={{ expanded: isExpanded }}
       >
         <View style={styles.faqHeader}>
           <View
             style={[
               styles.faqIcon,
-              { backgroundColor: Colors[colorScheme].tint + '15' },
+              { backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.08) },
             ]}
           >
             <Ionicons name={item.icon} size={20} color={Colors[colorScheme].tint} />
@@ -127,11 +135,11 @@ export default function HelpScreen() {
           <Ionicons
             name={isExpanded ? 'chevron-up' : 'chevron-down'}
             size={20}
-            color={Colors[colorScheme].tabIconDefault}
+            color={nc.textMuted}
           />
         </View>
         {isExpanded && (
-          <Text style={[styles.faqAnswer, { color: Colors[colorScheme].tabIconDefault }]}>
+          <Text style={[styles.faqAnswer, { color: nc.textLight }]}>
             {item.answer}
           </Text>
         )}
@@ -144,7 +152,7 @@ export default function HelpScreen() {
       key={option.id}
       style={[
         styles.supportOption,
-        { borderColor: Colors[colorScheme].tabIconDefault + '20' },
+        { borderColor: nc.borderLightAlpha },
       ]}
       // onPress={option.action}
       // activeOpacity={0.7}
@@ -153,7 +161,7 @@ export default function HelpScreen() {
       <View
         style={[
           styles.supportIcon,
-          { backgroundColor: Colors[colorScheme].tint + '15' },
+          { backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.08) },
         ]}
       >
         <Ionicons name={option.icon} size={24} color={Colors[colorScheme].tint} />
@@ -162,21 +170,21 @@ export default function HelpScreen() {
         <ThemedText style={styles.supportTitle}>
           {option.title}
         </ThemedText>
-        <Text style={[styles.supportDescription, { color: Colors[colorScheme].tabIconDefault }]}>
+        <Text style={[styles.supportDescription, { color: nc.textMuted }]}>
           {option.description}
         </Text>
       </View>
       {/* <Ionicons
         name="chevron-forward"
         size={20}
-        color={Colors[colorScheme].tabIconDefault}
+        color={nc.textMuted}
       /> */}
     </TouchableOpacity>
   );
 
   return (
     <ThemedView style={styles.screen}>
-    <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['top','bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['top','bottom']}>
       <Stack.Screen
         options={{
           title: 'Aide & Support',
@@ -188,7 +196,7 @@ export default function HelpScreen() {
         showsVerticalScrollIndicator={false}
       >
         <ThemedView style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}>
+          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]} accessibilityRole="header">
             QUESTIONS FRÉQUENTES
           </ThemedText>
           <View style={styles.faqContainer}>
@@ -197,7 +205,7 @@ export default function HelpScreen() {
         </ThemedView>
 
         <ThemedView style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}>
+          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]} accessibilityRole="header">
             NOUS CONTACTER
           </ThemedText>
           <View style={styles.supportContainer}>
@@ -206,7 +214,7 @@ export default function HelpScreen() {
         </ThemedView>
 
         <ThemedView style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}>
+          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]} accessibilityRole="header">
             ENVOYER UN MESSAGE
           </ThemedText>
           <View style={styles.contactForm}>
@@ -216,15 +224,16 @@ export default function HelpScreen() {
                 style={[
                   styles.input,
                   {
-                    backgroundColor: Colors[colorScheme].background,
-                    color: Colors[colorScheme].text,
-                    borderColor: Colors[colorScheme].tabIconDefault + '30',
+                    backgroundColor: nc.background,
+                    color: nc.textStrong,
+                    borderColor: sendError && !subject ? nc.error : nc.borderLightAlpha,
                   },
                 ]}
                 value={subject}
-                onChangeText={setSubject}
+                onChangeText={(text) => { setSubject(text); setSendError(false); }}
                 placeholder="Quel est le sujet de votre message ?"
-                placeholderTextColor={Colors[colorScheme].tabIconDefault}
+                placeholderTextColor={nc.textMuted}
+                accessibilityLabel="Sujet du message"
               />
             </View>
 
@@ -234,18 +243,19 @@ export default function HelpScreen() {
                 style={[
                   styles.textArea,
                   {
-                    backgroundColor: Colors[colorScheme].background,
-                    color: Colors[colorScheme].text,
-                    borderColor: Colors[colorScheme].tabIconDefault + '30',
+                    backgroundColor: nc.background,
+                    color: nc.textStrong,
+                    borderColor: sendError && !message ? nc.error : nc.borderLightAlpha,
                   },
                 ]}
                 value={message}
-                onChangeText={setMessage}
+                onChangeText={(text) => { setMessage(text); setSendError(false); }}
                 placeholder="Décrivez votre problème ou question..."
-                placeholderTextColor={Colors[colorScheme].tabIconDefault}
+                placeholderTextColor={nc.textMuted}
                 multiline
                 numberOfLines={6}
                 textAlignVertical="top"
+                accessibilityLabel="Contenu du message"
               />
             </View>
 
@@ -253,6 +263,8 @@ export default function HelpScreen() {
               style={[styles.sendButton, { backgroundColor: Colors[colorScheme].tint }]}
               onPress={handleSendMessage}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Envoyer le message"
             >
               <Ionicons name="send" size={20} color="#fff" />
               <Text style={styles.sendButtonText}>Envoyer le message</Text>
@@ -271,8 +283,8 @@ export default function HelpScreen() {
         visible={modalConfig.visible}
         title={modalConfig.title}
         message={modalConfig.message}
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
+        backgroundColor={nc.background}
+        textColor={nc.textStrong}
         onClose={() => setModalConfig((prev) => ({ ...prev, visible: false }))}
       />
     </SafeAreaView>
@@ -305,6 +317,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   faqItem: {
+    minHeight: 44,
     paddingVertical: 16,
     borderBottomWidth: 1,
   },
@@ -389,6 +402,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
     padding: 16,
     borderRadius: 12,
     gap: 8,

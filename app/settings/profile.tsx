@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Stack } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,12 +10,14 @@ import { ThemedView } from '@/components/themed-view';
 import { InfoModal } from '@/components/ui/InfoModal';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { modifierNomUtilisateur } from '@/services/usersService';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const { userName, email, refreshUser } = useAuth();
+  const { showToast, showActionToast } = useToast();
   const [displayName, setDisplayName] = useState(userName ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -23,16 +26,23 @@ export default function ProfileScreen() {
     title: '',
     message: '',
   });
+  const isMountedRef = useRef(true);
 
-  const closeModal = () => {
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const closeModal = useCallback(() => {
     setModalConfig((prev) => ({ ...prev, visible: false }));
-  };
+  }, []);
 
   useEffect(() => {
     setDisplayName(userName ?? '');
   }, [userName]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     const trimmedName = displayName.trim();
     setErrorMessage('');
     if (trimmedName.length < 6) {
@@ -48,27 +58,28 @@ export default function ProfileScreen() {
       setIsSaving(true);
       await modifierNomUtilisateur(trimmedName);
       await refreshUser();
-      setModalConfig({
-        visible: true,
-        title: 'Succès',
-        message: 'Profil mis a jour avec succès',
-      });
+      if (!isMountedRef.current) return;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Profil mis a jour avec succes');
     } catch (error) {
+      if (!isMountedRef.current) return;
       const message = error instanceof Error ? error.message : 'Erreur inconnue.';
       setErrorMessage(message);
-      setModalConfig({
-        visible: true,
-        title: 'Erreur',
-        message: 'Impossible de mettre a jour le profil. Reessayez.',
-      });
+      showActionToast(
+        'Impossible de mettre a jour le profil.',
+        'Reessayer',
+        () => { handleSave(); }
+      );
     } finally {
-      setIsSaving(false);
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
     }
-  };
+  }, [displayName, refreshUser, showToast, showActionToast]);
 
-  const trimmedName = displayName.trim();
-  const isInvalid = trimmedName.length < 6;
-  const isUnchanged = trimmedName === (userName ?? '').trim();
+  const trimmedName = useMemo(() => displayName.trim(), [displayName]);
+  const isInvalid = useMemo(() => trimmedName.length < 6, [trimmedName]);
+  const isUnchanged = useMemo(() => trimmedName === (userName ?? '').trim(), [trimmedName, userName]);
   const isSaveDisabled = isSaving || isInvalid || isUnchanged;
 
   return (

@@ -5,11 +5,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function PrivacyScreen() {
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
 
 const sections = [
     {
@@ -54,7 +56,7 @@ const sections = [
       <SafeAreaView
         style={[
           styles.container,
-          { backgroundColor: Colors[colorScheme].background },
+          { backgroundColor: nc.background },
         ]}
         edges={["top", "bottom"]}
       >
@@ -68,11 +70,11 @@ const sections = [
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <ThemedView style={styles.header}>
+          <ThemedView style={styles.header} accessibilityRole="header">
             <View
               style={[
                 styles.headerIcon,
-                { backgroundColor: Colors[colorScheme].tint + "20" },
+                { backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.12) },
               ]}
             >
               <Ionicons
@@ -87,7 +89,7 @@ const sections = [
             <Text
               style={[
                 styles.headerDate,
-                { color: Colors[colorScheme].tabIconDefault },
+                { color: nc.textMuted },
               ]}
             >
               Dernière mise à jour : 1er janvier 2026
@@ -102,14 +104,18 @@ const sections = [
             </ThemedText>
 
             {sections.map((section, index) => (
-              <View key={index} style={styles.section}>
+              <View
+                key={index}
+                style={styles.section}
+                accessibilityRole="header"
+              >
                 <ThemedText style={styles.sectionTitle}>
                   {section.title}
                 </ThemedText>
                 <Text
                   style={[
                     styles.sectionContent,
-                    { color: Colors[colorScheme].tabIconDefault },
+                    { color: nc.textLight },
                   ]}
                 >
                   {section.content}

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { Stack } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Linking,
   Platform,
@@ -12,11 +12,13 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { Colors } from "@/constants/theme";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   mettreAJourPreferencesNotifications,
@@ -26,6 +28,7 @@ import * as Notifications from "expo-notifications";
 
 export default function NotificationsScreen() {
   const colorScheme = useColorScheme() ?? "light";
+  const { showToast, showActionToast } = useToast();
 
   const [pushEnabled, setPushEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(false);
@@ -91,16 +94,18 @@ export default function NotificationsScreen() {
     };
   }, []);
 
-  const closeModal = () => {
+  // P17a: Memoize callback
+  const closeModal = useCallback(() => {
     setModalConfig((prev) => ({
       ...prev,
       visible: false,
       confirmText: undefined,
       onConfirm: undefined,
     }));
-  };
+  }, []);
 
-  const ensurePushPermission = async () => {
+  // P17a: Memoize callback
+  const ensurePushPermission = useCallback(async () => {
     if (Platform.OS === "web") {
       setModalConfig({
         visible: true,
@@ -140,7 +145,7 @@ export default function NotificationsScreen() {
     }
 
     return false;
-  };
+  }, []);
 
   const handleToggle = async (
     key: "push" | "email" | "marketing" | "updates" | "tips",
@@ -168,25 +173,29 @@ export default function NotificationsScreen() {
       if (!allowed) return;
     }
 
+    // P8b: Haptic feedback on toggle
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setters[key](value);
 
     try {
       await mettreAJourPreferencesNotifications({ [key]: value });
+      // P6: Toast on save success
+      showToast("Préférence enregistrée");
     } catch (error) {
       setters[key](previousValue);
-      setModalConfig({
-        visible: true,
-        title: "Erreur",
-        message: "Impossible de mettre a jour les notifications.",
-        confirmText: undefined,
-        onConfirm: undefined,
-      });
+      // P27: Error retry toast
+      showActionToast(
+        "Impossible de mettre à jour",
+        "Réessayer",
+        () => handleToggle(key, value)
+      );
     }
   };
 
   const renderSwitch = (
     value: boolean,
-    onValueChange: (value: boolean) => void
+    onValueChange: (value: boolean) => void,
+    label?: string
   ) => (
     <Switch
       value={value}
@@ -198,6 +207,9 @@ export default function NotificationsScreen() {
       }}
       thumbColor={value ? Colors[colorScheme].tint : "#f4f3f4"}
       ios_backgroundColor={Colors[colorScheme].tabIconDefault + "30"}
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: value }}
     />
   );
 
@@ -219,7 +231,7 @@ export default function NotificationsScreen() {
           {description}
         </Text>
       </View>
-      {renderSwitch(value, onValueChange)}
+      {renderSwitch(value, onValueChange, title)}
     </View>
   );
 
@@ -235,6 +247,8 @@ export default function NotificationsScreen() {
     const nextEnabled =
       allDisabled ? false : "enabled" in next ? next.enabled : remindersEnabled;
 
+    // P8b: Haptic feedback on reminder change
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRemindersEnabled(nextEnabled);
     setReminderThresholds(nextThresholds);
 
@@ -245,16 +259,17 @@ export default function NotificationsScreen() {
           thresholds: nextThresholds,
         },
       });
+      // P6: Toast on save success
+      showToast("Rappel mis à jour");
     } catch (error) {
       setRemindersEnabled(previousEnabled);
       setReminderThresholds(previousThresholds);
-      setModalConfig({
-        visible: true,
-        title: "Erreur",
-        message: "Impossible de mettre a jour les rappels.",
-        confirmText: undefined,
-        onConfirm: undefined,
-      });
+      // P27: Error retry toast
+      showActionToast(
+        "Impossible de mettre à jour les rappels",
+        "Réessayer",
+        () => updateReminders(next)
+      );
     }
   };
 
@@ -300,6 +315,7 @@ export default function NotificationsScreen() {
           onValueChange={(itemValue) => onChange(Number(itemValue))}
           enabled={!isLoading && remindersEnabled}
           mode={Platform.OS === "android" ? "dropdown" : "dialog"}
+          accessibilityLabel={`${label} - délai de rappel`}
           style={[
             styles.picker,
             {

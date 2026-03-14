@@ -1,6 +1,6 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { Stack, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 
 import { ThemedView } from "@/components/themed-view";
 import { db } from "@/config/firebase";
@@ -20,12 +21,12 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { Child } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   afficherEnfant,
-  obtenirPreferences,
 } from "@/services/userPreferencesService";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { getAccessibleChildIds } from "@/utils/permissions";
 
 const { width } = Dimensions.get("window");
@@ -35,6 +36,7 @@ export default function HiddenChildrenScreen() {
   const router = useRouter();
   const { showAlert } = useModal();
   const { user } = useAuth();
+  const { showToast, showActionToast } = useToast();
   const [hiddenChildren, setHiddenChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
@@ -43,66 +45,63 @@ export default function HiddenChildrenScreen() {
     name: string;
   } | null>(null);
 
+  // P22: Use onSnapshot listener on user preferences doc for real-time updates
   useEffect(() => {
-    loadHiddenChildren();
-  }, [user]);
-
-  const loadHiddenChildren = async () => {
     if (!user) {
       setLoading(false);
       return;
     }
 
-    try {
-      setLoading(true);
+    setLoading(true);
+    const prefsRef = doc(db, "userPreferences", user.uid);
 
-      // Récupérer les préférences pour obtenir la liste des IDs masqués
-      const prefs = await obtenirPreferences();
-      const hiddenIds = prefs.hiddenChildrenIds || [];
+    const unsubscribe = onSnapshot(
+      prefsRef,
+      async (snapshot) => {
+        try {
+          const data = snapshot.data();
+          const hiddenIds: string[] = data?.hiddenChildrenIds ?? [];
 
-      if (hiddenIds.length === 0) {
-        setHiddenChildren([]);
+          if (hiddenIds.length === 0) {
+            setHiddenChildren([]);
+            setLoading(false);
+            return;
+          }
+
+          const childIds = await getAccessibleChildIds(user.uid);
+          const childDocs = await Promise.all(
+            childIds.map((id) => getDoc(doc(db, "children", id)))
+          );
+          const allChildren: Child[] = childDocs
+            .filter((snap) => snap.exists())
+            .map((snap) => ({
+              id: snap.id,
+              ...(snap.data() as Omit<Child, "id">),
+            }));
+
+          const hidden = allChildren.filter((child) =>
+            hiddenIds.includes(child.id)
+          );
+          setHiddenChildren(hidden);
+        } catch (error) {
+          console.error("Erreur lors du chargement des enfants masqués:", error);
+          showAlert("Erreur", "Impossible de charger les enfants masqués.");
+        } finally {
+          setLoading(false);
+        }
+      },
+      (error) => {
+        console.error("Erreur onSnapshot preferences:", error);
+        showAlert("Erreur", "Impossible de charger les enfants masqués.");
         setLoading(false);
-        return;
       }
+    );
 
-      // Récupérer tous les enfants accessibles par l'utilisateur
-      let childIds: string[] = [];
-      try {
-        childIds = await getAccessibleChildIds(user.uid);
-      } catch (error) {
-        throw error;
-      }
+    return () => unsubscribe();
+  }, [user]);
 
-      let childDocs;
-      try {
-        childDocs = await Promise.all(
-          childIds.map((id) => getDoc(doc(db, "children", id)))
-        );
-      } catch (error) {
-        throw error;
-      }
-      const allChildren: Child[] = childDocs
-        .filter((snap) => snap.exists())
-        .map((snap) => ({
-          id: snap.id,
-          ...(snap.data() as Omit<Child, "id">),
-        }));
-
-      // Filtrer uniquement les enfants masqués
-      const hidden = allChildren.filter((child) =>
-        hiddenIds.includes(child.id),
-      );
-      setHiddenChildren(hidden);
-    } catch (error) {
-      console.error("Erreur lors du chargement des enfants masqués:", error);
-      showAlert("Erreur", "Impossible de charger les enfants masqués.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const calculateAge = (birthDate: string) => {
+  // P17a: Memoize calculateAge function
+  const calculateAge = useCallback((birthDate: string) => {
     const [day, month, year] = birthDate.split("/").map(Number);
     const birth = new Date(year, month - 1, day);
     const today = new Date();
@@ -125,7 +124,16 @@ export default function HiddenChildrenScreen() {
       const yearText = years === 1 ? "an" : "ans";
       return `${years} ${yearText} ${months} mois`;
     }
-  };
+  }, []);
+
+  // P17a: Memoize age map for all hidden children
+  const ageMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    hiddenChildren.forEach((child) => {
+      map[child.id] = calculateAge(child.birthDate);
+    });
+    return map;
+  }, [hiddenChildren, calculateAge]);
 
   const handleRestoreChild = (childId: string, childName: string) => {
     setChildToRestore({ id: childId, name: childName });
@@ -134,16 +142,27 @@ export default function HiddenChildrenScreen() {
 
   const confirmRestoreChild = async () => {
     if (!childToRestore) return;
+    const restoringChild = childToRestore;
 
     try {
-      await afficherEnfant(childToRestore.id);
+      // P8b: Haptic feedback on restore action
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await afficherEnfant(restoringChild.id);
       setShowRestoreModal(false);
       setChildToRestore(null);
-      // Recharger la liste
-      await loadHiddenChildren();
+      // P6: Toast on restore success
+      showToast(`${restoringChild.name} restauré`);
+      // List refreshes automatically via onSnapshot (P22)
     } catch (error) {
       console.error("Erreur lors de la restauration:", error);
-      showAlert("Erreur", "Impossible de restaurer l'enfant.");
+      setShowRestoreModal(false);
+      setChildToRestore(null);
+      // P27: Error retry toast
+      showActionToast(
+        "Erreur lors de la restauration",
+        "Réessayer",
+        () => handleRestoreChild(restoringChild.id, restoringChild.name)
+      );
     }
   };
 
@@ -215,9 +234,15 @@ export default function HiddenChildrenScreen() {
                 les restaurer à tout moment.
               </Text>
               {hiddenChildren.map((child) => {
-                const ageText = calculateAge(child.birthDate);
+                const ageText = ageMap[child.id] ?? "";
                 return (
-                  <View key={child.id} style={styles.childItemContainer}>
+                  <View
+                    key={child.id}
+                    style={styles.childItemContainer}
+                    accessible={true}
+                    accessibilityRole="summary"
+                    accessibilityLabel={`${child.name}, ${ageText}, né le ${child.birthDate}`}
+                  >
                     <ThemedView style={styles.childCard}>
                       <View style={styles.childAvatar}>
                         <Text style={styles.childAvatarEmoji}>
@@ -248,6 +273,8 @@ export default function HiddenChildrenScreen() {
                       onPress={() => handleRestoreChild(child.id, child.name)}
                       activeOpacity={0.7}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Restaurer ${child.name}`}
                     >
                       <FontAwesome name="eye" size={20} color="#28a745" />
                     </TouchableOpacity>
@@ -403,6 +430,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   restoreButton: {
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
     padding: 4,
   },
   modalOverlay: {

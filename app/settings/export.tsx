@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as FileSystem from "expo-file-system";
+import * as Haptics from "expo-haptics";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -28,10 +29,12 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Child } from "@/contexts/BabyContext";
 import { useBaby } from "@/contexts/BabyContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { db } from "@/config/firebase";
 import { Event, EventType } from "@/services/eventsService";
@@ -118,6 +121,8 @@ const getEventTypes = (hideExtra: boolean) => [
 
 export default function ExportScreen() {
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
+  const { showToast } = useToast();
   const { userName, email, user } = useAuth();
   const { afterDelete } = useLocalSearchParams();
   const router = useRouter();
@@ -733,6 +738,9 @@ export default function ExportScreen() {
         await Sharing.shareAsync(fileUri);
       }
 
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Export terminé avec succès");
+
       const summary = buildSummary();
       setSummaryIndex(0);
       setExportSummary(summary);
@@ -751,6 +759,8 @@ export default function ExportScreen() {
           : undefined,
       });
     } catch (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast("Impossible d'exporter vos données. Réessayez.");
       setModalConfig({
         visible: true,
         title: "Erreur",
@@ -835,6 +845,9 @@ export default function ExportScreen() {
           onPress={() => toggleChild(item.child.id)}
           activeOpacity={0.7}
           disabled={isLoading || isExporting}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: item.selected }}
+          accessibilityLabel={`Sélectionner ${item.child.name}`}
         >
           <View style={styles.childLeft}>
             <View
@@ -889,7 +902,7 @@ export default function ExportScreen() {
             ]}
           >
             {item.selected && (
-              <Ionicons name="checkmark" size={18} color="#fff" />
+              <Ionicons name="checkmark" size={18} color={nc.backgroundCard} />
             )}
           </View>
         </TouchableOpacity>
@@ -913,6 +926,9 @@ export default function ExportScreen() {
         onPress={onToggle}
         activeOpacity={0.7}
         disabled={isLoading || isExporting}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: isSelected }}
+        accessibilityLabel={`Sélectionner ${type.label}`}
       >
         <View style={styles.typeLeft}>
           <View
@@ -956,7 +972,7 @@ export default function ExportScreen() {
             },
           ]}
         >
-          {isSelected && <Ionicons name="checkmark" size={18} color="#fff" />}
+          {isSelected && <Ionicons name="checkmark" size={18} color={nc.backgroundCard} />}
         </View>
       </TouchableOpacity>
     );
@@ -984,8 +1000,8 @@ export default function ExportScreen() {
               {isExporting || isLoading ? "Preparation de l'export..." : "Export termine."}
             </Text>
             {(isExporting || isLoading) && (
-              <View style={[styles.autoDeleteButton, { backgroundColor: "#dc3545" }]}>
-                <Text style={styles.autoDeleteButtonText}>
+              <View style={[styles.autoDeleteButton, { backgroundColor: nc.error }]}>
+                <Text style={[styles.autoDeleteButtonText, { color: nc.backgroundCard }]}>
                   Export en cours...
                 </Text>
               </View>
@@ -1025,6 +1041,8 @@ export default function ExportScreen() {
                   onPress={toggleAllChildren}
                   disabled={isLoading || isExporting}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Tout sélectionner ou désélectionner les enfants"
                 >
                   <Text
                     style={[
@@ -1082,6 +1100,8 @@ export default function ExportScreen() {
                   onPress={toggleAllEventTypes}
                   disabled={isLoading || isExporting || !selectedCanExportEvents}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Tout sélectionner ou désélectionner les types d'événements"
                 >
                   <Text
                     style={[
@@ -1122,6 +1142,8 @@ export default function ExportScreen() {
                   onPress={toggleAllInteractionTypes}
                   disabled={isLoading || isExporting}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Tout sélectionner ou désélectionner les types d'interactions"
                 >
                   <Text
                     style={[
@@ -1183,9 +1205,11 @@ export default function ExportScreen() {
             onPress={() => handleExport()}
             disabled={isExportDisabled}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Exporter les données"
           >
-            <Ionicons name="cloud-download" size={20} color="#fff" />
-            <Text style={styles.exportButtonText}>
+            <Ionicons name="cloud-download" size={20} color={nc.backgroundCard} />
+            <Text style={[styles.exportButtonText, { color: nc.backgroundCard }]}>
               {isExporting ? "Export en cours..." : "Exporter les donnees"}
             </Text>
           </TouchableOpacity>
@@ -1419,7 +1443,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   exportButtonText: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -1442,7 +1465,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   autoDeleteButtonText: {
-    color: "#fff",
     fontSize: 14,
     fontWeight: "700",
   },

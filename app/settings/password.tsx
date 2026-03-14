@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { InfoModal } from '@/components/ui/InfoModal';
 import { auth } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
+import { useToast } from '@/contexts/ToastContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   EmailAuthProvider,
@@ -20,6 +22,14 @@ import {
 export default function PasswordScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
+  const { showToast, showActionToast } = useToast();
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -36,11 +46,11 @@ export default function PasswordScreen() {
     onConfirm: undefined as undefined | (() => void),
   });
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setModalConfig((prev) => ({ ...prev, visible: false, onConfirm: undefined }));
-  };
+  }, []);
 
-  const passwordRules = [
+  const passwordRules = useMemo(() => [
     { id: 'length', label: '8+ caracteres', test: (value: string) => value.length >= 8 },
     { id: 'number', label: '1 chiffre', test: (value: string) => /\d/.test(value) },
     {
@@ -48,16 +58,25 @@ export default function PasswordScreen() {
       label: '1 caractere special',
       test: (value: string) => /[^A-Za-z0-9]/.test(value),
     },
-  ];
-  const unmetRules = passwordRules.filter((rule) => !rule.test(newPassword));
-  const strengthScore = passwordRules.length - unmetRules.length;
-  const strengthPercent = Math.round((strengthScore / passwordRules.length) * 100);
-  const strengthLabel =
-    strengthScore === 3 ? 'Fort' : strengthScore === 2 ? 'Moyen' : 'Faible';
+  ], []);
 
-  const mapFirebaseError = (error: unknown) => {
+  const unmetRules = useMemo(
+    () => passwordRules.filter((rule) => !rule.test(newPassword)),
+    [passwordRules, newPassword]
+  );
+  const strengthScore = passwordRules.length - unmetRules.length;
+  const strengthPercent = useMemo(
+    () => Math.round((strengthScore / passwordRules.length) * 100),
+    [strengthScore, passwordRules.length]
+  );
+  const strengthLabel = useMemo(
+    () => strengthScore === 3 ? 'Fort' : strengthScore === 2 ? 'Moyen' : 'Faible',
+    [strengthScore]
+  );
+
+  const mapFirebaseError = useCallback((error: unknown) => {
     if (!error || typeof error !== 'object') {
-      return 'Une erreur est survenue. Réessayez.';
+      return 'Une erreur est survenue. Reessayez.';
     }
 
     const code = 'code' in error ? String(error.code) : '';
@@ -65,7 +84,7 @@ export default function PasswordScreen() {
       return 'Mot de passe actuel incorrect.';
     }
     if (code === 'auth/too-many-requests') {
-      return 'Trop de tentatives. Réessayez plus tard.';
+      return 'Trop de tentatives. Reessayez plus tard.';
     }
     if (code === 'auth/weak-password') {
       return 'Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special.';
@@ -75,9 +94,9 @@ export default function PasswordScreen() {
     }
 
     return 'Impossible de modifier le mot de passe.';
-  };
+  }, []);
 
-  const handleForgotPassword = async () => {
+  const handleForgotPassword = useCallback(async () => {
     const user = auth.currentUser;
     setErrorMessage('');
     if (!user?.email) {
@@ -88,20 +107,25 @@ export default function PasswordScreen() {
     try {
       setIsSaving(true);
       await sendPasswordResetEmail(auth, user.email);
-      setModalConfig({
-        visible: true,
-        title: 'Email envoye',
-        message: 'Un email de reinitialisation a ete envoye.',
-        onConfirm: undefined,
-      });
+      if (!isMountedRef.current) return;
+      showToast('Email de reinitialisation envoye');
     } catch (error) {
-      setErrorMessage(mapFirebaseError(error));
+      if (!isMountedRef.current) return;
+      const message = mapFirebaseError(error);
+      setErrorMessage(message);
+      showActionToast(
+        'Echec de l\'envoi de l\'email.',
+        'Reessayer',
+        () => { handleForgotPassword(); }
+      );
     } finally {
-      setIsSaving(false);
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
     }
-  };
+  }, [mapFirebaseError, showToast, showActionToast]);
 
-  const handleChangePassword = async () => {
+  const handleChangePassword = useCallback(async () => {
     setErrorMessage('');
     if (!currentPassword || !newPassword || !confirmPassword) {
       setErrorMessage('Veuillez remplir tous les champs.');
@@ -134,26 +158,40 @@ export default function PasswordScreen() {
       const credential = EmailAuthProvider.credential(user.email, currentPassword);
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
+      if (!isMountedRef.current) return;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Mot de passe modifie avec succes');
       setModalConfig({
         visible: true,
-        title: 'Succès',
-        message: 'Mot de passe modifié avec succès.',
+        title: 'Succes',
+        message: 'Mot de passe modifie avec succes.',
         onConfirm: () => router.back(),
       });
     } catch (error) {
-      setErrorMessage(mapFirebaseError(error));
+      if (!isMountedRef.current) return;
+      const message = mapFirebaseError(error);
+      setErrorMessage(message);
+      showActionToast(
+        'Impossible de modifier le mot de passe.',
+        'Reessayer',
+        () => { handleChangePassword(); }
+      );
     } finally {
-      setIsSaving(false);
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
     }
-  };
+  }, [currentPassword, newPassword, confirmPassword, unmetRules, mapFirebaseError, showToast, showActionToast, router]);
 
-  const isInvalid =
+  const isInvalid = useMemo(() =>
     !currentPassword ||
     !newPassword ||
     !confirmPassword ||
     unmetRules.length > 0 ||
     newPassword !== confirmPassword ||
-    newPassword === currentPassword;
+    newPassword === currentPassword,
+    [currentPassword, newPassword, confirmPassword, unmetRules]
+  );
   const isSaveDisabled = isSaving || isInvalid;
 
   return (

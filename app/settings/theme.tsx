@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useThemePreference } from "@/contexts/ThemeContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -22,6 +23,7 @@ type ThemeOption = ThemePreference;
 
 export default function ThemeScreen() {
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const { preference, isLoading, setPreference } = useThemePreference();
   const [isSaving, setIsSaving] = useState(false);
   const [modalConfig, setModalConfig] = useState({
@@ -30,31 +32,36 @@ export default function ThemeScreen() {
     message: "",
   });
 
-  const themeOptions: {
-    value: ThemeOption;
-    label: string;
-    description: string;
-    icon: keyof typeof Ionicons.glyphMap;
-  }[] = [
+  const themeOptions = useMemo<
     {
-      value: "light",
-      label: "Clair",
-      description: "Thème clair pour une meilleure lisibilité en journée",
-      icon: "sunny",
-    },
-    {
-      value: "dark",
-      label: "Sombre",
-      description: "Thème sombre pour réduire la fatigue oculaire",
-      icon: "moon",
-    },
-    {
-      value: "auto",
-      label: "Automatique",
-      description: "Suit les paramètres système de votre appareil",
-      icon: "phone-portrait",
-    },
-  ];
+      value: ThemeOption;
+      label: string;
+      description: string;
+      icon: keyof typeof Ionicons.glyphMap;
+    }[]
+  >(
+    () => [
+      {
+        value: "light",
+        label: "Clair",
+        description: "Th\u00e8me clair pour une meilleure lisibilit\u00e9 en journ\u00e9e",
+        icon: "sunny",
+      },
+      {
+        value: "dark",
+        label: "Sombre",
+        description: "Th\u00e8me sombre pour r\u00e9duire la fatigue oculaire",
+        icon: "moon",
+      },
+      {
+        value: "auto",
+        label: "Automatique",
+        description: "Suit les param\u00e8tres syst\u00e8me de votre appareil",
+        icon: "phone-portrait",
+      },
+    ],
+    []
+  );
 
   const closeModal = () => {
     setModalConfig((prev) => ({ ...prev, visible: false }));
@@ -87,12 +94,17 @@ export default function ThemeScreen() {
         key={option.value}
         style={[
           styles.themeOption,
-          { borderBottomColor: Colors[colorScheme].tabIconDefault + "20" },
-          isSelected && { backgroundColor: Colors[colorScheme].tint + "10" },
+          { borderBottomColor: nc.borderLightAlpha },
+          isSelected && {
+            backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.06),
+          },
         ]}
         onPress={() => handleSelect(option.value)}
         activeOpacity={0.7}
         disabled={isDisabled}
+        accessibilityRole="radio"
+        accessibilityLabel={`${option.label}: ${option.description}`}
+        accessibilityState={{ selected: isSelected, disabled: isDisabled }}
       >
         <View style={styles.themeLeft}>
           <View
@@ -100,8 +112,8 @@ export default function ThemeScreen() {
               styles.iconContainer,
               {
                 backgroundColor: isSelected
-                  ? Colors[colorScheme].tint + "20"
-                  : Colors[colorScheme].tabIconDefault + "10",
+                  ? getBackgroundTint(Colors[colorScheme].tint, 0.13)
+                  : nc.backgroundPressed,
               },
             ]}
           >
@@ -111,7 +123,7 @@ export default function ThemeScreen() {
               color={
                 isSelected
                   ? Colors[colorScheme].tint
-                  : Colors[colorScheme].tabIconDefault
+                  : nc.textMuted
               }
             />
           </View>
@@ -122,7 +134,7 @@ export default function ThemeScreen() {
                 {
                   color: isSelected
                     ? Colors[colorScheme].tint
-                    : Colors[colorScheme].text,
+                    : nc.textStrong,
                   fontWeight: isSelected ? "600" : "500",
                 },
               ]}
@@ -132,7 +144,7 @@ export default function ThemeScreen() {
             <Text
               style={[
                 styles.themeDescription,
-                { color: Colors[colorScheme].tabIconDefault },
+                { color: nc.textMuted },
               ]}
             >
               {option.description}
@@ -155,13 +167,13 @@ export default function ThemeScreen() {
       <SafeAreaView
         style={[
           styles.container,
-          { backgroundColor: Colors[colorScheme].background },
+          { backgroundColor: nc.background },
         ]}
         edges={["top", "bottom"]}
       >
         <Stack.Screen
           options={{
-            title: "Thème",
+            title: "Th\u00e8me",
             headerBackTitle: "Retour",
           }}
         />
@@ -191,8 +203,8 @@ export default function ThemeScreen() {
             />
             <ThemedText style={styles.infoText}>
               Le mode automatique adapte l'apparence de l'application en
-              fonction des paramètres de votre appareil pour un confort optimal
-              à toute heure.
+              fonction des param\u00e8tres de votre appareil pour un confort optimal
+              \u00e0 toute heure.
             </ThemedText>
           </ThemedView>
         </ScrollView>
@@ -200,8 +212,8 @@ export default function ThemeScreen() {
           visible={modalConfig.visible}
           title={modalConfig.title}
           message={modalConfig.message}
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
+          backgroundColor={nc.background}
+          textColor={nc.textStrong}
           onClose={closeModal}
         />
       </SafeAreaView>
@@ -228,11 +240,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     marginBottom: 16,
-    // fontSize: 12,
-    // fontWeight: '700',
-    // textTransform: 'uppercase',
-    // letterSpacing: 1,
-    // marginBottom: 16,
   },
   themesContainer: {
     borderRadius: 12,

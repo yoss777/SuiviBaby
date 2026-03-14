@@ -5,11 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TermsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const nc = getNeutralColors(colorScheme);
 
   const sections = [
     {
@@ -71,7 +73,7 @@ export default function TermsScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['top','bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['top','bottom']}>
         <Stack.Screen
           options={{
             title: 'Conditions d\'utilisation',
@@ -82,14 +84,14 @@ export default function TermsScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <ThemedView style={styles.header}>
-            <View style={[styles.headerIcon, { backgroundColor: Colors[colorScheme].tint + '20' }]}>
+          <ThemedView style={styles.header} accessibilityRole="header">
+            <View style={[styles.headerIcon, { backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.12) }]}>
               <Ionicons name="document-text" size={32} color={Colors[colorScheme].tint} />
             </View>
             <ThemedText style={styles.headerTitle}>
               Conditions d'utilisation
             </ThemedText>
-            <Text style={[styles.headerDate, { color: Colors[colorScheme].tabIconDefault }]}>
+            <Text style={[styles.headerDate, { color: nc.textMuted }]}>
               Dernière mise à jour : 1er janvier 2026
             </Text>
           </ThemedView>
@@ -101,11 +103,15 @@ export default function TermsScreen() {
             </ThemedText>
 
             {sections.map((section, index) => (
-              <View key={index} style={styles.section}>
+              <View
+                key={index}
+                style={styles.section}
+                accessibilityRole="header"
+              >
                 <ThemedText style={styles.sectionTitle}>
                   {section.title}
                 </ThemedText>
-                <Text style={[styles.sectionContent, { color: Colors[colorScheme].tabIconDefault }]}>
+                <Text style={[styles.sectionContent, { color: nc.textLight }]}>
                   {section.content}
                 </Text>
               </View>
