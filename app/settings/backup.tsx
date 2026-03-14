@@ -6,7 +6,6 @@ import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
 import { useModal } from '@/contexts/ModalContext';
@@ -123,8 +122,8 @@ export default function BackupScreen() {
   );
 
   return (
-    <ThemedView style={styles.screen}>
-    <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['top','bottom']}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['bottom']}>
       <Stack.Screen
         options={{
           title: 'Sauvegarde',
@@ -135,7 +134,7 @@ export default function BackupScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <ThemedView style={styles.statusCard}>
+        <View style={[styles.statusCard, { backgroundColor: nc.backgroundCard }]}>
           <View style={styles.statusHeader}>
             <View
               style={[
@@ -180,9 +179,9 @@ export default function BackupScreen() {
               </Text>
             </View>
           </View>
-        </ThemedView>
+        </View>
 
-        <ThemedView style={styles.section}>
+        <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
           <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}>
             PARAM\u00c8TRES DE SAUVEGARDE
           </ThemedText>
@@ -204,7 +203,7 @@ export default function BackupScreen() {
             includePhotos,
             setIncludePhotos
           )}
-        </ThemedView>
+        </View>
 
         <View style={styles.actionsContainer}>
           <TouchableOpacity
@@ -252,15 +251,15 @@ export default function BackupScreen() {
           </TouchableOpacity>
         </View>
 
-        <ThemedView style={styles.infoBox}>
+        <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
           <Ionicons name="information-circle" size={24} color={Colors[colorScheme].tint} />
           <ThemedText style={styles.infoText}>
             Les sauvegardes sont crypt\u00e9es et stock\u00e9es de mani\u00e8re s\u00e9curis\u00e9e. Vos donn\u00e9es sont
             prot\u00e9g\u00e9es et accessibles uniquement par vous.
           </ThemedText>
-        </ThemedView>
+        </View>
 
-        <ThemedView style={styles.section}>
+        <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
           <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}>
             HISTORIQUE DES SAUVEGARDES
           </ThemedText>
@@ -309,10 +308,10 @@ export default function BackupScreen() {
               43.5 MB
             </Text>
           </View>
-        </ThemedView>
+        </View>
       </ScrollView>
     </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 

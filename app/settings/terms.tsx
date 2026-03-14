@@ -4,7 +4,6 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -72,8 +71,8 @@ export default function TermsScreen() {
   ];
 
   return (
-    <ThemedView style={styles.screen}>
-      <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['top','bottom']}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['bottom']}>
         <Stack.Screen
           options={{
             title: 'Conditions d\'utilisation',
@@ -84,7 +83,7 @@ export default function TermsScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <ThemedView style={styles.header} accessibilityRole="header">
+          <View style={[styles.header, { backgroundColor: nc.backgroundCard }]} accessibilityRole="header">
             <View style={[styles.headerIcon, { backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.12) }]}>
               <Ionicons name="document-text" size={32} color={Colors[colorScheme].tint} />
             </View>
@@ -94,9 +93,9 @@ export default function TermsScreen() {
             <Text style={[styles.headerDate, { color: nc.textMuted }]}>
               Dernière mise à jour : 1er janvier 2026
             </Text>
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.content}>
+          <View style={[styles.content, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText style={styles.intro}>
               Bienvenue sur SuiviBaby. Ces conditions d'utilisation regissent votre accès et
               utilisation de notre application. Veuillez les lire attentivement.
@@ -116,17 +115,17 @@ export default function TermsScreen() {
                 </Text>
               </View>
             ))}
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.footer}>
+          <View style={[styles.footer, { backgroundColor: nc.backgroundCard }]}>
             <Ionicons name="information-circle" size={20} color={Colors[colorScheme].tint} />
             <ThemedText style={styles.footerText}>
               Pour toute question : support@suivibaby.com
             </ThemedText>
-          </ThemedView>
+          </View>
         </ScrollView>
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 

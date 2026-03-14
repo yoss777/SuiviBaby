@@ -12,7 +12,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
@@ -177,13 +176,13 @@ export default function ThemeScreen() {
   };
 
   return (
-    <ThemedView style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={[
           styles.container,
           { backgroundColor: nc.background },
         ]}
-        edges={["top", "bottom"]}
+        edges={["bottom"]}
       >
         <Stack.Screen
           options={{
@@ -195,7 +194,7 @@ export default function ThemeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <ThemedView style={styles.section}>
+          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText
               style={[
                 styles.sectionTitle,
@@ -207,9 +206,9 @@ export default function ThemeScreen() {
             <View style={styles.themesContainer}>
               {themeOptions.map(renderThemeOption)}
             </View>
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.infoBox}>
+          <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
             <Ionicons
               name="information-circle"
               size={24}
@@ -220,7 +219,7 @@ export default function ThemeScreen() {
               fonction des param\u00e8tres de votre appareil pour un confort optimal
               \u00e0 toute heure.
             </ThemedText>
-          </ThemedView>
+          </View>
         </ScrollView>
         <InfoModal
           visible={modalConfig.visible}
@@ -231,7 +230,7 @@ export default function ThemeScreen() {
           onClose={closeModal}
         />
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 

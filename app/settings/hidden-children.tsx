@@ -15,7 +15,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
-import { ThemedView } from "@/components/themed-view";
 import { db } from "@/config/firebase";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
@@ -169,13 +168,13 @@ export default function HiddenChildrenScreen() {
   };
 
   return (
-    <ThemedView style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={[
           styles.container,
-          { backgroundColor: Colors[colorScheme].background },
+          { backgroundColor: nc.background },
         ]}
-        edges={["top", "bottom"]}
+        edges={["bottom"]}
       >
         <Stack.Screen
           options={{
@@ -196,7 +195,7 @@ export default function HiddenChildrenScreen() {
               <Text
                 style={[
                   styles.loadingText,
-                  { color: Colors[colorScheme].tabIconDefault },
+                  { color: nc.textMuted },
                 ]}
               >
                 Chargement...
@@ -207,17 +206,17 @@ export default function HiddenChildrenScreen() {
               <FontAwesome
                 name="eye-slash"
                 size={48}
-                color={Colors[colorScheme].tabIconDefault}
+                color={nc.textMuted}
               />
               <Text
-                style={[styles.emptyTitle, { color: Colors[colorScheme].text }]}
+                style={[styles.emptyTitle, { color: nc.textStrong }]}
               >
                 Aucun enfant masqué
               </Text>
               <Text
                 style={[
                   styles.emptyDescription,
-                  { color: Colors[colorScheme].tabIconDefault },
+                  { color: nc.textMuted },
                 ]}
               >
                 Vous pouvez masquer un enfant de votre liste de suivi depuis le
@@ -229,7 +228,7 @@ export default function HiddenChildrenScreen() {
               <Text
                 style={[
                   styles.infoText,
-                  { color: Colors[colorScheme].tabIconDefault },
+                  { color: nc.textMuted },
                 ]}
               >
                 Ces enfants sont masqués de votre liste de suivi. Vous pouvez
@@ -245,7 +244,7 @@ export default function HiddenChildrenScreen() {
                     accessibilityRole="summary"
                     accessibilityLabel={`${child.name}, ${ageText}, né le ${child.birthDate}`}
                   >
-                    <ThemedView style={styles.childCard}>
+                    <View style={[styles.childCard, { backgroundColor: nc.backgroundCard }]}>
                       <View style={[styles.childAvatar, { backgroundColor: nc.borderLight }]}>
                         <Text style={styles.childAvatarEmoji}>
                           {child.gender === "male" ? "👶" : "👧"}
@@ -255,7 +254,7 @@ export default function HiddenChildrenScreen() {
                         <Text
                           style={[
                             styles.childName,
-                            { color: Colors[colorScheme].text },
+                            { color: nc.textStrong },
                           ]}
                         >
                           {child.name}
@@ -263,13 +262,13 @@ export default function HiddenChildrenScreen() {
                         <Text
                           style={[
                             styles.childAge,
-                            { color: Colors[colorScheme].tabIconDefault },
+                            { color: nc.textMuted },
                           ]}
                         >
                           {ageText} • {child.birthDate}
                         </Text>
                       </View>
-                    </ThemedView>
+                    </View>
                     <TouchableOpacity
                       style={styles.restoreButton}
                       onPress={() => handleRestoreChild(child.id, child.name)}
@@ -301,19 +300,19 @@ export default function HiddenChildrenScreen() {
             <Pressable
               style={[
                 styles.modalContent,
-                { backgroundColor: Colors[colorScheme].background },
+                { backgroundColor: nc.backgroundCard },
               ]}
               onPress={(e) => e.stopPropagation()}
             >
               <Text
-                style={[styles.modalTitle, { color: Colors[colorScheme].text }]}
+                style={[styles.modalTitle, { color: nc.textStrong }]}
               >
                 Restaurer l'affichage
               </Text>
               <Text
                 style={[
                   styles.modalSubtitle,
-                  { color: Colors[colorScheme].text },
+                  { color: nc.textStrong },
                 ]}
               >
                 Êtes-vous sûr de vouloir restaurer{" "}
@@ -343,7 +342,7 @@ export default function HiddenChildrenScreen() {
           </Pressable>
         </Modal>
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 

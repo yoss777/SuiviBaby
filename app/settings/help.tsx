@@ -6,7 +6,6 @@ import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { InfoModal } from '@/components/ui/InfoModal';
 import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
@@ -194,8 +193,8 @@ export default function HelpScreen() {
   );
 
   return (
-    <ThemedView style={styles.screen}>
-    <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['top','bottom']}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['bottom']}>
       <Stack.Screen
         options={{
           title: 'Aide & Support',
@@ -206,25 +205,25 @@ export default function HelpScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <ThemedView style={styles.section}>
+        <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
           <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]} accessibilityRole="header">
             QUESTIONS FRÉQUENTES
           </ThemedText>
           <View style={styles.faqContainer}>
             {faqsMemo.map(renderFAQItem)}
           </View>
-        </ThemedView>
+        </View>
 
-        <ThemedView style={styles.section}>
+        <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
           <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]} accessibilityRole="header">
             NOUS CONTACTER
           </ThemedText>
           <View style={styles.supportContainer}>
             {supportOptionsMemo.map(renderSupportOption)}
           </View>
-        </ThemedView>
+        </View>
 
-        <ThemedView style={styles.section}>
+        <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
           <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]} accessibilityRole="header">
             ENVOYER UN MESSAGE
           </ThemedText>
@@ -271,24 +270,24 @@ export default function HelpScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.sendButton, { backgroundColor: Colors[colorScheme].tint }]}
+              style={[styles.sendButton, { backgroundColor: nc.todayAccent, shadowColor: nc.todayAccent }]}
               onPress={handleSendMessage}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel="Envoyer le message"
             >
-              <Ionicons name="send" size={20} color={nc.white} />
-              <Text style={[styles.sendButtonText, { color: nc.white }]}>Envoyer le message</Text>
+              <Ionicons name="send" size={20} color={colorScheme === 'dark' ? nc.white : nc.backgroundCard} />
+              <Text style={[styles.sendButtonText, { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard }]}>Envoyer le message</Text>
             </TouchableOpacity>
           </View>
-        </ThemedView>
+        </View>
 
-        <ThemedView style={styles.infoBox}>
+        <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
           <Ionicons name="time-outline" size={24} color={Colors[colorScheme].tint} />
           <ThemedText style={styles.infoText}>
             Notre equipe de support repond generalement sous 24 heures les jours ouvres.
           </ThemedText>
-        </ThemedView>
+        </View>
       </ScrollView>
       <InfoModal
         visible={modalConfig.visible}
@@ -299,7 +298,7 @@ export default function HelpScreen() {
         onClose={() => setModalConfig((prev) => ({ ...prev, visible: false }))}
       />
     </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -414,14 +413,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 48,
-    padding: 16,
+    paddingVertical: 16,
     borderRadius: 12,
-    gap: 8,
+    gap: 12,
     marginTop: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   sendButtonText: {
-    color: undefined as unknown as string, // set dynamically
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
   },
   infoBox: {

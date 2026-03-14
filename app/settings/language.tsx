@@ -12,7 +12,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
@@ -173,13 +172,13 @@ export default function LanguageScreen() {
   };
 
   return (
-    <ThemedView style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={[
           styles.container,
           { backgroundColor: nc.background },
         ]}
-        edges={["top", "bottom"]}
+        edges={["bottom"]}
       >
         <Stack.Screen
           options={{
@@ -191,7 +190,7 @@ export default function LanguageScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <ThemedView style={styles.section}>
+          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
             {/* <ThemedText
               style={[
                 styles.sectionTitle,
@@ -203,9 +202,9 @@ export default function LanguageScreen() {
             <View style={styles.languagesContainer}>
               {languages.map(renderLanguageOption)}
             </View>
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.infoBox}>
+          <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
             <Ionicons
               name="information-circle"
               size={24}
@@ -216,7 +215,7 @@ export default function LanguageScreen() {
               de l'application. Les donn\u00e9es m\u00e9dicales resteront dans leur langue
               d'origine.
             </ThemedText>
-          </ThemedView>
+          </View>
         </ScrollView>
         <InfoModal
           visible={modalConfig.visible}
@@ -227,7 +226,7 @@ export default function LanguageScreen() {
           onClose={closeModal}
         />
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 

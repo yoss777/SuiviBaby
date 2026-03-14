@@ -4,7 +4,6 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -52,13 +51,13 @@ const sections = [
   ];
 
   return (
-    <ThemedView style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={[
           styles.container,
           { backgroundColor: nc.background },
         ]}
-        edges={["top", "bottom"]}
+        edges={["bottom"]}
       >
         <Stack.Screen
           options={{
@@ -70,7 +69,7 @@ const sections = [
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <ThemedView style={styles.header} accessibilityRole="header">
+          <View style={[styles.header, { backgroundColor: nc.backgroundCard }]} accessibilityRole="header">
             <View
               style={[
                 styles.headerIcon,
@@ -94,9 +93,9 @@ const sections = [
             >
               Dernière mise à jour : 1er janvier 2026
             </Text>
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.content}>
+          <View style={[styles.content, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText style={styles.intro}>
               Chez SuiviBaby, la protection de vos donnees personnelles est
               notre priorite absolue. Cette politique explique comment nous
@@ -122,9 +121,9 @@ const sections = [
                 </Text>
               </View>
             ))}
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.footer}>
+          <View style={[styles.footer, { backgroundColor: nc.backgroundCard }]}>
             <Ionicons
               name="mail-outline"
               size={20}
@@ -133,10 +132,10 @@ const sections = [
             <ThemedText style={styles.footerText}>
               Pour toute question : privacy@suivibaby.com
             </ThemedText>
-          </ThemedView>
+          </View>
         </ScrollView>
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 

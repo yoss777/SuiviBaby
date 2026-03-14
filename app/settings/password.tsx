@@ -6,7 +6,6 @@ import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { InfoModal } from '@/components/ui/InfoModal';
 import { auth } from '@/config/firebase';
 import { getNeutralColors } from '@/constants/dashboardColors';
@@ -197,8 +196,8 @@ export default function PasswordScreen() {
   const isSaveDisabled = isSaving || isInvalid;
 
   return (
-    <ThemedView style={styles.screen}>
-      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['top','bottom']}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['bottom']}>
         <Stack.Screen
           options={{
             title: 'Mot de passe',
@@ -209,8 +208,8 @@ export default function PasswordScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <ThemedView style={styles.section}>
-            <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tabIconDefault }]}>
+          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
+            <ThemedText style={[styles.sectionTitle, { color: nc.textMuted }]}>
               Mot de passe
             </ThemedText>
 
@@ -223,9 +222,9 @@ export default function PasswordScreen() {
                   style={[
                     styles.input,
                     {
-                      backgroundColor: Colors[colorScheme].background,
-                      color: Colors[colorScheme].text,
-                      borderColor: Colors[colorScheme].tabIconDefault + '30',
+                      backgroundColor: nc.backgroundPressed,
+                      color: nc.textStrong,
+                      borderColor: nc.borderLight,
                     },
                   ]}
                   value={currentPassword}
@@ -234,7 +233,7 @@ export default function PasswordScreen() {
                     if (errorMessage) setErrorMessage('');
                   }}
                   placeholder="Entrez votre mot de passe actuel"
-                  placeholderTextColor={Colors[colorScheme].tabIconDefault}
+                  placeholderTextColor={nc.textMuted}
                   secureTextEntry={!showCurrentPassword}
                   textContentType="password"
                   autoCapitalize="none"
@@ -248,7 +247,7 @@ export default function PasswordScreen() {
                   <Ionicons
                     name={showCurrentPassword ? 'eye-off-outline' : 'eye-outline'}
                     size={22}
-                    color={Colors[colorScheme].tabIconDefault}
+                    color={nc.textMuted}
                   />
                 </TouchableOpacity>
               </View>
@@ -259,7 +258,7 @@ export default function PasswordScreen() {
                 disabled={isSaving}
                 accessibilityState={{ disabled: isSaving }}
               >
-                <Text style={[styles.forgotLinkText, { color: Colors[colorScheme].tabIconDefault }]}>
+                <Text style={[styles.forgotLinkText, { color: nc.textMuted }]}>
                   Mot de passe oublie ?
                 </Text>
               </TouchableOpacity>
@@ -274,9 +273,9 @@ export default function PasswordScreen() {
                   style={[
                     styles.input,
                     {
-                      backgroundColor: Colors[colorScheme].background,
-                      color: Colors[colorScheme].text,
-                      borderColor: Colors[colorScheme].tabIconDefault + '30',
+                      backgroundColor: nc.backgroundPressed,
+                      color: nc.textStrong,
+                      borderColor: nc.borderLight,
                     },
                   ]}
                   value={newPassword}
@@ -285,7 +284,7 @@ export default function PasswordScreen() {
                     if (errorMessage) setErrorMessage('');
                   }}
                   placeholder="Entrez votre nouveau mot de passe"
-                  placeholderTextColor={Colors[colorScheme].tabIconDefault}
+                  placeholderTextColor={nc.textMuted}
                   secureTextEntry={!showNewPassword}
                   textContentType="newPassword"
                   autoCapitalize="none"
@@ -299,12 +298,12 @@ export default function PasswordScreen() {
                   <Ionicons
                     name={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
                     size={22}
-                    color={Colors[colorScheme].tabIconDefault}
+                    color={nc.textMuted}
                   />
                 </TouchableOpacity>
               </View>
               {newPassword.length > 0 && unmetRules.length > 0 && (
-                <Text style={[styles.hint, { color: Colors[colorScheme].tabIconDefault }]}>
+                <Text style={[styles.hint, { color: nc.textMuted }]}>
                   {unmetRules.map((rule) => rule.label).join(', ')}
                 </Text>
               )}
@@ -325,7 +324,7 @@ export default function PasswordScreen() {
                 />
               </View>
               {newPassword.length > 0 && (
-                <Text style={[styles.strengthLabel, { color: Colors[colorScheme].tabIconDefault }]}>
+                <Text style={[styles.strengthLabel, { color: nc.textMuted }]}>
                   Force: {strengthLabel}
                 </Text>
               )}
@@ -340,9 +339,9 @@ export default function PasswordScreen() {
                   style={[
                     styles.input,
                     {
-                      backgroundColor: Colors[colorScheme].background,
-                      color: Colors[colorScheme].text,
-                      borderColor: Colors[colorScheme].tabIconDefault + '30',
+                      backgroundColor: nc.backgroundPressed,
+                      color: nc.textStrong,
+                      borderColor: nc.borderLight,
                     },
                   ]}
                   value={confirmPassword}
@@ -351,7 +350,7 @@ export default function PasswordScreen() {
                     if (errorMessage) setErrorMessage('');
                   }}
                   placeholder="Confirmez votre nouveau mot de passe"
-                  placeholderTextColor={Colors[colorScheme].tabIconDefault}
+                  placeholderTextColor={nc.textMuted}
                   secureTextEntry={!showConfirmPassword}
                   textContentType="password"
                   autoCapitalize="none"
@@ -365,7 +364,7 @@ export default function PasswordScreen() {
                   <Ionicons
                     name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
                     size={22}
-                    color={Colors[colorScheme].tabIconDefault}
+                    color={nc.textMuted}
                   />
                 </TouchableOpacity>
               </View>
@@ -373,19 +372,19 @@ export default function PasswordScreen() {
             {!!errorMessage && (
               <Text style={[styles.errorText, { color: nc.error }]}>{errorMessage}</Text>
             )}
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.infoBox}>
+          <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
             <Ionicons name="information-circle" size={24} color={Colors[colorScheme].tint} />
             <ThemedText style={styles.infoText}>
               Conseil: 8+ caracteres, 1 chiffre, 1 caractere special.
             </ThemedText>
-          </ThemedView>
+          </View>
 
           <TouchableOpacity
             style={[
               styles.saveButton,
-              { backgroundColor: Colors[colorScheme].tint },
+              { backgroundColor: nc.todayAccent, shadowColor: nc.todayAccent },
               isSaveDisabled && styles.saveButtonDisabled,
             ]}
             onPress={handleChangePassword}
@@ -394,8 +393,8 @@ export default function PasswordScreen() {
             accessibilityRole="button"
             accessibilityState={{ disabled: isSaveDisabled }}
           >
-            <Ionicons name="checkmark" size={20} color={nc.white} />
-            <Text style={[styles.saveButtonText, { color: nc.white }]}>
+            <Ionicons name="checkmark" size={20} color={colorScheme === 'dark' ? nc.white : nc.backgroundCard} />
+            <Text style={[styles.saveButtonText, { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard }]}>
               {isSaving ? 'Enregistrement...' : 'Changer le mot de passe'}
             </Text>
           </TouchableOpacity>
@@ -404,13 +403,13 @@ export default function PasswordScreen() {
           visible={modalConfig.visible}
           title={modalConfig.title}
           message={modalConfig.message}
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
+          backgroundColor={nc.background}
+          textColor={nc.textStrong}
           onClose={closeModal}
           onConfirm={modalConfig.onConfirm}
         />
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -509,17 +508,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    paddingVertical: 16,
     borderRadius: 12,
     marginBottom: 24,
-    gap: 8,
+    gap: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   saveButtonDisabled: {
     opacity: 0.6,
   },
   saveButtonText: {
-    color: undefined as unknown as string, // set dynamically
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
   },
 });

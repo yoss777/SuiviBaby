@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ThemedView } from "@/components/themed-view";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
@@ -411,16 +410,16 @@ export default function SettingsScreen() {
       <Text style={[styles.sectionTitle, { color: nc.textMuted }]}>
         {title}
       </Text>
-      <ThemedView style={styles.sectionContent}>
+      <View style={[styles.sectionContent, { backgroundColor: nc.backgroundCard }]}>
         {items.map(renderSettingItem)}
-      </ThemedView>
+      </View>
     </View>
   );
 
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: nc.background }]}
-      edges={["top", "bottom"]}
+      edges={["bottom"]}
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}

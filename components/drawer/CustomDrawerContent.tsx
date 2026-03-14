@@ -292,11 +292,14 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           accessibilityRole="button"
           accessibilityLabel="Ajouter un enfant"
         >
-          <Text
-            style={[styles.addBabyText, { color: Colors[colorScheme].tint }]}
-          >
-            ➕ Ajouter un enfant
-          </Text>
+          <View style={styles.buttonContent}>
+            <FontAwesome name="plus" size={14} color={Colors[colorScheme].tint} />
+            <Text
+              style={[styles.addBabyText, { color: Colors[colorScheme].tint }]}
+            >
+              Ajouter un enfant
+            </Text>
+          </View>
         </TouchableOpacity>
 
         {/* Bouton J'ai un code - Retiré car intégré dans la modale */}
@@ -313,11 +316,14 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           accessibilityRole="button"
           accessibilityLabel="Ouvrir les paramètres"
         >
-          <Text
-            style={[styles.settingsText, { color: Colors[colorScheme].tint }]}
-          >
-            ⚙️ Paramètres
-          </Text>
+          <View style={styles.buttonContent}>
+            <FontAwesome name="cog" size={14} color={Colors[colorScheme].tint} />
+            <Text
+              style={[styles.settingsText, { color: Colors[colorScheme].tint }]}
+            >
+              Paramètres
+            </Text>
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -326,9 +332,12 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           accessibilityRole="button"
           accessibilityLabel="Se déconnecter"
         >
-          <Text style={[styles.signOutText, { color: nc.error }]}>
-            🚪 Déconnexion
-          </Text>
+          <View style={styles.buttonContent}>
+            <FontAwesome name="sign-out-alt" size={14} color={nc.error} />
+            <Text style={[styles.signOutText, { color: nc.error }]}>
+              Déconnexion
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -483,6 +492,11 @@ const styles = StyleSheet.create({
   childBirthDate: {
     fontSize: 12,
     marginTop: 2,
+  },
+  buttonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   addBabyButton: {
     marginHorizontal: 16,

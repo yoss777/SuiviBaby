@@ -15,7 +15,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
@@ -204,11 +203,11 @@ export default function NotificationsScreen() {
       onValueChange={onValueChange}
       disabled={isLoading}
       trackColor={{
-        false: Colors[colorScheme].tabIconDefault + "30",
+        false: nc.textMuted + "30",
         true: Colors[colorScheme].tint + "50",
       }}
       thumbColor={value ? Colors[colorScheme].tint : nc.backgroundCard}
-      ios_backgroundColor={Colors[colorScheme].tabIconDefault + "30"}
+      ios_backgroundColor={nc.textMuted + "30"}
       accessibilityRole="switch"
       accessibilityLabel={label}
       accessibilityState={{ checked: value }}
@@ -227,7 +226,7 @@ export default function NotificationsScreen() {
         <Text
           style={[
             styles.settingDescription,
-            { color: Colors[colorScheme].tabIconDefault },
+            { color: nc.textMuted },
           ]}
         >
           {description}
@@ -295,7 +294,7 @@ export default function NotificationsScreen() {
         <Text
           style={[
             styles.settingDescription,
-            { color: Colors[colorScheme].tabIconDefault },
+            { color: nc.textMuted },
             (isDisabled || isRowMuted) && styles.settingDescriptionDisabled,
           ]}
         >
@@ -306,8 +305,8 @@ export default function NotificationsScreen() {
         style={[
           styles.pickerContainer,
           {
-            borderColor: Colors[colorScheme].tabIconDefault + "30",
-            backgroundColor: Colors[colorScheme].background,
+            borderColor: nc.borderLight,
+            backgroundColor: nc.backgroundPressed,
           },
           isDisabled && styles.pickerContainerDisabled,
         ]}
@@ -322,19 +321,19 @@ export default function NotificationsScreen() {
             styles.picker,
             {
               color: isDisabled
-                ? Colors[colorScheme].tabIconDefault
-                : Colors[colorScheme].text,
-              backgroundColor: Colors[colorScheme].background,
+                ? nc.textMuted
+                : nc.textStrong,
+              backgroundColor: nc.backgroundPressed,
               height: Platform.OS === "ios" ? 60 : 54,
             },
           ]}
           itemStyle={{
             color: isDisabled
-              ? Colors[colorScheme].tabIconDefault
-              : Colors[colorScheme].text,
+              ? nc.textMuted
+              : nc.textStrong,
             fontSize: 13,
           }}
-          dropdownIconColor={Colors[colorScheme].tabIconDefault}
+          dropdownIconColor={nc.textMuted}
         >
           <Picker.Item label="Aucun" value={0} />
           {Array.from({ length: maxHours }, (_, index) => index + 1).map(
@@ -349,13 +348,13 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <ThemedView style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={[
           styles.container,
-          { backgroundColor: Colors[colorScheme].background },
+          { backgroundColor: nc.background },
         ]}
-        edges={["top", "bottom"]}
+        edges={["bottom"]}
       >
         <Stack.Screen
           options={{
@@ -367,7 +366,7 @@ export default function NotificationsScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <ThemedView style={styles.section}>
+          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText
               style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}
             >
@@ -385,9 +384,9 @@ export default function NotificationsScreen() {
               emailEnabled,
               (value) => handleToggle("email", value)
             )}
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.section}>
+          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText
               style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}
             >
@@ -434,9 +433,9 @@ export default function NotificationsScreen() {
               24,
               (value) => updateReminders({ vitamines: value })
             )}
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.section}>
+          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText
               style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}
             >
@@ -460,9 +459,9 @@ export default function NotificationsScreen() {
               marketing,
               (value) => handleToggle("marketing", value)
             )}
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.infoBox}>
+          <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
             <Ionicons
               name="information-circle"
               size={24}
@@ -473,20 +472,20 @@ export default function NotificationsScreen() {
               notifications critiques relatives a la securite ne peuvent pas
               etre desactivees.
             </ThemedText>
-          </ThemedView>
+          </View>
         </ScrollView>
         <InfoModal
           visible={modalConfig.visible}
           title={modalConfig.title}
           message={modalConfig.message}
           confirmText={modalConfig.confirmText}
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
+          backgroundColor={nc.background}
+          textColor={nc.textStrong}
           onClose={closeModal}
           onConfirm={modalConfig.onConfirm}
         />
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 

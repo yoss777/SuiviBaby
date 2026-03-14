@@ -26,7 +26,6 @@ import {
 } from "firebase/firestore";
 
 import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -983,13 +982,13 @@ export default function ExportScreen() {
   };
 
   return (
-    <ThemedView style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
       <SafeAreaView
         style={[
           styles.container,
           { backgroundColor: Colors[colorScheme].background },
         ]}
-        edges={["top", "bottom"]}
+        edges={["bottom"]}
       >
         <Stack.Screen
           options={{
@@ -1005,7 +1004,7 @@ export default function ExportScreen() {
             </Text>
             {(isExporting || isLoading) && (
               <View style={[styles.autoDeleteButton, { backgroundColor: nc.error }]}>
-                <Text style={[styles.autoDeleteButtonText, { color: nc.backgroundCard }]}>
+                <Text style={[styles.autoDeleteButtonText, { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard }]}>
                   Export en cours...
                 </Text>
               </View>
@@ -1016,7 +1015,7 @@ export default function ExportScreen() {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-          <ThemedView style={styles.section}>
+          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText
               style={[
                 styles.sectionTitle,
@@ -1028,9 +1027,9 @@ export default function ExportScreen() {
             <View style={styles.formatsContainer}>
               {exportFormats.map(renderFormatOption)}
             </View>
-          </ThemedView>
+          </View>
 
-          <ThemedView style={styles.section}>
+          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
             <View style={styles.sectionHeader}>
               <ThemedText
                 style={[
@@ -1087,10 +1086,10 @@ export default function ExportScreen() {
                 children.map(renderChildRow)
               )}
             </View>
-          </ThemedView>
+          </View>
 
           {selectedEventsCount > 0 && (
-            <ThemedView style={styles.section}>
+            <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
               <View style={styles.sectionHeader}>
                 <ThemedText
                   style={[
@@ -1128,11 +1127,11 @@ export default function ExportScreen() {
                   )
                 )}
               </View>
-            </ThemedView>
+            </View>
           )}
 
           {selectedInteractionsCount > 0 && (
-            <ThemedView style={styles.section}>
+            <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
               <View style={styles.sectionHeader}>
                 <ThemedText
                   style={[
@@ -1170,11 +1169,11 @@ export default function ExportScreen() {
                   )
                 )}
               </View>
-            </ThemedView>
+            </View>
           )}
 
           {selectedEventsCount === 0 && selectedInteractionsCount === 0 && (
-            <ThemedView style={styles.section}>
+            <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
               <Text
                 style={[
                   styles.childSubtitle,
@@ -1183,10 +1182,10 @@ export default function ExportScreen() {
               >
                 Aucune donnee à exporter.
               </Text>
-            </ThemedView>
+            </View>
           )}
 
-          <ThemedView style={styles.infoBox}>
+          <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
             <Ionicons
               name="shield-checkmark"
               size={24}
@@ -1196,13 +1195,14 @@ export default function ExportScreen() {
               Vos donnees sont exportées localement. Stockez le fichier dans un
               endroit sûr.
             </ThemedText>
-          </ThemedView>
+          </View>
 
           <TouchableOpacity
             style={[
               styles.exportButton,
               {
-                backgroundColor: Colors[colorScheme].tint,
+                backgroundColor: nc.todayAccent,
+                shadowColor: nc.todayAccent,
                 opacity: isExportDisabled ? 0.6 : 1,
               },
             ]}
@@ -1212,8 +1212,8 @@ export default function ExportScreen() {
             accessibilityRole="button"
             accessibilityLabel="Exporter les données"
           >
-            <Ionicons name="cloud-download" size={20} color={nc.backgroundCard} />
-            <Text style={[styles.exportButtonText, { color: nc.backgroundCard }]}>
+            <Ionicons name="cloud-download" size={20} color={colorScheme === 'dark' ? nc.white : nc.backgroundCard} />
+            <Text style={[styles.exportButtonText, { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard }]}>
               {isExporting ? "Export en cours..." : "Exporter les donnees"}
             </Text>
           </TouchableOpacity>
@@ -1234,7 +1234,7 @@ export default function ExportScreen() {
           onConfirm={modalConfig.onConfirm}
         />
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -1441,13 +1441,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 16,
+    paddingVertical: 16,
     borderRadius: 12,
     marginBottom: 24,
-    gap: 8,
+    gap: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   exportButtonText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
   },
   autoExportLoader: {

@@ -6,10 +6,8 @@ import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { InfoModal } from '@/components/ui/InfoModal';
 import { getNeutralColors } from '@/constants/dashboardColors';
-import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -85,8 +83,8 @@ export default function ProfileScreen() {
   const isSaveDisabled = isSaving || isInvalid || isUnchanged;
 
   return (
-    <ThemedView style={styles.screen}>
-      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]} edges={['top','bottom']}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['bottom']}>
         <Stack.Screen
           options={{
             title: 'Profil',
@@ -97,8 +95,8 @@ export default function ProfileScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <ThemedView style={styles.section}>
-            <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tabIconDefault }]}>
+          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
+            <ThemedText style={[styles.sectionTitle, { color: nc.textMuted }]}>
               Profil
             </ThemedText>
 
@@ -108,18 +106,18 @@ export default function ProfileScreen() {
                 style={[
                   styles.input,
                   {
-                    backgroundColor: Colors[colorScheme].background,
-                    color: Colors[colorScheme].text,
-                    borderColor: Colors[colorScheme].tabIconDefault + '30',
+                    backgroundColor: nc.backgroundPressed,
+                    color: nc.textStrong,
+                    borderColor: nc.borderLight,
                   },
                 ]}
                 value={displayName}
                 onChangeText={setDisplayName}
                 placeholder="Entrez votre pseudo"
-                placeholderTextColor={Colors[colorScheme].tabIconDefault}
+                placeholderTextColor={nc.textMuted}
               />
               {isInvalid && (
-                <Text style={[styles.helperText, { color: Colors[colorScheme].tabIconDefault }]}>
+                <Text style={[styles.helperText, { color: nc.textMuted }]}>
                   6 caracteres minimum.
                 </Text>
               )}
@@ -136,23 +134,23 @@ export default function ProfileScreen() {
                   styles.input,
                   styles.inputDisabled,
                   {
-                    backgroundColor: Colors[colorScheme].background,
-                    color: Colors[colorScheme].tabIconDefault,
-                    borderColor: Colors[colorScheme].tabIconDefault + '30',
+                    backgroundColor: nc.backgroundPressed,
+                    color: nc.textMuted,
+                    borderColor: nc.borderLight,
                   },
                 ]}
                 value={email ?? ''}
                 editable={false}
                 placeholder="Email du compte"
-                placeholderTextColor={Colors[colorScheme].tabIconDefault}
+                placeholderTextColor={nc.textMuted}
               />
             </View>
-          </ThemedView>
+          </View>
 
           <TouchableOpacity
             style={[
               styles.saveButton,
-              { backgroundColor: Colors[colorScheme].tint },
+              { backgroundColor: nc.todayAccent, shadowColor: nc.todayAccent },
               isSaveDisabled && styles.saveButtonDisabled,
             ]}
             onPress={handleSave}
@@ -161,8 +159,8 @@ export default function ProfileScreen() {
             accessibilityRole="button"
             accessibilityState={{ disabled: isSaveDisabled }}
           >
-            <Ionicons name="checkmark" size={20} color={nc.white} />
-            <Text style={[styles.saveButtonText, { color: nc.white }]}>
+            <Ionicons name="checkmark" size={20} color={colorScheme === 'dark' ? nc.white : nc.backgroundCard} />
+            <Text style={[styles.saveButtonText, { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard }]}>
               {isSaving ? 'Enregistrement...' : 'Enregistrer'}
             </Text>
           </TouchableOpacity>
@@ -171,12 +169,12 @@ export default function ProfileScreen() {
           visible={modalConfig.visible}
           title={modalConfig.title}
           message={modalConfig.message}
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
+          backgroundColor={nc.background}
+          textColor={nc.textStrong}
           onClose={closeModal}
         />
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -231,17 +229,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    paddingVertical: 16,
     borderRadius: 12,
     marginBottom: 24,
-    gap: 8,
+    gap: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   saveButtonDisabled: {
     opacity: 0.6,
   },
   saveButtonText: {
-    color: undefined as unknown as string, // set dynamically
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
   },
 });

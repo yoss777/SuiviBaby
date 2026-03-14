@@ -1,4 +1,3 @@
-import { ThemedView } from "@/components/themed-view";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DotsLoader } from "@/components/ui/DotsLoader";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
@@ -274,7 +273,7 @@ export default function JoinChildScreen() {
   );
 
   return (
-    <ThemedView style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: nc.background }]}>
       <KeyboardAvoidingView
         style={styles.safeArea}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -283,7 +282,7 @@ export default function JoinChildScreen() {
         <SafeAreaView
           style={[
             styles.safeArea,
-            { backgroundColor: Colors[colorScheme].background },
+            { backgroundColor: nc.background },
           ]}
           edges={["bottom"]}
         >
@@ -421,7 +420,7 @@ export default function JoinChildScreen() {
                             <Text
                               style={[
                                 styles.acceptButtonText,
-                                { color: nc.backgroundCard },
+                                { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard },
                               ]}
                             >
                               Accepter
@@ -511,7 +510,7 @@ export default function JoinChildScreen() {
                       <Text
                         style={[
                           styles.submitButtonText,
-                          { color: nc.backgroundCard },
+                          { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard },
                         ]}
                       >
                         Valider le code
@@ -554,10 +553,10 @@ export default function JoinChildScreen() {
           confirmTextColor={
             colorScheme === "dark" ? nc.textStrong : nc.white
           }
-          cancelButtonColor={`${Colors[colorScheme].tabIconDefault}20`}
-          cancelTextColor={Colors[colorScheme].text}
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
+          cancelButtonColor={`${nc.textMuted}20`}
+          cancelTextColor={nc.textStrong}
+          backgroundColor={nc.background}
+          textColor={nc.textStrong}
           onConfirm={handleSwitchConfirm}
           onCancel={handleSwitchLater}
           onDismiss={handleSwitchLater}
@@ -568,13 +567,13 @@ export default function JoinChildScreen() {
             <View
               style={[
                 styles.prepCard,
-                { backgroundColor: Colors[colorScheme].background },
+                { backgroundColor: nc.background },
               ]}
             >
               <DotsLoader color={Colors[colorScheme].tint} />
               <IconPulseDots color={Colors[colorScheme].tint} />
               <Text
-                style={[styles.prepText, { color: Colors[colorScheme].text }]}
+                style={[styles.prepText, { color: nc.textStrong }]}
               >
                 Chargement du profil...
               </Text>
@@ -582,7 +581,7 @@ export default function JoinChildScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
-    </ThemedView>
+    </View>
   );
 }
 
