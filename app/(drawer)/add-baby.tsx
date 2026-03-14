@@ -28,11 +28,6 @@ const GENDER_COLORS = {
   male: '#4A90E2',
 } as const;
 
-const INFO_COLORS = {
-  light: { bg: '#d1ecf1', border: '#17a2b8', text: '#0c5460', icon: '#17a2b8' },
-  dark: { bg: '#0c2a30', border: '#17a2b8', text: '#a2d5dc', icon: '#17a2b8' },
-} as const;
-
 export default function AddBabyScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -148,7 +143,7 @@ export default function AddBabyScreen() {
     },
     infoBox: {
       flexDirection: "row" as const,
-      backgroundColor: INFO_COLORS[colorScheme].bg,
+      backgroundColor: nc.todayAccent + "15",
       padding: 16,
       marginHorizontal: 20,
       marginTop: 24,
@@ -156,12 +151,12 @@ export default function AddBabyScreen() {
       borderRadius: 12,
       gap: 12,
       borderLeftWidth: 4,
-      borderLeftColor: INFO_COLORS[colorScheme].border,
+      borderLeftColor: nc.todayAccent,
     },
     infoText: {
       flex: 1,
       fontSize: 14,
-      color: INFO_COLORS[colorScheme].text,
+      color: nc.todayAccent,
       lineHeight: 20,
     },
   }), [nc, colorScheme]);
@@ -285,7 +280,7 @@ export default function AddBabyScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: Colors[colorScheme].background }]} edges={['bottom']}>
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
           <View style={dynamicStyles.header}>
             <FontAwesome name="baby" size={48} color={tint} />
@@ -430,7 +425,7 @@ export default function AddBabyScreen() {
 
           {/* Information */}
           <View style={dynamicStyles.infoBox}>
-            <FontAwesome name="info-circle" size={20} color={INFO_COLORS[colorScheme].icon} />
+            <FontAwesome name="info-circle" size={20} color={nc.todayAccent} />
             <Text style={dynamicStyles.infoText}>
               L'enfant sera immédiatement ajouté à votre liste de suivi. Vous pourrez modifier ses informations plus tard depuis les paramètres.
             </Text>
@@ -458,7 +453,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   required: {
-    color: "#dc3545",
+    color: "#ef4444",
   },
   genderContainer: {
     flexDirection: "row",

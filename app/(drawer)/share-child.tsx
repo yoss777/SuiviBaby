@@ -146,7 +146,7 @@ export default function ShareChildScreen() {
           fontStyle: "italic" as const,
         },
         generateButton: {
-          backgroundColor: Colors[colorScheme].tint,
+          backgroundColor: nc.todayAccent,
           flexDirection: "row" as const,
           alignItems: "center" as const,
           justifyContent: "center" as const,
@@ -154,7 +154,7 @@ export default function ShareChildScreen() {
           minHeight: 48,
           gap: 12,
           borderRadius: 12,
-          shadowColor: Colors[colorScheme].tint,
+          shadowColor: nc.todayAccent,
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.3,
           shadowRadius: 8,
@@ -229,6 +229,19 @@ export default function ShareChildScreen() {
     [nc, colorScheme],
   );
 
+  const loadChildInfo = useCallback(async () => {
+    try {
+      const childDoc = await getDoc(doc(db, "children", childId));
+      if (childDoc.exists()) {
+        setChildName(childDoc.data().name);
+      }
+    } catch (error) {
+      console.error("Erreur chargement enfant:", error);
+    } finally {
+      setIsLoadingChild(false);
+    }
+  }, [childId]);
+
   // Charger les infos de l'enfant et le code existant
   useEffect(() => {
     loadChildInfo();
@@ -240,7 +253,7 @@ export default function ShareChildScreen() {
     return () => {
       unsubscribe();
     };
-  }, [childId, user?.uid]);
+  }, [childId, user?.uid, loadChildInfo]);
 
   useFocusEffect(
     useCallback(() => {
@@ -260,20 +273,7 @@ export default function ShareChildScreen() {
     }, [childId, colorScheme, returnTo, router, setHeaderLeft])
   );
 
-  const loadChildInfo = async () => {
-    try {
-      const childDoc = await getDoc(doc(db, "children", childId));
-      if (childDoc.exists()) {
-        setChildName(childDoc.data().name);
-      }
-    } catch (error) {
-      console.error("Erreur chargement enfant:", error);
-    } finally {
-      setIsLoadingChild(false);
-    }
-  };
-
-  const handleGenerateCode = async () => {
+  const handleGenerateCode = useCallback(async () => {
     setIsLoadingCode(true);
     try {
       const code = await createShareCode(childId, childName);
@@ -286,17 +286,17 @@ export default function ShareChildScreen() {
     } finally {
       setIsLoadingCode(false);
     }
-  };
+  }, [childId, childName, showAlert]);
 
-  const handleCopyCode = () => {
+  const handleCopyCode = useCallback(() => {
     if (shareCode) {
       Clipboard.setString(shareCode);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       showAlert("\u2705", "Code copie dans le presse-papier", [{ text: "" }]);
     }
-  };
+  }, [shareCode, showAlert]);
 
-  const handleShareCode = async () => {
+  const handleShareCode = useCallback(async () => {
     if (!shareCode) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -307,9 +307,9 @@ export default function ShareChildScreen() {
     } catch (error) {
       console.error("Erreur partage:", error);
     }
-  };
+  }, [shareCode, childName]);
 
-  const handleSendInvitation = async () => {
+  const handleSendInvitation = useCallback(async () => {
     if (isSendingInviteRef.current || isLoadingInvite) return;
     const trimmedEmail = inviteEmail.trim();
     if (!trimmedEmail) {
@@ -360,7 +360,7 @@ export default function ShareChildScreen() {
       setIsLoadingInvite(false);
       isSendingInviteRef.current = false;
     }
-  };
+  }, [childId, childName, inviteEmail, isLoadingInvite, showAlert, user?.uid]);
 
   if (isLoadingChild) {
     return (
@@ -391,10 +391,7 @@ export default function ShareChildScreen() {
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <SafeAreaView
-          style={[
-            styles.safeArea,
-            { backgroundColor: Colors[colorScheme].background },
-          ]}
+          style={styles.safeArea}
           edges={["bottom"]}
         >
           <ScrollView

@@ -242,13 +242,13 @@ export default function JoinChildScreen() {
   }, []);
 
   const headerStyle = useMemo(
-    () => [styles.header, { backgroundColor: nc.backgroundCard }],
-    [nc.backgroundCard],
+    () => [styles.header, { backgroundColor: nc.backgroundCard, shadowColor: nc.shadow }],
+    [nc.backgroundCard, nc.shadow],
   );
 
   const sectionStyle = useMemo(
-    () => [styles.section, { backgroundColor: nc.backgroundCard }],
-    [nc.backgroundCard],
+    () => [styles.section, { backgroundColor: nc.backgroundCard, shadowColor: nc.shadow }],
+    [nc.backgroundCard, nc.shadow],
   );
 
   const invitationCardStyle = useMemo(
@@ -604,7 +604,6 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -628,7 +627,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderRadius: 16,
     padding: 20,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -688,6 +686,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
+    minHeight: 44,
     borderRadius: 10,
     gap: 8,
   },
@@ -717,6 +716,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
+    minHeight: 48,
     borderWidth: 1,
     gap: 12,
   },
@@ -731,6 +731,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 16,
+    minHeight: 48,
     gap: 12,
     borderRadius: 12,
     shadowOffset: { width: 0, height: 4 },
