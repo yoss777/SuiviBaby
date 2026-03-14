@@ -18,6 +18,8 @@ interface InfoModalProps {
   textColor: string;
   confirmButtonColor?: string;
   confirmTextColor?: string;
+  dismissText?: string;
+  allowBackdropDismiss?: boolean;
   onClose: () => void;
   onConfirm?: () => void;
 }
@@ -48,6 +50,8 @@ export function InfoModal({
   textColor,
   confirmButtonColor,
   confirmTextColor,
+  dismissText,
+  allowBackdropDismiss = false,
   onClose,
   onConfirm,
 }: InfoModalProps) {
@@ -97,7 +101,7 @@ export function InfoModal({
       animationType="fade"
       onRequestClose={() => {}}
     >
-      <Pressable style={styles.modalOverlay}>
+      <Pressable style={styles.modalOverlay} onPress={allowBackdropDismiss ? onClose : undefined}>
         <Pressable
           style={[styles.modalContent, { backgroundColor }]}
           onPress={(event) => event.stopPropagation()}
@@ -125,6 +129,11 @@ export function InfoModal({
                 </Text>
               </TouchableOpacity>
             </View>
+          )}
+          {!!dismissText && (
+            <TouchableOpacity onPress={onClose} activeOpacity={0.7} style={styles.dismissLink}>
+              <Text style={[styles.dismissText, { color: textColor }]}>{dismissText}</Text>
+            </TouchableOpacity>
           )}
         </Pressable>
       </Pressable>
@@ -185,5 +194,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: '600',
+  },
+  dismissLink: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  dismissText: {
+    fontSize: 14,
+    opacity: 0.6,
   },
 });

@@ -2,9 +2,18 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  where,
+} from "firebase/firestore";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   Platform,
@@ -15,19 +24,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  query,
-  where,
-} from "firebase/firestore";
 
 import { ThemedText } from "@/components/themed-text";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { db } from "@/config/firebase";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,7 +36,6 @@ import type { Child } from "@/contexts/BabyContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { db } from "@/config/firebase";
 import { Event, EventType } from "@/services/eventsService";
 import { obtenirPreferences } from "@/services/userPreferencesService";
 import type { ChildRole } from "@/types/permissions";
@@ -82,35 +82,105 @@ type ExportTypeItem = {
 };
 
 const BASE_EVENT_TYPES: ExportTypeItem[] = [
-  { id: "biberon", label: "Biberon", icon: { lib: "MaterialCommunityIcons", name: "baby-bottle" } },
-  { id: "tetee", label: "Tetee", icon: { lib: "FontAwesome", name: "person-breastfeeding" } },
-  { id: "pompage", label: "Pompage", icon: { lib: "FontAwesome", name: "pump-medical" } },
-  { id: "couche", label: "Couche", icon: { lib: "MaterialCommunityIcons", name: "human-baby-changing-table" } },
-  { id: "miction", label: "Miction", icon: { lib: "FontAwesome", name: "water" } },
+  {
+    id: "biberon",
+    label: "Biberon",
+    icon: { lib: "MaterialCommunityIcons", name: "baby-bottle" },
+  },
+  {
+    id: "tetee",
+    label: "Tetee",
+    icon: { lib: "FontAwesome", name: "person-breastfeeding" },
+  },
+  {
+    id: "pompage",
+    label: "Pompage",
+    icon: { lib: "FontAwesome", name: "pump-medical" },
+  },
+  {
+    id: "couche",
+    label: "Couche",
+    icon: { lib: "MaterialCommunityIcons", name: "human-baby-changing-table" },
+  },
+  {
+    id: "miction",
+    label: "Miction",
+    icon: { lib: "FontAwesome", name: "water" },
+  },
   { id: "selle", label: "Selle", icon: { lib: "FontAwesome", name: "poop" } },
-  { id: "sommeil", label: "Sommeil", icon: { lib: "FontAwesome", name: "moon" } },
-  { id: "vaccin", label: "Vaccin", icon: { lib: "FontAwesome", name: "syringe" } },
-  { id: "vitamine", label: "Vitamine", icon: { lib: "FontAwesome", name: "pills" } },
+  {
+    id: "sommeil",
+    label: "Sommeil",
+    icon: { lib: "FontAwesome", name: "moon" },
+  },
+  {
+    id: "vaccin",
+    label: "Vaccin",
+    icon: { lib: "FontAwesome", name: "syringe" },
+  },
+  {
+    id: "vitamine",
+    label: "Vitamine",
+    icon: { lib: "FontAwesome", name: "pills" },
+  },
 ];
 
 const EXTRA_EVENT_TYPES: ExportTypeItem[] = [
-  { id: "solide", label: "Solide", icon: { lib: "FontAwesome", name: "utensils" } },
-  { id: "bain", label: "Bain", icon: { lib: "MaterialCommunityIcons", name: "bathtub" } },
-  { id: "temperature", label: "Temperature", icon: { lib: "MaterialCommunityIcons", name: "thermometer" } },
-  { id: "medicament", label: "Medicament", icon: { lib: "MaterialCommunityIcons", name: "pill" } },
-  { id: "symptome", label: "Symptome", icon: { lib: "MaterialCommunityIcons", name: "alert-circle-outline" } },
-  { id: "croissance", label: "Croissance", icon: { lib: "MaterialCommunityIcons", name: "chart-line" } },
-  { id: "activite", label: "Activite", icon: { lib: "MaterialCommunityIcons", name: "run-fast" } },
-  { id: "jalon", label: "Jalon", icon: { lib: "MaterialCommunityIcons", name: "star-outline" } },
+  {
+    id: "solide",
+    label: "Solide",
+    icon: { lib: "FontAwesome", name: "utensils" },
+  },
+  {
+    id: "bain",
+    label: "Bain",
+    icon: { lib: "MaterialCommunityIcons", name: "bathtub" },
+  },
+  {
+    id: "temperature",
+    label: "Temperature",
+    icon: { lib: "MaterialCommunityIcons", name: "thermometer" },
+  },
+  {
+    id: "medicament",
+    label: "Medicament",
+    icon: { lib: "MaterialCommunityIcons", name: "pill" },
+  },
+  {
+    id: "symptome",
+    label: "Symptome",
+    icon: { lib: "MaterialCommunityIcons", name: "alert-circle-outline" },
+  },
+  {
+    id: "croissance",
+    label: "Croissance",
+    icon: { lib: "MaterialCommunityIcons", name: "chart-line" },
+  },
+  {
+    id: "activite",
+    label: "Activite",
+    icon: { lib: "MaterialCommunityIcons", name: "run-fast" },
+  },
+  {
+    id: "jalon",
+    label: "Jalon",
+    icon: { lib: "MaterialCommunityIcons", name: "star-outline" },
+  },
 ];
 
 const INTERACTION_TYPES: ExportTypeItem[] = [
   { id: "likes", label: "Likes", icon: { lib: "Ionicons", name: "heart" } },
-  { id: "comments", label: "Commentaires", icon: { lib: "Ionicons", name: "chatbubble" } },
+  {
+    id: "comments",
+    label: "Commentaires",
+    icon: { lib: "Ionicons", name: "chatbubble" },
+  },
 ];
 
 const ALL_EVENT_TYPE_IDS = new Set<EventType>(
-  [...BASE_EVENT_TYPES, ...EXTRA_EVENT_TYPES].map((item) => item.id as EventType)
+  [...BASE_EVENT_TYPES, ...EXTRA_EVENT_TYPES].map(
+    (item) => item.id as EventType,
+  ),
 );
 
 const getEventTypes = (hideExtra: boolean) => [
@@ -133,10 +203,10 @@ export default function ExportScreen() {
   const [isContributorOnly, setIsContributorOnly] = useState(false);
   const eventTypes = useMemo(
     () => getEventTypes(isContributorOnly),
-    [isContributorOnly]
+    [isContributorOnly],
   );
   const [selectedEventTypes, setSelectedEventTypes] = useState<Set<EventType>>(
-    () => new Set(getEventTypes(false).map((item) => item.id as EventType))
+    () => new Set(getEventTypes(false).map((item) => item.id as EventType)),
   );
   const [selectedInteractionTypes, setSelectedInteractionTypes] = useState<
     Set<InteractionType>
@@ -158,6 +228,11 @@ export default function ExportScreen() {
   const [summaryIndex, setSummaryIndex] = useState(0);
   const summaryScrollRef = useRef<ScrollView | null>(null);
   const autoExportTriggered = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      autoExportTriggered.current = false;
+    }, []),
+  );
   const [preferences, setPreferences] = useState<{
     notifications?: any;
     theme?: string;
@@ -186,15 +261,20 @@ export default function ExportScreen() {
           obtenirPreferences().catch(() => null),
           Promise.all(
             visibleChildren.map(async (child) => {
-              const [eventsSnapshot, likesSnapshot, commentsSnapshot, accessDoc] = await Promise.all([
+              const [
+                eventsSnapshot,
+                likesSnapshot,
+                commentsSnapshot,
+                accessDoc,
+              ] = await Promise.all([
                 user?.uid
                   ? getDocs(
                       query(
                         collection(db, "events"),
                         where("childId", "==", child.id),
                         where("userId", "==", user.uid),
-                        limit(10000)
-                      )
+                        limit(10000),
+                      ),
                     )
                   : Promise.resolve({ docs: [] } as any),
                 user?.uid
@@ -203,8 +283,8 @@ export default function ExportScreen() {
                         collection(db, "eventLikes"),
                         where("childId", "==", child.id),
                         where("userId", "==", user.uid),
-                        limit(10000)
-                      )
+                        limit(10000),
+                      ),
                     )
                   : Promise.resolve({ docs: [] } as any),
                 user?.uid
@@ -213,8 +293,8 @@ export default function ExportScreen() {
                         collection(db, "eventComments"),
                         where("childId", "==", child.id),
                         where("userId", "==", user.uid),
-                        limit(10000)
-                      )
+                        limit(10000),
+                      ),
                     )
                   : Promise.resolve({ docs: [] } as any),
                 user?.uid
@@ -223,26 +303,27 @@ export default function ExportScreen() {
               ]);
 
               const events = eventsSnapshot.docs.map(
-                (d: any) => ({ id: d.id, ...d.data() }) as Event
+                (d: any) => ({ id: d.id, ...d.data() }) as Event,
               );
 
-              const role = accessDoc && accessDoc.exists()
-                ? ((accessDoc.data()?.role ?? null) as ChildRole | null)
-                : null;
+              const role =
+                accessDoc && accessDoc.exists()
+                  ? ((accessDoc.data()?.role ?? null) as ChildRole | null)
+                  : null;
 
               return {
                 child,
                 events,
                 likes: likesSnapshot.docs.map(
-                  (d: any) => ({ id: d.id, ...d.data() }) as EventLike
+                  (d: any) => ({ id: d.id, ...d.data() }) as EventLike,
                 ),
                 comments: commentsSnapshot.docs.map(
-                  (d: any) => ({ id: d.id, ...d.data() }) as EventComment
+                  (d: any) => ({ id: d.id, ...d.data() }) as EventComment,
                 ),
                 role,
                 selected: true,
               };
-            })
+            }),
           ),
         ]);
 
@@ -255,22 +336,28 @@ export default function ExportScreen() {
         }
 
         if (isMounted) {
-          const roles = childrenWithEvents.map((item) => item.role).filter(Boolean);
+          const roles = childrenWithEvents
+            .map((item) => item.role)
+            .filter(Boolean);
           const hasElevatedRole = roles.some(
-            (role) => role === "owner" || role === "admin"
+            (role) => role === "owner" || role === "admin",
           );
-          const hasContributorRole = roles.some((role) => role === "contributor");
+          const hasContributorRole = roles.some(
+            (role) => role === "contributor",
+          );
           const contributorOnly =
             !hasElevatedRole && (hasContributorRole || roles.length === 0);
 
           setIsContributorOnly(contributorOnly);
           setChildren((prev) => {
             const selectionMap = new Map(
-              prev.map((item) => [item.child.id, item.selected])
+              prev.map((item) => [item.child.id, item.selected]),
             );
             return childrenWithEvents.map((item) => ({
               ...item,
-              selected: isAutoDeleteFlow ? true : selectionMap.get(item.child.id) ?? true,
+              selected: isAutoDeleteFlow
+                ? true
+                : (selectionMap.get(item.child.id) ?? true),
             }));
           });
 
@@ -278,10 +365,16 @@ export default function ExportScreen() {
             setSelectedEventTypes(
               contributorOnly
                 ? new Set()
-                : new Set(getEventTypes(contributorOnly).map((item) => item.id as EventType))
+                : new Set(
+                    getEventTypes(contributorOnly).map(
+                      (item) => item.id as EventType,
+                    ),
+                  ),
             );
             setSelectedInteractionTypes(
-              new Set(INTERACTION_TYPES.map((item) => item.id as InteractionType))
+              new Set(
+                INTERACTION_TYPES.map((item) => item.id as InteractionType),
+              ),
             );
           }
         }
@@ -310,10 +403,13 @@ export default function ExportScreen() {
       setSelectedEventTypes(new Set());
       return;
     }
-    setSelectedEventTypes(new Set(eventTypes.map((item) => item.id as EventType)));
+    setSelectedEventTypes(
+      new Set(eventTypes.map((item) => item.id as EventType)),
+    );
   }, [eventTypes, isContributorOnly]);
 
   const closeModal = () => {
+    const wasDeleteFlow = isAutoDeleteFlow && modalConfig.onConfirm;
     setModalConfig((prev) => ({
       ...prev,
       visible: false,
@@ -322,6 +418,10 @@ export default function ExportScreen() {
       confirmText: undefined,
       onConfirm: undefined,
     }));
+    if (wasDeleteFlow) {
+      autoExportTriggered.current = false;
+      router.replace("/(drawer)/settings");
+    }
   };
 
   const serializeValue = (value: any): any => {
@@ -335,7 +435,7 @@ export default function ExportScreen() {
         return value.map(serializeValue);
       }
       return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [key, serializeValue(item)])
+        Object.entries(value).map(([key, item]) => [key, serializeValue(item)]),
       );
     }
     return value;
@@ -343,21 +443,21 @@ export default function ExportScreen() {
 
   const selectedChildren = useMemo(
     () => children.filter((item) => item.selected),
-    [children]
+    [children],
   );
 
   const selectedEventsCount = useMemo(
     () => selectedChildren.reduce((sum, item) => sum + item.events.length, 0),
-    [selectedChildren]
+    [selectedChildren],
   );
 
   const selectedInteractionsCount = useMemo(
     () =>
       selectedChildren.reduce(
         (sum, item) => sum + item.likes.length + item.comments.length,
-        0
+        0,
       ),
-    [selectedChildren]
+    [selectedChildren],
   );
 
   const selectedCanExportEvents = useMemo(
@@ -366,18 +466,18 @@ export default function ExportScreen() {
         (child) =>
           child.role === "owner" ||
           child.role === "admin" ||
-          child.events.length > 0
+          child.events.length > 0,
       ),
-    [selectedChildren]
+    [selectedChildren],
   );
 
   const selectedEventTypesArray = useMemo(
     () => Array.from(selectedEventTypes),
-    [selectedEventTypes]
+    [selectedEventTypes],
   );
   const selectedInteractionTypesArray = useMemo(
     () => Array.from(selectedInteractionTypes),
-    [selectedInteractionTypes]
+    [selectedInteractionTypes],
   );
 
   useEffect(() => {
@@ -397,8 +497,10 @@ export default function ExportScreen() {
   const toggleChild = (childId: string) => {
     setChildren((prev) =>
       prev.map((item) =>
-        item.child.id === childId ? { ...item, selected: !item.selected } : item
-      )
+        item.child.id === childId
+          ? { ...item, selected: !item.selected }
+          : item,
+      ),
     );
   };
 
@@ -442,7 +544,9 @@ export default function ExportScreen() {
       if (prev.size === INTERACTION_TYPES.length) {
         return new Set();
       }
-      return new Set(INTERACTION_TYPES.map((item) => item.id as InteractionType));
+      return new Set(
+        INTERACTION_TYPES.map((item) => item.id as InteractionType),
+      );
     });
   };
 
@@ -624,7 +728,8 @@ export default function ExportScreen() {
 
   const hasSelectedChildren = selectedChildren.length > 0;
   const hasSelectedTypes =
-    selectedEventTypesArray.length > 0 || selectedInteractionTypesArray.length > 0;
+    selectedEventTypesArray.length > 0 ||
+    selectedInteractionTypesArray.length > 0;
   const hasSelectedData =
     (selectedEventsCount > 0 && selectedEventTypesArray.length > 0) ||
     (selectedInteractionsCount > 0 && selectedInteractionTypesArray.length > 0);
@@ -697,10 +802,12 @@ export default function ExportScreen() {
           preferences,
           children: effectiveChildren.map((item) => {
             const canExportEventsForChild =
-              item.role === "owner" || item.role === "admin" || item.events.length > 0;
+              item.role === "owner" ||
+              item.role === "admin" ||
+              item.events.length > 0;
             const filteredEvents = canExportEventsForChild
               ? item.events.filter((event) =>
-                  effectiveEventTypes.includes(event.type)
+                  effectiveEventTypes.includes(event.type),
                 )
               : [];
             return {
@@ -710,7 +817,9 @@ export default function ExportScreen() {
               photoUri: item.child.photoUri ?? null,
               events: filteredEvents.map(serializeValue),
               likes: includeLikes ? item.likes.map(serializeValue) : [],
-              comments: includeComments ? item.comments.map(serializeValue) : [],
+              comments: includeComments
+                ? item.comments.map(serializeValue)
+                : [],
             };
           }),
         },
@@ -729,7 +838,7 @@ export default function ExportScreen() {
         JSON.stringify(exportData, null, 2),
         {
           encoding: FileSystem.EncodingType.UTF8,
-        }
+        },
       );
 
       const canShare = await Sharing.isAvailableAsync();
@@ -750,7 +859,7 @@ export default function ExportScreen() {
         title: "Export terminé",
         message: "",
         mode: "summary",
-        confirmText: shouldReturnToDelete ? "Continuer la suppression de votre compte" : undefined,
+        confirmText: shouldReturnToDelete ? "Supprimer le compte" : undefined,
         onConfirm: shouldReturnToDelete
           ? () => {
               router.replace("/(drawer)/settings?delete=1");
@@ -759,11 +868,9 @@ export default function ExportScreen() {
       });
     } catch (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showActionToast(
-        "Impossible d'exporter vos données.",
-        "Réessayer",
-        () => { handleExport(); }
-      );
+      showActionToast("Impossible d'exporter vos données.", "Réessayer", () => {
+        handleExport();
+      });
       setModalConfig({
         visible: true,
         title: "Erreur",
@@ -916,9 +1023,8 @@ export default function ExportScreen() {
   const renderTypeRow = (
     type: ExportTypeItem,
     isSelected: boolean,
-    onToggle: () => void
+    onToggle: () => void,
   ) => {
-
     return (
       <TouchableOpacity
         key={type.id}
@@ -975,7 +1081,9 @@ export default function ExportScreen() {
             },
           ]}
         >
-          {isSelected && <Ionicons name="checkmark" size={18} color={nc.backgroundCard} />}
+          {isSelected && (
+            <Ionicons name="checkmark" size={18} color={nc.backgroundCard} />
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -999,12 +1107,29 @@ export default function ExportScreen() {
         {isAutoDeleteFlow ? (
           <View style={styles.autoExportLoader}>
             <IconPulseDots color={Colors[colorScheme].tint} />
-            <Text style={[styles.autoExportText, { color: Colors[colorScheme].text }]}>
-              {isExporting || isLoading ? "Preparation de l'export..." : "Export termine."}
+            <Text
+              style={[
+                styles.autoExportText,
+                { color: Colors[colorScheme].text },
+              ]}
+            >
+              {isExporting || isLoading
+                ? "Preparation de l'export..."
+                : "Export terminé."}
             </Text>
             {(isExporting || isLoading) && (
-              <View style={[styles.autoDeleteButton, { backgroundColor: nc.error }]}>
-                <Text style={[styles.autoDeleteButtonText, { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard }]}>
+              <View
+                style={[styles.autoDeleteButton, { backgroundColor: nc.error }]}
+              >
+                <Text
+                  style={[
+                    styles.autoDeleteButtonText,
+                    {
+                      color:
+                        colorScheme === "dark" ? nc.white : nc.backgroundCard,
+                    },
+                  ]}
+                >
                   Export en cours...
                 </Text>
               </View>
@@ -1015,208 +1140,234 @@ export default function ExportScreen() {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
-            <ThemedText
-              style={[
-                styles.sectionTitle,
-                { color: Colors[colorScheme].tabIconDefault },
-              ]}
+            <View
+              style={[styles.section, { backgroundColor: nc.backgroundCard }]}
             >
-              Format d&apos;export
-            </ThemedText>
-            <View style={styles.formatsContainer}>
-              {exportFormats.map(renderFormatOption)}
-            </View>
-          </View>
-
-          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
-            <View style={styles.sectionHeader}>
               <ThemedText
                 style={[
                   styles.sectionTitle,
                   { color: Colors[colorScheme].tabIconDefault },
                 ]}
               >
-                Enfants à exporter
+                Format d&apos;export
               </ThemedText>
-              {children.length > 1 && (
-                <TouchableOpacity
-                  onPress={toggleAllChildren}
-                  disabled={isLoading || isExporting}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="Tout sélectionner ou désélectionner les enfants"
-                >
-                  <Text
-                    style={[
-                      styles.toggleAllText,
-                      { color: Colors[colorScheme].tint },
-                    ]}
-                  >
-                    {children.every((item) => item.selected)
-                      ? "Tout décocher"
-                      : "Tout cocher"}
-                  </Text>
-                </TouchableOpacity>
-              )}
+              <View style={styles.formatsContainer}>
+                {exportFormats.map(renderFormatOption)}
+              </View>
             </View>
-            <View style={styles.childrenContainer}>
-              {isLoading ? (
-                <View style={styles.childrenLoading}>
-                  <IconPulseDots color={Colors[colorScheme].tint} />
+
+            <View
+              style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+            >
+              <View style={styles.sectionHeader}>
+                <ThemedText
+                  style={[
+                    styles.sectionTitle,
+                    { color: Colors[colorScheme].tabIconDefault },
+                  ]}
+                >
+                  Enfants à exporter
+                </ThemedText>
+                {children.length > 1 && (
+                  <TouchableOpacity
+                    onPress={toggleAllChildren}
+                    disabled={isLoading || isExporting}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="Tout sélectionner ou désélectionner les enfants"
+                  >
+                    <Text
+                      style={[
+                        styles.toggleAllText,
+                        { color: Colors[colorScheme].tint },
+                      ]}
+                    >
+                      {children.every((item) => item.selected)
+                        ? "Tout décocher"
+                        : "Tout cocher"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={styles.childrenContainer}>
+                {isLoading ? (
+                  <View style={styles.childrenLoading}>
+                    <IconPulseDots color={Colors[colorScheme].tint} />
+                    <Text
+                      style={[
+                        styles.childSubtitle,
+                        { color: Colors[colorScheme].tabIconDefault },
+                      ]}
+                    >
+                      Chargement des enfants...
+                    </Text>
+                  </View>
+                ) : children.length === 0 ? (
                   <Text
                     style={[
                       styles.childSubtitle,
                       { color: Colors[colorScheme].tabIconDefault },
                     ]}
                   >
-                    Chargement des enfants...
+                    Aucun enfant disponible.
                   </Text>
+                ) : (
+                  children.map(renderChildRow)
+                )}
+              </View>
+            </View>
+
+            {selectedEventsCount > 0 && (
+              <View
+                style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+              >
+                <View style={styles.sectionHeader}>
+                  <ThemedText
+                    style={[
+                      styles.sectionTitle,
+                      { color: Colors[colorScheme].tabIconDefault },
+                    ]}
+                  >
+                    Types d'evenements
+                  </ThemedText>
+                  <TouchableOpacity
+                    onPress={toggleAllEventTypes}
+                    disabled={
+                      isLoading || isExporting || !selectedCanExportEvents
+                    }
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="Tout sélectionner ou désélectionner les types d'événements"
+                  >
+                    <Text
+                      style={[
+                        styles.toggleAllText,
+                        { color: Colors[colorScheme].tint },
+                      ]}
+                    >
+                      {selectedEventTypes.size === eventTypes.length
+                        ? "Tout décocher"
+                        : "Tout cocher"}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              ) : children.length === 0 ? (
+                <View style={styles.typesContainer}>
+                  {eventTypes.map((type) =>
+                    renderTypeRow(
+                      type,
+                      selectedEventTypes.has(type.id as EventType),
+                      () => toggleEventType(type.id as EventType),
+                    ),
+                  )}
+                </View>
+              </View>
+            )}
+
+            {selectedInteractionsCount > 0 && (
+              <View
+                style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+              >
+                <View style={styles.sectionHeader}>
+                  <ThemedText
+                    style={[
+                      styles.sectionTitle,
+                      { color: Colors[colorScheme].tabIconDefault },
+                    ]}
+                  >
+                    Types d'interactions
+                  </ThemedText>
+                  <TouchableOpacity
+                    onPress={toggleAllInteractionTypes}
+                    disabled={isLoading || isExporting}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="Tout sélectionner ou désélectionner les types d'interactions"
+                  >
+                    <Text
+                      style={[
+                        styles.toggleAllText,
+                        { color: Colors[colorScheme].tint },
+                      ]}
+                    >
+                      {selectedInteractionTypes.size ===
+                      INTERACTION_TYPES.length
+                        ? "Tout décocher"
+                        : "Tout cocher"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.typesContainer}>
+                  {INTERACTION_TYPES.map((type) =>
+                    renderTypeRow(
+                      type,
+                      selectedInteractionTypes.has(type.id as InteractionType),
+                      () => toggleInteractionType(type.id as InteractionType),
+                    ),
+                  )}
+                </View>
+              </View>
+            )}
+
+            {selectedEventsCount === 0 && selectedInteractionsCount === 0 && (
+              <View
+                style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+              >
                 <Text
                   style={[
                     styles.childSubtitle,
                     { color: Colors[colorScheme].tabIconDefault },
                   ]}
                 >
-                  Aucun enfant disponible.
+                  Aucune donnee à exporter.
                 </Text>
-              ) : (
-                children.map(renderChildRow)
-              )}
-            </View>
-          </View>
+              </View>
+            )}
 
-          {selectedEventsCount > 0 && (
-            <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
-              <View style={styles.sectionHeader}>
-                <ThemedText
-                  style={[
-                    styles.sectionTitle,
-                    { color: Colors[colorScheme].tabIconDefault },
-                  ]}
-                >
-                  Types d'evenements
-                </ThemedText>
-                <TouchableOpacity
-                  onPress={toggleAllEventTypes}
-                  disabled={isLoading || isExporting || !selectedCanExportEvents}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="Tout sélectionner ou désélectionner les types d'événements"
-                >
-                  <Text
-                    style={[
-                      styles.toggleAllText,
-                      { color: Colors[colorScheme].tint },
-                    ]}
-                  >
-                    {selectedEventTypes.size === eventTypes.length
-                      ? "Tout décocher"
-                      : "Tout cocher"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.typesContainer}>
-                {eventTypes.map((type) =>
-                  renderTypeRow(
-                    type,
-                    selectedEventTypes.has(type.id as EventType),
-                    () => toggleEventType(type.id as EventType)
-                  )
-                )}
-              </View>
+            <View
+              style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}
+            >
+              <Ionicons
+                name="shield-checkmark"
+                size={24}
+                color={Colors[colorScheme].tint}
+              />
+              <ThemedText style={styles.infoText}>
+                Vos donnees sont exportées localement. Stockez le fichier dans
+                un endroit sûr.
+              </ThemedText>
             </View>
-          )}
 
-          {selectedInteractionsCount > 0 && (
-            <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
-              <View style={styles.sectionHeader}>
-                <ThemedText
-                  style={[
-                    styles.sectionTitle,
-                    { color: Colors[colorScheme].tabIconDefault },
-                  ]}
-                >
-                  Types d'interactions
-                </ThemedText>
-                <TouchableOpacity
-                  onPress={toggleAllInteractionTypes}
-                  disabled={isLoading || isExporting}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="Tout sélectionner ou désélectionner les types d'interactions"
-                >
-                  <Text
-                    style={[
-                      styles.toggleAllText,
-                      { color: Colors[colorScheme].tint },
-                    ]}
-                  >
-                    {selectedInteractionTypes.size === INTERACTION_TYPES.length
-                      ? "Tout décocher"
-                      : "Tout cocher"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.typesContainer}>
-                {INTERACTION_TYPES.map((type) =>
-                  renderTypeRow(
-                    type,
-                    selectedInteractionTypes.has(type.id as InteractionType),
-                    () => toggleInteractionType(type.id as InteractionType)
-                  )
-                )}
-              </View>
-            </View>
-          )}
-
-          {selectedEventsCount === 0 && selectedInteractionsCount === 0 && (
-            <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
+            <TouchableOpacity
+              style={[
+                styles.exportButton,
+                {
+                  backgroundColor: nc.todayAccent,
+                  shadowColor: nc.todayAccent,
+                  opacity: isExportDisabled ? 0.6 : 1,
+                },
+              ]}
+              onPress={() => handleExport()}
+              disabled={isExportDisabled}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Exporter les données"
+            >
+              <Ionicons
+                name="cloud-download"
+                size={20}
+                color="#fff"
+              />
               <Text
                 style={[
-                  styles.childSubtitle,
-                  { color: Colors[colorScheme].tabIconDefault },
+                  styles.exportButtonText,
+                  {
+                    color: "#fff",
+                  },
                 ]}
               >
-                Aucune donnee à exporter.
+                {isExporting ? "Export en cours..." : "Exporter les donnees"}
               </Text>
-            </View>
-          )}
-
-          <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
-            <Ionicons
-              name="shield-checkmark"
-              size={24}
-              color={Colors[colorScheme].tint}
-            />
-            <ThemedText style={styles.infoText}>
-              Vos donnees sont exportées localement. Stockez le fichier dans un
-              endroit sûr.
-            </ThemedText>
-          </View>
-
-          <TouchableOpacity
-            style={[
-              styles.exportButton,
-              {
-                backgroundColor: nc.todayAccent,
-                shadowColor: nc.todayAccent,
-                opacity: isExportDisabled ? 0.6 : 1,
-              },
-            ]}
-            onPress={() => handleExport()}
-            disabled={isExportDisabled}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Exporter les données"
-          >
-            <Ionicons name="cloud-download" size={20} color={colorScheme === 'dark' ? nc.white : nc.backgroundCard} />
-            <Text style={[styles.exportButtonText, { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard }]}>
-              {isExporting ? "Export en cours..." : "Exporter les donnees"}
-            </Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
           </ScrollView>
         )}
         <InfoModal
@@ -1228,8 +1379,15 @@ export default function ExportScreen() {
               : modalConfig.message
           }
           confirmText={modalConfig.confirmText}
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
+          confirmButtonColor={modalConfig.onConfirm ? nc.error : undefined}
+          backgroundColor={nc.backgroundCard}
+          textColor={nc.textStrong}
+          dismissText={
+            modalConfig.onConfirm
+              ? "Fermer et revenir aux paramètres"
+              : undefined
+          }
+          allowBackdropDismiss={!!modalConfig.onConfirm}
           onClose={closeModal}
           onConfirm={modalConfig.onConfirm}
         />

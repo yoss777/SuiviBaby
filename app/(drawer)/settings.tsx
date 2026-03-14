@@ -410,7 +410,9 @@ export default function SettingsScreen() {
       <Text style={[styles.sectionTitle, { color: nc.textMuted }]}>
         {title}
       </Text>
-      <View style={[styles.sectionContent, { backgroundColor: nc.backgroundCard }]}>
+      <View
+        style={[styles.sectionContent, { backgroundColor: nc.backgroundCard }]}
+      >
         {items.map(renderSettingItem)}
       </View>
     </View>
@@ -453,7 +455,10 @@ export default function SettingsScreen() {
         cancelText="Supprimer"
         backgroundColor={nc.backgroundCard}
         textColor={nc.textStrong}
-        confirmButtonColor={Colors[colorScheme].tint}
+        confirmButtonColor={Colors.light.tint}
+        confirmTextColor={colorScheme === "dark" ? nc.white : nc.backgroundCard}
+        allowBackdropDismiss
+        onDismiss={() => setShowDeleteExportModal(false)}
         onConfirm={() => {
           setShowDeleteExportModal(false);
           router.push("/settings/export?afterDelete=1");
