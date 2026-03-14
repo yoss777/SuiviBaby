@@ -55,7 +55,7 @@ export default function HiddenChildrenScreen() {
     }
 
     setLoading(true);
-    const prefsRef = doc(db, "userPreferences", user.uid);
+    const prefsRef = doc(db, "user_preferences", user.uid);
 
     const unsubscribe = onSnapshot(
       prefsRef,
