@@ -343,6 +343,29 @@ service cloud.firestore {
     }
 
     // ============================================
+    // NOTIFICATIONS
+    // ============================================
+
+    match /device_tokens/{tokenId} {
+      // Lecture/création/mise à jour : l'utilisateur ne gère que ses propres tokens
+      allow read, create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
+      // Suppression : uniquement ses propres tokens
+      allow delete: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    match /notification_history/{docId} {
+      // Lecture seule pour l'utilisateur (l'écriture est faite par les Cloud Functions)
+      allow read: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // ============================================
     // CLOUD FUNCTIONS DATA (server-side only)
     // ============================================
 

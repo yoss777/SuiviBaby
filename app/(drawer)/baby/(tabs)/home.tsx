@@ -24,6 +24,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Ionicons } from "@expo/vector-icons";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import {
   ajouterJalon,
   ajouterSommeil,
@@ -535,7 +536,7 @@ export default function HomeDashboard() {
   const { openSheet: openSheetRaw } = useSheet();
   const { showToast, showUndoToast, showActionToast } = useToast();
   const warningStateRef = useRef<
-    Record<string, { miction?: number; selle?: number }>
+    Record<string, { miction?: number; selle?: number; repas?: number; pompage?: number }>
   >({});
   // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
   const remindersEnabled = reminderPreferences.enabled;
@@ -949,6 +950,14 @@ export default function HomeDashboard() {
     );
   }, [todayStats, recentEvents]);
 
+  // Schedule/cancel local reminder notifications based on prefs + last event timestamps
+  useReminderScheduler(
+    activeChild?.id,
+    activeChild?.name,
+    reminderPreferences,
+    todayStats,
+  );
+
   const todayJalons = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1045,10 +1054,36 @@ export default function HomeDashboard() {
     timeSince?: string;
     timeSinceLabel?: string;
     lastTime?: string;
+    isWarning: boolean;
     items: StatItem[];
   } => {
     const biberonQty = todayStats.meals.biberons.quantity;
     const pompageQty = todayStats.pompages.quantity;
+
+    // Check for meal warning — threshold "repas" covers biberon, tétée, solide
+    const repasThresholdMs =
+      remindersEnabled && reminderThresholds.repas > 0
+        ? reminderThresholds.repas * 60 * 60 * 1000
+        : null;
+    const now = currentTime.getTime();
+    const mealsLastTs = todayStats.meals.total.lastTimestamp ?? todayStats.meals.lastAbsoluteTimestamp;
+    const repasWarning =
+      repasThresholdMs !== null &&
+      !!mealsLastTs &&
+      now - mealsLastTs > repasThresholdMs;
+
+    // Check for pompage warning
+    const pompagesThresholdMs =
+      remindersEnabled && reminderThresholds.pompages > 0
+        ? reminderThresholds.pompages * 60 * 60 * 1000
+        : null;
+    const pompageLastTs = todayStats.pompages.lastTimestamp;
+    const pompageWarning =
+      pompagesThresholdMs !== null &&
+      !!pompageLastTs &&
+      now - pompageLastTs > pompagesThresholdMs;
+
+    const isWarning = !!(repasWarning || pompageWarning);
 
     // Count unique meals: events within 2 min = 1 meal
     const MEAL_GROUP_MS = 20 * 60 * 1000;
@@ -1086,6 +1121,7 @@ export default function HomeDashboard() {
       summary: summaryNode,
       timeSince: getTimeSince(displayTimestamp),
       lastTime,
+      isWarning,
       items: [
         {
           key: "seins",
@@ -1142,7 +1178,7 @@ export default function HomeDashboard() {
         },
       ],
     };
-  }, [todayStats, data.tetees, data.biberons, data.solides, toDate, getTimeSince, formatTime, canManageContent]);
+  }, [todayStats, data.tetees, data.biberons, data.solides, toDate, getTimeSince, formatTime, canManageContent, remindersEnabled, reminderThresholds.repas, reminderThresholds.pompages, currentTime]);
 
   // Santé Group (Couches + Vitamines + Vaccins)
   const santeGroup = useMemo((): {
@@ -1458,13 +1494,60 @@ export default function HomeDashboard() {
       );
       warningState.selle = selleTs;
     }
+
+    // Repas warning
+    const repasThresholdHours = reminderThresholds.repas || 0;
+    const repasThresholdMs =
+      repasThresholdHours > 0 ? repasThresholdHours * 60 * 60 * 1000 : null;
+    const repasTs = todayStats.meals.total.lastTimestamp ?? todayStats.meals.lastAbsoluteTimestamp;
+    const repasExceeded =
+      remindersEnabled &&
+      repasThresholdMs !== null &&
+      !!repasTs &&
+      now - repasTs > repasThresholdMs;
+    const repasNotified = repasTs && warningState.repas === repasTs;
+
+    if (repasExceeded && !repasNotified) {
+      showToast(
+        `⚠️ Attention: plus de ${repasThresholdHours}h depuis le dernier repas.`,
+        3200,
+        "top",
+      );
+      warningState.repas = repasTs;
+    }
+
+    // Pompages warning
+    const pompagesThresholdHours = reminderThresholds.pompages || 0;
+    const pompagesThresholdMs =
+      pompagesThresholdHours > 0 ? pompagesThresholdHours * 60 * 60 * 1000 : null;
+    const pompageTs = todayStats.pompages.lastTimestamp;
+    const pompageExceeded =
+      remindersEnabled &&
+      pompagesThresholdMs !== null &&
+      !!pompageTs &&
+      now - pompageTs > pompagesThresholdMs;
+    const pompageNotified = pompageTs && warningState.pompage === pompageTs;
+
+    if (pompageExceeded && !pompageNotified) {
+      showToast(
+        `⚠️ Attention: plus de ${pompagesThresholdHours}h depuis le dernier pompage.`,
+        3200,
+        "top",
+      );
+      warningState.pompage = pompageTs;
+    }
   }, [
     activeChild?.id,
     currentTime,
     remindersEnabled,
     reminderThresholds.changes,
+    reminderThresholds.repas,
+    reminderThresholds.pompages,
     todayStats.mictions.lastTimestamp,
     todayStats.selles.lastTimestamp,
+    todayStats.meals.total.lastTimestamp,
+    todayStats.meals.lastAbsoluteTimestamp,
+    todayStats.pompages.lastTimestamp,
     showToast,
   ]);
 
@@ -2053,6 +2136,7 @@ export default function HomeDashboard() {
                 lastActivity={alimentationGroup.lastTime}
                 timeSince={alimentationGroup.timeSince}
                 timeSinceLabel={alimentationGroup.timeSinceLabel}
+                isWarning={alimentationGroup.isWarning}
                 items={alimentationGroup.items}
                 currentTime={currentTime}
                 colorScheme={colorScheme}

@@ -1,6 +1,8 @@
 // contexts/AuthContext.tsx
 import { auth, db } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
+import { cancelAllReminders } from "@/services/localNotificationService";
+import { registerPushToken, removePushTokens } from "@/services/pushTokenService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
 import {
   canUserAccessApp,
@@ -171,6 +173,9 @@ export function AuthProvider({
           appVersion,
         ).catch(console.error);
 
+        // Enregistrer le push token pour les notifications (fire-and-forget)
+        registerPushToken(fbUser.uid).catch(console.error);
+
         // Tout est OK, charger l'utilisateur (single dispatch au lieu de 5 setState)
         dispatch({
           type: "SET_USER_DATA",
@@ -214,6 +219,10 @@ export function AuthProvider({
   const signOut = useCallback(async () => {
     try {
       clearTodayEventsCache();
+      await cancelAllReminders();
+      // Supprimer les push tokens avant signOut (nécessite auth active)
+      const uid = auth.currentUser?.uid;
+      if (uid) await removePushTokens(uid).catch(() => {});
       await firebaseSignOut(auth);
       if (isMountedRef.current) {
         dispatch({ type: "CLEAR_USER" });

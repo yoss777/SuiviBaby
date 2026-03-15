@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { exportAllEventsCSV } from "@/services/exportService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -19,7 +20,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { exportAllEventsCSV } from "@/services/exportService";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type ItemIcon = string | { lib: "mci"; name: string };
@@ -45,7 +45,7 @@ const SECTIONS: Section[] = [
     items: [
       {
         title: "Repas",
-        subtitle: "Biberons et tétées",
+        subtitle: "Biberons, tétées et solides",
         icon: "utensils",
         color: "#4A90E2",
         route: "/baby/meals",
@@ -286,10 +286,7 @@ export default function PlusScreen() {
                         </View>
                         <View style={styles.textBlock}>
                           <Text
-                            style={[
-                              styles.rowTitle,
-                              { color: nc.textStrong },
-                            ]}
+                            style={[styles.rowTitle, { color: nc.textStrong }]}
                           >
                             {item.title}
                           </Text>
@@ -364,14 +361,10 @@ export default function PlusScreen() {
                     )}
                   </View>
                   <View style={styles.textBlock}>
-                    <Text
-                      style={[styles.rowTitle, { color: nc.textStrong }]}
-                    >
+                    <Text style={[styles.rowTitle, { color: nc.textStrong }]}>
                       Exporter les données
                     </Text>
-                    <Text
-                      style={[styles.rowSubtitle, { color: nc.textLight }]}
-                    >
+                    <Text style={[styles.rowSubtitle, { color: nc.textLight }]}>
                       {exporting
                         ? "Export en cours..."
                         : "Télécharger un fichier CSV"}

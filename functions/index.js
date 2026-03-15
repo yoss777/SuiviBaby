@@ -2,9 +2,12 @@ const admin = require("firebase-admin");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 
+const { Expo } = require("expo-server-sdk");
+
 admin.initializeApp();
 
 const BATCH_LIMIT = 450;
+const expo = new Expo();
 
 // ============================================
 // SHARED HELPERS
@@ -794,6 +797,8 @@ exports.deleteUserAccount = onCall(
       deleteDocsByFieldBatched(db, "eventComments", "userId", uid),
       deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", uid),
       deleteDocsByFieldBatched(db, "shareCodes", "createdBy", uid),
+      deleteDocsByFieldBatched(db, "device_tokens", "userId", uid),
+      deleteDocsByFieldBatched(db, "notification_history", "userId", uid),
     ]);
 
     // 4. Supprimer les invitations par email
@@ -826,5 +831,186 @@ exports.deleteUserAccount = onCall(
 
     console.log(`deleteUserAccount: completed for uid=${uid}`);
     return { success: true };
+  }
+);
+
+// ============================================
+// REMINDER PUSH NOTIFICATIONS (Scheduled)
+// ============================================
+
+/**
+ * Mapping catégorie de rappel → types d'événements Firestore
+ */
+const REMINDER_CATEGORIES = {
+  repas: ["biberon", "tetee", "solide"],
+  pompages: ["pompage"],
+  changes: ["miction", "selle", "couche"],
+  vitamines: ["vitamine"],
+};
+
+const CATEGORY_LABELS = {
+  repas: "repas",
+  pompages: "pompage",
+  changes: "change",
+  vitamines: "vitamine",
+};
+
+/**
+ * checkAndSendReminders — Vérification périodique (toutes les 30 min)
+ * Pour chaque utilisateur ayant des rappels activés :
+ *   - Vérifie le dernier événement par catégorie et par enfant
+ *   - Si elapsed > threshold, envoie une notification push
+ *   - Anti-spam : pas de re-notification si déjà envoyée il y a < 2h
+ */
+exports.checkAndSendReminders = onSchedule(
+  {
+    schedule: "every 30 minutes",
+    region: "europe-west1",
+    memory: "256MiB",
+    timeoutSeconds: 120,
+  },
+  async () => {
+    const db = admin.firestore();
+    const now = admin.firestore.Timestamp.now();
+    const nowMs = now.toMillis();
+
+    // 1. Récupérer tous les utilisateurs avec rappels activés
+    const prefsSnapshot = await db
+      .collection("user_preferences")
+      .where("notifications.reminders.enabled", "==", true)
+      .get();
+
+    if (prefsSnapshot.empty) {
+      console.log("checkAndSendReminders: no users with reminders enabled");
+      return;
+    }
+
+    let totalSent = 0;
+    let totalSkipped = 0;
+
+    for (const prefDoc of prefsSnapshot.docs) {
+      const userId = prefDoc.id;
+      const prefs = prefDoc.data();
+      const thresholds = prefs.notifications?.reminders?.thresholds || {};
+
+      // Skip si les notifications push sont désactivées par l'utilisateur
+      if (prefs.notifications?.push === false) continue;
+
+      // 2. Récupérer les device_tokens actifs de cet utilisateur
+      const tokensSnap = await db
+        .collection("device_tokens")
+        .where("userId", "==", userId)
+        .where("enabled", "==", true)
+        .get();
+
+      if (tokensSnap.empty) continue;
+
+      const pushTokens = tokensSnap.docs
+        .map((d) => d.data().token)
+        .filter((t) => Expo.isExpoPushToken(t));
+
+      if (pushTokens.length === 0) continue;
+
+      // 3. Récupérer les enfants auxquels l'utilisateur a accès
+      const accessSnap = await db
+        .collection("user_child_access")
+        .where("userId", "==", userId)
+        .get();
+
+      for (const accessDoc of accessSnap.docs) {
+        const { childId } = accessDoc.data();
+        if (!childId) continue;
+
+        // Récupérer le nom de l'enfant
+        const childDoc = await db.doc(`children/${childId}`).get();
+        if (!childDoc.exists) continue;
+        const childName = childDoc.data().name || "Bébé";
+
+        // 4. Pour chaque catégorie avec threshold > 0
+        for (const [category, eventTypes] of Object.entries(REMINDER_CATEGORIES)) {
+          const thresholdHours = thresholds[category] || 0;
+          if (thresholdHours <= 0) continue;
+
+          const thresholdMs = thresholdHours * 3600 * 1000;
+
+          // Dernier événement de cette catégorie pour cet enfant
+          const lastEventSnap = await db
+            .collection("events")
+            .where("childId", "==", childId)
+            .where("type", "in", eventTypes)
+            .orderBy("date", "desc")
+            .limit(1)
+            .get();
+
+          if (lastEventSnap.empty) continue;
+
+          const lastEvent = lastEventSnap.docs[0].data();
+          const lastEventDate = lastEvent.date?.toMillis?.() ?? 0;
+          const elapsedMs = nowMs - lastEventDate;
+
+          if (elapsedMs <= thresholdMs) continue;
+
+          // Anti-spam : vérifier si déjà notifié il y a < 2h
+          const twoHoursAgo = admin.firestore.Timestamp.fromMillis(nowMs - 2 * 3600 * 1000);
+          const recentNotifSnap = await db
+            .collection("notification_history")
+            .where("userId", "==", userId)
+            .where("childId", "==", childId)
+            .where("category", "==", category)
+            .where("sentAt", ">", twoHoursAgo)
+            .limit(1)
+            .get();
+
+          if (!recentNotifSnap.empty) {
+            totalSkipped++;
+            continue;
+          }
+
+          // 5. Envoyer la notification push
+          const elapsedHours = Math.round(elapsedMs / 3600000);
+          const label = CATEGORY_LABELS[category];
+          const messages = pushTokens.map((token) => ({
+            to: token,
+            sound: "default",
+            title: `Rappel ${label} — ${childName}`,
+            body: `Plus de ${elapsedHours}h depuis le dernier ${label}`,
+            data: {
+              type: "reminder",
+              category,
+              childId,
+              route: "/baby/home",
+            },
+          }));
+
+          try {
+            const chunks = expo.chunkPushNotifications(messages);
+            for (const chunk of chunks) {
+              await expo.sendPushNotificationsAsync(chunk);
+            }
+
+            // Enregistrer dans l'historique
+            await db.collection("notification_history").add({
+              userId,
+              childId,
+              category,
+              sentAt: now,
+              thresholdHours,
+              elapsedHours,
+            });
+
+            totalSent++;
+          } catch (error) {
+            console.error(
+              `checkAndSendReminders: error sending to ${userId}/${childId}/${category}:`,
+              error.message
+            );
+          }
+        }
+      }
+    }
+
+    console.log(
+      `checkAndSendReminders: sent=${totalSent}, skipped=${totalSkipped}, users=${prefsSnapshot.size}`
+    );
   }
 );

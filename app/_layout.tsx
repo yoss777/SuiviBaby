@@ -15,6 +15,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } fro
 import { Stack, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
+import * as Notifications from "expo-notifications";
 import { type ReactNode, useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
@@ -24,6 +25,7 @@ import { GlobalSheetManager } from "@/components/ui/GlobalSheetManager";
 import { InvitationListener } from "@/components/ui/InvitationListener";
 import { OfflineBanner } from "@/components/ui/OfflineBanner";
 
+import { setupNotificationHandler } from "@/services/localNotificationService";
 import { startAutoSync } from "@/services/offlineQueueService";
 
 Sentry.init({
@@ -32,6 +34,9 @@ Sentry.init({
   tracesSampleRate: 0.1,
   environment: __DEV__ ? "development" : "production",
 });
+
+// Configurer le handler de notifications locales (rappels)
+setupNotificationHandler();
 
 // Démarrer la synchronisation automatique de la queue offline
 startAutoSync();
@@ -89,6 +94,21 @@ export default Sentry.wrap(RootLayout);
 function AppNavigation() {
   const colorScheme = useColorScheme() ?? "light";
   const router = useRouter();
+
+  // Handle tap on a notification → navigate to the relevant screen
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const data = response.notification.request.content.data as
+          | { route?: string }
+          | undefined;
+        if (data?.route) {
+          router.push(data.route as any);
+        }
+      },
+    );
+    return () => subscription.remove();
+  }, [router]);
 
   // Intercepter les deep links Firebase (reset password)
   useEffect(() => {

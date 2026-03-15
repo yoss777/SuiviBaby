@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
+import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Linking,
   Platform,
@@ -12,7 +13,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/themed-text";
 import { InfoModal } from "@/components/ui/InfoModal";
@@ -20,6 +20,10 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import {
+  isDevicePushEnabled,
+  setDevicePushEnabled,
+} from "@/services/pushTokenService";
 import {
   mettreAJourPreferencesNotifications,
   obtenirPreferencesNotifications,
@@ -57,9 +61,12 @@ export default function NotificationsScreen() {
     let isMounted = true;
     const loadPreferences = async () => {
       try {
-        const preferences = await obtenirPreferencesNotifications();
+        const [preferences, devicePushOn] = await Promise.all([
+          obtenirPreferencesNotifications(),
+          isDevicePushEnabled(),
+        ]);
         if (!isMounted) return;
-        setPushEnabled(preferences.push);
+        setPushEnabled(devicePushOn);
         setEmailEnabled(preferences.email);
         setMarketing(preferences.marketing);
         setUpdates(preferences.updates);
@@ -70,8 +77,12 @@ export default function NotificationsScreen() {
           changes: preferences.reminders?.thresholds?.changes ?? 0,
           vitamines: preferences.reminders?.thresholds?.vitamines ?? 0,
         };
-        const allDisabled = Object.values(loadedThresholds).every((value) => value === 0);
-        setRemindersEnabled(allDisabled ? false : preferences.reminders?.enabled ?? true);
+        const allDisabled = Object.values(loadedThresholds).every(
+          (value) => value === 0,
+        );
+        setRemindersEnabled(
+          allDisabled ? false : (preferences.reminders?.enabled ?? true),
+        );
         setReminderThresholds(loadedThresholds);
       } catch (error) {
         if (!isMounted) return;
@@ -148,7 +159,7 @@ export default function NotificationsScreen() {
 
   const handleToggle = async (
     key: "push" | "email" | "marketing" | "updates" | "tips",
-    value: boolean
+    value: boolean,
   ) => {
     if (isLoading) return;
     const previousValue = {
@@ -177,16 +188,19 @@ export default function NotificationsScreen() {
     setters[key](value);
 
     try {
-      await mettreAJourPreferencesNotifications({ [key]: value });
+      // Push toggle → per-device enabled flag dans device_tokens
+      if (key === "push") {
+        await setDevicePushEnabled(value);
+      } else {
+        await mettreAJourPreferencesNotifications({ [key]: value });
+      }
       // P6: Toast on save success
       showToast("Préférence enregistrée");
     } catch (error) {
       setters[key](previousValue);
       // P27: Error retry toast
-      showActionToast(
-        "Impossible de mettre à jour",
-        "Réessayer",
-        () => handleToggle(key, value)
+      showActionToast("Impossible de mettre à jour", "Réessayer", () =>
+        handleToggle(key, value),
       );
     }
   };
@@ -194,7 +208,7 @@ export default function NotificationsScreen() {
   const renderSwitch = (
     value: boolean,
     onValueChange: (value: boolean) => void,
-    label?: string
+    label?: string,
   ) => (
     <Switch
       value={value}
@@ -208,7 +222,10 @@ export default function NotificationsScreen() {
       ios_backgroundColor={nc.textMuted + "30"}
       accessibilityRole="switch"
       accessibilityLabel={label}
-      accessibilityState={{ checked: value }}
+      accessibilityHint={
+        value ? "Appuyez pour désactiver" : "Appuyez pour activer"
+      }
+      accessibilityState={{ checked: value, disabled: isLoading }}
     />
   );
 
@@ -216,17 +233,12 @@ export default function NotificationsScreen() {
     title: string,
     description: string,
     value: boolean,
-    onValueChange: (value: boolean) => void
+    onValueChange: (value: boolean) => void,
   ) => (
     <View style={styles.settingItem}>
       <View style={styles.settingContent}>
         <ThemedText style={styles.settingTitle}>{title}</ThemedText>
-        <Text
-          style={[
-            styles.settingDescription,
-            { color: nc.textMuted },
-          ]}
-        >
+        <Text style={[styles.settingDescription, { color: nc.textMuted }]}>
           {description}
         </Text>
       </View>
@@ -235,15 +247,16 @@ export default function NotificationsScreen() {
   );
 
   const updateReminders = async (
-    next: Partial<typeof reminderThresholds> | { enabled: boolean }
+    next: Partial<typeof reminderThresholds> | { enabled: boolean },
   ) => {
     const previousEnabled = remindersEnabled;
     const previousThresholds = reminderThresholds;
 
     const nextThresholds =
-      "enabled" in next ? reminderThresholds : { ...reminderThresholds, ...next };
-    const nextEnabled =
-      "enabled" in next ? next.enabled : remindersEnabled;
+      "enabled" in next
+        ? reminderThresholds
+        : { ...reminderThresholds, ...next };
+    const nextEnabled = "enabled" in next ? next.enabled : remindersEnabled;
 
     // P8b: Haptic feedback on reminder change
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -266,7 +279,7 @@ export default function NotificationsScreen() {
       showActionToast(
         "Impossible de mettre à jour les rappels",
         "Réessayer",
-        () => updateReminders(next)
+        () => updateReminders(next),
       );
     }
   };
@@ -276,82 +289,89 @@ export default function NotificationsScreen() {
     description: string,
     value: number,
     maxHours: number,
-    onChange: (nextValue: number) => void
+    onChange: (nextValue: number) => void,
   ) => {
     const isDisabled = !remindersEnabled;
     const isRowMuted = remindersEnabled && value === 0;
     return (
-    <View style={styles.settingItem}>
-      <View style={styles.settingContent}>
-        <ThemedText
-          style={[styles.settingTitle, (isDisabled || isRowMuted) && styles.settingTitleDisabled]}
-        >
-          {label}
-        </ThemedText>
-        <Text
+      <View style={styles.settingItem}>
+        <View style={styles.settingContent}>
+          <ThemedText
+            style={[
+              styles.settingTitle,
+              (isDisabled || isRowMuted) && styles.settingTitleDisabled,
+            ]}
+          >
+            {label}
+          </ThemedText>
+          <Text
+            style={[
+              styles.settingDescription,
+              { color: nc.textMuted },
+              (isDisabled || isRowMuted) && styles.settingDescriptionDisabled,
+            ]}
+          >
+            {description}
+          </Text>
+        </View>
+        <View
           style={[
-            styles.settingDescription,
-            { color: nc.textMuted },
-            (isDisabled || isRowMuted) && styles.settingDescriptionDisabled,
-          ]}
-        >
-          {description}
-        </Text>
-      </View>
-      <View
-        style={[
-          styles.pickerContainer,
-          {
-            borderColor: nc.borderLight,
-            backgroundColor: nc.backgroundPressed,
-          },
-          isDisabled && styles.pickerContainerDisabled,
-        ]}
-      >
-        <Picker
-          selectedValue={value}
-          onValueChange={(itemValue) => onChange(Number(itemValue))}
-          enabled={!isLoading && remindersEnabled}
-          mode={Platform.OS === "android" ? "dropdown" : "dialog"}
-          accessibilityLabel={`${label} - délai de rappel`}
-          style={[
-            styles.picker,
+            styles.pickerContainer,
             {
-              color: isDisabled
-                ? nc.textMuted
-                : nc.textStrong,
+              borderColor: nc.borderLight,
               backgroundColor: nc.backgroundPressed,
-              height: Platform.OS === "ios" ? 120 : 54,
             },
+            isDisabled && styles.pickerContainerDisabled,
           ]}
-          itemStyle={{
-            color: isDisabled
-              ? nc.textMuted
-              : nc.textStrong,
-            fontSize: 14,
-            height: 120,
-          }}
-          dropdownIconColor={nc.textMuted}
         >
-          <Picker.Item label="Aucun" value={0} color={isDisabled ? nc.textMuted : nc.textStrong} />
-          {Array.from({ length: maxHours }, (_, index) => index + 1).map(
-            (hour) => (
-              <Picker.Item key={hour} label={`${hour} h`} value={hour} color={isDisabled ? nc.textMuted : nc.textStrong} />
-            )
-          )}
-        </Picker>
+          <Picker
+            selectedValue={value}
+            onValueChange={(itemValue) => onChange(Number(itemValue))}
+            enabled={!isLoading && remindersEnabled}
+            mode="dialog"
+            accessibilityLabel={`${label} - délai de rappel`}
+            style={[
+              styles.picker,
+              {
+                color: isDisabled ? nc.textMuted : nc.textStrong,
+                ...(Platform.OS === "ios" && {
+                  backgroundColor: nc.backgroundPressed,
+                }),
+                height: Platform.OS === "ios" ? 120 : 54,
+              },
+            ]}
+            itemStyle={{
+              color: isDisabled ? nc.textMuted : nc.textStrong,
+              fontSize: 14,
+              height: 120,
+            }}
+            dropdownIconColor={nc.textMuted}
+          >
+            <Picker.Item
+              label="Aucun"
+              value={0}
+              color={isDisabled ? nc.textMuted : nc.textStrong}
+            />
+            {Array.from({ length: maxHours }, (_, index) => index + 1).map(
+              (hour) => (
+                <Picker.Item
+                  key={hour}
+                  label={`${hour} h`}
+                  value={hour}
+                  color={isDisabled ? nc.textMuted : nc.textStrong}
+                />
+              ),
+            )}
+          </Picker>
+        </View>
       </View>
-    </View>
-  );
+    );
   };
 
   return (
     <View style={[styles.screen, { backgroundColor: nc.background }]}>
       <SafeAreaView
-        style={[
-          styles.container,
-          { backgroundColor: nc.background },
-        ]}
+        style={[styles.container, { backgroundColor: nc.background }]}
         edges={["bottom"]}
       >
         <Stack.Screen
@@ -364,7 +384,9 @@ export default function NotificationsScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
+          <View
+            style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+          >
             <ThemedText
               style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}
             >
@@ -374,17 +396,19 @@ export default function NotificationsScreen() {
               "Notifications push",
               "Recevoir des notifications sur votre appareil",
               pushEnabled,
-              (value) => handleToggle("push", value)
+              (value) => handleToggle("push", value),
             )}
             {renderSettingItem(
-              "Notifications par email",
-              "Recevoir des notifications par email",
+              "Récap hebdomadaire par email",
+              "Recevoir un résumé de la semaine par email",
               emailEnabled,
-              (value) => handleToggle("email", value)
+              (value) => handleToggle("email", value),
             )}
           </View>
 
-          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
+          <View
+            style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+          >
             <ThemedText
               style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}
             >
@@ -394,39 +418,41 @@ export default function NotificationsScreen() {
               "Activer les rappels",
               "Recevoir une alerte si un suivi dépasse le délai choisi",
               remindersEnabled,
-              (value) => updateReminders({ enabled: value })
+              (value) => updateReminders({ enabled: value }),
             )}
             {renderReminderItem(
               "Repas",
               "Délai maximum avant rappel",
               reminderThresholds.repas,
               12,
-              (value) => updateReminders({ repas: value })
+              (value) => updateReminders({ repas: value }),
             )}
             {renderReminderItem(
               "Pompages",
               "Délai maximum avant rappel",
               reminderThresholds.pompages,
               12,
-              (value) => updateReminders({ pompages: value })
+              (value) => updateReminders({ pompages: value }),
             )}
             {renderReminderItem(
               "Changes",
               "Délai maximum avant rappel",
               reminderThresholds.changes,
               12,
-              (value) => updateReminders({ changes: value })
+              (value) => updateReminders({ changes: value }),
             )}
             {renderReminderItem(
               "Vitamines",
               "Délai maximum avant rappel (24h max)",
               reminderThresholds.vitamines,
               24,
-              (value) => updateReminders({ vitamines: value })
+              (value) => updateReminders({ vitamines: value }),
             )}
           </View>
 
-          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
+          <View
+            style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+          >
             <ThemedText
               style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}
             >
@@ -436,23 +462,25 @@ export default function NotificationsScreen() {
               "Actualités et mises à jour",
               "Nouvelles fonctionnalités et améliorations",
               updates,
-              (value) => handleToggle("updates", value)
+              (value) => handleToggle("updates", value),
             )}
             {renderSettingItem(
               "Conseils santé",
               "Conseils et astuces pour votre santé",
               tips,
-              (value) => handleToggle("tips", value)
+              (value) => handleToggle("tips", value),
             )}
             {renderSettingItem(
               "Offres promotionnelles",
               "Informations sur les offres et promotions",
               marketing,
-              (value) => handleToggle("marketing", value)
+              (value) => handleToggle("marketing", value),
             )}
           </View>
 
-          <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
+          <View
+            style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}
+          >
             <Ionicons
               name="information-circle"
               size={24}
