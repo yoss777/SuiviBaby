@@ -7,7 +7,6 @@ import {
   OMSMetric,
   OMSSex,
 } from "@/constants/omsPercentiles";
-import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -679,19 +678,6 @@ export default function CroissanceScreen() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const nc = useMemo(() => getNeutralColors(colorScheme), [colorScheme]);
-  const colors = useMemo(
-    () => ({
-      text: nc.textStrong,
-      background: nc.backgroundCard,
-      surface: nc.background,
-      tint: nc.todayAccent,
-      secondary: nc.textMuted,
-      secondaryText: nc.textLight,
-      border: nc.border,
-      borderLight: nc.borderLight,
-    }),
-    [nc],
-  );
   const { openSheet } = useSheet();
   const { showToast, showUndoToast, showActionToast } = useToast();
   const { openModal, returnTo } = useLocalSearchParams();
@@ -751,12 +737,12 @@ export default function CroissanceScreen() {
 
   const palette = useMemo(
     () => ({
-      surface: colorScheme === "dark" ? "#12161c" : "#ffffff",
-      surfaceAlt: colorScheme === "dark" ? "#171c24" : "#f5f7f9",
-      ink: colorScheme === "dark" ? "#f5f7fb" : "#1e2a36",
-      muted: colorScheme === "dark" ? "#9aa5b1" : "#6a7784",
-      border: colorScheme === "dark" ? "#2a3340" : "#e5ecf2",
-      tint: Colors[colorScheme].tint,
+      surface: nc.backgroundCard,
+      surfaceAlt: nc.background,
+      ink: nc.textStrong,
+      muted: nc.textMuted,
+      border: nc.borderLight,
+      tint: nc.todayAccent,
       orange: "#f97316",
       green: "#8BCF9B",
       blue: "#2f80ed",
@@ -768,7 +754,7 @@ export default function CroissanceScreen() {
       amberSoft:
         colorScheme === "dark" ? "rgba(245, 158, 11, 0.15)" : "#fff3cd",
     }),
-    [colorScheme],
+    [colorScheme, nc],
   );
 
   const omsPalette = useMemo(
@@ -1223,7 +1209,7 @@ export default function CroissanceScreen() {
                 <View
                   style={[
                     styles.line,
-                    { backgroundColor: `${Colors[colorScheme].tabIconDefault}30` },
+                    { backgroundColor: nc.borderLightAlpha },
                     isLastInSection && styles.lineLast,
                   ]}
                 />
@@ -2081,9 +2067,9 @@ export default function CroissanceScreen() {
         title="Supprimer cette mesure ?"
         message="Cette action est irréversible."
         confirmText="Supprimer"
-        backgroundColor={colors.background}
-        textColor={colors.text}
-        confirmButtonColor="#dc3545"
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
+        confirmButtonColor={nc.error}
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
       />
