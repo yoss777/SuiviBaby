@@ -215,6 +215,61 @@ Aucun gap restant — tous les écrans sont à 100%.
 
 **Score formulaires : 72/72 applicables** (100%)
 
+## Écrans Auth (authentification)
+
+| Abrév. | Écran | Fichier |
+|--------|-------|---------|
+| LO | Login / Inscription | `app/(auth)/login.tsx` |
+| RP | Reset Password | `app/(auth)/reset-password.tsx` |
+| AT | Terms (re-export) | `app/(auth)/terms.tsx` → `app/settings/terms.tsx` |
+| AP | Privacy (re-export) | `app/(auth)/privacy.tsx` → `app/settings/privacy.tsx` |
+| AL | Auth Layout | `app/(auth)/_layout.tsx` |
+
+> Écrans pré-authentification. AT et AP sont des re-exports des écrans settings (déjà couverts).
+> L'analyse porte sur LO et RP uniquement. AL est un layout sans UI propre.
+
+| ID | Amélioration | LO | RP | Applicable ? | Statut |
+|----|-------------|----|----|-------------|--------|
+| P1 | Skeleton shimmer loading | n/a | n/a | Non — pas de chargement de données listes | — |
+| P2 | LayoutAnimation | n/a | n/a | Non — pas de sections collapsibles | — |
+| P3 | Enhanced empty state | n/a | n/a | Non — formulaires, jamais "vide" | — |
+| P4 | Date chip + clearDate | n/a | n/a | Non — pas de filtrage par date | — |
+| P5 | Soft-delete + undo | n/a | n/a | Non — pas de suppression | — |
+| P6 | Toast / modal on success | ✅ | ✅ | Oui — InfoModal pour succès/erreurs | 2/2 |
+| P7 | rangeEndDate | n/a | n/a | Non — pas de plage de dates | — |
+| P8a | Conditional footer | n/a | n/a | Non — footer statique | — |
+| P8b | Haptic feedback | ✅ | ✅ | Oui — boutons principaux (connexion, inscription, reset) | 2/2 |
+| P9a | Structured metrics | n/a | n/a | Non — pas de métriques | — |
+| P9b | Pull-to-refresh | n/a | n/a | Non — formulaires statiques | — |
+| P10 | formatSelectedDateLabel | n/a | n/a | Non — pas de sélection de date | — |
+| P11 | Android LayoutAnimation | n/a | n/a | Non — pas de LayoutAnimation | — |
+| P12a | Swipe-to-delete | n/a | n/a | Non — pas de listes | — |
+| P12b | Error boundary / try-catch | ✅ | ✅ | Oui — Firebase error codes gérés | 2/2 |
+| P13a | Delete confirm modal | n/a | n/a | Non — pas de suppression | — |
+| P14a | nc.* design tokens | ✅ | ✅ | Oui — getNeutralColors(colorScheme) | 2/2 |
+| P14b | Export CSV | n/a | n/a | Non — pas d'export | — |
+| P15a | Accessibility labels | ✅ | ✅ | Oui — accessibilityRole/Label sur inputs et boutons | 2/2 |
+| P15b | Multi-baby switcher | n/a | n/a | Non — pré-auth, pas de bébé | — |
+| P16a | Dark mode nc.* tokens | ✅ | ✅ | Oui — dark mode via nc.* tokens | 2/2 |
+| P16b | Offline indicator | n/a | n/a | Non — auth nécessite réseau | — |
+| P17a | useMemo/useCallback | ✅ | ✅ | Oui — PASSWORD_RULES module-level, useMemo/useCallback | 2/2 |
+| P17b | Batch delete | n/a | n/a | Non — pas de listes | — |
+| P18a | Pagination | n/a | n/a | Non — pas de listes | — |
+| P19 | Offline queue | n/a | n/a | Non — auth nécessite réseau | — |
+| P20 | Race condition guards | ✅ | ✅ | Oui — navigationLocked (LO), verifying state (RP), loading disable | 2/2 |
+| P21 | Theme tokens (no hardcoded) | ✅ | ✅ | Oui — toutes couleurs via nc.* tokens | 2/2 |
+| P22 | Realtime auto-refresh | n/a | n/a | Non — pas de données temps réel | — |
+| P23 | Header ellipsis menu | n/a | n/a | Non — pas de menu | — |
+| P24 | Batch delete confirm | n/a | n/a | Non — pas de listes | — |
+| P25 | Touch targets 44px | ✅ | ✅ | Oui — eyeIcon padding:12 + hitSlop, forgotPassword hitSlop | 2/2 |
+| P26 | Swipe hint | n/a | n/a | Non — pas de swipe | — |
+| P27 | Error retry toast | ✅ | ✅ | Oui — InfoModal + haptic error feedback | 2/2 |
+| P28 | Selection highlight | n/a | n/a | Non — pas de sélection | — |
+
+**Score auth : 20/20 applicables** (100%)
+
+> Tous les gaps corrigés : dark mode, nc.* tokens, accessibility, haptics, touch targets, useMemo/useCallback.
+
 ## Composants partagés créés
 
 | Composant | Fichier | Utilisé par |
@@ -226,5 +281,5 @@ Aucun gap restant — tous les écrans sont à 100%.
 
 ## Score
 
-**708/708 applicables déployés** (100%)
-(401 tabs/sous-écrans + 57 utilitaires drawer + 134 settings + 44 autres composants + 72/72 formulaires = 708/708 total)
+**728/728 applicables déployés** (100%)
+(401 tabs/sous-écrans + 57 utilitaires drawer + 134 settings + 20/20 auth + 44 autres composants + 72/72 formulaires = 728/728 total)

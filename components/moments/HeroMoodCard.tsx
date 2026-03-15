@@ -113,10 +113,10 @@ const FloatingIcon = ({
       withRepeat(
         withSequence(
           withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) })
+          withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
         ),
-        -1
-      )
+        -1,
+      ),
     );
   }, []);
 
@@ -129,7 +129,9 @@ const FloatingIcon = ({
   }));
 
   return (
-    <Animated.View style={[styles.floatingIcon, { left: x, top: y }, animatedStyle]}>
+    <Animated.View
+      style={[styles.floatingIcon, { left: x, top: y }, animatedStyle]}
+    >
       <FontAwesome6 name={icon} size={size} color={color} />
     </Animated.View>
   );
@@ -146,7 +148,7 @@ const AnimatedEmoji = ({ emoji }: { emoji: string }) => {
       withTiming(10, { duration: 150 }),
       withTiming(-8, { duration: 150 }),
       withTiming(5, { duration: 100 }),
-      withTiming(0, { duration: 100 })
+      withTiming(0, { duration: 100 }),
     );
   }, [emoji]);
 
@@ -338,7 +340,8 @@ const styles = StyleSheet.create({
   },
   heroEmoji: {
     fontSize: 80,
-    marginBottom: 12,
+    lineHeight: 94,
+    textAlignVertical: "center",
   },
   heroEmojiEmpty: {
     fontSize: 64,

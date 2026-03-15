@@ -1,13 +1,16 @@
 // app/(auth)/reset-password.tsx
 import { InfoModal } from "@/components/ui/InfoModal";
-import { Colors } from "@/constants/theme";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -19,8 +22,27 @@ import {
 } from "react-native";
 import { auth } from "../../config/firebase";
 
+const PASSWORD_RULES = [
+  {
+    id: "length",
+    label: "8+ caractères",
+    test: (value: string) => value.length >= 8,
+  },
+  {
+    id: "number",
+    label: "1 chiffre",
+    test: (value: string) => /\d/.test(value),
+  },
+  {
+    id: "special",
+    label: "1 caractère spécial",
+    test: (value: string) => /[^A-Za-z0-9]/.test(value),
+  },
+];
+
 export default function ResetPasswordScreen() {
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const router = useRouter();
   const { oobCode } = useLocalSearchParams<{ oobCode: string }>();
 
@@ -38,34 +60,20 @@ export default function ResetPasswordScreen() {
     message: "",
   });
 
-  const passwordRules = [
-    {
-      id: "length",
-      label: "8+ caractères",
-      test: (value: string) => value.length >= 8,
-    },
-    {
-      id: "number",
-      label: "1 chiffre",
-      test: (value: string) => /\d/.test(value),
-    },
-    {
-      id: "special",
-      label: "1 caractère spécial",
-      test: (value: string) => /[^A-Za-z0-9]/.test(value),
-    },
-  ];
-  const unmetRules = passwordRules.filter((rule) => !rule.test(password));
-  const strengthScore = passwordRules.length - unmetRules.length;
+  const unmetRules = useMemo(
+    () => PASSWORD_RULES.filter((rule) => !rule.test(password)),
+    [password],
+  );
+  const strengthScore = PASSWORD_RULES.length - unmetRules.length;
   const strengthPercent = Math.round(
-    (strengthScore / passwordRules.length) * 100
+    (strengthScore / PASSWORD_RULES.length) * 100,
   );
   const strengthLabel =
     strengthScore === 3 ? "Fort" : strengthScore === 2 ? "Moyen" : "Faible";
 
-  const showModal = (title: string, message: string) => {
+  const showModal = useCallback((title: string, message: string) => {
     setInfoModal({ visible: true, title, message });
-  };
+  }, []);
 
   // Vérifier que le code est valide au chargement
   useEffect(() => {
@@ -87,11 +95,11 @@ export default function ResetPasswordScreen() {
     verifyCode();
   }, [oobCode]);
 
-  const handleResetPassword = async () => {
+  const handleResetPassword = useCallback(async () => {
     if (unmetRules.length > 0) {
       showModal(
         "Erreur",
-        "Mot de passe trop faible. Utilisez 8+ caractères, 1 chiffre, 1 caractère spécial."
+        "Mot de passe trop faible. Utilisez 8+ caractères, 1 chiffre, 1 caractère spécial.",
       );
       return;
     }
@@ -104,11 +112,13 @@ export default function ResetPasswordScreen() {
     setLoading(true);
     try {
       await confirmPasswordReset(auth, oobCode!, password);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showModal(
         "Mot de passe modifié",
-        "Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter."
+        "Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter.",
       );
     } catch (error: any) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       let errorMessage = "Une erreur est survenue";
       switch (error.code) {
         case "auth/expired-action-code":
@@ -123,49 +133,130 @@ export default function ResetPasswordScreen() {
           errorMessage = "Le mot de passe est trop faible.";
           break;
         default:
-          errorMessage = error.message;
+          errorMessage = "Une erreur est survenue. Veuillez réessayer.";
       }
       showModal("Erreur", errorMessage);
     } finally {
       setLoading(false);
     }
-  };
+  }, [unmetRules, password, confirmPassword, oobCode, showModal]);
+
+  const handleTogglePassword = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowPassword(!showPassword);
+  }, [showPassword]);
+
+  const handleToggleConfirmPassword = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowConfirmPassword(!showConfirmPassword);
+  }, [showConfirmPassword]);
+
+  // Skeleton shimmer animation
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!verifying) return;
+    const loop = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1200,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [verifying, shimmerAnim]);
+
+  const shimmerOpacity = shimmerAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.3, 0.7, 0.3],
+  });
 
   if (verifying) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#4A90E2" />
-        <Text style={styles.verifyingText}>Vérification du lien...</Text>
+      <View style={[styles.container, styles.centered, { backgroundColor: nc.background }]}>
+        <View style={styles.skeletonContainer}>
+          {/* Skeleton icon circle */}
+          <Animated.View
+            style={[
+              styles.skeletonCircle,
+              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
+            ]}
+          />
+          {/* Skeleton title */}
+          <Animated.View
+            style={[
+              styles.skeletonTitle,
+              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
+            ]}
+          />
+          {/* Skeleton subtitle */}
+          <Animated.View
+            style={[
+              styles.skeletonSubtitle,
+              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
+            ]}
+          />
+          {/* Skeleton input fields */}
+          <Animated.View
+            style={[
+              styles.skeletonInput,
+              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.skeletonInput,
+              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
+            ]}
+          />
+          {/* Skeleton button */}
+          <Animated.View
+            style={[
+              styles.skeletonButton,
+              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
+            ]}
+          />
+        </View>
+        <Text style={[styles.verifyingText, { color: nc.textMuted }]}>
+          Vérification du lien...
+        </Text>
       </View>
     );
   }
 
   if (invalidCode) {
     return (
-      <View style={[styles.container, styles.centered]}>
+      <View style={[styles.container, styles.centered, { backgroundColor: nc.background }]}>
         <InfoModal
           visible={infoModal.visible}
           title={infoModal.title}
           message={infoModal.message}
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
+          backgroundColor={nc.backgroundCard}
+          textColor={nc.textStrong}
           onClose={() =>
             setInfoModal({ visible: false, title: "", message: "" })
           }
         />
         <View style={styles.errorContainer}>
-          <FontAwesome name="circle-xmark" size={60} color="#dc3545" />
-          <Text style={styles.errorTitle}>Lien invalide</Text>
-          <Text style={styles.errorMessage}>
+          <FontAwesome name="circle-xmark" size={60} color={nc.error} />
+          <Text style={[styles.errorTitle, { color: nc.textStrong }]}>
+            Lien invalide
+          </Text>
+          <Text style={[styles.errorMessage, { color: nc.textMuted }]}>
             Ce lien de réinitialisation est invalide ou a expiré. Veuillez
             refaire une demande depuis l'écran de connexion.
           </Text>
           <TouchableOpacity
-            style={styles.backButton}
+            style={[styles.backButton, { backgroundColor: nc.todayAccent }]}
             onPress={() => router.replace("/(auth)/login")}
+            accessibilityRole="button"
+            accessibilityLabel="Retour à la connexion"
           >
-            <FontAwesome name="arrow-left" size={16} color="white" />
-            <Text style={styles.backButtonText}>Retour à la connexion</Text>
+            <FontAwesome name="arrow-left" size={16} color={nc.white} />
+            <Text style={[styles.backButtonText, { color: nc.white }]}>
+              Retour à la connexion
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -175,17 +266,16 @@ export default function ResetPasswordScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: nc.background }]}
     >
       <InfoModal
         visible={infoModal.visible}
         title={infoModal.title}
         message={infoModal.message}
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
         onClose={() => {
           setInfoModal({ visible: false, title: "", message: "" });
-          // Rediriger vers login après succès
           if (infoModal.title === "Mot de passe modifié") {
             router.replace("/(auth)/login");
           }
@@ -198,11 +288,13 @@ export default function ResetPasswordScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.iconContainer}>
-            <FontAwesome name="key" size={36} color="#4A90E2" />
+          <View style={[styles.iconContainer, { backgroundColor: nc.backgroundCard }]}>
+            <FontAwesome name="key" size={36} color={nc.todayAccent} />
           </View>
-          <Text style={styles.title}>Nouveau mot de passe</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: nc.textStrong }]}>
+            Nouveau mot de passe
+          </Text>
+          <Text style={[styles.subtitle, { color: nc.textMuted }]}>
             Choisissez un nouveau mot de passe pour {email}
           </Text>
         </View>
@@ -210,29 +302,33 @@ export default function ResetPasswordScreen() {
         {/* Formulaire */}
         <View style={styles.formContainer}>
           {/* Nouveau mot de passe */}
-          <View style={styles.inputContainer}>
+          <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
             <View style={styles.inputIconContainer}>
-              <FontAwesome name="lock" size={20} color="#6c757d" />
+              <FontAwesome name="lock" size={20} color={nc.textMuted} />
             </View>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: nc.textStrong }]}
               placeholder="Nouveau mot de passe"
-              placeholderTextColor="#adb5bd"
+              placeholderTextColor={nc.textLight}
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               editable={!loading}
+              accessibilityLabel="Nouveau mot de passe"
             />
             <TouchableOpacity
               style={styles.eyeIcon}
-              onPress={() => setShowPassword(!showPassword)}
+              onPress={handleTogglePassword}
               disabled={loading}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
             >
               <FontAwesome
                 name={showPassword ? "eye" : "eye-slash"}
                 size={20}
-                color="#6c757d"
+                color={nc.textMuted}
               />
             </TouchableOpacity>
           </View>
@@ -240,60 +336,72 @@ export default function ResetPasswordScreen() {
           {/* Barre de force */}
           {password.length > 0 && (
             <View style={styles.strengthRow}>
-              <View style={styles.strengthBarTrack}>
+              <View style={[styles.strengthBarTrack, { backgroundColor: nc.borderLight }]}>
                 <View
                   style={[
                     styles.strengthBarFill,
-                    { width: `${strengthPercent}%` },
+                    { width: `${strengthPercent}%`, backgroundColor: nc.todayAccent },
                   ]}
                 />
               </View>
-              <Text style={styles.strengthLabel}>Force: {strengthLabel}</Text>
+              <Text style={[styles.strengthLabel, { color: nc.textMuted }]}>
+                Force: {strengthLabel}
+              </Text>
             </View>
           )}
 
           {/* Confirmer mot de passe */}
-          <View style={styles.inputContainer}>
+          <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
             <View style={styles.inputIconContainer}>
-              <FontAwesome name="lock" size={20} color="#6c757d" />
+              <FontAwesome name="lock" size={20} color={nc.textMuted} />
             </View>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: nc.textStrong }]}
               placeholder="Confirmer le mot de passe"
-              placeholderTextColor="#adb5bd"
+              placeholderTextColor={nc.textLight}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry={!showConfirmPassword}
               autoCapitalize="none"
               editable={!loading}
+              accessibilityLabel="Confirmer le mot de passe"
             />
             <TouchableOpacity
               style={styles.eyeIcon}
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              onPress={handleToggleConfirmPassword}
               disabled={loading}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={showConfirmPassword ? "Masquer la confirmation" : "Afficher la confirmation"}
             >
               <FontAwesome
                 name={showConfirmPassword ? "eye" : "eye-slash"}
                 size={20}
-                color="#6c757d"
+                color={nc.textMuted}
               />
             </TouchableOpacity>
           </View>
 
           {/* Bouton valider */}
           <TouchableOpacity
-            style={[styles.mainButton, loading && styles.mainButtonDisabled]}
+            style={[
+              styles.mainButton,
+              { backgroundColor: nc.todayAccent, shadowColor: nc.todayAccent },
+              loading && styles.mainButtonDisabled,
+            ]}
             onPress={handleResetPassword}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Réinitialiser le mot de passe"
           >
             {loading ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={nc.white} />
             ) : (
               <>
-                <Text style={styles.mainButtonText}>
+                <Text style={[styles.mainButtonText, { color: nc.white }]}>
                   Réinitialiser le mot de passe
                 </Text>
-                <FontAwesome name="check" size={20} color="white" />
+                <FontAwesome name="check" size={20} color={nc.white} />
               </>
             )}
           </TouchableOpacity>
@@ -303,9 +411,13 @@ export default function ResetPasswordScreen() {
             style={styles.linkContainer}
             onPress={() => router.replace("/(auth)/login")}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Retour à la connexion"
           >
-            <FontAwesome name="arrow-left" size={14} color="#4A90E2" />
-            <Text style={styles.linkText}>Retour à la connexion</Text>
+            <FontAwesome name="arrow-left" size={14} color={nc.todayAccent} />
+            <Text style={[styles.linkText, { color: nc.todayAccent }]}>
+              Retour à la connexion
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -316,7 +428,6 @@ export default function ResetPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   centered: {
     justifyContent: "center",
@@ -335,7 +446,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: "white",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
@@ -348,12 +458,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#212529",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
-    color: "#6c757d",
     textAlign: "center",
     paddingHorizontal: 20,
   },
@@ -363,7 +471,6 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "white",
     borderRadius: 12,
     paddingHorizontal: 16,
     shadowColor: "#000",
@@ -379,10 +486,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 56,
     fontSize: 16,
-    color: "#212529",
   },
   eyeIcon: {
-    padding: 8,
+    padding: 12,
   },
   strengthRow: {
     gap: 6,
@@ -390,27 +496,22 @@ const styles = StyleSheet.create({
   strengthBarTrack: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#e9ecef",
     overflow: "hidden",
   },
   strengthBarFill: {
     height: "100%",
-    backgroundColor: "#4A90E2",
   },
   strengthLabel: {
     fontSize: 12,
-    color: "#6c757d",
   },
   mainButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#4A90E2",
     height: 56,
     borderRadius: 12,
     marginTop: 8,
     gap: 12,
-    shadowColor: "#4A90E2",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -420,7 +521,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   mainButtonText: {
-    color: "white",
     fontSize: 18,
     fontWeight: "600",
   },
@@ -433,13 +533,11 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 15,
-    color: "#4A90E2",
     fontWeight: "600",
   },
   verifyingText: {
     marginTop: 16,
     fontSize: 16,
-    color: "#6c757d",
   },
   errorContainer: {
     alignItems: "center",
@@ -449,11 +547,9 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#212529",
   },
   errorMessage: {
     fontSize: 15,
-    color: "#6c757d",
     textAlign: "center",
     lineHeight: 22,
   },
@@ -461,7 +557,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#4A90E2",
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 12,
@@ -469,8 +564,41 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   backButtonText: {
-    color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+  skeletonContainer: {
+    width: "100%",
+    paddingHorizontal: 20,
+    alignItems: "center",
+    gap: 16,
+  },
+  skeletonCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 8,
+  },
+  skeletonTitle: {
+    width: 220,
+    height: 28,
+    borderRadius: 8,
+  },
+  skeletonSubtitle: {
+    width: 280,
+    height: 16,
+    borderRadius: 6,
+    marginBottom: 16,
+  },
+  skeletonInput: {
+    width: "100%",
+    height: 56,
+    borderRadius: 12,
+  },
+  skeletonButton: {
+    width: "100%",
+    height: 56,
+    borderRadius: 12,
+    marginTop: 8,
   },
 });

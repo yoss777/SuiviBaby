@@ -21,32 +21,34 @@ export const PulsingAura = ({ color, size = 120 }: PulsingAuraProps) => {
   const opacity2 = useSharedValue(0.4);
 
   useEffect(() => {
+    // Inner circle — faster, tighter pulse (breathing rhythm)
     scale1.value = withRepeat(
       withSequence(
-        withTiming(1.3, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+        withTiming(1.35, { duration: 1250, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 1250, easing: Easing.inOut(Easing.ease) })
       ),
       -1
     );
     opacity1.value = withRepeat(
       withSequence(
-        withTiming(0.2, { duration: 2000 }),
-        withTiming(0.6, { duration: 2000 })
+        withTiming(0.25, { duration: 1250 }),
+        withTiming(0.65, { duration: 1250 })
       ),
       -1
     );
 
+    // Outer circle — slower, wider wave (offset creates depth)
     scale2.value = withRepeat(
       withSequence(
-        withTiming(1.5, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) })
+        withTiming(1.55, { duration: 1750, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 1750, easing: Easing.inOut(Easing.ease) })
       ),
       -1
     );
     opacity2.value = withRepeat(
       withSequence(
-        withTiming(0.1, { duration: 2500 }),
-        withTiming(0.4, { duration: 2500 })
+        withTiming(0.1, { duration: 1750 }),
+        withTiming(0.45, { duration: 1750 })
       ),
       -1
     );

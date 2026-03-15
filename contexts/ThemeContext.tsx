@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useColorScheme as useSystemColorScheme } from 'react-native';
 
@@ -7,6 +8,8 @@ import {
   mettreAJourPreferenceTheme,
   ThemePreference,
 } from '@/services/userPreferencesService';
+
+const THEME_STORAGE_KEY = '@samaye_theme_preference';
 
 interface ThemeContextValue {
   preference: ThemePreference;
@@ -27,10 +30,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
     const loadPreference = async () => {
       if (!firebaseUser) {
-        if (isMounted) {
-          setPreferenceState('auto');
-          setIsLoading(false);
-        }
+        // Pas connecté : lire la préférence locale (persiste après déconnexion)
+        try {
+          const local = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+          if (isMounted && local && (local === 'light' || local === 'dark' || local === 'auto')) {
+            setPreferenceState(local as ThemePreference);
+          }
+        } catch {}
+        if (isMounted) setIsLoading(false);
         return;
       }
 
@@ -38,6 +45,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const themePreference = await obtenirPreferenceTheme();
         if (isMounted) {
           setPreferenceState(themePreference);
+          // Persister localement pour la prochaine déconnexion
+          AsyncStorage.setItem(THEME_STORAGE_KEY, themePreference).catch(() => {});
         }
       } catch (error) {
         if (isMounted) {
@@ -64,6 +73,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (value === preference) return;
     const previous = preference;
     setPreferenceState(value);
+    // Toujours persister localement
+    AsyncStorage.setItem(THEME_STORAGE_KEY, value).catch(() => {});
 
     if (!firebaseUser) return;
 
@@ -71,6 +82,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       await mettreAJourPreferenceTheme(value);
     } catch (error) {
       setPreferenceState(previous);
+      AsyncStorage.setItem(THEME_STORAGE_KEY, previous).catch(() => {});
       throw error;
     }
   };

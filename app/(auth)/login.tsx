@@ -1,33 +1,73 @@
 // app/(auth)/login.tsx
 import { InfoModal } from "@/components/ui/InfoModal";
-import { Colors } from "@/constants/theme";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import {
+  clearCredentials,
+  getBiometricType,
+  getCredentials,
+  isBiometricAvailable,
+  isBiometricEnabled,
+  saveCredentials,
+} from "@/services/biometricAuthService";
 import { createPatientUser } from "@/services/userService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
 } from "firebase/auth";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
 import { auth } from "../../config/firebase";
 
+const LAST_EMAIL_KEY = "@samaye_last_email";
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const PASSWORD_RULES = [
+  {
+    id: "length",
+    label: "8+ caracteres",
+    test: (value: string) => value.length >= 8,
+  },
+  {
+    id: "number",
+    label: "1 chiffre",
+    test: (value: string) => /\d/.test(value),
+  },
+  {
+    id: "special",
+    label: "1 caractere special",
+    test: (value: string) => /[^A-Za-z0-9]/.test(value),
+  },
+];
+
 export default function LoginScreen() {
   const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const {
@@ -47,53 +87,95 @@ export default function LoginScreen() {
   const [hasConsented, setHasConsented] = useState(false);
   const [showConsentError, setShowConsentError] = useState(false);
   const navigationLocked = useRef(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [cooldownEnd, setCooldownEnd] = useState<number | null>(null);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [forgotPasswordHint, setForgotPasswordHint] = useState(false);
+  const forgotPasswordOpacity = useRef(new Animated.Value(0)).current;
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricType, setBiometricType] = useState("Biométrie");
+  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+  const pendingCredentials = useRef<{ email: string; password: string } | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
   const [infoModal, setInfoModal] = useState({
     visible: false,
     title: "",
     message: "",
   });
 
-  const passwordRules = [
-    {
-      id: "length",
-      label: "8+ caracteres",
-      test: (value: string) => value.length >= 8,
-    },
-    {
-      id: "number",
-      label: "1 chiffre",
-      test: (value: string) => /\d/.test(value),
-    },
-    {
-      id: "special",
-      label: "1 caractere special",
-      test: (value: string) => /[^A-Za-z0-9]/.test(value),
-    },
-  ];
-  const unmetRules = passwordRules.filter((rule) => !rule.test(password));
-  const strengthScore = passwordRules.length - unmetRules.length;
+  const emailValid = useMemo(() => EMAIL_REGEX.test(email.trim()), [email]);
+
+  const unmetRules = useMemo(
+    () => PASSWORD_RULES.filter((rule) => !rule.test(password)),
+    [password],
+  );
+  const strengthScore = PASSWORD_RULES.length - unmetRules.length;
   const strengthPercent = Math.round(
-    (strengthScore / passwordRules.length) * 100
+    (strengthScore / PASSWORD_RULES.length) * 100,
   );
   const strengthLabel =
     strengthScore === 3 ? "Fort" : strengthScore === 2 ? "Moyen" : "Faible";
 
-  const resetPasswordFields = () => {
+  const resetPasswordFields = useCallback(() => {
     setPassword("");
     setConfirmPassword("");
     setShowPassword(false);
     setShowConfirmPassword(false);
-  };
+  }, []);
 
-  const resetAllFields = () => {
+  const resetAllFields = useCallback(() => {
     setEmail("");
     setUserName("");
     resetPasswordFields();
-  };
+  }, [resetPasswordFields]);
 
-  const showModal = (title: string, message: string) => {
+  const showModal = useCallback((title: string, message: string) => {
     setInfoModal({ visible: true, title, message });
-  };
+  }, []);
+
+  // Charger le dernier email (#6), check onboarding (#9), check biométrie (#1)
+  useEffect(() => {
+    AsyncStorage.getItem(LAST_EMAIL_KEY).then((saved) => {
+      if (saved) setEmail(saved);
+    }).catch(() => {});
+
+    (async () => {
+      try {
+        const { hasCompletedOnboarding } = await import("./onboarding");
+        const done = await hasCompletedOnboarding();
+        if (!done) {
+          router.replace("/(auth)/onboarding");
+          return;
+        }
+      } catch {}
+
+      try {
+        const available = await isBiometricAvailable();
+        setBiometricAvailable(available);
+        if (available) {
+          const enabled = await isBiometricEnabled();
+          setBiometricEnabled(enabled);
+          const type = await getBiometricType();
+          setBiometricType(type);
+        }
+      } catch {
+        setBiometricAvailable(false);
+      }
+    })();
+  }, [router]);
+
+  // Détection caps lock (#10)
+  const handlePasswordKeyPress = useCallback((e: any) => {
+    const key = e.nativeEvent?.key;
+    if (key && key.length === 1 && /[A-Z]/.test(key) && !/[a-z]/.test(key)) {
+      setCapsLockOn(true);
+    } else if (key && key.length === 1 && /[a-z]/.test(key)) {
+      setCapsLockOn(false);
+    }
+  }, []);
 
   // Rediriger automatiquement si l'utilisateur est déjà authentifié
   useEffect(() => {
@@ -127,12 +209,48 @@ export default function LoginScreen() {
     router,
   ]);
 
-  const handleForgotPassword = async () => {
+  // Cooldown countdown timer
+  useEffect(() => {
+    if (!cooldownEnd) return;
+    const tick = () => {
+      const remaining = Math.ceil((cooldownEnd - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setCooldownEnd(null);
+        setCooldownRemaining(0);
+      } else {
+        setCooldownRemaining(remaining);
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownEnd]);
+
+  // Forgot password hint animation
+  useEffect(() => {
+    if (forgotPasswordHint) {
+      Animated.sequence([
+        Animated.timing(forgotPasswordOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.delay(3000),
+        Animated.timing(forgotPasswordOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => setForgotPasswordHint(false));
+    }
+  }, [forgotPasswordHint, forgotPasswordOpacity]);
+
+  const isCoolingDown = cooldownEnd !== null && cooldownRemaining > 0;
+
+  const handleForgotPassword = useCallback(async () => {
     if (!email.trim()) {
-      showModal(
-        "Email requis",
-        "Veuillez entrer votre adresse email pour réinitialiser votre mot de passe."
-      );
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setForgotPasswordHint(true);
       return;
     }
 
@@ -144,13 +262,15 @@ export default function LoginScreen() {
         iOS: { bundleId: "com.yoss7.samaye" },
         android: { packageName: "com.yoss7.samaye", installApp: true },
       });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showModal(
         "Email envoyé",
         "Un email de réinitialisation a été envoyé à " +
           email.trim() +
-          ". Vérifiez votre boîte de réception (et vos spams)."
+          ". Vérifiez votre boîte de réception (et vos spams).",
       );
     } catch (error: any) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       let errorMessage = "Une erreur est survenue";
       switch (error.code) {
         case "auth/invalid-email":
@@ -160,22 +280,23 @@ export default function LoginScreen() {
           errorMessage = "Aucun compte trouvé avec cet email";
           break;
         case "auth/too-many-requests":
-          errorMessage =
-            "Trop de tentatives. Veuillez réessayer plus tard.";
+          errorMessage = "Trop de tentatives. Réessayez dans quelques minutes.";
           break;
         default:
-          errorMessage = error.message;
+          errorMessage = "Une erreur est survenue. Veuillez réessayer.";
       }
       showModal("Erreur", errorMessage);
     } finally {
       setLoading(false);
     }
-  };
+  }, [email, showModal]);
 
-  const handleAuth = async () => {
+  const handleAuth = useCallback(async () => {
+    if (isCoolingDown) return;
+
     if (!isLogin && !hasConsented) {
       setShowConsentError(true);
-      // On réinitialise l'erreur après 2 secondes
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setTimeout(() => setShowConsentError(false), 2000);
       return;
     }
@@ -185,7 +306,6 @@ export default function LoginScreen() {
       return;
     }
 
-    // ✅ Validation pour le pseudo en mode inscription
     if (!isLogin && !userName.trim()) {
       showModal("Erreur", "Veuillez entrer votre pseudo");
       return;
@@ -195,7 +315,7 @@ export default function LoginScreen() {
       if (unmetRules.length > 0) {
         showModal(
           "Erreur",
-          "Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special."
+          "Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special.",
         );
         return;
       }
@@ -211,27 +331,47 @@ export default function LoginScreen() {
     try {
       if (isLogin) {
         await signInWithEmailAndPassword(auth, email.trim(), password);
+        setFailedAttempts(0);
+        // Sauvegarder l'email pour pré-remplissage (#6 Remember me)
+        AsyncStorage.setItem(LAST_EMAIL_KEY, email.trim()).catch(() => {});
+        // Proposer la biométrie si disponible et pas encore activée (#1)
+        if (biometricAvailable && !biometricEnabled) {
+          pendingCredentials.current = { email: email.trim(), password };
+          setShowBiometricPrompt(true);
+        }
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        // ✅ Création du compte
         const userCredential = await createUserWithEmailAndPassword(
           auth,
           email.trim(),
-          password
+          password,
         );
 
-        // ✅ Sauvegarde du profil patient complet dans Firestore
         const defaultUserName = email.trim().split("@")[0];
         await createPatientUser(
           userCredential.user.uid,
           email.trim(),
-          userName.trim() || defaultUserName
+          userName.trim() || defaultUserName,
         );
 
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         resetAllFields();
         showModal("Succès", "Compte créé avec succès !");
       }
-      // Une fois connecté, l'effet d'auth redirige vers l'écran principal
     } catch (error: any) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
+      // Track failed login attempts for rate limiting
+      if (isLogin) {
+        const newCount = failedAttempts + 1;
+        setFailedAttempts(newCount);
+        if (newCount >= 5) {
+          setCooldownEnd(Date.now() + 60_000);
+        } else if (newCount >= 3) {
+          setCooldownEnd(Date.now() + 15_000);
+        }
+      }
+
       let errorMessage = "Une erreur est survenue";
 
       switch (error.code) {
@@ -242,10 +382,9 @@ export default function LoginScreen() {
           errorMessage = "Ce compte a été désactivé";
           break;
         case "auth/user-not-found":
-          errorMessage = "Aucun compte trouvé avec cet email";
-          break;
         case "auth/wrong-password":
-          errorMessage = "Mot de passe incorrect";
+        case "auth/invalid-credential":
+          errorMessage = "Email ou mot de passe incorrect";
           break;
         case "auth/email-already-in-use":
           errorMessage = "Cet email est déjà utilisé";
@@ -256,44 +395,137 @@ export default function LoginScreen() {
         case "auth/network-request-failed":
           errorMessage = "Erreur de connexion réseau";
           break;
+        case "auth/too-many-requests":
+          errorMessage = "Trop de tentatives. Réessayez dans quelques minutes.";
+          break;
         default:
-          errorMessage = error.message;
+          errorMessage = "Une erreur est survenue. Veuillez réessayer.";
       }
 
       showModal("Erreur", errorMessage);
-      console.log("Erreur", errorMessage);
     } finally {
       setLoading(false);
     }
-  };
+  }, [isLogin, hasConsented, email, password, userName, confirmPassword, unmetRules, showModal, resetAllFields, isCoolingDown, failedAttempts]);
+
+  // Connexion biométrique (#1)
+  const handleBiometricLogin = useCallback(async () => {
+    try {
+      const creds = await getCredentials();
+      if (!creds) return;
+      setLoading(true);
+      await signInWithEmailAndPassword(auth, creds.email, creds.password);
+      setFailedAttempts(0);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error: any) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (error.code === "auth/wrong-password" || error.code === "auth/user-not-found" || error.code === "auth/invalid-credential") {
+        await clearCredentials();
+        setBiometricEnabled(false);
+        showModal("Erreur", "Identifiants expirés. Veuillez vous reconnecter manuellement.");
+      } else {
+        showModal("Erreur", "Une erreur est survenue. Veuillez réessayer.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [showModal]);
+
+  const handleAcceptBiometric = useCallback(async () => {
+    setShowBiometricPrompt(false);
+    if (pendingCredentials.current) {
+      await saveCredentials(pendingCredentials.current.email, pendingCredentials.current.password);
+      setBiometricEnabled(true);
+      pendingCredentials.current = null;
+    }
+  }, []);
+
+  const handleDeclineBiometric = useCallback(() => {
+    setShowBiometricPrompt(false);
+    pendingCredentials.current = null;
+  }, []);
+
+  const handleEmailChange = useCallback((text: string) => {
+    setEmail(text);
+    if (!emailTouched && text.length > 0) setEmailTouched(true);
+  }, [emailTouched]);
+
+  // Auto-scroll vers le champ actif (#4 Keyboard-aware)
+  const handleInputFocus = useCallback((yOffset: number) => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: yOffset, animated: true });
+    }, 300);
+  }, []);
+
+  const handleToggleMode = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    LayoutAnimation.configureNext({
+      duration: 350,
+      create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+      update: { type: LayoutAnimation.Types.easeInEaseOut },
+      delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+    });
+    setIsLogin(!isLogin);
+    resetAllFields();
+    setEmailTouched(false);
+    setCapsLockOn(false);
+  }, [isLogin, resetAllFields]);
+
+  const handleTogglePassword = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowPassword(!showPassword);
+  }, [showPassword]);
+
+  const handleToggleConfirmPassword = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowConfirmPassword(!showConfirmPassword);
+  }, [showConfirmPassword]);
+
+  const handleToggleConsent = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setHasConsented(!hasConsented);
+    setShowConsentError(false);
+  }, [hasConsented]);
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: nc.background }]}
     >
       <InfoModal
         visible={infoModal.visible}
         title={infoModal.title}
         message={infoModal.message}
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
         onClose={() => setInfoModal({ visible: false, title: "", message: "" })}
       />
+      <InfoModal
+        visible={showBiometricPrompt}
+        title={`Activer ${biometricType} ?`}
+        message={`Souhaitez-vous utiliser ${biometricType} pour vous connecter plus rapidement la prochaine fois ?`}
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
+        confirmText="Activer"
+        dismissText="Plus tard"
+        onConfirm={handleAcceptBiometric}
+        onClose={handleDeclineBiometric}
+      />
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* Header avec icône */}
         <View style={styles.header}>
-          <View style={styles.iconContainer}>
-            <FontAwesome name="baby-carriage" size={40} color="#4A90E2" />
+          <View style={[styles.iconContainer, { backgroundColor: nc.backgroundCard }]}>
+            <FontAwesome name="baby-carriage" size={40} color={nc.todayAccent} />
           </View>
-          <Text style={styles.title}>
+          <Text style={[styles.title, { color: nc.textStrong }]}>
             {isLogin ? "Bienvenue" : "Créer un compte"}
           </Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.subtitle, { color: nc.textMuted }]}>
             {isLogin
               ? "Connectez-vous pour suivre le quotidien de votre bébé"
               : "Commencez à suivre le quotidien de votre bébé"}
@@ -303,126 +535,181 @@ export default function LoginScreen() {
         {/* Formulaire */}
         <View style={styles.formContainer}>
           {/* Champ Email */}
-          <View style={styles.inputContainer}>
-            <View style={styles.inputIconContainer}>
-              <FontAwesome name="envelope" size={20} color="#6c757d" />
-            </View>
-            <TextInput
-              style={styles.input}
-              placeholder="Adresse email"
-              placeholderTextColor="#adb5bd"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              autoCorrect={false}
-              spellCheck={false}
-              editable={!loading}
-            />
-          </View>
-
-          {/* ✅ Champ Pseudo (seulement en mode inscription) */}
-          {!isLogin && (
-            <View style={styles.inputContainer}>
+          <View>
+            <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
               <View style={styles.inputIconContainer}>
-                <FontAwesome name="user" size={20} color="#6c757d" />
+                <FontAwesome name="envelope" size={20} color={nc.textMuted} />
               </View>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: nc.textStrong }]}
+                placeholder="Adresse email"
+                placeholderTextColor={nc.textLight}
+                value={email}
+                onChangeText={handleEmailChange}
+                onBlur={() => setEmailTouched(true)}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                autoCorrect={false}
+                spellCheck={false}
+                editable={!loading}
+                accessibilityLabel="Adresse email"
+              />
+              {emailTouched && email.trim().length > 0 && (
+                <FontAwesome
+                  name={emailValid ? "circle-check" : "circle-xmark"}
+                  size={18}
+                  color={emailValid ? "#22c55e" : nc.error}
+                  style={styles.emailValidationIcon}
+                />
+              )}
+            </View>
+            {emailTouched && email.trim().length > 0 && !emailValid && (
+              <Text style={[styles.inlineHint, { color: nc.error }]}>
+                Format d'email invalide
+              </Text>
+            )}
+          </View>
+
+          {/* Champ Pseudo (seulement en mode inscription) */}
+          {!isLogin && (
+            <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
+              <View style={styles.inputIconContainer}>
+                <FontAwesome name="user" size={20} color={nc.textMuted} />
+              </View>
+              <TextInput
+                style={[styles.input, { color: nc.textStrong }]}
                 placeholder="Pseudo"
-                placeholderTextColor="#adb5bd"
+                placeholderTextColor={nc.textLight}
                 value={userName}
                 onChangeText={setUserName}
                 autoCapitalize="words"
                 editable={!loading}
+                accessibilityLabel="Pseudo"
+                onFocus={() => handleInputFocus(150)}
               />
             </View>
           )}
 
           {/* Champ Mot de passe */}
-          <View style={styles.inputContainer}>
-            <View style={styles.inputIconContainer}>
-              <FontAwesome name="lock" size={20} color="#6c757d" />
-            </View>
-            <TextInput
-              style={styles.input}
-              placeholder="Mot de passe"
-              placeholderTextColor="#adb5bd"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoComplete="password"
-              editable={!loading}
-            />
-            <TouchableOpacity
-              style={styles.eyeIcon}
-              onPress={() => setShowPassword(!showPassword)}
-              disabled={loading}
-            >
-              <FontAwesome
-                name={showPassword ? "eye" : "eye-slash"}
-                size={20}
-                color="#6c757d"
+          <View>
+            <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
+              <View style={styles.inputIconContainer}>
+                <FontAwesome name="lock" size={20} color={nc.textMuted} />
+              </View>
+              <TextInput
+                style={[styles.input, { color: nc.textStrong }]}
+                placeholder="Mot de passe"
+                placeholderTextColor={nc.textLight}
+                value={password}
+                onChangeText={setPassword}
+                onKeyPress={handlePasswordKeyPress}
+                onFocus={() => handleInputFocus(200)}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoComplete="password"
+                editable={!loading}
+                accessibilityLabel="Mot de passe"
               />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.eyeIcon}
+                onPress={handleTogglePassword}
+                disabled={loading}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              >
+                <FontAwesome
+                  name={showPassword ? "eye" : "eye-slash"}
+                  size={20}
+                  color={nc.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
+            {capsLockOn && (
+              <View style={styles.capsLockRow}>
+                <FontAwesome name="triangle-exclamation" size={12} color={nc.todayAccent} />
+                <Text style={[styles.inlineHint, { color: nc.todayAccent }]}>
+                  Verrouillage majuscules activé
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Lien mot de passe oublié (mode connexion uniquement) */}
           {isLogin && (
-            <TouchableOpacity
-              onPress={handleForgotPassword}
-              disabled={loading}
-              style={styles.forgotPasswordContainer}
-            >
-              <Text style={styles.forgotPasswordText}>
-                Mot de passe oublié ?
-              </Text>
-            </TouchableOpacity>
+            <View>
+              <TouchableOpacity
+                onPress={handleForgotPassword}
+                disabled={loading}
+                style={styles.forgotPasswordContainer}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Mot de passe oublié"
+              >
+                <Text style={[styles.forgotPasswordText, { color: nc.todayAccent }]}>
+                  Mot de passe oublié ?
+                </Text>
+              </TouchableOpacity>
+              {forgotPasswordHint && (
+                <Animated.Text
+                  style={[
+                    styles.forgotPasswordHint,
+                    { color: nc.todayAccent, opacity: forgotPasswordOpacity },
+                  ]}
+                >
+                  Entrez d'abord votre email ci-dessus
+                </Animated.Text>
+              )}
+            </View>
           )}
 
           {!isLogin && password.length > 0 && (
-            <>
-              <View style={styles.strengthRow}>
-                <View style={styles.strengthBarTrack}>
-                  <View
-                    style={[
-                      styles.strengthBarFill,
-                      { width: `${strengthPercent}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.strengthLabel}>Force: {strengthLabel}</Text>
+            <View style={styles.strengthRow}>
+              <View style={[styles.strengthBarTrack, { backgroundColor: nc.borderLight }]}>
+                <View
+                  style={[
+                    styles.strengthBarFill,
+                    { width: `${strengthPercent}%`, backgroundColor: nc.todayAccent },
+                  ]}
+                />
               </View>
-            </>
+              <Text style={[styles.strengthLabel, { color: nc.textMuted }]}>
+                Force: {strengthLabel}
+              </Text>
+            </View>
           )}
 
           {!isLogin && (
-            <View style={styles.inputContainer}>
+            <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
               <View style={styles.inputIconContainer}>
-                <FontAwesome name="lock" size={20} color="#6c757d" />
+                <FontAwesome name="lock" size={20} color={nc.textMuted} />
               </View>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: nc.textStrong }]}
                 placeholder="Confirmer le mot de passe"
-                placeholderTextColor="#adb5bd"
+                placeholderTextColor={nc.textLight}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
+                onFocus={() => handleInputFocus(300)}
                 secureTextEntry={!showConfirmPassword}
                 autoCapitalize="none"
                 autoComplete="password"
                 editable={!loading}
+                accessibilityLabel="Confirmer le mot de passe"
               />
               <TouchableOpacity
                 style={styles.eyeIcon}
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                onPress={handleToggleConfirmPassword}
                 disabled={loading}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={showConfirmPassword ? "Masquer la confirmation" : "Afficher la confirmation"}
               >
                 <FontAwesome
                   name={showConfirmPassword ? "eye" : "eye-slash"}
                   size={20}
-                  color="#6c757d"
+                  color={nc.textMuted}
                 />
               </TouchableOpacity>
             </View>
@@ -430,76 +717,103 @@ export default function LoginScreen() {
 
           {/* Bouton principal */}
           <TouchableOpacity
-            // style={[
-            //   styles.mainButton,
-            //   (loading || (!isLogin && !hasConsented)) &&
-            //     styles.mainButtonDisabled,
-            // ]}
-            // onPress={handleAuth}
-            // disabled={loading || (!isLogin && !hasConsented)}
             style={[
               styles.mainButton,
-              loading && styles.mainButtonDisabled,
+              { backgroundColor: nc.todayAccent, shadowColor: nc.todayAccent },
+              (loading || isCoolingDown) && styles.mainButtonDisabled,
               !isLogin &&
                 !hasConsented &&
-                showConsentError && { backgroundColor: "#d32f2f" }, // Rouge en cas d'oubli
+                showConsentError && { backgroundColor: nc.error },
             ]}
             onPress={handleAuth}
-            disabled={loading}
+            disabled={loading || isCoolingDown}
+            accessibilityRole="button"
+            accessibilityLabel={isLogin ? "Se connecter" : "Créer mon compte"}
           >
             {loading ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={nc.white} />
+            ) : isCoolingDown ? (
+              <>
+                <FontAwesome name="clock" size={20} color={nc.white} />
+                <Text style={[styles.mainButtonText, { color: nc.white }]}>
+                  Réessayer dans {cooldownRemaining}s
+                </Text>
+              </>
             ) : (
               <>
-                <Text style={styles.mainButtonText}>
+                <Text style={[styles.mainButtonText, { color: nc.white }]}>
                   {isLogin ? "Se connecter" : "Créer mon compte"}
                 </Text>
-                <FontAwesome name="arrow-right" size={20} color="white" />
+                <FontAwesome name="arrow-right" size={20} color={nc.white} />
               </>
             )}
           </TouchableOpacity>
 
-          {/* ✅ Consentement aux conditions et politique de confidentialité */}
+          {/* Bouton biométrique (#1) */}
+          {isLogin && biometricAvailable && biometricEnabled && (
+            <TouchableOpacity
+              style={[styles.biometricButton, { borderColor: nc.todayAccent }]}
+              onPress={handleBiometricLogin}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel={`Se connecter avec ${biometricType}`}
+            >
+              <FontAwesome
+                name={biometricType === "Face ID" ? "face-smile" : "fingerprint"}
+                size={22}
+                color={nc.todayAccent}
+              />
+              <Text style={[styles.biometricButtonText, { color: nc.todayAccent }]}>
+                Se connecter avec {biometricType}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Consentement aux conditions et politique de confidentialité */}
           {!isLogin && (
             <View
               style={[
-                {
-                  alignItems: "center",
-                  flexDirection: "row",
-                  flexWrap: "wrap",
-                  justifyContent: "center",
-                },
                 styles.legalContainer,
-                showConsentError && styles.legalErrorBorder, // Ajout d'une bordure ou d'un fond léger
+                showConsentError && [
+                  styles.legalErrorBorder,
+                  { backgroundColor: nc.errorBg, borderColor: nc.error },
+                ],
               ]}
             >
               <TouchableOpacity
-                onPress={() => {
-                  setHasConsented(!hasConsented);
-                  setShowConsentError(false);
-                }}
-                style={{ marginRight: 8 }}
+                onPress={handleToggleConsent}
+                style={styles.consentCheckbox}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: hasConsented }}
+                accessibilityLabel="Accepter les conditions et la politique de confidentialité"
               >
                 <FontAwesome
                   name={hasConsented ? "check-square" : "square"}
                   size={20}
-                  color={showConsentError ? "#d32f2f" : "#4A90E2"}
+                  color={showConsentError ? nc.error : nc.todayAccent}
                 />
               </TouchableOpacity>
               <Text
                 style={[
                   styles.legalText,
-                  showConsentError && { color: "#d32f2f", fontWeight: "bold" },
+                  { color: nc.textMuted },
+                  showConsentError && { color: nc.error, fontWeight: "bold" },
                 ]}
               >
                 J'accepte{" "}
               </Text>
-              <TouchableOpacity onPress={() => router.push("/(auth)/terms")}>
+              <TouchableOpacity
+                onPress={() => router.push("/(auth)/terms")}
+                accessibilityRole="link"
+                accessibilityLabel="Voir les conditions d'utilisation"
+              >
                 <Text
                   style={[
                     styles.legalLink,
+                    { color: nc.todayAccent },
                     showConsentError && {
-                      color: "#d32f2f",
+                      color: nc.error,
                       fontWeight: "bold",
                     },
                   ]}
@@ -510,7 +824,8 @@ export default function LoginScreen() {
               <Text
                 style={[
                   styles.legalText,
-                  showConsentError && { color: "#d32f2f", fontWeight: "bold" },
+                  { color: nc.textMuted },
+                  showConsentError && { color: nc.error, fontWeight: "bold" },
                 ]}
               >
                 {" "}
@@ -519,12 +834,15 @@ export default function LoginScreen() {
               <TouchableOpacity
                 onPress={() => router.push("/(auth)/privacy")}
                 disabled={loading}
+                accessibilityRole="link"
+                accessibilityLabel="Voir la politique de confidentialité"
               >
                 <Text
                   style={[
                     styles.legalLink,
+                    { color: nc.todayAccent },
                     showConsentError && {
-                      color: "#d32f2f",
+                      color: nc.error,
                       fontWeight: "bold",
                     },
                   ]}
@@ -532,23 +850,22 @@ export default function LoginScreen() {
                   la politique de confidentialite
                 </Text>
               </TouchableOpacity>
-              <Text style={styles.legalText}>.</Text>
+              <Text style={[styles.legalText, { color: nc.textMuted }]}>.</Text>
             </View>
           )}
 
           {/* Lien pour basculer entre connexion et inscription */}
           <View style={styles.switchContainer}>
-            <Text style={styles.switchText}>
+            <Text style={[styles.switchText, { color: nc.textMuted }]}>
               {isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}
             </Text>
             <TouchableOpacity
-              onPress={() => {
-                setIsLogin(!isLogin);
-                resetAllFields();
-              }}
+              onPress={handleToggleMode}
               disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel={isLogin ? "Créer un compte" : "Se connecter"}
             >
-              <Text style={styles.switchLink}>
+              <Text style={[styles.switchLink, { color: nc.todayAccent }]}>
                 {isLogin ? "Créer un compte" : "Se connecter"}
               </Text>
             </TouchableOpacity>
@@ -557,8 +874,8 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <FontAwesome name="shield-halved" size={16} color="#6c757d" />
-          <Text style={styles.footerText}>
+          <FontAwesome name="shield-halved" size={16} color={nc.textMuted} />
+          <Text style={[styles.footerText, { color: nc.textMuted }]}>
             Vos données sont sécurisées et privées
           </Text>
         </View>
@@ -570,7 +887,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   scrollContent: {
     flexGrow: 1,
@@ -585,7 +901,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: "white",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
@@ -598,12 +913,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: "700",
-    color: "#212529",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: "#6c757d",
     textAlign: "center",
     paddingHorizontal: 20,
   },
@@ -613,7 +926,6 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "white",
     borderRadius: 12,
     paddingHorizontal: 16,
     shadowColor: "#000",
@@ -629,10 +941,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 56,
     fontSize: 16,
-    color: "#212529",
   },
   eyeIcon: {
-    padding: 8,
+    padding: 12,
   },
   strengthRow: {
     gap: 6,
@@ -640,27 +951,22 @@ const styles = StyleSheet.create({
   strengthBarTrack: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#e9ecef",
     overflow: "hidden",
   },
   strengthBarFill: {
     height: "100%",
-    backgroundColor: "#4A90E2",
   },
   strengthLabel: {
     fontSize: 12,
-    color: "#6c757d",
   },
   mainButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#4A90E2",
     height: 56,
     borderRadius: 12,
     marginTop: 8,
     gap: 12,
-    shadowColor: "#4A90E2",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -670,7 +976,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   mainButtonText: {
-    color: "white",
     fontSize: 18,
     fontWeight: "600",
   },
@@ -683,11 +988,9 @@ const styles = StyleSheet.create({
   },
   switchText: {
     fontSize: 15,
-    color: "#6c757d",
   },
   switchLink: {
     fontSize: 15,
-    color: "#4A90E2",
     fontWeight: "600",
   },
   footer: {
@@ -699,30 +1002,30 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 13,
-    color: "#6c757d",
   },
   legalContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
+    alignItems: "center",
     justifyContent: "center",
     marginTop: 16,
     paddingHorizontal: 12,
   },
   legalText: {
     fontSize: 12,
-    color: "#6c757d",
   },
   legalLink: {
     fontSize: 12,
-    color: "#4A90E2",
     fontWeight: "600",
   },
   legalErrorBorder: {
-    backgroundColor: "#ffebee", // Fond rouge très léger
     padding: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#d32f2f",
+  },
+  consentCheckbox: {
+    marginRight: 8,
+    padding: 4,
   },
   forgotPasswordContainer: {
     alignSelf: "flex-end",
@@ -730,7 +1033,41 @@ const styles = StyleSheet.create({
   },
   forgotPasswordText: {
     fontSize: 14,
-    color: "#4A90E2",
     fontWeight: "500",
+  },
+  forgotPasswordHint: {
+    fontSize: 13,
+    fontWeight: "500",
+    textAlign: "right",
+    marginTop: 4,
+  },
+  emailValidationIcon: {
+    marginLeft: 8,
+  },
+  inlineHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  capsLockRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  biometricButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 2,
+    gap: 12,
+  },
+  biometricButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

@@ -1,29 +1,37 @@
 // app/(auth)/_layout.tsx
-import { Stack } from 'expo-router';
+import { getNeutralColors } from "@/constants/dashboardColors";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Stack } from "expo-router";
 
 export default function AuthLayout() {
+  const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
+
   return (
-    <Stack 
+    <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#f8f9fa' },
+        contentStyle: { backgroundColor: nc.background },
+        headerStyle: { backgroundColor: nc.background },
+        headerTintColor: nc.textStrong,
       }}
     >
+      <Stack.Screen name="onboarding" />
       <Stack.Screen name="login" />
       <Stack.Screen
         name="reset-password"
         options={{
           headerShown: true,
-          title: 'Nouveau mot de passe',
-          headerBackTitle: 'Retour',
+          title: "Nouveau mot de passe",
+          headerBackTitle: "Retour",
         }}
       />
       <Stack.Screen
         name="privacy"
         options={{
           headerShown: true,
-          title: 'Confidentialité',
-          headerBackTitle: 'Retour',
+          title: "Confidentialité",
+          headerBackTitle: "Retour",
         }}
       />
       <Stack.Screen
@@ -31,7 +39,7 @@ export default function AuthLayout() {
         options={{
           headerShown: true,
           title: "Conditions d'utilisation",
-          headerBackTitle: 'Retour',
+          headerBackTitle: "Retour",
         }}
       />
     </Stack>

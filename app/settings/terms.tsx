@@ -1,16 +1,28 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Stack } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from "@expo/vector-icons";
+import { Stack } from "expo-router";
+import { useCallback, useRef, useState } from "react";
+import {
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ThemedText } from "@/components/themed-text";
+import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function TermsScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const sectionRefs = useRef<Record<number, number>>({});
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const scrollTopOpacity = useRef(new Animated.Value(0)).current;
 
   const sections = [
     {
@@ -80,8 +92,22 @@ export default function TermsScreen() {
           }}
         />
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          onScroll={useCallback((e: any) => {
+            const y = e.nativeEvent.contentOffset.y;
+            const shouldShow = y > 300;
+            if (shouldShow !== showScrollTop) {
+              setShowScrollTop(shouldShow);
+              Animated.timing(scrollTopOpacity, {
+                toValue: shouldShow ? 1 : 0,
+                duration: 200,
+                useNativeDriver: true,
+              }).start();
+            }
+          }, [showScrollTop, scrollTopOpacity])}
+          scrollEventThrottle={100}
         >
           <View style={[styles.header, { backgroundColor: nc.backgroundCard }]} accessibilityRole="header">
             <View style={[styles.headerIcon, { backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.12) }]}>
@@ -95,6 +121,29 @@ export default function TermsScreen() {
             </Text>
           </View>
 
+          {/* Sommaire cliquable */}
+          <View style={[styles.tocContainer, { backgroundColor: nc.backgroundCard }]}>
+            <ThemedText style={styles.tocTitle}>Sommaire</ThemedText>
+            {sections.map((section, index) => (
+              <TouchableOpacity
+                key={`toc-${index}`}
+                style={styles.tocItem}
+                onPress={() => {
+                  const y = sectionRefs.current[index];
+                  if (y !== undefined) {
+                    scrollViewRef.current?.scrollTo({ y, animated: true });
+                  }
+                }}
+                accessibilityRole="link"
+                accessibilityLabel={section.title}
+              >
+                <Text style={[styles.tocText, { color: Colors[colorScheme].tint }]}>
+                  {section.title}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           <View style={[styles.content, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText style={styles.intro}>
               Bienvenue sur SuiviBaby. Ces conditions d'utilisation regissent votre accès et
@@ -106,6 +155,9 @@ export default function TermsScreen() {
                 key={index}
                 style={styles.section}
                 accessibilityRole="header"
+                onLayout={(e) => {
+                  sectionRefs.current[index] = e.nativeEvent.layout.y;
+                }}
               >
                 <ThemedText style={styles.sectionTitle}>
                   {section.title}
@@ -124,6 +176,18 @@ export default function TermsScreen() {
             </ThemedText>
           </View>
         </ScrollView>
+
+        {/* Bouton retour en haut */}
+        <Animated.View style={[styles.scrollTopButton, { opacity: scrollTopOpacity }]} pointerEvents={showScrollTop ? "auto" : "none"}>
+          <TouchableOpacity
+            style={[styles.scrollTopTouchable, { backgroundColor: nc.todayAccent }]}
+            onPress={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
+            accessibilityRole="button"
+            accessibilityLabel="Retour en haut"
+          >
+            <Ionicons name="chevron-up" size={24} color={nc.white} />
+          </TouchableOpacity>
+        </Animated.View>
       </SafeAreaView>
     </View>
   );
@@ -194,5 +258,39 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
+  },
+  tocContainer: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  tocTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 12,
+  },
+  tocItem: {
+    paddingVertical: 6,
+  },
+  tocText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  scrollTopButton: {
+    position: "absolute",
+    bottom: 24,
+    right: 16,
+  },
+  scrollTopTouchable: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });
