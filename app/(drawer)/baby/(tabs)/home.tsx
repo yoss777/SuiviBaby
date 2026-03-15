@@ -8,11 +8,9 @@ import { GlobalFAB } from "@/components/suivibaby/GlobalFAB";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import {
-  categoryColors,
   getCategoryColors,
   getNeutralColors,
   itemColors,
-  neutralColors,
 } from "@/constants/dashboardColors";
 import {
   MOMENT_REPAS_LABELS,
@@ -138,6 +136,14 @@ function StaggeredCard({ index, visible, children }: { index: number; visible: b
 
 const RECENT_EVENTS_CUTOFF_HOURS = 24;
 const RECENT_EVENTS_MAX = 7;
+
+const BIBERON_TYPE_LABELS: Record<string, string> = {
+  lait_maternel: "Lait maternel",
+  lait_infantile: "Lait infantile",
+  eau: "Eau",
+  jus: "Jus",
+  autre: "Autre",
+};
 
 // ============================================
 // TYPES
@@ -718,14 +724,6 @@ export default function HomeDashboard() {
     const m = minutes % 60;
     return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
   }, []);
-
-  const BIBERON_TYPE_LABELS: Record<string, string> = {
-    lait_maternel: "Lait maternel",
-    lait_infantile: "Lait infantile",
-    eau: "Eau",
-    jus: "Jus",
-    autre: "Autre",
-  };
 
   const buildDetails = useCallback(
     (event: any) => {
@@ -2216,21 +2214,9 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: neutralColors.background,
   },
   scrollContent: {
     paddingBottom: 100,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: neutralColors.background,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: neutralColors.textLight,
   },
   headerRow: {
     marginBottom: 8,
@@ -2249,12 +2235,10 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 28,
     fontWeight: "700",
-    color: neutralColors.textStrong,
     marginBottom: 4,
   },
   date: {
     fontSize: 16,
-    color: neutralColors.textLight,
     textTransform: "capitalize",
   },
   section: {
@@ -2263,7 +2247,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
-    color: neutralColors.textStrong,
     marginHorizontal: 20,
     marginBottom: 16,
   },
@@ -2271,44 +2254,16 @@ const styles = StyleSheet.create({
     marginHorizontal: 0,
     marginBottom: 0,
   },
-  statsGrid: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 12,
-  },
   statsGroupContainer: {
     paddingHorizontal: 20,
     marginBottom: 12,
   },
-  statsButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: neutralColors.backgroundCard,
-    marginHorizontal: 20,
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  statsButtonText: {
-    flex: 1,
-    fontSize: 16,
-    color: neutralColors.textNormal,
-    fontWeight: "500",
-  },
   // Mood card styles
   moodCard: {
-    backgroundColor: categoryColors.moments.background,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: categoryColors.moments.border,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -2319,7 +2274,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     fontSize: 13,
     fontWeight: "600",
-    color: neutralColors.textLight,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -2334,12 +2288,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 10,
-    backgroundColor: neutralColors.backgroundCard,
   },
   moodEmojiSelected: {
-    backgroundColor: `${categoryColors.moments.primary}20`,
     borderWidth: 2,
-    borderColor: categoryColors.moments.primary,
   },
   moodEmojiText: {
     fontSize: 22,

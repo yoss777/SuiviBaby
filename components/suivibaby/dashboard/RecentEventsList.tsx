@@ -270,8 +270,8 @@ function RecentEventsListComponent({
   getDayLabel,
 }: RecentEventsListProps) {
   const nc = getNeutralColors(colorScheme);
-  const borderColor = `${Colors[colorScheme].tabIconDefault}30`;
-  const textColor = Colors[colorScheme].tabIconDefault;
+  const borderColor = nc.borderLightAlpha;
+  const textColor = nc.textLight;
 
   const getDisplayLabel = (event: RecentEvent, config: EventConfigItem) => {
     const isSleep = event.type === "sommeil";
@@ -486,7 +486,7 @@ function RecentEventsListComponent({
                         styles.recentCard,
                         {
                           borderColor,
-                          backgroundColor: Colors[colorScheme].background,
+                          backgroundColor: nc.backgroundCard,
                         },
                       ]}
                       activeOpacity={0.85}
@@ -509,7 +509,7 @@ function RecentEventsListComponent({
                         <Text
                           style={[
                             styles.recentTitle,
-                            { color: Colors[colorScheme].text },
+                            { color: nc.textStrong },
                           ]}
                         >
                           {displayLabel}
