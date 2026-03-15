@@ -328,15 +328,16 @@ export default function NotificationsScreen() {
             selectedValue={value}
             onValueChange={(itemValue) => onChange(Number(itemValue))}
             enabled={!isLoading && remindersEnabled}
-            mode="dialog"
+            mode={Platform.OS === "android" ? "dropdown" : "dialog"}
             accessibilityLabel={`${label} - délai de rappel`}
             style={[
               styles.picker,
               {
                 color: isDisabled ? nc.textMuted : nc.textStrong,
-                ...(Platform.OS === "ios" && {
-                  backgroundColor: nc.backgroundPressed,
-                }),
+                backgroundColor:
+                  Platform.OS === "ios"
+                    ? nc.backgroundPressed
+                    : "transparent",
                 height: Platform.OS === "ios" ? 120 : 54,
               },
             ]}
