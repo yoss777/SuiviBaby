@@ -29,8 +29,7 @@ import { ThemedText } from "@/components/themed-text";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { db } from "@/config/firebase";
-import { getNeutralColors } from "@/constants/dashboardColors";
-import { Colors } from "@/constants/theme";
+import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Child } from "@/contexts/BabyContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -638,7 +637,7 @@ export default function ExportScreen() {
               <Text
                 style={[
                   styles.summaryTitle,
-                  { color: Colors[colorScheme].text },
+                  { color: nc.textStrong },
                 ]}
               >
                 {item.childName}
@@ -647,7 +646,7 @@ export default function ExportScreen() {
                 <Text
                   style={[
                     styles.summaryEmpty,
-                    { color: Colors[colorScheme].tabIconDefault },
+                    { color: nc.textMuted },
                   ]}
                 >
                   Aucun evenement à exporter
@@ -658,7 +657,7 @@ export default function ExportScreen() {
                     <Text
                       style={[
                         styles.summaryLabel,
-                        { color: Colors[colorScheme].tabIconDefault },
+                        { color: nc.textMuted },
                       ]}
                     >
                       {row.label}
@@ -666,7 +665,7 @@ export default function ExportScreen() {
                     <Text
                       style={[
                         styles.summaryValue,
-                        { color: Colors[colorScheme].text },
+                        { color: nc.textStrong },
                       ]}
                     >
                       {row.selected}/{row.total}
@@ -691,13 +690,13 @@ export default function ExportScreen() {
               <Ionicons
                 name="chevron-back"
                 size={20}
-                color={Colors[colorScheme].text}
+                color={nc.textStrong}
               />
             </TouchableOpacity>
             <Text
               style={[
                 styles.summaryHint,
-                { color: Colors[colorScheme].tabIconDefault },
+                { color: nc.textMuted },
               ]}
             >
               {summaryIndex + 1}/{summary.length}
@@ -717,7 +716,7 @@ export default function ExportScreen() {
               <Ionicons
                 name="chevron-forward"
                 size={20}
-                color={Colors[colorScheme].text}
+                color={nc.textStrong}
               />
             </TouchableOpacity>
           </View>
@@ -888,8 +887,8 @@ export default function ExportScreen() {
       style={[
         styles.formatOption,
         {
-          borderBottomColor: Colors[colorScheme].tabIconDefault + "20",
-          backgroundColor: Colors[colorScheme].tint + "10",
+          borderBottomColor: nc.borderLightAlpha,
+          backgroundColor: getBackgroundTint(nc.todayAccent, 0.06),
         },
       ]}
     >
@@ -897,25 +896,25 @@ export default function ExportScreen() {
         <View
           style={[
             styles.formatIcon,
-            { backgroundColor: Colors[colorScheme].tint + "20" },
+            { backgroundColor: getBackgroundTint(nc.todayAccent, 0.12) },
           ]}
         >
           <Ionicons
             name={format.icon}
             size={22}
-            color={Colors[colorScheme].tint}
+            color={nc.todayAccent}
           />
         </View>
         <View style={styles.formatContent}>
           <ThemedText
-            style={[styles.formatName, { color: Colors[colorScheme].tint }]}
+            style={[styles.formatName, { color: nc.todayAccent }]}
           >
             {format.name}
           </ThemedText>
           <Text
             style={[
               styles.formatDescription,
-              { color: Colors[colorScheme].tabIconDefault },
+              { color: nc.textMuted },
             ]}
           >
             {format.description}
@@ -925,7 +924,7 @@ export default function ExportScreen() {
       <Ionicons
         name="checkmark-circle"
         size={24}
-        color={Colors[colorScheme].tint}
+        color={nc.todayAccent}
       />
     </View>
   );
@@ -947,7 +946,7 @@ export default function ExportScreen() {
         key={item.child.id}
         style={[
           styles.childOption,
-          { borderBottomColor: Colors[colorScheme].tabIconDefault + "20" },
+          { borderBottomColor: nc.borderLightAlpha },
         ]}
       >
         <TouchableOpacity
@@ -963,13 +962,13 @@ export default function ExportScreen() {
             <View
               style={[
                 styles.childIcon,
-                { backgroundColor: Colors[colorScheme].tint + "15" },
+                { backgroundColor: getBackgroundTint(nc.todayAccent, 0.08) },
               ]}
             >
               <FontAwesome
                 name="baby"
                 size={22}
-                color={Colors[colorScheme].tint}
+                color={nc.todayAccent}
               />
             </View>
             <View style={styles.childContent}>
@@ -979,7 +978,7 @@ export default function ExportScreen() {
               <Text
                 style={[
                   styles.childSubtitle,
-                  { color: Colors[colorScheme].tabIconDefault },
+                  { color: nc.textMuted },
                 ]}
               >
                 {totalEvents === 0
@@ -989,7 +988,7 @@ export default function ExportScreen() {
               <Text
                 style={[
                   styles.childSubtitle,
-                  { color: Colors[colorScheme].tabIconDefault },
+                  { color: nc.textMuted },
                 ]}
               >
                 {totalInteractions === 0
@@ -1003,10 +1002,10 @@ export default function ExportScreen() {
               styles.checkbox,
               {
                 borderColor: item.selected
-                  ? Colors[colorScheme].tint
-                  : Colors[colorScheme].tabIconDefault + "50",
+                  ? nc.todayAccent
+                  : nc.borderLight,
                 backgroundColor: item.selected
-                  ? Colors[colorScheme].tint
+                  ? nc.todayAccent
                   : "transparent",
               },
             ]}
@@ -1030,7 +1029,7 @@ export default function ExportScreen() {
         key={type.id}
         style={[
           styles.typeOption,
-          { borderBottomColor: Colors[colorScheme].tabIconDefault + "20" },
+          { borderBottomColor: nc.borderLightAlpha },
         ]}
         onPress={onToggle}
         activeOpacity={0.7}
@@ -1043,26 +1042,26 @@ export default function ExportScreen() {
           <View
             style={[
               styles.typeIcon,
-              { backgroundColor: Colors[colorScheme].tint + "15" },
+              { backgroundColor: getBackgroundTint(nc.todayAccent, 0.08) },
             ]}
           >
             {type.icon.lib === "MaterialCommunityIcons" ? (
               <MaterialCommunityIcons
                 name={type.icon.name as any}
                 size={20}
-                color={Colors[colorScheme].tint}
+                color={nc.todayAccent}
               />
             ) : type.icon.lib === "Ionicons" ? (
               <Ionicons
                 name={type.icon.name as any}
                 size={20}
-                color={Colors[colorScheme].tint}
+                color={nc.todayAccent}
               />
             ) : (
               <FontAwesome
                 name={type.icon.name as any}
                 size={20}
-                color={Colors[colorScheme].tint}
+                color={nc.todayAccent}
               />
             )}
           </View>
@@ -1073,10 +1072,10 @@ export default function ExportScreen() {
             styles.checkbox,
             {
               borderColor: isSelected
-                ? Colors[colorScheme].tint
-                : Colors[colorScheme].tabIconDefault + "50",
+                ? nc.todayAccent
+                : nc.borderLight,
               backgroundColor: isSelected
-                ? Colors[colorScheme].tint
+                ? nc.todayAccent
                 : "transparent",
             },
           ]}
@@ -1094,7 +1093,7 @@ export default function ExportScreen() {
       <SafeAreaView
         style={[
           styles.container,
-          { backgroundColor: Colors[colorScheme].background },
+          { backgroundColor: nc.background },
         ]}
         edges={["bottom"]}
       >
@@ -1106,11 +1105,11 @@ export default function ExportScreen() {
         />
         {isAutoDeleteFlow ? (
           <View style={styles.autoExportLoader}>
-            <IconPulseDots color={Colors[colorScheme].tint} />
+            <IconPulseDots color={nc.todayAccent} />
             <Text
               style={[
                 styles.autoExportText,
-                { color: Colors[colorScheme].text },
+                { color: nc.textStrong },
               ]}
             >
               {isExporting || isLoading
@@ -1146,7 +1145,7 @@ export default function ExportScreen() {
               <ThemedText
                 style={[
                   styles.sectionTitle,
-                  { color: Colors[colorScheme].tabIconDefault },
+                  { color: nc.textStrong },
                 ]}
               >
                 Format d&apos;export
@@ -1163,7 +1162,7 @@ export default function ExportScreen() {
                 <ThemedText
                   style={[
                     styles.sectionTitle,
-                    { color: Colors[colorScheme].tabIconDefault },
+                    { color: nc.textStrong },
                   ]}
                 >
                   Enfants à exporter
@@ -1179,7 +1178,7 @@ export default function ExportScreen() {
                     <Text
                       style={[
                         styles.toggleAllText,
-                        { color: Colors[colorScheme].tint },
+                        { color: nc.todayAccent },
                       ]}
                     >
                       {children.every((item) => item.selected)
@@ -1192,11 +1191,11 @@ export default function ExportScreen() {
               <View style={styles.childrenContainer}>
                 {isLoading ? (
                   <View style={styles.childrenLoading}>
-                    <IconPulseDots color={Colors[colorScheme].tint} />
+                    <IconPulseDots color={nc.todayAccent} />
                     <Text
                       style={[
                         styles.childSubtitle,
-                        { color: Colors[colorScheme].tabIconDefault },
+                        { color: nc.textMuted },
                       ]}
                     >
                       Chargement des enfants...
@@ -1206,7 +1205,7 @@ export default function ExportScreen() {
                   <Text
                     style={[
                       styles.childSubtitle,
-                      { color: Colors[colorScheme].tabIconDefault },
+                      { color: nc.textMuted },
                     ]}
                   >
                     Aucun enfant disponible.
@@ -1225,7 +1224,7 @@ export default function ExportScreen() {
                   <ThemedText
                     style={[
                       styles.sectionTitle,
-                      { color: Colors[colorScheme].tabIconDefault },
+                      { color: nc.textStrong },
                     ]}
                   >
                     Types d'evenements
@@ -1242,7 +1241,7 @@ export default function ExportScreen() {
                     <Text
                       style={[
                         styles.toggleAllText,
-                        { color: Colors[colorScheme].tint },
+                        { color: nc.todayAccent },
                       ]}
                     >
                       {selectedEventTypes.size === eventTypes.length
@@ -1271,7 +1270,7 @@ export default function ExportScreen() {
                   <ThemedText
                     style={[
                       styles.sectionTitle,
-                      { color: Colors[colorScheme].tabIconDefault },
+                      { color: nc.textStrong },
                     ]}
                   >
                     Types d'interactions
@@ -1286,7 +1285,7 @@ export default function ExportScreen() {
                     <Text
                       style={[
                         styles.toggleAllText,
-                        { color: Colors[colorScheme].tint },
+                        { color: nc.todayAccent },
                       ]}
                     >
                       {selectedInteractionTypes.size ===
@@ -1315,7 +1314,7 @@ export default function ExportScreen() {
                 <Text
                   style={[
                     styles.childSubtitle,
-                    { color: Colors[colorScheme].tabIconDefault },
+                    { color: nc.textMuted },
                   ]}
                 >
                   Aucune donnee à exporter.
@@ -1329,7 +1328,7 @@ export default function ExportScreen() {
               <Ionicons
                 name="shield-checkmark"
                 size={24}
-                color={Colors[colorScheme].tint}
+                color={nc.todayAccent}
               />
               <ThemedText style={styles.infoText}>
                 Vos donnees sont exportées localement. Stockez le fichier dans
@@ -1355,13 +1354,13 @@ export default function ExportScreen() {
               <Ionicons
                 name="cloud-download"
                 size={20}
-                color="#fff"
+                color={colorScheme === "dark" ? nc.white : nc.backgroundCard}
               />
               <Text
                 style={[
                   styles.exportButtonText,
                   {
-                    color: "#fff",
+                    color: colorScheme === "dark" ? nc.white : nc.backgroundCard,
                   },
                 ]}
               >

@@ -1,26 +1,32 @@
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { Stack, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { Stack, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { InfoModal } from '@/components/ui/InfoModal';
-import { auth } from '@/config/firebase';
-import { getNeutralColors } from '@/constants/dashboardColors';
-import { Colors } from '@/constants/theme';
-import { useToast } from '@/contexts/ToastContext';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ThemedText } from "@/components/themed-text";
+import { InfoModal } from "@/components/ui/InfoModal";
+import { auth } from "@/config/firebase";
+import { getNeutralColors } from "@/constants/dashboardColors";
+import { useToast } from "@/contexts/ToastContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   EmailAuthProvider,
   reauthenticateWithCredential,
   sendPasswordResetEmail,
   updatePassword,
-} from 'firebase/auth';
+} from "firebase/auth";
 
 export default function PasswordScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const router = useRouter();
   const { showToast, showActionToast } = useToast();
@@ -32,76 +38,92 @@ export default function PasswordScreen() {
     };
   }, []);
 
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
   const [modalConfig, setModalConfig] = useState({
     visible: false,
-    title: '',
-    message: '',
+    title: "",
+    message: "",
     onConfirm: undefined as undefined | (() => void),
   });
 
   const closeModal = useCallback(() => {
-    setModalConfig((prev) => ({ ...prev, visible: false, onConfirm: undefined }));
+    setModalConfig((prev) => ({
+      ...prev,
+      visible: false,
+      onConfirm: undefined,
+    }));
   }, []);
 
-  const passwordRules = useMemo(() => [
-    { id: 'length', label: '8+ caracteres', test: (value: string) => value.length >= 8 },
-    { id: 'number', label: '1 chiffre', test: (value: string) => /\d/.test(value) },
-    {
-      id: 'special',
-      label: '1 caractere special',
-      test: (value: string) => /[^A-Za-z0-9]/.test(value),
-    },
-  ], []);
+  const passwordRules = useMemo(
+    () => [
+      {
+        id: "length",
+        label: "8+ caracteres",
+        test: (value: string) => value.length >= 8,
+      },
+      {
+        id: "number",
+        label: "1 chiffre",
+        test: (value: string) => /\d/.test(value),
+      },
+      {
+        id: "special",
+        label: "1 caractere special",
+        test: (value: string) => /[^A-Za-z0-9]/.test(value),
+      },
+    ],
+    [],
+  );
 
   const unmetRules = useMemo(
     () => passwordRules.filter((rule) => !rule.test(newPassword)),
-    [passwordRules, newPassword]
+    [passwordRules, newPassword],
   );
   const strengthScore = passwordRules.length - unmetRules.length;
   const strengthPercent = useMemo(
     () => Math.round((strengthScore / passwordRules.length) * 100),
-    [strengthScore, passwordRules.length]
+    [strengthScore, passwordRules.length],
   );
   const strengthLabel = useMemo(
-    () => strengthScore === 3 ? 'Fort' : strengthScore === 2 ? 'Moyen' : 'Faible',
-    [strengthScore]
+    () =>
+      strengthScore === 3 ? "Fort" : strengthScore === 2 ? "Moyen" : "Faible",
+    [strengthScore],
   );
 
   const mapFirebaseError = useCallback((error: unknown) => {
-    if (!error || typeof error !== 'object') {
-      return 'Une erreur est survenue. Reessayez.';
+    if (!error || typeof error !== "object") {
+      return "Une erreur est survenue. Reessayez.";
     }
 
-    const code = 'code' in error ? String(error.code) : '';
-    if (code === 'auth/wrong-password') {
-      return 'Mot de passe actuel incorrect.';
+    const code = "code" in error ? String(error.code) : "";
+    if (code === "auth/wrong-password") {
+      return "Mot de passe actuel incorrect.";
     }
-    if (code === 'auth/too-many-requests') {
-      return 'Trop de tentatives. Reessayez plus tard.';
+    if (code === "auth/too-many-requests") {
+      return "Trop de tentatives. Reessayez plus tard.";
     }
-    if (code === 'auth/weak-password') {
-      return 'Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special.';
+    if (code === "auth/weak-password") {
+      return "Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special.";
     }
-    if (code === 'auth/requires-recent-login') {
-      return 'Veuillez vous reconnecter pour changer votre mot de passe.';
+    if (code === "auth/requires-recent-login") {
+      return "Veuillez vous reconnecter pour changer votre mot de passe.";
     }
 
-    return 'Impossible de modifier le mot de passe.';
+    return "Impossible de modifier le mot de passe.";
   }, []);
 
   const handleForgotPassword = useCallback(async () => {
     const user = auth.currentUser;
-    setErrorMessage('');
+    setErrorMessage("");
     if (!user?.email) {
-      setErrorMessage('Email introuvable pour la reinitialisation.');
+      setErrorMessage("Email introuvable pour la reinitialisation.");
       return;
     }
 
@@ -109,16 +131,14 @@ export default function PasswordScreen() {
       setIsSaving(true);
       await sendPasswordResetEmail(auth, user.email);
       if (!isMountedRef.current) return;
-      showToast('Email de reinitialisation envoye');
+      showToast("Email de reinitialisation envoye");
     } catch (error) {
       if (!isMountedRef.current) return;
       const message = mapFirebaseError(error);
       setErrorMessage(message);
-      showActionToast(
-        'Echec de l\'envoi de l\'email.',
-        'Reessayer',
-        () => { handleForgotPassword(); }
-      );
+      showActionToast("Echec de l'envoi de l'email.", "Reessayer", () => {
+        handleForgotPassword();
+      });
     } finally {
       if (isMountedRef.current) {
         setIsSaving(false);
@@ -127,45 +147,50 @@ export default function PasswordScreen() {
   }, [mapFirebaseError, showToast, showActionToast]);
 
   const handleChangePassword = useCallback(async () => {
-    setErrorMessage('');
+    setErrorMessage("");
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setErrorMessage('Veuillez remplir tous les champs.');
+      setErrorMessage("Veuillez remplir tous les champs.");
       return;
     }
 
     if (unmetRules.length > 0) {
-      setErrorMessage('Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special.');
+      setErrorMessage(
+        "Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special.",
+      );
       return;
     }
 
     if (newPassword === currentPassword) {
-      setErrorMessage('Le nouveau mot de passe doit etre different.');
+      setErrorMessage("Le nouveau mot de passe doit etre different.");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setErrorMessage('Les nouveaux mots de passe ne correspondent pas.');
+      setErrorMessage("Les nouveaux mots de passe ne correspondent pas.");
       return;
     }
 
     const user = auth.currentUser;
     if (!user || !user.email) {
-      setErrorMessage('Utilisateur non authentifie.');
+      setErrorMessage("Utilisateur non authentifie.");
       return;
     }
 
     try {
       setIsSaving(true);
-      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      const credential = EmailAuthProvider.credential(
+        user.email,
+        currentPassword,
+      );
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
       if (!isMountedRef.current) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast('Mot de passe modifie avec succes');
+      showToast("Mot de passe modifie avec succes");
       setModalConfig({
         visible: true,
-        title: 'Succes',
-        message: 'Mot de passe modifie avec succes.',
+        title: "Succes",
+        message: "Mot de passe modifie avec succes.",
         onConfirm: () => router.back(),
       });
     } catch (error) {
@@ -173,50 +198,65 @@ export default function PasswordScreen() {
       const message = mapFirebaseError(error);
       setErrorMessage(message);
       showActionToast(
-        'Impossible de modifier le mot de passe.',
-        'Reessayer',
-        () => { handleChangePassword(); }
+        "Impossible de modifier le mot de passe.",
+        "Reessayer",
+        () => {
+          handleChangePassword();
+        },
       );
     } finally {
       if (isMountedRef.current) {
         setIsSaving(false);
       }
     }
-  }, [currentPassword, newPassword, confirmPassword, unmetRules, mapFirebaseError, showToast, showActionToast, router]);
+  }, [
+    currentPassword,
+    newPassword,
+    confirmPassword,
+    unmetRules,
+    mapFirebaseError,
+    showToast,
+    showActionToast,
+    router,
+  ]);
 
-  const isInvalid = useMemo(() =>
-    !currentPassword ||
-    !newPassword ||
-    !confirmPassword ||
-    unmetRules.length > 0 ||
-    newPassword !== confirmPassword ||
-    newPassword === currentPassword,
-    [currentPassword, newPassword, confirmPassword, unmetRules]
+  const isInvalid = useMemo(
+    () =>
+      !currentPassword ||
+      !newPassword ||
+      !confirmPassword ||
+      unmetRules.length > 0 ||
+      newPassword !== confirmPassword ||
+      newPassword === currentPassword,
+    [currentPassword, newPassword, confirmPassword, unmetRules],
   );
   const isSaveDisabled = isSaving || isInvalid;
 
   return (
     <View style={[styles.screen, { backgroundColor: nc.background }]}>
-      <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['bottom']}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: nc.background }]}
+        edges={["bottom"]}
+      >
         <Stack.Screen
           options={{
-            title: 'Mot de passe',
-            headerBackTitle: 'Retour',
+            title: "Mot de passe",
+            headerBackTitle: "Retour",
           }}
         />
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
-            <ThemedText style={[styles.sectionTitle, { color: nc.textMuted }]}>
+          <View
+            style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+          >
+            {/* <ThemedText style={[styles.sectionTitle, { color: nc.textMuted }]}>
               Mot de passe
-            </ThemedText>
+            </ThemedText> */}
 
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.label}>
-                Mot de passe actuel
-              </ThemedText>
+              <ThemedText style={styles.label}>Mot de passe actuel</ThemedText>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={[
@@ -230,7 +270,7 @@ export default function PasswordScreen() {
                   value={currentPassword}
                   onChangeText={(value) => {
                     setCurrentPassword(value);
-                    if (errorMessage) setErrorMessage('');
+                    if (errorMessage) setErrorMessage("");
                   }}
                   placeholder="Entrez votre mot de passe actuel"
                   placeholderTextColor={nc.textMuted}
@@ -245,7 +285,9 @@ export default function PasswordScreen() {
                   accessibilityRole="button"
                 >
                   <Ionicons
-                    name={showCurrentPassword ? 'eye-off-outline' : 'eye-outline'}
+                    name={
+                      showCurrentPassword ? "eye-off-outline" : "eye-outline"
+                    }
                     size={22}
                     color={nc.textMuted}
                   />
@@ -265,9 +307,7 @@ export default function PasswordScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.label}>
-                Nouveau mot de passe
-              </ThemedText>
+              <ThemedText style={styles.label}>Nouveau mot de passe</ThemedText>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={[
@@ -281,7 +321,7 @@ export default function PasswordScreen() {
                   value={newPassword}
                   onChangeText={(value) => {
                     setNewPassword(value);
-                    if (errorMessage) setErrorMessage('');
+                    if (errorMessage) setErrorMessage("");
                   }}
                   placeholder="Entrez votre nouveau mot de passe"
                   placeholderTextColor={nc.textMuted}
@@ -296,7 +336,7 @@ export default function PasswordScreen() {
                   accessibilityRole="button"
                 >
                   <Ionicons
-                    name={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
+                    name={showNewPassword ? "eye-off-outline" : "eye-outline"}
                     size={22}
                     color={nc.textMuted}
                   />
@@ -304,10 +344,16 @@ export default function PasswordScreen() {
               </View>
               {newPassword.length > 0 && unmetRules.length > 0 && (
                 <Text style={[styles.hint, { color: nc.textMuted }]}>
-                  {unmetRules.map((rule) => rule.label).join(', ')}
+                  {unmetRules.map((rule) => rule.label).join(", ")}
                 </Text>
               )}
-              <View style={[styles.strengthBarTrack, { backgroundColor: nc.borderLight }, newPassword.length === 0 && styles.strengthBarTrackEmpty]}>
+              <View
+                style={[
+                  styles.strengthBarTrack,
+                  { backgroundColor: nc.borderLight },
+                  newPassword.length === 0 && styles.strengthBarTrackEmpty,
+                ]}
+              >
                 <View
                   style={[
                     styles.strengthBarFill,
@@ -317,8 +363,8 @@ export default function PasswordScreen() {
                         unmetRules.length === 0
                           ? nc.success
                           : unmetRules.length === 1
-                          ? nc.warning
-                          : nc.error,
+                            ? nc.warning
+                            : nc.error,
                     },
                   ]}
                 />
@@ -347,7 +393,7 @@ export default function PasswordScreen() {
                   value={confirmPassword}
                   onChangeText={(value) => {
                     setConfirmPassword(value);
-                    if (errorMessage) setErrorMessage('');
+                    if (errorMessage) setErrorMessage("");
                   }}
                   placeholder="Confirmez votre nouveau mot de passe"
                   placeholderTextColor={nc.textMuted}
@@ -362,7 +408,9 @@ export default function PasswordScreen() {
                   accessibilityRole="button"
                 >
                   <Ionicons
-                    name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                    name={
+                      showConfirmPassword ? "eye-off-outline" : "eye-outline"
+                    }
                     size={22}
                     color={nc.textMuted}
                   />
@@ -370,12 +418,20 @@ export default function PasswordScreen() {
               </View>
             </View>
             {!!errorMessage && (
-              <Text style={[styles.errorText, { color: nc.error }]}>{errorMessage}</Text>
+              <Text style={[styles.errorText, { color: nc.error }]}>
+                {errorMessage}
+              </Text>
             )}
           </View>
 
-          <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
-            <Ionicons name="information-circle" size={24} color={Colors[colorScheme].tint} />
+          <View
+            style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}
+          >
+            <Ionicons
+              name="information-circle"
+              size={24}
+              color={nc.todayAccent}
+            />
             <ThemedText style={styles.infoText}>
               Conseil: 8+ caracteres, 1 chiffre, 1 caractere special.
             </ThemedText>
@@ -393,9 +449,20 @@ export default function PasswordScreen() {
             accessibilityRole="button"
             accessibilityState={{ disabled: isSaveDisabled }}
           >
-            <Ionicons name="checkmark" size={20} color={colorScheme === 'dark' ? nc.white : nc.backgroundCard} />
-            <Text style={[styles.saveButtonText, { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard }]}>
-              {isSaving ? 'Enregistrement...' : 'Changer le mot de passe'}
+            <Ionicons
+              name="checkmark"
+              size={20}
+              color={colorScheme === "dark" ? nc.white : nc.backgroundCard}
+            />
+            <Text
+              style={[
+                styles.saveButtonText,
+                {
+                  color: colorScheme === "dark" ? nc.white : nc.backgroundCard,
+                },
+              ]}
+            >
+              {isSaving ? "Enregistrement..." : "Changer le mot de passe"}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -430,7 +497,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 16,
   },
   inputGroup: {
@@ -438,32 +505,32 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 8,
   },
   passwordContainer: {
-    position: 'relative',
+    position: "relative",
   },
   forgotLink: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     marginTop: 8,
   },
   forgotLinkText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   strengthBarTrack: {
     height: 6,
     borderRadius: 999,
     backgroundColor: undefined as unknown as string, // set dynamically
     marginTop: 10,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   strengthBarTrackEmpty: {
     opacity: 0.4,
   },
   strengthBarFill: {
-    height: '100%',
+    height: "100%",
     borderRadius: 999,
   },
   strengthLabel: {
@@ -477,9 +544,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingRight: 50,
     fontSize: 16,
+    letterSpacing: 0,
   },
   eyeIcon: {
-    position: 'absolute',
+    position: "absolute",
     right: 16,
     top: 13,
   },
@@ -493,7 +561,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   infoBox: {
-    flexDirection: 'row',
+    flexDirection: "row",
     padding: 16,
     borderRadius: 12,
     marginBottom: 24,
@@ -505,9 +573,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 16,
     borderRadius: 12,
     marginBottom: 24,
@@ -522,6 +590,6 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

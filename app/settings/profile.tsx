@@ -1,30 +1,37 @@
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { Stack } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { Stack } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { InfoModal } from '@/components/ui/InfoModal';
-import { getNeutralColors } from '@/constants/dashboardColors';
-import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/contexts/ToastContext';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { modifierNomUtilisateur } from '@/services/usersService';
+import { ThemedText } from "@/components/themed-text";
+import { InfoModal } from "@/components/ui/InfoModal";
+import { getNeutralColors } from "@/constants/dashboardColors";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { modifierNomUtilisateur } from "@/services/usersService";
 
 export default function ProfileScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { userName, email, refreshUser } = useAuth();
   const { showToast, showActionToast } = useToast();
-  const [displayName, setDisplayName] = useState(userName ?? '');
+  const [displayName, setDisplayName] = useState(userName ?? "");
   const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
   const [modalConfig, setModalConfig] = useState({
     visible: false,
-    title: '',
-    message: '',
+    title: "",
+    message: "",
   });
   const isMountedRef = useRef(true);
 
@@ -39,17 +46,17 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    setDisplayName(userName ?? '');
+    setDisplayName(userName ?? "");
   }, [userName]);
 
   const handleSave = useCallback(async () => {
     const trimmedName = displayName.trim();
-    setErrorMessage('');
+    setErrorMessage("");
     if (trimmedName.length < 6) {
       setModalConfig({
         visible: true,
-        title: 'Pseudo invalide',
-        message: 'Le pseudo doit contenir au moins 6 caracteres.',
+        title: "Pseudo invalide",
+        message: "Le pseudo doit contenir au moins 6 caracteres.",
       });
       return;
     }
@@ -60,15 +67,18 @@ export default function ProfileScreen() {
       await refreshUser();
       if (!isMountedRef.current) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast('Profil mis a jour avec succes');
+      showToast("Profil mis a jour avec succes");
     } catch (error) {
       if (!isMountedRef.current) return;
-      const message = error instanceof Error ? error.message : 'Erreur inconnue.';
+      const message =
+        error instanceof Error ? error.message : "Erreur inconnue.";
       setErrorMessage(message);
       showActionToast(
-        'Impossible de mettre a jour le profil.',
-        'Reessayer',
-        () => { handleSave(); }
+        "Impossible de mettre a jour le profil.",
+        "Reessayer",
+        () => {
+          handleSave();
+        },
       );
     } finally {
       if (isMountedRef.current) {
@@ -79,26 +89,34 @@ export default function ProfileScreen() {
 
   const trimmedName = useMemo(() => displayName.trim(), [displayName]);
   const isInvalid = useMemo(() => trimmedName.length < 6, [trimmedName]);
-  const isUnchanged = useMemo(() => trimmedName === (userName ?? '').trim(), [trimmedName, userName]);
+  const isUnchanged = useMemo(
+    () => trimmedName === (userName ?? "").trim(),
+    [trimmedName, userName],
+  );
   const isSaveDisabled = isSaving || isInvalid || isUnchanged;
 
   return (
     <View style={[styles.screen, { backgroundColor: nc.background }]}>
-      <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['bottom']}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: nc.background }]}
+        edges={["bottom"]}
+      >
         <Stack.Screen
           options={{
-            title: 'Profil',
-            headerBackTitle: 'Retour',
+            title: "Profil",
+            headerBackTitle: "Retour",
           }}
         />
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
-            <ThemedText style={[styles.sectionTitle, { color: nc.textMuted }]}>
+          <View
+            style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+          >
+            {/* <ThemedText style={[styles.sectionTitle, { color: nc.textMuted }]}>
               Profil
-            </ThemedText>
+            </ThemedText> */}
 
             <View style={styles.inputGroup}>
               <ThemedText style={styles.label}>Pseudo</ThemedText>
@@ -124,7 +142,9 @@ export default function ProfileScreen() {
             </View>
 
             {!!errorMessage && (
-              <Text style={[styles.errorText, { color: nc.error }]}>{errorMessage}</Text>
+              <Text style={[styles.errorText, { color: nc.error }]}>
+                {errorMessage}
+              </Text>
             )}
 
             <View style={styles.inputGroup}>
@@ -139,7 +159,7 @@ export default function ProfileScreen() {
                     borderColor: nc.borderLight,
                   },
                 ]}
-                value={email ?? ''}
+                value={email ?? ""}
                 editable={false}
                 placeholder="Email du compte"
                 placeholderTextColor={nc.textMuted}
@@ -159,9 +179,20 @@ export default function ProfileScreen() {
             accessibilityRole="button"
             accessibilityState={{ disabled: isSaveDisabled }}
           >
-            <Ionicons name="checkmark" size={20} color={colorScheme === 'dark' ? nc.white : nc.backgroundCard} />
-            <Text style={[styles.saveButtonText, { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard }]}>
-              {isSaving ? 'Enregistrement...' : 'Enregistrer'}
+            <Ionicons
+              name="checkmark"
+              size={20}
+              color={colorScheme === "dark" ? nc.white : nc.backgroundCard}
+            />
+            <Text
+              style={[
+                styles.saveButtonText,
+                {
+                  color: colorScheme === "dark" ? nc.white : nc.backgroundCard,
+                },
+              ]}
+            >
+              {isSaving ? "Enregistrement..." : "Enregistrer"}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -195,7 +226,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 16,
   },
   inputGroup: {
@@ -203,7 +234,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 8,
   },
   helperText: {
@@ -226,9 +257,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 16,
     borderRadius: 12,
     marginBottom: 24,
@@ -243,6 +274,6 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

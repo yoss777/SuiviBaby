@@ -1,16 +1,25 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Stack } from 'expo-router';
-import * as Haptics from 'expo-haptics';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { Stack } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { InfoModal } from '@/components/ui/InfoModal';
-import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
-import { Colors } from '@/constants/theme';
-import { useToast } from '@/contexts/ToastContext';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ThemedText } from "@/components/themed-text";
+import { InfoModal } from "@/components/ui/InfoModal";
+import {
+  getBackgroundTint,
+  getNeutralColors,
+} from "@/constants/dashboardColors";
+import { useToast } from "@/contexts/ToastContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
 interface FAQItem {
   question: string;
@@ -19,69 +28,70 @@ interface FAQItem {
 }
 
 export default function HelpScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { showToast } = useToast();
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
   const [sendError, setSendError] = useState(false);
   const [modalConfig, setModalConfig] = useState({
     visible: false,
-    title: '',
-    message: '',
+    title: "",
+    message: "",
   });
 
   const faqs: FAQItem[] = [
     {
-      question: 'Comment enregistrer un événement pour mon bébé ?',
+      question: "Comment enregistrer un événement pour mon bébé ?",
       answer:
-        'Ouvrez le bébé concerné puis choisissez le type d\'événement (biberon, tétée, sommeil, etc.) et validez.',
-      icon: 'add-circle',
+        "Ouvrez le bébé concerné puis choisissez le type d'événement (biberon, tétée, sommeil, etc.) et validez.",
+      icon: "add-circle",
     },
     {
-      question: 'Comment partager un bébé avec un autre parent ?',
+      question: "Comment partager un bébé avec un autre parent ?",
       answer:
-        'Allez dans la section de partage et envoyez une invitation ou un code à l\'autre parent.',
-      icon: 'share-social',
+        "Allez dans la section de partage et envoyez une invitation ou un code à l'autre parent.",
+      icon: "share-social",
     },
     {
-      question: 'Comment exporter mes données ?',
+      question: "Comment exporter mes données ?",
       answer:
-        'Allez dans Paramètres > Exporter les données. Sélectionnez les enfants et les types d\'événements à inclure.',
-      icon: 'cloud-download',
+        "Allez dans Paramètres > Exporter les données. Sélectionnez les enfants et les types d'événements à inclure.",
+      icon: "cloud-download",
     },
     {
-      question: 'Comment ajouter un bébé au suivi ?',
+      question: "Comment ajouter un bébé au suivi ?",
       answer:
         'Allez dans le menu principal et sélectionnez "Ajouter un bébé". Remplissez les informations et validez.',
-      icon: 'person-add',
+      icon: "person-add",
     },
     {
-      question: 'Comment changer mon mot de passe ?',
+      question: "Comment changer mon mot de passe ?",
       answer:
-        'Allez dans Paramètres > Mot de passe. Entrez votre mot de passe actuel, puis le nouveau mot de passe deux fois.',
-      icon: 'lock-closed',
+        "Allez dans Paramètres > Mot de passe. Entrez votre mot de passe actuel, puis le nouveau mot de passe deux fois.",
+      icon: "lock-closed",
     },
     {
-      question: 'Mes données sont-elles sécurisées ?',
+      question: "Mes données sont-elles sécurisées ?",
       answer:
-        'Oui, vos données sont sécurisées et stockées dans le cloud. Consultez notre politique de confidentialité pour plus de détails.',
-      icon: 'shield-checkmark',
+        "Oui, vos données sont sécurisées et stockées dans le cloud. Consultez notre politique de confidentialité pour plus de détails.",
+      icon: "shield-checkmark",
     },
   ];
 
   const supportOptions = [
     {
-      id: 'email',
-      icon: 'mail' as keyof typeof Ionicons.glyphMap,
-      title: 'Email',
-      description: 'support@suivibaby.com',
-      action: () => setModalConfig({
-        visible: true,
-        title: 'Email',
-        message: 'support@suivibaby.com',
-      }),
+      id: "email",
+      icon: "mail" as keyof typeof Ionicons.glyphMap,
+      title: "Email",
+      description: "support@suivibaby.com",
+      action: () =>
+        setModalConfig({
+          visible: true,
+          title: "Email",
+          message: "support@suivibaby.com",
+        }),
     },
   ];
 
@@ -95,8 +105,9 @@ export default function HelpScreen() {
       setSendError(true);
       setModalConfig({
         visible: true,
-        title: 'Champs requis',
-        message: 'Veuillez remplir tous les champs avant d\'envoyer votre message.',
+        title: "Champs requis",
+        message:
+          "Veuillez remplir tous les champs avant d'envoyer votre message.",
       });
       return;
     }
@@ -104,14 +115,14 @@ export default function HelpScreen() {
     // P8b: Haptic feedback on send
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     // P6: Success toast
-    showToast('Message envoyé avec succès');
+    showToast("Message envoyé avec succès");
     setModalConfig({
       visible: true,
-      title: 'Message envoye',
-      message: 'Nous vous repondrons dans les plus brefs delais.',
+      title: "Message envoye",
+      message: "Nous vous repondrons dans les plus brefs delais.",
     });
-    setSubject('');
-    setMessage('');
+    setSubject("");
+    setMessage("");
   }, [subject, message]);
 
   const renderFAQItem = (item: FAQItem, index: number) => {
@@ -120,10 +131,7 @@ export default function HelpScreen() {
     return (
       <TouchableOpacity
         key={index}
-        style={[
-          styles.faqItem,
-          { borderBottomColor: nc.borderLightAlpha },
-        ]}
+        style={[styles.faqItem, { borderBottomColor: nc.borderLightAlpha }]}
         onPress={() => setExpandedIndex(isExpanded ? null : index)}
         activeOpacity={0.7}
         accessibilityRole="button"
@@ -134,16 +142,14 @@ export default function HelpScreen() {
           <View
             style={[
               styles.faqIcon,
-              { backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.08) },
+              { backgroundColor: getBackgroundTint(nc.todayAccent, 0.08) },
             ]}
           >
-            <Ionicons name={item.icon} size={20} color={Colors[colorScheme].tint} />
+            <Ionicons name={item.icon} size={20} color={nc.todayAccent} />
           </View>
-          <ThemedText style={styles.faqQuestion}>
-            {item.question}
-          </ThemedText>
+          <ThemedText style={styles.faqQuestion}>{item.question}</ThemedText>
           <Ionicons
-            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            name={isExpanded ? "chevron-up" : "chevron-down"}
             size={20}
             color={nc.textMuted}
           />
@@ -157,13 +163,10 @@ export default function HelpScreen() {
     );
   };
 
-  const renderSupportOption = (option: typeof supportOptions[0]) => (
+  const renderSupportOption = (option: (typeof supportOptions)[0]) => (
     <TouchableOpacity
       key={option.id}
-      style={[
-        styles.supportOption,
-        { borderColor: nc.borderLightAlpha },
-      ]}
+      style={[styles.supportOption, { borderColor: nc.borderLightAlpha }]}
       // onPress={option.action}
       // activeOpacity={0.7}
       activeOpacity={1}
@@ -171,15 +174,13 @@ export default function HelpScreen() {
       <View
         style={[
           styles.supportIcon,
-          { backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.08) },
+          { backgroundColor: getBackgroundTint(nc.todayAccent, 0.08) },
         ]}
       >
-        <Ionicons name={option.icon} size={24} color={Colors[colorScheme].tint} />
+        <Ionicons name={option.icon} size={24} color={nc.todayAccent} />
       </View>
       <View style={styles.supportContent}>
-        <ThemedText style={styles.supportTitle}>
-          {option.title}
-        </ThemedText>
+        <ThemedText style={styles.supportTitle}>{option.title}</ThemedText>
         <Text style={[styles.supportDescription, { color: nc.textMuted }]}>
           {option.description}
         </Text>
@@ -194,110 +195,161 @@ export default function HelpScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: nc.background }]}>
-    <SafeAreaView style={[styles.container, { backgroundColor: nc.background }]} edges={['bottom']}>
-      <Stack.Screen
-        options={{
-          title: 'Aide & Support',
-          headerBackTitle: 'Retour',
-        }}
-      />
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: nc.background }]}
+        edges={["bottom"]}
       >
-        <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]} accessibilityRole="header">
-            QUESTIONS FRÉQUENTES
-          </ThemedText>
-          <View style={styles.faqContainer}>
-            {faqsMemo.map(renderFAQItem)}
-          </View>
-        </View>
-
-        <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]} accessibilityRole="header">
-            NOUS CONTACTER
-          </ThemedText>
-          <View style={styles.supportContainer}>
-            {supportOptionsMemo.map(renderSupportOption)}
-          </View>
-        </View>
-
-        <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
-          <ThemedText style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]} accessibilityRole="header">
-            ENVOYER UN MESSAGE
-          </ThemedText>
-          <View style={styles.contactForm}>
-            <View style={styles.inputGroup}>
-              <ThemedText style={styles.label}>Sujet</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: nc.background,
-                    color: nc.textStrong,
-                    borderColor: sendError && !subject ? nc.error : nc.borderLightAlpha,
-                  },
-                ]}
-                value={subject}
-                onChangeText={(text) => { setSubject(text); setSendError(false); }}
-                placeholder="Quel est le sujet de votre message ?"
-                placeholderTextColor={nc.textMuted}
-                accessibilityLabel="Sujet du message"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <ThemedText style={styles.label}>Message</ThemedText>
-              <TextInput
-                style={[
-                  styles.textArea,
-                  {
-                    backgroundColor: nc.background,
-                    color: nc.textStrong,
-                    borderColor: sendError && !message ? nc.error : nc.borderLightAlpha,
-                  },
-                ]}
-                value={message}
-                onChangeText={(text) => { setMessage(text); setSendError(false); }}
-                placeholder="Décrivez votre problème ou question..."
-                placeholderTextColor={nc.textMuted}
-                multiline
-                numberOfLines={6}
-                textAlignVertical="top"
-                accessibilityLabel="Contenu du message"
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.sendButton, { backgroundColor: nc.todayAccent, shadowColor: nc.todayAccent }]}
-              onPress={handleSendMessage}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel="Envoyer le message"
+        <Stack.Screen
+          options={{
+            title: "Aide & Support",
+            headerBackTitle: "Retour",
+          }}
+        />
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View
+            style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+          >
+            <ThemedText
+              style={[styles.sectionTitle, { color: nc.todayAccent }]}
+              accessibilityRole="header"
             >
-              <Ionicons name="send" size={20} color={colorScheme === 'dark' ? nc.white : nc.backgroundCard} />
-              <Text style={[styles.sendButtonText, { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard }]}>Envoyer le message</Text>
-            </TouchableOpacity>
+              QUESTIONS FRÉQUENTES
+            </ThemedText>
+            <View style={styles.faqContainer}>
+              {faqsMemo.map(renderFAQItem)}
+            </View>
           </View>
-        </View>
 
-        <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
-          <Ionicons name="time-outline" size={24} color={Colors[colorScheme].tint} />
-          <ThemedText style={styles.infoText}>
-            Notre equipe de support repond generalement sous 24 heures les jours ouvres.
-          </ThemedText>
-        </View>
-      </ScrollView>
-      <InfoModal
-        visible={modalConfig.visible}
-        title={modalConfig.title}
-        message={modalConfig.message}
-        backgroundColor={nc.background}
-        textColor={nc.textStrong}
-        onClose={() => setModalConfig((prev) => ({ ...prev, visible: false }))}
-      />
-    </SafeAreaView>
+          <View
+            style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+          >
+            <ThemedText
+              style={[styles.sectionTitle, { color: nc.todayAccent }]}
+              accessibilityRole="header"
+            >
+              NOUS CONTACTER
+            </ThemedText>
+            <View style={styles.supportContainer}>
+              {supportOptionsMemo.map(renderSupportOption)}
+            </View>
+          </View>
+
+          <View
+            style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+          >
+            <ThemedText
+              style={[styles.sectionTitle, { color: nc.todayAccent }]}
+              accessibilityRole="header"
+            >
+              ENVOYER UN MESSAGE
+            </ThemedText>
+            <View style={styles.contactForm}>
+              <View style={styles.inputGroup}>
+                <ThemedText style={styles.label}>Sujet</ThemedText>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: nc.background,
+                      color: nc.textStrong,
+                      borderColor:
+                        sendError && !subject ? nc.error : nc.borderLightAlpha,
+                    },
+                  ]}
+                  value={subject}
+                  onChangeText={(text) => {
+                    setSubject(text);
+                    setSendError(false);
+                  }}
+                  placeholder="Quel est le sujet de votre message ?"
+                  placeholderTextColor={nc.textMuted}
+                  accessibilityLabel="Sujet du message"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <ThemedText style={styles.label}>Message</ThemedText>
+                <TextInput
+                  style={[
+                    styles.textArea,
+                    {
+                      backgroundColor: nc.background,
+                      color: nc.textStrong,
+                      borderColor:
+                        sendError && !message ? nc.error : nc.borderLightAlpha,
+                    },
+                  ]}
+                  value={message}
+                  onChangeText={(text) => {
+                    setMessage(text);
+                    setSendError(false);
+                  }}
+                  placeholder="Décrivez votre problème ou question..."
+                  placeholderTextColor={nc.textMuted}
+                  multiline
+                  numberOfLines={6}
+                  textAlignVertical="top"
+                  accessibilityLabel="Contenu du message"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  {
+                    backgroundColor: nc.todayAccent,
+                    shadowColor: nc.todayAccent,
+                  },
+                ]}
+                onPress={handleSendMessage}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Envoyer le message"
+              >
+                <Ionicons
+                  name="send"
+                  size={20}
+                  color={colorScheme === "dark" ? nc.white : nc.backgroundCard}
+                />
+                <Text
+                  style={[
+                    styles.sendButtonText,
+                    {
+                      color:
+                        colorScheme === "dark" ? nc.white : nc.backgroundCard,
+                    },
+                  ]}
+                >
+                  Envoyer le message
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View
+            style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}
+          >
+            <Ionicons name="time-outline" size={24} color={nc.todayAccent} />
+            <ThemedText style={styles.infoText}>
+              Notre équipe de support répond généralement sous 24 heures les
+              jours ouvrés.
+            </ThemedText>
+          </View>
+        </ScrollView>
+        <InfoModal
+          visible={modalConfig.visible}
+          title={modalConfig.title}
+          message={modalConfig.message}
+          backgroundColor={nc.background}
+          textColor={nc.textStrong}
+          onClose={() =>
+            setModalConfig((prev) => ({ ...prev, visible: false }))
+          }
+        />
+      </SafeAreaView>
     </View>
   );
 }
@@ -319,12 +371,12 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 16,
   },
   faqContainer: {
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   faqItem: {
     minHeight: 44,
@@ -332,21 +384,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   faqHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   faqIcon: {
     width: 36,
     height: 36,
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   faqQuestion: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   faqAnswer: {
     marginTop: 12,
@@ -358,8 +410,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   supportOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 16,
     borderRadius: 12,
     // borderWidth: 1,
@@ -368,8 +420,8 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 12,
   },
   supportContent: {
@@ -377,7 +429,7 @@ const styles = StyleSheet.create({
   },
   supportTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 2,
   },
   supportDescription: {
@@ -391,7 +443,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   input: {
     height: 48,
@@ -399,6 +451,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 16,
     fontSize: 16,
+    letterSpacing: 0,
   },
   textArea: {
     minHeight: 120,
@@ -407,11 +460,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
+    letterSpacing: 0,
   },
   sendButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     minHeight: 48,
     paddingVertical: 16,
     borderRadius: 12,
@@ -424,10 +478,10 @@ const styles = StyleSheet.create({
   },
   sendButtonText: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   infoBox: {
-    flexDirection: 'row',
+    flexDirection: "row",
     padding: 16,
     borderRadius: 12,
     marginBottom: 24,
