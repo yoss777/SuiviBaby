@@ -10,7 +10,6 @@ import { SheetProvider } from "@/contexts/SheetContext";
 import { SuccessAnimationProvider } from "@/contexts/SuccessAnimationContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { MigrationProvider } from "@/migration/MigrationProvider";
 import { composeProviders } from "@/utils/composeProviders";
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from "@react-navigation/native";
 import { Stack, useRouter } from "expo-router";
@@ -70,7 +69,6 @@ const AppProviders = composeProviders([
   AppThemeProvider,
   BabyProvider,
   MomentsNotificationProvider,
-  MigrationProvider,
   SheetProvider,
   SuccessAnimationProvider,
 ]);

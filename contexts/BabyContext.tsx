@@ -1,5 +1,5 @@
 import { db } from '@/config/firebase';
-import { obtenirPreferences } from '@/services/userPreferencesService';
+import { obtenirPreferences, type ReminderPreferences } from '@/services/userPreferencesService';
 import { collection, doc, limit, onSnapshot, query, setDoc, where } from 'firebase/firestore';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
@@ -14,12 +14,18 @@ export interface Child {
   photoUri?: string;
 }
 
+const DEFAULT_REMINDERS: ReminderPreferences = {
+  enabled: false,
+  thresholds: { repas: 0, pompages: 0, mictions: 0, selles: 0, vitamines: 0 },
+};
+
 interface BabyContextType {
   children: Child[];
   activeChild: Child | null;
   loading: boolean;
   childrenLoaded: boolean;
   hiddenChildrenIds: string[];
+  reminderPreferences: ReminderPreferences;
   setActiveChild: (child: Child) => void;
   addChild: (child: Child) => void;
   updateChild: (id: string, child: Partial<Child>) => void;
@@ -76,6 +82,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   const [loading, setLoading] = useState(true);
   const [childrenLoaded, setChildrenLoaded] = useState(false);
   const [hiddenChildrenIds, setHiddenChildrenIds] = useState<string[]>([]);
+  const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences>(DEFAULT_REMINDERS);
   const lastActiveChildIdRef = useRef<string | null>(null);
   const lastActiveOverrideRef = useRef<string | null>(null);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
@@ -142,6 +149,16 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
           }
           return newHiddenIds;
         });
+        // R7: Extract reminder preferences from the same snapshot
+        const reminders = data.notifications?.reminders;
+        if (reminders) {
+          setReminderPreferences({
+            enabled: reminders.enabled ?? DEFAULT_REMINDERS.enabled,
+            thresholds: { ...DEFAULT_REMINDERS.thresholds, ...(reminders.thresholds || {}) },
+          });
+        } else {
+          setReminderPreferences(DEFAULT_REMINDERS);
+        }
         const prefsLastActive = data.lastActiveChildId || null;
         lastActiveChildIdRef.current = prefsLastActive;
         if (lastActiveOverrideRef.current && prefsLastActive === lastActiveOverrideRef.current) {
@@ -149,6 +166,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
         }
       } else {
         setHiddenChildrenIds((prev) => prev.length === 0 ? prev : []);
+        setReminderPreferences(DEFAULT_REMINDERS);
         if (!lastActiveOverrideRef.current) {
           lastActiveChildIdRef.current = null;
         }
@@ -176,7 +194,8 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   }, [user]);
 
   // Charger les enfants depuis Firestore
-  // Deps: user, preferencesLoaded, authLoading — NOT hiddenChildrenIds
+  // R5: No longer waits for preferencesLoaded — children and prefs load in parallel.
+  // syncState() reads hiddenChildrenIdsRef which updates when prefs arrive.
   useEffect(() => {
     if (authLoading) {
       setLoading(true);
@@ -188,12 +207,6 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       setChildren([]);
       setActiveChildState(null);
       setLoading(false);
-      setChildrenLoaded(false);
-      return;
-    }
-
-    if (!preferencesLoaded) {
-      setLoading(true);
       setChildrenLoaded(false);
       return;
     }
@@ -278,7 +291,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       childListenersRef.current.clear();
       childDataRef.current.clear();
     };
-  }, [user, preferencesLoaded, authLoading, syncState]);
+  }, [user, authLoading, syncState]);
 
   // Preload today's events for all children
   useEffect(() => {
@@ -374,11 +387,12 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     loading,
     childrenLoaded,
     hiddenChildrenIds,
+    reminderPreferences,
     setActiveChild,
     addChild,
     updateChild,
     deleteChild,
-  }), [children, activeChild, loading, childrenLoaded, hiddenChildrenIds, setActiveChild, addChild, updateChild, deleteChild]);
+  }), [children, activeChild, loading, childrenLoaded, hiddenChildrenIds, reminderPreferences, setActiveChild, addChild, updateChild, deleteChild]);
 
   return (
     <BabyContext.Provider value={value}>

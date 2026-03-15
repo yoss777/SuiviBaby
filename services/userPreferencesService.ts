@@ -21,7 +21,7 @@ export type LanguagePreference = 'fr' | 'en' | 'es' | 'de' | 'it' | 'pt' | 'ar';
 
 export type ReminderKey = 'repas' | 'pompages' | 'mictions' | 'selles' | 'vitamines';
 
-interface ReminderPreferences {
+export interface ReminderPreferences {
   enabled: boolean;
   thresholds: Record<ReminderKey, number>;
 }

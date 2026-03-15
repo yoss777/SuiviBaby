@@ -104,15 +104,19 @@ export function AuthProvider({
   const loadUserData = useCallback(
     async (fbUser: FirebaseUser) => {
       try {
-        const userDoc = await getDoc(doc(db, "users", fbUser.uid));
+        const appType =
+          process.env.EXPO_PUBLIC_APP_TYPE === "professional"
+            ? "professional"
+            : "patient";
+
+        // R4: Parallelize user doc fetch + access check
+        const [userDoc, accessCheck] = await Promise.all([
+          getDoc(doc(db, "users", fbUser.uid)),
+          canUserAccessApp(fbUser.uid, appType),
+        ]);
         if (!isMountedRef.current) return;
 
         if (!userDoc.exists()) {
-          const appType =
-            process.env.EXPO_PUBLIC_APP_TYPE === "professional"
-              ? "professional"
-              : "patient";
-
           if (appType === "patient" && fbUser.email) {
             const fallbackName =
               fbUser.displayName || fbUser.email.split("@")[0];
@@ -140,14 +144,6 @@ export function AuthProvider({
           ...userDoc.data(),
         } as User;
 
-        // Vérifier si l'utilisateur peut accéder à l'app actuelle
-        const appType =
-          process.env.EXPO_PUBLIC_APP_TYPE === "professional"
-            ? "professional"
-            : "patient";
-        const accessCheck = await canUserAccessApp(fbUser.uid, appType);
-        if (!isMountedRef.current) return;
-
         if (!accessCheck.canAccess) {
           showAlert(
             "Accès non autorisé",
@@ -167,14 +163,13 @@ export function AuthProvider({
           return;
         }
 
-        // Mettre à jour le dernier login
+        // Mettre à jour le dernier login (fire-and-forget, non bloquant)
         const appVersion = Constants.expoConfig?.version ?? "1.0.0";
-        await updateLastLogin(
+        updateLastLogin(
           fbUser.uid,
           Platform.OS as "ios" | "android" | "web",
           appVersion,
-        );
-        if (!isMountedRef.current) return;
+        ).catch(console.error);
 
         // Tout est OK, charger l'utilisateur (single dispatch au lieu de 5 setState)
         dispatch({

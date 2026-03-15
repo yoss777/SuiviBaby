@@ -1,24 +1,21 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ThemedText } from "@/components/themed-text";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import BackgroundImage from "@/components/ui/BackgroundImage";
-import { DotsLoader } from "@/components/ui/DotsLoader";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
-import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { obtenirEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import {
   buildTodayEventsData,
+  getTodayEventsCache,
   setTodayEventsCache,
 } from "@/services/todayEventsCache";
 import { router } from "expo-router";
 
-export default function BootScreen() {
-  const colorScheme = useColorScheme() ?? "light";
+function BootScreenContent() {
   const { user, loading: authLoading } = useAuth();
   const {
     children,
@@ -28,12 +25,14 @@ export default function BootScreen() {
   } = useBaby();
   const [delayDone, setDelayDone] = useState(false);
   const [unauthDelayDone, setUnauthDelayDone] = useState(false);
-  const [videoDone, setVideoDone] = useState(false);
 
+  // R1+R9: Splash minimum — shorter if cache exists (warm return)
   useEffect(() => {
-    const timer = setTimeout(() => setDelayDone(true), 1500);
+    const hasCache = activeChild?.id ? !!getTodayEventsCache(activeChild.id) : false;
+    const minDelay = hasCache ? 500 : 1200;
+    const timer = setTimeout(() => setDelayDone(true), minDelay);
     return () => clearTimeout(timer);
-  }, []);
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (authLoading || user) {
@@ -41,27 +40,22 @@ export default function BootScreen() {
       return;
     }
 
-    const timer = setTimeout(() => setUnauthDelayDone(true), 1500);
+    const timer = setTimeout(() => setUnauthDelayDone(true), 1200);
     return () => clearTimeout(timer);
   }, [authLoading, user]);
 
-  useEffect(() => {
-    const fallback = setTimeout(() => setVideoDone(true), 3000);
-    return () => clearTimeout(fallback);
+  // P17a: Extract prefetch as useCallback
+  const prefetchToday = useCallback(async (childId: string) => {
+    try {
+      const events = await obtenirEvenementsDuJourHybrid(childId);
+      setTodayEventsCache(childId, buildTodayEventsData(events));
+    } catch (error) {
+      console.warn("[BOOT] Préchargement today échoué:", error);
+    }
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-
-    const prefetchToday = async (childId: string) => {
-      try {
-        const events = await obtenirEvenementsDuJourHybrid(childId);
-        if (cancelled) return;
-        setTodayEventsCache(childId, buildTodayEventsData(events));
-      } catch (error) {
-        console.warn("[BOOT] Préchargement today échoué:", error);
-      }
-    };
 
     const run = async () => {
       console.log(
@@ -84,7 +78,7 @@ export default function BootScreen() {
       // Étape 2 : Si pas d'utilisateur, rediriger vers login
       if (!user) {
         console.log("[BOOT] Pas de user, redirection vers login");
-        if (!unauthDelayDone || !videoDone) {
+        if (!unauthDelayDone) {
           return;
         }
         router.replace("/(auth)/login");
@@ -98,7 +92,7 @@ export default function BootScreen() {
         return;
       }
 
-      if (!delayDone || !videoDone) {
+      if (!delayDone) {
         console.log("[BOOT] Attente du délai minimum...");
         return;
       }
@@ -140,10 +134,9 @@ export default function BootScreen() {
           setTimeout(resolve, 2500),
         );
         await Promise.race([prefetchToday(targetChild.id), preloadTimeout]);
+        if (cancelled) return;
 
-        if (!cancelled) {
-          router.replace("/(drawer)/baby" as any);
-        }
+        router.replace("/(drawer)/baby" as any);
         return;
       }
 
@@ -162,70 +155,71 @@ export default function BootScreen() {
     babyLoading,
     delayDone,
     unauthDelayDone,
-    videoDone,
     user,
     children,
+    activeChild,
     setActiveChild,
+    prefetchToday,
   ]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors[colorScheme].background }}>
+    <View style={styles.root}>
       <BackgroundImage />
-      {/* <AppBackground /> */}
       <SafeAreaView
-        style={{ flex: 1, backgroundColor: "transparent" }}
+        style={styles.safe}
         edges={["top", "bottom"]}
+        accessibilityRole="summary"
+        accessibilityLabel="Écran de chargement"
       >
-        {/* {!videoDone ? (
-          <Video
-            source={require("@/assets/bootsplash2.mp4")}
-            style={styles.fullscreenVideo}
-            resizeMode={ResizeMode.CONTAIN}
-            shouldPlay
-            isLooping={false}
-            isMuted
-            onPlaybackStatusUpdate={(status) => {
-              if (!status.isLoaded) return;
-              if (status.didJustFinish) {
-                setVideoDone(true);
-              }
-            }}
-          />
-        ) : ( */}
-        <View
-          style={{
-            flex: 1,
-            alignItems: "center",
-            justifyContent: "center",
-            paddingBottom: 24,
-            paddingHorizontal: 24,
-            gap: 24,
-          }}
-        >
+        <View style={styles.content}>
           <Image
             source={require("@/assets/images/icon.png")}
-            style={{
-              width: 192,
-              height: 192,
-              marginBottom: 24,
-              borderRadius: 24,
-            }}
+            style={styles.logo}
             resizeMode="contain"
+            accessibilityLabel="Logo Suivi Baby"
           />
-          <DotsLoader />
-          <IconPulseDots />
-          <ThemedText style={{ marginTop: 12, color: "#ffffff" }}>
-            Préparation de votre espace...
-          </ThemedText>
+          <IconPulseDots
+            size={20}
+            gap={16}
+            minOpacity={0.3}
+            maxOpacity={0.9}
+            minScale={0.9}
+            maxScale={1.1}
+            cycleDurationMs={2400}
+          />
         </View>
-        {/* )} */}
       </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  fullscreenVideo: {
-    ...StyleSheet.absoluteFillObject,
+  root: {
+    flex: 1,
+  },
+  safe: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  content: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 40,
+    gap: 32,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    borderRadius: 28,
   },
 });
+
+// P12b: ErrorBoundary wrapper
+export default function BootScreen() {
+  return (
+    <ErrorBoundary>
+      <BootScreenContent />
+    </ErrorBoundary>
+  );
+}

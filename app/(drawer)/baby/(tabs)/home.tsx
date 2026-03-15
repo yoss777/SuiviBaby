@@ -36,7 +36,6 @@ import {
   getTodayEventsCache,
 } from "@/services/todayEventsCache";
 import { supprimerEvenement } from "@/services/eventsService";
-import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -520,7 +519,7 @@ function getEditRoute(event: any): string | null {
 // ============================================
 
 export default function HomeDashboard() {
-  const { activeChild } = useBaby();
+  const { activeChild, reminderPreferences } = useBaby();
   const { firebaseUser } = useAuth();
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
@@ -532,14 +531,9 @@ export default function HomeDashboard() {
   const warningStateRef = useRef<
     Record<string, { miction?: number; selle?: number }>
   >({});
-  const [remindersEnabled, setRemindersEnabled] = useState(true);
-  const [reminderThresholds, setReminderThresholds] = useState({
-    repas: 0,
-    pompages: 0,
-    mictions: 0,
-    selles: 0,
-    vitamines: 0,
-  });
+  // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
+  const remindersEnabled = reminderPreferences.enabled;
+  const reminderThresholds = reminderPreferences.thresholds;
   const [showRecentHint, setShowRecentHint] = useState(false);
   const headerMicOpacity = useRef(new Animated.Value(0)).current;
   const inlineMicOpacity = useRef(new Animated.Value(1)).current;
@@ -1603,35 +1597,7 @@ export default function HomeDashboard() {
     };
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      let isActive = true;
-
-      const loadReminders = async () => {
-        try {
-          const prefs = await obtenirPreferencesNotifications();
-          if (!isActive) return;
-          setRemindersEnabled(prefs.reminders?.enabled ?? true);
-          setReminderThresholds({
-            repas: prefs.reminders?.thresholds?.repas ?? 0,
-            pompages: prefs.reminders?.thresholds?.pompages ?? 0,
-            mictions: prefs.reminders?.thresholds?.mictions ?? 0,
-            selles: prefs.reminders?.thresholds?.selles ?? 0,
-            vitamines: prefs.reminders?.thresholds?.vitamines ?? 0,
-          });
-        } catch {
-          if (!isActive) return;
-          setRemindersEnabled(true);
-        }
-      };
-
-      loadReminders();
-
-      return () => {
-        isActive = false;
-      };
-    }, []),
-  );
+  // R7: Reminder prefs are now read from BabyContext (real-time, no extra Firestore read)
 
   // ============================================
   // EFFECTS - DATA LISTENERS

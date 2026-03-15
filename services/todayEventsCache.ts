@@ -39,12 +39,12 @@ const TODAY_TYPES: EventType[] = [
 ];
 
 type CacheEntry = {
-  childId: string;
   dateKey: string;
   data: TodayEventsData;
 };
 
-let cache: CacheEntry | null = null;
+// R8: Multi-child cache — supports switching between children without re-fetch
+const cacheMap = new Map<string, CacheEntry>();
 
 const getTodayKey = () => {
   const now = new Date();
@@ -130,22 +130,24 @@ export const buildTodayEventsData = (events: Event[]): TodayEventsData => {
 };
 
 export const setTodayEventsCache = (childId: string, data: TodayEventsData) => {
-  cache = {
-    childId,
+  cacheMap.set(childId, {
     dateKey: getTodayKey(),
     data,
-  };
+  });
 };
 
 export const getTodayEventsCache = (childId: string) => {
-  if (!cache) return null;
-  if (cache.childId !== childId) return null;
-  if (cache.dateKey !== getTodayKey()) return null;
-  return cache.data;
+  const entry = cacheMap.get(childId);
+  if (!entry) return null;
+  if (entry.dateKey !== getTodayKey()) {
+    cacheMap.delete(childId);
+    return null;
+  }
+  return entry.data;
 };
 
 export const clearTodayEventsCache = () => {
-  cache = null;
+  cacheMap.clear();
 };
 
 export const getTodayTypes = () => TODAY_TYPES.slice();

@@ -114,121 +114,109 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     loadLastSeen();
   }, [activeChild?.id, user?.uid]);
 
-  // Écouter les nouveaux événements
+  // R6: Defer listeners — start after a short delay so Home renders first
   useEffect(() => {
     if (!activeChild?.id || !user?.uid || !isInitialized) {
       return;
     }
 
-    console.log('[MomentsNotification] Démarrage des listeners, lastSeen:', lastSeenTimestampRef.current);
+    const childId = activeChild.id;
+    const userId = user.uid;
+    let unsubscribes: (() => void)[] = [];
 
-    // Écouter les jalons
-    const jalonsQuery = query(
-      collection(db, 'events'),
-      where('childId', '==', activeChild.id),
-      where('type', '==', 'jalon'),
-      orderBy('createdAt', 'desc'),
-      limit(100)
-    );
+    const timer = setTimeout(() => {
+      console.log('[MomentsNotification] Démarrage des listeners, lastSeen:', lastSeenTimestampRef.current);
 
-    const unsubscribeJalons = onSnapshot(jalonsQuery, (snapshot) => {
-      console.log('[MomentsNotification] Jalons reçus:', snapshot.docs.length, 'docs');
-      let count = 0;
-      const newJalonIds = new Set<string>();
-      snapshot.docs.forEach((doc) => {
-        const data = doc.data();
-        const timestamp = getTimestamp(data.createdAt);
-        console.log('[MomentsNotification] Jalon:', {
-          id: doc.id,
-          userId: data.userId,
-          currentUser: user.uid,
-          timestamp,
-          lastSeen: lastSeenTimestampRef.current,
-          isNew: data.userId !== user.uid && timestamp > lastSeenTimestampRef.current
+      // Écouter les jalons
+      const jalonsQuery = query(
+        collection(db, 'events'),
+        where('childId', '==', childId),
+        where('type', '==', 'jalon'),
+        orderBy('createdAt', 'desc'),
+        limit(100)
+      );
+
+      unsubscribes.push(onSnapshot(jalonsQuery, (snapshot) => {
+        let count = 0;
+        const newJalonIds = new Set<string>();
+        snapshot.docs.forEach((d) => {
+          const data = d.data();
+          const timestamp = getTimestamp(data.createdAt);
+          if (data.userId !== userId && timestamp > lastSeenTimestampRef.current) {
+            count++;
+            newJalonIds.add(d.id);
+          }
         });
-        // Ne pas compter les événements créés par l'utilisateur actuel
-        if (data.userId !== user.uid && timestamp > lastSeenTimestampRef.current) {
-          count++;
-          newJalonIds.add(doc.id);
-        }
-      });
 
-      console.log('[MomentsNotification] Jalons count:', count);
-      countsRef.current.jalons = count;
-      eventIdsRef.current.jalons = newJalonIds;
-      updateTotalCount();
-    }, (error) => {
-      console.error('[MomentsNotification] Erreur listener jalons:', error);
-    });
+        countsRef.current.jalons = count;
+        eventIdsRef.current.jalons = newJalonIds;
+        updateTotalCount();
+      }, (error) => {
+        console.error('[MomentsNotification] Erreur listener jalons:', error);
+      }));
 
-    // Écouter les likes
-    const likesQuery = query(
-      collection(db, 'eventLikes'),
-      where('childId', '==', activeChild.id),
-      orderBy('createdAt', 'desc'),
-      limit(500)
-    );
+      // Écouter les likes
+      const likesQuery = query(
+        collection(db, 'eventLikes'),
+        where('childId', '==', childId),
+        orderBy('createdAt', 'desc'),
+        limit(500)
+      );
 
-    const unsubscribeLikes = onSnapshot(likesQuery, (snapshot) => {
-      let count = 0;
-      const newLikeEventIds = new Set<string>();
-      snapshot.docs.forEach((doc) => {
-        const data = doc.data();
-        const timestamp = getTimestamp(data.createdAt);
-        // Ne pas compter les likes de l'utilisateur actuel
-        if (data.userId !== user.uid && timestamp > lastSeenTimestampRef.current) {
-          count++;
-          // Ajouter l'eventId (la photo qui a reçu le like)
-          if (data.eventId) {
-            newLikeEventIds.add(data.eventId);
+      unsubscribes.push(onSnapshot(likesQuery, (snapshot) => {
+        let count = 0;
+        const newLikeEventIds = new Set<string>();
+        snapshot.docs.forEach((d) => {
+          const data = d.data();
+          const timestamp = getTimestamp(data.createdAt);
+          if (data.userId !== userId && timestamp > lastSeenTimestampRef.current) {
+            count++;
+            if (data.eventId) {
+              newLikeEventIds.add(data.eventId);
+            }
           }
-        }
-      });
+        });
 
-      console.log('[MomentsNotification] Likes count:', count);
-      countsRef.current.likes = count;
-      eventIdsRef.current.likesEvents = newLikeEventIds;
-      updateTotalCount();
-    }, (error) => {
-      console.error('[MomentsNotification] Erreur listener likes:', error);
-    });
+        countsRef.current.likes = count;
+        eventIdsRef.current.likesEvents = newLikeEventIds;
+        updateTotalCount();
+      }, (error) => {
+        console.error('[MomentsNotification] Erreur listener likes:', error);
+      }));
 
-    // Écouter les commentaires
-    const commentsQuery = query(
-      collection(db, 'eventComments'),
-      where('childId', '==', activeChild.id),
-      orderBy('createdAt', 'desc'),
-      limit(500)
-    );
+      // Écouter les commentaires
+      const commentsQuery = query(
+        collection(db, 'eventComments'),
+        where('childId', '==', childId),
+        orderBy('createdAt', 'desc'),
+        limit(500)
+      );
 
-    const unsubscribeComments = onSnapshot(commentsQuery, (snapshot) => {
-      let count = 0;
-      const newCommentEventIds = new Set<string>();
-      snapshot.docs.forEach((doc) => {
-        const data = doc.data();
-        const timestamp = getTimestamp(data.createdAt);
-        // Ne pas compter les commentaires de l'utilisateur actuel
-        if (data.userId !== user.uid && timestamp > lastSeenTimestampRef.current) {
-          count++;
-          // Ajouter l'eventId (la photo qui a reçu le commentaire)
-          if (data.eventId) {
-            newCommentEventIds.add(data.eventId);
+      unsubscribes.push(onSnapshot(commentsQuery, (snapshot) => {
+        let count = 0;
+        const newCommentEventIds = new Set<string>();
+        snapshot.docs.forEach((d) => {
+          const data = d.data();
+          const timestamp = getTimestamp(data.createdAt);
+          if (data.userId !== userId && timestamp > lastSeenTimestampRef.current) {
+            count++;
+            if (data.eventId) {
+              newCommentEventIds.add(data.eventId);
+            }
           }
-        }
-      });
+        });
 
-      console.log('[MomentsNotification] Comments count:', count);
-      countsRef.current.comments = count;
-      eventIdsRef.current.commentsEvents = newCommentEventIds;
-      updateTotalCount();
-    }, (error) => {
-      console.error('[MomentsNotification] Erreur listener comments:', error);
-    });
+        countsRef.current.comments = count;
+        eventIdsRef.current.commentsEvents = newCommentEventIds;
+        updateTotalCount();
+      }, (error) => {
+        console.error('[MomentsNotification] Erreur listener comments:', error);
+      }));
+    }, 1500);
 
     return () => {
-      unsubscribeJalons();
-      unsubscribeLikes();
-      unsubscribeComments();
+      clearTimeout(timer);
+      unsubscribes.forEach((unsub) => unsub());
     };
   }, [activeChild?.id, user?.uid, isInitialized, updateTotalCount]);
 

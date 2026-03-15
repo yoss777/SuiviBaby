@@ -1,15 +1,12 @@
 import { useNetInfo } from "@react-native-community/netinfo";
-import { useRouter } from "expo-router";
 import { Drawer } from "expo-router/drawer";
 import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -106,8 +103,7 @@ function BabyHeaderTitle() {
 
 export default function DrawerLayout() {
   const colorScheme = useColorScheme() ?? "light";
-  const { user, firebaseUser, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useAuth();
   const [headerRightState, setHeaderRightState] = useState<{
     component: React.ReactElement | null;
     ownerId?: string;
@@ -118,8 +114,6 @@ export default function DrawerLayout() {
   }>({ component: null, ownerId: undefined });
   const netInfo = useNetInfo();
   const insets = useSafeAreaInsets();
-
-  const patientId = firebaseUser?.uid || user?.uid;
 
   const setHeaderRight = useCallback(
     (component: React.ReactElement | null, ownerId?: string) => {
@@ -159,34 +153,8 @@ export default function DrawerLayout() {
     [],
   );
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (loading) return;
-
-    if (!user) {
-      // User is not signed in, redirect to login
-      router.replace("/(auth)/login");
-    }
-  }, [user, loading]);
-
-  // Show loading screen while checking authentication
-  if (loading) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: Colors[colorScheme].background,
-        }}
-      >
-        <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-      </View>
-    );
-  }
-
-  // Don't render drawer if not authenticated
-  if (!user) {
+  // R10: Auth redirect is handled by boot.tsx — just guard against null user
+  if (loading || !user) {
     return null;
   }
 
