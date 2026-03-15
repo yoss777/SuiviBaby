@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
-import { useMomentsNotification } from "@/contexts/MomentsNotificationContext";
+import { useMomentsNotification, NotificationType } from "@/contexts/MomentsNotificationContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
@@ -41,7 +41,10 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withRepeat,
+  withSequence,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../_layout";
@@ -190,11 +193,13 @@ const styles = StyleSheet.create({
   },
   newBadge: {
     position: "absolute",
-    top: 4,
-    right: 4,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    top: 2,
+    right: 2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
     borderWidth: 2,
     zIndex: 10,
   },
@@ -370,6 +375,14 @@ function GallerySkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
 // POLAROID CARD COMPONENT
 // ============================================
 
+// Notification badge icon config
+const NOTIF_ICON: Record<NotificationType, { name: string; solid: boolean }> = {
+  photo: { name: 'star', solid: true },
+  like: { name: 'heart', solid: true },
+  comment: { name: 'comment', solid: true },
+};
+const NOTIF_COLOR = '#E8A85A';
+
 const PolaroidCard = React.memo(function PolaroidCard({
   photo,
   index,
@@ -378,7 +391,7 @@ const PolaroidCard = React.memo(function PolaroidCard({
   canEdit,
   likeCount,
   hasComments,
-  hasNewInteraction,
+  notificationType,
   nc,
 }: {
   photo: PhotoMilestone;
@@ -388,7 +401,7 @@ const PolaroidCard = React.memo(function PolaroidCard({
   canEdit: boolean;
   likeCount?: number;
   hasComments?: boolean;
-  hasNewInteraction?: boolean;
+  notificationType?: NotificationType;
   nc: ReturnType<typeof getNeutralColors>;
 }) {
   const hasLikes = (likeCount ?? 0) > 0;
@@ -406,6 +419,25 @@ const PolaroidCard = React.memo(function PolaroidCard({
   const scale = useSharedValue(0.8);
   const opacity = useSharedValue(0);
   const pressScale = useSharedValue(1);
+
+  // Pulse animation for notification badge
+  const badgePulse = useSharedValue(1);
+  useEffect(() => {
+    if (notificationType) {
+      badgePulse.value = withRepeat(
+        withSequence(
+          withTiming(1.15, { duration: 800 }),
+          withTiming(1, { duration: 800 }),
+        ),
+        -1,
+        true,
+      );
+    }
+  }, [notificationType, badgePulse]);
+
+  const badgeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: badgePulse.value }],
+  }));
 
   const clampedIndex = Math.min(index, 5);
   useEffect(() => {
@@ -446,8 +478,21 @@ const PolaroidCard = React.memo(function PolaroidCard({
         accessibilityLabel={`Photo ${photo.titre || formatDateShort(photo.date)}${hasLikes ? ", aimée" : ""}${hasComments ? ", commentée" : ""}`}
         accessibilityHint={canEdit ? "Appuyez longuement pour modifier" : "Appuyez pour voir en plein écran"}
       >
-        {hasNewInteraction && (
-          <View style={[styles.newBadge, { borderColor: nc.backgroundCard, backgroundColor: nc.error }]} />
+        {notificationType && (
+          <Animated.View
+            style={[
+              styles.newBadge,
+              { borderColor: nc.backgroundCard, backgroundColor: NOTIF_COLOR },
+              badgeAnimatedStyle,
+            ]}
+          >
+            <FontAwesome6
+              name={NOTIF_ICON[notificationType].name}
+              size={8}
+              color="#fff"
+              solid={NOTIF_ICON[notificationType].solid}
+            />
+          </Animated.View>
         )}
 
         <View style={[styles.polaroidImageContainer, { backgroundColor: nc.borderLight }]}>
@@ -497,7 +542,7 @@ export default function GalleryScreen() {
   const { activeChild } = useBaby();
   const { userName, firebaseUser } = useAuth();
   const { showToast } = useToast();
-  const { newEventIds, markMomentsAsSeen } = useMomentsNotification();
+  const { newEventIds, newEventTypes, markMomentsAsSeen, markEventAsSeen } = useMomentsNotification();
   const { openSheet, closeSheet, isOpen } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -912,13 +957,13 @@ export default function GalleryScreen() {
             canEdit={canManageContent}
             likeCount={likesInfo[photo.id]?.count}
             hasComments={(commentCounts[photo.id] ?? 0) > 0}
-            hasNewInteraction={newEventIds.has(photo.id)}
+            notificationType={newEventIds.has(photo.id) ? newEventTypes.get(photo.id) : undefined}
             nc={nc}
           />
         ))}
       </View>
     </View>
-  ), [handlePhotoPress, canManageContent, handleEditPhoto, likesInfo, commentCounts, newEventIds, nc]);
+  ), [handlePhotoPress, canManageContent, handleEditPhoto, likesInfo, commentCounts, newEventIds, newEventTypes, nc]);
 
   // P9b: Pull-to-refresh
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1009,6 +1054,8 @@ export default function GalleryScreen() {
         onEdit={canManageContent ? handleEditPhoto : undefined}
         onLike={handleLike}
         onDownload={handleDownload}
+        onMarkSeen={markEventAsSeen}
+        newEventIds={newEventIds}
         likesInfo={likesInfo}
         commentCounts={commentCounts}
         currentUserName={userName ?? "Moi"}

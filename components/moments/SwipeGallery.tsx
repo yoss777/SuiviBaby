@@ -71,6 +71,8 @@ type SwipeGalleryProps = {
     photoId: string,
     uri: string,
   ) => Promise<{ success: boolean; message: string }>;
+  onMarkSeen?: (photoId: string) => void;
+  newEventIds?: Set<string>;
   likesInfo?: Record<string, LikeInfo>;
   commentCounts?: Record<string, number>;
   currentUserName?: string;
@@ -151,6 +153,8 @@ export const SwipeGallery = ({
   onEdit,
   onLike,
   onDownload,
+  onMarkSeen,
+  newEventIds = new Set(),
   likesInfo = {},
   commentCounts = {},
   currentUserName = "Moi",
@@ -292,14 +296,32 @@ export const SwipeGallery = ({
           animated: false,
         });
       }, 50);
+
+      // Mark initial photo as seen
+      const item = galleryItems[computedInitialPage];
+      if (item?.type === 'photo' && onMarkSeen && newEventIds.has(item.photo.id)) {
+        onMarkSeen(item.photo.id);
+      }
     }
-  }, [visible, initialIndex, photos, computedInitialPage]);
+  }, [visible, initialIndex, photos, computedInitialPage, galleryItems, onMarkSeen, newEventIds]);
+
+  // Stable refs for viewable items callback
+  const onMarkSeenRef = useRef(onMarkSeen);
+  const newEventIdsRef = useRef(newEventIds);
+  useEffect(() => { onMarkSeenRef.current = onMarkSeen; }, [onMarkSeen]);
+  useEffect(() => { newEventIdsRef.current = newEventIds; }, [newEventIds]);
 
   // Handle viewable items change for FlatList
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (viewableItems.length > 0 && viewableItems[0].index != null) {
         setCurrentIndex(viewableItems[0].index);
+
+        // Mark viewed photo as seen if it has a notification
+        const item = viewableItems[0].item as GalleryItem;
+        if (item?.type === 'photo' && onMarkSeenRef.current && newEventIdsRef.current.has(item.photo.id)) {
+          onMarkSeenRef.current(item.photo.id);
+        }
       }
     },
   ).current;

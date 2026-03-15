@@ -1,5 +1,6 @@
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
+import { NotificationType } from "@/contexts/MomentsNotificationContext";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -17,7 +18,10 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withRepeat,
+  withSequence,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -47,6 +51,7 @@ type PolaroidGalleryProps = {
   likesInfo?: Record<string, LikeInfo>;
   commentCounts?: Record<string, number>;
   newEventIds?: Set<string>;
+  newEventTypes?: Map<string, NotificationType>;
   colorScheme?: "light" | "dark";
 };
 
@@ -57,6 +62,14 @@ const formatDateShort = (date: Date) =>
     year: "numeric",
   });
 
+// Notification badge icon config
+const NOTIF_ICON: Record<NotificationType, { name: string; solid: boolean }> = {
+  photo: { name: 'star', solid: true },
+  like: { name: 'heart', solid: true },
+  comment: { name: 'comment', solid: true },
+};
+const NOTIF_COLOR = '#E8A85A'; // Amber warm — matches app accent
+
 // Polaroid card component
 const PolaroidCard = ({
   photo,
@@ -65,7 +78,7 @@ const PolaroidCard = ({
   onLongPress,
   likeCount,
   hasComments,
-  hasNewInteraction,
+  notificationType,
   nc,
 }: {
   photo: PhotoMilestone;
@@ -75,7 +88,7 @@ const PolaroidCard = ({
   likeCount?: number;
   isLikedByMe?: boolean;
   hasComments?: boolean;
-  hasNewInteraction?: boolean;
+  notificationType?: NotificationType;
   nc: ReturnType<typeof getNeutralColors>;
 }) => {
   const hasLikes = (likeCount ?? 0) > 0;
@@ -97,6 +110,25 @@ const PolaroidCard = ({
 
   const scale = useSharedValue(0.8);
   const opacity = useSharedValue(0);
+
+  // Pulse animation for notification badge
+  const badgePulse = useSharedValue(1);
+  useEffect(() => {
+    if (notificationType) {
+      badgePulse.value = withRepeat(
+        withSequence(
+          withTiming(1.15, { duration: 800 }),
+          withTiming(1, { duration: 800 }),
+        ),
+        -1,
+        true,
+      );
+    }
+  }, [notificationType, badgePulse]);
+
+  const badgeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: badgePulse.value }],
+  }));
 
   useEffect(() => {
     opacity.value = withDelay(index * 100, withSpring(1));
@@ -122,11 +154,22 @@ const PolaroidCard = ({
         accessibilityRole="button"
         accessibilityLabel={`Photo ${photo.titre || formatDateShort(photo.date)}`}
       >
-        {/* Point rouge pour les nouvelles interactions */}
-        {hasNewInteraction && (
-          <View
-            style={[styles.newBadge, { borderColor: nc.backgroundCard }]}
-          />
+        {/* Badge contextuel pour les nouvelles interactions */}
+        {notificationType && (
+          <Animated.View
+            style={[
+              styles.newBadge,
+              { borderColor: nc.backgroundCard, backgroundColor: NOTIF_COLOR },
+              badgeAnimatedStyle,
+            ]}
+          >
+            <FontAwesome6
+              name={NOTIF_ICON[notificationType].name}
+              size={8}
+              color="#fff"
+              solid={NOTIF_ICON[notificationType].solid}
+            />
+          </Animated.View>
         )}
 
         <View
@@ -228,6 +271,7 @@ export const PolaroidGallery = ({
   likesInfo = {},
   commentCounts = {},
   newEventIds = new Set(),
+  newEventTypes = new Map(),
   colorScheme = "light",
 }: PolaroidGalleryProps) => {
   const nc = getNeutralColors(colorScheme);
@@ -339,7 +383,7 @@ export const PolaroidGallery = ({
                 likeCount={likesInfo[photo.id]?.count}
                 isLikedByMe={likesInfo[photo.id]?.likedByMe}
                 hasComments={(commentCounts[photo.id] ?? 0) > 0}
-                hasNewInteraction={newEventIds.has(photo.id)}
+                notificationType={newEventIds.has(photo.id) ? newEventTypes.get(photo.id) : undefined}
                 nc={nc}
               />
             ))}
@@ -400,12 +444,13 @@ const styles = StyleSheet.create({
   },
   newBadge: {
     position: "absolute",
-    top: 4,
-    right: 4,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#e63946",
+    top: 2,
+    right: 2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
     borderWidth: 2,
     zIndex: 10,
   },

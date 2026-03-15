@@ -16,6 +16,11 @@ export interface EventLike {
 /**
  * Représente un commentaire sur un événement
  */
+export interface Mention {
+  userId: string;
+  userName: string;
+}
+
 export interface EventComment {
   id?: string;
   eventId: string; // ID de l'événement
@@ -23,6 +28,9 @@ export interface EventComment {
   userId: string; // UID de l'utilisateur qui a commenté
   userName: string; // Nom affiché
   content: string; // Contenu du commentaire
+  replyToId?: string; // ID du commentaire parent (threading 1 niveau)
+  replyToUserName?: string; // Nom de l'auteur du commentaire cité
+  mentions?: Mention[]; // Utilisateurs mentionnés via @
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }

@@ -5,11 +5,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, limit, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
+export type NotificationType = 'photo' | 'like' | 'comment';
+
 interface MomentsNotificationContextType {
   hasNewMoments: boolean;
   newMomentsCount: number;
   newEventIds: Set<string>;
+  /** Type de notification dominant par eventId (photo > comment > like) */
+  newEventTypes: Map<string, NotificationType>;
   markMomentsAsSeen: () => void;
+  markEventAsSeen: (eventId: string) => void;
 }
 
 const MomentsNotificationContext = createContext<MomentsNotificationContextType | undefined>(undefined);
@@ -34,6 +39,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
   const [hasNewMoments, setHasNewMoments] = useState(false);
   const [newMomentsCount, setNewMomentsCount] = useState(0);
   const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set());
+  const [newEventTypes, setNewEventTypes] = useState<Map<string, NotificationType>>(new Map());
   const lastSeenTimestampRef = useRef<number>(0);
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -58,6 +64,19 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
       ...eventIdsRef.current.commentsEvents,
     ]);
     setNewEventIds(allIds);
+
+    // Build type map with priority: photo > comment > like
+    const typesMap = new Map<string, NotificationType>();
+    for (const id of eventIdsRef.current.likesEvents) {
+      typesMap.set(id, 'like');
+    }
+    for (const id of eventIdsRef.current.commentsEvents) {
+      typesMap.set(id, 'comment');
+    }
+    for (const id of eventIdsRef.current.jalons) {
+      typesMap.set(id, 'photo');
+    }
+    setNewEventTypes(typesMap);
   }, []);
 
   // Charger le dernier timestamp vu depuis AsyncStorage
@@ -66,6 +85,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
       setHasNewMoments(false);
       setNewMomentsCount(0);
       setNewEventIds(new Set());
+      setNewEventTypes(new Map());
       setIsInitialized(false);
       countsRef.current = { jalons: 0, likes: 0, comments: 0 };
       eventIdsRef.current = { jalons: new Set(), likesEvents: new Set(), commentsEvents: new Set() };
@@ -222,6 +242,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     setHasNewMoments(false);
     setNewMomentsCount(0);
     setNewEventIds(new Set());
+    setNewEventTypes(new Map());
 
     try {
       const key = `${LAST_SEEN_KEY_PREFIX}${user.uid}_${activeChild.id}`;
@@ -231,13 +252,29 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     }
   }, [activeChild?.id, user?.uid]);
 
+  const markEventAsSeen = useCallback((eventId: string) => {
+    // Remove from each category ref
+    eventIdsRef.current.jalons.delete(eventId);
+    eventIdsRef.current.likesEvents.delete(eventId);
+    eventIdsRef.current.commentsEvents.delete(eventId);
+
+    // Recount
+    countsRef.current.jalons = eventIdsRef.current.jalons.size;
+    countsRef.current.likes = eventIdsRef.current.likesEvents.size;
+    countsRef.current.comments = eventIdsRef.current.commentsEvents.size;
+
+    updateTotalCount();
+  }, [updateTotalCount]);
+
   return (
     <MomentsNotificationContext.Provider
       value={{
         hasNewMoments,
         newMomentsCount,
         newEventIds,
+        newEventTypes,
         markMomentsAsSeen,
+        markEventAsSeen,
       }}
     >
       {children}

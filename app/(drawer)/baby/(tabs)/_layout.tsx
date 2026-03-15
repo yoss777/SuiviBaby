@@ -62,7 +62,7 @@ export default function BabyTabLayout() {
           options={{
             title: "Moments",
             tabBarIcon: ({ focused, color }) => (
-              <TabBarBadge visible={hasNewMoments} type="dot" color="#e63946">
+              <TabBarBadge visible={hasNewMoments} type="dot" color="#E8A85A">
                 <FontAwesome
                   size={28}
                   name="heart"

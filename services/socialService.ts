@@ -22,6 +22,7 @@ import {
   EventLike,
   LatestComment,
   LikeInfo,
+  Mention,
 } from "../types/social";
 
 // ============================================
@@ -378,7 +379,12 @@ export const ajouterCommentaire = async (
   eventId: string,
   childId: string,
   userName: string,
-  content: string
+  content: string,
+  options?: {
+    replyToId?: string;
+    replyToUserName?: string;
+    mentions?: Mention[];
+  }
 ): Promise<string> => {
   const userId = getUserId();
 
@@ -389,6 +395,9 @@ export const ajouterCommentaire = async (
     userName,
     content,
     createdAt: Timestamp.now(),
+    ...(options?.replyToId && { replyToId: options.replyToId }),
+    ...(options?.replyToUserName && { replyToUserName: options.replyToUserName }),
+    ...(options?.mentions && options.mentions.length > 0 && { mentions: options.mentions }),
   };
 
   const docRef = await addDoc(collection(db, "eventComments"), comment);
