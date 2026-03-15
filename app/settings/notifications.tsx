@@ -244,9 +244,8 @@ export default function NotificationsScreen() {
 
     const nextThresholds =
       "enabled" in next ? reminderThresholds : { ...reminderThresholds, ...next };
-    const allDisabled = Object.values(nextThresholds).every((value) => value === 0);
     const nextEnabled =
-      allDisabled ? false : "enabled" in next ? next.enabled : remindersEnabled;
+      "enabled" in next ? next.enabled : remindersEnabled;
 
     // P8b: Haptic feedback on reminder change
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -324,21 +323,22 @@ export default function NotificationsScreen() {
                 ? nc.textMuted
                 : nc.textStrong,
               backgroundColor: nc.backgroundPressed,
-              height: Platform.OS === "ios" ? 60 : 54,
+              height: Platform.OS === "ios" ? 120 : 54,
             },
           ]}
           itemStyle={{
             color: isDisabled
               ? nc.textMuted
               : nc.textStrong,
-            fontSize: 13,
+            fontSize: 14,
+            height: 120,
           }}
           dropdownIconColor={nc.textMuted}
         >
-          <Picker.Item label="Aucun" value={0} />
+          <Picker.Item label="Aucun" value={0} color={isDisabled ? nc.textMuted : nc.textStrong} />
           {Array.from({ length: maxHours }, (_, index) => index + 1).map(
             (hour) => (
-              <Picker.Item key={hour} label={`${hour} h`} value={hour} />
+              <Picker.Item key={hour} label={`${hour} h`} value={hour} color={isDisabled ? nc.textMuted : nc.textStrong} />
             )
           )}
         </Picker>
