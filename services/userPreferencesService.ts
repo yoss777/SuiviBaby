@@ -19,7 +19,7 @@ interface UserPreferences {
 export type ThemePreference = 'light' | 'dark' | 'auto';
 export type LanguagePreference = 'fr' | 'en' | 'es' | 'de' | 'it' | 'pt' | 'ar';
 
-export type ReminderKey = 'repas' | 'pompages' | 'mictions' | 'selles' | 'vitamines';
+export type ReminderKey = 'repas' | 'pompages' | 'changes' | 'vitamines';
 
 export interface ReminderPreferences {
   enabled: boolean;
@@ -46,8 +46,7 @@ const defaultNotificationPreferences: NotificationPreferences = {
     thresholds: {
       repas: 0,
       pompages: 0,
-      mictions: 0,
-      selles: 0,
+      changes: 0,
       vitamines: 0,
     },
   },

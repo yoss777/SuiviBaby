@@ -41,8 +41,7 @@ export default function NotificationsScreen() {
   const [reminderThresholds, setReminderThresholds] = useState({
     repas: 0,
     pompages: 0,
-    mictions: 0,
-    selles: 0,
+    changes: 0,
     vitamines: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -68,8 +67,7 @@ export default function NotificationsScreen() {
         const loadedThresholds = {
           repas: preferences.reminders?.thresholds?.repas ?? 0,
           pompages: preferences.reminders?.thresholds?.pompages ?? 0,
-          mictions: preferences.reminders?.thresholds?.mictions ?? 0,
-          selles: preferences.reminders?.thresholds?.selles ?? 0,
+          changes: preferences.reminders?.thresholds?.changes ?? 0,
           vitamines: preferences.reminders?.thresholds?.vitamines ?? 0,
         };
         const allDisabled = Object.values(loadedThresholds).every((value) => value === 0);
@@ -413,18 +411,11 @@ export default function NotificationsScreen() {
               (value) => updateReminders({ pompages: value })
             )}
             {renderReminderItem(
-              "Mictions",
+              "Changes",
               "Délai maximum avant rappel",
-              reminderThresholds.mictions,
+              reminderThresholds.changes,
               12,
-              (value) => updateReminders({ mictions: value })
-            )}
-            {renderReminderItem(
-              "Selles",
-              "Délai maximum avant rappel",
-              reminderThresholds.selles,
-              12,
-              (value) => updateReminders({ selles: value })
+              (value) => updateReminders({ changes: value })
             )}
             {renderReminderItem(
               "Vitamines",

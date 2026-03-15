@@ -1158,25 +1158,21 @@ export default function HomeDashboard() {
     const vitamineCount = todayStats.vitamines.count;
     const vaccinCount = todayStats.vaccins.count;
 
-    // Check for warnings
-    const mictionThresholdMs =
-      remindersEnabled && reminderThresholds.mictions > 0
-        ? reminderThresholds.mictions * 60 * 60 * 1000
-        : null;
-    const selleThresholdMs =
-      remindersEnabled && reminderThresholds.selles > 0
-        ? reminderThresholds.selles * 60 * 60 * 1000
+    // Check for warnings — single "changes" threshold covers mictions + selles
+    const changesThresholdMs =
+      remindersEnabled && reminderThresholds.changes > 0
+        ? reminderThresholds.changes * 60 * 60 * 1000
         : null;
 
     const now = currentTime.getTime();
     const mictionWarning =
-      mictionThresholdMs !== null &&
+      changesThresholdMs !== null &&
       todayStats.mictions.lastTimestamp &&
-      now - todayStats.mictions.lastTimestamp > mictionThresholdMs;
+      now - todayStats.mictions.lastTimestamp > changesThresholdMs;
     const selleWarning =
-      selleThresholdMs !== null &&
+      changesThresholdMs !== null &&
       todayStats.selles.lastTimestamp &&
-      now - todayStats.selles.lastTimestamp > selleThresholdMs;
+      now - todayStats.selles.lastTimestamp > changesThresholdMs;
 
     const isWarning = !!(mictionWarning || selleWarning);
 
@@ -1296,8 +1292,7 @@ export default function HomeDashboard() {
     getTimeSince,
     formatTime,
     remindersEnabled,
-    reminderThresholds.mictions,
-    reminderThresholds.selles,
+    reminderThresholds.changes,
     currentTime,
     canManageContent,
   ]);
@@ -1410,29 +1405,25 @@ export default function HomeDashboard() {
     }
     const warningState = warningStateRef.current[childKey];
     const now = currentTime.getTime();
-    const mictionThresholdHours = reminderThresholds.mictions || 0;
-    const selleThresholdHours = reminderThresholds.selles || 0;
-    const mictionThresholdMs =
-      mictionThresholdHours > 0 ? mictionThresholdHours * 60 * 60 * 1000 : null;
-    const selleThresholdMs =
-      selleThresholdHours > 0 ? selleThresholdHours * 60 * 60 * 1000 : null;
+    const changesThresholdHours = reminderThresholds.changes || 0;
+    const changesThresholdMs =
+      changesThresholdHours > 0 ? changesThresholdHours * 60 * 60 * 1000 : null;
 
     const mictionTs = todayStats.mictions.lastTimestamp;
     const selleTs = todayStats.selles.lastTimestamp;
     const mictionExceeded =
       remindersEnabled &&
-      mictionThresholdMs !== null &&
+      changesThresholdMs !== null &&
       !!mictionTs &&
-      now - mictionTs > mictionThresholdMs;
+      now - mictionTs > changesThresholdMs;
     const selleExceeded =
       remindersEnabled &&
-      selleThresholdMs !== null &&
+      changesThresholdMs !== null &&
       !!selleTs &&
-      now - selleTs > selleThresholdMs;
+      now - selleTs > changesThresholdMs;
     const mictionNotified = mictionTs && warningState.miction === mictionTs;
     const selleNotified = selleTs && warningState.selle === selleTs;
-    const mictionHoursLabel = `${mictionThresholdHours}h`;
-    const selleHoursLabel = `${selleThresholdHours}h`;
+    const changesHoursLabel = `${changesThresholdHours}h`;
 
     if (
       mictionExceeded &&
@@ -1441,7 +1432,7 @@ export default function HomeDashboard() {
       !selleNotified
     ) {
       showToast(
-        `⚠️ Attention: plus de ${mictionHoursLabel} depuis le dernier pipi, ${selleHoursLabel} depuis le dernier popo.`,
+        `⚠️ Attention: plus de ${changesHoursLabel} depuis le dernier pipi et popo.`,
         3200,
         "top",
       );
@@ -1452,7 +1443,7 @@ export default function HomeDashboard() {
 
     if (mictionExceeded && !mictionNotified) {
       showToast(
-        `⚠️ Attention: plus de ${mictionHoursLabel} depuis le dernier pipi.`,
+        `⚠️ Attention: plus de ${changesHoursLabel} depuis le dernier pipi.`,
         3200,
         "top",
       );
@@ -1461,7 +1452,7 @@ export default function HomeDashboard() {
 
     if (selleExceeded && !selleNotified) {
       showToast(
-        `⚠️ Attention: plus de ${selleHoursLabel} depuis le dernier popo.`,
+        `⚠️ Attention: plus de ${changesHoursLabel} depuis le dernier popo.`,
         3200,
         "top",
       );
@@ -1471,8 +1462,7 @@ export default function HomeDashboard() {
     activeChild?.id,
     currentTime,
     remindersEnabled,
-    reminderThresholds.mictions,
-    reminderThresholds.selles,
+    reminderThresholds.changes,
     todayStats.mictions.lastTimestamp,
     todayStats.selles.lastTimestamp,
     showToast,

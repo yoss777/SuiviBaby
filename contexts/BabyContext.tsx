@@ -16,7 +16,7 @@ export interface Child {
 
 const DEFAULT_REMINDERS: ReminderPreferences = {
   enabled: false,
-  thresholds: { repas: 0, pompages: 0, mictions: 0, selles: 0, vitamines: 0 },
+  thresholds: { repas: 0, pompages: 0, changes: 0, vitamines: 0 },
 };
 
 interface BabyContextType {
