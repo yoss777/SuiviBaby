@@ -365,6 +365,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /recap_history/{docId} {
+      // Lecture seule pour l'utilisateur (l'écriture est faite par la CF sendWeeklyRecap)
+      allow read: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
     // ============================================
     // CLOUD FUNCTIONS DATA (server-side only)
     // ============================================

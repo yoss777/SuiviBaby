@@ -37,7 +37,7 @@ interface NotificationPreferences {
 
 const defaultNotificationPreferences: NotificationPreferences = {
   push: true,
-  email: true,
+  email: false,
   updates: true,
   tips: true,
   marketing: false,
