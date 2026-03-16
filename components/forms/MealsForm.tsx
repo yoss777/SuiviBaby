@@ -347,7 +347,7 @@ export function MealsForm({
               : undefined,
           reaction:
             typeSolide === "autre" && nouveauAliment ? reaction : undefined,
-          aime,
+          aime: aime ?? (editData ? null : undefined),
           date: dateHeure,
         });
 

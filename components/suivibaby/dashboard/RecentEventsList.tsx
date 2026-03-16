@@ -366,39 +366,46 @@ function RecentEventsListComponent({
           const date = toDate(event.date);
           const isSolide = event.type === "solide";
           const details = buildDetails(event);
-          const solideMomentLabel = isSolide
-            ? event.momentRepas
-              ? MOMENT_REPAS_LABELS[event.momentRepas]
-              : null
+          const solideTypeLabels: Record<string, string> = {
+            puree: "Purée", compote: "Compote", cereales: "Céréales",
+            yaourt: "Yaourt", morceaux: "Morceaux", autre: "Autre",
+          };
+          const solideQtyLabels: Record<string, string> = {
+            peu: "Un peu", moyen: "Moyen", beaucoup: "Beaucoup",
+          };
+          const solideMomentLabel = isSolide && event.momentRepas
+            ? MOMENT_REPAS_LABELS[event.momentRepas] ?? null
             : null;
-          const solideQuantity = isSolide
-            ? (event.quantiteSolide ?? event.quantite)
+          const solideQtyLabel = isSolide && event.quantite
+            ? `Qté : ${solideQtyLabels[event.quantite as string] ?? ""}`
             : null;
-          const solideLine2 =
-            isSolide && (solideMomentLabel || solideQuantity)
-              ? `${solideMomentLabel ?? ""}${
-                  solideMomentLabel && solideQuantity ? " · " : ""
-                }${solideQuantity ?? ""}`
-              : null;
+          const solideTypeLabel = isSolide && event.typeSolide
+            ? solideTypeLabels[event.typeSolide] ?? null
+            : null;
+          const solideLine1Parts = [solideMomentLabel, solideTypeLabel, solideQtyLabel].filter(Boolean);
+          const solideLine2 = solideLine1Parts.length > 0 ? solideLine1Parts.join(" · ") : null;
+
           const solideDishName = isSolide
             ? event.nomNouvelAliment || event.ingredients || ""
             : "";
-          const solideLikeLabel =
-            isSolide && event.aime !== undefined
-              ? event.aime
+          const solideLikeLabel = isSolide
+            ? event.aime === undefined
+              ? solideDishName || null
+              : event.aime
                 ? solideDishName
                   ? `A aimé ce plat : ${solideDishName}`
                   : "A aimé ce plat"
                 : solideDishName
                   ? `N'a pas aimé ce plat : ${solideDishName}`
                   : "N'a pas aimé ce plat"
-              : null;
-          const solideLikeColor =
-            isSolide && event.aime !== undefined
-              ? event.aime
+            : null;
+          const solideLikeColor = isSolide
+            ? event.aime === undefined
+              ? nc.success
+              : event.aime
                 ? nc.success
                 : nc.error
-              : undefined;
+            : undefined;
 
           const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
           const elapsedMinutes = isOngoingSleep

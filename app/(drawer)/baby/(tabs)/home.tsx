@@ -756,27 +756,32 @@ export default function HomeDashboard() {
           return parts.length > 0 ? parts.join(" · ") : undefined;
         }
         case "solide": {
+          const typeLabels: Record<string, string> = {
+            puree: "Purée", compote: "Compote", cereales: "Céréales",
+            yaourt: "Yaourt", morceaux: "Morceaux", autre: "Autre",
+          };
+          const qtyLabels: Record<string, string> = {
+            peu: "Un peu", moyen: "Moyen", beaucoup: "Beaucoup",
+          };
           const momentLabel = event.momentRepas
             ? MOMENT_REPAS_LABELS[event.momentRepas]
             : null;
-          const quantity = event.quantiteSolide ?? event.quantite;
-          const line2 =
-            momentLabel || quantity
-              ? `${momentLabel ?? ""}${momentLabel && quantity ? " · " : ""}${quantity ?? ""}`
-              : null;
+          const qtyLabel = event.quantite ? `Qté : ${qtyLabels[event.quantite]}` : null;
+          const typeLabel = event.typeSolide ? typeLabels[event.typeSolide] : null;
+          const line1Parts = [momentLabel, typeLabel, qtyLabel].filter(Boolean);
+          const line1 = line1Parts.length > 0 ? line1Parts.join(" · ") : null;
           const dishName = event.nomNouvelAliment || event.ingredients || "";
-          const likeLabel =
+          const line2 =
             event.aime === undefined
-              ? null
+              ? dishName || null
               : event.aime
                 ? dishName
                   ? `A aimé ce plat : ${dishName}`
-                  : "A aimé son plat"
+                  : "A aimé ce plat"
                 : dishName
                   ? `N'a pas aimé ce plat : ${dishName}`
-                  : "N'a pas aimé le plat";
-          const line3 = likeLabel || null;
-          const parts = [line2, line3].filter(Boolean);
+                  : "N'a pas aimé ce plat";
+          const parts = [line1, line2].filter(Boolean);
           return parts.length > 0 ? parts.join("\n") : undefined;
         }
         case "tetee": {

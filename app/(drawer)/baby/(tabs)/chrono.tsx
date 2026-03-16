@@ -256,27 +256,32 @@ function buildDetails(event: Event) {
       return parts.length > 0 ? parts.join(" · ") : undefined;
     }
     case "solide": {
+      const typeLabels: Record<string, string> = {
+        puree: "Purée", compote: "Compote", cereales: "Céréales",
+        yaourt: "Yaourt", morceaux: "Morceaux", autre: "Autre",
+      };
+      const qtyLabels: Record<string, string> = {
+        peu: "Un peu", moyen: "Moyen", beaucoup: "Beaucoup",
+      };
       const momentLabel = event.momentRepas
         ? MOMENT_REPAS_LABELS[event.momentRepas]
         : null;
-      const quantity = (event as any).quantiteSolide ?? event.quantite;
-      const line2 =
-        momentLabel || quantity
-          ? `${momentLabel ?? ""}${momentLabel && quantity ? " · " : ""}${quantity ?? ""}`
-          : null;
+      const qtyLabel = event.quantite ? `Qté : ${qtyLabels[event.quantite as string]}` : null;
+      const typeLabel = event.typeSolide ? typeLabels[event.typeSolide] : null;
+      const line1Parts = [momentLabel, typeLabel, qtyLabel].filter(Boolean);
+      const line1 = line1Parts.length > 0 ? line1Parts.join(" · ") : null;
       const dishName = event.nomNouvelAliment || event.ingredients || "";
-      const likeLabel =
+      const line2 =
         event.aime === undefined
-          ? null
+          ? dishName || null
           : event.aime
             ? dishName
               ? `A aimé ce plat : ${dishName}`
-              : "A aimé son plat"
+              : "A aimé ce plat"
             : dishName
               ? `N'a pas aimé ce plat : ${dishName}`
-              : "N'a pas aimé le plat";
-      const line3 = likeLabel || null;
-      const parts = [line2, line3].filter(Boolean);
+              : "N'a pas aimé ce plat";
+      const parts = [line1, line2].filter(Boolean);
       return parts.length > 0 ? parts.join("\n") : undefined;
     }
     case "tetee": {
@@ -628,7 +633,6 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 8,
-    backgroundColor: "#f3f4f6",
   },
   cardTitleRow: {
     flexDirection: "row",
@@ -703,7 +707,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   deleteAction: {
-    backgroundColor: "#ef4444",
     justifyContent: "center",
     alignItems: "center",
     width: 80,
@@ -1020,39 +1023,46 @@ const TimelineCard = React.memo(
     const isSolide = event.type === "solide";
 
     // Build solide-specific details inline (avoids double computation with buildDetails)
-    const solideMomentLabel = isSolide
-      ? event.momentRepas
-        ? MOMENT_REPAS_LABELS[event.momentRepas]
-        : null
+    const solideTypeLabels: Record<string, string> = {
+      puree: "Purée", compote: "Compote", cereales: "Céréales",
+      yaourt: "Yaourt", morceaux: "Morceaux", autre: "Autre",
+    };
+    const solideQtyLabels: Record<string, string> = {
+      peu: "Un peu", moyen: "Moyen", beaucoup: "Beaucoup",
+    };
+    const solideMomentLabel = isSolide && event.momentRepas
+      ? MOMENT_REPAS_LABELS[event.momentRepas] ?? null
       : null;
-    const solideQuantity = isSolide
-      ? ((event as any).quantiteSolide ?? event.quantite)
+    const solideTypeLabel = isSolide && event.typeSolide
+      ? solideTypeLabels[event.typeSolide] ?? null
       : null;
-    const solideLine2 =
-      isSolide && (solideMomentLabel || solideQuantity)
-        ? `${solideMomentLabel ?? ""}${
-            solideMomentLabel && solideQuantity ? " · " : ""
-          }${solideQuantity ?? ""}`
-        : null;
+    const solideQtyLabel = isSolide && event.quantite
+      ? `Qté : ${solideQtyLabels[event.quantite as string] ?? ""}`
+      : null;
+    const solideLine1Parts = [solideMomentLabel, solideTypeLabel, solideQtyLabel].filter(Boolean);
+    const solideLine2 = solideLine1Parts.length > 0 ? solideLine1Parts.join(" · ") : null;
+
     const solideDishName = isSolide
       ? event.nomNouvelAliment || event.ingredients || ""
       : "";
-    const solideLikeLabel =
-      isSolide && event.aime !== undefined
-        ? event.aime
+    const solideLikeLabel = isSolide
+      ? event.aime === undefined
+        ? solideDishName || null
+        : event.aime
           ? solideDishName
             ? `A aimé ce plat : ${solideDishName}`
             : "A aimé ce plat"
           : solideDishName
             ? `N'a pas aimé ce plat : ${solideDishName}`
             : "N'a pas aimé ce plat"
-        : null;
-    const solideLikeColor =
-      isSolide && event.aime !== undefined
-        ? event.aime
-          ? "#16a34a"
-          : "#dc2626"
-        : undefined;
+      : null;
+    const solideLikeColor = isSolide
+      ? event.aime === undefined
+        ? "#22c55e"
+        : event.aime
+          ? "#22c55e"
+          : "#ef4444"
+      : undefined;
 
     // Non-solide details
     const details = isSolide ? undefined : buildDetails(event);
@@ -1193,7 +1203,7 @@ const TimelineCard = React.memo(
             {isJalon && event.photos?.[0] ? (
               <Image
                 source={{ uri: event.photos[0] }}
-                style={styles.cardThumb}
+                style={[styles.cardThumb, { backgroundColor: secondaryTextColor + "20" }]}
               />
             ) : null}
           </View>
@@ -1256,7 +1266,7 @@ const DeleteAction = React.memo(function DeleteAction({
 }) {
   return (
     <Pressable
-      style={styles.deleteAction}
+      style={[styles.deleteAction, { backgroundColor: "#ef4444" }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cet événement"
@@ -2529,7 +2539,7 @@ export default function ChronoScreen() {
         confirmText="Supprimer"
         backgroundColor={colors.background}
         textColor={colors.text}
-        confirmButtonColor="#dc3545"
+        confirmButtonColor={nc.error}
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
       />
