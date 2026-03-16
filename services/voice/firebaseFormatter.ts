@@ -185,6 +185,7 @@ export function commandTypeToEventType(type: CommandType): string {
     medicament: "medicament",
     symptome: "symptome",
     vaccin: "vaccin",
+    nettoyage_nez: "nettoyage_nez",
     autre: "autre",
   };
   return mapping[type] || type;

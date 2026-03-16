@@ -14,16 +14,18 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
-import { modifierSommeil, supprimerSommeil, supprimerBain } from "@/migration/eventsDoubleWriteService";
+import { modifierSommeil, supprimerSommeil, supprimerBain, supprimerNettoyageNez } from "@/migration/eventsDoubleWriteService";
 import {
   ecouterBainsHybrid,
+  ecouterNettoyageNezHybrid,
   ecouterSommeilsHybrid,
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
-import { BainEvent, SommeilEvent, supprimerEvenement } from "@/services/eventsService";
+import { BainEvent, NettoyageNezEvent, SommeilEvent, supprimerEvenement } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -190,7 +192,7 @@ const RoutinesSkeleton = React.memo(function RoutinesSkeleton({
 // TYPES
 // ============================================
 
-type RoutineEvent = (SommeilEvent | BainEvent) & { id: string };
+type RoutineEvent = (SommeilEvent | BainEvent | NettoyageNezEvent) & { id: string };
 
 type RoutineGroup = {
   date: string;
@@ -212,6 +214,11 @@ const TYPE_CONFIG: Record<
     label: "Bain",
     color: eventColors.bain.dark,
     icon: "bath",
+  },
+  nettoyage_nez: {
+    label: "Nez",
+    color: eventColors.nettoyage_nez.dark,
+    icon: "eyedropper",
   },
 };
 
@@ -272,7 +279,7 @@ export default function RoutinesScreen() {
   const [events, setEvents] = useState<RoutineEvent[]>([]);
   const [groupedEvents, setGroupedEvents] = useState<RoutineGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [loaded, setLoaded] = useState({ sommeil: false, bain: false });
+  const [loaded, setLoaded] = useState({ sommeil: false, bain: false, nez: false });
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
@@ -503,9 +510,10 @@ export default function RoutinesScreen() {
 
     let sommeilsData: RoutineEvent[] = [];
     let bainsData: RoutineEvent[] = [];
+    let nezData: RoutineEvent[] = [];
 
     const merge = () => {
-      const merged = [...sommeilsData, ...bainsData].sort(
+      const merged = [...sommeilsData, ...bainsData, ...nezData].sort(
         (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
       );
       setEvents(merged);
@@ -551,9 +559,20 @@ export default function RoutinesScreen() {
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
+    const unsubscribeNez = ecouterNettoyageNezHybrid(
+      activeChild.id,
+      (data) => {
+        nezData = data as RoutineEvent[];
+        setLoaded((prev) => ({ ...prev, nez: true }));
+        merge();
+      },
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+    );
+
     return () => {
       unsubscribeSommeils();
       unsubscribeBains();
+      unsubscribeNez();
     };
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
 
@@ -561,7 +580,7 @@ export default function RoutinesScreen() {
     if (!activeChild?.id) return;
     setEvents([]);
     setGroupedEvents([]);
-    setLoaded({ sommeil: false, bain: false });
+    setLoaded({ sommeil: false, bain: false, nez: false });
     setEmptyDelayDone(false);
     setDaysWindow(14);
     setRangeEndDate(null);
@@ -603,7 +622,7 @@ export default function RoutinesScreen() {
     const beforeDate = new Date(startOfRange.getTime() - 1);
 
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, ["sommeil", "bain"], beforeDate)
+    hasMoreEventsBeforeHybrid(activeChild.id, ["sommeil", "bain", "nettoyage_nez"], beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -630,7 +649,9 @@ export default function RoutinesScreen() {
         dotColor:
           item.type === "bain"
             ? eventColors.bain.dark
-            : eventColors.sommeil.dark,
+            : item.type === "nettoyage_nez"
+              ? eventColors.nettoyage_nez.dark
+              : eventColors.sommeil.dark,
       };
     });
     if (selectedDate) {
@@ -790,7 +811,7 @@ export default function RoutinesScreen() {
         // Clic manuel ou auto épuisé : sauter directement au prochain événement
         const nextEventDate = await getNextEventDateBeforeHybrid(
           activeChild.id,
-          ["sommeil", "bain"],
+          ["sommeil", "bain", "nettoyage_nez"],
           beforeDate,
         );
 
@@ -880,6 +901,16 @@ export default function RoutinesScreen() {
         note: event.note,
       };
     }
+    if (event.type === "nettoyage_nez") {
+      return {
+        id: event.id,
+        type: "nettoyage_nez",
+        date: toDate(event.date),
+        methode: (event as any).methode,
+        resultat: (event as any).resultat,
+        note: event.note,
+      };
+    }
     // Bain
     const bain = event as BainEvent & { id: string };
     return {
@@ -933,6 +964,8 @@ export default function RoutinesScreen() {
         try {
           if (eventType === "sommeil") {
             await supprimerSommeil(childId, eventId);
+          } else if (eventType === "nettoyage_nez") {
+            await supprimerNettoyageNez(childId, eventId);
           } else {
             await supprimerBain(childId, eventId);
           }
@@ -945,7 +978,9 @@ export default function RoutinesScreen() {
           });
           const retryDelete = eventType === "sommeil"
             ? () => supprimerSommeil(childId, eventId)
-            : () => supprimerBain(childId, eventId);
+            : eventType === "nettoyage_nez"
+              ? () => supprimerNettoyageNez(childId, eventId)
+              : () => supprimerBain(childId, eventId);
           showActionToast("Erreur lors de la suppression", "Réessayer", () => {
             retryDelete().catch(() => {
               showActionToast("Erreur lors de la suppression", "Réessayer", () => {
@@ -1021,7 +1056,7 @@ export default function RoutinesScreen() {
       const normalizedType = normalizeParam(type);
       const normalizedMode = normalizeParam(mode);
       const routineType: RoutineType =
-        normalizedType && ["bain", "sommeil"].includes(normalizedType)
+        normalizedType && ["bain", "sommeil", "nettoyage_nez"].includes(normalizedType)
           ? (normalizedType as RoutineType)
           : "sommeil";
       const sleepMode: SleepMode =
@@ -1145,6 +1180,21 @@ export default function RoutinesScreen() {
         formatDuration(duration),
         event.location,
         event.quality,
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : undefined;
+    }
+
+    if (event.type === "nettoyage_nez") {
+      const nez = event as any;
+      const methodeLabels: Record<string, string> = {
+        serum: "Sérum", mouche_bebe: "Mouche-bébé", coton: "Coton", autre: "Autre",
+      };
+      const resultatLabels: Record<string, string> = {
+        efficace: "Efficace", mucus_clair: "Clair", mucus_epais: "Épais", mucus_colore: "Coloré",
+      };
+      const parts = [
+        nez.methode ? methodeLabels[nez.methode] : null,
+        nez.resultat ? resultatLabels[nez.resultat] : null,
       ].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;
     }
@@ -1308,6 +1358,12 @@ export default function RoutinesScreen() {
               name={event.isNap ? "bed" : "moon"}
               size={14}
               color={eventColors.sommeil.dark}
+            />
+          ) : event.type === "nettoyage_nez" ? (
+            <MaterialCommunityIcons
+              name="eyedropper"
+              size={16}
+              color={config.color}
             />
           ) : (
             <FontAwesome
@@ -1535,6 +1591,16 @@ export default function RoutinesScreen() {
                   color={Colors[colorScheme].tint}
                 />
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
+                onPress={() => openAddModal("nettoyage_nez")}
+              >
+                <MaterialCommunityIcons
+                  name="eyedropper"
+                  size={16}
+                  color={Colors[colorScheme].tint}
+                />
+              </TouchableOpacity>
             </View>
           </View>
           {showCalendar && (
@@ -1698,7 +1764,9 @@ export default function RoutinesScreen() {
         message={
           deleteConfirm.event?.type === "sommeil"
             ? "Voulez-vous vraiment supprimer ce sommeil ?"
-            : "Voulez-vous vraiment supprimer ce bain ?"
+            : deleteConfirm.event?.type === "nettoyage_nez"
+              ? "Voulez-vous vraiment supprimer ce nettoyage de nez ?"
+              : "Voulez-vous vraiment supprimer ce bain ?"
         }
         confirmText="Supprimer"
         cancelText="Annuler"

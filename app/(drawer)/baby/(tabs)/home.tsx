@@ -167,6 +167,7 @@ interface DashboardData {
   vaccins: any[];
   activites: any[];
   jalons: any[];
+  nettoyagesNez: any[];
 }
 
 interface MealsStats {
@@ -462,6 +463,20 @@ function useEventEditHandler(
               note: event.note,
             },
           }),
+        nettoyage_nez: () =>
+          openSheet({
+            ownerId: headerOwnerId.current,
+            formType: "routines",
+            routineType: "nettoyage_nez",
+            editData: {
+              id: event.id,
+              type: "nettoyage_nez",
+              date: toDate(event.date),
+              methode: event.methode,
+              resultat: event.resultat,
+              note: event.note,
+            },
+          }),
         croissance: () =>
           openSheet({
             ownerId: headerOwnerId.current,
@@ -501,6 +516,7 @@ function getEditRoute(event: any): string | null {
     case "sommeil":
       return `/baby/routines?editId=${id}&returnTo=home`;
     case "bain":
+    case "nettoyage_nez":
       return `/baby/routines?editId=${id}&returnTo=home`;
     case "temperature":
     case "medicament":
@@ -579,6 +595,7 @@ export default function HomeDashboard() {
     vaccins: [],
     activites: [],
     jalons: [],
+    nettoyagesNez: [],
   });
 
   const [todayStats, setTodayStats] = useState<TodayStats>({
@@ -620,6 +637,7 @@ export default function HomeDashboard() {
     vaccins: true,
     activites: true,
     jalons: true,
+    nettoyagesNez: true,
   });
 
   // Global loaded state for entrance animations
@@ -820,6 +838,19 @@ export default function HomeDashboard() {
           ].filter(Boolean);
           return parts.length > 0 ? parts.join(" · ") : undefined;
         }
+        case "nettoyage_nez": {
+          const methodeLabels: Record<string, string> = {
+            serum: "Sérum", mouche_bebe: "Mouche-bébé", coton: "Coton", autre: "Autre",
+          };
+          const resultatLabels: Record<string, string> = {
+            efficace: "Efficace", mucus_clair: "Clair", mucus_epais: "Épais", mucus_colore: "Coloré",
+          };
+          const parts = [
+            event.methode ? methodeLabels[event.methode] : null,
+            event.resultat ? resultatLabels[event.resultat] : null,
+          ].filter(Boolean);
+          return parts.length > 0 ? parts.join(" · ") : undefined;
+        }
         case "temperature": {
           const value =
             typeof event.valeur === "number" ? `${event.valeur}°C` : undefined;
@@ -906,6 +937,7 @@ export default function HomeDashboard() {
       ...data.vaccins,
       ...data.activites,
       ...data.jalons,
+      ...data.nettoyagesNez,
     ].map((event) => ({
       ...event,
       type: event.type,
@@ -933,6 +965,7 @@ export default function HomeDashboard() {
     data.vitamines,
     data.activites,
     data.jalons,
+    data.nettoyagesNez,
     currentTime,
     toDate,
     softDeletedIds,
@@ -1701,6 +1734,7 @@ export default function HomeDashboard() {
         vaccins: false,
         activites: false,
         jalons: false,
+        nettoyagesNez: false,
       });
     } else {
       // Pas de cache, afficher le loading
@@ -1721,6 +1755,7 @@ export default function HomeDashboard() {
         vaccins: true,
         activites: true,
         jalons: true,
+        nettoyagesNez: true,
       });
     }
 
@@ -1746,6 +1781,7 @@ export default function HomeDashboard() {
           vaccins: false,
           activites: false,
           jalons: false,
+          nettoyagesNez: false,
         });
       },
       { waitForServer: true },

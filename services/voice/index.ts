@@ -15,7 +15,7 @@ export { detectAction, detectEventIdentifier, extractContextNote, splitIntoSegme
 export {
   detectBiberon, detectTetee, detectPompage, detectCouche,
   detectVitamine, detectSommeil, detectActivite, detectJalon,
-  detectCroissance, detectSolide, detectBain, detectTemperature,
+  detectCroissance, detectSolide, detectBain, detectNettoyageNez, detectTemperature,
   detectMedicament, detectSymptome, detectVaccin, ALL_DETECTORS,
 } from "./detectors";
 export { parseCommand, parseMultipleCommands, parseSegmentForAllEvents, parseSingleCommand } from "./commandParser";

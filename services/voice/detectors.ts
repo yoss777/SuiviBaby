@@ -457,6 +457,33 @@ export function detectBain(lowerText: string, rawText: string, timestampInfo: Ti
 }
 
 /**
+ * Détecte un nettoyage de nez dans le texte
+ */
+export function detectNettoyageNez(lowerText: string, rawText: string, timestampInfo: TimestampInfo): ParsedCommandResult | null {
+  if (
+    !lowerText.includes("nez") &&
+    !lowerText.includes("mouche") &&
+    !lowerText.includes("sérum") &&
+    !lowerText.includes("serum") &&
+    !lowerText.includes("moucher")
+  ) {
+    return null;
+  }
+
+  const cmd = createBaseCommand("nettoyage_nez", rawText, timestampInfo);
+
+  if (lowerText.includes("sérum") || lowerText.includes("serum") || lowerText.includes("physiologique")) {
+    cmd.methode = "serum";
+  } else if (lowerText.includes("mouche")) {
+    cmd.methode = "mouche_bebe";
+  } else if (lowerText.includes("coton") || lowerText.includes("mouchoir")) {
+    cmd.methode = "coton";
+  }
+
+  return cmd;
+}
+
+/**
  * Détecte une température dans le texte
  */
 export function detectTemperature(lowerText: string, rawText: string, timestampInfo: TimestampInfo): ParsedCommandResult | null {
@@ -620,6 +647,7 @@ export const ALL_DETECTORS = [
   detectCroissance,
   detectSolide,
   detectBain,
+  detectNettoyageNez,
   detectTemperature,
   detectMedicament,
   detectSymptome,

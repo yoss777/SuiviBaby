@@ -18,6 +18,7 @@ export type CommandType =
   | "medicament"
   | "symptome"
   | "vaccin"
+  | "nettoyage_nez"
   | "autre";
 
 // Types pour les actions (ajout, modification, suppression)
@@ -109,6 +110,11 @@ interface BainCommand extends BaseCommand {
   duree?: number;
 }
 
+interface NettoyageNezCommand extends BaseCommand {
+  type: "nettoyage_nez";
+  methode?: string;
+}
+
 interface TemperatureCommand extends BaseCommand {
   type: "temperature";
   valeur: number;
@@ -147,6 +153,7 @@ export type ParsedCommand =
   | MedicamentCommand
   | SymptomeCommand
   | VaccinCommand
+  | NettoyageNezCommand
   | BaseCommand; // pour sommeil et autre
 
 // Type générique pour le parsing (toutes les propriétés optionnelles)
@@ -184,6 +191,7 @@ export interface ParsedCommandResult extends BaseCommand {
   consistance?: string;
   couleur?: string;
   typeBiberon?: string;
+  methode?: string;
   isFuture?: boolean;
   contextNote?: string;
 }

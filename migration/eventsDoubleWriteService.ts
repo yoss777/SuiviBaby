@@ -419,6 +419,22 @@ export async function supprimerBain(childId: string, id: string) {
 }
 
 // ============================================
+// NETTOYAGE NEZ
+// ============================================
+
+export async function ajouterNettoyageNez(childId: string, data: any) {
+  return ajouterEvenement(childId, removeUndefined({ type: "nettoyage_nez", ...data }) as any);
+}
+
+export async function modifierNettoyageNez(childId: string, id: string, data: any) {
+  return modifierEvenement(childId, id, removeUndefined(data));
+}
+
+export async function supprimerNettoyageNez(childId: string, id: string) {
+  return supprimerEvenement(childId, id);
+}
+
+// ============================================
 // MÉDICAMENT
 // ============================================
 

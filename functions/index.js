@@ -3,6 +3,8 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 
 const { Expo } = require("expo-server-sdk");
+const { Resend } = require("resend");
+const { buildRecapHTML } = require("./emailTemplates");
 
 admin.initializeApp();
 
@@ -375,7 +377,7 @@ const VALID_EVENT_TYPES = [
   "biberon", "tetee", "solide", "pompage",
   "couche", "miction", "selle", "sommeil",
   "bain", "temperature", "medicament", "symptome",
-  "croissance", "vaccin", "vitamine", "activite", "jalon",
+  "croissance", "vaccin", "vitamine", "activite", "jalon", "nettoyage_nez",
 ];
 
 /**
@@ -799,6 +801,7 @@ exports.deleteUserAccount = onCall(
       deleteDocsByFieldBatched(db, "shareCodes", "createdBy", uid),
       deleteDocsByFieldBatched(db, "device_tokens", "userId", uid),
       deleteDocsByFieldBatched(db, "notification_history", "userId", uid),
+      deleteDocsByFieldBatched(db, "recap_history", "userId", uid),
     ]);
 
     // 4. Supprimer les invitations par email
@@ -1011,6 +1014,326 @@ exports.checkAndSendReminders = onSchedule(
 
     console.log(
       `checkAndSendReminders: sent=${totalSent}, skipped=${totalSkipped}, users=${prefsSnapshot.size}`
+    );
+  }
+);
+
+// ============================================
+// WEEKLY RECAP EMAIL (Scheduled)
+// ============================================
+
+/**
+ * Calcule les stats d'une semaine pour un enfant.
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string} childId
+ * @param {admin.firestore.Timestamp} weekStart
+ * @param {admin.firestore.Timestamp} weekEnd
+ */
+async function computeWeeklyStats(db, childId, weekStart, weekEnd) {
+  const eventsSnap = await db
+    .collection("events")
+    .where("childId", "==", childId)
+    .where("date", ">=", weekStart)
+    .where("date", "<=", weekEnd)
+    .orderBy("date", "desc")
+    .get();
+
+  const stats = {
+    meals: { count: 0, biberonsCount: 0, biberonsMl: 0, teteesCount: 0, teteesMinutes: 0, solidesCount: 0 },
+    sleep: { totalMinutes: 0, nightCount: 0, napCount: 0 },
+    changes: { total: 0, mictions: 0, selles: 0 },
+    pompages: { count: 0, totalMl: 0 },
+    growth: { hasData: false, weight: null, height: null, head: null },
+    health: { vitamines: 0, medicaments: 0, vaccins: 0, symptomes: 0 },
+    activities: 0,
+  };
+
+  for (const doc of eventsSnap.docs) {
+    const e = doc.data();
+    switch (e.type) {
+      case "biberon":
+        stats.meals.count++;
+        stats.meals.biberonsCount++;
+        stats.meals.biberonsMl += e.quantite || 0;
+        break;
+      case "tetee":
+        stats.meals.count++;
+        stats.meals.teteesCount++;
+        stats.meals.teteesMinutes += (e.dureeGauche || 0) + (e.dureeDroite || 0);
+        break;
+      case "solide":
+        stats.meals.count++;
+        stats.meals.solidesCount++;
+        break;
+      case "pompage":
+        stats.pompages.count++;
+        stats.pompages.totalMl += (e.quantiteGauche || 0) + (e.quantiteDroite || 0);
+        break;
+      case "miction":
+        stats.changes.total++;
+        stats.changes.mictions++;
+        break;
+      case "selle":
+        stats.changes.total++;
+        stats.changes.selles++;
+        break;
+      case "couche":
+        stats.changes.total++;
+        break;
+      case "sommeil":
+        if (e.isNap) {
+          stats.sleep.napCount++;
+        } else {
+          stats.sleep.nightCount++;
+        }
+        stats.sleep.totalMinutes += e.duree || 0;
+        break;
+      case "croissance":
+        stats.growth.hasData = true;
+        if (e.poidsKg) stats.growth.weight = e.poidsKg;
+        if (e.tailleCm) stats.growth.height = e.tailleCm;
+        if (e.teteCm) stats.growth.head = e.teteCm;
+        break;
+      case "vitamine":
+        stats.health.vitamines++;
+        break;
+      case "medicament":
+        stats.health.medicaments++;
+        break;
+      case "vaccin":
+        stats.health.vaccins++;
+        break;
+      case "symptome":
+        stats.health.symptomes++;
+        break;
+      case "activite":
+        stats.activities++;
+        break;
+    }
+  }
+
+  return stats;
+}
+
+/**
+ * Formate une date en "9 mars 2026"
+ */
+function formatDateFr(date) {
+  const months = [
+    "janvier", "février", "mars", "avril", "mai", "juin",
+    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+  ];
+  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/**
+ * sendWeeklyRecap — Envoi du récap hebdomadaire chaque lundi à 8h.
+ * Pour chaque utilisateur ayant activé l'email :
+ *   - Calcule les stats de la semaine écoulée (lundi-dimanche)
+ *   - Compare avec la semaine précédente
+ *   - Envoie un email HTML via Resend
+ */
+exports.sendWeeklyRecap = onSchedule(
+  {
+    schedule: "every monday 08:00",
+    timeZone: "Europe/Paris",
+    region: "europe-west1",
+    memory: "256MiB",
+    timeoutSeconds: 300,
+    secrets: ["RESEND_API_KEY"],
+  },
+  async () => {
+    console.log("sendWeeklyRecap: START");
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      console.error("sendWeeklyRecap: RESEND_API_KEY not configured");
+      return;
+    }
+    console.log("sendWeeklyRecap: API key OK");
+
+    const resend = new Resend(apiKey);
+    const db = admin.firestore();
+
+    // Calculer les bornes de la semaine à récapituler
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0=dim, 1=lun
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+    // Lundi de cette semaine
+    const thisMonday = new Date(now);
+    thisMonday.setDate(now.getDate() - mondayOffset);
+    thisMonday.setHours(0, 0, 0, 0);
+
+    // Si on est lundi (exécution normale), récapituler la semaine précédente
+    // Sinon (exécution forcée), récapituler la semaine courante jusqu'à maintenant
+    const isMonday = dayOfWeek === 1;
+
+    const lastMonday = new Date(thisMonday);
+    if (isMonday) {
+      lastMonday.setDate(thisMonday.getDate() - 7);
+    }
+    // sinon lastMonday = thisMonday (semaine courante)
+
+    const lastSunday = new Date(isMonday ? thisMonday : now);
+    if (isMonday) {
+      lastSunday.setDate(thisMonday.getDate() - 1);
+    }
+    lastSunday.setHours(23, 59, 59, 999);
+
+    // Semaine d'avant (pour les tendances)
+    const prevMonday = new Date(lastMonday);
+    prevMonday.setDate(lastMonday.getDate() - 7);
+
+    const prevSunday = new Date(lastMonday);
+    prevSunday.setDate(lastMonday.getDate() - 1);
+    prevSunday.setHours(23, 59, 59, 999);
+
+    console.log(`sendWeeklyRecap: date calc — now=${now.toISOString()}, dayOfWeek=${dayOfWeek}, isMonday=${isMonday}, lastMonday=${lastMonday.toISOString()}, lastSunday=${lastSunday.toISOString()}`);
+
+    const weekStart = admin.firestore.Timestamp.fromDate(lastMonday);
+    const weekEnd = admin.firestore.Timestamp.fromDate(lastSunday);
+    const prevWeekStart = admin.firestore.Timestamp.fromDate(prevMonday);
+    const prevWeekEnd = admin.firestore.Timestamp.fromDate(prevSunday);
+
+    const weekLabel = `${formatDateFr(lastMonday)} au ${formatDateFr(lastSunday)}`;
+
+    // Récupérer tous les utilisateurs avec email activé
+    const prefsSnap = await db
+      .collection("user_preferences")
+      .where("notifications.email", "==", true)
+      .get();
+
+    console.log(`sendWeeklyRecap: found ${prefsSnap.size} users with email enabled, weekLabel=${weekLabel}`);
+
+    if (prefsSnap.empty) {
+      console.log("sendWeeklyRecap: no users with email recap enabled");
+      return;
+    }
+
+    let totalSent = 0;
+    let totalSkipped = 0;
+
+    for (const prefDoc of prefsSnap.docs) {
+      const userId = prefDoc.id;
+
+      console.log(`sendWeeklyRecap: processing user ${userId}`);
+      // Récupérer l'email depuis le document utilisateur Firestore (pas Firebase Auth)
+      let userEmail;
+      try {
+        const userDoc = await db.doc(`users/${userId}`).get();
+        if (userDoc.exists) {
+          userEmail = userDoc.data().email;
+        }
+        // Fallback sur users_public si pas trouvé
+        if (!userEmail) {
+          const publicDoc = await db.doc(`users_public/${userId}`).get();
+          if (publicDoc.exists) {
+            userEmail = publicDoc.data().email;
+          }
+        }
+        if (!userEmail) {
+          console.warn(`sendWeeklyRecap: no email found for user ${userId}`);
+          totalSkipped++;
+          continue;
+        }
+      } catch (error) {
+        console.warn(`sendWeeklyRecap: error fetching email for ${userId}`, error.message);
+        totalSkipped++;
+        continue;
+      }
+
+      // Récupérer les enfants de l'utilisateur
+      const accessSnap = await db
+        .collection("user_child_access")
+        .where("userId", "==", userId)
+        .get();
+
+      for (const accessDoc of accessSnap.docs) {
+        const { childId } = accessDoc.data();
+        if (!childId) continue;
+
+        // Anti-doublon : vérifier si déjà envoyé pour cette semaine
+        const existingSnap = await db
+          .collection("recap_history")
+          .where("userId", "==", userId)
+          .where("childId", "==", childId)
+          .where("weekStart", "==", weekStart)
+          .limit(1)
+          .get();
+
+        if (!existingSnap.empty) {
+          const existingDoc = existingSnap.docs[0].data();
+          console.log(`sendWeeklyRecap: SKIP ${childId} for user ${userId} - already sent this week (docId=${existingSnap.docs[0].id}, sentAt=${existingDoc.sentAt?.toDate?.()?.toISOString()})`);
+          totalSkipped++;
+          continue;
+        }
+
+        // Récupérer le nom de l'enfant
+        const childDoc = await db.doc(`children/${childId}`).get();
+        if (!childDoc.exists) continue;
+        const childName = childDoc.data().name || "Bébé";
+
+        // Calculer les stats des deux semaines
+        const [stats, previousStats] = await Promise.all([
+          computeWeeklyStats(db, childId, weekStart, weekEnd),
+          computeWeeklyStats(db, childId, prevWeekStart, prevWeekEnd),
+        ]);
+
+        // Vérifier qu'il y a eu de l'activité cette semaine
+        const hasActivity =
+          stats.meals.count > 0 ||
+          stats.sleep.totalMinutes > 0 ||
+          stats.changes.total > 0 ||
+          stats.pompages.count > 0;
+
+        if (!hasActivity) {
+          console.log(`sendWeeklyRecap: SKIP ${childName} (${childId}) - no activity this week (meals=${stats.meals.count}, sleep=${stats.sleep.totalMinutes}, changes=${stats.changes.total})`);
+          totalSkipped++;
+          continue;
+        }
+
+        // Générer le HTML
+        const html = buildRecapHTML({
+          childName,
+          weekLabel,
+          stats,
+          previousStats,
+          unsubscribeUrl: "samaye://settings/notifications",
+        });
+
+        // Envoyer via Resend
+        console.log(`sendWeeklyRecap: sending to ${userEmail} for ${childName} (hasActivity=${hasActivity})`);
+        try {
+          const sendResult = await resend.emails.send({
+            from: "Samaye <onboarding@resend.dev>",
+            to: userEmail,
+            subject: `Récap semaine — ${childName}`,
+            html,
+          });
+          console.log(`sendWeeklyRecap: Resend response`, JSON.stringify(sendResult));
+
+          // Enregistrer dans l'historique
+          await db.collection("recap_history").add({
+            userId,
+            childId,
+            weekStart,
+            weekEnd,
+            sentAt: admin.firestore.Timestamp.now(),
+            stats,
+          });
+
+          totalSent++;
+        } catch (error) {
+          console.error(
+            `sendWeeklyRecap: error sending to ${userEmail} for ${childName}:`,
+            error.message
+          );
+        }
+      }
+    }
+
+    console.log(
+      `sendWeeklyRecap: sent=${totalSent}, skipped=${totalSkipped}, users=${prefsSnap.size}`
     );
   }
 );

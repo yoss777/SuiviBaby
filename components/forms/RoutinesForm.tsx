@@ -8,10 +8,13 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterBain,
+  ajouterNettoyageNez,
   ajouterSommeil,
   modifierBain,
+  modifierNettoyageNez,
   modifierSommeil,
   supprimerBain,
+  supprimerNettoyageNez,
   supprimerSommeil,
 } from "@/migration/eventsDoubleWriteService";
 import { obtenirEvenements, EventType } from "@/services/eventsService";
@@ -39,7 +42,7 @@ function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
 // TYPES
 // ============================================
 
-export type RoutineType = "sommeil" | "bain";
+export type RoutineType = "sommeil" | "bain" | "nettoyage_nez";
 export type SleepMode = "nap" | "night";
 export type SleepLocation =
   | "lit"
@@ -48,6 +51,8 @@ export type SleepLocation =
   | "voiture"
   | "autre";
 export type SleepQuality = "paisible" | "agité" | "mauvais";
+export type NezMethode = "serum" | "mouche_bebe" | "coton" | "autre";
+export type NezResultat = "efficace" | "mucus_clair" | "mucus_epais" | "mucus_colore";
 
 export type RoutinesEditData = {
   id: string;
@@ -63,6 +68,9 @@ export type RoutinesEditData = {
   // Bain fields
   temperatureEau?: number;
   produits?: string;
+  // Nettoyage nez fields
+  methode?: NezMethode;
+  resultat?: NezResultat;
   // Common
   note?: string;
 };
@@ -79,6 +87,7 @@ export type RoutinesFormProps = {
   onDelete?: () => void;
   // For checking if there's an ongoing sleep
   sommeilEnCours?: { id: string } | null;
+  onSheetTypeChange?: (sheetType: "nap" | "night" | "bain" | "nez") => void;
 };
 
 // ============================================
@@ -94,6 +103,20 @@ const LOCATION_OPTIONS: SleepLocation[] = [
 ];
 
 const QUALITY_OPTIONS: SleepQuality[] = ["paisible", "agité", "mauvais"];
+
+const METHODE_NEZ_OPTIONS: { value: NezMethode; label: string }[] = [
+  { value: "serum", label: "Sérum physiologique" },
+  { value: "mouche_bebe", label: "Mouche-bébé" },
+  { value: "coton", label: "Coton / mouchoir" },
+  { value: "autre", label: "Autre" },
+];
+
+const RESULTAT_NEZ_OPTIONS: { value: NezResultat; label: string }[] = [
+  { value: "efficace", label: "Efficace" },
+  { value: "mucus_clair", label: "Mucus clair" },
+  { value: "mucus_epais", label: "Mucus épais" },
+  { value: "mucus_colore", label: "Mucus coloré" },
+];
 
 // ============================================
 // HELPERS
@@ -132,6 +155,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   editData,
   onDelete,
   sommeilEnCours,
+  onSheetTypeChange,
 }) => {
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
@@ -140,22 +164,31 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
 
+  const isDark = colorScheme === "dark";
+  const chipActiveColors = isDark
+    ? { bg: "#6f42c1" + "30", border: "#b794f4", text: "#e9d8fd" }
+    : { bg: "#ede7f6", border: "#6f42c1", text: "#4c2c79" };
+
   const isEditing = !!editData;
   const isEditingBain = isEditing && editData.type === "bain";
   const isEditingSommeil = isEditing && editData.type === "sommeil";
 
+  const isEditingNez = isEditing && editData.type === "nettoyage_nez";
+
   // Determine initial sheet type
-  const getInitialSheetType = (): "nap" | "night" | "bain" => {
+  const getInitialSheetType = (): "nap" | "night" | "bain" | "nez" => {
     if (editData) {
       if (editData.type === "bain") return "bain";
+      if (editData.type === "nettoyage_nez") return "nez";
       return editData.isNap === false ? "night" : "nap";
     }
     if (initialType === "bain") return "bain";
+    if (initialType === "nettoyage_nez") return "nez";
     return initialSleepMode === "night" ? "night" : "nap";
   };
 
   // Form state
-  const [sheetType, setSheetType] = useState<"nap" | "night" | "bain">(
+  const [sheetType, setSheetType] = useState<"nap" | "night" | "bain" | "nez">(
     getInitialSheetType(),
   );
 
@@ -172,6 +205,20 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const [produits, setProduits] = useState<string>(editData?.produits ?? "");
   const [noteBain, setNoteBain] = useState<string>(
     editData?.type === "bain" ? (editData.note ?? "") : "",
+  );
+
+  // Nettoyage nez state
+  const [dateNez, setDateNez] = useState<Date>(
+    editData && editData.type === "nettoyage_nez" ? toDate(editData.date) : new Date(),
+  );
+  const [methodeNez, setMethodeNez] = useState<NezMethode | undefined>(
+    editData?.methode ?? undefined,
+  );
+  const [resultatNez, setResultatNez] = useState<NezResultat | undefined>(
+    editData?.resultat ?? undefined,
+  );
+  const [noteNez, setNoteNez] = useState<string>(
+    editData?.type === "nettoyage_nez" ? (editData.note ?? "") : "",
   );
 
   // Sommeil state
@@ -206,6 +253,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const [showTimeStart, setShowTimeStart] = useState(false);
   const [showDateEnd, setShowDateEnd] = useState(false);
   const [showTimeEnd, setShowTimeEnd] = useState(false);
+  const [showDateNez, setShowDateNez] = useState(false);
+  const [showTimeNez, setShowTimeNez] = useState(false);
 
   // Notify parent when picker visibility changes
   const handlePickerChange = useCallback(
@@ -263,17 +312,45 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     [handlePickerChange],
   );
 
+  const handleShowDateNez = useCallback(
+    (show: boolean) => {
+      setShowDateNez(show);
+      handlePickerChange(show);
+    },
+    [handlePickerChange],
+  );
+
+  const handleShowTimeNez = useCallback(
+    (show: boolean) => {
+      setShowTimeNez(show);
+      handlePickerChange(show);
+    },
+    [handlePickerChange],
+  );
+
   // ============================================
   // TYPE SELECTION
   // ============================================
 
-  const handleSelectType = (next: "nap" | "night" | "bain") => {
+  const handleSelectType = (next: "nap" | "night" | "bain" | "nez") => {
     if (isEditingBain && next !== "bain") return;
-    if (isEditingSommeil && next === "bain") return;
+    if (isEditingNez && next !== "nez") return;
+    if (isEditingSommeil && (next === "bain" || next === "nez")) return;
+
+    if (next === "nez") {
+      if (sheetType !== "nez") {
+        setDateNez(new Date());
+        setMethodeNez(undefined);
+        setResultatNez(undefined);
+        setNoteNez("");
+      }
+      setSheetType("nez");
+      onSheetTypeChange?.("nez");
+      return;
+    }
 
     if (next === "bain") {
       if (sheetType !== "bain") {
-        // Reset bain form
         setDateHeure(new Date());
         setDureeBain(10);
         setTemperatureEau(37);
@@ -281,10 +358,11 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         setNoteBain("");
       }
       setSheetType("bain");
+      onSheetTypeChange?.("bain");
       return;
     }
 
-    if (sheetType === "bain") {
+    if (sheetType === "bain" || sheetType === "nez") {
       // Reset sleep form
       setHeureDebut(new Date());
       setHeureFin(null);
@@ -295,6 +373,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     }
     setSheetType(next);
     setIsNap(next === "nap");
+    onSheetTypeChange?.(next);
   };
 
   // ============================================
@@ -307,7 +386,22 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     try {
       setIsSubmitting(true);
 
-      if (sheetType === "bain") {
+      if (sheetType === "nez") {
+        const data = removeUndefined({
+          date: dateNez,
+          methode: methodeNez ?? undefined,
+          resultat: resultatNez ?? undefined,
+          note: noteNez.trim() ? noteNez.trim() : undefined,
+        });
+
+        if (editData && editData.type === "nettoyage_nez") {
+          await modifierNettoyageNez(activeChild.id, editData.id, data);
+          showSuccess("default", "Nettoyage nez modifié");
+        } else {
+          await ajouterNettoyageNez(activeChild.id, data);
+          showSuccess("default", "Nettoyage nez ajouté");
+        }
+      } else if (sheetType === "bain") {
         const data = removeUndefined({
           date: dateHeure,
           duree: dureeBain > 0 ? dureeBain : undefined,
@@ -426,14 +520,17 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
 
-    const typeLabel = editData.type === "bain" ? "ce bain" : "ce sommeil";
+    const typeLabel = editData.type === "nettoyage_nez" ? "ce nettoyage de nez" : editData.type === "bain" ? "ce bain" : "ce sommeil";
     showConfirm(
       "Supprimer",
       `Voulez-vous vraiment supprimer ${typeLabel} ?`,
       async () => {
         try {
           setIsSubmitting(true);
-          if (editData.type === "bain") {
+          if (editData.type === "nettoyage_nez") {
+            await supprimerNettoyageNez(activeChild.id, editData.id);
+            showToast("Nettoyage nez supprimé");
+          } else if (editData.type === "bain") {
             await supprimerBain(activeChild.id, editData.id);
             showToast("Bain supprimé");
           } else {
@@ -461,21 +558,24 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         { key: "nap", label: "Sieste" },
         { key: "night", label: "Nuit" },
         { key: "bain", label: "Bain" },
+        { key: "nez", label: "Nez" },
       ].map((item) => {
         const active = sheetType === item.key;
         const isDisabled = isEditingBain
           ? item.key !== "bain"
-          : isEditingSommeil
-            ? item.key === "bain"
-            : false;
+          : isEditingNez
+            ? item.key !== "nez"
+            : isEditingSommeil
+              ? item.key === "bain" || item.key === "nez"
+              : false;
         return (
           <TouchableOpacity
             key={item.key}
             style={[
               styles.typeChip,
               {
-                backgroundColor: active ? nc.backgroundCard : nc.background,
-                borderColor: active ? "#6f42c1" : nc.border,
+                backgroundColor: active ? chipActiveColors.bg : nc.background,
+                borderColor: active ? chipActiveColors.border : nc.border,
               },
               isDisabled && styles.typeChipDisabled,
             ]}
@@ -488,7 +588,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             <Text
               style={[
                 styles.typeChipText,
-                { color: active ? "#4c2c79" : nc.textLight },
+                { color: active ? chipActiveColors.text : nc.textLight },
                 active && styles.typeChipTextActive,
               ]}
             >
@@ -515,8 +615,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               style={[
                 styles.chip,
                 {
-                  backgroundColor: location === option ? "#ede7f6" : nc.background,
-                  borderColor: location === option ? "#6f42c1" : nc.border,
+                  backgroundColor: location === option ? chipActiveColors.bg : nc.background,
+                  borderColor: location === option ? chipActiveColors.border : nc.border,
                 },
               ]}
               onPress={() =>
@@ -529,7 +629,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               <Text
                 style={[
                   styles.chipText,
-                  { color: location === option ? "#4c2c79" : nc.textLight },
+                  { color: location === option ? chipActiveColors.text : nc.textLight },
                 ]}
               >
                 {option}
@@ -548,8 +648,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               style={[
                 styles.chip,
                 {
-                  backgroundColor: quality === option ? "#ede7f6" : nc.background,
-                  borderColor: quality === option ? "#6f42c1" : nc.border,
+                  backgroundColor: quality === option ? chipActiveColors.bg : nc.background,
+                  borderColor: quality === option ? chipActiveColors.border : nc.border,
                 },
               ]}
               onPress={() =>
@@ -562,7 +662,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               <Text
                 style={[
                   styles.chipText,
-                  { color: quality === option ? "#4c2c79" : nc.textLight },
+                  { color: quality === option ? chipActiveColors.text : nc.textLight },
                 ]}
               >
                 {option}
@@ -782,6 +882,188 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               setHeureFin((prev) => {
                 const base = prev ?? new Date();
                 const next = new Date(base);
+                next.setHours(date.getHours(), date.getMinutes(), 0, 0);
+                return next;
+              });
+            }
+          }}
+        />
+      )}
+    </>
+  );
+
+  // ============================================
+  // RENDER - NETTOYAGE NEZ FORM
+  // ============================================
+
+  const renderNezForm = () => (
+    <>
+      <View style={styles.chipSection}>
+        <Text style={[styles.chipLabel, { color: nc.textLight }]}>Méthode</Text>
+        <View style={styles.chipRow}>
+          {METHODE_NEZ_OPTIONS.map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: methodeNez === option.value ? chipActiveColors.bg : nc.background,
+                  borderColor: methodeNez === option.value ? chipActiveColors.border : nc.border,
+                },
+              ]}
+              onPress={() =>
+                setMethodeNez(methodeNez === option.value ? undefined : option.value)
+              }
+              disabled={isSubmitting}
+              accessibilityLabel={option.label}
+              hitSlop={8}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  { color: methodeNez === option.value ? chipActiveColors.text : nc.textLight },
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.chipSection}>
+        <Text style={[styles.chipLabel, { color: nc.textLight }]}>Résultat</Text>
+        <View style={styles.chipRow}>
+          {RESULTAT_NEZ_OPTIONS.map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: resultatNez === option.value ? chipActiveColors.bg : nc.background,
+                  borderColor: resultatNez === option.value ? chipActiveColors.border : nc.border,
+                },
+              ]}
+              onPress={() =>
+                setResultatNez(resultatNez === option.value ? undefined : option.value)
+              }
+              disabled={isSubmitting}
+              accessibilityLabel={option.label}
+              hitSlop={8}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  { color: resultatNez === option.value ? chipActiveColors.text : nc.textLight },
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Note</Text>
+        <TextInput
+          value={noteNez}
+          onChangeText={setNoteNez}
+          placeholder="Ajouter une note"
+          placeholderTextColor={nc.textMuted}
+          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+          editable={!isSubmitting}
+        />
+      </View>
+
+      <View style={styles.dateTimeContainerWithPadding}>
+        <TouchableOpacity
+          style={[
+            styles.dateButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
+          ]}
+          onPress={() => handleShowDateNez(true)}
+          disabled={isSubmitting}
+          accessibilityLabel="Choisir la date"
+          hitSlop={8}
+        >
+          <FontAwesome5
+            name="calendar-alt"
+            size={16}
+            color={Colors[colorScheme].tint}
+          />
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.dateButton,
+            { borderColor: nc.border, backgroundColor: nc.background },
+          ]}
+          onPress={() => handleShowTimeNez(true)}
+          disabled={isSubmitting}
+          accessibilityLabel="Choisir l'heure"
+          hitSlop={8}
+        >
+          <FontAwesome5
+            name="clock"
+            size={16}
+            color={Colors[colorScheme].tint}
+          />
+          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.selectedDateTime}>
+        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
+          {dateNez.toLocaleDateString("fr-FR", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
+        </Text>
+        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
+          {dateNez.toLocaleTimeString("fr-FR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Text>
+      </View>
+
+      {showDateNez && (
+        <DateTimePicker
+          value={dateNez}
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
+          onChange={(_, date) => {
+            handleShowDateNez(false);
+            if (date) {
+              setDateNez((prev) => {
+                const next = new Date(prev);
+                next.setFullYear(
+                  date.getFullYear(),
+                  date.getMonth(),
+                  date.getDate(),
+                );
+                return next;
+              });
+            }
+          }}
+        />
+      )}
+      {showTimeNez && (
+        <DateTimePicker
+          value={dateNez}
+          mode="time"
+          is24Hour
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          themeVariant={colorScheme}
+          onChange={(_, date) => {
+            handleShowTimeNez(false);
+            if (date) {
+              setDateNez((prev) => {
+                const next = new Date(prev);
                 next.setHours(date.getHours(), date.getMinutes(), 0, 0);
                 return next;
               });
@@ -1028,7 +1310,11 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     <View style={styles.sheetContent}>
       {renderTypePicker()}
 
-      {sheetType === "bain" ? renderBainForm() : renderSommeilForm()}
+      {sheetType === "nez"
+        ? renderNezForm()
+        : sheetType === "bain"
+          ? renderBainForm()
+          : renderSommeilForm()}
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>

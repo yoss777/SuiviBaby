@@ -114,6 +114,12 @@ export const EVENT_CONFIG: Record<string, EventConfigItem> = {
     icon: { lib: "fa6", name: "star" },
     color: eventColors.jalon.dark,
   },
+  nettoyage_nez: {
+    label: "Nettoyage nez",
+    short: "Nez",
+    icon: { lib: "mci", name: "eyedropper" },
+    color: "#06b6d4",
+  },
 };
 
 // ============================================
@@ -344,6 +350,13 @@ export const QUICK_ADD_ACTIONS: QuickAddAction[] = [
     sheetParams: { formType: "routines", routineType: "bain" },
   },
   {
+    key: "nettoyage_nez",
+    label: "Nettoyage nez",
+    icon: { type: "mc", name: "eyedropper", color: "#06b6d4" },
+    route: "/baby/routines?type=nettoyage_nez&openModal=true&returnTo=home",
+    sheetParams: { formType: "routines", routineType: "nettoyage_nez" },
+  },
+  {
     key: "sommeil",
     label: "Sommeil",
     icon: { type: "fa", name: "bed", color: "#6f42c1" },
@@ -392,7 +405,7 @@ export const QUICK_ADD_CATEGORIES: QuickAddCategory[] = [
     key: "sante",
     label: "Santé & Hygiène",
     actions: QUICK_ADD_ACTIONS.filter((a) =>
-      ["miction", "selle", "vitamine", "vaccin", "temperature", "medicament", "symptome", "bain"].includes(a.key),
+      ["miction", "selle", "vitamine", "vaccin", "temperature", "medicament", "symptome", "bain", "nettoyage_nez"].includes(a.key),
     ),
   },
   {

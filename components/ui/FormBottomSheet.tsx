@@ -2,6 +2,7 @@ import { Colors } from "@/constants/theme";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
@@ -25,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export interface FormBottomSheetProps {
   title: string;
   icon?: string;
+  iconLib?: "fa6" | "mci";
   accentColor?: string;
   isEditing?: boolean;
   isSubmitting?: boolean;
@@ -48,6 +50,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
     {
       title,
       icon = "edit",
+      iconLib = "fa6",
       accentColor = "#4A90E2",
       isEditing = false,
       isSubmitting = false,
@@ -103,7 +106,11 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         >
           {/* Header */}
           <View style={styles.header}>
-            <FontAwesome name={icon} size={24} color={accentColor} />
+            {iconLib === "mci" ? (
+              <MaterialCommunityIcons name={icon as any} size={24} color={accentColor} />
+            ) : (
+              <FontAwesome name={icon} size={24} color={accentColor} />
+            )}
             <Text style={[styles.title, { color: nc.textStrong }]}>{title}</Text>
           </View>
 

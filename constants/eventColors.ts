@@ -55,6 +55,10 @@ export const eventColors = {
     dark: "#8BCF9B", // Soft green (seedling)
     light: "#e8f5eb",
   },
+  nettoyage_nez: {
+    dark: "#06b6d4", // Cyan
+    light: "#e0f7fa",
+  },
   default: {
     dark: "#6c757d", // Gray
     light: "#f8f9fa",

@@ -122,7 +122,7 @@ const FILTER_CONFIG: Record<
     label: "Routines",
     icon: "bath",
     color: "#3b82f6",
-    eventTypes: ["sommeil", "bain"],
+    eventTypes: ["sommeil", "bain", "nettoyage_nez"],
   },
   immunos: {
     label: "Santé",
@@ -325,6 +325,20 @@ function buildDetails(event: Event) {
       const parts = [
         event.duree ? `${event.duree} min` : null,
         event.temperatureEau ? `${event.temperatureEau}°C` : null,
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : undefined;
+    }
+
+    case "nettoyage_nez": {
+      const methodeLabels: Record<string, string> = {
+        serum: "Sérum", mouche_bebe: "Mouche-bébé", coton: "Coton", autre: "Autre",
+      };
+      const resultatLabels: Record<string, string> = {
+        efficace: "Efficace", mucus_clair: "Clair", mucus_epais: "Épais", mucus_colore: "Coloré",
+      };
+      const parts = [
+        event.methode ? methodeLabels[event.methode] : null,
+        event.resultat ? resultatLabels[event.resultat] : null,
       ].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;
     }
@@ -1545,6 +1559,7 @@ export default function ChronoScreen() {
     "symptome",
     "activite",
     "jalon",
+    "nettoyage_nez",
   ];
 
   // Load events with unified listener
@@ -1944,6 +1959,23 @@ export default function ChronoScreen() {
             duree: event.duree,
             temperatureEau: event.temperatureEau,
             note: event.note,
+          },
+        });
+        return;
+      }
+      if ((event as any).type === "nettoyage_nez") {
+        const nez = event as any;
+        openSheet({
+          ownerId: sheetOwnerId,
+          formType: "routines",
+          routineType: "nettoyage_nez",
+          editData: {
+            id: nez.id,
+            type: "nettoyage_nez",
+            date: eventDate,
+            methode: nez.methode,
+            resultat: nez.resultat,
+            note: nez.note,
           },
         });
         return;

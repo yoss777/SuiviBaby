@@ -44,7 +44,8 @@ export type EventType =
   | "vaccin"
   | "vitamine"
   | "activite" // Activités d'éveil
-  | "jalon"; // Jalons et moments
+  | "jalon" // Jalons et moments
+  | "nettoyage_nez"; // Nettoyage de nez
 
 export interface BaseEvent {
   id?: string;
@@ -142,6 +143,12 @@ export interface BainEvent extends BaseEvent {
   produits?: string;
 }
 
+export interface NettoyageNezEvent extends BaseEvent {
+  type: "nettoyage_nez";
+  methode?: "serum" | "mouche_bebe" | "coton" | "autre";
+  resultat?: "efficace" | "mucus_clair" | "mucus_epais" | "mucus_colore";
+}
+
 export interface TemperatureEvent extends BaseEvent {
   type: "temperature";
   valeur: number; // °C
@@ -223,7 +230,8 @@ export type Event =
   | VaccinEvent
   | VitamineEvent
   | ActiviteEvent
-  | JalonEvent;
+  | JalonEvent
+  | NettoyageNezEvent;
 
 // ============================================
 // CRUD UNIFIÉ

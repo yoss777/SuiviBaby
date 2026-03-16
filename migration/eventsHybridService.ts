@@ -162,6 +162,9 @@ export const ecouterTemperaturesHybrid = makeEcouter("temperature");
 // Bains
 export const ecouterBainsHybrid = makeEcouter("bain");
 
+// Nettoyage nez
+export const ecouterNettoyageNezHybrid = makeEcouter("nettoyage_nez");
+
 // Médicaments
 export const ecouterMedicamentsHybrid = makeEcouter("medicament");
 

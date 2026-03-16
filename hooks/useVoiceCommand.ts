@@ -28,6 +28,7 @@ import {
   modifierCroissance,
   modifierSolide,
   modifierBain,
+  modifierNettoyageNez,
   modifierTemperature,
   modifierMedicament,
   modifierSymptome,
@@ -44,6 +45,7 @@ import {
   supprimerCroissance,
   supprimerSolide,
   supprimerBain,
+  supprimerNettoyageNez,
   supprimerTemperature,
   supprimerMedicament,
   supprimerSymptome,
@@ -534,6 +536,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       medicament: "💊",
       symptome: "🤒",
       vaccin: "💉",
+      nettoyage_nez: "👃",
       autre: "📝",
     };
 
@@ -938,6 +941,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         medicament: supprimerMedicament,
         symptome: supprimerSymptome,
         vaccin: supprimerVaccin,
+        nettoyage_nez: supprimerNettoyageNez,
       };
 
       const deleteFn = deleteMap[type];
@@ -992,6 +996,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         medicament: modifierMedicament,
         symptome: modifierSymptome,
         vaccin: modifierVaccin,
+        nettoyage_nez: modifierNettoyageNez,
       };
 
       // Convertir les modifications au format Firebase

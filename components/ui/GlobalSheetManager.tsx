@@ -28,6 +28,7 @@ export const GlobalSheetManager = () => {
   const sheetRef = useRef<BottomSheet>(null);
   const [formKey, setFormKey] = useState(0);
   const [isInPicker, setIsInPicker] = useState(false);
+  const [activeRoutineSheet, setActiveRoutineSheet] = useState<"nap" | "night" | "bain" | "nez">("nap");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -36,6 +37,13 @@ export const GlobalSheetManager = () => {
       setFormKey((k) => k + 1);
       setIsInPicker(false);
       setIsSubmitting(false);
+      // Initialize routine sheet type from viewProps
+      if (viewProps && isFormSheetProps(viewProps) && isRoutinesFormProps(viewProps)) {
+        const rt = viewProps.routineType;
+        setActiveRoutineSheet(
+          rt === "bain" ? "bain" : rt === "nettoyage_nez" ? "nez" : (viewProps.sleepMode === "night" ? "night" : "nap")
+        );
+      }
       sheetRef.current?.snapToIndex(1);
     } else {
       sheetRef.current?.close();
@@ -301,22 +309,45 @@ export const GlobalSheetManager = () => {
       );
     }
 
-    // Handle routines form (sommeil, bain)
+    // Handle routines form (sommeil, bain, nettoyage_nez)
     if (isRoutinesFormProps(viewProps)) {
       const { routineType, sleepMode, editData, sommeilEnCours } = viewProps;
       const isEditing = !!editData;
-      const isBain = routineType === 'bain';
-      const title = isEditing
-        ? (isBain ? 'Modifier le bain' : 'Modifier le sommeil')
-        : (isBain ? 'Nouveau bain' : 'Nouveau sommeil');
-      const icon = isBain ? 'bath' : 'bed';
-      const accentColor = isBain ? eventColors.bain.dark : eventColors.sommeil.dark;
+
+      const getRoutineSheetInfo = (sheetType: "nap" | "night" | "bain" | "nez") => {
+        switch (sheetType) {
+          case "bain":
+            return {
+              title: isEditing ? "Modifier le bain" : "Nouveau bain",
+              icon: "bath",
+              iconLib: "fa6" as const,
+              accentColor: eventColors.bain.dark,
+            };
+          case "nez":
+            return {
+              title: isEditing ? "Modifier le soin" : "Nouveau soin",
+              icon: "eyedropper",
+              iconLib: "mci" as const,
+              accentColor: eventColors.nettoyage_nez.dark,
+            };
+          default:
+            return {
+              title: isEditing ? "Modifier le sommeil" : "Nouveau sommeil",
+              icon: "bed",
+              iconLib: "fa6" as const,
+              accentColor: eventColors.sommeil.dark,
+            };
+        }
+      };
+
+      const { title, icon, iconLib, accentColor } = getRoutineSheetInfo(activeRoutineSheet);
 
       return (
         <FormBottomSheet
           ref={sheetRef}
           title={title}
           icon={icon}
+          iconLib={iconLib}
           accentColor={accentColor}
           showActions={false}
           enablePanDownToClose={!isInPicker}
@@ -336,6 +367,7 @@ export const GlobalSheetManager = () => {
             editData={editData}
             onDelete={closeSheet}
             sommeilEnCours={sommeilEnCours}
+            onSheetTypeChange={setActiveRoutineSheet}
           />
         </FormBottomSheet>
       );
