@@ -583,6 +583,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             activeOpacity={0.7}
             onPress={() => handleSelectType(item.key as any)}
             accessibilityLabel={item.label}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
             hitSlop={8}
           >
             <Text
@@ -624,6 +626,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               }
               disabled={isSubmitting}
               accessibilityLabel={option}
+              accessibilityRole="button"
+              accessibilityState={{ selected: location === option }}
               hitSlop={8}
             >
               <Text
@@ -657,6 +661,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               }
               disabled={isSubmitting}
               accessibilityLabel={option}
+              accessibilityRole="button"
+              accessibilityState={{ selected: quality === option }}
               hitSlop={8}
             >
               <Text
@@ -916,6 +922,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               }
               disabled={isSubmitting}
               accessibilityLabel={option.label}
+              accessibilityRole="button"
+              accessibilityState={{ selected: methodeNez === option.value }}
               hitSlop={8}
             >
               <Text
@@ -949,6 +957,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               }
               disabled={isSubmitting}
               accessibilityLabel={option.label}
+              accessibilityRole="button"
+              accessibilityState={{ selected: resultatNez === option.value }}
               hitSlop={8}
             >
               <Text

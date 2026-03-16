@@ -1564,6 +1564,8 @@ export default function RoutinesScreen() {
               <TouchableOpacity
                 style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => openAddModal("sommeil", "nap")}
+                accessibilityLabel="Ajouter une sieste"
+                accessibilityRole="button"
               >
                 <FontAwesome
                   name="bed"
@@ -1574,6 +1576,8 @@ export default function RoutinesScreen() {
               <TouchableOpacity
                 style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => openAddModal("sommeil", "night")}
+                accessibilityLabel="Ajouter un sommeil nocturne"
+                accessibilityRole="button"
               >
                 <FontAwesome
                   name="moon"
@@ -1584,6 +1588,8 @@ export default function RoutinesScreen() {
               <TouchableOpacity
                 style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => openAddModal("bain")}
+                accessibilityLabel="Ajouter un bain"
+                accessibilityRole="button"
               >
                 <FontAwesome
                   name="bath"
@@ -1594,6 +1600,8 @@ export default function RoutinesScreen() {
               <TouchableOpacity
                 style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
                 onPress={() => openAddModal("nettoyage_nez")}
+                accessibilityLabel="Ajouter un nettoyage de nez"
+                accessibilityRole="button"
               >
                 <MaterialCommunityIcons
                   name="eyedropper"
