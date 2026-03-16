@@ -756,7 +756,7 @@ export default function StatsScreen() {
               size={14}
               color={nc.white}
             />
-            <Text style={styles.retryText}>Réessayer</Text>
+            <Text style={[styles.retryText, { color: nc.white }]}>Réessayer</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -918,6 +918,7 @@ const styles = StyleSheet.create({
   loaderContainer: {
     flex: 1,
     width: "100%",
+    minHeight: 300,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -948,7 +949,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   retryText: {
-    color: "#ffffff",
     fontSize: 15,
     fontWeight: "600",
   },
