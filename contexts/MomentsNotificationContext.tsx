@@ -125,7 +125,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     let unsubscribes: (() => void)[] = [];
 
     const timer = setTimeout(() => {
-      console.log('[MomentsNotification] Démarrage des listeners, lastSeen:', lastSeenTimestampRef.current);
+      console.log(`[MomentsNotification] Démarrage des listeners, lastSeen=${lastSeenTimestampRef.current}, userId=${userId}, user.uid=${user?.uid}`);
 
       // Écouter les jalons
       const jalonsQuery = query(
@@ -142,12 +142,15 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
         snapshot.docs.forEach((d) => {
           const data = d.data();
           const timestamp = getTimestamp(data.createdAt);
-          if (data.userId !== userId && timestamp > lastSeenTimestampRef.current) {
+          const hasPhotos = Array.isArray(data.photos) && data.photos.length > 0;
+          if (hasPhotos && data.userId !== userId && timestamp > lastSeenTimestampRef.current) {
             count++;
             newJalonIds.add(d.id);
+            console.log(`[MomentsNotification] NEW jalon with photo: ${d.id}, createdAt=${timestamp}, lastSeen=${lastSeenTimestampRef.current}, by=${data.userId}`);
           }
         });
 
+        console.log(`[MomentsNotification] jalons: ${count} new out of ${snapshot.size} total`);
         countsRef.current.jalons = count;
         eventIdsRef.current.jalons = newJalonIds;
         updateTotalCount();
@@ -177,6 +180,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
           }
         });
 
+        console.log(`[MomentsNotification] likes: ${count} new out of ${snapshot.size} total`);
         countsRef.current.likes = count;
         eventIdsRef.current.likesEvents = newLikeEventIds;
         updateTotalCount();
@@ -206,6 +210,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
           }
         });
 
+        console.log(`[MomentsNotification] comments: ${count} new out of ${snapshot.size} total`);
         countsRef.current.comments = count;
         eventIdsRef.current.commentsEvents = newCommentEventIds;
         updateTotalCount();

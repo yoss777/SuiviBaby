@@ -51,7 +51,7 @@ export default function MomentsScreen() {
   const { setHeaderRight } = useHeaderRight();
   const { showToast } = useToast();
   const { openSheet } = useSheet();
-  const { newEventIds, newEventTypes, markEventAsSeen } = useMomentsNotification();
+  const { newEventIds, newEventTypes, markEventAsSeen, markMomentsAsSeen } = useMomentsNotification();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const insets = useSafeAreaInsets();
@@ -105,6 +105,13 @@ export default function MomentsScreen() {
     onSuccess: handleSheetSuccess,
     canManageContent,
   });
+
+  // Marquer les moments comme vus quand on entre dans l'onglet
+  useFocusEffect(
+    useCallback(() => {
+      markMomentsAsSeen();
+    }, [markMomentsAsSeen]),
+  );
 
   // Header setup
   useFocusEffect(
