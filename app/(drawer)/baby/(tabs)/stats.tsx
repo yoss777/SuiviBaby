@@ -67,6 +67,19 @@ export default function StatsScreen() {
   const [tabWidth, setTabWidth] = useState(0);
   const underlineX = useRef(new Animated.Value(0)).current;
   const pagerRef = useRef<PagerView>(null);
+  const getThisWeekStart = useCallback(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const dayOfWeek = day === 0 ? 7 : day;
+    const d = new Date(now);
+    d.setDate(d.getDate() - (dayOfWeek - 1));
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  const [weekByTab, setWeekByTab] = useState<Record<TabKey, Date>>(() => {
+    const w = getThisWeekStart();
+    return { tetees: w, pompages: w, sommeil: w };
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -346,14 +359,25 @@ export default function StatsScreen() {
     return () => clearTimeout(timer);
   }, [isSommeilLoading, sommeils.length]);
 
-  // Weekly counts for resume cards
+  // Per-tab week change callbacks
+  const handleRepasWeekChange = useCallback((ws: Date) => {
+    setWeekByTab((prev) => ({ ...prev, tetees: ws }));
+  }, []);
+  const handlePompagesWeekChange = useCallback((ws: Date) => {
+    setWeekByTab((prev) => ({ ...prev, pompages: ws }));
+  }, []);
+  const handleSommeilWeekChange = useCallback((ws: Date) => {
+    setWeekByTab((prev) => ({ ...prev, sommeil: ws }));
+  }, []);
+
+  // Displayed week = the active tab's week
+  const displayWeek = weekByTab[selectedTab];
+
+  // Weekly counts for resume cards — synced with displayed week
   const thisWeekCounts = useMemo(() => {
-    const now = new Date();
-    const day = now.getDay();
-    const dayOfWeek = day === 0 ? 7 : day;
-    const weekStart = new Date(now);
-    weekStart.setDate(weekStart.getDate() - (dayOfWeek - 1));
-    weekStart.setHours(0, 0, 0, 0);
+    const weekStart = displayWeek;
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
 
     const toD = (d: any): Date => {
       if (d instanceof Timestamp) return d.toDate();
@@ -362,11 +386,19 @@ export default function StatsScreen() {
       return new Date(d);
     };
 
-    const repasCount = tetees.filter((t) => toD(t.date) >= weekStart).length;
-    const pompagesCount = pompages.filter((p) => toD(p.date) >= weekStart).length;
-    const sommeilCount = sommeils.filter((s) => toD(s.date) >= weekStart).length;
+    const repasCount = tetees.filter((t) => { const d = toD(t.date); return d >= weekStart && d < weekEnd; }).length;
+    const pompagesCount = pompages.filter((p) => { const d = toD(p.date); return d >= weekStart && d < weekEnd; }).length;
+    const sommeilCount = sommeils.filter((s) => { const d = toD(s.date); return d >= weekStart && d < weekEnd; }).length;
     return { repas: repasCount, pompages: pompagesCount, sommeil: sommeilCount };
-  }, [tetees, pompages, sommeils]);
+  }, [tetees, pompages, sommeils, displayWeek]);
+
+  // Week label for resume cards
+  const weekLabel = useMemo(() => {
+    const weekEnd = new Date(displayWeek);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const fmt = (d: Date) => d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    return `${fmt(displayWeek)} – ${fmt(weekEnd)}`;
+  }, [displayWeek]);
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -651,7 +683,9 @@ export default function StatsScreen() {
 
       {/* RESUME CARDS + EXPORT */}
       {!loadError && !isTeteesLoading && !isPompagesLoading && !isSommeilLoading && (
-        <View style={styles.resumeRow}>
+        <View>
+          <Text style={[styles.weekLabel, { color: nc.textMuted }]}>{weekLabel}</Text>
+          <View style={styles.resumeRow}>
           <TouchableOpacity
             style={[styles.resumeCard, { borderColor: chartColors.tetees.blue + "40" }]}
             onPress={() => handleTabChange("tetees")}
@@ -694,6 +728,7 @@ export default function StatsScreen() {
           >
             <FontAwesome name="file-pdf" size={16} color={nc.textMuted} />
           </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -755,6 +790,7 @@ export default function StatsScreen() {
                 initialTypeFilter={initialTypeFilter}
                 colorScheme={colorScheme}
                 screenWidth={screenWidth}
+                onWeekChange={handleRepasWeekChange}
               />
             )}
           </ScrollView>
@@ -780,6 +816,7 @@ export default function StatsScreen() {
                 pompages={pompages}
                 colorScheme={colorScheme}
                 screenWidth={screenWidth}
+                onWeekChange={handlePompagesWeekChange}
               />
             )}
           </ScrollView>
@@ -807,6 +844,7 @@ export default function StatsScreen() {
                 babyName={activeChild?.name}
                 colorScheme={colorScheme}
                 screenWidth={screenWidth}
+                onWeekChange={handleSommeilWeekChange}
               />
             )}
           </ScrollView>
@@ -913,6 +951,13 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "600",
+  },
+  weekLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 6,
+    textTransform: "capitalize",
   },
   resumeRow: {
     flexDirection: "row",

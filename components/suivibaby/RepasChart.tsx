@@ -41,6 +41,7 @@ type Props = {
   initialTypeFilter?: "tous" | "seins" | "biberons" | "solides";
   colorScheme?: "light" | "dark";
   screenWidth?: number;
+  onWeekChange?: (weekStart: Date) => void;
 };
 
 const DEFAULT_SCREEN_WIDTH = Dimensions.get("window").width - 40;
@@ -118,6 +119,7 @@ export default function RepasChart({
   initialTypeFilter,
   colorScheme = "light",
   screenWidth: screenWidthProp,
+  onWeekChange,
 }: Props) {
   const SCREEN_WIDTH = screenWidthProp ?? DEFAULT_SCREEN_WIDTH;
   const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
@@ -218,6 +220,10 @@ export default function RepasChart({
   useEffect(() => {
     setSelectedBarIndex(null);
   }, [currentWeek, viewMode, typeFilter]);
+
+  useEffect(() => {
+    onWeekChange?.(getStartOfWeek(currentWeek));
+  }, [currentWeek, onWeekChange]);
 
   const isEmpty = !tetees || tetees.length === 0;
 

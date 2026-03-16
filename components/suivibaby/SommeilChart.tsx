@@ -40,6 +40,7 @@ type Props = {
   babyName?: string;
   colorScheme?: "light" | "dark";
   screenWidth?: number;
+  onWeekChange?: (weekStart: Date) => void;
 };
 
 const DEFAULT_SCREEN_WIDTH = Dimensions.get("window").width - 40;
@@ -155,6 +156,7 @@ export default function SommeilChart({
   babyName,
   colorScheme = "light",
   screenWidth: screenWidthProp,
+  onWeekChange,
 }: Props) {
   const SCREEN_WIDTH = screenWidthProp ?? DEFAULT_SCREEN_WIDTH;
   const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
@@ -179,6 +181,10 @@ export default function SommeilChart({
   useEffect(() => {
     setSelectedBarIndex(null);
   }, [currentWeek]);
+
+  useEffect(() => {
+    onWeekChange?.(getStartOfWeek(currentWeek));
+  }, [currentWeek, onWeekChange]);
 
   const isEmpty = !sommeils || sommeils.length === 0;
 
