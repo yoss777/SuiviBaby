@@ -36,6 +36,8 @@ import Animated, {
 
 type Props = {
   sommeils: any[];
+  repas?: any[];
+  babyName?: string;
   colorScheme?: "light" | "dark";
   screenWidth?: number;
 };
@@ -149,6 +151,8 @@ function makeRRect(
 
 export default function SommeilChart({
   sommeils,
+  repas = [],
+  babyName,
   colorScheme = "light",
   screenWidth: screenWidthProp,
 }: Props) {
@@ -312,6 +316,106 @@ export default function SommeilChart({
   }, [sommeils, start, end]);
 
   // ============================================
+  // 5.1 CORRELATION REPAS / SOMMEIL
+  // ============================================
+  const mealSleepCorrelation = useMemo(() => {
+    if (repas.length === 0 || sommeils.length === 0) return null;
+
+    // Find nighttime sleeps this week (isNap === false)
+    const nightSleeps = sommeils.filter((s) => {
+      const d = toDate(s.date);
+      return d >= start && d < end && !s.isNap;
+    });
+    if (nightSleeps.length === 0) return null;
+
+    const results: { gap: number; quality: number }[] = [];
+    nightSleeps.forEach((sleep) => {
+      const sleepStart = sleep.heureDebut ? toDate(sleep.heureDebut) : toDate(sleep.date);
+      // Find last meal before this sleep (within 6h window)
+      const sixHoursBefore = new Date(sleepStart.getTime() - 6 * 3600000);
+      const mealsBefore = repas
+        .map((r) => ({ ...r, d: toDate(r.date) }))
+        .filter((r) => r.d >= sixHoursBefore && r.d < sleepStart)
+        .sort((a, b) => b.d.getTime() - a.d.getTime());
+
+      if (mealsBefore.length > 0) {
+        const lastMeal = mealsBefore[0];
+        const gapMinutes = (sleepStart.getTime() - lastMeal.d.getTime()) / 60000;
+        results.push({ gap: gapMinutes, quality: qualityScore(sleep.quality) });
+      }
+    });
+
+    if (results.length === 0) return null;
+    const avgGap = results.reduce((a, r) => a + r.gap, 0) / results.length;
+    const avgQuality = results.reduce((a, r) => a + r.quality, 0) / results.length;
+
+    return { avgGapMinutes: avgGap, avgQuality, sampleSize: results.length };
+  }, [repas, sommeils, start, end]);
+
+  // ============================================
+  // 5.3 WEEK-OVER-WEEK COMPARISON
+  // ============================================
+  const prevWeekStart = useMemo(() => addWeeks(start, -1), [start]);
+  const prevWeekEnd = useMemo(() => new Date(start.getTime()), [start]);
+
+  const prevWeekData = useMemo(() => {
+    const data: Record<string, { total: number }> = {};
+    jours.forEach((j) => { data[j] = { total: 0 }; });
+
+    sommeils.forEach((s) => {
+      const d = toDate(s.date);
+      if (d >= prevWeekStart && d < prevWeekEnd) {
+        const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
+        const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
+        if (data[jourKey]) {
+          data[jourKey].total += getDurationMinutes(s);
+        }
+      }
+    });
+    return data;
+  }, [sommeils, prevWeekStart, prevWeekEnd]);
+
+  const weekTrend = useMemo(() => {
+    const currentTotal = metrics.totalMinutes;
+    const prevTotal = jours.reduce((acc, j) => acc + prevWeekData[j].total, 0);
+    if (prevTotal === 0) return null;
+    const pct = Math.round(((currentTotal - prevTotal) / prevTotal) * 100);
+    return { pct, direction: pct >= 0 ? "up" : "down" as const, prevTotal };
+  }, [metrics.totalMinutes, prevWeekData]);
+
+  // ============================================
+  // 5.6 SMART SLEEP TIP
+  // ============================================
+  const smartTip = useMemo(() => {
+    if (sommeils.length === 0) return null;
+    const name = babyName || "bébé";
+
+    // Check last 3 days quality trend
+    const today = new Date();
+    const threeDaysAgo = new Date(today);
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+    const recentSleeps = sommeils
+      .filter((s) => {
+        const d = toDate(s.date);
+        return d >= threeDaysAgo && d <= today;
+      })
+      .map((s) => ({ quality: qualityScore(s.quality), date: toDate(s.date) }));
+
+    if (recentSleeps.length < 3) return null;
+
+    const avgRecent = recentSleeps.reduce((a, s) => a + s.quality, 0) / recentSleeps.length;
+
+    if (avgRecent <= 1.5) {
+      return `Le sommeil de ${name} semble agité depuis quelques jours. Vérifiez la température de la chambre (18-20°C) et le bruit ambiant.`;
+    }
+    if (avgRecent >= 2.7) {
+      return `${name} dort bien ces derniers jours ! Continuez sur ce bon rythme.`;
+    }
+    return null;
+  }, [sommeils, babyName]);
+
+  // ============================================
   // CHART BARS (stacked nuit + sieste)
   // ============================================
   const chartAreaHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
@@ -321,9 +425,10 @@ export default function SommeilChart({
   const maxMinutes = useMemo(() => {
     return Math.max(
       ...jours.map((j) => weeklyData[j].nuitMinutes + weeklyData[j].siesteMinutes),
+      ...jours.map((j) => prevWeekData[j].total),
       60, // minimum 1h scale
     );
-  }, [weeklyData]);
+  }, [weeklyData, prevWeekData]);
 
   const bars = useMemo(() => {
     return jours.map((jour, index) => {
@@ -335,6 +440,10 @@ export default function SommeilChart({
       const nuitHeight = total > 0 ? (nuit / total) * totalHeight : 0;
       const siesteHeight = total > 0 ? (sieste / total) * totalHeight : 0;
       const baseY = CHART_PADDING.top + chartAreaHeight;
+
+      // Ghost bar (prev week)
+      const prevTotal = prevWeekData[jour].total;
+      const prevHeight = maxMinutes > 0 ? (prevTotal / maxMinutes) * chartAreaHeight : 0;
 
       return {
         jour,
@@ -350,9 +459,11 @@ export default function SommeilChart({
         isMax: total === Math.max(...jours.map((j) => weeklyData[j].nuitMinutes + weeklyData[j].siesteMinutes)) && total > 0,
         nuitCount: weeklyData[jour].nuitCount,
         siesteCount: weeklyData[jour].siesteCount,
+        prevTotal,
+        prevHeight,
       };
     });
-  }, [weeklyData, barWidth, barSpacing, chartAreaHeight, maxMinutes]);
+  }, [weeklyData, prevWeekData, barWidth, barSpacing, chartAreaHeight, maxMinutes]);
 
   const yAxisLabels = useMemo(() => {
     const steps = 4;
@@ -549,7 +660,25 @@ export default function SommeilChart({
                     <View style={[styles.legendSwatch, { backgroundColor: C.lavender }]} />
                     <Text style={[styles.legendLabel, { color: C.muted }]}>Siestes</Text>
                   </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendSwatch, { backgroundColor: C.emptyBar, opacity: 0.5 }]} />
+                    <Text style={[styles.legendLabel, { color: C.muted }]}>Sem. préc.</Text>
+                  </View>
                 </View>
+                {weekTrend && (
+                  <View style={styles.trendBadge}>
+                    <FontAwesome
+                      name={weekTrend.direction === "up" ? "arrow-up" : "arrow-down"}
+                      size={10}
+                      color={weekTrend.direction === "up" ? C.qualityPaisible : C.qualityMauvais}
+                    />
+                    <Text style={[styles.trendText, {
+                      color: weekTrend.direction === "up" ? C.qualityPaisible : C.qualityMauvais,
+                    }]}>
+                      {Math.abs(weekTrend.pct)}%
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* CHART */}
@@ -591,6 +720,24 @@ export default function SommeilChart({
                         strokeWidth={1}
                       />
                     ))}
+
+                    {/* Ghost bars (prev week) */}
+                    {bars.map((bar, index) => {
+                      if (bar.prevHeight <= 0) return null;
+                      const ghostY = bar.baseY - bar.prevHeight;
+                      return (
+                        <RoundedRect
+                          key={`ghost-${index}`}
+                          x={bar.x}
+                          y={ghostY}
+                          width={bar.width}
+                          height={Math.max(bar.prevHeight, 2)}
+                          r={6}
+                          color={C.emptyBar}
+                          opacity={0.5}
+                        />
+                      );
+                    })}
 
                     {bars.map((bar, index) => {
                       if (bar.total === 0) {
@@ -878,6 +1025,31 @@ export default function SommeilChart({
                       </View>
                     </>
                   )}
+                </View>
+              )}
+
+              {/* 5.1 CORRELATION REPAS / SOMMEIL */}
+              {mealSleepCorrelation && (
+                <View style={[styles.correlationCard, { backgroundColor: C.metricBg, borderColor: C.border }]}>
+                  <FontAwesome name="utensils" size={16} color={C.lavender} />
+                  <View style={styles.correlationContent}>
+                    <Text style={[styles.correlationTitle, { color: C.ink }]}>
+                      Dernier repas avant la nuit
+                    </Text>
+                    <Text style={[styles.correlationDetail, { color: C.muted }]}>
+                      En moyenne {formatHours(mealSleepCorrelation.avgGapMinutes)} avant le coucher · Qualité {Math.round(mealSleepCorrelation.avgQuality * 10) / 10}/3
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* 5.6 SMART TIP */}
+              {smartTip && (
+                <View style={[styles.smartTipCard, { backgroundColor: C.insightBg }]}>
+                  <FontAwesome name="wand-magic-sparkles" size={14} color={C.purple} />
+                  <Text style={[styles.smartTipText, { color: C.insightText }]}>
+                    {smartTip}
+                  </Text>
                 </View>
               )}
 
@@ -1312,6 +1484,54 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   insightText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  // Trend badge
+  trendBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  trendText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  // Correlation card
+  correlationCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 16,
+  },
+  correlationContent: {
+    flex: 1,
+  },
+  correlationTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  correlationDetail: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  // Smart tip
+  smartTipCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  smartTipText: {
+    flex: 1,
     fontSize: 13,
     lineHeight: 18,
   },

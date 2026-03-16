@@ -46,6 +46,7 @@
     "expo-local-authentication": "~16.0.5",
     "expo-media-library": "~17.1.7",
     "expo-notifications": "~0.31.4",
+    "expo-print": "~14.1.4",
     "expo-router": "~5.1.5",
     "expo-secure-store": "~14.2.4",
     "expo-sharing": "~13.1.5",

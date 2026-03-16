@@ -304,12 +304,12 @@ Phase 6 (validation)           ~1h   — audit matrice
 - P25 Touch targets : ✅ (hitSlop ajoute sur buttons)
 - **TypeScript : 0 erreurs**
 
-### Phase 5 — Propositions complementaires : EN ATTENTE
-- [ ] 5.1 Correlation repas/sommeil
-- [ ] 5.2 Export PDF rapport hebdo
-- [ ] 5.3 Comparaison semaine N vs N-1
-- [ ] 5.4 Mode resume condense
-- [ ] 5.5 Swipe horizontal entre tabs
-- [ ] 5.6 Notification intelligente sommeil
+### Phase 5 — Propositions complementaires : FAIT ✅
+- [x] 5.1 Correlation repas/sommeil — card "Dernier repas avant la nuit" avec gap moyen et qualite
+- [x] 5.2 Export PDF — bouton PDF dans resume row, genere HTML+PDF via expo-print, partage via expo-sharing
+- [x] 5.3 Comparaison semaine N vs N-1 — ghost bars (opacity 0.5) + badge tendance % (fleche haut/bas)
+- [x] 5.4 Mode resume — 3 mini-cards (repas/pompages/sommeil) avec count total, tap = navigation vers tab
+- [x] 5.5 Swipe horizontal — PagerView remplace le fade, dots indicator en bas, haptic sur swipe
+- [x] 5.6 Smart tip sommeil — detecte 3 jours agites consecutifs, affiche conseil contextuel avec prenom
 
 *Derniere mise a jour : 2026-03-16*
