@@ -958,7 +958,7 @@ export default function RepasChart({
                 ]}
               >
                 <Text style={[styles.metricLabel, { color: C.muted }]}>
-                  Total lait
+                  Total biberons
                 </Text>
                 <Text style={[styles.metricValue, { color: C.blueDeep }]}>
                   {totalWeekQuantity} ml
@@ -1410,7 +1410,7 @@ export default function RepasChart({
                     {totalWeekQuantity} ml
                   </Text>
                   <Text style={[styles.statLabel, { color: C.muted }]}>
-                    Total lait
+                    Total biberons
                   </Text>
                 </View>
               </View>
@@ -1519,7 +1519,7 @@ export default function RepasChart({
                 </Text>
                 <Text style={[styles.insightText, { color: C.insightText }]}>
                   {typeFilter === "tous"
-                    ? `Cette semaine: ${totalSeinsCount} tétée${totalSeinsCount > 1 ? "s" : ""} au sein, ${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s" : ""}${totalSolidesCount > 0 ? `, ${totalSolidesCount} solide${totalSolidesCount > 1 ? "s" : ""}` : ""} (${totalWeekQuantity} ml de lait). ${
+                    ? `Cette semaine: ${totalSeinsCount} tétée${totalSeinsCount > 1 ? "s" : ""} au sein, ${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s" : ""}${totalWeekQuantity > 0 ? ` (${totalWeekQuantity} ml)` : ""}${totalSolidesCount > 0 ? `, ${totalSolidesCount} solide${totalSolidesCount > 1 ? "s" : ""}` : ""}. ${
                         (() => {
                           const max = Math.max(totalSeinsCount, totalBiberonsCount, totalSolidesCount);
                           if (max === 0) return "";
@@ -1544,7 +1544,7 @@ export default function RepasChart({
                           }${newFoodsThisWeek.length > 0 ? `${newFoodsThisWeek.length} nouvel${newFoodsThisWeek.length > 1 ? "les" : ""} introduction${newFoodsThisWeek.length > 1 ? "s" : ""} alimentaire${newFoodsThisWeek.length > 1 ? "s" : ""}. ` : ""}${
                             reactionsThisWeek > 0 ? `⚠️ ${reactionsThisWeek} réaction${reactionsThisWeek > 1 ? "s" : ""} notée${reactionsThisWeek > 1 ? "s" : ""}.` : ""
                           }`
-                        : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s au total" : ""}). Moyenne de ${dailyAverageQuantity} ml par jour.`}
+                        : `${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s" : ""} cette semaine${totalWeekQuantity > 0 ? ` (${totalWeekQuantity} ml au total)` : ""}. Moyenne de ${dailyAverageCount} par jour${dailyAverageQuantity > 0 ? `, ${dailyAverageQuantity} ml/jour` : ""}.`}
                 </Text>
               </View>
             </View>
