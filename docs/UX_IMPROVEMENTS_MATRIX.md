@@ -102,8 +102,11 @@ Aucun gap restant — tous les écrans sont à 100%.
 
 | ID | Amélioration | SE | AB | SC | ST | MA | Statut |
 |----|-------------|----|----|----|----|----|----|
+| P1 | Skeleton shimmer loading | n/a | n/a | n/a | ✅ | n/a | 1/1 |
+| P3 | Enhanced empty state | n/a | n/a | n/a | ✅ | n/a | 1/1 |
 | P6 | Toast on action success | ✅ | ✅ | ✅ | n/a | ✅ | 4/4 |
 | P8b | Haptic feedback | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
+| P9b | Pull-to-refresh | n/a | n/a | n/a | ✅ | n/a | 1/1 |
 | P12b | Error boundary / try-catch | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
 | P14a | nc.* design tokens | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
 | P15a | Accessibility labels | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
@@ -115,7 +118,7 @@ Aucun gap restant — tous les écrans sont à 100%.
 | P22 | Realtime auto-refresh | ✅ | n/a | ✅ | ✅ | ✅ | 4/4 |
 | P25 | Touch targets 44px | ✅ | ✅ | ✅ | ✅ | ✅ | 5/5 |
 
-**Score utilitaires : 57/57 applicables** (100%)
+**Score utilitaires : 60/60 applicables** (100%)
 
 ## Écrans Settings (sous-écrans de Paramètres)
 
@@ -281,5 +284,5 @@ Aucun gap restant — tous les écrans sont à 100%.
 
 ## Score
 
-**728/728 applicables déployés** (100%)
-(401 tabs/sous-écrans + 57 utilitaires drawer + 134 settings + 20/20 auth + 44 autres composants + 72/72 formulaires = 728/728 total)
+**731/731 applicables déployés** (100%)
+(401 tabs/sous-écrans + 60 utilitaires drawer + 134 settings + 20/20 auth + 44 autres composants + 72/72 formulaires = 731/731 total)

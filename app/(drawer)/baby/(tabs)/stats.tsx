@@ -1,5 +1,6 @@
 import PompagesChart from "@/components/suivibaby/PompagesChart";
 import RepasChart from "@/components/suivibaby/RepasChart";
+import SommeilChart from "@/components/suivibaby/SommeilChart";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { Colors } from "@/constants/theme";
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
@@ -9,6 +10,7 @@ import {
   ecouterBiberonsHybrid as ecouterBiberons,
   ecouterPompagesHybrid as ecouterPompages,
   ecouterSolidesHybrid as ecouterSolides,
+  ecouterSommeilsHybrid as ecouterSommeils,
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -30,6 +32,14 @@ import {
 } from "react-native";
 import { useHeaderLeft } from "../../_layout";
 
+type TabKey = "tetees" | "pompages" | "sommeil";
+
+const TAB_CONFIG: { key: TabKey; icon: string; label: string; a11yLabel: string; a11yHint: string }[] = [
+  { key: "tetees", icon: "utensils", label: "Repas", a11yLabel: "Onglet Repas", a11yHint: "Afficher les statistiques des repas" },
+  { key: "pompages", icon: "pump-medical", label: "Pompages", a11yLabel: "Onglet Pompages", a11yHint: "Afficher les statistiques des pompages" },
+  { key: "sommeil", icon: "bed", label: "Sommeil", a11yLabel: "Onglet Sommeil", a11yHint: "Afficher les statistiques du sommeil" },
+];
+
 export default function StatsScreen() {
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
@@ -40,15 +50,16 @@ export default function StatsScreen() {
   const { setHeaderLeft } = useHeaderLeft();
   const [tetees, setTetees] = useState<any[]>([]);
   const [pompages, setPompages] = useState<any[]>([]);
+  const [sommeils, setSommeils] = useState<any[]>([]);
   const [teteesLoaded, setTeteesLoaded] = useState(false);
   const [biberonsLoaded, setBiberonsLoaded] = useState(false);
   const [solidesLoaded, setSolidesLoaded] = useState(false);
   const [pompagesLoaded, setPompagesLoaded] = useState(false);
+  const [sommeilLoaded, setSommeilLoaded] = useState(false);
   const [teteesEmptyDelayDone, setTeteesEmptyDelayDone] = useState(false);
   const [pompagesEmptyDelayDone, setPompagesEmptyDelayDone] = useState(false);
-  const [selectedTab, setSelectedTab] = useState<"tetees" | "pompages">(
-    "tetees",
-  );
+  const [sommeilEmptyDelayDone, setSommeilEmptyDelayDone] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<TabKey>("tetees");
   const [tabWidth, setTabWidth] = useState(0);
   const underlineX = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -78,6 +89,8 @@ export default function StatsScreen() {
   useEffect(() => {
     if (rawTab === "pompages") {
       setSelectedTab("pompages");
+    } else if (rawTab === "sommeil") {
+      setSelectedTab("sommeil");
     } else {
       setSelectedTab("tetees");
     }
@@ -85,7 +98,8 @@ export default function StatsScreen() {
 
   useEffect(() => {
     if (tabWidth === 0) return;
-    const target = selectedTab === "pompages" ? tabWidth : 0;
+    const tabIndex = TAB_CONFIG.findIndex((t) => t.key === selectedTab);
+    const target = tabIndex * tabWidth;
     Animated.timing(underlineX, {
       toValue: target,
       duration: 220,
@@ -93,7 +107,7 @@ export default function StatsScreen() {
     }).start();
   }, [selectedTab, tabWidth, underlineX]);
 
-  const handleTabChange = (tab: "tetees" | "pompages") => {
+  const handleTabChange = (tab: TabKey) => {
     if (tab === selectedTab) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     fadeAnim.stopAnimation(() => {
@@ -170,6 +184,7 @@ export default function StatsScreen() {
     setBiberonsLoaded(true);
     setSolidesLoaded(true);
     setPompagesLoaded(true);
+    setSommeilLoaded(true);
   }, []);
 
   // écoute en temps réel des tetees, biberons ET solides
@@ -244,29 +259,48 @@ export default function StatsScreen() {
     return () => unsubscribePompages();
   }, [activeChild, refreshKey, handleListenerError]);
 
+  // écoute en temps réel du sommeil
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    const unsubscribeSommeils = ecouterSommeils(
+      activeChild.id,
+      (data) => {
+        setSommeils(data);
+        setSommeilLoaded(true);
+      },
+      { waitForServer: true },
+      handleListenerError,
+    );
+    return () => unsubscribeSommeils();
+  }, [activeChild, refreshKey, handleListenerError]);
+
   useEffect(() => {
     if (!activeChild?.id) return;
     setTetees([]);
     setPompages([]);
+    setSommeils([]);
     setTeteesLoaded(false);
     setBiberonsLoaded(false);
     setSolidesLoaded(false);
     setPompagesLoaded(false);
+    setSommeilLoaded(false);
     setTeteesEmptyDelayDone(false);
     setPompagesEmptyDelayDone(false);
+    setSommeilEmptyDelayDone(false);
     setLoadError(null);
   }, [activeChild?.id]);
 
   const isTeteesLoading = !(teteesLoaded && biberonsLoaded && solidesLoaded);
   const isPompagesLoading = !pompagesLoaded;
+  const isSommeilLoading = !sommeilLoaded;
 
   // End refresh spinner when ALL data arrives (tab-agnostic to avoid stuck spinner)
   useEffect(() => {
     if (!isRefreshing) return;
-    if (!isTeteesLoading && !isPompagesLoading) {
+    if (!isTeteesLoading && !isPompagesLoading && !isSommeilLoading) {
       setIsRefreshing(false);
     }
-  }, [isRefreshing, isTeteesLoading, isPompagesLoading]);
+  }, [isRefreshing, isTeteesLoading, isPompagesLoading, isSommeilLoading]);
 
   useEffect(() => {
     if (isTeteesLoading) {
@@ -294,12 +328,26 @@ export default function StatsScreen() {
     return () => clearTimeout(timer);
   }, [isPompagesLoading, pompages.length]);
 
+  useEffect(() => {
+    if (isSommeilLoading) {
+      setSommeilEmptyDelayDone(false);
+      return;
+    }
+    if (sommeils.length > 0) {
+      setSommeilEmptyDelayDone(true);
+      return;
+    }
+    const timer = setTimeout(() => setSommeilEmptyDelayDone(true), 300);
+    return () => clearTimeout(timer);
+  }, [isSommeilLoading, sommeils.length]);
+
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     setTeteesLoaded(false);
     setBiberonsLoaded(false);
     setSolidesLoaded(false);
     setPompagesLoaded(false);
+    setSommeilLoaded(false);
     setLoadError(null);
     setRefreshKey((k) => k + 1);
   }, []);
@@ -310,64 +358,60 @@ export default function StatsScreen() {
     [fadeAnim],
   );
 
-  // Refresh tint color: use chart accent instead of generic tint
+  // Refresh tint color: use chart accent per tab
   const refreshTintColor =
     selectedTab === "tetees"
       ? chartColors.tetees.blue
-      : chartColors.pompages.green;
+      : selectedTab === "pompages"
+        ? chartColors.pompages.green
+        : chartColors.sommeil.purple;
 
   return (
     <View style={[styles.container, { backgroundColor: nc.background }]}>
-      {/* BOUTONS DE SÉLECTION */}
+      {/* BOUTONS DE SÉLECTION (icônes) */}
       <View
         style={styles.tabContainer}
         onLayout={(event) => {
-          const width = Math.floor(event.nativeEvent.layout.width / 2);
+          const width = Math.floor(event.nativeEvent.layout.width / TAB_CONFIG.length);
           if (width !== tabWidth) setTabWidth(width);
         }}
         accessibilityRole="tablist"
       >
-        <TouchableOpacity
-          style={styles.tabButton}
-          onPress={() => handleTabChange("tetees")}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: selectedTab === "tetees" }}
-          accessibilityLabel="Onglet Repas"
-          accessibilityHint="Afficher les statistiques des repas"
-        >
-          <Text
-            style={[
-              styles.tabText,
-              { color: nc.textLight },
-              selectedTab === "tetees" && {
-                color: Colors[colorScheme].tint,
-              },
-            ]}
-          >
-            Repas
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabButton}
-          onPress={() => handleTabChange("pompages")}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: selectedTab === "pompages" }}
-          accessibilityLabel="Onglet Pompages"
-          accessibilityHint="Afficher les statistiques des pompages"
-        >
-          <Text
-            style={[
-              styles.tabText,
-              { color: nc.textLight },
-              selectedTab === "pompages" && {
-                color: Colors[colorScheme].tint,
-              },
-            ]}
-          >
-            Pompages
-          </Text>
-        </TouchableOpacity>
+        {TAB_CONFIG.map((tabItem) => {
+          const isActive = selectedTab === tabItem.key;
+          const activeColor =
+            tabItem.key === "tetees"
+              ? chartColors.tetees.blue
+              : tabItem.key === "pompages"
+                ? chartColors.pompages.green
+                : chartColors.sommeil.purple;
+          return (
+            <TouchableOpacity
+              key={tabItem.key}
+              style={styles.tabButton}
+              onPress={() => handleTabChange(tabItem.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              accessibilityLabel={tabItem.a11yLabel}
+              accessibilityHint={tabItem.a11yHint}
+            >
+              <FontAwesome
+                name={tabItem.icon}
+                size={22}
+                color={isActive ? activeColor : nc.textMuted}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  { color: nc.textMuted },
+                  isActive && { color: activeColor, fontWeight: "700" },
+                ]}
+              >
+                {tabItem.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
         {tabWidth > 0 && (
           <Animated.View
             pointerEvents="none"
@@ -376,7 +420,12 @@ export default function StatsScreen() {
               {
                 width: tabWidth,
                 transform: [{ translateX: underlineX }],
-                backgroundColor: Colors[colorScheme].tint,
+                backgroundColor:
+                  selectedTab === "tetees"
+                    ? chartColors.tetees.blue
+                    : selectedTab === "pompages"
+                      ? chartColors.pompages.green
+                      : chartColors.sommeil.purple,
               },
             ]}
           />
@@ -411,13 +460,14 @@ export default function StatsScreen() {
                   { backgroundColor: refreshTintColor },
                 ]}
                 onPress={handleRefresh}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
                 accessibilityLabel="Réessayer le chargement"
               >
                 <FontAwesome
                   name="arrows-rotate"
                   size={14}
-                  color="#ffffff"
+                  color={nc.white}
                 />
                 <Text style={styles.retryText}>Réessayer</Text>
               </TouchableOpacity>
@@ -451,6 +501,19 @@ export default function StatsScreen() {
                   />
                 )}
               </View>
+              <View style={[styles.tabPanel, selectedTab !== "sommeil" && styles.hiddenTab]}>
+                {isSommeilLoading || !sommeilEmptyDelayDone ? (
+                  <View style={styles.loaderContainer}>
+                    <IconPulseDots color={chartColors.sommeil.purple} />
+                  </View>
+                ) : (
+                  <SommeilChart
+                    sommeils={sommeils}
+                    colorScheme={colorScheme}
+                    screenWidth={screenWidth}
+                  />
+                )}
+              </View>
             </>
           )}
         </Animated.View>
@@ -467,25 +530,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     marginHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 8,
     marginBottom: 10,
     position: "relative",
   },
   tabButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 12,
     flex: 1,
     alignItems: "center",
+    gap: 4,
   },
-  tabText: {
-    fontSize: 16,
+  tabLabel: {
+    fontSize: 10,
     fontWeight: "600",
     textAlign: "center",
   },
   tabUnderline: {
     position: "absolute",
-    bottom: 4,
+    bottom: 0,
     left: 0,
     height: 2,
     borderRadius: 2,
@@ -493,6 +557,7 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
     alignItems: "center",
+    paddingBottom: 80,
   },
   loaderContainer: {
     flex: 1,

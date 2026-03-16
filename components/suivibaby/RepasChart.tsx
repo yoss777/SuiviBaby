@@ -49,6 +49,38 @@ const CHART_PADDING = { top: 18, right: 18, bottom: 46, left: 50 };
 
 const TAP_HINT_KEY = "tetees_chart_tap_hint_shown";
 
+const SOLIDE_TYPES = ["puree", "compote", "cereales", "yaourt", "morceaux", "autre"] as const;
+type SolideType = (typeof SOLIDE_TYPES)[number];
+const SOLIDE_LABELS: Record<SolideType, string> = {
+  puree: "Purées",
+  compote: "Compotes",
+  cereales: "Céréales",
+  yaourt: "Yaourts",
+  morceaux: "Morceaux",
+  autre: "Autre",
+};
+
+function getSolideColors(scheme: "light" | "dark"): Record<SolideType, string> {
+  if (scheme === "dark") {
+    return {
+      puree: "#fb923c",
+      compote: "#f87171",
+      cereales: "#fbbf24",
+      yaourt: "#a78bfa",
+      morceaux: "#f97316",
+      autre: "#9ca3af",
+    };
+  }
+  return {
+    puree: "#E89A5A",
+    compote: "#E8785A",
+    cereales: "#D4A574",
+    yaourt: "#A78BFA",
+    morceaux: "#C97B3A",
+    autre: "#9ca3af",
+  };
+}
+
 function getStartOfWeek(date: Date) {
   const d = new Date(date);
   const day = d.getDay();
@@ -207,73 +239,29 @@ export default function RepasChart({
     return false;
   });
 
-  const weeklyData: Record<
-    string,
-    {
-      quantity: number;
-      count: number;
-      seinsCount: number;
-      biberonsCount: number;
-      biberonsQuantity: number;
-      solidesCount: number;
-    }
-  > = {
-    Lun: {
-      quantity: 0,
-      count: 0,
-      seinsCount: 0,
-      biberonsCount: 0,
-      biberonsQuantity: 0,
-      solidesCount: 0,
-    },
-    Mar: {
-      quantity: 0,
-      count: 0,
-      seinsCount: 0,
-      biberonsCount: 0,
-      biberonsQuantity: 0,
-      solidesCount: 0,
-    },
-    Mer: {
-      quantity: 0,
-      count: 0,
-      seinsCount: 0,
-      biberonsCount: 0,
-      biberonsQuantity: 0,
-      solidesCount: 0,
-    },
-    Jeu: {
-      quantity: 0,
-      count: 0,
-      seinsCount: 0,
-      biberonsCount: 0,
-      biberonsQuantity: 0,
-      solidesCount: 0,
-    },
-    Ven: {
-      quantity: 0,
-      count: 0,
-      seinsCount: 0,
-      biberonsCount: 0,
-      biberonsQuantity: 0,
-      solidesCount: 0,
-    },
-    Sam: {
-      quantity: 0,
-      count: 0,
-      seinsCount: 0,
-      biberonsCount: 0,
-      biberonsQuantity: 0,
-      solidesCount: 0,
-    },
-    Dim: {
-      quantity: 0,
-      count: 0,
-      seinsCount: 0,
-      biberonsCount: 0,
-      biberonsQuantity: 0,
-      solidesCount: 0,
-    },
+  const solideColors = useMemo(() => getSolideColors(colorScheme), [colorScheme]);
+
+  type DayData = {
+    quantity: number;
+    count: number;
+    seinsCount: number;
+    biberonsCount: number;
+    biberonsQuantity: number;
+    solidesCount: number;
+    solidesByType: Record<SolideType, number>;
+  };
+  const emptyDay = (): DayData => ({
+    quantity: 0,
+    count: 0,
+    seinsCount: 0,
+    biberonsCount: 0,
+    biberonsQuantity: 0,
+    solidesCount: 0,
+    solidesByType: { puree: 0, compote: 0, cereales: 0, yaourt: 0, morceaux: 0, autre: 0 },
+  });
+  const weeklyData: Record<string, DayData> = {
+    Lun: emptyDay(), Mar: emptyDay(), Mer: emptyDay(), Jeu: emptyDay(),
+    Ven: emptyDay(), Sam: emptyDay(), Dim: emptyDay(),
   };
 
   filteredTetees.forEach((t) => {
@@ -294,6 +282,9 @@ export default function RepasChart({
           weeklyData[jourKey].quantity += quantite;
         } else if (type === "solide") {
           weeklyData[jourKey].solidesCount += 1;
+          const ts = (t.typeSolide || "autre") as SolideType;
+          const validTs = SOLIDE_TYPES.includes(ts) ? ts : "autre";
+          weeklyData[jourKey].solidesByType[validTs] += 1;
         }
       }
     }
@@ -371,6 +362,44 @@ export default function RepasChart({
     ...jours.map((j) => weeklyData[j].solidesCount),
     0,
   );
+
+  // Solide type totals for the week
+  const solideTypeTotals = useMemo(() => {
+    const totals: Record<SolideType, number> = { puree: 0, compote: 0, cereales: 0, yaourt: 0, morceaux: 0, autre: 0 };
+    jours.forEach((j) => {
+      SOLIDE_TYPES.forEach((st) => {
+        totals[st] += weeklyData[j].solidesByType[st];
+      });
+    });
+    return totals;
+  }, [weeklyData]);
+
+  // New foods introduced this week
+  const newFoodsThisWeek = useMemo(() => {
+    return filteredTetees.filter((t) => {
+      if (t.type !== "solide") return false;
+      const d = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
+      return d >= start && d < end && t.nouveauAliment;
+    });
+  }, [filteredTetees, start, end]);
+
+  // Favorite solide type
+  const favoriteSolideType = useMemo(() => {
+    const entries = Object.entries(solideTypeTotals).filter(([_, v]) => v > 0) as [SolideType, number][];
+    if (entries.length === 0) return null;
+    entries.sort((a, b) => b[1] - a[1]);
+    return entries[0][0];
+  }, [solideTypeTotals]);
+
+  // Reactions this week
+  const reactionsThisWeek = useMemo(() => {
+    return filteredTetees.filter((t) => {
+      if (t.type !== "solide") return false;
+      const d = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
+      return d >= start && d < end && t.reaction && t.reaction !== "aucune";
+    }).length;
+  }, [filteredTetees, start, end]);
+
   const groupedMax = Math.max(maxSeinsCount, maxBiberonsCount, maxSolidesCount, 0);
   const currentValues = viewMode === "quantity" ? quantityValues : countValues;
   const isGrouped =
@@ -452,6 +481,34 @@ export default function RepasChart({
         };
       }
 
+      // Solides stacked by typeSolide
+      if (typeFilter === "solides" && value > 0) {
+        const byType = weeklyData[jour].solidesByType;
+        const barHeight = currentMax > 0 ? (value / currentMax) * chartAreaHeight : 0;
+        const baseY = CHART_PADDING.top + chartAreaHeight;
+        const solideSegments: { type: SolideType; height: number; color: string }[] = [];
+        SOLIDE_TYPES.forEach((st) => {
+          if (byType[st] > 0) {
+            solideSegments.push({
+              type: st,
+              height: (byType[st] / value) * barHeight,
+              color: solideColors[st],
+            });
+          }
+        });
+
+        return {
+          jour,
+          value,
+          x,
+          width: barWidth,
+          y: baseY - barHeight,
+          height: Math.max(barHeight, 2),
+          isMax: value === currentMax && value > 0,
+          solideSegments,
+        };
+      }
+
       const barHeight =
         currentMax > 0 ? (value / currentMax) * chartAreaHeight : 0;
       const y = CHART_PADDING.top + (chartAreaHeight - barHeight);
@@ -492,6 +549,7 @@ export default function RepasChart({
     isStacked,
     typeFilter,
     weeklyData,
+    solideColors,
     C,
   ]);
 
@@ -907,6 +965,18 @@ export default function RepasChart({
               </TouchableOpacity>
             </View>
           )}
+          {typeFilter === "solides" && totalSolidesCount > 0 && (
+            <View style={styles.legendRow}>
+              <View style={[styles.legendList, { flexWrap: "wrap" }]}>
+                {SOLIDE_TYPES.filter((st) => solideTypeTotals[st] > 0).map((st) => (
+                  <View key={st} style={styles.legendItem}>
+                    <View style={[styles.legendSwatch, { backgroundColor: solideColors[st] }]} />
+                    <Text style={[styles.legendLabel, { color: C.muted }]}>{SOLIDE_LABELS[st]}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
 
           <View style={styles.chartContainer}>
             <View style={styles.yAxisContainer}>
@@ -1051,6 +1121,36 @@ export default function RepasChart({
                     );
                   }
 
+                  // Solides stacked by typeSolide
+                  if ("solideSegments" in bar && bar.solideSegments) {
+                    const baseY = CHART_PADDING.top + chartAreaHeight;
+                    const segs = bar.solideSegments as { type: string; height: number; color: string }[];
+                    const visibleSegs: { y: number; h: number; color: string }[] = [];
+                    let curY = baseY;
+                    segs.forEach((seg) => {
+                      curY -= seg.height;
+                      visibleSegs.push({ y: curY, h: Math.max(seg.height, 1), color: seg.color });
+                    });
+                    visibleSegs.reverse(); // bottom to top
+                    const R = 6;
+                    return (
+                      <Group key={`bar-${index}`}>
+                        {visibleSegs.map((seg, si) => {
+                          const isBottom = si === 0;
+                          const isTop = si === visibleSegs.length - 1;
+                          if (isBottom && isTop) {
+                            return <RoundedRect key={si} x={bar.x} y={seg.y} width={bar.width} height={seg.h} r={R} color={seg.color} />;
+                          }
+                          const tl = isTop ? R : 0;
+                          const tr = isTop ? R : 0;
+                          const br = isBottom ? R : 0;
+                          const bl = isBottom ? R : 0;
+                          return <Path key={si} path={makeRRect(bar.x, seg.y, bar.width, seg.h, tl, tr, br, bl)} color={seg.color} />;
+                        })}
+                      </Group>
+                    );
+                  }
+
                   return (
                     <RoundedRect
                       key={`bar-${index}`}
@@ -1126,6 +1226,13 @@ export default function RepasChart({
                     {weeklyData[bars[selectedBarIndex].jour].solidesCount > 1
                       ? "solides"
                       : "solide"}
+                  </Text>
+                )}
+                {typeFilter === "solides" && (
+                  <Text style={[styles.tooltipDetail, { color: C.muted }]}>
+                    {SOLIDE_TYPES.filter((st) => weeklyData[bars[selectedBarIndex].jour].solidesByType[st] > 0)
+                      .map((st) => `${weeklyData[bars[selectedBarIndex].jour].solidesByType[st]} ${SOLIDE_LABELS[st].toLowerCase()}`)
+                      .join("\n")}
                   </Text>
                 )}
               </Animated.View>
@@ -1326,9 +1433,9 @@ export default function RepasChart({
                         }`
                       : typeFilter === "solides"
                         ? `${totalSolidesCount} repas solide${totalSolidesCount > 1 ? "s" : ""} cette semaine, soit ${dailyAverageCount} par jour en moyenne. ${
-                            maxCount > dailyAverageCount * 1.5
-                              ? `Le ${bestCountDay} a été particulièrement actif.`
-                              : "Rythme régulier cette semaine."
+                            favoriteSolideType ? `Type favori : ${SOLIDE_LABELS[favoriteSolideType].toLowerCase()}. ` : ""
+                          }${newFoodsThisWeek.length > 0 ? `${newFoodsThisWeek.length} nouvel${newFoodsThisWeek.length > 1 ? "les" : ""} introduction${newFoodsThisWeek.length > 1 ? "s" : ""} alimentaire${newFoodsThisWeek.length > 1 ? "s" : ""}. ` : ""}${
+                            reactionsThisWeek > 0 ? `⚠️ ${reactionsThisWeek} réaction${reactionsThisWeek > 1 ? "s" : ""} notée${reactionsThisWeek > 1 ? "s" : ""}.` : ""
                           }`
                         : `${totalWeekQuantity} ml de lait en biberon cette semaine (${totalBiberonsCount} biberon${totalBiberonsCount > 1 ? "s au total" : ""}). Moyenne de ${dailyAverageQuantity} ml par jour.`}
                 </Text>
