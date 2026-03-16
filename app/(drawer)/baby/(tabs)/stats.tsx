@@ -13,6 +13,7 @@ import {
   ecouterSommeilsHybrid as ecouterSommeils,
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
+import { Timestamp } from "firebase/firestore";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
@@ -345,6 +346,28 @@ export default function StatsScreen() {
     return () => clearTimeout(timer);
   }, [isSommeilLoading, sommeils.length]);
 
+  // Weekly counts for resume cards
+  const thisWeekCounts = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const dayOfWeek = day === 0 ? 7 : day;
+    const weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() - (dayOfWeek - 1));
+    weekStart.setHours(0, 0, 0, 0);
+
+    const toD = (d: any): Date => {
+      if (d instanceof Timestamp) return d.toDate();
+      if (d && typeof d.toDate === "function") return d.toDate();
+      if (d && d.seconds) return new Date(d.seconds * 1000);
+      return new Date(d);
+    };
+
+    const repasCount = tetees.filter((t) => toD(t.date) >= weekStart).length;
+    const pompagesCount = pompages.filter((p) => toD(p.date) >= weekStart).length;
+    const sommeilCount = sommeils.filter((s) => toD(s.date) >= weekStart).length;
+    return { repas: repasCount, pompages: pompagesCount, sommeil: sommeilCount };
+  }, [tetees, pompages, sommeils]);
+
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     setTeteesLoaded(false);
@@ -356,54 +379,188 @@ export default function StatsScreen() {
     setRefreshKey((k) => k + 1);
   }, []);
 
-  // PDF Export
+  // PDF Export — 3-month weekly trend report
   const handleExportPDF = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const name = activeChild?.name || "Bébé";
     const now = new Date();
     const dateStr = now.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 
+    const toD = (d: any): Date => {
+      if (d instanceof Timestamp) return d.toDate();
+      if (d && typeof d.toDate === "function") return d.toDate();
+      if (d && d.seconds) return new Date(d.seconds * 1000);
+      return new Date(d);
+    };
+
+    // Build 12 weeks of data (3 months)
+    const getWeekStart = (date: Date) => {
+      const d = new Date(date);
+      const day = d.getDay();
+      const dayOfWeek = day === 0 ? 7 : day;
+      d.setDate(d.getDate() - (dayOfWeek - 1));
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+
+    const currentWeekStart = getWeekStart(now);
+    const weeks: { start: Date; end: Date; label: string }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const ws = new Date(currentWeekStart);
+      ws.setDate(ws.getDate() - i * 7);
+      const we = new Date(ws);
+      we.setDate(we.getDate() + 7);
+      const label = `${ws.getDate()}/${ws.getMonth() + 1}`;
+      weeks.push({ start: ws, end: we, label });
+    }
+
+    const getDurMin = (s: any): number => {
+      if (s.duree && typeof s.duree === "number") return s.duree;
+      const st = s.heureDebut ? toD(s.heureDebut) : null;
+      const en = s.heureFin ? toD(s.heureFin) : null;
+      if (st && en) return Math.max(0, (en.getTime() - st.getTime()) / 60000);
+      return 0;
+    };
+
+    const fmtH = (min: number) => {
+      const h = Math.floor(min / 60);
+      const m = Math.round(min % 60);
+      return h > 0 ? `${h}h${m > 0 ? m.toString().padStart(2, "0") : ""}` : `${m}min`;
+    };
+
+    // Compute weekly data
+    type WeekRow = {
+      label: string;
+      tetees: number; biberons: number; solides: number; repasTotal: number;
+      pompages: number; pompagesMl: number;
+      nuits: number; siestes: number; sommeilTotal: number; sommeilMinutes: number;
+      nuitLieux: Record<string, number>; siesteLieux: Record<string, number>;
+    };
+
+    const emptyLieux = () => ({ lit: 0, cododo: 0, poussette: 0, voiture: 0, autre: 0 });
+    const weekRows: WeekRow[] = weeks.map((w) => {
+      const row: WeekRow = {
+        label: w.label,
+        tetees: 0, biberons: 0, solides: 0, repasTotal: 0,
+        pompages: 0, pompagesMl: 0,
+        nuits: 0, siestes: 0, sommeilTotal: 0, sommeilMinutes: 0,
+        nuitLieux: emptyLieux(), siesteLieux: emptyLieux(),
+      };
+
+      tetees.forEach((t) => {
+        const d = toD(t.date);
+        if (d >= w.start && d < w.end) {
+          const type = t.type || "tetee";
+          if (type === "tetee" || type === "seins") row.tetees++;
+          else if (type === "biberon") row.biberons++;
+          else if (type === "solide") row.solides++;
+          row.repasTotal++;
+        }
+      });
+
+      pompages.forEach((p) => {
+        const d = toD(p.date);
+        if (d >= w.start && d < w.end) {
+          row.pompages++;
+          row.pompagesMl += (p.quantiteGauche || 0) + (p.quantiteDroite || 0) + (p.totalQuantite || 0);
+        }
+      });
+
+      sommeils.forEach((s) => {
+        const d = toD(s.date);
+        if (d >= w.start && d < w.end) {
+          const loc = s.location || "autre";
+          const dur = getDurMin(s);
+          row.sommeilTotal++;
+          row.sommeilMinutes += dur;
+          if (s.isNap) {
+            row.siestes++;
+            row.siesteLieux[loc] = (row.siesteLieux[loc] || 0) + 1;
+          } else {
+            row.nuits++;
+            row.nuitLieux[loc] = (row.nuitLieux[loc] || 0) + 1;
+          }
+        }
+      });
+
+      return row;
+    });
+
+    const locLabel: Record<string, string> = { lit: "Lit", cododo: "Co-dodo", poussette: "Poussette", voiture: "Voiture", autre: "Autre" };
+    const fmtLieux = (lieux: Record<string, number>) => {
+      return Object.entries(lieux).filter(([_, v]) => v > 0).map(([k, v]) => `${locLabel[k] || k}: ${v}`).join(", ") || "—";
+    };
+
+    const repasRows = weekRows.map((r) =>
+      `<tr><td>${r.label}</td><td>${r.tetees}</td><td>${r.biberons}</td><td>${r.solides}</td><td><b>${r.repasTotal}</b></td></tr>`
+    ).join("");
+
+    const pompagesRows = weekRows.map((r) =>
+      `<tr><td>${r.label}</td><td>${r.pompages}</td><td>${r.pompagesMl > 0 ? r.pompagesMl + " ml" : "—"}</td></tr>`
+    ).join("");
+
+    const sommeilRows = weekRows.map((r) =>
+      `<tr><td>${r.label}</td><td>${r.nuits}</td><td>${fmtLieux(r.nuitLieux)}</td><td>${r.siestes}</td><td>${fmtLieux(r.siesteLieux)}</td><td>${fmtH(r.sommeilMinutes)}</td></tr>`
+    ).join("");
+
+    // Current week summary
+    const cw = weekRows[weekRows.length - 1];
+
     const html = `
       <html>
       <head><meta charset="utf-8"><style>
-        body { font-family: -apple-system, sans-serif; padding: 32px; color: #1e2a36; }
-        h1 { font-size: 22px; color: #6366f1; margin-bottom: 4px; }
-        h2 { font-size: 16px; color: #6b7280; margin-top: 24px; }
-        .date { font-size: 13px; color: #9ca3af; margin-bottom: 20px; }
-        .grid { display: flex; gap: 12px; margin-top: 12px; }
-        .card { flex: 1; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; text-align: center; }
-        .card-value { font-size: 28px; font-weight: 700; }
-        .card-label { font-size: 12px; color: #6b7280; margin-top: 4px; }
-        .blue { color: #2f80ed; }
-        .green { color: #2e7d32; }
-        .purple { color: #7c3aed; }
-        .footer { margin-top: 32px; font-size: 11px; color: #9ca3af; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+        body { font-family: -apple-system, Helvetica, sans-serif; padding: 28px; color: #1e2a36; font-size: 12px; }
+        h1 { font-size: 20px; color: #6366f1; margin-bottom: 2px; }
+        h2 { font-size: 15px; color: #374151; margin-top: 22px; margin-bottom: 8px; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; }
+        .subtitle { font-size: 12px; color: #9ca3af; margin-bottom: 16px; }
+        .grid { display: flex; gap: 10px; margin: 10px 0 16px; }
+        .card { flex: 1; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; text-align: center; }
+        .card-value { font-size: 24px; font-weight: 700; }
+        .card-label { font-size: 10px; color: #6b7280; margin-top: 3px; }
+        .blue { color: #2f80ed; } .green { color: #2e7d32; } .purple { color: #7c3aed; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 11px; }
+        th { background: #f3f4f6; color: #374151; font-weight: 600; text-align: left; padding: 6px 8px; border: 1px solid #e5e7eb; }
+        td { padding: 5px 8px; border: 1px solid #e5e7eb; }
+        tr:nth-child(even) { background: #f9fafb; }
+        .footer { margin-top: 28px; font-size: 10px; color: #9ca3af; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+        .section-icon { display: inline-block; width: 18px; height: 18px; border-radius: 4px; text-align: center; line-height: 18px; font-size: 11px; margin-right: 6px; vertical-align: middle; }
       </style></head>
       <body>
-        <h1>Rapport hebdomadaire — ${name}</h1>
-        <div class="date">${dateStr}</div>
+        <h1>Rapport 3 mois — ${name}</h1>
+        <div class="subtitle">${dateStr} · Tendance sur 12 semaines</div>
 
-        <h2>Résumé</h2>
         <div class="grid">
           <div class="card">
-            <div class="card-value blue">${tetees.length}</div>
-            <div class="card-label">Repas enregistrés</div>
+            <div class="card-value blue">${cw.repasTotal}</div>
+            <div class="card-label">Repas cette semaine</div>
           </div>
           <div class="card">
-            <div class="card-value green">${pompages.length}</div>
-            <div class="card-label">Pompages</div>
+            <div class="card-value green">${cw.pompages}</div>
+            <div class="card-label">Pompages cette semaine</div>
           </div>
           <div class="card">
-            <div class="card-value purple">${sommeils.length}</div>
-            <div class="card-label">Sommeils</div>
+            <div class="card-value purple">${cw.sommeilTotal}</div>
+            <div class="card-label">Sommeils cette semaine</div>
           </div>
         </div>
 
-        <h2>Détail repas</h2>
-        <p>${tetees.filter((t: any) => t.type === "tetee" || !t.type).length} tétées, ${tetees.filter((t: any) => t.type === "biberon").length} biberons, ${tetees.filter((t: any) => t.type === "solide").length} solides</p>
+        <h2>🍽 Repas — Évolution hebdomadaire</h2>
+        <table>
+          <tr><th>Semaine</th><th>Tétées</th><th>Biberons</th><th>Solides</th><th>Total</th></tr>
+          ${repasRows}
+        </table>
 
-        <h2>Sommeil</h2>
-        <p>${sommeils.filter((s: any) => !s.isNap).length} nuits, ${sommeils.filter((s: any) => s.isNap).length} siestes</p>
+        <h2>🍼 Pompages — Évolution hebdomadaire</h2>
+        <table>
+          <tr><th>Semaine</th><th>Sessions</th><th>Volume</th></tr>
+          ${pompagesRows}
+        </table>
+
+        <h2>😴 Sommeil — Évolution hebdomadaire</h2>
+        <table>
+          <tr><th>Semaine</th><th>Nuits</th><th>Lieux (nuit)</th><th>Siestes</th><th>Lieux (sieste)</th><th>Durée totale</th></tr>
+          ${sommeilRows}
+        </table>
 
         <div class="footer">Généré par Samaye · ${dateStr}</div>
       </body>
@@ -502,7 +659,7 @@ export default function StatsScreen() {
           >
             <FontAwesome name="utensils" size={14} color={chartColors.tetees.blue} />
             <Text style={[styles.resumeValue, { color: chartColors.tetees.blue }]}>
-              {tetees.length}
+              {thisWeekCounts.repas}
             </Text>
             <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>repas</Text>
           </TouchableOpacity>
@@ -513,7 +670,7 @@ export default function StatsScreen() {
           >
             <FontAwesome name="pump-medical" size={14} color={chartColors.pompages.green} />
             <Text style={[styles.resumeValue, { color: chartColors.pompages.green }]}>
-              {pompages.length}
+              {thisWeekCounts.pompages}
             </Text>
             <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>pompages</Text>
           </TouchableOpacity>
@@ -524,7 +681,7 @@ export default function StatsScreen() {
           >
             <FontAwesome name="bed" size={14} color={chartColors.sommeil.purple} />
             <Text style={[styles.resumeValue, { color: chartColors.sommeil.purple }]}>
-              {sommeils.length}
+              {thisWeekCounts.sommeil}
             </Text>
             <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>sommeils</Text>
           </TouchableOpacity>
