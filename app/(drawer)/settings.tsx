@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { doc, onSnapshot } from "firebase/firestore";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -62,6 +64,32 @@ export default function SettingsScreen() {
   const [deletePassword, setDeletePassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const deleteParamHandledRef = useRef(false);
+  const navigation = useNavigation();
+
+  // Header right: home shortcut when activeChild exists
+  useLayoutEffect(() => {
+    if (!activeChild) {
+      navigation.setOptions({ headerRight: undefined });
+      return;
+    }
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.replace("/baby/home");
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={{ marginRight: 16 }}
+          accessibilityRole="button"
+          accessibilityLabel={`Accueil de ${activeChild.name}`}
+          accessibilityHint="Retourner au tableau de bord"
+        >
+          <FontAwesome name="house" size={20} color={nc.textNormal} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [activeChild, colorScheme, navigation, router]);
 
   useEffect(() => {
     if (!user) {
