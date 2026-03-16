@@ -822,7 +822,7 @@ export default function RepasChart({
                     style={[
                       styles.typeFilterLabel,
                       { color: C.muted },
-                      isActive && { color: C.ink, fontWeight: "700" },
+                      isActive && { color: C.blue, fontWeight: "700" },
                     ]}
                   >
                     {type.label}
