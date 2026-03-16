@@ -296,6 +296,41 @@ export default function RepasChart({
     }
   });
 
+  // Previous week data for ghost bars + trend
+  const prevWeekStart = useMemo(() => addWeeks(start, -1), [start]);
+  const prevWeekEnd = useMemo(() => new Date(start.getTime()), [start]);
+
+  const prevWeekValues = useMemo(() => {
+    const data: Record<string, { count: number; quantity: number }> = {};
+    jours.forEach((j) => { data[j] = { count: 0, quantity: 0 }; });
+
+    tetees.forEach((t) => {
+      const d = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
+      if (d >= prevWeekStart && d < prevWeekEnd) {
+        const type = t.type || "seins";
+        // Apply same typeFilter logic
+        if (typeFilter !== "tous") {
+          if (typeFilter === "seins" && type !== "seins" && type !== "tetee" && t.type) return;
+          if (typeFilter === "biberons" && type !== "biberons" && type !== "biberon") return;
+          if (typeFilter === "solides" && type !== "solide") return;
+        }
+        const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
+        const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
+        if (data[jourKey]) {
+          data[jourKey].count += 1;
+          if (type === "biberons" || type === "biberon") {
+            data[jourKey].quantity += t.quantite || 0;
+          }
+        }
+      }
+    });
+    return data;
+  }, [tetees, prevWeekStart, prevWeekEnd, typeFilter]);
+
+  const prevWeekTotalCount = useMemo(
+    () => jours.reduce((acc, j) => acc + prevWeekValues[j].count, 0), [prevWeekValues],
+  );
+
   const quantityValues = jours.map((j) => weeklyData[j].quantity);
   const countValues = jours.map((j) => weeklyData[j].count);
 
@@ -406,14 +441,27 @@ export default function RepasChart({
     }).length;
   }, [filteredTetees, start, end]);
 
+  // Week-over-week trend
+  const weekTrend = useMemo(() => {
+    if (prevWeekTotalCount === 0) return null;
+    const pct = Math.round(((totalWeekCount - prevWeekTotalCount) / prevWeekTotalCount) * 100);
+    return { pct, direction: pct >= 0 ? "up" : "down" as const };
+  }, [totalWeekCount, prevWeekTotalCount]);
+
   const groupedMax = Math.max(maxSeinsCount, maxBiberonsCount, maxSolidesCount, 0);
   const currentValues = viewMode === "quantity" ? quantityValues : countValues;
   const isGrouped =
     typeFilter === "tous" && viewMode === "frequency" && isGroupedView;
   const isStacked =
     typeFilter === "tous" && viewMode === "frequency" && !isGroupedView;
+  const prevCountMax = Math.max(...jours.map((j) => prevWeekValues[j].count), 0);
+  const prevQuantityMax = Math.max(...jours.map((j) => prevWeekValues[j].quantity), 0);
   const currentMax =
-    viewMode === "quantity" ? maxQuantity : isGrouped ? groupedMax : maxCount;
+    viewMode === "quantity"
+      ? Math.max(maxQuantity, prevQuantityMax)
+      : isGrouped
+        ? groupedMax
+        : Math.max(maxCount, prevCountMax);
 
   const barWidth = CHART_WIDTH / (jours.length * 1.45);
   const barSpacing = barWidth / 2.2;
@@ -424,6 +472,10 @@ export default function RepasChart({
     return jours.map((jour, index) => {
       const value = currentValues[index];
       const x = CHART_PADDING.left + index * (barWidth + barSpacing);
+
+      // Ghost bar data (prev week)
+      const prevVal = viewMode === "quantity" ? prevWeekValues[jour].quantity : prevWeekValues[jour].count;
+      const prevBarHeight = currentMax > 0 ? (prevVal / currentMax) * chartAreaHeight : 0;
 
       if (isGrouped) {
         const total = countValues[index];
@@ -447,6 +499,7 @@ export default function RepasChart({
           y: topY,
           height: Math.max(Math.max(biberonsHeight, seinsHeight, solidesHeight), 2),
           isMax: total === maxCount && total > 0,
+          prevHeight: prevBarHeight,
           segments: {
             biberonsHeight,
             seinsHeight,
@@ -479,6 +532,7 @@ export default function RepasChart({
           y: baseY - barHeight,
           height: Math.max(barHeight, 2),
           isMax: total === currentMax && total > 0,
+          prevHeight: prevBarHeight,
           segments: {
             biberonsHeight,
             seinsHeight,
@@ -511,6 +565,7 @@ export default function RepasChart({
           y: baseY - barHeight,
           height: Math.max(barHeight, 2),
           isMax: value === currentMax && value > 0,
+          prevHeight: prevBarHeight,
           solideSegments,
         };
       }
@@ -541,6 +596,7 @@ export default function RepasChart({
         height: Math.max(barHeight, 2),
         color,
         isMax: value === currentMax && value > 0,
+        prevHeight: prevBarHeight,
       };
     });
   }, [
@@ -556,6 +612,8 @@ export default function RepasChart({
     typeFilter,
     weeklyData,
     solideColors,
+    prevWeekValues,
+    viewMode,
     C,
   ]);
 
@@ -984,6 +1042,30 @@ export default function RepasChart({
             </View>
           )}
 
+          {/* Ghost bar legend + trend */}
+          {prevWeekTotalCount > 0 && (
+            <View style={styles.legendRow}>
+              <View style={styles.legendList}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, { backgroundColor: C.emptyBar, opacity: 0.5 }]} />
+                  <Text style={[styles.legendLabel, { color: C.muted }]}>Sem. préc.</Text>
+                </View>
+              </View>
+              {weekTrend && (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <FontAwesome
+                    name={weekTrend.direction === "up" ? "arrow-up" : "arrow-down"}
+                    size={10}
+                    color={weekTrend.direction === "up" ? nc.success : nc.error}
+                  />
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: weekTrend.direction === "up" ? nc.success : nc.error }}>
+                    {Math.abs(weekTrend.pct)}%
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           <View style={styles.chartContainer}>
             <View style={styles.yAxisContainer}>
               {yAxisLabels.map((label, index) => (
@@ -1032,6 +1114,25 @@ export default function RepasChart({
                     strokeWidth={1}
                   />
                 ))}
+
+                {/* Ghost bars (prev week) */}
+                {bars.map((bar, index) => {
+                  const ph = "prevHeight" in bar ? (bar as any).prevHeight : 0;
+                  if (ph <= 0) return null;
+                  const ghostY = CHART_PADDING.top + chartAreaHeight - ph;
+                  return (
+                    <RoundedRect
+                      key={`ghost-${index}`}
+                      x={bar.x}
+                      y={ghostY}
+                      width={bar.width}
+                      height={Math.max(ph, 2)}
+                      r={6}
+                      color={C.emptyBar}
+                      opacity={0.5}
+                    />
+                  );
+                })}
 
                 {bars.map((bar, index) => {
                   if (isGrouped && bar.segments) {

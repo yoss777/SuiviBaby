@@ -308,8 +308,30 @@ export default function PompagesChart({
     }
   });
 
+  // Previous week data for ghost bars
+  const prevWeekStart = useMemo(() => addWeeks(weekStart, -1), [weekStart]);
+  const prevWeekEnd = useMemo(() => new Date(weekStart.getTime()), [weekStart]);
+
+  const prevWeekData = useMemo(() => {
+    const data: Record<string, number> = {};
+    jours.forEach((j) => { data[j] = 0; });
+    pompages.forEach((p) => {
+      const d = p.date instanceof Timestamp ? p.date.toDate() : new Date(p.date);
+      if (d >= prevWeekStart && d < prevWeekEnd) {
+        const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
+        const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
+        const total = (p.quantiteDroite || 0) + (p.quantiteGauche || 0);
+        if (data[jourKey] !== undefined) data[jourKey] += total;
+      }
+    });
+    return data;
+  }, [pompages, prevWeekStart, prevWeekEnd]);
+
+  const prevWeekTotal = useMemo(() => jours.reduce((a, j) => a + prevWeekData[j], 0), [prevWeekData]);
+
   const weeklyValues = jours.map((j) => weeklyData[j]);
-  const maxWeekly = Math.max(...weeklyValues, 0);
+  const prevWeekValues = jours.map((j) => prevWeekData[j]);
+  const maxWeekly = Math.max(...weeklyValues, ...prevWeekValues, 0);
   const weeklyTotal = weeklyValues.reduce((a, b) => a + b, 0);
   const daysWithWeeklyData = weeklyValues.filter((v) => v > 0).length;
   const weeklyAverageLabel = `Moyenne/jour (${daysWithWeeklyData}j)`;
@@ -324,6 +346,13 @@ export default function PompagesChart({
   const weeklyChartHeight =
     CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
 
+  // Week-over-week trend
+  const weekTrend = useMemo(() => {
+    if (prevWeekTotal === 0) return null;
+    const pct = Math.round(((weeklyTotal - prevWeekTotal) / prevWeekTotal) * 100);
+    return { pct, direction: pct >= 0 ? "up" : "down" as const };
+  }, [weeklyTotal, prevWeekTotal]);
+
   const weeklyBars = useMemo(() => {
     return jours.map((jour, index) => {
       const value = weeklyValues[index];
@@ -333,6 +362,8 @@ export default function PompagesChart({
         CHART_PADDING.left + index * (weeklyBarWidth + weeklyBarSpacing);
       const y = CHART_PADDING.top + (weeklyChartHeight - barHeight);
       const isMax = value === maxWeekly && value > 0;
+      const prevVal = prevWeekValues[index];
+      const prevHeight = maxWeekly > 0 ? (prevVal / maxWeekly) * weeklyChartHeight : 0;
       return {
         jour,
         value,
@@ -342,9 +373,10 @@ export default function PompagesChart({
         height: Math.max(barHeight, 2),
         color: isMax ? C.gold : value > 0 ? C.green : C.emptyBar,
         isMax,
+        prevHeight,
       };
     });
-  }, [weeklyValues, maxWeekly, C]);
+  }, [weeklyValues, prevWeekValues, maxWeekly, C]);
 
   const weeklyYAxisLabels = useMemo(() => {
     const steps = 4;
@@ -888,6 +920,28 @@ export default function PompagesChart({
               )}
             </View>
 
+            {/* Ghost legend + trend */}
+            {prevWeekTotal > 0 && (
+              <View style={styles.legendRow}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, { backgroundColor: C.emptyBar, opacity: 0.5 }]} />
+                  <Text style={[styles.legendLabel, { color: C.muted }]}>Sem. préc.</Text>
+                </View>
+                {weekTrend && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 12 }}>
+                    <FontAwesome
+                      name={weekTrend.direction === "up" ? "arrow-up" : "arrow-down"}
+                      size={10}
+                      color={weekTrend.direction === "up" ? nc.success : nc.error}
+                    />
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: weekTrend.direction === "up" ? nc.success : nc.error }}>
+                      {Math.abs(weekTrend.pct)}%
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
             <View style={styles.chartContainer}>
               <View style={styles.yAxisContainer}>
                 {weeklyYAxisLabels.map((label, index) => (
@@ -936,6 +990,24 @@ export default function PompagesChart({
                       strokeWidth={1}
                     />
                   ))}
+
+                  {/* Ghost bars (prev week) */}
+                  {weeklyBars.map((bar, index) => {
+                    if (bar.prevHeight <= 0) return null;
+                    const ghostY = CHART_PADDING.top + weeklyChartHeight - bar.prevHeight;
+                    return (
+                      <RoundedRect
+                        key={`ghost-${index}`}
+                        x={bar.x}
+                        y={ghostY}
+                        width={bar.width}
+                        height={Math.max(bar.prevHeight, 2)}
+                        r={6}
+                        color={C.emptyBar}
+                        opacity={0.5}
+                      />
+                    );
+                  })}
 
                   {weeklyBars.map((bar, index) => (
                     <RoundedRect
@@ -1010,6 +1082,25 @@ export default function PompagesChart({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  legendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  legendSwatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+  },
+  legendLabel: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   emptyContainer: {
     flex: 1,
