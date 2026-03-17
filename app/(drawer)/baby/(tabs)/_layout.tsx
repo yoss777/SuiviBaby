@@ -29,12 +29,7 @@ export default function BabyTabLayout() {
           tabBarInactiveTintColor: Colors[colorScheme].tabIconDefault,
           headerShown: false,
           freezeOnBlur: true,
-          tabBarStyle: Platform.select({
-            ios: {
-              position: "absolute",
-            },
-            default: {},
-          }),
+          tabBarStyle: {},
         }}
       >
         <Tabs.Screen

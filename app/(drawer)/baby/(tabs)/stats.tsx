@@ -2,8 +2,8 @@ import PompagesChart from "@/components/suivibaby/PompagesChart";
 import RepasChart from "@/components/suivibaby/RepasChart";
 import SommeilChart from "@/components/suivibaby/SommeilChart";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
-import { Colors } from "@/constants/theme";
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -13,15 +13,14 @@ import {
   ecouterSommeilsHybrid as ecouterSommeils,
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
-import { Timestamp } from "firebase/firestore";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
 import { router, useLocalSearchParams } from "expo-router";
-import PagerView from "react-native-pager-view";
+import * as Sharing from "expo-sharing";
+import { Timestamp } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -34,14 +33,39 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import PagerView from "react-native-pager-view";
 import { useHeaderLeft } from "../../_layout";
 
 type TabKey = "tetees" | "pompages" | "sommeil";
 
-const TAB_CONFIG: { key: TabKey; icon: string; label: string; a11yLabel: string; a11yHint: string }[] = [
-  { key: "tetees", icon: "utensils", label: "Repas", a11yLabel: "Onglet Repas", a11yHint: "Afficher les statistiques des repas" },
-  { key: "pompages", icon: "pump-medical", label: "Pompages", a11yLabel: "Onglet Pompages", a11yHint: "Afficher les statistiques des pompages" },
-  { key: "sommeil", icon: "bed", label: "Sommeil", a11yLabel: "Onglet Sommeil", a11yHint: "Afficher les statistiques du sommeil" },
+const TAB_CONFIG: {
+  key: TabKey;
+  icon: string;
+  label: string;
+  a11yLabel: string;
+  a11yHint: string;
+}[] = [
+  {
+    key: "tetees",
+    icon: "utensils",
+    label: "Repas",
+    a11yLabel: "Onglet Repas",
+    a11yHint: "Afficher les statistiques des repas",
+  },
+  {
+    key: "pompages",
+    icon: "pump-medical",
+    label: "Pompages",
+    a11yLabel: "Onglet Pompages",
+    a11yHint: "Afficher les statistiques des pompages",
+  },
+  {
+    key: "sommeil",
+    icon: "bed",
+    label: "Sommeil",
+    a11yLabel: "Onglet Sommeil",
+    a11yHint: "Afficher les statistiques du sommeil",
+  },
 ];
 
 export default function StatsScreen() {
@@ -135,14 +159,17 @@ export default function StatsScreen() {
     setSelectedTab(tab);
   };
 
-  const handlePageSelected = useCallback((e: { nativeEvent: { position: number } }) => {
-    const index = e.nativeEvent.position;
-    const tab = TAB_CONFIG[index]?.key;
-    if (tab && tab !== selectedTab) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setSelectedTab(tab);
-    }
-  }, [selectedTab]);
+  const handlePageSelected = useCallback(
+    (e: { nativeEvent: { position: number } }) => {
+      const index = e.nativeEvent.position;
+      const tab = TAB_CONFIG[index]?.key;
+      if (tab && tab !== selectedTab) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setSelectedTab(tab);
+      }
+    },
+    [selectedTab],
+  );
 
   // Factored navigation handler
   const navigateReturn = useCallback(() => {
@@ -386,17 +413,31 @@ export default function StatsScreen() {
       return new Date(d);
     };
 
-    const repasCount = tetees.filter((t) => { const d = toD(t.date); return d >= weekStart && d < weekEnd; }).length;
-    const pompagesCount = pompages.filter((p) => { const d = toD(p.date); return d >= weekStart && d < weekEnd; }).length;
-    const sommeilCount = sommeils.filter((s) => { const d = toD(s.date); return d >= weekStart && d < weekEnd; }).length;
-    return { repas: repasCount, pompages: pompagesCount, sommeil: sommeilCount };
+    const repasCount = tetees.filter((t) => {
+      const d = toD(t.date);
+      return d >= weekStart && d < weekEnd;
+    }).length;
+    const pompagesCount = pompages.filter((p) => {
+      const d = toD(p.date);
+      return d >= weekStart && d < weekEnd;
+    }).length;
+    const sommeilCount = sommeils.filter((s) => {
+      const d = toD(s.date);
+      return d >= weekStart && d < weekEnd;
+    }).length;
+    return {
+      repas: repasCount,
+      pompages: pompagesCount,
+      sommeil: sommeilCount,
+    };
   }, [tetees, pompages, sommeils, displayWeek]);
 
   // Week label for resume cards
   const weekLabel = useMemo(() => {
     const weekEnd = new Date(displayWeek);
     weekEnd.setDate(weekEnd.getDate() + 6);
-    const fmt = (d: Date) => d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
     return `${fmt(displayWeek)} – ${fmt(weekEnd)}`;
   }, [displayWeek]);
 
@@ -416,7 +457,11 @@ export default function StatsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const name = activeChild?.name || "Bébé";
     const now = new Date();
-    const dateStr = now.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+    const dateStr = now.toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
 
     const toD = (d: any): Date => {
       if (d instanceof Timestamp) return d.toDate();
@@ -457,26 +502,50 @@ export default function StatsScreen() {
     const fmtH = (min: number) => {
       const h = Math.floor(min / 60);
       const m = Math.round(min % 60);
-      return h > 0 ? `${h}h${m > 0 ? m.toString().padStart(2, "0") : ""}` : `${m}min`;
+      return h > 0
+        ? `${h}h${m > 0 ? m.toString().padStart(2, "0") : ""}`
+        : `${m}min`;
     };
 
     // Compute weekly data
     type WeekRow = {
       label: string;
-      tetees: number; biberons: number; solides: number; repasTotal: number;
-      pompages: number; pompagesMl: number;
-      nuits: number; siestes: number; sommeilTotal: number; sommeilMinutes: number;
-      nuitLieux: Record<string, number>; siesteLieux: Record<string, number>;
+      tetees: number;
+      biberons: number;
+      solides: number;
+      repasTotal: number;
+      pompages: number;
+      pompagesMl: number;
+      nuits: number;
+      siestes: number;
+      sommeilTotal: number;
+      sommeilMinutes: number;
+      nuitLieux: Record<string, number>;
+      siesteLieux: Record<string, number>;
     };
 
-    const emptyLieux = () => ({ lit: 0, cododo: 0, poussette: 0, voiture: 0, autre: 0 });
+    const emptyLieux = () => ({
+      lit: 0,
+      cododo: 0,
+      poussette: 0,
+      voiture: 0,
+      autre: 0,
+    });
     const weekRows: WeekRow[] = weeks.map((w) => {
       const row: WeekRow = {
         label: w.label,
-        tetees: 0, biberons: 0, solides: 0, repasTotal: 0,
-        pompages: 0, pompagesMl: 0,
-        nuits: 0, siestes: 0, sommeilTotal: 0, sommeilMinutes: 0,
-        nuitLieux: emptyLieux(), siesteLieux: emptyLieux(),
+        tetees: 0,
+        biberons: 0,
+        solides: 0,
+        repasTotal: 0,
+        pompages: 0,
+        pompagesMl: 0,
+        nuits: 0,
+        siestes: 0,
+        sommeilTotal: 0,
+        sommeilMinutes: 0,
+        nuitLieux: emptyLieux(),
+        siesteLieux: emptyLieux(),
       };
 
       tetees.forEach((t) => {
@@ -494,7 +563,10 @@ export default function StatsScreen() {
         const d = toD(p.date);
         if (d >= w.start && d < w.end) {
           row.pompages++;
-          row.pompagesMl += (p.quantiteGauche || 0) + (p.quantiteDroite || 0) + (p.totalQuantite || 0);
+          row.pompagesMl +=
+            (p.quantiteGauche || 0) +
+            (p.quantiteDroite || 0) +
+            (p.totalQuantite || 0);
         }
       });
 
@@ -518,22 +590,42 @@ export default function StatsScreen() {
       return row;
     });
 
-    const locLabel: Record<string, string> = { lit: "Lit", cododo: "Co-dodo", poussette: "Poussette", voiture: "Voiture", autre: "Autre" };
+    const locLabel: Record<string, string> = {
+      lit: "Lit",
+      cododo: "Co-dodo",
+      poussette: "Poussette",
+      voiture: "Voiture",
+      autre: "Autre",
+    };
     const fmtLieux = (lieux: Record<string, number>) => {
-      return Object.entries(lieux).filter(([_, v]) => v > 0).map(([k, v]) => `${locLabel[k] || k}: ${v}`).join(", ") || "—";
+      return (
+        Object.entries(lieux)
+          .filter(([_, v]) => v > 0)
+          .map(([k, v]) => `${locLabel[k] || k}: ${v}`)
+          .join(", ") || "—"
+      );
     };
 
-    const repasRows = weekRows.map((r) =>
-      `<tr><td>${r.label}</td><td>${r.tetees}</td><td>${r.biberons}</td><td>${r.solides}</td><td><b>${r.repasTotal}</b></td></tr>`
-    ).join("");
+    const repasRows = weekRows
+      .map(
+        (r) =>
+          `<tr><td>${r.label}</td><td>${r.tetees}</td><td>${r.biberons}</td><td>${r.solides}</td><td><b>${r.repasTotal}</b></td></tr>`,
+      )
+      .join("");
 
-    const pompagesRows = weekRows.map((r) =>
-      `<tr><td>${r.label}</td><td>${r.pompages}</td><td>${r.pompagesMl > 0 ? r.pompagesMl + " ml" : "—"}</td></tr>`
-    ).join("");
+    const pompagesRows = weekRows
+      .map(
+        (r) =>
+          `<tr><td>${r.label}</td><td>${r.pompages}</td><td>${r.pompagesMl > 0 ? r.pompagesMl + " ml" : "—"}</td></tr>`,
+      )
+      .join("");
 
-    const sommeilRows = weekRows.map((r) =>
-      `<tr><td>${r.label}</td><td>${r.nuits}</td><td>${fmtLieux(r.nuitLieux)}</td><td>${r.siestes}</td><td>${fmtLieux(r.siesteLieux)}</td><td>${fmtH(r.sommeilMinutes)}</td></tr>`
-    ).join("");
+    const sommeilRows = weekRows
+      .map(
+        (r) =>
+          `<tr><td>${r.label}</td><td>${r.nuits}</td><td>${fmtLieux(r.nuitLieux)}</td><td>${r.siestes}</td><td>${fmtLieux(r.siesteLieux)}</td><td>${fmtH(r.sommeilMinutes)}</td></tr>`,
+      )
+      .join("");
 
     // Current week summary
     const cw = weekRows[weekRows.length - 1];
@@ -601,7 +693,10 @@ export default function StatsScreen() {
 
     try {
       const { uri } = await Print.printToFileAsync({ html, base64: false });
-      await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
+      await Sharing.shareAsync(uri, {
+        mimeType: "application/pdf",
+        UTI: "com.adobe.pdf",
+      });
     } catch (_) {
       // User cancelled sharing
     }
@@ -615,13 +710,40 @@ export default function StatsScreen() {
         ? chartColors.pompages.green
         : chartColors.sommeil.purple;
 
+  const pageDots = (
+    <View style={styles.dotsContainer}>
+      {TAB_CONFIG.map((tabItem) => {
+        const isActive = selectedTab === tabItem.key;
+        const dotColor = isActive
+          ? tabItem.key === "tetees"
+            ? chartColors.tetees.blue
+            : tabItem.key === "pompages"
+              ? chartColors.pompages.green
+              : chartColors.sommeil.purple
+          : nc.textMuted;
+        return (
+          <View
+            key={tabItem.key}
+            style={[
+              styles.dot,
+              { backgroundColor: dotColor },
+              isActive && styles.dotActive,
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: nc.background }]}>
       {/* BOUTONS DE SÉLECTION (icônes) */}
       <View
         style={styles.tabContainer}
         onLayout={(event) => {
-          const width = Math.floor(event.nativeEvent.layout.width / TAB_CONFIG.length);
+          const width = Math.floor(
+            event.nativeEvent.layout.width / TAB_CONFIG.length,
+          );
           if (width !== tabWidth) setTabWidth(width);
         }}
         accessibilityRole="tablist"
@@ -682,55 +804,102 @@ export default function StatsScreen() {
       </View>
 
       {/* RESUME CARDS + EXPORT */}
-      {!loadError && !isTeteesLoading && !isPompagesLoading && !isSommeilLoading && (
-        <View>
-          <Text style={[styles.weekLabel, { color: nc.textMuted }]}>{weekLabel}</Text>
-          <View style={styles.resumeRow}>
-          <TouchableOpacity
-            style={[styles.resumeCard, { borderColor: chartColors.tetees.blue + "40" }]}
-            onPress={() => handleTabChange("tetees")}
-            accessibilityLabel="Résumé repas, appuyer pour voir les détails"
-          >
-            <FontAwesome name="utensils" size={14} color={chartColors.tetees.blue} />
-            <Text style={[styles.resumeValue, { color: chartColors.tetees.blue }]}>
-              {thisWeekCounts.repas}
+      {!loadError &&
+        !isTeteesLoading &&
+        !isPompagesLoading &&
+        !isSommeilLoading && (
+          <View>
+            <Text style={[styles.weekLabel, { color: nc.textMuted }]}>
+              {weekLabel}
             </Text>
-            <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>repas</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.resumeCard, { borderColor: chartColors.pompages.green + "40" }]}
-            onPress={() => handleTabChange("pompages")}
-            accessibilityLabel="Résumé pompages, appuyer pour voir les détails"
-          >
-            <FontAwesome name="pump-medical" size={14} color={chartColors.pompages.green} />
-            <Text style={[styles.resumeValue, { color: chartColors.pompages.green }]}>
-              {thisWeekCounts.pompages}
-            </Text>
-            <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>pompages</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.resumeCard, { borderColor: chartColors.sommeil.purple + "40" }]}
-            onPress={() => handleTabChange("sommeil")}
-            accessibilityLabel="Résumé sommeil, appuyer pour voir les détails"
-          >
-            <FontAwesome name="bed" size={14} color={chartColors.sommeil.purple} />
-            <Text style={[styles.resumeValue, { color: chartColors.sommeil.purple }]}>
-              {thisWeekCounts.sommeil}
-            </Text>
-            <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>sommeils</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.exportButton, { borderColor: nc.border }]}
-            onPress={handleExportPDF}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel="Exporter le rapport en PDF"
-          >
-            <FontAwesome name="file-pdf" size={16} color={nc.textMuted} />
-          </TouchableOpacity>
+            <View style={styles.resumeRow}>
+              <TouchableOpacity
+                style={[
+                  styles.resumeCard,
+                  { borderColor: chartColors.tetees.blue + "40" },
+                ]}
+                onPress={() => handleTabChange("tetees")}
+                accessibilityLabel="Résumé repas, appuyer pour voir les détails"
+              >
+                <FontAwesome
+                  name="utensils"
+                  size={14}
+                  color={chartColors.tetees.blue}
+                />
+                <Text
+                  style={[
+                    styles.resumeValue,
+                    { color: chartColors.tetees.blue },
+                  ]}
+                >
+                  {thisWeekCounts.repas}
+                </Text>
+                <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>
+                  repas
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.resumeCard,
+                  { borderColor: chartColors.pompages.green + "40" },
+                ]}
+                onPress={() => handleTabChange("pompages")}
+                accessibilityLabel="Résumé pompages, appuyer pour voir les détails"
+              >
+                <FontAwesome
+                  name="pump-medical"
+                  size={14}
+                  color={chartColors.pompages.green}
+                />
+                <Text
+                  style={[
+                    styles.resumeValue,
+                    { color: chartColors.pompages.green },
+                  ]}
+                >
+                  {thisWeekCounts.pompages}
+                </Text>
+                <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>
+                  pompages
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.resumeCard,
+                  { borderColor: chartColors.sommeil.purple + "40" },
+                ]}
+                onPress={() => handleTabChange("sommeil")}
+                accessibilityLabel="Résumé sommeil, appuyer pour voir les détails"
+              >
+                <FontAwesome
+                  name="bed"
+                  size={14}
+                  color={chartColors.sommeil.purple}
+                />
+                <Text
+                  style={[
+                    styles.resumeValue,
+                    { color: chartColors.sommeil.purple },
+                  ]}
+                >
+                  {thisWeekCounts.sommeil}
+                </Text>
+                <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>
+                  sommeils
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.exportButton, { borderColor: nc.border }]}
+                onPress={handleExportPDF}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Exporter le rapport en PDF"
+              >
+                <FontAwesome name="file-pdf" size={16} color={nc.textMuted} />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      )}
+        )}
 
       {loadError ? (
         <View style={styles.errorContainer}>
@@ -742,138 +911,113 @@ export default function StatsScreen() {
             Vérifiez votre connexion internet
           </Text>
           <TouchableOpacity
-            style={[
-              styles.retryButton,
-              { backgroundColor: refreshTintColor },
-            ]}
+            style={[styles.retryButton, { backgroundColor: refreshTintColor }]}
             onPress={handleRefresh}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
             accessibilityLabel="Réessayer le chargement"
           >
-            <FontAwesome
-              name="arrows-rotate"
-              size={14}
-              color={nc.white}
-            />
-            <Text style={[styles.retryText, { color: nc.white }]}>Réessayer</Text>
+            <FontAwesome name="arrows-rotate" size={14} color={nc.white} />
+            <Text style={[styles.retryText, { color: nc.white }]}>
+              Réessayer
+            </Text>
           </TouchableOpacity>
         </View>
       ) : (
-        <PagerView
-          ref={pagerRef}
-          style={styles.pager}
-          initialPage={0}
-          onPageSelected={handlePageSelected}
-          overdrag
-        >
-          <ScrollView
-            key="repas"
-            contentContainerStyle={styles.scrollContainer}
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                tintColor={chartColors.tetees.blue}
-              />
-            }
+        <View style={styles.pagerWrapper}>
+          <PagerView
+            ref={pagerRef}
+            style={styles.pager}
+            initialPage={0}
+            onPageSelected={handlePageSelected}
+            overdrag
           >
-            {isTeteesLoading || !teteesEmptyDelayDone ? (
-              <View style={styles.loaderContainer}>
-                <IconPulseDots color={chartColors.tetees.blue} />
-              </View>
-            ) : (
-              <RepasChart
-                tetees={tetees}
-                initialTypeFilter={initialTypeFilter}
-                colorScheme={colorScheme}
-                screenWidth={screenWidth}
-                onWeekChange={handleRepasWeekChange}
-              />
-            )}
-          </ScrollView>
-          <ScrollView
-            key="pompages"
-            contentContainerStyle={styles.scrollContainer}
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                tintColor={chartColors.pompages.green}
-              />
-            }
-          >
-            {isPompagesLoading || !pompagesEmptyDelayDone ? (
-              <View style={styles.loaderContainer}>
-                <IconPulseDots color={chartColors.pompages.green} />
-              </View>
-            ) : (
-              <PompagesChart
-                pompages={pompages}
-                colorScheme={colorScheme}
-                screenWidth={screenWidth}
-                onWeekChange={handlePompagesWeekChange}
-              />
-            )}
-          </ScrollView>
-          <ScrollView
-            key="sommeil"
-            contentContainerStyle={styles.scrollContainer}
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                tintColor={chartColors.sommeil.purple}
-              />
-            }
-          >
-            {isSommeilLoading || !sommeilEmptyDelayDone ? (
-              <View style={styles.loaderContainer}>
-                <IconPulseDots color={chartColors.sommeil.purple} />
-              </View>
-            ) : (
-              <SommeilChart
-                sommeils={sommeils}
-                repas={tetees}
-                babyName={activeChild?.name}
-                colorScheme={colorScheme}
-                screenWidth={screenWidth}
-                onWeekChange={handleSommeilWeekChange}
-              />
-            )}
-          </ScrollView>
-        </PagerView>
+            <ScrollView
+              key="repas"
+              contentContainerStyle={styles.scrollContainer}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={chartColors.tetees.blue}
+                />
+              }
+            >
+              {isTeteesLoading || !teteesEmptyDelayDone ? (
+                <View style={styles.loaderContainer}>
+                  <IconPulseDots color={chartColors.tetees.blue} />
+                </View>
+              ) : (
+                <RepasChart
+                  tetees={tetees}
+                  initialTypeFilter={initialTypeFilter}
+                  colorScheme={colorScheme}
+                  screenWidth={screenWidth}
+                  onWeekChange={handleRepasWeekChange}
+                />
+              )}
+            </ScrollView>
+            <ScrollView
+              key="pompages"
+              contentContainerStyle={styles.scrollContainer}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={chartColors.pompages.green}
+                />
+              }
+            >
+              {isPompagesLoading || !pompagesEmptyDelayDone ? (
+                <View style={styles.loaderContainer}>
+                  <IconPulseDots color={chartColors.pompages.green} />
+                </View>
+              ) : (
+                <PompagesChart
+                  pompages={pompages}
+                  colorScheme={colorScheme}
+                  screenWidth={screenWidth}
+                  onWeekChange={handlePompagesWeekChange}
+                />
+              )}
+            </ScrollView>
+            <ScrollView
+              key="sommeil"
+              contentContainerStyle={styles.scrollContainer}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={chartColors.sommeil.purple}
+                />
+              }
+            >
+              {isSommeilLoading || !sommeilEmptyDelayDone ? (
+                <View style={styles.loaderContainer}>
+                  <IconPulseDots color={chartColors.sommeil.purple} />
+                </View>
+              ) : (
+                <SommeilChart
+                  sommeils={sommeils}
+                  repas={tetees}
+                  babyName={activeChild?.name}
+                  colorScheme={colorScheme}
+                  screenWidth={screenWidth}
+                  onWeekChange={handleSommeilWeekChange}
+                />
+              )}
+            </ScrollView>
+          </PagerView>
+        </View>
       )}
-
       {/* Page dots */}
-      <View style={styles.dotsContainer}>
-        {TAB_CONFIG.map((tabItem, i) => {
-          const isActive = selectedTab === tabItem.key;
-          const dotColor = isActive
-            ? (tabItem.key === "tetees"
-              ? chartColors.tetees.blue
-              : tabItem.key === "pompages"
-                ? chartColors.pompages.green
-                : chartColors.sommeil.purple)
-            : nc.textMuted;
-          return (
-            <View
-              key={tabItem.key}
-              style={[
-                styles.dot,
-                { backgroundColor: dotColor },
-                isActive && styles.dotActive,
-              ]}
-            />
-          );
-        })}
-      </View>
+      {!loadError && pageDots}
     </View>
   );
 }
@@ -913,7 +1057,7 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
     alignItems: "center",
-    paddingBottom: 80,
+    // paddingBottom: 8,
   },
   loaderContainer: {
     flex: 1,
@@ -988,6 +1132,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
+  pagerWrapper: {
+    flex: 1,
+  },
   pager: {
     flex: 1,
   },
@@ -996,7 +1143,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 8,
+    paddingVertical: 16,
   },
   dot: {
     width: 6,
