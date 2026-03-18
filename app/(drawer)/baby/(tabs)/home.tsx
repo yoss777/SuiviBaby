@@ -33,6 +33,7 @@ import {
 } from "@/migration/eventsDoubleWriteService";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import { supprimerEvenement } from "@/services/eventsService";
+import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import {
   buildTodayEventsData,
   getTodayEventsCache,
@@ -631,6 +632,7 @@ export default function HomeDashboard() {
     event: any | null;
   }>({ visible: false, event: null });
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [tipsEnabled, setTipsEnabled] = useState(true);
 
   // États des données
   const [data, setData] = useState<DashboardData>({
@@ -1074,6 +1076,19 @@ export default function HomeDashboard() {
     todayStats,
   );
 
+  // Load tips preference from notification settings (re-check on screen focus)
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      obtenirPreferencesNotifications()
+        .then((prefs) => {
+          if (mounted) setTipsEnabled(prefs.tips);
+        })
+        .catch(() => {});
+      return () => { mounted = false; };
+    }, []),
+  );
+
   // Smart Content: combine all events for insight engine
   const allEventsForInsights = useMemo(() => {
     const all: {
@@ -1113,7 +1128,7 @@ export default function HomeDashboard() {
           reaction: e.reaction,
           quantiteMl: e.quantiteMl,
           valeur: e.valeur,
-          jalonType: e.jalonType,
+          jalonType: e.typeJalon ?? e.jalonType,
           titre: e.titre,
         });
       }
@@ -1138,7 +1153,7 @@ export default function HomeDashboard() {
     events: allEventsForInsights,
     babyBirthDate: activeChild?.birthDate ?? null,
     babyName: activeChild?.name ?? "",
-    tipsEnabled: true,
+    tipsEnabled,
   });
 
   const todayJalons = useMemo(() => {

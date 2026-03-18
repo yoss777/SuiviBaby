@@ -446,8 +446,11 @@ function developpementInsights(
 
   const recent7d = filterByDays(events, 7, now);
 
-  // Recent milestone
-  const jalons = filterByType(recent7d, "jalon");
+  // Recent milestone (exclude daily mood entries)
+  const MILESTONE_JALON_TYPES = new Set(["dent", "pas", "sourire", "mot", "photo", "autre"]);
+  const jalons = filterByType(recent7d, "jalon").filter(
+    (e) => e.jalonType && MILESTONE_JALON_TYPES.has(e.jalonType),
+  );
   if (jalons.length > 0) {
     const lastJalon = jalons[jalons.length - 1];
     const label = lastJalon.titre || lastJalon.jalonType || "nouveau jalon";

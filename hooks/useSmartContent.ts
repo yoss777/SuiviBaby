@@ -104,6 +104,9 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
   // Fetch tips and milestones from Firestore
   useEffect(() => {
     if (!babyBirthDate || !tipsEnabled) {
+      setTips([]);
+      setMilestones([]);
+      setAllMilestonesState([]);
       setIsLoading(false);
       return;
     }
