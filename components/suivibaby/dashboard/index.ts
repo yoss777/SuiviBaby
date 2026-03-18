@@ -12,3 +12,7 @@ export type { MoodCardProps } from "./MoodCard";
 
 export { RecentEventsList } from "./RecentEventsList";
 export type { RecentEventsListProps, RecentEvent } from "./RecentEventsList";
+
+export { SmartFeedCard } from "./SmartFeedCard";
+export { InsightCard } from "./InsightCard";
+export { MilestoneTimelineCard } from "./MilestoneTimelineCard";

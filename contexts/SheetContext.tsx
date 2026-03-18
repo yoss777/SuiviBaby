@@ -117,8 +117,17 @@ export type CroissanceFormSheetProps = {
   editData?: CroissanceEditData;
 };
 
+// Props for opening a content/article reader sheet
+export type ContentSheetProps = {
+  ownerId: string;
+  formType: 'content';
+  tipId: string;
+  onSuccess?: () => void;
+  onDismiss?: () => void;
+};
+
 // Union type for form-based sheets
-export type FormSheetProps = ImmunizationFormSheetProps | SoinsFormSheetProps | MealsFormSheetProps | PumpingFormSheetProps | ActivitiesFormSheetProps | MilestonesFormSheetProps | DiapersFormSheetProps | RoutinesFormSheetProps | CroissanceFormSheetProps;
+export type FormSheetProps = ImmunizationFormSheetProps | SoinsFormSheetProps | MealsFormSheetProps | PumpingFormSheetProps | ActivitiesFormSheetProps | MilestonesFormSheetProps | DiapersFormSheetProps | RoutinesFormSheetProps | CroissanceFormSheetProps | ContentSheetProps;
 
 // Union type for all sheet props
 export type AnySheetProps = SheetViewProps | FormSheetProps;
@@ -171,6 +180,11 @@ export function isRoutinesFormProps(props: FormSheetProps): props is RoutinesFor
 // Type guard for croissance form
 export function isCroissanceFormProps(props: FormSheetProps): props is CroissanceFormSheetProps {
   return props.formType === 'croissance';
+}
+
+// Type guard for content/article reader
+export function isContentSheetProps(props: FormSheetProps): props is ContentSheetProps {
+  return props.formType === 'content';
 }
 
 interface SheetContextType {

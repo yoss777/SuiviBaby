@@ -388,6 +388,35 @@ service cloud.firestore {
     }
 
     // ============================================
+    // SMART CONTENT — Tips (read-only for authenticated users)
+    // ============================================
+
+    match /tips/{tipId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Admin-only via Firebase Console or scripts
+    }
+
+    // ============================================
+    // SMART CONTENT — Milestone references (read-only for authenticated users)
+    // ============================================
+
+    match /milestones_ref/{milestoneId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Admin-only via Firebase Console or scripts
+    }
+
+    // ============================================
+    // SMART CONTENT — User content state (own data only)
+    // ============================================
+
+    match /user_content/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // ============================================
     // COLLECTION GROUP QUERIES
     // ============================================
 

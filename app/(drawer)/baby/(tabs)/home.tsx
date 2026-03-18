@@ -1,6 +1,9 @@
 import {
+  InsightCard,
+  MilestoneTimelineCard,
   RecentEventsList,
   SleepWidget,
+  SmartFeedCard,
   StatsGroup,
   type StatItem,
 } from "@/components/suivibaby/dashboard";
@@ -22,6 +25,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useSmartContent } from "@/hooks/useSmartContent";
 import { Ionicons } from "@expo/vector-icons";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
@@ -995,6 +999,61 @@ export default function HomeDashboard() {
     reminderPreferences,
     todayStats,
   );
+
+  // Smart Content: combine all events for insight engine
+  const allEventsForInsights = useMemo(() => {
+    const all: Array<{
+      id: string; type: string; date: Date;
+      quality?: string; location?: string; isNap?: boolean; duree?: number;
+      heureDebut?: Date; heureFin?: Date; typeSolide?: string;
+      nouveauAliment?: boolean; nomNouvelAliment?: string; reaction?: string;
+      quantiteMl?: number; valeur?: number; jalonType?: string; titre?: string;
+    }> = [];
+    const push = (items: any[], type: string) => {
+      for (const e of items) {
+        all.push({
+          id: e.id ?? "",
+          type,
+          date: toDate(e.date),
+          quality: e.quality,
+          location: e.location,
+          isNap: e.isNap,
+          duree: e.duree,
+          heureDebut: e.heureDebut ? toDate(e.heureDebut) : undefined,
+          heureFin: e.heureFin ? toDate(e.heureFin) : undefined,
+          typeSolide: e.typeSolide,
+          nouveauAliment: e.nouveauAliment,
+          nomNouvelAliment: e.nomNouvelAliment,
+          reaction: e.reaction,
+          quantiteMl: e.quantiteMl,
+          valeur: e.valeur,
+          jalonType: e.jalonType,
+          titre: e.titre,
+        });
+      }
+    };
+    push(data.tetees, "tetee");
+    push(data.biberons, "biberon");
+    push(data.solides, "solide");
+    push(data.pompages, "pompage");
+    push(data.sommeils, "sommeil");
+    push(data.bains, "bain");
+    push(data.temperatures, "temperature");
+    push(data.medicaments, "medicament");
+    push(data.symptomes, "symptome");
+    push(data.vitamines, "vitamine");
+    push(data.vaccins, "vaccin");
+    push(data.activites, "activite");
+    push(data.jalons, "jalon");
+    return all;
+  }, [data, toDate]);
+
+  const smartContent = useSmartContent({
+    events: allEventsForInsights,
+    babyBirthDate: activeChild?.birthDate ?? null,
+    babyName: activeChild?.name ?? "",
+    tipsEnabled: true,
+  });
 
   const todayJalons = useMemo(() => {
     const today = new Date();
@@ -2270,6 +2329,78 @@ export default function HomeDashboard() {
             </StaggeredCard>
           )}
         </View>
+
+        {/* Smart Content: Insights + Tips + Milestones */}
+        {isDataLoaded && !smartContent.isLoading && (
+          <View style={{ paddingHorizontal: 16, gap: 10, marginTop: 4 }}>
+            {/* Data-driven insights */}
+            {smartContent.insights.map((insight, i) => (
+              <StaggeredCard key={insight.id} index={4 + i} visible={isDataLoaded}>
+                <InsightCard
+                  insight={insight}
+                  onLearnMore={(ins) => {
+                    if (ins.relatedTipId) {
+                      openSheetRaw({
+                        ownerId: activeChild?.id ?? "",
+                        formType: "content" as const,
+                        tipId: ins.relatedTipId,
+                      });
+                    }
+                  }}
+                  colorScheme={colorScheme}
+                />
+              </StaggeredCard>
+            ))}
+
+            {/* Cross-data correlations */}
+            {smartContent.correlations.map((corr, i) => (
+              <StaggeredCard key={corr.id} index={7 + i} visible={isDataLoaded}>
+                <InsightCard
+                  insight={corr}
+                  colorScheme={colorScheme}
+                />
+              </StaggeredCard>
+            ))}
+
+            {/* Tip of the day */}
+            {smartContent.currentTip && (
+              <StaggeredCard index={8} visible={isDataLoaded}>
+                <SmartFeedCard
+                  tip={smartContent.currentTip}
+                  isBookmarked={smartContent.userContent.bookmarks.includes(smartContent.currentTip.id)}
+                  onRead={(tip) => {
+                    openSheetRaw({
+                      ownerId: activeChild?.id ?? "",
+                      formType: "content" as const,
+                      tipId: tip.id,
+                    });
+                  }}
+                  onDismiss={smartContent.dismissTip}
+                  onBookmark={(tipId) => {
+                    if (smartContent.userContent.bookmarks.includes(tipId)) {
+                      smartContent.removeBookmark(tipId);
+                    } else {
+                      smartContent.bookmarkTip(tipId);
+                    }
+                  }}
+                  colorScheme={colorScheme}
+                />
+              </StaggeredCard>
+            )}
+
+            {/* Upcoming milestones */}
+            {smartContent.upcomingMilestones.length > 0 && (
+              <StaggeredCard index={9} visible={isDataLoaded}>
+                <MilestoneTimelineCard
+                  milestones={smartContent.upcomingMilestones}
+                  ageWeeks={activeChild?.birthDate ? Math.floor((Date.now() - new Date(activeChild.birthDate.split("/").reverse().join("-")).getTime()) / (7 * 24 * 60 * 60 * 1000)) : 0}
+                  onViewAll={() => router.push("/baby/milestones" as any)}
+                  colorScheme={colorScheme}
+                />
+              </StaggeredCard>
+            )}
+          </View>
+        )}
 
         {/* P3: Enhanced empty state */}
         {!hasAnyTodayData && isDataLoaded && (

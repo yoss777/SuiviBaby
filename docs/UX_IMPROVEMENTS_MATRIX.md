@@ -1,7 +1,21 @@
 # Matrice des améliorations UX — Samaye
 
 > Suivi des améliorations UX appliquées à tous les écrans et composants de l'app.
-> Dernière mise à jour : 2026-03-14 (100% — tous gaps corrigés)
+> Dernière mise à jour : 2026-03-18 (100% — Smart Content System ajouté)
+
+## Smart Content System — Nouveaux composants (v2.4)
+
+| Composant | P1 | P3 | P6 | P8b | P9b | P14a | P15a | P16a | P17a | P20 | P21 | P22 | P25 | P27 |
+|-----------|:--:|:--:|:--:|:---:|:---:|:----:|:----:|:----:|:----:|:---:|:---:|:---:|:---:|:---:|
+| SmartFeedCard | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | — |
+| InsightCard | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | — |
+| MilestoneTimelineCard | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | — |
+| MilestoneTimeline | — | ✅ | — | — | — | ✅ | — | ✅ | ✅ | — | ✅ | — | — | — |
+| ArticleReader | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | — |
+| ChangelogModal | — | — | — | ✅ | — | ✅ | ✅ | ✅ | — | — | ✅ | — | ✅ | — |
+| useSmartContent | — | — | — | — | — | — | — | — | ✅ | ✅ | — | — | — | ✅ |
+
+**Couverture** : tous les composants respectent nc.* tokens (P14a/P16a/P21), accessibility (P15a), touch targets (P25), haptic (P8b). Le hook useSmartContent inclut race condition guards (P20), useMemo (P17a), et error handling (P27).
 
 ## Écrans concernés
 

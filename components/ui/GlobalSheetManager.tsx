@@ -1,7 +1,7 @@
 // components/ui/GlobalSheetManager.tsx
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import BottomSheet from '@gorhom/bottom-sheet';
-import { useSheet, isFormSheetProps, isImmunizationFormProps, isSoinsFormProps, isMealsFormProps, isPumpingFormProps, isActivitiesFormProps, isMilestonesFormProps, isDiapersFormProps, isRoutinesFormProps, isCroissanceFormProps } from '@/contexts/SheetContext';
+import { useSheet, isFormSheetProps, isImmunizationFormProps, isSoinsFormProps, isMealsFormProps, isPumpingFormProps, isActivitiesFormProps, isMilestonesFormProps, isDiapersFormProps, isRoutinesFormProps, isCroissanceFormProps, isContentSheetProps } from '@/contexts/SheetContext';
 import { FormBottomSheet } from './FormBottomSheet';
 import { ImmunizationForm } from '@/components/forms/ImmunizationForm';
 import { SoinsForm } from '@/components/forms/SoinsForm';
@@ -12,8 +12,12 @@ import { MilestonesForm } from '@/components/forms/MilestonesForm';
 import { DiapersForm } from '@/components/forms/DiapersForm';
 import { RoutinesForm } from '@/components/forms/RoutinesForm';
 import { CroissanceForm } from '@/components/forms/CroissanceForm';
+import { ArticleReader } from '@/components/suivibaby/ArticleReader';
 import { eventColors } from '@/constants/eventColors';
 import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { fetchTipById, bookmarkTip, removeBookmark, submitTipFeedback, getUserContentState } from '@/services/smartContentService';
+import type { Tip, UserContent } from '@/types/content';
 
 const SOINS_TYPE_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   temperature: { label: "Température", color: eventColors.temperature.dark, icon: "temperature-half" },
@@ -23,7 +27,59 @@ const SOINS_TYPE_CONFIG: Record<string, { label: string; color: string; icon: st
   vitamine: { label: "Vitamine", color: eventColors.vitamine.dark, icon: "pills" },
 };
 
+// Internal component for content sheet
+function ContentSheetContent({ tipId, onClose }: { tipId: string; onClose: () => void }) {
+  const colorScheme = useColorScheme() ?? 'light';
+  const [tip, setTip] = React.useState<Tip | null>(null);
+  const [userContent, setUserContent] = React.useState<UserContent | null>(null);
+
+  React.useEffect(() => {
+    let mounted = true;
+    Promise.all([fetchTipById(tipId), getUserContentState()])
+      .then(([t, uc]) => {
+        if (mounted) {
+          setTip(t);
+          setUserContent(uc);
+        }
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, [tipId]);
+
+  const handleBookmark = React.useCallback(async (id: string) => {
+    if (!userContent) return;
+    const isBookmarked = userContent.bookmarks.includes(id);
+    if (isBookmarked) {
+      await removeBookmark(id);
+      setUserContent(prev => prev ? { ...prev, bookmarks: prev.bookmarks.filter(b => b !== id) } : prev);
+    } else {
+      await bookmarkTip(id);
+      setUserContent(prev => prev ? { ...prev, bookmarks: [...prev.bookmarks, id] } : prev);
+    }
+  }, [userContent]);
+
+  const handleFeedback = React.useCallback(async (id: string, fb: 'up' | 'down') => {
+    await submitTipFeedback(id, fb);
+    setUserContent(prev => prev ? { ...prev, tipFeedback: { ...prev.tipFeedback, [id]: fb } } : prev);
+  }, []);
+
+  if (!tip) return null;
+
+  return (
+    <ArticleReader
+      tip={tip}
+      isBookmarked={userContent?.bookmarks.includes(tipId) ?? false}
+      feedback={userContent?.tipFeedback?.[tipId] ?? null}
+      onBookmark={handleBookmark}
+      onFeedback={handleFeedback}
+      onClose={onClose}
+      colorScheme={colorScheme}
+    />
+  );
+}
+
 export const GlobalSheetManager = () => {
+  const colorScheme = useColorScheme() ?? 'light';
   const { isOpen, viewProps, closeSheet } = useSheet();
   const sheetRef = useRef<BottomSheet>(null);
   const [formKey, setFormKey] = useState(0);
@@ -401,6 +457,27 @@ export const GlobalSheetManager = () => {
             editData={editData}
             onDelete={closeSheet}
           />
+        </FormBottomSheet>
+      );
+    }
+
+    // Handle content/article reader sheet
+    if (isContentSheetProps(viewProps)) {
+      // ArticleReader is rendered via useSmartContent hook directly
+      // The sheet just provides the container
+      return (
+        <FormBottomSheet
+          ref={sheetRef}
+          title="Conseil"
+          icon="lightbulb"
+          accentColor={Colors[colorScheme].tint}
+          showActions={false}
+          enablePanDownToClose={true}
+          onSubmit={() => {}}
+          onCancel={closeSheet}
+          onClose={closeSheet}
+        >
+          <ContentSheetContent tipId={viewProps.tipId} onClose={closeSheet} />
         </FormBottomSheet>
       );
     }
