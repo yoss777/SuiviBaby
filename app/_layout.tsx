@@ -24,6 +24,7 @@ import { PortalProvider } from "@gorhom/portal";
 import { GlobalSheetManager } from "@/components/ui/GlobalSheetManager";
 import { InvitationListener } from "@/components/ui/InvitationListener";
 import { OfflineBanner } from "@/components/ui/OfflineBanner";
+import { AppUpdateManager } from "@/components/ui/AppUpdateManager";
 
 import { setupNotificationHandler } from "@/services/localNotificationService";
 import { startAutoSync } from "@/services/offlineQueueService";
@@ -85,6 +86,7 @@ function RootLayout() {
       <GlobalSheetManager />
       <InvitationListener />
       <OfflineBanner />
+      <AppUpdateManager />
     </AppProviders>
   );
 }

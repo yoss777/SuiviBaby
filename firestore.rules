@@ -417,6 +417,15 @@ service cloud.firestore {
     }
 
     // ============================================
+    // APP CONFIG — Version check (read-only for authenticated users)
+    // ============================================
+
+    match /app_config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Admin-only via Firebase Console
+    }
+
+    // ============================================
     // COLLECTION GROUP QUERIES
     // ============================================
 
