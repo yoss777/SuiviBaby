@@ -16,3 +16,4 @@ export type { RecentEventsListProps, RecentEvent } from "./RecentEventsList";
 export { SmartFeedCard } from "./SmartFeedCard";
 export { InsightCard } from "./InsightCard";
 export { MilestoneTimelineCard } from "./MilestoneTimelineCard";
+export { TipsCarousel } from "./TipsCarousel";

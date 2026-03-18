@@ -141,6 +141,20 @@ export interface MilestoneRef {
 
 export type TipFrequency = "daily" | "few_per_week" | "weekly";
 
+export type MilestoneStatus = "not_started" | "in_progress" | "done";
+
+export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
+  not_started: "Pas commencé",
+  in_progress: "En cours",
+  done: "Réalisé",
+};
+
+export const MILESTONE_STATUS_ICONS: Record<MilestoneStatus, string> = {
+  not_started: "circle",
+  in_progress: "circle-half-stroke",
+  done: "circle-check",
+};
+
 export interface UserContent {
   dismissedTips: string[];
   bookmarks: string[];
@@ -149,6 +163,7 @@ export interface UserContent {
   tipFrequency: TipFrequency;
   preferredCategories: TipCategory[];
   tipFeedback?: Record<string, "up" | "down">; // tipId → thumbs up/down
+  milestoneStatuses?: Record<string, MilestoneStatus>; // milestoneId → status
 }
 
 export const DEFAULT_USER_CONTENT: UserContent = {
@@ -163,6 +178,7 @@ export const DEFAULT_USER_CONTENT: UserContent = {
     "developpement",
     "bien_etre",
   ],
+  milestoneStatuses: {},
 };
 
 // ============================================

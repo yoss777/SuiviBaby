@@ -6,7 +6,7 @@ import type { MilestoneRef } from "@/types/content";
 import { MILESTONE_CATEGORY_COLORS } from "@/types/content";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
-import React, { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface MilestoneTimelineCardProps {
@@ -52,7 +52,10 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
 
   return (
     <TouchableOpacity
-      style={[styles.card, { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight }]}
+      style={[
+        styles.card,
+        { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight },
+      ]}
       onPress={handleViewAll}
       activeOpacity={0.7}
       accessibilityRole="button"
@@ -69,7 +72,7 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
         </View>
         <View style={styles.headerRight}>
           <Text style={[styles.viewAll, { color: nc.textMuted }]}>
-            Tout voir
+            Voir tout
           </Text>
           <FontAwesome name="chevron-right" size={10} color={nc.textMuted} />
         </View>
@@ -78,18 +81,25 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
       {/* Milestones list */}
       <View style={styles.list}>
         {upcoming.map((m, index) => {
-          const catColor = MILESTONE_CATEGORY_COLORS[m.category] ?? nc.textMuted;
+          const catColor =
+            MILESTONE_CATEGORY_COLORS[m.category] ?? nc.textMuted;
           const rangeWeeks = m.ageMaxWeeks - m.ageMinWeeks;
           const progress =
             rangeWeeks > 0
-              ? Math.min(1, Math.max(0, (ageWeeks - m.ageMinWeeks) / rangeWeeks))
+              ? Math.min(
+                  1,
+                  Math.max(0, (ageWeeks - m.ageMinWeeks) / rangeWeeks),
+                )
               : 0;
-          const isActive = ageWeeks >= m.ageMinWeeks && ageWeeks <= m.ageMaxWeeks;
+          const isActive =
+            ageWeeks >= m.ageMinWeeks && ageWeeks <= m.ageMaxWeeks;
 
           return (
             <View key={m.id}>
               {index > 0 && (
-                <View style={[styles.divider, { backgroundColor: nc.borderLight }]} />
+                <View
+                  style={[styles.divider, { backgroundColor: nc.borderLight }]}
+                />
               )}
               <View style={styles.milestoneRow}>
                 <View
@@ -117,11 +127,19 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
                 </View>
                 {/* Mini progress */}
                 {isActive && (
-                  <View style={[styles.miniProgress, { backgroundColor: nc.borderLight }]}>
+                  <View
+                    style={[
+                      styles.miniProgress,
+                      { backgroundColor: nc.borderLight },
+                    ]}
+                  >
                     <View
                       style={[
                         styles.miniProgressFill,
-                        { backgroundColor: catColor, width: `${Math.round(progress * 100)}%` },
+                        {
+                          backgroundColor: catColor,
+                          width: `${Math.round(progress * 100)}%`,
+                        },
                       ]}
                     />
                   </View>

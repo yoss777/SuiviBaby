@@ -18,6 +18,7 @@ import {
 import { auth, db } from "../config/firebase";
 import type {
   MilestoneRef,
+  MilestoneStatus,
   Tip,
   TipCategory,
   UserContent,
@@ -45,16 +46,14 @@ export async function fetchTipsForAge(
   const q = query(
     tipsRef,
     where("active", "==", true),
-    where("ageMinMonths", "<=", ageMonths),
-    orderBy("ageMinMonths"),
     orderBy("priority"),
-    limit(maxResults * 2), // Fetch extra to filter client-side
+    limit(50),
   );
 
   const snapshot = await getDocs(q);
   return snapshot.docs
     .map((d) => ({ id: d.id, ...d.data() }) as Tip)
-    .filter((tip) => ageMonths <= tip.ageMaxMonths)
+    .filter((tip) => ageMonths >= tip.ageMinMonths && ageMonths <= tip.ageMaxMonths)
     .slice(0, maxResults);
 }
 
@@ -71,16 +70,14 @@ export async function fetchTipsByCategory(
     tipsRef,
     where("active", "==", true),
     where("category", "==", category),
-    where("ageMinMonths", "<=", ageMonths),
-    orderBy("ageMinMonths"),
-    orderBy("priority"),
-    limit(maxResults * 2),
+    limit(50),
   );
 
   const snapshot = await getDocs(q);
   return snapshot.docs
     .map((d) => ({ id: d.id, ...d.data() }) as Tip)
-    .filter((tip) => ageMonths <= tip.ageMaxMonths)
+    .filter((tip) => ageMonths >= tip.ageMinMonths && ageMonths <= tip.ageMaxMonths)
+    .sort((a, b) => a.priority - b.priority)
     .slice(0, maxResults);
 }
 
@@ -101,24 +98,33 @@ export async function fetchTipById(tipId: string): Promise<Tip | null> {
 /**
  * Fetch milestones relevant for a given age (in weeks)
  */
+/**
+ * Fetch ALL milestones from birth up to current age + window.
+ * Used by the full MilestoneTimeline modal.
+ */
+export async function fetchAllMilestones(): Promise<MilestoneRef[]> {
+  const ref = collection(db, "milestones_ref");
+  const q = query(ref, limit(50));
+  const snapshot = await getDocs(q);
+  return snapshot.docs
+    .map((d) => ({ id: d.id, ...d.data() }) as MilestoneRef)
+    .sort((a, b) => a.order - b.order);
+}
+
+/**
+ * Fetch milestones relevant for a given age (nearby window only).
+ * Used by the dashboard card preview.
+ */
 export async function fetchMilestonesForAge(
   ageWeeks: number,
   windowWeeks = 8,
 ): Promise<MilestoneRef[]> {
-  const ref = collection(db, "milestones_ref");
-  // Fetch milestones where the baby's age is within the expected range
-  // or approaching (within windowWeeks)
-  const q = query(
-    ref,
-    where("ageMinWeeks", "<=", ageWeeks + windowWeeks),
-    orderBy("ageMinWeeks"),
-    orderBy("order"),
+  const all = await fetchAllMilestones();
+  return all.filter(
+    (m) =>
+      ageWeeks + windowWeeks >= m.ageMinWeeks &&
+      ageWeeks <= m.ageMaxWeeks + windowWeeks,
   );
-
-  const snapshot = await getDocs(q);
-  return snapshot.docs
-    .map((d) => ({ id: d.id, ...d.data() }) as MilestoneRef)
-    .filter((m) => ageWeeks <= m.ageMaxWeeks + windowWeeks);
 }
 
 /**
@@ -282,6 +288,31 @@ export async function updateTipFrequency(
     await setDoc(docRef, {
       ...DEFAULT_USER_CONTENT,
       tipFrequency: frequency,
+      updatedAt: new Date(),
+    });
+  }
+}
+
+/**
+ * Update a milestone's status (not_started, in_progress, done)
+ */
+export async function updateMilestoneStatus(
+  milestoneId: string,
+  status: MilestoneStatus,
+): Promise<void> {
+  const userId = getUserId();
+  const docRef = doc(db, "user_content", userId);
+  const docSnap = await getDoc(docRef);
+
+  if (docSnap.exists()) {
+    await updateDoc(docRef, {
+      [`milestoneStatuses.${milestoneId}`]: status,
+      updatedAt: new Date(),
+    });
+  } else {
+    await setDoc(docRef, {
+      ...DEFAULT_USER_CONTENT,
+      milestoneStatuses: { [milestoneId]: status },
       updatedAt: new Date(),
     });
   }

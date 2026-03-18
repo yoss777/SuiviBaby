@@ -7,13 +7,16 @@ import { getAgeInMonths, getAgeInWeeks } from "@/utils/ageUtils";
 import { getTopInsights } from "@/services/insightEngine";
 import { generateCorrelations } from "@/services/correlationService";
 import {
+  fetchAllMilestones,
   fetchTipsForAge,
   getUpcomingMilestones,
   getUserContentState,
   dismissTip as dismissTipService,
   bookmarkTip as bookmarkTipService,
   removeBookmark as removeBookmarkService,
+  updateMilestoneStatus as updateMilestoneStatusService,
 } from "@/services/smartContentService";
+import type { MilestoneStatus } from "@/types/content";
 import type { Insight, MilestoneRef, Tip, UserContent } from "@/types/content";
 import { DEFAULT_USER_CONTENT } from "@/types/content";
 
@@ -49,18 +52,21 @@ interface SmartContentParams {
 
 interface SmartContentResult {
   currentTip: Tip | null;
+  availableTips: Tip[];
   insights: Insight[];
   correlations: Insight[];
+  allMilestones: MilestoneRef[];
   upcomingMilestones: MilestoneRef[];
   userContent: UserContent;
   isLoading: boolean;
   dismissTip: (tipId: string) => Promise<void>;
   bookmarkTip: (tipId: string) => Promise<void>;
   removeBookmark: (tipId: string) => Promise<void>;
+  updateMilestoneStatus: (milestoneId: string, status: import("@/types/content").MilestoneStatus) => Promise<void>;
   refreshContent: () => void;
 }
 
-const CACHE_KEY = "samaye_smart_content_cache";
+const CACHE_KEY = "samaye_smart_content_cache_v2"; // Bumped to invalidate stale cache
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 // ============================================
@@ -72,6 +78,7 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
 
   const [tips, setTips] = useState<Tip[]>([]);
   const [milestones, setMilestones] = useState<MilestoneRef[]>([]);
+  const [allMilestonesState, setAllMilestonesState] = useState<MilestoneRef[]>([]);
   const [userContent, setUserContent] = useState<UserContent>(DEFAULT_USER_CONTENT);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -113,6 +120,7 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
             if (mounted) {
               setTips(parsed.tips || []);
               setMilestones(parsed.milestones || []);
+              setAllMilestonesState(parsed.allMilestones || []);
               setUserContent(parsed.userContent || DEFAULT_USER_CONTENT);
               setIsLoading(false);
             }
@@ -124,16 +132,18 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
       }
 
       try {
-        const [fetchedTips, fetchedMilestones, fetchedUserContent] =
+        const [fetchedTips, fetchedMilestones, fetchedAllMilestones, fetchedUserContent] =
           await Promise.all([
             fetchTipsForAge(ageMonths, 20),
             getUpcomingMilestones(ageWeeks, 5),
+            fetchAllMilestones(),
             getUserContentState(),
           ]);
 
         if (mounted) {
           setTips(fetchedTips);
           setMilestones(fetchedMilestones);
+          setAllMilestonesState(fetchedAllMilestones);
           setUserContent(fetchedUserContent);
           setIsLoading(false);
 
@@ -143,6 +153,7 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
             JSON.stringify({
               tips: fetchedTips,
               milestones: fetchedMilestones,
+              allMilestones: fetchedAllMilestones,
               userContent: fetchedUserContent,
               timestamp: Date.now(),
             }),
@@ -181,18 +192,18 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
     });
   }, [events, babyName, babyBirthDate]);
 
-  // Select the best tip to show (not dismissed, not already seen recently)
-  const currentTip = useMemo(() => {
-    if (tips.length === 0) return null;
+  // All available tips (not dismissed), sorted by priority
+  const availableTips = useMemo(() => {
+    if (tips.length === 0) return [];
 
     const dismissed = new Set(userContent.dismissedTips);
-    const available = tips.filter((t) => !dismissed.has(t.id));
-
-    if (available.length === 0) return null;
-
-    // Sort by priority, return the best one
-    return available.sort((a, b) => a.priority - b.priority)[0];
+    return tips
+      .filter((t) => !dismissed.has(t.id))
+      .sort((a, b) => a.priority - b.priority);
   }, [tips, userContent.dismissedTips]);
+
+  // Best single tip (for backward compat)
+  const currentTip = availableTips.length > 0 ? availableTips[0] : null;
 
   // Actions
   const dismissTip = useCallback(
@@ -240,6 +251,25 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
     [],
   );
 
+  const updateMilestoneStatus = useCallback(
+    async (milestoneId: string, status: MilestoneStatus) => {
+      // Optimistic update
+      setUserContent((prev) => ({
+        ...prev,
+        milestoneStatuses: {
+          ...prev.milestoneStatuses,
+          [milestoneId]: status,
+        },
+      }));
+      try {
+        await updateMilestoneStatusService(milestoneId, status);
+      } catch {
+        // Optimistic update already applied
+      }
+    },
+    [],
+  );
+
   const refreshContent = useCallback(() => {
     AsyncStorage.removeItem(CACHE_KEY).catch(() => {});
     setRefreshKey((k) => k + 1);
@@ -248,14 +278,17 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
 
   return {
     currentTip,
+    availableTips,
     insights,
     correlations,
+    allMilestones: allMilestonesState,
     upcomingMilestones: milestones,
     userContent,
     isLoading,
     dismissTip,
     bookmarkTip,
     removeBookmark,
+    updateMilestoneStatus,
     refreshContent,
   };
 }

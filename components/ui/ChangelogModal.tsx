@@ -155,7 +155,7 @@ export const ChangelogModal = memo(function ChangelogModal({
             </Text>
             <TouchableOpacity
               onPress={handleClose}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
               accessibilityLabel="Fermer"
             >
@@ -210,7 +210,7 @@ export const ChangelogModal = memo(function ChangelogModal({
               currentIndex === entries.length - 1 ? "Compris" : "Suivant"
             }
           >
-            <Text style={styles.ctaText}>
+            <Text style={[styles.ctaText, { color: nc.white }]}>
               {currentIndex === entries.length - 1 ? "Compris !" : "Suivant"}
             </Text>
           </TouchableOpacity>
@@ -223,7 +223,7 @@ export const ChangelogModal = memo(function ChangelogModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.5)", // Overlay requires fixed opacity regardless of theme
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
@@ -319,7 +319,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   ctaText: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },

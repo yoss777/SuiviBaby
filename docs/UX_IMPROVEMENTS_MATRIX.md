@@ -7,15 +7,20 @@
 
 | Composant | P1 | P3 | P6 | P8b | P9b | P14a | P15a | P16a | P17a | P20 | P21 | P22 | P25 | P27 |
 |-----------|:--:|:--:|:--:|:---:|:---:|:----:|:----:|:----:|:----:|:---:|:---:|:---:|:---:|:---:|
+| TipsCarousel | ✅ | — | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | — |
 | SmartFeedCard | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | — |
 | InsightCard | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | — |
-| MilestoneTimelineCard | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | — |
-| MilestoneTimeline | — | ✅ | — | — | — | ✅ | — | ✅ | ✅ | — | ✅ | — | — | — |
-| ArticleReader | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | — |
-| ChangelogModal | — | — | — | ✅ | — | ✅ | ✅ | ✅ | — | — | ✅ | — | ✅ | — |
+| MilestoneTimelineCard | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — |
+| MilestoneTimeline | — | ✅ | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | — |
+| ArticleReader | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — |
+| ChangelogModal | — | — | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — |
 | useSmartContent | — | — | — | — | — | — | — | — | ✅ | ✅ | — | — | — | ✅ |
 
-**Couverture** : tous les composants respectent nc.* tokens (P14a/P16a/P21), accessibility (P15a), touch targets (P25), haptic (P8b). Le hook useSmartContent inclut race condition guards (P20), useMemo (P17a), et error handling (P27).
+**Audit v2 (post-fix)** :
+- P21 : STATUS_COLORS remplace par getStatusColors(nc) dans MilestoneTimeline, "#fff" remplace par nc.white dans ChangelogModal, overlay rgba documente
+- P25 : hitSlop augmente a 14px (SmartFeedCard, InsightCard), 16px (ChangelogModal close), minHeight 36px (StatusBtn)
+- P8b : haptic sur status change, filter change, group toggle dans MilestoneTimeline
+- P15a : accessibilityRole/Label/State/Hint sur tous les boutons interactifs et sections collapsibles
 
 ## Écrans concernés
 

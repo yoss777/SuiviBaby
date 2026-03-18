@@ -3,8 +3,8 @@ import {
   MilestoneTimelineCard,
   RecentEventsList,
   SleepWidget,
-  SmartFeedCard,
   StatsGroup,
+  TipsCarousel,
   type StatItem,
 } from "@/components/suivibaby/dashboard";
 import { GlobalFAB } from "@/components/suivibaby/GlobalFAB";
@@ -15,30 +15,29 @@ import {
   getNeutralColors,
   itemColors,
 } from "@/constants/dashboardColors";
-import {
-  MOMENT_REPAS_LABELS,
-  MOOD_EMOJIS,
-} from "@/constants/dashboardConfig";
+import { MOMENT_REPAS_LABELS, MOOD_EMOJIS } from "@/constants/dashboardConfig";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useSmartContent } from "@/hooks/useSmartContent";
-import { Ionicons } from "@expo/vector-icons";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
+import { useSmartContent } from "@/hooks/useSmartContent";
+import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
+import { getAgeInWeeks } from "@/utils/ageUtils";
 import {
   ajouterJalon,
   ajouterSommeil,
 } from "@/migration/eventsDoubleWriteService";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
+import { supprimerEvenement } from "@/services/eventsService";
 import {
   buildTodayEventsData,
   getTodayEventsCache,
 } from "@/services/todayEventsCache";
-import { supprimerEvenement } from "@/services/eventsService";
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -48,6 +47,7 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -83,14 +83,45 @@ function HomeSkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
   });
   const shimmerBg = colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
 
-  const Block = ({ width, height }: { width: number | string; height: number }) => (
-    <View style={{ width: width as number, height, backgroundColor: nc.borderLight, borderRadius: 8, overflow: "hidden", marginBottom: 10 }}>
-      <Animated.View style={{ position: "absolute", top: 0, bottom: 0, width: 120, backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }} />
+  const Block = ({
+    width,
+    height,
+  }: {
+    width: number | string;
+    height: number;
+  }) => (
+    <View
+      style={{
+        width: width as number,
+        height,
+        backgroundColor: nc.borderLight,
+        borderRadius: 8,
+        overflow: "hidden",
+        marginBottom: 10,
+      }}
+    >
+      <Animated.View
+        style={{
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          width: 120,
+          backgroundColor: shimmerBg,
+          transform: [{ translateX: shimmerTranslate }],
+        }}
+      />
     </View>
   );
 
   return (
-    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: nc.background }}>
+    <View
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: nc.background,
+      }}
+    >
       <View style={{ width: "100%", padding: 20 }}>
         <Block width="60%" height={24} />
         <Block width="40%" height={14} />
@@ -111,7 +142,15 @@ function HomeSkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
 // STAGGERED ENTRANCE
 // ============================================
 
-function StaggeredCard({ index, visible, children }: { index: number; visible: boolean; children: React.ReactNode }) {
+function StaggeredCard({
+  index,
+  visible,
+  children,
+}: {
+  index: number;
+  visible: boolean;
+  children: React.ReactNode;
+}) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (visible) {
@@ -127,7 +166,14 @@ function StaggeredCard({ index, visible, children }: { index: number; visible: b
     <Animated.View
       style={{
         opacity: anim,
-        transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+        transform: [
+          {
+            translateY: anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [16, 0],
+            }),
+          },
+        ],
       }}
     >
       {children}
@@ -556,7 +602,10 @@ export default function HomeDashboard() {
   const { openSheet: openSheetRaw } = useSheet();
   const { showToast, showUndoToast, showActionToast } = useToast();
   const warningStateRef = useRef<
-    Record<string, { miction?: number; selle?: number; repas?: number; pompage?: number }>
+    Record<
+      string,
+      { miction?: number; selle?: number; repas?: number; pompage?: number }
+    >
   >({});
   // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
   const remindersEnabled = reminderPreferences.enabled;
@@ -574,6 +623,8 @@ export default function HomeDashboard() {
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
+
+  const [showMilestonesModal, setShowMilestonesModal] = useState(false);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
@@ -705,10 +756,8 @@ export default function HomeDashboard() {
           return next;
         });
         // P27: error retry toast
-        showActionToast(
-          "Erreur lors de la suppression",
-          "Réessayer",
-          () => confirmDelete(),
+        showActionToast("Erreur lors de la suppression", "Réessayer", () =>
+          confirmDelete(),
         );
       }
     }, 3000);
@@ -720,7 +769,13 @@ export default function HomeDashboard() {
         return next;
       });
     });
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast, triggerRefresh]);
+  }, [
+    activeChild?.id,
+    deleteConfirm.event,
+    showUndoToast,
+    showActionToast,
+    triggerRefresh,
+  ]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -761,17 +816,27 @@ export default function HomeDashboard() {
         }
         case "solide": {
           const typeLabels: Record<string, string> = {
-            puree: "Purée", compote: "Compote", cereales: "Céréales",
-            yaourt: "Yaourt", morceaux: "Morceaux", autre: "Autre",
+            puree: "Purée",
+            compote: "Compote",
+            cereales: "Céréales",
+            yaourt: "Yaourt",
+            morceaux: "Morceaux",
+            autre: "Autre",
           };
           const qtyLabels: Record<string, string> = {
-            peu: "Un peu", moyen: "Moyen", beaucoup: "Beaucoup",
+            peu: "Un peu",
+            moyen: "Moyen",
+            beaucoup: "Beaucoup",
           };
           const momentLabel = event.momentRepas
             ? MOMENT_REPAS_LABELS[event.momentRepas]
             : null;
-          const qtyLabel = event.quantite ? `Qté : ${qtyLabels[event.quantite]}` : null;
-          const typeLabel = event.typeSolide ? typeLabels[event.typeSolide] : null;
+          const qtyLabel = event.quantite
+            ? `Qté : ${qtyLabels[event.quantite]}`
+            : null;
+          const typeLabel = event.typeSolide
+            ? typeLabels[event.typeSolide]
+            : null;
           const line1Parts = [momentLabel, typeLabel, qtyLabel].filter(Boolean);
           const line1 = line1Parts.length > 0 ? line1Parts.join(" · ") : null;
           const dishName = event.nomNouvelAliment || event.ingredients || "";
@@ -849,10 +914,16 @@ export default function HomeDashboard() {
         }
         case "nettoyage_nez": {
           const methodeLabels: Record<string, string> = {
-            serum: "Sérum", mouche_bebe: "Mouche-bébé", coton: "Coton", autre: "Autre",
+            serum: "Sérum",
+            mouche_bebe: "Mouche-bébé",
+            coton: "Coton",
+            autre: "Autre",
           };
           const resultatLabels: Record<string, string> = {
-            efficace: "Efficace", mucus_clair: "Clair", mucus_epais: "Épais", mucus_colore: "Coloré",
+            efficace: "Efficace",
+            mucus_clair: "Clair",
+            mucus_epais: "Épais",
+            mucus_colore: "Coloré",
           };
           const parts = [
             event.methode ? methodeLabels[event.methode] : null,
@@ -954,7 +1025,10 @@ export default function HomeDashboard() {
     }));
 
     return merged
-      .filter((event) => toDate(event.date) >= cutoff && !softDeletedIds.has(event.id))
+      .filter(
+        (event) =>
+          toDate(event.date) >= cutoff && !softDeletedIds.has(event.id),
+      )
       .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime())
       .slice(0, RECENT_EVENTS_MAX);
   }, [
@@ -1002,13 +1076,25 @@ export default function HomeDashboard() {
 
   // Smart Content: combine all events for insight engine
   const allEventsForInsights = useMemo(() => {
-    const all: Array<{
-      id: string; type: string; date: Date;
-      quality?: string; location?: string; isNap?: boolean; duree?: number;
-      heureDebut?: Date; heureFin?: Date; typeSolide?: string;
-      nouveauAliment?: boolean; nomNouvelAliment?: string; reaction?: string;
-      quantiteMl?: number; valeur?: number; jalonType?: string; titre?: string;
-    }> = [];
+    const all: {
+      id: string;
+      type: string;
+      date: Date;
+      quality?: string;
+      location?: string;
+      isNap?: boolean;
+      duree?: number;
+      heureDebut?: Date;
+      heureFin?: Date;
+      typeSolide?: string;
+      nouveauAliment?: boolean;
+      nomNouvelAliment?: string;
+      reaction?: string;
+      quantiteMl?: number;
+      valeur?: number;
+      jalonType?: string;
+      titre?: string;
+    }[] = [];
     const push = (items: any[], type: string) => {
       for (const e of items) {
         all.push({
@@ -1163,7 +1249,9 @@ export default function HomeDashboard() {
         ? reminderThresholds.repas * 60 * 60 * 1000
         : null;
     const now = currentTime.getTime();
-    const mealsLastTs = todayStats.meals.total.lastTimestamp ?? todayStats.meals.lastAbsoluteTimestamp;
+    const mealsLastTs =
+      todayStats.meals.total.lastTimestamp ??
+      todayStats.meals.lastAbsoluteTimestamp;
     const repasWarning =
       repasThresholdMs !== null &&
       !!mealsLastTs &&
@@ -1185,9 +1273,21 @@ export default function HomeDashboard() {
     // Count unique meals: events within 2 min = 1 meal
     const MEAL_GROUP_MS = 20 * 60 * 1000;
     const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-    const allMealTimestamps = [...data.tetees, ...data.biberons, ...data.solides]
+    const startOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    );
+    const endOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() + 1,
+    );
+    const allMealTimestamps = [
+      ...data.tetees,
+      ...data.biberons,
+      ...data.solides,
+    ]
       .map((e) => toDate(e.date).getTime())
       .filter((t) => t >= startOfToday.getTime() && t < endOfToday.getTime())
       .sort((a, b) => a - b);
@@ -1275,7 +1375,20 @@ export default function HomeDashboard() {
         },
       ],
     };
-  }, [todayStats, data.tetees, data.biberons, data.solides, toDate, getTimeSince, formatTime, canManageContent, remindersEnabled, reminderThresholds.repas, reminderThresholds.pompages, currentTime]);
+  }, [
+    todayStats,
+    data.tetees,
+    data.biberons,
+    data.solides,
+    toDate,
+    getTimeSince,
+    formatTime,
+    canManageContent,
+    remindersEnabled,
+    reminderThresholds.repas,
+    reminderThresholds.pompages,
+    currentTime,
+  ]);
 
   // Santé Group (Couches + Vitamines + Vaccins)
   const santeGroup = useMemo((): {
@@ -1338,8 +1451,16 @@ export default function HomeDashboard() {
     // Count unique changes: miction + selle within 2 min = 1 change
     const CHANGE_GROUP_MS = 2 * 60 * 1000;
     const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const startOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    );
+    const endOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() + 1,
+    );
     const allChangeTimestamps = [...data.mictions, ...data.selles]
       .map((e) => toDate(e.date).getTime())
       .filter((t) => t >= startOfToday.getTime() && t < endOfToday.getTime())
@@ -1353,11 +1474,11 @@ export default function HomeDashboard() {
       }
     }
 
-    const summaryParts = [
-      `${changeCount} change${changeCount > 1 ? "s" : ""}`,
-    ];
+    const summaryParts = [`${changeCount} change${changeCount > 1 ? "s" : ""}`];
     if (vitamineCount > 0)
-      summaryParts.push(`${vitamineCount} vitamine${vitamineCount > 1 ? "s" : ""}`);
+      summaryParts.push(
+        `${vitamineCount} vitamine${vitamineCount > 1 ? "s" : ""}`,
+      );
     if (vaccinCount > 0)
       summaryParts.push(`${vaccinCount} vaccin${vaccinCount > 1 ? "s" : ""}`);
 
@@ -1376,7 +1497,8 @@ export default function HomeDashboard() {
           color: itemColors.miction,
           lastTimestamp: todayStats.mictions.lastTimestamp,
           onPress: canManageContent
-            ? () => router.push("/baby/diapers?tab=mictions&returnTo=home" as any)
+            ? () =>
+                router.push("/baby/diapers?tab=mictions&returnTo=home" as any)
             : undefined,
         },
         {
@@ -1400,7 +1522,8 @@ export default function HomeDashboard() {
           color: itemColors.vitamine,
           lastTimestamp: todayStats.vitamines.lastTimestamp,
           onPress: canManageContent
-            ? () => router.push("/baby/soins?type=vitamine&returnTo=home" as any)
+            ? () =>
+                router.push("/baby/soins?type=vitamine&returnTo=home" as any)
             : undefined,
         },
         {
@@ -1596,7 +1719,9 @@ export default function HomeDashboard() {
     const repasThresholdHours = reminderThresholds.repas || 0;
     const repasThresholdMs =
       repasThresholdHours > 0 ? repasThresholdHours * 60 * 60 * 1000 : null;
-    const repasTs = todayStats.meals.total.lastTimestamp ?? todayStats.meals.lastAbsoluteTimestamp;
+    const repasTs =
+      todayStats.meals.total.lastTimestamp ??
+      todayStats.meals.lastAbsoluteTimestamp;
     const repasExceeded =
       remindersEnabled &&
       repasThresholdMs !== null &&
@@ -1616,7 +1741,9 @@ export default function HomeDashboard() {
     // Pompages warning
     const pompagesThresholdHours = reminderThresholds.pompages || 0;
     const pompagesThresholdMs =
-      pompagesThresholdHours > 0 ? pompagesThresholdHours * 60 * 60 * 1000 : null;
+      pompagesThresholdHours > 0
+        ? pompagesThresholdHours * 60 * 60 * 1000
+        : null;
     const pompageTs = todayStats.pompages.lastTimestamp;
     const pompageExceeded =
       remindersEnabled &&
@@ -1649,10 +1776,7 @@ export default function HomeDashboard() {
   ]);
 
   const updateHeaderControls = useCallback(
-    (
-      scrollY: number,
-      headerLayout: { y: number; height: number } | null,
-    ) => {
+    (scrollY: number, headerLayout: { y: number; height: number } | null) => {
       if (headerLayout) {
         const threshold = headerLayout.y + headerLayout.height - 8;
         const fadeRange = 70;
@@ -1680,19 +1804,13 @@ export default function HomeDashboard() {
     (event: any) => {
       const scrollY = event.nativeEvent.contentOffset.y || 0;
       scrollYRef.current = scrollY;
-      updateHeaderControls(
-        scrollY,
-        headerRowLayoutRef.current,
-      );
+      updateHeaderControls(scrollY, headerRowLayoutRef.current);
     },
     [updateHeaderControls],
   );
 
   useEffect(() => {
-    updateHeaderControls(
-      scrollYRef.current,
-      headerRowLayoutRef.current,
-    );
+    updateHeaderControls(scrollYRef.current, headerRowLayoutRef.current);
   }, [updateHeaderControls]);
 
   useFocusEffect(
@@ -2188,14 +2306,13 @@ export default function HomeDashboard() {
           onLayout={(event) => {
             const { y, height } = event.nativeEvent.layout;
             headerRowLayoutRef.current = { y, height };
-            updateHeaderControls(
-              scrollYRef.current,
-              { y, height },
-            );
+            updateHeaderControls(scrollYRef.current, { y, height });
           }}
         >
           <View style={styles.header}>
-            <Text style={[styles.greeting, { color: nc.textStrong }]}>{getGreeting()}</Text>
+            <Text style={[styles.greeting, { color: nc.textStrong }]}>
+              {getGreeting()}
+            </Text>
             <Text style={[styles.date, { color: nc.textLight }]}>
               {new Date().toLocaleDateString("fr-FR", {
                 weekday: "long",
@@ -2217,10 +2334,54 @@ export default function HomeDashboard() {
           )}
         </View>
 
+        {/* Tips carousel — skeleton while loading (P1) */}
+        {isDataLoaded && smartContent.isLoading && (
+          <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
+            <View
+              style={{
+                height: 140,
+                borderRadius: 12,
+                backgroundColor: nc.borderLight,
+              }}
+              accessibilityLabel="Chargement des conseils"
+            />
+          </View>
+        )}
+
+        {/* Tips carousel — hero position */}
+        {isDataLoaded &&
+          !smartContent.isLoading &&
+          smartContent.availableTips.length > 0 && (
+            <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+              <TipsCarousel
+                tips={smartContent.availableTips}
+                bookmarkedIds={smartContent.userContent.bookmarks}
+                onRead={(tip) => {
+                  openSheetRaw({
+                    ownerId: activeChild?.id ?? "",
+                    formType: "content" as const,
+                    tipId: tip.id,
+                  });
+                }}
+                onDismiss={smartContent.dismissTip}
+                onBookmark={(tipId) => {
+                  if (smartContent.userContent.bookmarks.includes(tipId)) {
+                    smartContent.removeBookmark(tipId);
+                  } else {
+                    smartContent.bookmarkTip(tipId);
+                  }
+                }}
+                colorScheme={colorScheme}
+              />
+            </View>
+          )}
+
         {/* Résumé du jour */}
         <View style={styles.section}>
           <View>
-            <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>{`Résumé d'aujourd'hui`}</Text>
+            <Text
+              style={[styles.sectionTitle, { color: nc.textStrong }]}
+            >{`Résumé d'aujourd'hui`}</Text>
           </View>
 
           {/* Alimentation Group */}
@@ -2290,52 +2451,72 @@ export default function HomeDashboard() {
           {/* Humeur du jour */}
           {canManageContent && (
             <StaggeredCard index={3} visible={isDataLoaded}>
-            <View style={styles.statsGroupContainer}>
-              <View style={[styles.moodCard, { backgroundColor: cat.moments.background, borderColor: cat.moments.border }]}>
-                <Text style={[styles.moodLabel, { color: nc.textLight }]}>Humeur du jour</Text>
-                <View style={styles.moodEmojisRow}>
-                  {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
-                    const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
-                    const isSelected = todayMoodEvent?.humeur === moodValue;
-                    const isCurrentlySaving = isMoodSaving && isSelected;
-                    return (
-                      <TouchableOpacity
-                        key={key}
-                        style={[
-                          styles.moodEmojiButton,
-                          { backgroundColor: nc.backgroundCard },
-                          isSelected && [styles.moodEmojiSelected, { backgroundColor: `${cat.moments.primary}20`, borderColor: cat.moments.primary }],
-                        ]}
-                        onPress={() => handleSetMood(moodValue)}
-                        disabled={isMoodSaving}
-                        activeOpacity={0.7}
-                        accessibilityLabel={`Humeur ${moodValue} sur 5`}
-                        accessibilityState={{ selected: isSelected }}
-                      >
-                        {isCurrentlySaving ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={cat.moments.primary}
-                          />
-                        ) : (
-                          <Text style={styles.moodEmojiText}>{emoji}</Text>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+              <View style={styles.statsGroupContainer}>
+                <View
+                  style={[
+                    styles.moodCard,
+                    {
+                      backgroundColor: cat.moments.background,
+                      borderColor: cat.moments.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.moodLabel, { color: nc.textLight }]}>
+                    Humeur du jour
+                  </Text>
+                  <View style={styles.moodEmojisRow}>
+                    {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
+                      const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
+                      const isSelected = todayMoodEvent?.humeur === moodValue;
+                      const isCurrentlySaving = isMoodSaving && isSelected;
+                      return (
+                        <TouchableOpacity
+                          key={key}
+                          style={[
+                            styles.moodEmojiButton,
+                            { backgroundColor: nc.backgroundCard },
+                            isSelected && [
+                              styles.moodEmojiSelected,
+                              {
+                                backgroundColor: `${cat.moments.primary}20`,
+                                borderColor: cat.moments.primary,
+                              },
+                            ],
+                          ]}
+                          onPress={() => handleSetMood(moodValue)}
+                          disabled={isMoodSaving}
+                          activeOpacity={0.7}
+                          accessibilityLabel={`Humeur ${moodValue} sur 5`}
+                          accessibilityState={{ selected: isSelected }}
+                        >
+                          {isCurrentlySaving ? (
+                            <ActivityIndicator
+                              size="small"
+                              color={cat.moments.primary}
+                            />
+                          ) : (
+                            <Text style={styles.moodEmojiText}>{emoji}</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
               </View>
-            </View>
             </StaggeredCard>
           )}
         </View>
 
         {/* Smart Content: Insights + Tips + Milestones */}
         {isDataLoaded && !smartContent.isLoading && (
-          <View style={{ paddingHorizontal: 16, gap: 10, marginTop: 4 }}>
+          <View style={{ paddingHorizontal: 20, gap: 12, marginBottom: 12 }}>
             {/* Data-driven insights */}
             {smartContent.insights.map((insight, i) => (
-              <StaggeredCard key={insight.id} index={4 + i} visible={isDataLoaded}>
+              <StaggeredCard
+                key={insight.id}
+                index={4 + i}
+                visible={isDataLoaded}
+              >
                 <InsightCard
                   insight={insight}
                   onLearnMore={(ins) => {
@@ -2355,46 +2536,30 @@ export default function HomeDashboard() {
             {/* Cross-data correlations */}
             {smartContent.correlations.map((corr, i) => (
               <StaggeredCard key={corr.id} index={7 + i} visible={isDataLoaded}>
-                <InsightCard
-                  insight={corr}
-                  colorScheme={colorScheme}
-                />
+                <InsightCard insight={corr} colorScheme={colorScheme} />
               </StaggeredCard>
             ))}
-
-            {/* Tip of the day */}
-            {smartContent.currentTip && (
-              <StaggeredCard index={8} visible={isDataLoaded}>
-                <SmartFeedCard
-                  tip={smartContent.currentTip}
-                  isBookmarked={smartContent.userContent.bookmarks.includes(smartContent.currentTip.id)}
-                  onRead={(tip) => {
-                    openSheetRaw({
-                      ownerId: activeChild?.id ?? "",
-                      formType: "content" as const,
-                      tipId: tip.id,
-                    });
-                  }}
-                  onDismiss={smartContent.dismissTip}
-                  onBookmark={(tipId) => {
-                    if (smartContent.userContent.bookmarks.includes(tipId)) {
-                      smartContent.removeBookmark(tipId);
-                    } else {
-                      smartContent.bookmarkTip(tipId);
-                    }
-                  }}
-                  colorScheme={colorScheme}
-                />
-              </StaggeredCard>
-            )}
 
             {/* Upcoming milestones */}
             {smartContent.upcomingMilestones.length > 0 && (
               <StaggeredCard index={9} visible={isDataLoaded}>
                 <MilestoneTimelineCard
                   milestones={smartContent.upcomingMilestones}
-                  ageWeeks={activeChild?.birthDate ? Math.floor((Date.now() - new Date(activeChild.birthDate.split("/").reverse().join("-")).getTime()) / (7 * 24 * 60 * 60 * 1000)) : 0}
-                  onViewAll={() => router.push("/baby/milestones" as any)}
+                  ageWeeks={
+                    activeChild?.birthDate
+                      ? Math.floor(
+                          (Date.now() -
+                            new Date(
+                              activeChild.birthDate
+                                .split("/")
+                                .reverse()
+                                .join("-"),
+                            ).getTime()) /
+                            (7 * 24 * 60 * 60 * 1000),
+                        )
+                      : 0
+                  }
+                  onViewAll={() => setShowMilestonesModal(true)}
                   colorScheme={colorScheme}
                 />
               </StaggeredCard>
@@ -2404,12 +2569,38 @@ export default function HomeDashboard() {
 
         {/* P3: Enhanced empty state */}
         {!hasAnyTodayData && isDataLoaded && (
-          <View style={{ alignItems: "center", paddingVertical: 24, paddingHorizontal: 20 }}>
-            <Ionicons name="sunny-outline" size={48} color={nc.textLight} style={{ marginBottom: 12 }} />
-            <Text style={{ fontSize: 17, fontWeight: "600", color: nc.textStrong, textAlign: "center", marginBottom: 6 }}>
-              Rien encore aujourd'hui
+          <View
+            style={{
+              alignItems: "center",
+              paddingVertical: 24,
+              paddingHorizontal: 20,
+            }}
+          >
+            <Ionicons
+              name="sunny-outline"
+              size={48}
+              color={nc.textLight}
+              style={{ marginBottom: 12 }}
+            />
+            <Text
+              style={{
+                fontSize: 17,
+                fontWeight: "600",
+                color: nc.textStrong,
+                textAlign: "center",
+                marginBottom: 6,
+              }}
+            >
+              {"Rien encore aujourd'hui"}
             </Text>
-            <Text style={{ fontSize: 14, color: nc.textLight, textAlign: "center", lineHeight: 20 }}>
+            <Text
+              style={{
+                fontSize: 14,
+                color: nc.textLight,
+                textAlign: "center",
+                lineHeight: 20,
+              }}
+            >
               Appuyez sur + pour enregistrer le premier événement de la journée
             </Text>
           </View>
@@ -2446,6 +2637,37 @@ export default function HomeDashboard() {
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
       />
+
+      {/* Milestones Timeline Modal */}
+      <Modal
+        visible={showMilestonesModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowMilestonesModal(false)}
+      >
+        <View style={[styles.screen, { backgroundColor: nc.background }]}>
+          <View style={styles.milestonesModalHeader}>
+            <Text style={[styles.milestonesModalTitle, { color: nc.textStrong }]}>
+              {"Jalons de développement"}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowMilestonesModal(false)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer"
+            >
+              <Ionicons name="close" size={24} color={nc.textStrong} />
+            </TouchableOpacity>
+          </View>
+          <MilestoneTimeline
+            milestones={smartContent.allMilestones}
+            ageWeeks={activeChild?.birthDate ? getAgeInWeeks(activeChild.birthDate) : 0}
+            milestoneStatuses={smartContent.userContent.milestoneStatuses ?? {}}
+            onStatusChange={smartContent.updateMilestoneStatus}
+            colorScheme={colorScheme}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2540,5 +2762,17 @@ const styles = StyleSheet.create({
   },
   moodEmojiText: {
     fontSize: 22,
+  },
+  milestonesModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  milestonesModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
   },
 });
