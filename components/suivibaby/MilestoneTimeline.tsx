@@ -392,7 +392,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
           const progressPct =
             totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
           const groupColor = isCurrentOrNext
-            ? "#5B9BD5"
+            ? nc.todayAccent
             : isPast
               ? nc.success
               : nc.textMuted;
@@ -530,7 +530,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
                               <FontAwesome
                                 name="check"
                                 size={8}
-                                color="#fff"
+                                color={nc.white}
                               />
                             )}
                           </View>
