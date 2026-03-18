@@ -42,19 +42,24 @@ export async function fetchTipsForAge(
   ageMonths: number,
   maxResults = 10,
 ): Promise<Tip[]> {
-  const tipsRef = collection(db, "tips");
-  const q = query(
-    tipsRef,
-    where("active", "==", true),
-    orderBy("priority"),
-    limit(50),
-  );
+  try {
+    const tipsRef = collection(db, "tips");
+    const q = query(
+      tipsRef,
+      where("active", "==", true),
+      orderBy("priority"),
+      limit(50),
+    );
 
-  const snapshot = await getDocs(q);
-  return snapshot.docs
-    .map((d) => ({ id: d.id, ...d.data() }) as Tip)
-    .filter((tip) => ageMonths >= tip.ageMinMonths && ageMonths <= tip.ageMaxMonths)
-    .slice(0, maxResults);
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as Tip)
+      .filter((tip) => ageMonths >= tip.ageMinMonths && ageMonths <= tip.ageMaxMonths)
+      .slice(0, maxResults);
+  } catch (e) {
+    console.error("[smartContentService] fetchTipsForAge error:", e);
+    return [];
+  }
 }
 
 /**
@@ -65,30 +70,40 @@ export async function fetchTipsByCategory(
   ageMonths: number,
   maxResults = 10,
 ): Promise<Tip[]> {
-  const tipsRef = collection(db, "tips");
-  const q = query(
-    tipsRef,
-    where("active", "==", true),
-    where("category", "==", category),
-    limit(50),
-  );
+  try {
+    const tipsRef = collection(db, "tips");
+    const q = query(
+      tipsRef,
+      where("active", "==", true),
+      where("category", "==", category),
+      limit(50),
+    );
 
-  const snapshot = await getDocs(q);
-  return snapshot.docs
-    .map((d) => ({ id: d.id, ...d.data() }) as Tip)
-    .filter((tip) => ageMonths >= tip.ageMinMonths && ageMonths <= tip.ageMaxMonths)
-    .sort((a, b) => a.priority - b.priority)
-    .slice(0, maxResults);
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as Tip)
+      .filter((tip) => ageMonths >= tip.ageMinMonths && ageMonths <= tip.ageMaxMonths)
+      .sort((a, b) => a.priority - b.priority)
+      .slice(0, maxResults);
+  } catch (e) {
+    console.error("[smartContentService] fetchTipsByCategory error:", e);
+    return [];
+  }
 }
 
 /**
  * Fetch a single tip by ID
  */
 export async function fetchTipById(tipId: string): Promise<Tip | null> {
-  const docRef = doc(db, "tips", tipId);
-  const docSnap = await getDoc(docRef);
-  if (!docSnap.exists()) return null;
-  return { id: docSnap.id, ...docSnap.data() } as Tip;
+  try {
+    const docRef = doc(db, "tips", tipId);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) return null;
+    return { id: docSnap.id, ...docSnap.data() } as Tip;
+  } catch (e) {
+    console.error("[smartContentService] fetchTipById error:", e);
+    return null;
+  }
 }
 
 // ============================================
@@ -103,12 +118,17 @@ export async function fetchTipById(tipId: string): Promise<Tip | null> {
  * Used by the full MilestoneTimeline modal.
  */
 export async function fetchAllMilestones(): Promise<MilestoneRef[]> {
-  const ref = collection(db, "milestones_ref");
-  const q = query(ref, limit(50));
-  const snapshot = await getDocs(q);
-  return snapshot.docs
-    .map((d) => ({ id: d.id, ...d.data() }) as MilestoneRef)
-    .sort((a, b) => a.order - b.order);
+  try {
+    const ref = collection(db, "milestones_ref");
+    const q = query(ref, limit(50));
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as MilestoneRef)
+      .sort((a, b) => a.order - b.order);
+  } catch (e) {
+    console.error("[smartContentService] fetchAllMilestones error:", e);
+    return [];
+  }
 }
 
 /**

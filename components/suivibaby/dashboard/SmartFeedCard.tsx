@@ -104,11 +104,13 @@ export const SmartFeedCard = memo(function SmartFeedCard({
           <View style={styles.actions}>
             <TouchableOpacity
               onPress={handleBookmark}
-              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
               accessibilityLabel={
                 isBookmarked ? "Retirer des favoris" : "Ajouter aux favoris"
               }
+              accessibilityState={{ selected: isBookmarked }}
+              accessibilityHint="Appuyez pour sauvegarder ce conseil"
             >
               <FontAwesome
                 name="bookmark"
@@ -119,9 +121,10 @@ export const SmartFeedCard = memo(function SmartFeedCard({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleDismiss}
-              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
               accessibilityLabel="Masquer ce conseil"
+              accessibilityHint="Ce conseil ne sera plus affiché"
             >
               <FontAwesome name="xmark" size={14} color={nc.textMuted} />
             </TouchableOpacity>

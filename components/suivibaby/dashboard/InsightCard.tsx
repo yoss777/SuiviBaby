@@ -98,9 +98,10 @@ export const InsightCard = memo(function InsightCard({
             {onDismiss && (
               <TouchableOpacity
                 onPress={handleDismiss}
-                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
                 accessibilityRole="button"
                 accessibilityLabel="Masquer cet insight"
+                accessibilityHint="Cet insight ne sera plus affiché"
               >
                 <FontAwesome name="xmark" size={12} color={nc.textMuted} />
               </TouchableOpacity>
@@ -124,9 +125,10 @@ export const InsightCard = memo(function InsightCard({
             <TouchableOpacity
               style={styles.learnMore}
               onPress={handleLearnMore}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
               accessibilityLabel="En savoir plus"
+              accessibilityHint="Ouvre un article avec plus de détails"
             >
               <Text
                 style={[styles.learnMoreText, { color: insight.accentColor }]}

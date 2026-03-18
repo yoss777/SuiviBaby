@@ -43,6 +43,7 @@ export const TipsCarousel = memo(function TipsCarousel({
   const autoScrollTimerRef = useRef<ReturnType<typeof setInterval> | null>(
     null,
   );
+  const resumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cardWidth = Dimensions.get("window").width - 40; // paddingHorizontal: 20
   const [cardHeight, setCardHeight] = useState(0);
@@ -112,6 +113,9 @@ export const TipsCarousel = memo(function TipsCarousel({
       if (autoScrollTimerRef.current) {
         clearInterval(autoScrollTimerRef.current);
       }
+      if (resumeTimeoutRef.current) {
+        clearTimeout(resumeTimeoutRef.current);
+      }
     };
   }, [autoScrollInterval, tips.length]);
 
@@ -124,7 +128,8 @@ export const TipsCarousel = memo(function TipsCarousel({
   const onScrollEndDrag = useCallback(() => {
     if (autoScrollInterval <= 0 || tips.length <= 1) return;
 
-    setTimeout(() => {
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+    resumeTimeoutRef.current = setTimeout(() => {
       userInteractedRef.current = false;
       // Restart auto-scroll
       if (autoScrollTimerRef.current) {

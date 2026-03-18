@@ -164,7 +164,7 @@ function alimentationInsights(
       icon: "triangle-exclamation",
       title: "Réaction alimentaire",
       message: `${name} a eu ${reactions.length} réaction${reactions.length > 1 ? "s" : ""} cette semaine${foods ? ` (${foods})` : ""}. Surveillez et consultez si nécessaire.`,
-      accentColor: "#E07E7E",
+      accentColor: TIP_CATEGORY_COLORS.sante,
       priority: 1,
       category: "alimentation",
     });

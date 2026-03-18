@@ -54,7 +54,8 @@ export const ArticleReader = memo(function ArticleReader({
 
   const handleSourceLink = useCallback(() => {
     if (tip.sourceUrl) {
-      Linking.openURL(tip.sourceUrl);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Linking.openURL(tip.sourceUrl).catch(() => {});
     }
   }, [tip.sourceUrl]);
 
@@ -185,6 +186,8 @@ export const ArticleReader = memo(function ArticleReader({
           onPress={handleSourceLink}
           disabled={!tip.sourceUrl}
           accessibilityRole={tip.sourceUrl ? "link" : "text"}
+          accessibilityLabel={`Source : ${tip.source}`}
+          accessibilityHint={tip.sourceUrl ? "Ouvre le lien de la source" : undefined}
         >
           <FontAwesome name="book-open" size={12} color={nc.textMuted} />
           <Text style={[styles.sourceText, { color: nc.textMuted }]}>
@@ -267,6 +270,8 @@ export const ArticleReader = memo(function ArticleReader({
         accessibilityLabel={
           isBookmarked ? "Retirer des favoris" : "Sauvegarder"
         }
+        accessibilityState={{ selected: isBookmarked }}
+        accessibilityHint="Appuyez pour sauvegarder cet article"
       >
         <FontAwesome
           name="bookmark"
