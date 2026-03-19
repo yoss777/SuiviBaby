@@ -23,11 +23,10 @@ function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
   ) as T;
 }
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -142,8 +141,6 @@ export function ImmunizationForm({
     onFormStepChange?.(step !== "form");
   }, [onFormStepChange]);
   const [dateHeure, setDateHeure] = useState<Date>(editData?.date ?? new Date());
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Vaccin state
@@ -276,32 +273,6 @@ export function ImmunizationForm({
       showAlert("Erreur", "Impossible de supprimer. Veuillez réessayer.");
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const onChangeDate = (event: any, selectedDate?: Date) => {
-    setShowDate(false);
-    if (selectedDate) {
-      setDateHeure((prev) => {
-        const newDate = new Date(prev);
-        newDate.setFullYear(
-          selectedDate.getFullYear(),
-          selectedDate.getMonth(),
-          selectedDate.getDate(),
-        );
-        return newDate;
-      });
-    }
-  };
-
-  const onChangeTime = (event: any, selectedDate?: Date) => {
-    setShowTime(false);
-    if (selectedDate) {
-      setDateHeure((prev) => {
-        const newDate = new Date(prev);
-        newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-        return newDate;
-      });
     }
   };
 
@@ -699,75 +670,13 @@ export function ImmunizationForm({
       )}
 
       {/* Date & Time */}
-      <View style={styles.dateTimeSection}>
-        <View style={styles.dateTimeContainer}>
-          <TouchableOpacity
-            style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
-            onPress={() => setShowDate(true)}
-            disabled={isSubmitting}
-            accessibilityLabel="Choisir la date"
-            hitSlop={8}
-          >
-            <FontAwesome5
-              name="calendar-alt"
-              size={16}
-              color={Colors[colorScheme].tint}
-            />
-            <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
-            onPress={() => setShowTime(true)}
-            disabled={isSubmitting}
-            accessibilityLabel="Choisir l'heure"
-            hitSlop={8}
-          >
-            <FontAwesome5
-              name="clock"
-              size={16}
-              color={Colors[colorScheme].tint}
-            />
-            <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.selectedDateTime}>
-          <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
-            {dateHeure.toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </Text>
-          <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
-            {dateHeure.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-      </View>
-
-      {showDate && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={onChangeDate}
-        />
-      )}
-      {showTime && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="time"
-          is24Hour
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={onChangeTime}
-        />
-      )}
+      <DateTimeSectionRow
+        value={dateHeure}
+        onChange={setDateHeure}
+        colorScheme={colorScheme}
+        disabled={isSubmitting}
+        onPickerToggle={onFormStepChange}
+      />
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>

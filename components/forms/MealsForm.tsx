@@ -28,11 +28,10 @@ import {
 import { BiberonEvent, SolideEvent } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Platform,
   StyleSheet,
   Switch,
   Text,
@@ -123,8 +122,6 @@ export function MealsForm({
   // Form state
   const [mealType, setMealType] = useState<MealType>(editData?.type ?? initialType);
   const [dateHeure, setDateHeure] = useState<Date>(editData?.date ?? new Date());
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
 
   // Tetee state
   const [leftSeconds, setLeftSeconds] = useState(
@@ -245,41 +242,6 @@ export function MealsForm({
       timerTickRef.current = null;
     };
   }, [runningSide, mealType, isEditing]);
-
-  // Notify parent when in date/time picker
-  useEffect(() => {
-    onFormStepChange?.(showDate || showTime);
-  }, [showDate, showTime, onFormStepChange]);
-
-  // ============================================
-  // HANDLERS - Date/Time
-  // ============================================
-
-  const onChangeDate = (event: any, selectedDate?: Date) => {
-    setShowDate(false);
-    if (selectedDate) {
-      setDateHeure((prev) => {
-        const newDate = new Date(prev);
-        newDate.setFullYear(
-          selectedDate.getFullYear(),
-          selectedDate.getMonth(),
-          selectedDate.getDate()
-        );
-        return newDate;
-      });
-    }
-  };
-
-  const onChangeTime = (event: any, selectedDate?: Date) => {
-    setShowTime(false);
-    if (selectedDate) {
-      setDateHeure((prev) => {
-        const newDate = new Date(prev);
-        newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-        return newDate;
-      });
-    }
-  };
 
   // ============================================
   // SUBMIT / DELETE
@@ -937,73 +899,13 @@ export function MealsForm({
       )}
 
       {/* DATE/TIME PICKER */}
-      <View style={styles.dateTimeContainer}>
-        <TouchableOpacity
-          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }, isSubmitting && styles.buttonDisabled]}
-          onPress={() => setShowDate(true)}
-          disabled={isSubmitting}
-          accessibilityLabel="Choisir la date"
-          hitSlop={8}
-        >
-          <FontAwesome
-            name="calendar-alt"
-            size={16}
-            color={isSubmitting ? nc.textMuted : Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }, isSubmitting && styles.textDisabled]}>Date</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }, isSubmitting && styles.buttonDisabled]}
-          onPress={() => setShowTime(true)}
-          disabled={isSubmitting}
-          accessibilityLabel="Choisir l'heure"
-          hitSlop={8}
-        >
-          <FontAwesome
-            name="clock"
-            size={16}
-            color={isSubmitting ? nc.textMuted : Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }, isSubmitting && styles.textDisabled]}>Heure</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.selectedDateTime}>
-        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
-          {dateHeure.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </Text>
-        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
-          {dateHeure.toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-      </View>
-
-      {showDate && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={onChangeDate}
-        />
-      )}
-      {showTime && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="time"
-          is24Hour
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={onChangeTime}
-        />
-      )}
+      <DateTimeSectionRow
+        value={dateHeure}
+        onChange={setDateHeure}
+        colorScheme={colorScheme}
+        disabled={isSubmitting}
+        onPickerToggle={onFormStepChange}
+      />
 
       {/* ACTION BUTTONS */}
       <View style={styles.buttonsContainer}>

@@ -32,11 +32,10 @@ function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
   ) as T;
 }
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -220,8 +219,6 @@ export function SoinsForm({
 
   // Common state
   const [dateHeure, setDateHeure] = useState<Date>(editData?.date ?? new Date());
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
   const [note, setNote] = useState(editData?.note ?? "");
 
   // Temperature state
@@ -1522,93 +1519,13 @@ export function SoinsForm({
       </View>
 
       {/* Date/Time */}
-      <View style={styles.dateTimeContainerWithPadding}>
-        <TouchableOpacity
-          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
-          onPress={() => setShowDate(true)}
-          accessibilityLabel="Choisir la date"
-          hitSlop={8}
-        >
-          <FontAwesome5
-            name="calendar-alt"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.dateButton, { borderColor: nc.border, backgroundColor: nc.background }]}
-          onPress={() => setShowTime(true)}
-          accessibilityLabel="Choisir l'heure"
-          hitSlop={8}
-        >
-          <FontAwesome5
-            name="clock"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.selectedDateTime}>
-        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
-          {dateHeure.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </Text>
-        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
-          {dateHeure.toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-      </View>
-
-      {showDate && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            setShowDate(false);
-            if (date) {
-              setDateHeure((prev) => {
-                const next = new Date(prev);
-                next.setFullYear(
-                  date.getFullYear(),
-                  date.getMonth(),
-                  date.getDate()
-                );
-                return next;
-              });
-            }
-          }}
-        />
-      )}
-      {showTime && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="time"
-          is24Hour
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            setShowTime(false);
-            if (date) {
-              setDateHeure((prev) => {
-                const next = new Date(prev);
-                next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                return next;
-              });
-            }
-          }}
-        />
-      )}
+      <DateTimeSectionRow
+        value={dateHeure}
+        onChange={setDateHeure}
+        colorScheme={colorScheme}
+        disabled={isSubmitting}
+        onPickerToggle={onFormStepChange}
+      />
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
