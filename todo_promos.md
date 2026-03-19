@@ -1,6 +1,6 @@
 # Système Promotionnel & Monétisation — Samaye
 
-> **Contexte** : Le toggle "Offres promotionnelles" (`marketing`) existe dans les préférences notifications mais n'est branché sur rien. Ce document définit la stratégie et l'implémentation pour le rendre fonctionnel.
+> **Contexte** : Le toggle "Offres promotionnelles" (`marketing`) existe dans les préférences notifications et contrôle l'affichage des promos et du parrainage dans le dashboard.
 
 ---
 
@@ -9,80 +9,81 @@
 - **Confiance d'abord** : une app de suivi bébé touche à l'intime. Toute promo doit apporter de la valeur, pas du bruit.
 - **Opt-in strict** : le toggle `marketing: false` par défaut. L'utilisateur choisit activement de recevoir.
 - **Pertinence contextuelle** : les promos doivent être liées à l'âge du bébé et aux habitudes de l'utilisateur.
-- **Fréquence maîtrisée** : max 1 promo/semaine, jamais pendant la nuit (22h-7h).
+- **Fréquence maîtrisée** : max 1 promo/24h, jamais pendant la nuit (22h-7h).
 
 ---
 
-## Stratégie par phase
+## Statut d'implémentation
 
-### Phase 1 — Infrastructure promo (prêt à activer)
+### Phase 1 — Infrastructure promo : ✅ FAIT
 
-- [ ] **Collection Firestore `promotions/{promoId}`**
-  ```typescript
-  interface Promotion {
-    id: string;
-    title: string;              // "10% sur les couches Pampers"
-    description: string;        // Description détaillée
-    imageUrl?: string;          // Bannière visuelle
-    promoCode?: string;         // Code promo à copier
-    deepLink: string;           // URL vers le partenaire ou la page interne
-    type: "partner" | "premium" | "referral" | "seasonal";
-    category?: TipCategory;     // Lier aux catégories bébé (alimentation, sommeil...)
-    ageMinMonths?: number;      // Ciblage par âge
-    ageMaxMonths?: number;
-    priority: number;
-    startDate: Timestamp;
-    endDate: Timestamp;
-    active: boolean;
-    maxImpressions?: number;    // Limite d'affichage globale
-  }
-  ```
+- [x] **Collection Firestore `promotions/{promoId}`** — lectures users, écritures admin-only
+  - Schéma : title, description, shortDescription, imageUrl, promoCode, deepLink, type, category, ageMin/MaxMonths, priority, startDate, endDate, active, maxImpressions
+  - Types : `types/promo.ts` (Promotion, UserPromos, PromoType, ReferralTier)
 
-- [ ] **Collection `user_promos/{userId}`** — tracking impressions/clics
-  ```typescript
-  interface UserPromos {
-    seenPromos: string[];           // promoIds vus
-    dismissedPromos: string[];      // promoIds fermés
-    clickedPromos: string[];        // promoIds cliqués
-    lastPromoShownAt?: Timestamp;   // Anti-spam
-    referralCode?: string;          // Code parrainage unique
-    referralCount: number;          // Nb de parrainages réussis
-  }
-  ```
+- [x] **Collection Firestore `user_promos/{userId}`** — tracking impressions/clics
+  - Schéma : seenPromos[], dismissedPromos[], clickedPromos[], lastPromoShownAt, referralCode, referralCount, referralRewards[]
 
-- [ ] **Règles Firestore** :
+- [x] **Règles Firestore déployées** :
   - `promotions` : lecture users authentifiés, écriture admin-only
   - `user_promos` : lecture/écriture owner seulement
 
-- [ ] **Service `promoService.ts`** :
-  - `fetchActivePromos(ageMonths: number): Promise<Promotion[]>`
-  - `trackImpression(promoId: string): Promise<void>`
-  - `trackClick(promoId: string): Promise<void>`
-  - `dismissPromo(promoId: string): Promise<void>`
+- [x] **Service `services/promoService.ts`** :
+  - `fetchActivePromos(ageMonths)` — filtre par date, âge, priorité
+  - `fetchPromoById(promoId)`
+  - `trackImpression(promoId)` — marque vu + met à jour lastPromoShownAt
+  - `trackClick(promoId)` — marque cliqué
+  - `dismissPromo(promoId)` — ne plus afficher
+  - `getUserPromoState()` — état complet + génère referralCode si manquant
+  - `getReferralCode()` — code unique au format `SAM-XXXX-XXXX`
 
-### Phase 2 — UI promo
+- [x] **Hook `hooks/usePromos.ts`** :
+  - Fetch promos + user state
+  - Anti-spam : cooldown 24h entre chaque promo
+  - Anti-nuit : pas de promo entre 22h-7h
+  - Contrôlé par `marketingEnabled` (lu depuis preferences notifications)
+  - Track impression automatique quand un promo s'affiche
+  - Optimistic updates sur dismiss/click
 
-- [ ] **PromoBanner component** — banner discret dans le dashboard
-  - Position : en bas du scroll, après la chronologie récente
-  - Layout : image/icône + titre + description + CTA ("Voir l'offre" / "Copier le code")
-  - Dismiss : bouton X + haptic
-  - Style : bordure dorée subtile pour différencier du contenu éditorial
-  - Badge "Partenaire" ou "Premium" pour la transparence
+### Phase 2 — UI promo : ✅ FAIT
 
-- [ ] **PromoSheet** — bottom sheet pour les détails
-  - Image large + description complète
+- [x] **PromoBanner** (`components/suivibaby/dashboard/PromoBanner.tsx`)
+  - Accent doré (#D4A017) pour différencier du contenu éditorial
+  - Badge type (Partenaire, Premium, Saisonnier, Parrainage)
   - Bouton "Copier le code" avec Clipboard + toast
-  - Bouton "Ouvrir" avec deeplink vers le partenaire
+  - Bouton "Voir l'offre" avec deeplink
+  - Bouton dismiss avec haptic
+  - Dark mode, nc.* tokens, accessibilityRole/Label/Hint
+
+- [x] **Intégration home.tsx** — contrôlé par `marketing` toggle
+  - `useFocusEffect` relit la préférence marketing à chaque focus
+  - Si `marketing: false` → aucune promo/referral affiché
+  - Si `marketing: true` → PromoBanner + ReferralCard en bas du dashboard
+
+- [ ] **PromoSheet** — bottom sheet pour les détails (à faire si besoin)
+  - Image large + description complète
+  - Bouton "Copier le code" + "Ouvrir" deeplink
   - Conditions : date de validité, CGU
 
-- [ ] **Intégration home.tsx** — contrôlé par `marketing` toggle
-  - Si `marketing: false` → aucune promo affichée
-  - Si `marketing: true` → max 1 promo/session, anti-spam 24h
+### Phase 5 — Parrainage : ✅ FAIT
 
-### Phase 3 — Samaye Premium (monétisation directe)
+- [x] **ReferralCard** (`components/suivibaby/dashboard/ReferralCard.tsx`)
+  - Code parrainage unique (généré automatiquement : `SAM-XXXX-XXXX`)
+  - Partage via Share API (SMS, WhatsApp, email)
+  - Bouton "Copier" avec Clipboard + toast
+  - Progression gamifiée vers le prochain palier
+  - 3 paliers : Parrain (1+), Ambassadeur (3+), Super Parent (10+)
+
+- [x] **4 promotions seedées dans Firestore** :
+  - Samaye Premium (essai gratuit)
+  - Joone couches éco (-15%, code SAMAYE15)
+  - Good Goût diversification (-20%, code SAMAYE20, 4-12 mois)
+  - Petit Bateau printemps (-25%, code SAMSPRING25)
+
+### Phase 3 — Samaye Premium (monétisation directe) : ⏳ À FAIRE
 
 - [ ] **Offre Premium** — fonctionnalités avancées payantes
-  - Export PDF illimité (actuellement limité ?)
+  - Export PDF illimité
   - Insights avancés (corrélations cross-data détaillées)
   - Stockage photos illimité
   - Mode multi-bébé illimité
@@ -101,14 +102,14 @@
   - Famille : 29,99€/an (jusqu'à 5 enfants + 3 co-parents)
 
 - [ ] **Implémentation** :
-  - `expo-in-app-purchases` ou `react-native-purchases` (RevenueCat)
-  - RevenueCat recommandé : analytics, A/B testing, cross-platform, webhooks
+  - `react-native-purchases` (RevenueCat) recommandé : analytics, A/B testing, cross-platform, webhooks
   - Collection Firestore `subscriptions/{userId}` pour vérification serveur
+  - Cloud Function pour valider les receipts
 
-### Phase 4 — Partenariats bébé (revenus partenaires)
+### Phase 4 — Partenariats bébé (revenus partenaires) : ⏳ À FAIRE
 
 - [ ] **Types de partenariats pertinents** :
-  - **Couches** : Pampers, Lotus Baby, marques éco → codes promo mensuels
+  - **Couches** : Pampers, Lotus Baby, Joone, marques éco → codes promo mensuels
   - **Alimentation bébé** : Blédina, Good Goût, Babybio → promos diversification
   - **Puériculture** : Babymoov, Chicco, Bébé Confort → réductions équipement
   - **Santé** : laboratoires (vitamines D, probiotiques) → réductions
@@ -127,24 +128,7 @@
   - Post-vaccination → promos paracétamol pédiatrique
   - **Jamais de promo pendant un épisode de santé en cours** (éthique)
 
-### Phase 5 — Programme de parrainage
-
-- [ ] **Mécanique** :
-  - Chaque utilisateur a un code parrainage unique (généré à l'inscription)
-  - Partage via : SMS, WhatsApp, email, copier le lien
-  - Le filleul s'inscrit avec le code → les deux reçoivent un avantage
-
-- [ ] **Récompenses** :
-  - Parrain : 1 mois Premium offert par parrainage (cumulable)
-  - Filleul : 1 mois Premium offert à l'inscription
-  - Paliers : 3 parrainages → badge "Ambassadeur", 10 → "Super Parent"
-
-- [ ] **UI** :
-  - Écran dédié dans Settings : "Inviter des parents"
-  - Card dans le dashboard (contrôlé par `marketing` toggle)
-  - Compteur de parrainages + historique
-
-### Phase 6 — Contenu sponsorisé (dans le carousel tips)
+### Phase 6 — Contenu sponsorisé (dans le carousel tips) : ⏳ À FAIRE
 
 - [ ] **Tip sponsorisé** — article/tip payé par un partenaire
   - Badge "Sponsorisé" clairement visible (transparence RGPD)
@@ -176,17 +160,33 @@
 
 ### Ce que personne ne fait (nos innovations)
 
-1. **Promos anti-stress** : jamais de promo pendant un épisode de santé détecté. Si bébé a de la fièvre, pas de bannière "Achetez du Doliprane". C'est du respect, pas du marketing.
+1. **Promos anti-stress** : jamais de promo pendant un épisode de santé détecté. Si bébé a de la fièvre, pas de bannière. C'est du respect, pas du marketing.
 
 2. **Promos contextuelles intelligentes** : basées sur les données réelles de l'app (âge, type d'alimentation, saison, événements récents). Pas du spam générique.
 
 3. **Transparence totale** : badge "Sponsorisé" sur tout contenu payé, charte éthique publique, pas de dark patterns.
 
-4. **Valeur bidirectionnelle** : les promos doivent faire économiser l'utilisateur, pas juste générer du revenu. Si un code promo Pampers fait économiser 10€ au parent, tout le monde y gagne.
+4. **Valeur bidirectionnelle** : les promos doivent faire économiser l'utilisateur, pas juste générer du revenu. Si un code promo fait économiser 10€ au parent, tout le monde y gagne.
 
-5. **Fréquence respectueuse** : max 1 promo/semaine, jamais la nuit, jamais pendant un moment stressant. La fatigue parentale n'est pas un levier marketing.
+5. **Fréquence respectueuse** : max 1 promo/24h, jamais la nuit, jamais pendant un moment stressant. La fatigue parentale n'est pas un levier marketing.
 
-6. **Programme ambassadeur gamifié** : badges, paliers, récompenses cumulables. Les parents qui recommandent l'app sont récompensés durablement, pas avec un one-shot.
+6. **Programme ambassadeur gamifié** : badges, paliers, récompenses cumulables. Les parents qui recommandent l'app sont récompensés durablement.
+
+---
+
+## Fichiers créés/modifiés
+
+| Fichier | Rôle |
+|---------|------|
+| `types/promo.ts` | Types Promotion, UserPromos, ReferralTier |
+| `services/promoService.ts` | CRUD Firestore promos + tracking + referral |
+| `hooks/usePromos.ts` | Orchestration promos avec anti-spam et night guard |
+| `components/suivibaby/dashboard/PromoBanner.tsx` | Bannière promo dashboard |
+| `components/suivibaby/dashboard/ReferralCard.tsx` | Carte parrainage avec partage |
+| `data/promos_seed.json` | 4 promos sample |
+| `scripts/seedPromos.mjs` | Script de seed Firestore |
+| `firestore.rules` | Collections promotions + user_promos |
+| `app/(drawer)/baby/(tabs)/home.tsx` | Intégration contrôlée par marketing toggle |
 
 ---
 
@@ -201,17 +201,14 @@
 
 ---
 
-## Ordre d'implémentation recommandé
+## Ordre d'implémentation restant
 
 ```
-Phase 1 (infrastructure)     — préparer sans rien afficher
-Phase 5 (parrainage)          — acquisition gratuite, forte viralité
-Phase 3 (Premium)             — monétisation directe, RevenueCat
-Phase 2 (UI promo)            — afficher les promos quand le contenu est prêt
-Phase 4 (partenariats)        — quand la base utilisateurs justifie les négociations
-Phase 6 (contenu sponsorisé)  — quand le carousel tips a prouvé son engagement
+Phase 3 (Premium + RevenueCat)    — monétisation directe, nécessite compte RevenueCat
+Phase 4 (Partenariats)            — quand la base utilisateurs justifie les négociations
+Phase 6 (Contenu sponsorisé)      — quand le carousel tips a prouvé son engagement
 ```
 
 ---
 
-*Dernière mise à jour : 2026-03-18*
+*Dernière mise à jour : 2026-03-19*
