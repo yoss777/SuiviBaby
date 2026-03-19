@@ -159,6 +159,12 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const isDark = colorScheme === "dark";
+
+  // Chip colors aligned with RoutinesForm pattern
+  const chipActiveColors = isDark
+    ? { bg: eventColors.activite.dark + "30", border: "#6EE7B7", text: "#A7F3D0" }
+    : { bg: "#ECFDF5", border: eventColors.activite.dark, text: "#065F46" };
 
   const isEditing = !!editData;
 
@@ -363,8 +369,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                   styles.typeChip,
                   { borderColor: nc.border, backgroundColor: nc.background },
                   active && {
-                    backgroundColor: nc.backgroundCard,
-                    borderColor: eventColors.activite.dark,
+                    backgroundColor: chipActiveColors.bg,
+                    borderColor: chipActiveColors.border,
                   },
                 ]}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTypeActivite(type); }}
@@ -377,7 +383,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                     styles.typeChipText,
                     { color: nc.textLight },
                     active && {
-                      color: eventColors.activite.dark,
+                      color: chipActiveColors.text,
                       fontWeight: "700",
                     },
                   ]}
@@ -481,8 +487,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             style={[
               styles.chronoRow,
               {
-                borderColor: isOngoing ? eventColors.activite.dark + "60" : nc.border,
-                backgroundColor: isOngoing ? eventColors.activite.dark + "10" : nc.background,
+                borderColor: isOngoing ? chipActiveColors.border : nc.border,
+                backgroundColor: isOngoing ? chipActiveColors.bg : nc.background,
               },
             ]}
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsOngoing((prev) => !prev); }}
@@ -492,13 +498,13 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             accessibilityState={{ checked: isOngoing }}
             accessibilityHint="Active si la promenade est toujours en cours"
           >
-            <Text style={[styles.chronoLabel, { color: isOngoing ? eventColors.activite.dark : nc.textLight }]}>
+            <Text style={[styles.chronoLabel, { color: isOngoing ? chipActiveColors.text : nc.textLight }]}>
               {"En cours"}
             </Text>
             <FontAwesome5
               name={isOngoing ? "toggle-on" : "toggle-off"}
               size={22}
-              color={isOngoing ? eventColors.activite.dark : nc.textMuted}
+              color={isOngoing ? chipActiveColors.border : nc.textMuted}
             />
           </TouchableOpacity>
 

@@ -1,6 +1,5 @@
 // components/forms/RoutinesForm.tsx
 import { Colors } from "@/constants/theme";
-import { eventColors } from "@/constants/eventColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import * as Haptics from "expo-haptics";
 import { useBaby } from "@/contexts/BabyContext";
@@ -782,8 +781,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         style={[
           styles.checkboxRow,
           {
-            borderColor: isOngoing ? eventColors.sommeil.dark + "60" : nc.border,
-            backgroundColor: isOngoing ? eventColors.sommeil.dark + "10" : nc.background,
+            borderColor: isOngoing ? chipActiveColors.border : nc.border,
+            backgroundColor: isOngoing ? chipActiveColors.bg : nc.background,
             borderWidth: 1,
             borderRadius: 10,
             paddingHorizontal: 14,
@@ -800,13 +799,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         accessibilityState={{ checked: isOngoing }}
         accessibilityHint="Active si le sommeil est toujours en cours"
       >
-        <Text style={[styles.checkboxLabel, { color: isOngoing ? eventColors.sommeil.dark : nc.textLight }]}>
+        <Text style={[styles.checkboxLabel, { color: isOngoing ? chipActiveColors.text : nc.textLight }]}>
           {"En cours"}
         </Text>
         <FontAwesome
           name={isOngoing ? "toggle-on" : "toggle-off"}
           size={22}
-          color={isOngoing ? eventColors.sommeil.dark : nc.textMuted}
+          color={isOngoing ? chipActiveColors.border : nc.textMuted}
           style={{ marginLeft: "auto" }}
         />
       </TouchableOpacity>
