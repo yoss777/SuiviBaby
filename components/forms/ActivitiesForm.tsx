@@ -185,15 +185,15 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const [heureDebut, setHeureDebut] = useState<Date>(
     editData?.heureDebut ? toDate(editData.heureDebut) : new Date(),
   );
-  const [heureFin, setHeureFin] = useState<Date>(
-    editData?.heureFin ? toDate(editData.heureFin) : new Date(),
+  const [heureFin, setHeureFin] = useState<Date | null>(
+    editData?.heureFin ? toDate(editData.heureFin) : null,
   );
   const [showChronoDate, setShowChronoDate] = useState(false);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
   // Auto-compute duree from heureDebut/heureFin in chrono mode
-  const chronoDuree = isChronoMode
+  const chronoDuree = isChronoMode && heureFin
     ? Math.max(1, Math.round((heureFin.getTime() - heureDebut.getTime()) / 60000))
     : duree;
 
@@ -220,7 +220,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;
-    if (isChronoMode && !isOngoing && heureFin <= heureDebut) {
+    if (isChronoMode && !isOngoing && heureFin && heureFin <= heureDebut) {
       showAlert("Erreur", "L'heure de fin doit être après l'heure de début.");
       return;
     }
@@ -257,22 +257,58 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         setIsSubmitting(false);
         return;
       }
-      const data = removeUndefined({
-        date: isChronoMode ? heureDebut : dateHeure,
-        typeActivite,
-        duree: isChronoMode && !isOngoing ? chronoDuree : undefined,
-        description: description.trim() ? description.trim() : undefined,
-        note: description.trim() ? description.trim() : undefined,
-        heureDebut: isChronoMode ? heureDebut : undefined,
-        heureFin: isChronoMode && !isOngoing ? heureFin : undefined,
-      });
+      // Build data — iso sommeil pattern: null for ongoing fields, undefined to omit
+      const fin = isOngoing ? null : (heureFin ?? undefined);
+      const computedDuree = heureDebut && fin
+        ? Math.max(1, Math.round((fin.getTime() - heureDebut.getTime()) / 60000))
+        : undefined;
 
-      if (editData) {
-        await modifierActivite(activeChild.id, editData.id, data);
-        showSuccess("activity", isChronoMode ? "Promenade modifiée" : "Activité modifiée");
-      } else {
+      if (isChronoMode && editData) {
+        // Edit mode: keep null values to trigger deleteField (iso modifierSommeil)
+        const editPayload: Record<string, any> = {
+          date: heureDebut,
+          typeActivite,
+          heureDebut,
+          heureFin: isOngoing ? null : fin,
+          duree: isOngoing ? null : computedDuree,
+          description: description.trim() || undefined,
+          note: description.trim() || undefined,
+        };
+        // Remove undefined but KEEP null (CF converts null → deleteField)
+        const cleanedPayload = Object.fromEntries(
+          Object.entries(editPayload).filter(([, v]) => v !== undefined),
+        );
+        await modifierActivite(activeChild.id, editData.id, cleanedPayload);
+        showSuccess("activity", "Promenade modifiée");
+      } else if (isChronoMode) {
+        // Create mode: use removeUndefined (no null needed for new events)
+        const data = removeUndefined({
+          date: heureDebut,
+          typeActivite,
+          heureDebut,
+          heureFin: fin ?? undefined,
+          duree: computedDuree,
+          description: description.trim() || undefined,
+          note: description.trim() || undefined,
+        });
         await ajouterActivite(activeChild.id, data);
-        showSuccess("activity", isChronoMode ? "Promenade ajoutée" : "Activité ajoutée");
+        showSuccess("activity", "Promenade ajoutée");
+      } else {
+        // Non-chrono activities
+        const data = removeUndefined({
+          date: dateHeure,
+          typeActivite,
+          duree: duree || undefined,
+          description: description.trim() || undefined,
+          note: description.trim() || undefined,
+        });
+        if (editData) {
+          await modifierActivite(activeChild.id, editData.id, data);
+          showSuccess("activity", "Activité modifiée");
+        } else {
+          await ajouterActivite(activeChild.id, data);
+          showSuccess("activity", "Activité ajoutée");
+        }
       }
 
       onSuccess?.();
@@ -400,6 +436,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                     return next;
                   });
                   setHeureFin((prev) => {
+                    if (!prev) return prev;
                     const next = new Date(prev);
                     next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
                     return next;
@@ -485,7 +522,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                   {"Fin"}
                 </Text>
                 <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
-                  {heureFin.toLocaleTimeString("fr-FR", {
+                  {(heureFin ?? new Date()).toLocaleTimeString("fr-FR", {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
@@ -516,7 +553,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 if (date) {
                   setHeureDebut(date);
                   // Push heureFin if it would be before new heureDebut
-                  if (date >= heureFin) {
+                  if (heureFin && date >= heureFin) {
                     setHeureFin(new Date(date.getTime() + 60000));
                   }
                 }
@@ -526,7 +563,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           {/* End time picker */}
           {showEndPicker && (
             <DateTimePicker
-              value={heureFin}
+              value={heureFin ?? new Date()}
               mode="time"
               is24Hour
               minimumDate={heureDebut}

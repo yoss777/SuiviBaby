@@ -1,6 +1,8 @@
 // components/forms/RoutinesForm.tsx
 import { Colors } from "@/constants/theme";
+import { eventColors } from "@/constants/eventColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
+import * as Haptics from "expo-haptics";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -777,19 +779,36 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       </View>
 
       <TouchableOpacity
-        style={styles.checkboxRow}
-        onPress={() => setIsOngoing((prev) => !prev)}
+        style={[
+          styles.checkboxRow,
+          {
+            borderColor: isOngoing ? eventColors.sommeil.dark + "60" : nc.border,
+            backgroundColor: isOngoing ? eventColors.sommeil.dark + "10" : nc.background,
+            borderWidth: 1,
+            borderRadius: 10,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+          },
+        ]}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setIsOngoing((prev) => !prev);
+        }}
         disabled={isSubmitting}
+        accessibilityRole="switch"
         accessibilityLabel="Sommeil en cours"
+        accessibilityState={{ checked: isOngoing }}
+        accessibilityHint="Active si le sommeil est toujours en cours"
       >
-        <View style={[
-          styles.checkbox,
-          { borderColor: nc.border },
-          isOngoing && styles.checkboxChecked,
-        ]}>
-          {isOngoing && <FontAwesome name="check" size={12} color="#fff" />}
-        </View>
-        <Text style={[styles.checkboxLabel, { color: nc.textLight }]}>Sommeil en cours</Text>
+        <Text style={[styles.checkboxLabel, { color: isOngoing ? eventColors.sommeil.dark : nc.textLight }]}>
+          {"En cours"}
+        </Text>
+        <FontAwesome
+          name={isOngoing ? "toggle-on" : "toggle-off"}
+          size={22}
+          color={isOngoing ? eventColors.sommeil.dark : nc.textMuted}
+          style={{ marginLeft: "auto" }}
+        />
       </TouchableOpacity>
 
       <View style={styles.sleepSelectedDateTime}>

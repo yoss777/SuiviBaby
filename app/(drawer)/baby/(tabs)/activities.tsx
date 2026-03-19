@@ -322,6 +322,21 @@ export default function ActivitiesScreen() {
 
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
+  // Detect ongoing promenade (iso sommeilEnCours in routines.tsx)
+  const promenadeEnCours = useMemo(() => {
+    return events.find(
+      (item: any) => item.typeActivite === "promenade" && item.heureDebut && !item.heureFin,
+    ) as (ActivityEventWithId & { heureDebut: any }) | undefined;
+  }, [events]);
+
+  // Real-time elapsed timer for ongoing promenade
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    if (!promenadeEnCours) return;
+    const interval = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(interval);
+  }, [promenadeEnCours]);
+
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
   const editIdRef = useRef<string | null>(null);
@@ -378,6 +393,8 @@ export default function ActivitiesScreen() {
       duree: event.duree,
       description: event.description,
       date: toDate(event.date),
+      heureDebut: (event as any).heureDebut ? toDate((event as any).heureDebut) : undefined,
+      heureFin: (event as any).heureFin ? toDate((event as any).heureFin) : undefined,
     };
   }, []);
 
@@ -880,6 +897,7 @@ export default function ActivitiesScreen() {
         formType: "activities",
         activiteType: pendingActiviteType,
         editData: pendingEditData ?? undefined,
+        promenadeEnCours: promenadeEnCours ? { id: promenadeEnCours.id } : null,
         onSuccess: () => {
           ensureTodayInRange();
           applyTodayFilter();
@@ -933,7 +951,20 @@ export default function ActivitiesScreen() {
   // RENDER HELPERS
   // ============================================
   const buildDetails = (event: ActivityEventWithId): { duration?: string; description?: string } | null => {
-    const duration = event.duree ? formatDuration(event.duree) : undefined;
+    const e = event as any;
+    const isPromenade = event.typeActivite === "promenade";
+    let duration: string | undefined;
+
+    if (isPromenade && e.heureDebut && e.heureFin) {
+      const d = Math.max(0, Math.round((toDate(e.heureFin).getTime() - toDate(e.heureDebut).getTime()) / 60000));
+      duration = formatDuration(d);
+    } else if (isPromenade && e.heureDebut && !e.heureFin) {
+      const d = Math.max(0, Math.round((now.getTime() - toDate(e.heureDebut).getTime()) / 60000));
+      duration = formatDuration(d);
+    } else {
+      duration = event.duree ? formatDuration(event.duree) : undefined;
+    }
+
     const description = event.description || undefined;
     if (!duration && !description) return null;
     return { duration, description };
@@ -1114,15 +1145,44 @@ export default function ActivitiesScreen() {
             </Pressable>
           )}
           <View style={styles.sessionTime}>
-            <Text
-              style={[
-                styles.sessionTimeText,
-                { color: nc.textMuted },
-                isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }],
-              ]}
-            >
-              {formatTime(time)}
-            </Text>
+            {(() => {
+              const isPromenade = event.typeActivite === "promenade";
+              const walkStart = isPromenade && (event as any).heureDebut ? toDate((event as any).heureDebut) : null;
+              const walkEnd = isPromenade && (event as any).heureFin ? toDate((event as any).heureFin) : null;
+              const walkOngoing = isPromenade && walkStart && !walkEnd;
+
+              if (walkStart && walkEnd) {
+                return (
+                  <>
+                    <Text style={[styles.sessionTimeText, { color: nc.textMuted }, isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }]]}>
+                      {formatTime(walkStart)}
+                    </Text>
+                    <Text style={[styles.sessionTimeArrow, { color: nc.textMuted }]}>{"↓"}</Text>
+                    <Text style={[styles.sessionTimeText, { color: nc.textMuted }]}>
+                      {formatTime(walkEnd)}
+                    </Text>
+                  </>
+                );
+              }
+              if (walkOngoing) {
+                return (
+                  <>
+                    <Text style={[styles.sessionTimeText, { color: nc.textMuted }, isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }]]}>
+                      {formatTime(walkStart)}
+                    </Text>
+                    <Text style={[styles.sessionTimeArrow, { color: nc.textMuted }]}>{"↓"}</Text>
+                    <Text style={[styles.sessionTimeOngoing, { color: eventColors.activite.dark }]}>
+                      {"en cours"}
+                    </Text>
+                  </>
+                );
+              }
+              return (
+                <Text style={[styles.sessionTimeText, { color: nc.textMuted }, isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }]]}>
+                  {formatTime(time)}
+                </Text>
+              );
+            })()}
           </View>
           <View
             style={[
@@ -1582,6 +1642,14 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  sessionTimeArrow: {
+    fontSize: 10,
+    lineHeight: 12,
+  },
+  sessionTimeOngoing: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   sessionTimeTextLast: {
     fontWeight: "600",
