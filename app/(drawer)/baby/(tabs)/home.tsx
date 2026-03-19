@@ -1310,8 +1310,8 @@ export default function HomeDashboard() {
 
     const isWarning = !!(repasWarning || pompageWarning);
 
-    // Count unique meals: events within 2 min = 1 meal
-    const MEAL_GROUP_MS = 20 * 60 * 1000;
+    // Count unique meals: events within 30 min = 1 meal
+    const MEAL_GROUP_MS = 30 * 60 * 1000;
     const today = new Date();
     const startOfToday = new Date(
       today.getFullYear(),
