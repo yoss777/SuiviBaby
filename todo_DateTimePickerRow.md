@@ -44,23 +44,52 @@ interface DateTimePickerRowProps {
 
 ### Composant bonus : `DateTimeSectionRow.tsx`
 
-Pour les formulaires qui ont juste Date + Heure (pas de début/fin), un wrapper qui combine les deux :
+Composant complet qui gere tous les cas : date simple, date+heure, ou mode chrono (debut/fin/en cours).
 
 ```typescript
 interface DateTimeSectionProps {
-  label?: string;                   // "Date et heure" (default)
-  value: Date;
+  label?: string;                   // "Date et heure" (default) ou "Horaires"
   colorScheme: "light" | "dark";
   disabled?: boolean;
-  onChange: (date: Date) => void;
   onPickerToggle?: (visible: boolean) => void;
+
+  // Mode simple (1 date + 1 heure)
+  value?: Date;
+  onChange?: (date: Date) => void;
+
+  // Mode chrono (debut/fin avec toggle "en cours")
+  chrono?: boolean;                 // Active le mode debut/fin
+  heureDebut?: Date;
+  heureFin?: Date | null;
+  onHeureDebutChange?: (date: Date) => void;
+  onHeureFinChange?: (date: Date | null) => void;
+
+  // Toggle "En cours" (optionnel, actif seulement si chrono=true)
+  showOngoingToggle?: boolean;      // Affiche le toggle "En cours"
+  isOngoing?: boolean;
+  onOngoingChange?: (ongoing: boolean) => void;
+  ongoingLabel?: string;            // "En cours" (default)
+  ongoingActiveColors?: {           // Couleurs du toggle actif (chipActiveColors)
+    bg: string;
+    border: string;
+    text: string;
+  };
+
+  // Date fin separee (optionnel, pour les nuits qui debordent)
+  showEndDate?: boolean;            // Affiche un picker "Date fin" en plus de "Heure fin"
+
+  // Duree calculee (optionnel)
+  showDuration?: boolean;           // Affiche la duree calculee
 }
 ```
 
-Ce composant affiche :
-- Label "Date et heure"
-- Row Date (avec DateTimePickerRow mode="date")
-- Row Heure (avec DateTimePickerRow mode="time")
+Ce composant gere :
+- **Mode simple** : Label + Row Date + Row Heure (pour bain, nez, couches, repas, etc.)
+- **Mode chrono** : Label + Row Date debut + Row Heure debut + [Toggle En cours] + [Row Date fin] + [Row Heure fin] + [Duree calculee]
+- Le toggle "En cours" est integre : quand actif, masque les rows fin + duree
+- La duree est calculee automatiquement depuis heureDebut/heureFin
+- Toutes les validations (heureFin > heureDebut, clamp, initialisation) sont gerees en interne
+- Un seul composant pour tous les formulaires, avec des props optionnelles selon le besoin
 
 ---
 
@@ -127,7 +156,7 @@ Ces formulaires utilisent déjà le style chronoRow mais avec du code inline.
 **Spécificités sommeil** :
 - **Date début** : `DateTimePickerRow` mode="date" → modifie `heureDebut`
 - **Heure début** : `DateTimePickerRow` mode="time" → modifie `heureDebut`
-- **Toggle "En cours"** : composant séparé (PAS dans DateTimePickerRow) — reste inline
+- **Toggle "En cours"** : intégré via `showOngoingToggle=true` + `ongoingActiveColors={chipActiveColors}`
 - **Date fin** : `DateTimePickerRow` mode="date" → modifie `heureFin`
   - Visible uniquement quand `!isOngoing`
   - Nécessaire pour les nuits qui débordent sur le lendemain (22h → 7h)
@@ -135,7 +164,7 @@ Ces formulaires utilisent déjà le style chronoRow mais avec du code inline.
 - **Heure fin** : `DateTimePickerRow` mode="time" → modifie `heureFin`
   - Visible uniquement quand `!isOngoing`
   - Quand `heureFin` est null, initialise à `new Date()` avant d'ouvrir le picker
-- **Durée calculée** : reste inline (calculée depuis heureDebut/heureFin)
+- **Durée calculée** : intégrée via `showDuration=true` (calculée automatiquement depuis heureDebut/heureFin)
 - **Validation** : heureFin doit être après heureDebut (gérée dans handleSubmit)
 - **States** : `heureDebut`, `heureFin` (Date|null), `showDateStart`, `showTimeStart`, `showDateEnd`, `showTimeEnd`, `isOngoing`
 
@@ -149,12 +178,12 @@ Ces formulaires utilisent déjà le style chronoRow mais avec du code inline.
 - **Date** : `DateTimePickerRow` mode="date" → modifie `heureDebut` (et `heureFin` si non null, même jour)
 - **Heure début** : `DateTimePickerRow` mode="time" → modifie `heureDebut`
   - Si nouvelle heureDebut >= heureFin → heureFin décalée à heureDebut + 1min
-- **Toggle "En cours"** : composant séparé — reste inline
+- **Toggle "En cours"** : intégré via `showOngoingToggle=true` + `ongoingActiveColors={chipActiveColors}`
 - **Heure fin** : `DateTimePickerRow` mode="time" → modifie `heureFin`
   - Visible uniquement quand `!isOngoing`
   - `minimumDate={heureDebut}` sur le picker
   - Clamp si valeur sélectionnée < heureDebut
-- **Durée calculée** : reste inline
+- **Durée calculée** : intégrée via `showDuration=true`
 - **Pas de date fin séparée** (pas de promenade de nuit)
 - **States** : `heureDebut`, `heureFin` (Date|null), `showChronoDate`, `showStartPicker`, `showEndPicker`, `isOngoing`
 - **Différence avec sommeil** : un seul picker date (pas de date fin), le changement de date modifie les deux heures
