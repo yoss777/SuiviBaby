@@ -22,6 +22,7 @@ import { obtenirEvenements, EventType } from "@/services/eventsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import React, { useCallback, useState } from "react";
 import {
   Platform,
@@ -247,15 +248,11 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     editData?.type === "sommeil" ? (editData.note ?? "") : "",
   );
 
-  // Date/Time picker visibility
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
+  // Date/Time picker visibility (sommeil only — bain/nez use DateTimeSectionRow)
   const [showDateStart, setShowDateStart] = useState(false);
   const [showTimeStart, setShowTimeStart] = useState(false);
   const [showDateEnd, setShowDateEnd] = useState(false);
   const [showTimeEnd, setShowTimeEnd] = useState(false);
-  const [showDateNez, setShowDateNez] = useState(false);
-  const [showTimeNez, setShowTimeNez] = useState(false);
 
   // Notify parent when picker visibility changes
   const handlePickerChange = useCallback(
@@ -263,22 +260,6 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       onFormStepChange?.(show);
     },
     [onFormStepChange],
-  );
-
-  const handleShowDate = useCallback(
-    (show: boolean) => {
-      setShowDate(show);
-      handlePickerChange(show);
-    },
-    [handlePickerChange],
-  );
-
-  const handleShowTime = useCallback(
-    (show: boolean) => {
-      setShowTime(show);
-      handlePickerChange(show);
-    },
-    [handlePickerChange],
   );
 
   const handleShowDateStart = useCallback(
@@ -308,22 +289,6 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const handleShowTimeEnd = useCallback(
     (show: boolean) => {
       setShowTimeEnd(show);
-      handlePickerChange(show);
-    },
-    [handlePickerChange],
-  );
-
-  const handleShowDateNez = useCallback(
-    (show: boolean) => {
-      setShowDateNez(show);
-      handlePickerChange(show);
-    },
-    [handlePickerChange],
-  );
-
-  const handleShowTimeNez = useCallback(
-    (show: boolean) => {
-      setShowTimeNez(show);
       handlePickerChange(show);
     },
     [handlePickerChange],
@@ -975,44 +940,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         />
       </View>
 
-      <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>{"Date et heure"}</Text>
-        <TouchableOpacity
-          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
-          onPress={() => handleShowDateNez(true)}
-          disabled={isSubmitting}
-          accessibilityLabel="Modifier la date"
-        >
-          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Date"}</Text>
-          <Text style={[styles.chronoValue, { color: nc.textStrong, fontSize: 15, fontWeight: "500" }]}>
-            {dateNez.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
-          onPress={() => handleShowTimeNez(true)}
-          disabled={isSubmitting}
-          accessibilityLabel="Modifier l'heure"
-        >
-          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Heure"}</Text>
-          <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
-            {dateNez.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {showDateNez && (
-        <DateTimePicker
-          value={dateNez} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} themeVariant={colorScheme}
-          onChange={(_, date) => { handleShowDateNez(false); if (date) { setDateNez((prev) => { const next = new Date(prev); next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate()); return next; }); } }}
-        />
-      )}
-      {showTimeNez && (
-        <DateTimePicker
-          value={dateNez} mode="time" is24Hour display={Platform.OS === "ios" ? "spinner" : "default"} themeVariant={colorScheme}
-          onChange={(_, date) => { handleShowTimeNez(false); if (date) { setDateNez((prev) => { const next = new Date(prev); next.setHours(date.getHours(), date.getMinutes(), 0, 0); return next; }); } }}
-        />
-      )}
+      <DateTimeSectionRow
+        value={dateNez}
+        onChange={setDateNez}
+        colorScheme={colorScheme}
+        disabled={isSubmitting}
+        onPickerToggle={onFormStepChange}
+      />
     </>
   );
 
@@ -1146,44 +1080,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         />
       </View>
 
-      <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>{"Date et heure"}</Text>
-        <TouchableOpacity
-          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
-          onPress={() => handleShowDate(true)}
-          disabled={isSubmitting}
-          accessibilityLabel="Modifier la date"
-        >
-          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Date"}</Text>
-          <Text style={[styles.chronoValue, { color: nc.textStrong, fontSize: 15, fontWeight: "500" }]}>
-            {dateHeure.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
-          onPress={() => handleShowTime(true)}
-          disabled={isSubmitting}
-          accessibilityLabel="Modifier l'heure"
-        >
-          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Heure"}</Text>
-          <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
-            {dateHeure.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {showDate && (
-        <DateTimePicker
-          value={dateHeure} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} themeVariant={colorScheme}
-          onChange={(_, date) => { handleShowDate(false); if (date) { setDateHeure((prev) => { const next = new Date(prev); next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate()); return next; }); } }}
-        />
-      )}
-      {showTime && (
-        <DateTimePicker
-          value={dateHeure} mode="time" is24Hour display={Platform.OS === "ios" ? "spinner" : "default"} themeVariant={colorScheme}
-          onChange={(_, date) => { handleShowTime(false); if (date) { setDateHeure((prev) => { const next = new Date(prev); next.setHours(date.getHours(), date.getMinutes(), 0, 0); return next; }); } }}
-        />
-      )}
+      <DateTimeSectionRow
+        value={dateHeure}
+        onChange={setDateHeure}
+        colorScheme={colorScheme}
+        disabled={isSubmitting}
+        onPickerToggle={onFormStepChange}
+      />
     </>
   );
 
