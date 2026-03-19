@@ -1637,48 +1637,6 @@ const styles = StyleSheet.create({
     color: "white",
   },
 
-  // Date/Time
-  dateTimeContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-    paddingTop: 20,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  dateButtonDisabled: {
-    opacity: 0.5,
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  dateButtonTextDisabled: {
-    opacity: 0.5,
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  selectedTime: {
-    fontSize: 20,
-    fontWeight: "600",
-  },
-
   // Buttons
   buttonsContainer: {
     gap: 12,

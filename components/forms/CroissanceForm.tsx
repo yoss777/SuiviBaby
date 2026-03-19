@@ -332,41 +332,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
   },
-  // Date/Time
-  dateTimeContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-    paddingTop: 12,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  selectedTime: {
-    fontSize: 20,
-    fontWeight: "600",
-  },
   // Action buttons
   buttonsContainer: {
     gap: 12,

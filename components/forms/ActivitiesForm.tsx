@@ -633,40 +633,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  dateTimeContainerWithPadding: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-    paddingTop: 20,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  selectedTime: {
-    fontSize: 20,
-    fontWeight: "600",
-  },
   buttonsContainer: {
     gap: 12,
     marginTop: 16,
@@ -716,34 +682,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     letterSpacing: 0.2,
-  },
-  // Chrono mode styles (promenade)
-  chronoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 6,
-  },
-  chronoLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  chronoValue: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  chronoDureeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingTop: 4,
-  },
-  chronoDureeText: {
-    fontSize: 13,
-    fontWeight: "500",
   },
 });

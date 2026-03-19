@@ -752,41 +752,6 @@ const styles = StyleSheet.create({
   moodLabelActive: {
     color: eventColors.jalon.dark,
   },
-  dateTimeContainerWithPadding: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-    paddingTop: 20,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-    textTransform: "capitalize",
-  },
-  selectedTime: {
-    fontSize: 20,
-    fontWeight: "600",
-  },
   photoPreviewContainer: {
     position: "relative" as const,
     alignSelf: "center",

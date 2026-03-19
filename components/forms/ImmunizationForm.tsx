@@ -815,42 +815,6 @@ const styles = StyleSheet.create({
     minWidth: 100,
     textAlign: "center",
   },
-  dateTimeSection: {
-    paddingTop: 20,
-  },
-  dateTimeContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  dateButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  selectedDateTime: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  selectedDate: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  selectedTime: {
-    fontSize: 20,
-    fontWeight: "600",
-  },
   sheetBreadcrumb: {
     flexDirection: "row",
     alignItems: "center",
