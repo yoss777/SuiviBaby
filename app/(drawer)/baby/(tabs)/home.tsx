@@ -50,6 +50,7 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
+  Easing,
   Modal,
   RefreshControl,
   ScrollView,
@@ -1248,6 +1249,34 @@ export default function HomeDashboard() {
       Math.round((currentTime.getTime() - start.getTime()) / 60000),
     );
   }, [promenadeEnCours, currentTime, toDate]);
+
+  // Shared pulse animation for all active widgets (sleep + promenade sync)
+  const sharedPulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const hasActiveWidget = !!sommeilEnCours || !!promenadeEnCours;
+    if (hasActiveWidget) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(sharedPulseAnim, {
+            toValue: 1.02,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(sharedPulseAnim, {
+            toValue: 1,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      pulse.start();
+      return () => pulse.stop();
+    } else {
+      sharedPulseAnim.setValue(1);
+    }
+  }, [!!sommeilEnCours, !!promenadeEnCours, sharedPulseAnim]);
 
   // ============================================
   // STATS GROUPS DATA
@@ -2523,6 +2552,7 @@ export default function HomeDashboard() {
                   onStopSleep={handleStopSleep}
                   showStopButton={canManageContent}
                   colorScheme={colorScheme}
+                  sharedPulseAnim={sharedPulseAnim}
                 />
               </View>
             </StaggeredCard>
@@ -2544,6 +2574,7 @@ export default function HomeDashboard() {
                   onStop={handleStopPromenade}
                   showStopButton={canManageContent}
                   colorScheme={colorScheme}
+                  sharedPulseAnim={sharedPulseAnim}
                 />
               </View>
             </StaggeredCard>

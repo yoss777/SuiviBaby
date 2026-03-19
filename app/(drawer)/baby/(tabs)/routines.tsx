@@ -5,8 +5,9 @@ import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
 import { eventColors } from "@/constants/eventColors";
+import { SleepWidget } from "@/components/suivibaby/dashboard/SleepWidget";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
-import { getCategoryColors, getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -14,7 +15,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
-import { modifierSommeil, supprimerSommeil, supprimerBain, supprimerNettoyageNez } from "@/migration/eventsDoubleWriteService";
+import { supprimerSommeil, supprimerBain, supprimerNettoyageNez } from "@/migration/eventsDoubleWriteService";
 import {
   ecouterBainsHybrid,
   ecouterNettoyageNezHybrid,
@@ -34,7 +35,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   BackHandler,
-  Easing,
   FlatList,
   InteractionManager,
   LayoutAnimation,
@@ -696,22 +696,6 @@ export default function RoutinesScreen() {
     return Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
   }, [sommeilEnCours, now]);
 
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (sommeilEnCours) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.015, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        ]),
-      );
-      pulse.start();
-      return () => pulse.stop();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [sommeilEnCours, pulseAnim]);
-
   const handleDateSelect = useCallback((day: DateData) => {
     setSelectedDate(day.dateString);
     setSelectedFilter(null);
@@ -1141,28 +1125,31 @@ export default function RoutinesScreen() {
   // ============================================
   // STOP ONGOING SLEEP
   // ============================================
-  const handleStopSleep = useCallback(async () => {
+  const handleStopSleep = useCallback(() => {
     if (!activeChild?.id || !sommeilEnCours) return;
-    try {
-      const fin = new Date();
-      const start = toDate(sommeilEnCours.heureDebut);
-      const duree = Math.max(
-        0,
-        Math.round((fin.getTime() - start.getTime()) / 60000),
-      );
-      await modifierSommeil(activeChild.id, sommeilEnCours.id, {
-        heureFin: fin,
-        duree,
-      });
-      openEditModal({
-        ...(sommeilEnCours as any),
-        heureFin: fin,
-        duree,
-      });
-    } catch {
-      showToast("Impossible d'arrêter le sommeil.");
-    }
-  }, [activeChild?.id, sommeilEnCours, openEditModal, showToast]);
+    const start = toDate(sommeilEnCours.heureDebut);
+
+    // Open form with heureFin pre-filled — don't modify base until user confirms
+    // (iso home.tsx handleStopSleep pattern)
+    openSheet({
+      ownerId: sheetOwnerId,
+      formType: "routines",
+      routineType: "sommeil",
+      sleepMode: sommeilEnCours.isNap ? "nap" : "night",
+      editData: {
+        id: sommeilEnCours.id,
+        type: "sommeil",
+        date: start,
+        heureDebut: start,
+        heureFin: new Date(),
+        isNap: sommeilEnCours.isNap,
+        location: sommeilEnCours.location,
+        quality: sommeilEnCours.quality,
+        note: sommeilEnCours.note,
+      },
+      sommeilEnCours: { id: sommeilEnCours.id },
+    });
+  }, [activeChild?.id, sommeilEnCours, openSheet]);
 
   // ============================================
   // RENDER HELPERS
@@ -1636,50 +1623,18 @@ export default function RoutinesScreen() {
           )}
         </View>
 
-        {sommeilEnCours && (
-          <Animated.View
-            style={[
-              styles.sleepWidgetWrapper,
-              {
-                backgroundColor: getCategoryColors(colorScheme).sommeil.background,
-                borderWidth: 2,
-                borderColor: getCategoryColors(colorScheme).sommeil.primary,
-                shadowColor: getCategoryColors(colorScheme).sommeil.primary,
-                shadowOpacity: 0.25,
-                shadowRadius: 12,
-                shadowOffset: { width: 0, height: 2 },
-                elevation: 4,
-                transform: [{ scale: pulseAnim }],
-              },
-            ]}
-            accessibilityRole="timer"
-            accessibilityLabel={`${sommeilEnCours.isNap ? "Sieste" : "Nuit"} en cours depuis ${formatDuration(elapsedMinutes)}`}
-          >
-            <View style={styles.sleepWidgetHeaderRow}>
-              <FontAwesome
-                name={sommeilEnCours.isNap ? "bed" : "moon"}
-                size={14}
-                color={colorScheme === "dark" ? "#D4C8F0" : "#4A3D6B"}
-              />
-              <Text style={[styles.sleepWidgetTitle, { color: colorScheme === "dark" ? "#D4C8F0" : "#4A3D6B" }]}>
-                {sommeilEnCours.isNap ? "Sieste" : "Nuit"} en cours
-              </Text>
-            </View>
-            <Text style={[styles.sleepWidgetValue, { color: colorScheme === "dark" ? "#D4C8F0" : "#4A3D6B" }]}>
-              {formatDuration(elapsedMinutes)}
-            </Text>
-            <Text style={[styles.sleepWidgetSubtitle, { color: colorScheme === "dark" ? "#9B8CBF" : "#7A6B9A" }]}>
-              Début {formatTime(toDate(sommeilEnCours.heureDebut))}
-            </Text>
-            <TouchableOpacity
-              style={[styles.sleepWidgetStop, { backgroundColor: getCategoryColors(colorScheme).sommeil.primary }]}
-              onPress={handleStopSleep}
-              accessibilityRole="button"
-              accessibilityLabel="Terminer le sommeil"
-            >
-              <Text style={[styles.sleepWidgetStopText, { color: nc.backgroundCard }]}>Terminer</Text>
-            </TouchableOpacity>
-          </Animated.View>
+        {(!!sommeilEnCours) && (
+          <View style={{ paddingHorizontal: 16, marginBottom: 12, flexDirection: "row" }}>
+            <SleepWidget
+              isActive={true}
+              isNap={sommeilEnCours.isNap}
+              elapsedMinutes={elapsedMinutes}
+              startTime={formatTime(toDate(sommeilEnCours.heureDebut))}
+              onStartSleep={() => {}}
+              onStopSleep={handleStopSleep}
+              colorScheme={colorScheme}
+            />
+          </View>
         )}
 
         {/* Barre de sélection */}
@@ -1817,42 +1772,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-  },
-  sleepWidgetWrapper: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 16,
-    padding: 16,
-    overflow: "hidden",
-  },
-  sleepWidgetHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  sleepWidgetTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  sleepWidgetValue: {
-    marginTop: 6,
-    fontSize: 26,
-    fontWeight: "700",
-  },
-  sleepWidgetSubtitle: {
-    marginTop: 4,
-    fontSize: 12,
-  },
-  sleepWidgetStop: {
-    marginTop: 10,
-    minHeight: 44,
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sleepWidgetStopText: {
-    fontWeight: "700",
   },
   filterRow: {
     flexDirection: "row",

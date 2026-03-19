@@ -27,6 +27,7 @@ export interface SleepWidgetProps {
   onStopSleep: () => void;
   showStopButton?: boolean;
   colorScheme?: "light" | "dark";
+  sharedPulseAnim?: Animated.Value; // Shared pulse for sync with other widgets
 }
 
 // ============================================
@@ -54,6 +55,7 @@ export const SleepWidget = memo(function SleepWidget({
   onStopSleep,
   showStopButton = true,
   colorScheme = "light",
+  sharedPulseAnim,
 }: SleepWidgetProps) {
   const nc = getNeutralColors(colorScheme);
   const cat = getCategoryColors(colorScheme);
@@ -92,19 +94,21 @@ export const SleepWidget = memo(function SleepWidget({
   }, [onStopSleep]);
 
   // Pulse animation for active sleep
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const ownPulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = sharedPulseAnim ?? ownPulseAnim;
 
   useEffect(() => {
+    if (sharedPulseAnim) return; // Shared pulse managed by parent
     if (isActive) {
       const pulse = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, {
+          Animated.timing(ownPulseAnim, {
             toValue: 1.02,
             duration: 1500,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
-          Animated.timing(pulseAnim, {
+          Animated.timing(ownPulseAnim, {
             toValue: 1,
             duration: 1500,
             easing: Easing.inOut(Easing.ease),
@@ -115,7 +119,7 @@ export const SleepWidget = memo(function SleepWidget({
       pulse.start();
       return () => pulse.stop();
     } else {
-      pulseAnim.setValue(1);
+      ownPulseAnim.setValue(1);
     }
   }, [isActive, pulseAnim]);
 

@@ -1,4 +1,5 @@
 import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesForm";
+import { PromenadeWidget } from "@/components/suivibaby/dashboard/PromenadeWidget";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
@@ -20,7 +21,7 @@ import {
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
-import { modifierActivite, supprimerActivite } from "@/migration/eventsDoubleWriteService";
+import { supprimerActivite } from "@/migration/eventsDoubleWriteService";
 import { ActiviteEvent } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -32,7 +33,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   BackHandler,
-  Easing,
   FlatList,
   InteractionManager,
   LayoutAnimation,
@@ -41,7 +41,6 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TouchableOpacity,
   UIManager,
   View,
 } from "react-native";
@@ -344,22 +343,6 @@ export default function ActivitiesScreen() {
     const start = toDate(promenadeEnCours.heureDebut);
     return Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
   }, [promenadeEnCours, now]);
-
-  const promPulseAnim = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (promenadeEnCours) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(promPulseAnim, { toValue: 1.02, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(promPulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        ]),
-      );
-      pulse.start();
-      return () => pulse.stop();
-    } else {
-      promPulseAnim.setValue(1);
-    }
-  }, [promenadeEnCours, promPulseAnim]);
 
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
@@ -1115,25 +1098,28 @@ export default function ActivitiesScreen() {
   }, []);
 
   // Stop ongoing promenade (iso handleStopSleep in routines.tsx)
-  const handleStopPromenade = useCallback(async () => {
+  const handleStopPromenade = useCallback(() => {
     if (!activeChild?.id || !promenadeEnCours) return;
-    try {
-      const fin = new Date();
-      const start = toDate(promenadeEnCours.heureDebut);
-      const duree = Math.max(0, Math.round((fin.getTime() - start.getTime()) / 60000));
-      await modifierActivite(activeChild.id, promenadeEnCours.id, {
-        heureFin: fin,
-        duree,
-      });
-      openEditModal({
-        ...(promenadeEnCours as any),
-        heureFin: fin,
-        duree,
-      });
-    } catch {
-      showToast("Impossible d'arrêter la promenade.");
-    }
-  }, [activeChild?.id, promenadeEnCours, openEditModal, showToast]);
+    const start = toDate(promenadeEnCours.heureDebut);
+
+    // Open form with heureFin pre-filled — don't modify base until user confirms
+    // (iso home.tsx handleStopPromenade pattern)
+    openSheet({
+      ownerId: sheetOwnerId,
+      formType: "activities",
+      activiteType: "promenade",
+      editData: {
+        id: promenadeEnCours.id,
+        typeActivite: "promenade",
+        date: start,
+        heureDebut: start,
+        heureFin: new Date(),
+        duree: Math.max(1, Math.round((Date.now() - start.getTime()) / 60000)),
+        description: (promenadeEnCours as any).description,
+      },
+      promenadeEnCours: { id: promenadeEnCours.id },
+    });
+  }, [activeChild?.id, promenadeEnCours, openSheet]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -1455,48 +1441,24 @@ export default function ActivitiesScreen() {
           )}
         </View>
 
-        {/* Promenade en cours widget (iso sommeilEnCours in routines.tsx) */}
-        {promenadeEnCours && (
-          <Animated.View
-            style={[
-              styles.promenadeWidgetWrapper,
-              {
-                backgroundColor: eventColors.activite.light,
-                borderWidth: 2,
-                borderColor: eventColors.activite.dark,
-                shadowColor: eventColors.activite.dark,
-                shadowOpacity: 0.25,
-                shadowRadius: 12,
-                shadowOffset: { width: 0, height: 2 },
-                elevation: 4,
-                transform: [{ scale: promPulseAnim }],
-              },
-            ]}
-            accessibilityRole="timer"
-            accessibilityLabel={`Promenade en cours depuis ${formatDuration(elapsedPromenadeMinutes)}`}
-          >
-            <View style={styles.promenadeWidgetHeaderRow}>
-              <FontAwesome name="person-walking" size={14} color={eventColors.activite.dark} />
-              <Text style={[styles.promenadeWidgetTitle, { color: eventColors.activite.dark }]}>
-                {"Promenade en cours"}
-              </Text>
-            </View>
-            <Text style={[styles.promenadeWidgetValue, { color: eventColors.activite.dark }]}>
-              {formatDuration(elapsedPromenadeMinutes)}
-            </Text>
-            <Text style={[styles.promenadeWidgetSubtitle, { color: nc.textMuted }]}>
-              {`Début ${formatTime(toDate(promenadeEnCours.heureDebut))}`}
-            </Text>
-            <TouchableOpacity
-              style={[styles.promenadeWidgetStop, { backgroundColor: eventColors.activite.dark }]}
-              onPress={handleStopPromenade}
-              accessibilityRole="button"
-              accessibilityLabel="Terminer la promenade"
-              accessibilityHint="Arrête le chrono et ouvre le formulaire"
-            >
-              <Text style={[styles.promenadeWidgetStopText, { color: nc.backgroundCard }]}>{"Terminer"}</Text>
-            </TouchableOpacity>
-          </Animated.View>
+        {/* Promenade en cours widget (same component as home.tsx) */}
+        {(promenadeEnCours || !selectionMode) && (
+          <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+            <PromenadeWidget
+              isActive={!!promenadeEnCours}
+              elapsedMinutes={elapsedPromenadeMinutes}
+              startTime={
+                promenadeEnCours?.heureDebut
+                  ? formatTime(toDate(promenadeEnCours.heureDebut))
+                  : undefined
+              }
+              onStart={() => {
+                openAddModal("promenade");
+              }}
+              onStop={handleStopPromenade}
+              colorScheme={colorScheme}
+            />
+          </View>
         )}
 
         {/* Barre de sélection */}
@@ -1868,43 +1830,6 @@ const styles = StyleSheet.create({
   },
   deleteActionText: {
     fontSize: 11,
-    fontWeight: "700",
-  },
-  // Promenade en cours widget (iso sleepWidgetWrapper in routines.tsx)
-  promenadeWidgetWrapper: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 16,
-    padding: 16,
-    overflow: "hidden",
-  },
-  promenadeWidgetHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  promenadeWidgetTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  promenadeWidgetValue: {
-    marginTop: 6,
-    fontSize: 26,
-    fontWeight: "700",
-  },
-  promenadeWidgetSubtitle: {
-    marginTop: 4,
-    fontSize: 12,
-  },
-  promenadeWidgetStop: {
-    marginTop: 10,
-    minHeight: 44,
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  promenadeWidgetStopText: {
     fontWeight: "700",
   },
 });
