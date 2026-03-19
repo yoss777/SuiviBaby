@@ -284,6 +284,7 @@ export const GlobalSheetManager = () => {
             onFormStepChange={handleFormStepChange}
             editData={editData}
             onDelete={closeSheet}
+            promenadeEnCours={viewProps.promenadeEnCours}
           />
         </FormBottomSheet>
       );

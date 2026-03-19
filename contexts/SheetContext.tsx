@@ -73,6 +73,7 @@ export type ActivitiesFormSheetProps = {
   onSuccess?: () => void;
   onDismiss?: () => void;
   editData?: ActivitiesEditData;
+  promenadeEnCours?: { id: string } | null;
 };
 
 // Props for opening a milestones form sheet

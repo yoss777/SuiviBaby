@@ -69,6 +69,7 @@ export type ActivitiesFormProps = {
   onFormStepChange?: (inPicker: boolean) => void;
   editData?: ActivitiesEditData;
   onDelete?: () => void;
+  promenadeEnCours?: { id: string } | null;
 };
 
 // ============================================
@@ -150,6 +151,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   onFormStepChange,
   editData,
   onDelete,
+  promenadeEnCours,
 }) => {
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
@@ -225,15 +227,18 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
     try {
       setIsSubmitting(true);
 
-      // Prevent duplicate ongoing promenade (like RoutinesForm does for sleep)
+      // Prevent duplicate ongoing promenade (same pattern as RoutinesForm for sleep)
       if (isChronoMode && isOngoing && !isEditing) {
-        const recentActivites = await obtenirEvenements(activeChild.id, {
-          type: "activite" as EventType,
-          limite: 10,
-        });
-        const hasOngoing = recentActivites.some(
-          (e: any) => e.typeActivite === "promenade" && e.heureDebut && !e.heureFin,
-        );
+        let hasOngoing = !!promenadeEnCours;
+        if (!promenadeEnCours && activeChild?.id) {
+          const recentActivites = await obtenirEvenements(activeChild.id, {
+            type: "activite" as EventType,
+            limite: 10,
+          });
+          hasOngoing = recentActivites.some(
+            (e: any) => e.typeActivite === "promenade" && e.heureDebut && !e.heureFin,
+          );
+        }
         if (hasOngoing) {
           showAlert(
             "Attention",
@@ -243,27 +248,14 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           return;
         }
       }
-      // Prevent toggling "En cours" on edit if another promenade is already ongoing
-      if (isChronoMode && isOngoing && isEditing) {
-        const recentActivites = await obtenirEvenements(activeChild.id, {
-          type: "activite" as EventType,
-          limite: 10,
-        });
-        const otherOngoing = recentActivites.some(
-          (e: any) =>
-            e.typeActivite === "promenade" &&
-            e.heureDebut &&
-            !e.heureFin &&
-            e.id !== editData?.id,
+      const isEditingSamePromenade = editData && promenadeEnCours && editData.id === promenadeEnCours.id;
+      if (isChronoMode && isOngoing && isEditing && !isEditingSamePromenade) {
+        showAlert(
+          "Attention",
+          "Une autre promenade est déjà en cours. Terminez-la d'abord.",
         );
-        if (otherOngoing) {
-          showAlert(
-            "Attention",
-            "Une autre promenade est déjà en cours. Terminez-la d'abord.",
-          );
-          setIsSubmitting(false);
-          return;
-        }
+        setIsSubmitting(false);
+        return;
       }
       const data = removeUndefined({
         date: isChronoMode ? heureDebut : dateHeure,
@@ -277,10 +269,10 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 
       if (editData) {
         await modifierActivite(activeChild.id, editData.id, data);
-        showSuccess("activity", "Activité modifiée");
+        showSuccess("activity", isChronoMode ? "Promenade modifiée" : "Activité modifiée");
       } else {
         await ajouterActivite(activeChild.id, data);
-        showSuccess("activity", "Activité ajoutée");
+        showSuccess("activity", isChronoMode ? "Promenade ajoutée" : "Activité ajoutée");
       }
 
       onSuccess?.();

@@ -289,6 +289,7 @@ function useEventEditHandler(
   toDate: (value: any) => Date,
   headerOwnerId: React.MutableRefObject<string>,
   sommeilEnCours: any,
+  promenadeEnCours: any,
 ) {
   return useCallback(
     (event: any) => {
@@ -440,7 +441,10 @@ function useEventEditHandler(
               duree: event.duree,
               description: event.description ?? event.note,
               date: toDate(event.date),
+              heureDebut: event.heureDebut ? toDate(event.heureDebut) : undefined,
+              heureFin: event.heureFin ? toDate(event.heureFin) : undefined,
             },
+            promenadeEnCours: promenadeEnCours ?? null,
           }),
         jalon: () =>
           openSheet({
@@ -552,7 +556,7 @@ function useEventEditHandler(
         if (route) router.push(route as any);
       }
     },
-    [openSheet, toDate, headerOwnerId, sommeilEnCours],
+    [openSheet, toDate, headerOwnerId, sommeilEnCours, promenadeEnCours],
   );
 }
 
@@ -1212,11 +1216,20 @@ export default function HomeDashboard() {
     return data.sommeils.find((item) => !item.heureFin && item.heureDebut);
   }, [data.sommeils]);
 
+  // Promenade en cours detection (same pattern as sommeil)
+  const promenadeEnCours = useMemo(() => {
+    return data.activites.find(
+      (item: any) =>
+        item.typeActivite === "promenade" && item.heureDebut && !item.heureFin,
+    );
+  }, [data.activites]);
+
   const handleEventEdit = useEventEditHandler(
     openSheet,
     toDate,
     headerOwnerId,
     sommeilEnCours,
+    promenadeEnCours,
   );
 
   const elapsedSleepMinutes = useMemo(() => {
@@ -1227,14 +1240,6 @@ export default function HomeDashboard() {
       Math.round((currentTime.getTime() - start.getTime()) / 60000),
     );
   }, [sommeilEnCours, currentTime, toDate]);
-
-  // Promenade en cours detection (same pattern as sommeil)
-  const promenadeEnCours = useMemo(() => {
-    return data.activites.find(
-      (item: any) =>
-        item.typeActivite === "promenade" && item.heureDebut && !item.heureFin,
-    );
-  }, [data.activites]);
 
   const elapsedPromenadeMinutes = useMemo(() => {
     if (!promenadeEnCours?.heureDebut) return 0;
@@ -1667,6 +1672,7 @@ export default function HomeDashboard() {
         ),
         description: promenadeEnCours.description,
       },
+      promenadeEnCours,
     });
   }, [activeChild?.id, promenadeEnCours, toDate, openSheet]);
 
