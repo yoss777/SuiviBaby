@@ -417,6 +417,26 @@ service cloud.firestore {
     }
 
     // ============================================
+    // PROMOTIONS — Read-only for authenticated users
+    // ============================================
+
+    match /promotions/{promoId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Admin-only via Firebase Console
+    }
+
+    // ============================================
+    // USER PROMOS — Promo tracking (own data only)
+    // ============================================
+
+    match /user_promos/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // ============================================
     // APP CONFIG — Version check (read-only for authenticated users)
     // ============================================
 

@@ -17,3 +17,5 @@ export { SmartFeedCard } from "./SmartFeedCard";
 export { InsightCard } from "./InsightCard";
 export { MilestoneTimelineCard } from "./MilestoneTimelineCard";
 export { TipsCarousel } from "./TipsCarousel";
+export { PromoBanner } from "./PromoBanner";
+export { ReferralCard } from "./ReferralCard";
