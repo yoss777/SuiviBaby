@@ -202,6 +202,8 @@ export interface ActiviteEvent extends BaseEvent {
     | "autre";
   duree?: number; // minutes
   description?: string;
+  heureDebut?: Date | Timestamp; // For chrono mode (promenade)
+  heureFin?: Date | Timestamp; // For chrono mode (promenade)
 }
 
 export interface JalonEvent extends BaseEvent {

@@ -18,4 +18,6 @@ export { InsightCard } from "./InsightCard";
 export { MilestoneTimelineCard } from "./MilestoneTimelineCard";
 export { TipsCarousel } from "./TipsCarousel";
 export { PromoBanner } from "./PromoBanner";
+export { PromenadeWidget } from "./PromenadeWidget";
+export type { PromenadeWidgetProps } from "./PromenadeWidget";
 export { ReferralCard } from "./ReferralCard";

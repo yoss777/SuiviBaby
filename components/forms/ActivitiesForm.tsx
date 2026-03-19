@@ -53,6 +53,8 @@ export type ActivitiesEditData = {
   duree?: number;
   description?: string;
   date: Date | { seconds: number } | { toDate: () => Date };
+  heureDebut?: Date | { seconds: number } | { toDate: () => Date };
+  heureFin?: Date | { seconds: number } | { toDate: () => Date };
 };
 
 export type ActivitiesFormProps = {
@@ -169,6 +171,27 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
 
+  // Promenade always uses heureDebut/heureFin pickers (like sommeil)
+  const isChronoMode = typeActivite === "promenade";
+  const hasEditHeureFin = !!editData?.heureFin;
+  const [isOngoing, setIsOngoing] = useState(
+    isChronoMode && !!editData?.heureDebut && !editData?.heureFin,
+  );
+  const [heureDebut, setHeureDebut] = useState<Date>(
+    editData?.heureDebut ? toDate(editData.heureDebut) : new Date(),
+  );
+  const [heureFin, setHeureFin] = useState<Date>(
+    editData?.heureFin ? toDate(editData.heureFin) : new Date(),
+  );
+  const [showChronoDate, setShowChronoDate] = useState(false);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+
+  // Auto-compute duree from heureDebut/heureFin in chrono mode
+  const chronoDuree = isChronoMode
+    ? Math.max(1, Math.round((heureFin.getTime() - heureDebut.getTime()) / 60000))
+    : duree;
+
   // Notify parent when picker visibility changes
   const handleShowDate = useCallback(
     (show: boolean) => {
@@ -192,14 +215,20 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;
+    if (isChronoMode && !isOngoing && heureFin <= heureDebut) {
+      showAlert("Erreur", "L'heure de fin doit être après l'heure de début.");
+      return;
+    }
     try {
       setIsSubmitting(true);
       const data = removeUndefined({
-        date: dateHeure,
+        date: isChronoMode ? heureDebut : dateHeure,
         typeActivite,
-        duree: duree || undefined,
+        duree: isChronoMode && !isOngoing ? chronoDuree : undefined,
         description: description.trim() ? description.trim() : undefined,
         note: description.trim() ? description.trim() : undefined,
+        heureDebut: isChronoMode ? heureDebut : undefined,
+        heureFin: isChronoMode && !isOngoing ? heureFin : undefined,
       });
 
       if (editData) {
@@ -289,60 +318,252 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         </View>
       </View>
 
-      <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>
-          Durée (minutes)
-        </Text>
-        <View style={styles.quantityPickerRow}>
-          <TouchableOpacity
-            style={[
-              styles.quantityButton,
-              { backgroundColor: nc.backgroundPressed },
-              isSubmitting && styles.quantityButtonDisabled,
-            ]}
-            onPress={() => setDuree((value) => Math.max(0, value - 5))}
-            disabled={isSubmitting}
-            accessibilityLabel="Diminuer la durée"
-          >
-            <Text
-              style={[
-                styles.quantityButtonText,
-                { color: nc.textStrong },
-                isSubmitting && { color: nc.textMuted },
-              ]}
-            >
-              -
-            </Text>
-          </TouchableOpacity>
-          <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
-            {duree} min
+      {/* Chrono mode: date + heureDebut/heureFin pickers (promenade) */}
+      {isChronoMode ? (
+        <View style={styles.inputGroup}>
+          {/* Date */}
+          <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+            {"Date"}
           </Text>
           <TouchableOpacity
             style={[
-              styles.quantityButton,
-              { backgroundColor: nc.backgroundPressed },
-              isSubmitting && styles.quantityButtonDisabled,
+              styles.chronoRow,
+              { borderColor: nc.border, backgroundColor: nc.background },
             ]}
-            onPress={() => setDuree((value) => value + 5)}
+            onPress={() => {
+              setShowChronoDate(true);
+              onFormStepChange?.(true);
+            }}
             disabled={isSubmitting}
-            accessibilityLabel="Augmenter la durée"
+            accessibilityLabel="Modifier la date"
+            accessibilityHint="Ouvre le sélecteur de date"
           >
-            <Text
-              style={[
-                styles.quantityButtonText,
-                { color: nc.textStrong },
-                isSubmitting && { color: nc.textMuted },
-              ]}
-            >
-              +
+            <FontAwesome5 name="calendar-alt" size={14} color={Colors[colorScheme].tint} />
+            <Text style={[styles.chronoValue, { color: nc.textStrong, fontSize: 15, fontWeight: "500" }]}>
+              {heureDebut.toLocaleDateString("fr-FR", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
             </Text>
           </TouchableOpacity>
+          {showChronoDate && (
+            <DateTimePicker
+              value={heureDebut}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              themeVariant={colorScheme}
+              onChange={(_, date) => {
+                setShowChronoDate(false);
+                onFormStepChange?.(false);
+                if (date) {
+                  // Update date on both heureDebut and heureFin, keep times
+                  setHeureDebut((prev) => {
+                    const next = new Date(prev);
+                    next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                    return next;
+                  });
+                  setHeureFin((prev) => {
+                    const next = new Date(prev);
+                    next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                    return next;
+                  });
+                }
+              }}
+            />
+          )}
+
+          {/* Horaires */}
+          <Text style={[styles.inputLabel, { color: nc.textLight, marginTop: 8 }]}>
+            {"Horaires"}
+          </Text>
+
+          {/* Heure de début */}
+          <TouchableOpacity
+            style={[
+              styles.chronoRow,
+              { borderColor: nc.border, backgroundColor: nc.background },
+            ]}
+            onPress={() => {
+              setShowStartPicker(true);
+              onFormStepChange?.(true);
+            }}
+            disabled={isSubmitting}
+            accessibilityLabel="Modifier l'heure de début"
+            accessibilityHint="Ouvre le sélecteur d'heure"
+          >
+            <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
+              {"Début"}
+            </Text>
+            <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
+              {heureDebut.toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+          </TouchableOpacity>
+
+          {/* En cours toggle */}
+          <TouchableOpacity
+            style={[
+              styles.chronoRow,
+              {
+                borderColor: isOngoing ? eventColors.activite.dark + "60" : nc.border,
+                backgroundColor: isOngoing ? eventColors.activite.dark + "10" : nc.background,
+              },
+            ]}
+            onPress={() => setIsOngoing((prev) => !prev)}
+            disabled={isSubmitting}
+            accessibilityRole="switch"
+            accessibilityLabel="Promenade en cours"
+            accessibilityState={{ checked: isOngoing }}
+            accessibilityHint="Active si la promenade est toujours en cours"
+          >
+            <Text style={[styles.chronoLabel, { color: isOngoing ? eventColors.activite.dark : nc.textLight }]}>
+              {"En cours"}
+            </Text>
+            <FontAwesome5
+              name={isOngoing ? "toggle-on" : "toggle-off"}
+              size={22}
+              color={isOngoing ? eventColors.activite.dark : nc.textMuted}
+            />
+          </TouchableOpacity>
+
+          {/* Heure de fin (hidden if ongoing) */}
+          {!isOngoing && (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.chronoRow,
+                  { borderColor: nc.border, backgroundColor: nc.background },
+                ]}
+                onPress={() => {
+                  setShowEndPicker(true);
+                  onFormStepChange?.(true);
+                }}
+                disabled={isSubmitting}
+                accessibilityLabel="Modifier l'heure de fin"
+                accessibilityHint="Ouvre le sélecteur d'heure"
+              >
+                <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
+                  {"Fin"}
+                </Text>
+                <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
+                  {heureFin.toLocaleTimeString("fr-FR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Durée calculée */}
+              <View style={styles.chronoDureeRow}>
+                <FontAwesome5 name="clock" size={12} color={nc.textMuted} />
+                <Text style={[styles.chronoDureeText, { color: nc.textMuted }]}>
+                  {`Durée : ${chronoDuree} min`}
+                </Text>
+              </View>
+            </>
+          )}
+
+          {/* Start time picker */}
+          {showStartPicker && (
+            <DateTimePicker
+              value={heureDebut}
+              mode="time"
+              is24Hour
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              themeVariant={colorScheme}
+              onChange={(_, date) => {
+                setShowStartPicker(false);
+                onFormStepChange?.(false);
+                if (date) {
+                  setHeureDebut(date);
+                  // Push heureFin if it would be before new heureDebut
+                  if (date >= heureFin) {
+                    setHeureFin(new Date(date.getTime() + 60000));
+                  }
+                }
+              }}
+            />
+          )}
+          {/* End time picker */}
+          {showEndPicker && (
+            <DateTimePicker
+              value={heureFin}
+              mode="time"
+              is24Hour
+              minimumDate={heureDebut}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              themeVariant={colorScheme}
+              onChange={(_, date) => {
+                setShowEndPicker(false);
+                onFormStepChange?.(false);
+                if (date) {
+                  // Ensure heureFin is after heureDebut
+                  setHeureFin(date > heureDebut ? date : new Date(heureDebut.getTime() + 60000));
+                }
+              }}
+            />
+          )}
         </View>
-      </View>
+      ) : (
+        /* Standard mode: duration stepper */
+        <View style={styles.inputGroup}>
+          <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+            {"Durée (minutes)"}
+          </Text>
+          <View style={styles.quantityPickerRow}>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                { backgroundColor: nc.backgroundPressed },
+                isSubmitting && styles.quantityButtonDisabled,
+              ]}
+              onPress={() => setDuree((value) => Math.max(0, value - 5))}
+              disabled={isSubmitting}
+              accessibilityLabel="Diminuer la durée"
+            >
+              <Text
+                style={[
+                  styles.quantityButtonText,
+                  { color: nc.textStrong },
+                  isSubmitting && { color: nc.textMuted },
+                ]}
+              >
+                -
+              </Text>
+            </TouchableOpacity>
+            <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
+              {duree} min
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                { backgroundColor: nc.backgroundPressed },
+                isSubmitting && styles.quantityButtonDisabled,
+              ]}
+              onPress={() => setDuree((value) => value + 5)}
+              disabled={isSubmitting}
+              accessibilityLabel="Augmenter la durée"
+            >
+              <Text
+                style={[
+                  styles.quantityButtonText,
+                  { color: nc.textStrong },
+                  isSubmitting && { color: nc.textMuted },
+                ]}
+              >
+                +
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <View style={styles.inputGroup}>
         <Text style={[styles.inputLabel, { color: nc.textLight }]}>
-          Description
+          {"Description"}
         </Text>
         <TextInput
           value={description}
@@ -358,108 +579,113 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         />
       </View>
 
-      <View style={styles.dateTimeContainerWithPadding}>
-        <TouchableOpacity
-          style={[
-            styles.dateButton,
-            { borderColor: nc.border, backgroundColor: nc.background },
-          ]}
-          onPress={() => handleShowDate(true)}
-          disabled={isSubmitting}
-          accessibilityLabel="Choisir la date"
-          hitSlop={8}
-        >
-          <FontAwesome5
-            name="calendar-alt"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>
-            Date
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.dateButton,
-            { borderColor: nc.border, backgroundColor: nc.background },
-          ]}
-          onPress={() => handleShowTime(true)}
-          disabled={isSubmitting}
-          accessibilityLabel="Choisir l'heure"
-          hitSlop={8}
-        >
-          <FontAwesome5
-            name="clock"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>
-            Heure
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {/* Standard date/time pickers (hidden in chrono mode) */}
+      {!isChronoMode && (
+        <>
+          <View style={styles.dateTimeContainerWithPadding}>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                { borderColor: nc.border, backgroundColor: nc.background },
+              ]}
+              onPress={() => handleShowDate(true)}
+              disabled={isSubmitting}
+              accessibilityLabel="Choisir la date"
+              hitSlop={8}
+            >
+              <FontAwesome5
+                name="calendar-alt"
+                size={16}
+                color={Colors[colorScheme].tint}
+              />
+              <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>
+                Date
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                { borderColor: nc.border, backgroundColor: nc.background },
+              ]}
+              onPress={() => handleShowTime(true)}
+              disabled={isSubmitting}
+              accessibilityLabel="Choisir l'heure"
+              hitSlop={8}
+            >
+              <FontAwesome5
+                name="clock"
+                size={16}
+                color={Colors[colorScheme].tint}
+              />
+              <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>
+                Heure
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-      <View style={styles.selectedDateTime}>
-        <Text
-          style={[styles.selectedDate, { color: nc.textStrong }]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-        >
-          {dateHeure.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </Text>
-        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
-          {dateHeure.toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-      </View>
+          <View style={styles.selectedDateTime}>
+            <Text
+              style={[styles.selectedDate, { color: nc.textStrong }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {dateHeure.toLocaleDateString("fr-FR", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </Text>
+            <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
+              {dateHeure.toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+          </View>
 
-      {showDate && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            handleShowDate(false);
-            if (date) {
-              setDateHeure((prev) => {
-                const next = new Date(prev);
-                next.setFullYear(
-                  date.getFullYear(),
-                  date.getMonth(),
-                  date.getDate()
-                );
-                return next;
-              });
-            }
-          }}
-        />
-      )}
-      {showTime && (
-        <DateTimePicker
-          value={dateHeure}
-          mode="time"
-          is24Hour
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            handleShowTime(false);
-            if (date) {
-              setDateHeure((prev) => {
-                const next = new Date(prev);
-                next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                return next;
-              });
-            }
-          }}
-        />
+          {showDate && (
+            <DateTimePicker
+              value={dateHeure}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              themeVariant={colorScheme}
+              onChange={(_, date) => {
+                handleShowDate(false);
+                if (date) {
+                  setDateHeure((prev) => {
+                    const next = new Date(prev);
+                    next.setFullYear(
+                      date.getFullYear(),
+                      date.getMonth(),
+                      date.getDate()
+                    );
+                    return next;
+                  });
+                }
+              }}
+            />
+          )}
+          {showTime && (
+            <DateTimePicker
+              value={dateHeure}
+              mode="time"
+              is24Hour
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              themeVariant={colorScheme}
+              onChange={(_, date) => {
+                handleShowTime(false);
+                if (date) {
+                  setDateHeure((prev) => {
+                    const next = new Date(prev);
+                    next.setHours(date.getHours(), date.getMinutes(), 0, 0);
+                    return next;
+                  });
+                }
+              }}
+            />
+          )}
+        </>
       )}
 
       {/* Action Buttons */}
@@ -673,5 +899,34 @@ const styles = StyleSheet.create({
     color: "#dc3545",
     fontWeight: "700",
     letterSpacing: 0.2,
+  },
+  // Chrono mode styles (promenade)
+  chronoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  chronoLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  chronoValue: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  chronoDureeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 4,
+  },
+  chronoDureeText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
 });

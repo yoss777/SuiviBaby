@@ -1,6 +1,7 @@
 import {
   InsightCard,
   MilestoneTimelineCard,
+  PromenadeWidget,
   RecentEventsList,
   SleepWidget,
   StatsGroup,
@@ -28,6 +29,7 @@ import { useSmartContent } from "@/hooks/useSmartContent";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
 import {
+  ajouterActivite,
   ajouterJalon,
   ajouterSommeil,
 } from "@/migration/eventsDoubleWriteService";
@@ -1226,6 +1228,23 @@ export default function HomeDashboard() {
     );
   }, [sommeilEnCours, currentTime, toDate]);
 
+  // Promenade en cours detection (same pattern as sommeil)
+  const promenadeEnCours = useMemo(() => {
+    return data.activites.find(
+      (item: any) =>
+        item.typeActivite === "promenade" && item.heureDebut && !item.heureFin,
+    );
+  }, [data.activites]);
+
+  const elapsedPromenadeMinutes = useMemo(() => {
+    if (!promenadeEnCours?.heureDebut) return 0;
+    const start = toDate(promenadeEnCours.heureDebut);
+    return Math.max(
+      0,
+      Math.round((currentTime.getTime() - start.getTime()) / 60000),
+    );
+  }, [promenadeEnCours, currentTime, toDate]);
+
   // ============================================
   // STATS GROUPS DATA
   // ============================================
@@ -1611,6 +1630,45 @@ export default function HomeDashboard() {
       sommeilEnCours,
     });
   }, [activeChild?.id, sommeilEnCours, toDate, openSheet]);
+
+  // Promenade start/stop handlers
+  const handleStartPromenade = useCallback(async () => {
+    if (!activeChild?.id || promenadeEnCours) return;
+    try {
+      await ajouterActivite(activeChild.id, {
+        typeActivite: "promenade",
+        heureDebut: new Date(),
+        date: new Date(),
+      });
+      showToast("Promenade démarrée");
+    } catch (error) {
+      console.error("Erreur démarrage promenade:", error);
+      showToast("Impossible de démarrer la promenade");
+    }
+  }, [activeChild?.id, promenadeEnCours, showToast]);
+
+  const handleStopPromenade = useCallback(() => {
+    if (!activeChild?.id || !promenadeEnCours?.id) return;
+    const start = toDate(promenadeEnCours.heureDebut);
+
+    openSheet({
+      ownerId: headerOwnerId.current,
+      formType: "activities",
+      activiteType: "promenade",
+      editData: {
+        id: promenadeEnCours.id,
+        typeActivite: "promenade",
+        date: start,
+        heureDebut: start,
+        heureFin: new Date(),
+        duree: Math.max(
+          1,
+          Math.round((Date.now() - start.getTime()) / 60000),
+        ),
+        description: promenadeEnCours.description,
+      },
+    });
+  }, [activeChild?.id, promenadeEnCours, toDate, openSheet]);
 
   // ============================================
   // EFFECTS - TIMER
@@ -2465,9 +2523,30 @@ export default function HomeDashboard() {
             </StaggeredCard>
           )}
 
+          {/* Promenade Section */}
+          {(canManageContent || !!promenadeEnCours) && (
+            <StaggeredCard index={3} visible={isDataLoaded}>
+              <View style={styles.statsGroupContainer}>
+                <PromenadeWidget
+                  isActive={!!promenadeEnCours}
+                  elapsedMinutes={elapsedPromenadeMinutes}
+                  startTime={
+                    promenadeEnCours?.heureDebut
+                      ? formatTime(toDate(promenadeEnCours.heureDebut))
+                      : undefined
+                  }
+                  onStart={handleStartPromenade}
+                  onStop={handleStopPromenade}
+                  showStopButton={canManageContent}
+                  colorScheme={colorScheme}
+                />
+              </View>
+            </StaggeredCard>
+          )}
+
           {/* Humeur du jour */}
           {canManageContent && (
-            <StaggeredCard index={3} visible={isDataLoaded}>
+            <StaggeredCard index={4} visible={isDataLoaded}>
               <View style={styles.statsGroupContainer}>
                 <View
                   style={[
