@@ -222,6 +222,52 @@ Ces formulaires utilisent déjà le style chronoRow mais avec du code inline.
 
 ---
 
+## Impact sur les submits
+
+**Aucun changement dans les handleSubmit** — ce refactoring est purement visuel/UI.
+
+### Ce qui change (UI/state)
+- Les states d'affichage des pickers (`showDate`, `showTime`, `showStartPicker`, `showEndPicker`, `showDateNez`, `showTimeNez`, `showChronoDate`, etc.) **disparaissent** des formulaires → gérés en interne par `DateTimeSectionRow`
+- Les callbacks de toggle picker (`handleShowDate`, `handleShowTime`, `handleShowDateStart`, `handleShowTimeStart`, `handleShowDateEnd`, `handleShowTimeEnd`, `handleShowDateNez`, `handleShowTimeNez`) **disparaissent** des formulaires
+- Le JSX date/heure (TouchableOpacity + DateTimePicker + styles) **disparait** → remplacé par `<DateTimeSectionRow ... />`
+
+### Ce qui ne change PAS (logique métier)
+- Les states métier restent dans chaque formulaire :
+  - `dateHeure` / `setDateHeure` (formulaires simples)
+  - `heureDebut` / `setHeureDebut` (sommeil, promenade)
+  - `heureFin` / `setHeureFin` (sommeil, promenade)
+  - `isOngoing` / `setIsOngoing` (sommeil, promenade)
+  - `duree` / `setDuree` (activités non-promenade)
+- `handleSubmit` — lit les mêmes states, envoie les mêmes données aux services
+- La logique de validation (heureFin > heureDebut, duplicate prevention, null handling)
+- Les appels service (`ajouterSommeil`, `modifierSommeil`, `ajouterActivite`, `modifierActivite`, etc.)
+- Le `onFormStepChange` callback vers le parent (FormBottomSheet) → remplacé par `onPickerToggle` dans le composant, même effet
+
+### Migration type (exemple DiapersForm)
+
+**Avant** (~60 lignes) :
+```typescript
+const [showDate, setShowDate] = useState(false);
+const [showTime, setShowTime] = useState(false);
+const handleShowDate = useCallback((show) => { setShowDate(show); onFormStepChange?.(show || showTime); }, [...]);
+const handleShowTime = useCallback((show) => { setShowTime(show); onFormStepChange?.(show || showDate); }, [...]);
+// ... JSX: 2 TouchableOpacity + 2 DateTimePicker + selectedDateTime display
+```
+
+**Après** (~5 lignes) :
+```typescript
+<DateTimeSectionRow
+  value={dateHeure}
+  onChange={setDateHeure}
+  colorScheme={colorScheme}
+  onPickerToggle={onFormStepChange}
+/>
+```
+
+Le `handleSubmit` ne change pas du tout — il lit toujours `dateHeure` comme avant.
+
+---
+
 ## Bénéfices
 
 - **1 source de vérité** pour le style date/heure → changement de design en 1 endroit
