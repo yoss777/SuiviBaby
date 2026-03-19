@@ -182,25 +182,144 @@ C'est le **game changer** par rapport aux concurrents.
 
 ---
 
-## Estimations de revenus
+## Plan d'acquisition utilisateurs
 
-### Scénario 10K utilisateurs actifs (objectif 6 mois)
+### Réalité : sans plan d'acquisition, pas de revenus
+
+L'app est techniquement solide mais **personne ne s'occupe de l'acquisition**. Sans stratégie active, les installs organiques seront de ~50-100/mois via l'App Store. Il faut un plan concret.
+
+### Canal 1 — ASO (App Store Optimization) — Gratuit, long terme
+
+- [ ] **Optimiser la fiche store** :
+  - Titre : "Samaye — Suivi bébé intelligent" (mots-clés dans le titre)
+  - Sous-titre : "Tétées, sommeil, couches, croissance" (4 mots-clés forts)
+  - Description : structurée par bénéfice, pas par feature
+  - Screenshots : 6 captures montrant les écrans clés (pas des mockups vides)
+  - Vidéo preview (30s) montrant le parcours quotidien d'un parent
+  - Mots-clés : "suivi bébé", "allaitement", "sommeil bébé", "carnet santé", "biberon"
+- [ ] **Encourager les avis** : prompt in-app après 14 jours d'utilisation active (StoreKit)
+- **Impact estimé** : x2-3 les installs organiques → 100-300/mois
+- **Coût** : 0€ (temps seulement)
+
+### Canal 2 — Contenu organique (réseaux sociaux) — Gratuit, moyen terme
+
+- [ ] **Compte Instagram @samaye.app** :
+  - Infographies parentales (réutiliser le contenu des tips !)
+  - "Saviez-vous que..." tirés des articles OMS/HAS
+  - Témoignages parents (avec autorisation)
+  - Reels : "Comment j'utilise Samaye au quotidien" (30s)
+  - Fréquence : 3 posts/semaine + 2 stories/jour
+- [ ] **TikTok** : vidéos courtes "La vie de parent avec Samaye"
+  - Format : problème → solution avec l'app
+  - "Mon bébé ne dort pas → voici ce que les données de Samaye m'ont montré"
+  - Potentiel viral si authentique (pas de pub déguisée)
+- [ ] **Groupes Facebook parentaux** : partager l'app dans les groupes (avec modération, pas du spam)
+  - Identifier 20 groupes francophones actifs (jeunes parents, allaitement, diversification)
+  - Poster des conseils utiles + mentionner l'app quand pertinent
+- **Impact estimé** : 200-500 installs/mois si régulier
+- **Coût** : 0€ (2-3h/semaine de création de contenu)
+
+### Canal 3 — Partenariats maternités/PMI — Gratuit, lent mais puissant
+
+- [ ] **Kit maternité** : flyer A5 avec QR code + "3 mois Premium offerts"
+  - Distribué dans les maternités partenaires
+  - Coût impression : ~0.05€/flyer
+- [ ] **Pédiatres** : carte de visite avec QR code dans la salle d'attente
+  - "Recommandé par votre pédiatre" = confiance immédiate
+  - Pitch : "Vos patients arrivent avec des courbes de croissance claires"
+- [ ] **PMI (Protection Maternelle et Infantile)** :
+  - Version adaptée ou partenariat institutionnel
+  - Les PMI suivent des milliers de familles
+- **Impact estimé** : 50-200 installs/maternité partenaire/mois
+- **Coût** : ~100€ d'impression + temps de démarchage
+- **Délai** : 3-6 mois pour les premiers partenariats
+
+### Canal 4 — Publicité payante — Budget nécessaire
+
+- [ ] **Facebook/Instagram Ads** ciblant :
+  - Parents 25-40 ans, enfants 0-2 ans
+  - Intérêts : allaitement, diversification, sommeil bébé
+  - Lookalike audiences des users existants
+  - Budget : 500-2000€/mois pour commencer
+  - CPI estimé (coût par install) : 1-3€ → 250-2000 installs/mois
+- [ ] **Apple Search Ads** :
+  - Mots-clés : "suivi bébé", "allaitement", "carnet santé"
+  - Budget : 300-1000€/mois
+  - CPI estimé : 0.50-2€ (très efficace sur niche)
+- [ ] **Google UAC (Universal App Campaigns)** :
+  - Automatisé, multi-réseau (Search, YouTube, Play Store)
+  - Budget : 500-1500€/mois
+- **Impact estimé** : 500-3000 installs/mois selon budget
+- **Coût** : 1000-4000€/mois
+
+### Canal 5 — Programme de parrainage — Quasi-gratuit, viral
+
+- [x] **Infrastructure faite** (ReferralCard, code unique, tiers gamifiés)
+- [ ] **Activer le backend** (Cloud Function pour valider les codes)
+- [ ] **Incentive** : 1 mois Premium offert au parrain + filleul
+- **Impact estimé** : coefficient viral 0.2-0.5 (chaque user amène 0.2 à 0.5 nouveaux users)
+- **Coût** : coût du mois Premium offert (~0€ en marginal)
+
+---
+
+## Estimations de revenus (réalistes)
+
+### Scénario A — Organique seul (0€ budget pub)
+
+**Timeline** : 12 mois pour atteindre ~2K users actifs
+
+| Mois | Users actifs | Canal principal |
+|------|-------------|----------------|
+| M1-M3 | 100-300 | ASO + bouche à oreille |
+| M3-M6 | 300-800 | + réseaux sociaux + parrainage |
+| M6-M12 | 800-2000 | + premiers partenariats maternités |
 
 | Source | Hypothèse | Revenu/an |
 |---|---|---|
-| Abonnements Premium (6% conversion) | 600 × 30€/an | **18 000€** |
-| Abonnements Famille (2% conversion) | 200 × 40€/an | **8 000€** |
-| Partenariats/affiliation | 5 partenaires × 200€/mois | **12 000€** |
-| **Total** | | **~38 000€/an** |
+| Premium (4% conversion) | 80 × 30€ | **2 400€** |
+| Famille (1% conversion) | 20 × 40€ | **800€** |
+| Partenariats | 2 × 100€/mois | **2 400€** |
+| **Total an 1** | | **~5 600€** |
 
-### Scénario 50K utilisateurs actifs (objectif 18 mois)
+### Scénario B — Budget marketing modéré (1-2K€/mois)
+
+**Timeline** : 12 mois pour atteindre ~8K users actifs
+
+| Mois | Users actifs | Investissement/mois |
+|------|-------------|---------------------|
+| M1-M3 | 500-1500 | 1 000€ (ads + ASO) |
+| M3-M6 | 1500-4000 | 1 500€ (ads + contenu) |
+| M6-M12 | 4000-8000 | 2 000€ (ads + partenariats) |
 
 | Source | Hypothèse | Revenu/an |
 |---|---|---|
-| Abonnements Premium (7% conversion) | 3500 × 30€/an | **105 000€** |
-| Abonnements Famille (3% conversion) | 1500 × 40€/an | **60 000€** |
-| Partenariats | 10 partenaires × 500€/mois | **60 000€** |
-| **Total** | | **~225 000€/an** |
+| Premium (5% conversion) | 400 × 30€ | **12 000€** |
+| Famille (2% conversion) | 160 × 40€ | **6 400€** |
+| Partenariats | 4 × 200€/mois | **9 600€** |
+| **Total an 1** | | **~28 000€** |
+| **Investissement pub** | 12 × 1 500€ | **-18 000€** |
+| **Net an 1** | | **~10 000€** |
+
+### Scénario C — Croissance accélérée (5K€/mois + B2B)
+
+**Timeline** : 18 mois pour atteindre ~30K users actifs
+
+| Source | Hypothèse | Revenu/an 2 |
+|---|---|---|
+| Premium (6% conversion) | 1800 × 30€ | **54 000€** |
+| Famille (2% conversion) | 600 × 40€ | **24 000€** |
+| Partenariats | 8 × 400€/mois | **38 400€** |
+| B2B (pédiatres/maternités) | 5 × 500€/an | **2 500€** |
+| **Total an 2** | | **~119 000€** |
+| **Investissement pub** | 12 × 5 000€ | **-60 000€** |
+| **Net an 2** | | **~59 000€** |
+
+### Facteurs clés de succès
+
+- **Rétention** > acquisition : un user qui reste 12 mois vaut 10x un user qui part après 1 mois
+- **Taux de conversion Premium** : dépend de la qualité du paywall contextuel et de la valeur perçue de l'IA
+- **Parrainage** : si le coefficient viral dépasse 0.5, la croissance devient exponentielle
+- **Partenariats maternités** : canal le plus rentable (0€ pub, confiance immédiate) mais le plus lent à activer
 
 ---
 
