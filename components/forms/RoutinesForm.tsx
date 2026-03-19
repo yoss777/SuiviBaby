@@ -691,141 +691,112 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         />
       </View>
 
-      <View style={styles.rowBetween}>
+      {/* Horaires (iso promenade style) */}
+      <View style={styles.inputGroup}>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>{"Horaires"}</Text>
+
+        {/* Date début */}
         <TouchableOpacity
-          style={[
-            styles.dateButton,
-            { borderColor: nc.border, backgroundColor: nc.background },
-          ]}
+          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => handleShowDateStart(true)}
           disabled={isSubmitting}
-          accessibilityLabel="Choisir la date de début"
-          hitSlop={8}
+          accessibilityLabel="Modifier la date de début"
+          accessibilityHint="Ouvre le sélecteur de date"
         >
-          <FontAwesome5
-            name="calendar-alt"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date début</Text>
+          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Date début"}</Text>
+          <Text style={[styles.chronoValue, { color: nc.textStrong, fontSize: 15, fontWeight: "500" }]}>
+            {formatDateLabel(heureDebut)}
+          </Text>
         </TouchableOpacity>
+
+        {/* Heure de début */}
         <TouchableOpacity
-          style={[
-            styles.dateButton,
-            { borderColor: nc.border, backgroundColor: nc.background },
-          ]}
+          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => handleShowTimeStart(true)}
           disabled={isSubmitting}
-          accessibilityLabel="Choisir l'heure de début"
-          hitSlop={8}
+          accessibilityLabel="Modifier l'heure de début"
+          accessibilityHint="Ouvre le sélecteur d'heure"
         >
-          <FontAwesome5
-            name="clock"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure début</Text>
+          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Début"}</Text>
+          <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
+            {formatTime(heureDebut)}
+          </Text>
         </TouchableOpacity>
-      </View>
 
-      <View style={styles.rowBetween}>
+        {/* En cours toggle */}
         <TouchableOpacity
           style={[
-            styles.dateButton,
-            { borderColor: nc.border, backgroundColor: nc.background },
-            isOngoing && styles.dateButtonDisabled,
+            styles.chronoRow,
+            {
+              borderColor: isOngoing ? chipActiveColors.border : nc.border,
+              backgroundColor: isOngoing ? chipActiveColors.bg : nc.background,
+            },
           ]}
           onPress={() => {
-            if (!isOngoing) {
-              setHeureFin((prev) => prev ?? new Date());
-              handleShowDateEnd(true);
-            }
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setIsOngoing((prev) => !prev);
           }}
-          disabled={isSubmitting || isOngoing}
-          accessibilityLabel="Choisir la date de fin"
-          hitSlop={8}
+          disabled={isSubmitting}
+          accessibilityRole="switch"
+          accessibilityLabel="Sommeil en cours"
+          accessibilityState={{ checked: isOngoing }}
+          accessibilityHint="Active si le sommeil est toujours en cours"
         >
-          <FontAwesome5
-            name="calendar-alt"
-            size={16}
-            color={Colors[colorScheme].tint}
+          <Text style={[styles.chronoLabel, { color: isOngoing ? chipActiveColors.text : nc.textLight }]}>
+            {"En cours"}
+          </Text>
+          <FontAwesome
+            name={isOngoing ? "toggle-on" : "toggle-off"}
+            size={22}
+            color={isOngoing ? chipActiveColors.border : nc.textMuted}
           />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date fin</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.dateButton,
-            { borderColor: nc.border, backgroundColor: nc.background },
-            isOngoing && styles.dateButtonDisabled,
-          ]}
-          onPress={() => {
-            if (!isOngoing) {
-              setHeureFin((prev) => prev ?? new Date());
-              handleShowTimeEnd(true);
-            }
-          }}
-          disabled={isSubmitting || isOngoing}
-          accessibilityLabel="Choisir l'heure de fin"
-          hitSlop={8}
-        >
-          <FontAwesome5
-            name="clock"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure fin</Text>
-        </TouchableOpacity>
-      </View>
 
-      <TouchableOpacity
-        style={[
-          styles.checkboxRow,
-          {
-            borderColor: isOngoing ? chipActiveColors.border : nc.border,
-            backgroundColor: isOngoing ? chipActiveColors.bg : nc.background,
-            borderWidth: 1,
-            borderRadius: 10,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-          },
-        ]}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          setIsOngoing((prev) => !prev);
-        }}
-        disabled={isSubmitting}
-        accessibilityRole="switch"
-        accessibilityLabel="Sommeil en cours"
-        accessibilityState={{ checked: isOngoing }}
-        accessibilityHint="Active si le sommeil est toujours en cours"
-      >
-        <Text style={[styles.checkboxLabel, { color: isOngoing ? chipActiveColors.text : nc.textLight }]}>
-          {"En cours"}
-        </Text>
-        <FontAwesome
-          name={isOngoing ? "toggle-on" : "toggle-off"}
-          size={22}
-          color={isOngoing ? chipActiveColors.border : nc.textMuted}
-          style={{ marginLeft: "auto" }}
-        />
-      </TouchableOpacity>
-
-      <View style={styles.sleepSelectedDateTime}>
-        <Text style={[styles.sleepSelectedDate, { color: nc.textStrong }]}>
-          {formatDateLabel(heureDebut)}
-        </Text>
-        <Text style={[styles.sleepSelectedTime, { color: nc.textStrong }]}>{formatTime(heureDebut)}</Text>
-        {!isOngoing && heureFin && (
+        {/* Date + heure de fin (hidden if ongoing) */}
+        {!isOngoing && (
           <>
-            {formatDateLabel(heureFin) !== formatDateLabel(heureDebut) && (
-              <Text style={[styles.sleepSelectedDate, { color: nc.textStrong }]}>
-                {formatDateLabel(heureFin)}
+            {/* Date fin (pour les nuits qui debordent sur le lendemain) */}
+            <TouchableOpacity
+              style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
+              onPress={() => {
+                setHeureFin((prev) => prev ?? new Date());
+                handleShowDateEnd(true);
+              }}
+              disabled={isSubmitting}
+              accessibilityLabel="Modifier la date de fin"
+              accessibilityHint="Ouvre le sélecteur de date"
+            >
+              <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Date fin"}</Text>
+              <Text style={[styles.chronoValue, { color: nc.textStrong, fontSize: 15, fontWeight: "500" }]}>
+                {heureFin ? formatDateLabel(heureFin) : formatDateLabel(heureDebut)}
               </Text>
-            )}
-            <Text style={[styles.sleepSelectedTime, { color: nc.textStrong }]}>
-              → {formatTime(heureFin)}
-            </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
+              onPress={() => {
+                setHeureFin((prev) => prev ?? new Date());
+                handleShowTimeEnd(true);
+              }}
+              disabled={isSubmitting}
+              accessibilityLabel="Modifier l'heure de fin"
+              accessibilityHint="Ouvre le sélecteur d'heure"
+            >
+              <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Fin"}</Text>
+              <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
+                {heureFin ? formatTime(heureFin) : "--:--"}
+              </Text>
+            </TouchableOpacity>
           </>
+        )}
+
+        {/* Durée calculée */}
+        {!isOngoing && heureFin && (
+          <View style={styles.chronoDureeRow}>
+            <FontAwesome5 name="clock" size={12} color={nc.textMuted} />
+            <Text style={[styles.chronoDureeText, { color: nc.textMuted }]}>
+              {`Durée : ${Math.max(1, Math.round((heureFin.getTime() - heureDebut.getTime()) / 60000))} min`}
+            </Text>
+          </View>
         )}
       </View>
 
@@ -1004,99 +975,42 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         />
       </View>
 
-      <View style={styles.dateTimeContainerWithPadding}>
+      <View style={styles.inputGroup}>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>{"Date et heure"}</Text>
         <TouchableOpacity
-          style={[
-            styles.dateButton,
-            { borderColor: nc.border, backgroundColor: nc.background },
-          ]}
+          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => handleShowDateNez(true)}
           disabled={isSubmitting}
-          accessibilityLabel="Choisir la date"
-          hitSlop={8}
+          accessibilityLabel="Modifier la date"
         >
-          <FontAwesome5
-            name="calendar-alt"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
+          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Date"}</Text>
+          <Text style={[styles.chronoValue, { color: nc.textStrong, fontSize: 15, fontWeight: "500" }]}>
+            {dateNez.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[
-            styles.dateButton,
-            { borderColor: nc.border, backgroundColor: nc.background },
-          ]}
+          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => handleShowTimeNez(true)}
           disabled={isSubmitting}
-          accessibilityLabel="Choisir l'heure"
-          hitSlop={8}
+          accessibilityLabel="Modifier l'heure"
         >
-          <FontAwesome5
-            name="clock"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
+          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Heure"}</Text>
+          <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
+            {dateNez.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+          </Text>
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.selectedDateTime}>
-        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
-          {dateNez.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </Text>
-        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
-          {dateNez.toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
       </View>
 
       {showDateNez && (
         <DateTimePicker
-          value={dateNez}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            handleShowDateNez(false);
-            if (date) {
-              setDateNez((prev) => {
-                const next = new Date(prev);
-                next.setFullYear(
-                  date.getFullYear(),
-                  date.getMonth(),
-                  date.getDate(),
-                );
-                return next;
-              });
-            }
-          }}
+          value={dateNez} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} themeVariant={colorScheme}
+          onChange={(_, date) => { handleShowDateNez(false); if (date) { setDateNez((prev) => { const next = new Date(prev); next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate()); return next; }); } }}
         />
       )}
       {showTimeNez && (
         <DateTimePicker
-          value={dateNez}
-          mode="time"
-          is24Hour
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            handleShowTimeNez(false);
-            if (date) {
-              setDateNez((prev) => {
-                const next = new Date(prev);
-                next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                return next;
-              });
-            }
-          }}
+          value={dateNez} mode="time" is24Hour display={Platform.OS === "ios" ? "spinner" : "default"} themeVariant={colorScheme}
+          onChange={(_, date) => { handleShowTimeNez(false); if (date) { setDateNez((prev) => { const next = new Date(prev); next.setHours(date.getHours(), date.getMinutes(), 0, 0); return next; }); } }}
         />
       )}
     </>
@@ -1232,99 +1146,42 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         />
       </View>
 
-      <View style={styles.dateTimeContainerWithPadding}>
+      <View style={styles.inputGroup}>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>{"Date et heure"}</Text>
         <TouchableOpacity
-          style={[
-            styles.dateButton,
-            { borderColor: nc.border, backgroundColor: nc.background },
-          ]}
+          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => handleShowDate(true)}
           disabled={isSubmitting}
-          accessibilityLabel="Choisir la date"
-          hitSlop={8}
+          accessibilityLabel="Modifier la date"
         >
-          <FontAwesome5
-            name="calendar-alt"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Date</Text>
+          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Date"}</Text>
+          <Text style={[styles.chronoValue, { color: nc.textStrong, fontSize: 15, fontWeight: "500" }]}>
+            {dateHeure.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[
-            styles.dateButton,
-            { borderColor: nc.border, backgroundColor: nc.background },
-          ]}
+          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
           onPress={() => handleShowTime(true)}
           disabled={isSubmitting}
-          accessibilityLabel="Choisir l'heure"
-          hitSlop={8}
+          accessibilityLabel="Modifier l'heure"
         >
-          <FontAwesome5
-            name="clock"
-            size={16}
-            color={Colors[colorScheme].tint}
-          />
-          <Text style={[styles.dateButtonText, { color: nc.textNormal }]}>Heure</Text>
+          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Heure"}</Text>
+          <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
+            {dateHeure.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+          </Text>
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.selectedDateTime}>
-        <Text style={[styles.selectedDate, { color: nc.textStrong }]} numberOfLines={1} adjustsFontSizeToFit>
-          {dateHeure.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </Text>
-        <Text style={[styles.selectedTime, { color: nc.textStrong }]}>
-          {dateHeure.toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
       </View>
 
       {showDate && (
         <DateTimePicker
-          value={dateHeure}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            handleShowDate(false);
-            if (date) {
-              setDateHeure((prev) => {
-                const next = new Date(prev);
-                next.setFullYear(
-                  date.getFullYear(),
-                  date.getMonth(),
-                  date.getDate(),
-                );
-                return next;
-              });
-            }
-          }}
+          value={dateHeure} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} themeVariant={colorScheme}
+          onChange={(_, date) => { handleShowDate(false); if (date) { setDateHeure((prev) => { const next = new Date(prev); next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate()); return next; }); } }}
         />
       )}
       {showTime && (
         <DateTimePicker
-          value={dateHeure}
-          mode="time"
-          is24Hour
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            handleShowTime(false);
-            if (date) {
-              setDateHeure((prev) => {
-                const next = new Date(prev);
-                next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                return next;
-              });
-            }
-          }}
+          value={dateHeure} mode="time" is24Hour display={Platform.OS === "ios" ? "spinner" : "default"} themeVariant={colorScheme}
+          onChange={(_, date) => { handleShowTime(false); if (date) { setDateHeure((prev) => { const next = new Date(prev); next.setHours(date.getHours(), date.getMinutes(), 0, 0); return next; }); } }}
         />
       )}
     </>
@@ -1538,50 +1395,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
-  sleepSelectedDateTime: {
+  // Chrono rows (iso ActivitiesForm promenade style)
+  chronoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  chronoLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  chronoValue: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  chronoDureeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 4,
+  },
+  chronoDureeText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
   selectedDate: {
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 4,
   },
-  sleepSelectedDate: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-    textTransform: "capitalize",
-  },
   selectedTime: {
     fontSize: 20,
     fontWeight: "600",
   },
-  sleepSelectedTime: {
-    fontSize: 20,
-    fontWeight: "600",
-  },
-  // Checkbox
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkboxChecked: {
-    backgroundColor: "#6f42c1",
-    borderColor: "#6f42c1",
-  },
   checkboxLabel: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "500",
   },
   // Action buttons
   buttonsContainer: {
