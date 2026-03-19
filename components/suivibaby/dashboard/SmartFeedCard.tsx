@@ -3,7 +3,7 @@
 
 import { getNeutralColors } from "@/constants/dashboardColors";
 import type { Tip } from "@/types/content";
-import { TIP_CATEGORY_LABELS } from "@/types/content";
+import { TIP_CATEGORY_LABELS, getTipCategoryColor } from "@/types/content";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback } from "react";
@@ -32,6 +32,7 @@ export const SmartFeedCard = memo(function SmartFeedCard({
   colorScheme = "light",
 }: SmartFeedCardProps) {
   const nc = getNeutralColors(colorScheme);
+  const accentColor = getTipCategoryColor(tip.category, colorScheme);
 
   const handleRead = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -56,7 +57,7 @@ export const SmartFeedCard = memo(function SmartFeedCard({
         styles.card,
         {
           backgroundColor: nc.backgroundCard,
-          borderColor: tip.accentColor + "30",
+          borderColor: accentColor + "30",
         },
       ]}
       onPress={handleRead}
@@ -67,7 +68,7 @@ export const SmartFeedCard = memo(function SmartFeedCard({
     >
       {/* Accent strip */}
       <View
-        style={[styles.accentStrip, { backgroundColor: tip.accentColor }]}
+        style={[styles.accentStrip, { backgroundColor: accentColor }]}
       />
 
       <View style={styles.content}>
@@ -77,18 +78,18 @@ export const SmartFeedCard = memo(function SmartFeedCard({
             <View
               style={[
                 styles.iconCircle,
-                { backgroundColor: tip.accentColor + "15" },
+                { backgroundColor: accentColor + "15" },
               ]}
             >
               <FontAwesome
                 name={tip.icon || "lightbulb"}
                 size={14}
-                color={tip.accentColor}
+                color={accentColor}
               />
             </View>
             <View style={styles.headerText}>
               <Text
-                style={[styles.category, { color: tip.accentColor }]}
+                style={[styles.category, { color: accentColor }]}
               >
                 {catLabel}
               </Text>
@@ -116,7 +117,7 @@ export const SmartFeedCard = memo(function SmartFeedCard({
                 name="bookmark"
                 solid={isBookmarked}
                 size={14}
-                color={isBookmarked ? tip.accentColor : nc.textMuted}
+                color={isBookmarked ? accentColor : nc.textMuted}
               />
             </TouchableOpacity>
             <TouchableOpacity
@@ -148,25 +149,28 @@ export const SmartFeedCard = memo(function SmartFeedCard({
         {/* Source + CTA */}
         <View style={styles.footer}>
           {tip.source && (
-            <Text style={[styles.source, { color: nc.textMuted }]}>
+            <Text
+              style={[styles.source, { color: nc.textMuted }]}
+              numberOfLines={1}
+            >
               Source : {tip.source}
             </Text>
           )}
           <View
             style={[
               styles.ctaBadge,
-              { backgroundColor: tip.accentColor + "15" },
+              { backgroundColor: accentColor + "15" },
             ]}
           >
             <Text
-              style={[styles.ctaText, { color: tip.accentColor }]}
+              style={[styles.ctaText, { color: accentColor }]}
             >
               Lire
             </Text>
             <FontAwesome
               name="arrow-right"
               size={10}
-              color={tip.accentColor}
+              color={accentColor}
             />
           </View>
         </View>
@@ -243,8 +247,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   source: {
+    flex: 1,
     fontSize: 10,
     fontStyle: "italic",
+    marginRight: 8,
   },
   ctaBadge: {
     flexDirection: "row",

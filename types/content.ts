@@ -36,9 +36,26 @@ export const TIP_CATEGORY_COLORS: Record<TipCategory, string> = {
   alimentation: "#E89A5A",
   sommeil: "#7C6BA4",
   sante: "#E07E7E",
+  developpement: "#4CAF50",
+  bien_etre: "#5B9BD5",
+};
+
+export const TIP_CATEGORY_COLORS_DARK: Record<TipCategory, string> = {
+  alimentation: "#E89A5A",
+  sommeil: "#7C6BA4",
+  sante: "#E07E7E",
   developpement: "#7EE0A8",
   bien_etre: "#5B9BD5",
 };
+
+export function getTipCategoryColor(
+  category: TipCategory,
+  colorScheme: "light" | "dark",
+): string {
+  return colorScheme === "dark"
+    ? TIP_CATEGORY_COLORS_DARK[category]
+    : TIP_CATEGORY_COLORS[category];
+}
 
 // ============================================
 // TIP TRIGGER CONDITIONS

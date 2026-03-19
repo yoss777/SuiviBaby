@@ -68,6 +68,9 @@ interface SmartContentResult {
 
 const CACHE_KEY = "samaye_smart_content_cache_v2"; // Bumped to invalidate stale cache
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const TIP_HISTORY_KEY = "samaye_tip_history"; // { [tipId]: lastShownTimestamp }
+const MAX_CAROUSEL_TIPS = 5;
+const TIP_COOLDOWN_DAYS = 7; // Don't show the same tip again for 7 days
 
 // ============================================
 // HOOK
@@ -195,15 +198,64 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
     });
   }, [events, babyName, babyBirthDate]);
 
-  // All available tips (not dismissed), sorted by priority
+  // Tip history: { [tipId]: timestamp } — loaded from AsyncStorage
+  const [tipHistory, setTipHistory] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    AsyncStorage.getItem(TIP_HISTORY_KEY)
+      .then((raw) => {
+        if (raw) setTipHistory(JSON.parse(raw));
+      })
+      .catch(() => {});
+  }, []);
+
+  // Smart tip selection: 5 random tips, prefer unseen, respect cooldown
   const availableTips = useMemo(() => {
     if (tips.length === 0) return [];
 
     const dismissed = new Set(userContent.dismissedTips);
-    return tips
-      .filter((t) => !dismissed.has(t.id))
-      .sort((a, b) => a.priority - b.priority);
-  }, [tips, userContent.dismissedTips]);
+    const now = Date.now();
+    const cooldownMs = TIP_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+
+    // Filter: not dismissed
+    const candidates = tips.filter((t) => !dismissed.has(t.id));
+    if (candidates.length === 0) return [];
+
+    // Score each tip: unseen = 0, seen long ago = low, seen recently = high
+    const scored = candidates.map((tip) => {
+      const lastSeen = tipHistory[tip.id] ?? 0;
+      const daysSince = (now - lastSeen) / (24 * 60 * 60 * 1000);
+      const isOnCooldown = lastSeen > 0 && daysSince < TIP_COOLDOWN_DAYS;
+      // Lower score = show first. Unseen tips get score 0, old tips get low score
+      const score = isOnCooldown
+        ? 1000 + tip.priority // Push to end
+        : lastSeen === 0
+          ? tip.priority // Never seen = highest priority
+          : tip.priority + (TIP_COOLDOWN_DAYS - daysSince); // Seen but cooled down
+      return { tip, score };
+    });
+
+    // Sort by score (lower = better), then shuffle ties for variety
+    scored.sort((a, b) => {
+      const diff = a.score - b.score;
+      if (Math.abs(diff) < 0.5) return Math.random() - 0.5; // Shuffle ties
+      return diff;
+    });
+
+    // Take top MAX_CAROUSEL_TIPS
+    const selected = scored.slice(0, MAX_CAROUSEL_TIPS).map((s) => s.tip);
+
+    // Record that these tips were shown
+    const newHistory = { ...tipHistory };
+    for (const t of selected) {
+      newHistory[t.id] = now;
+    }
+    // Persist asynchronously (don't block render)
+    AsyncStorage.setItem(TIP_HISTORY_KEY, JSON.stringify(newHistory)).catch(() => {});
+    // Don't call setTipHistory here to avoid infinite loop — history updates on next session
+
+    return selected;
+  }, [tips, userContent.dismissedTips, tipHistory]);
 
   // Best single tip (for backward compat)
   const currentTip = availableTips.length > 0 ? availableTips[0] : null;
