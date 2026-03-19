@@ -1088,9 +1088,8 @@ export default function HomeDashboard() {
       let mounted = true;
       obtenirPreferencesNotifications()
         .then((prefs) => {
-          if (mounted) {
-          setTipsEnabled(prefs.tips);
-        }
+          if (!mounted) return;
+          setTipsEnabled((prev) => prev === prefs.tips ? prev : prefs.tips);
         })
         .catch(() => {});
       return () => { mounted = false; };

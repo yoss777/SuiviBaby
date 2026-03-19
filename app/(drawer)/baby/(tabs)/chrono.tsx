@@ -1470,6 +1470,20 @@ export default function ChronoScreen() {
   const [maxRange, setMaxRange] = useState<RangeOption>(14);
   const [selectedTypes, setSelectedTypes] = useState<FilterType[]>(ALL_FILTERS);
   const [events, setEvents] = useState<Event[]>([]);
+
+  // Detect ongoing sommeil & promenade (for duplicate prevention when editing)
+  const sommeilEnCours = useMemo(() => {
+    return events.find(
+      (e: any) => e.type === "sommeil" && e.heureDebut && !e.heureFin,
+    ) as (Event & { id: string }) | undefined;
+  }, [events]);
+
+  const promenadeEnCours = useMemo(() => {
+    return events.find(
+      (e: any) => e.type === "activite" && e.typeActivite === "promenade" && e.heureDebut && !e.heureFin,
+    ) as (Event & { id: string }) | undefined;
+  }, [events]);
+
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
@@ -1957,6 +1971,7 @@ export default function ChronoScreen() {
             quality: event.quality,
             note: event.note,
           },
+          sommeilEnCours: sommeilEnCours ? { id: sommeilEnCours.id } : null,
         });
         return;
       }
@@ -2057,7 +2072,10 @@ export default function ChronoScreen() {
             date: eventDate,
             duree: event.duree,
             description: event.description,
+            heureDebut: event.heureDebut ? toDate(event.heureDebut) : undefined,
+            heureFin: event.heureFin ? toDate(event.heureFin) : undefined,
           },
+          promenadeEnCours: promenadeEnCours ? { id: promenadeEnCours.id } : null,
         });
         return;
       }
