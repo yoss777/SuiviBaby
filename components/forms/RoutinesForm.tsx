@@ -21,11 +21,10 @@ import {
 import { obtenirEvenements, EventType } from "@/services/eventsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import {
-  Platform,
+
   StyleSheet,
   Text,
   TextInput,
@@ -248,51 +247,6 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     editData?.type === "sommeil" ? (editData.note ?? "") : "",
   );
 
-  // Date/Time picker visibility (sommeil only — bain/nez use DateTimeSectionRow)
-  const [showDateStart, setShowDateStart] = useState(false);
-  const [showTimeStart, setShowTimeStart] = useState(false);
-  const [showDateEnd, setShowDateEnd] = useState(false);
-  const [showTimeEnd, setShowTimeEnd] = useState(false);
-
-  // Notify parent when picker visibility changes
-  const handlePickerChange = useCallback(
-    (show: boolean) => {
-      onFormStepChange?.(show);
-    },
-    [onFormStepChange],
-  );
-
-  const handleShowDateStart = useCallback(
-    (show: boolean) => {
-      setShowDateStart(show);
-      handlePickerChange(show);
-    },
-    [handlePickerChange],
-  );
-
-  const handleShowTimeStart = useCallback(
-    (show: boolean) => {
-      setShowTimeStart(show);
-      handlePickerChange(show);
-    },
-    [handlePickerChange],
-  );
-
-  const handleShowDateEnd = useCallback(
-    (show: boolean) => {
-      setShowDateEnd(show);
-      handlePickerChange(show);
-    },
-    [handlePickerChange],
-  );
-
-  const handleShowTimeEnd = useCallback(
-    (show: boolean) => {
-      setShowTimeEnd(show);
-      handlePickerChange(show);
-    },
-    [handlePickerChange],
-  );
 
   // ============================================
   // TYPE SELECTION
@@ -656,199 +610,28 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         />
       </View>
 
-      {/* Horaires (iso promenade style) */}
-      <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>{"Horaires"}</Text>
-
-        {/* Date début */}
-        <TouchableOpacity
-          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
-          onPress={() => handleShowDateStart(true)}
-          disabled={isSubmitting}
-          accessibilityLabel="Modifier la date de début"
-          accessibilityHint="Ouvre le sélecteur de date"
-        >
-          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Date début"}</Text>
-          <Text style={[styles.chronoValue, { color: nc.textStrong, fontSize: 15, fontWeight: "500" }]}>
-            {formatDateLabel(heureDebut)}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Heure de début */}
-        <TouchableOpacity
-          style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
-          onPress={() => handleShowTimeStart(true)}
-          disabled={isSubmitting}
-          accessibilityLabel="Modifier l'heure de début"
-          accessibilityHint="Ouvre le sélecteur d'heure"
-        >
-          <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Début"}</Text>
-          <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
-            {formatTime(heureDebut)}
-          </Text>
-        </TouchableOpacity>
-
-        {/* En cours toggle */}
-        <TouchableOpacity
-          style={[
-            styles.chronoRow,
-            {
-              borderColor: isOngoing ? chipActiveColors.border : nc.border,
-              backgroundColor: isOngoing ? chipActiveColors.bg : nc.background,
-            },
-          ]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setIsOngoing((prev) => !prev);
-          }}
-          disabled={isSubmitting}
-          accessibilityRole="switch"
-          accessibilityLabel="Sommeil en cours"
-          accessibilityState={{ checked: isOngoing }}
-          accessibilityHint="Active si le sommeil est toujours en cours"
-        >
-          <Text style={[styles.chronoLabel, { color: isOngoing ? chipActiveColors.text : nc.textLight }]}>
-            {"En cours"}
-          </Text>
-          <FontAwesome
-            name={isOngoing ? "toggle-on" : "toggle-off"}
-            size={22}
-            color={isOngoing ? chipActiveColors.border : nc.textMuted}
-          />
-        </TouchableOpacity>
-
-        {/* Date + heure de fin (hidden if ongoing) */}
-        {!isOngoing && (
-          <>
-            {/* Date fin (pour les nuits qui debordent sur le lendemain) */}
-            <TouchableOpacity
-              style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
-              onPress={() => {
-                setHeureFin((prev) => prev ?? new Date());
-                handleShowDateEnd(true);
-              }}
-              disabled={isSubmitting}
-              accessibilityLabel="Modifier la date de fin"
-              accessibilityHint="Ouvre le sélecteur de date"
-            >
-              <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Date fin"}</Text>
-              <Text style={[styles.chronoValue, { color: nc.textStrong, fontSize: 15, fontWeight: "500" }]}>
-                {heureFin ? formatDateLabel(heureFin) : formatDateLabel(heureDebut)}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.chronoRow, { borderColor: nc.border, backgroundColor: nc.background }]}
-              onPress={() => {
-                setHeureFin((prev) => prev ?? new Date());
-                handleShowTimeEnd(true);
-              }}
-              disabled={isSubmitting}
-              accessibilityLabel="Modifier l'heure de fin"
-              accessibilityHint="Ouvre le sélecteur d'heure"
-            >
-              <Text style={[styles.chronoLabel, { color: nc.textLight }]}>{"Fin"}</Text>
-              <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
-                {heureFin ? formatTime(heureFin) : "--:--"}
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* Durée calculée */}
-        {!isOngoing && heureFin && (
-          <View style={styles.chronoDureeRow}>
-            <FontAwesome5 name="clock" size={12} color={nc.textMuted} />
-            <Text style={[styles.chronoDureeText, { color: nc.textMuted }]}>
-              {`Durée : ${Math.max(1, Math.round((heureFin.getTime() - heureDebut.getTime()) / 60000))} min`}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {showDateStart && (
-        <DateTimePicker
-          value={heureDebut}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            handleShowDateStart(false);
-            if (date) {
-              setHeureDebut((prev) => {
-                const next = new Date(prev);
-                next.setFullYear(
-                  date.getFullYear(),
-                  date.getMonth(),
-                  date.getDate(),
-                );
-                return next;
-              });
-            }
-          }}
-        />
-      )}
-      {showTimeStart && (
-        <DateTimePicker
-          value={heureDebut}
-          mode="time"
-          is24Hour
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            handleShowTimeStart(false);
-            if (date) {
-              setHeureDebut((prev) => {
-                const next = new Date(prev);
-                next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                return next;
-              });
-            }
-          }}
-        />
-      )}
-      {showDateEnd && heureFin && (
-        <DateTimePicker
-          value={heureFin}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            handleShowDateEnd(false);
-            if (date) {
-              setHeureFin((prev) => {
-                const base = prev ?? new Date();
-                const next = new Date(base);
-                next.setFullYear(
-                  date.getFullYear(),
-                  date.getMonth(),
-                  date.getDate(),
-                );
-                return next;
-              });
-            }
-          }}
-        />
-      )}
-      {showTimeEnd && heureFin && (
-        <DateTimePicker
-          value={heureFin}
-          mode="time"
-          is24Hour
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          onChange={(_, date) => {
-            handleShowTimeEnd(false);
-            if (date) {
-              setHeureFin((prev) => {
-                const base = prev ?? new Date();
-                const next = new Date(base);
-                next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                return next;
-              });
-            }
-          }}
-        />
-      )}
+      {/* Horaires */}
+      <DateTimeSectionRow
+        chrono
+        chronoLabel="Horaires"
+        heureDebut={heureDebut}
+        heureFin={heureFin}
+        onHeureDebutChange={setHeureDebut}
+        onHeureFinChange={setHeureFin}
+        showStartDate
+        startDateLabel="Date début"
+        showEndDate
+        endDateLabel="Date fin"
+        showOngoingToggle
+        isOngoing={isOngoing}
+        onOngoingChange={setIsOngoing}
+        ongoingLabel="En cours"
+        ongoingActiveColors={chipActiveColors}
+        showDuration
+        colorScheme={colorScheme}
+        disabled={isSubmitting}
+        onPickerToggle={onFormStepChange}
+      />
     </>
   );
 

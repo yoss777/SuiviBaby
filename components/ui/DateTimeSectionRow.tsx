@@ -2,10 +2,10 @@
 // Complete date/time section: simple mode or chrono mode (start/end/ongoing/duration)
 
 import { getNeutralColors } from "@/constants/dashboardColors";
-import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
-import React, { memo, useMemo } from "react";
+import { memo, useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { DateTimePickerRow } from "./DateTimePickerRow";
 
@@ -132,7 +132,11 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
           disabled={disabled}
           onChange={(date) => {
             const next = new Date(value);
-            next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+            next.setFullYear(
+              date.getFullYear(),
+              date.getMonth(),
+              date.getDate(),
+            );
             onChange(next);
           }}
           onPickerToggle={onPickerToggle}
@@ -197,7 +201,8 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
   const handleHeureFinTimeChange = (date: Date) => {
     if (!onHeureFinChange) return;
     // Ensure heureFin is after heureDebut
-    const fin = date > heureDebut ? date : new Date(heureDebut.getTime() + 60000);
+    const fin =
+      date > heureDebut ? date : new Date(heureDebut.getTime() + 60000);
     onHeureFinChange(fin);
   };
 
@@ -334,7 +339,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   toggleRow: {
     flexDirection: "row",

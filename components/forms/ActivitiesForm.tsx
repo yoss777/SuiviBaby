@@ -6,12 +6,11 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Platform,
+
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -193,9 +192,6 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const [heureFin, setHeureFin] = useState<Date | null>(
     editData?.heureFin ? toDate(editData.heureFin) : null,
   );
-  const [showChronoDate, setShowChronoDate] = useState(false);
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showEndPicker, setShowEndPicker] = useState(false);
 
   // Auto-compute duree from heureDebut/heureFin in chrono mode
   const chronoDuree = isChronoMode && heureFin
@@ -378,196 +374,27 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         </View>
       </View>
 
-      {/* Chrono mode: date + heureDebut/heureFin pickers (promenade) */}
+      {/* Chrono mode (promenade) or standard mode */}
       {isChronoMode ? (
-        <View style={styles.inputGroup}>
-          {/* Date */}
-          <Text style={[styles.inputLabel, { color: nc.textLight }]}>
-            {"Date"}
-          </Text>
-          <TouchableOpacity
-            style={[
-              styles.chronoRow,
-              { borderColor: nc.border, backgroundColor: nc.background },
-            ]}
-            onPress={() => {
-              setShowChronoDate(true);
-              onFormStepChange?.(true);
-            }}
-            disabled={isSubmitting}
-            accessibilityLabel="Modifier la date"
-            accessibilityHint="Ouvre le sélecteur de date"
-          >
-            <FontAwesome5 name="calendar-alt" size={14} color={Colors[colorScheme].tint} />
-            <Text style={[styles.chronoValue, { color: nc.textStrong, fontSize: 15, fontWeight: "500" }]}>
-              {heureDebut.toLocaleDateString("fr-FR", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })}
-            </Text>
-          </TouchableOpacity>
-          {showChronoDate && (
-            <DateTimePicker
-              value={heureDebut}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              themeVariant={colorScheme}
-              onChange={(_, date) => {
-                setShowChronoDate(false);
-                onFormStepChange?.(false);
-                if (date) {
-                  // Update date on both heureDebut and heureFin, keep times
-                  setHeureDebut((prev) => {
-                    const next = new Date(prev);
-                    next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-                    return next;
-                  });
-                  setHeureFin((prev) => {
-                    if (!prev) return prev;
-                    const next = new Date(prev);
-                    next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-                    return next;
-                  });
-                }
-              }}
-            />
-          )}
-
-          {/* Horaires */}
-          <Text style={[styles.inputLabel, { color: nc.textLight, marginTop: 8 }]}>
-            {"Horaires"}
-          </Text>
-
-          {/* Heure de début */}
-          <TouchableOpacity
-            style={[
-              styles.chronoRow,
-              { borderColor: nc.border, backgroundColor: nc.background },
-            ]}
-            onPress={() => {
-              setShowStartPicker(true);
-              onFormStepChange?.(true);
-            }}
-            disabled={isSubmitting}
-            accessibilityLabel="Modifier l'heure de début"
-            accessibilityHint="Ouvre le sélecteur d'heure"
-          >
-            <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
-              {"Début"}
-            </Text>
-            <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
-              {heureDebut.toLocaleTimeString("fr-FR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </TouchableOpacity>
-
-          {/* En cours toggle */}
-          <TouchableOpacity
-            style={[
-              styles.chronoRow,
-              {
-                borderColor: isOngoing ? chipActiveColors.border : nc.border,
-                backgroundColor: isOngoing ? chipActiveColors.bg : nc.background,
-              },
-            ]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsOngoing((prev) => !prev); }}
-            disabled={isSubmitting}
-            accessibilityRole="switch"
-            accessibilityLabel="Promenade en cours"
-            accessibilityState={{ checked: isOngoing }}
-            accessibilityHint="Active si la promenade est toujours en cours"
-          >
-            <Text style={[styles.chronoLabel, { color: isOngoing ? chipActiveColors.text : nc.textLight }]}>
-              {"En cours"}
-            </Text>
-            <FontAwesome5
-              name={isOngoing ? "toggle-on" : "toggle-off"}
-              size={22}
-              color={isOngoing ? chipActiveColors.border : nc.textMuted}
-            />
-          </TouchableOpacity>
-
-          {/* Heure de fin (hidden if ongoing) */}
-          {!isOngoing && (
-            <>
-              <TouchableOpacity
-                style={[
-                  styles.chronoRow,
-                  { borderColor: nc.border, backgroundColor: nc.background },
-                ]}
-                onPress={() => {
-                  setShowEndPicker(true);
-                  onFormStepChange?.(true);
-                }}
-                disabled={isSubmitting}
-                accessibilityLabel="Modifier l'heure de fin"
-                accessibilityHint="Ouvre le sélecteur d'heure"
-              >
-                <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
-                  {"Fin"}
-                </Text>
-                <Text style={[styles.chronoValue, { color: nc.textStrong }]}>
-                  {(heureFin ?? new Date()).toLocaleTimeString("fr-FR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Durée calculée */}
-              <View style={styles.chronoDureeRow}>
-                <FontAwesome5 name="clock" size={12} color={nc.textMuted} />
-                <Text style={[styles.chronoDureeText, { color: nc.textMuted }]}>
-                  {`Durée : ${chronoDuree} min`}
-                </Text>
-              </View>
-            </>
-          )}
-
-          {/* Start time picker */}
-          {showStartPicker && (
-            <DateTimePicker
-              value={heureDebut}
-              mode="time"
-              is24Hour
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              themeVariant={colorScheme}
-              onChange={(_, date) => {
-                setShowStartPicker(false);
-                onFormStepChange?.(false);
-                if (date) {
-                  setHeureDebut(date);
-                  // Push heureFin if it would be before new heureDebut
-                  if (heureFin && date >= heureFin) {
-                    setHeureFin(new Date(date.getTime() + 60000));
-                  }
-                }
-              }}
-            />
-          )}
-          {/* End time picker */}
-          {showEndPicker && (
-            <DateTimePicker
-              value={heureFin ?? new Date()}
-              mode="time"
-              is24Hour
-              minimumDate={heureDebut}
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              themeVariant={colorScheme}
-              onChange={(_, date) => {
-                setShowEndPicker(false);
-                onFormStepChange?.(false);
-                if (date) {
-                  // Ensure heureFin is after heureDebut
-                  setHeureFin(date > heureDebut ? date : new Date(heureDebut.getTime() + 60000));
-                }
-              }}
-            />
-          )}
-        </View>
+        <DateTimeSectionRow
+          chrono
+          chronoLabel="Horaires"
+          heureDebut={heureDebut}
+          heureFin={heureFin}
+          onHeureDebutChange={setHeureDebut}
+          onHeureFinChange={setHeureFin}
+          showStartDate
+          showOngoingToggle
+          isOngoing={isOngoing}
+          onOngoingChange={setIsOngoing}
+          ongoingLabel="En cours"
+          ongoingActiveColors={chipActiveColors}
+          showDuration
+          heureFinMinimumDate={heureDebut}
+          colorScheme={colorScheme}
+          disabled={isSubmitting}
+          onPickerToggle={onFormStepChange}
+        />
       ) : (
         /* Standard mode: duration stepper */
         <View style={styles.inputGroup}>
