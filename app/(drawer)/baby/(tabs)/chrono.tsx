@@ -1104,9 +1104,12 @@ const TimelineCard = React.memo(
           : "moon"
         : null;
 
-    // Calculate elapsed time for ongoing sleep
+    // Calculate elapsed time for ongoing sleep or promenade
     const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
-    const elapsedMinutes = isOngoingSleep
+    const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !event.heureFin && event.heureDebut;
+    const isOngoing = isOngoingSleep || isOngoingPromenade;
+    const hasStartEnd = (isSleep || (event.type === "activite" && event.typeActivite === "promenade")) && !!event.heureDebut;
+    const elapsedMinutes = isOngoing
       ? Math.max(
           0,
           Math.round(
@@ -1129,12 +1132,12 @@ const TimelineCard = React.memo(
           />
         </View>
         <View style={styles.cardTimeLeft}>
-          {isSleep && event.heureFin ? (
+          {hasStartEnd && event.heureFin ? (
             <>
               <Text
                 style={[styles.cardTimeText, { color: secondaryTextColor }]}
               >
-                {formatTime(date)}
+                {event.heureDebut ? formatTime(toDate(event.heureDebut)) : formatTime(date)}
               </Text>
               <Text
                 style={[styles.cardTimeArrow, { color: secondaryTextColor }]}
@@ -1150,12 +1153,12 @@ const TimelineCard = React.memo(
                 {formatTime(toDate(event.heureFin))}
               </Text>
             </>
-          ) : isSleep && !event.heureFin ? (
+          ) : hasStartEnd && !event.heureFin ? (
             <>
               <Text
                 style={[styles.cardTimeText, { color: secondaryTextColor }]}
               >
-                {formatTime(date)}
+                {event.heureDebut ? formatTime(toDate(event.heureDebut)) : formatTime(date)}
               </Text>
               <Text
                 style={[styles.cardTimeArrow, { color: secondaryTextColor }]}
@@ -1165,7 +1168,7 @@ const TimelineCard = React.memo(
               <Text
                 style={[
                   styles.cardTimeOngoing,
-                  { color: eventColors.sommeil.dark },
+                  { color: isOngoingPromenade ? eventColors.activite.dark : eventColors.sommeil.dark },
                 ]}
               >
                 en cours
@@ -1207,9 +1210,9 @@ const TimelineCard = React.memo(
               />
             ) : null}
           </View>
-          {!isSolide && (details || isOngoingSleep) && (
+          {!isSolide && (details || isOngoing) && (
             <Text style={[styles.cardDetails, { color: secondaryTextColor }]}>
-              {isOngoingSleep
+              {isOngoing
                 ? details
                   ? `${formatDuration(elapsedMinutes)} · ${details}`
                   : formatDuration(elapsedMinutes)

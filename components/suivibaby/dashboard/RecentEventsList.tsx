@@ -121,18 +121,23 @@ const DaySeparator = memo(function DaySeparator({
 
 const TimeDisplay = memo(function TimeDisplay({
   isSleep,
+  hasStartEnd,
   hasEndTime,
   startTime,
   endTime,
+  ongoingColor,
   textColor,
 }: {
   isSleep: boolean;
+  hasStartEnd: boolean;
   hasEndTime: boolean;
   startTime: string;
   endTime?: string;
+  ongoingColor?: string;
   textColor: string;
 }) {
-  if (isSleep && hasEndTime && endTime) {
+  // Events with heureDebut/heureFin (sommeil, promenade)
+  if (hasStartEnd && hasEndTime && endTime) {
     return (
       <>
         <Text style={[styles.recentTimeText, { color: textColor }]}>
@@ -146,7 +151,7 @@ const TimeDisplay = memo(function TimeDisplay({
     );
   }
 
-  if (isSleep && !hasEndTime) {
+  if (hasStartEnd && !hasEndTime) {
     return (
       <>
         <Text style={[styles.recentTimeText, { color: textColor }]}>
@@ -156,7 +161,7 @@ const TimeDisplay = memo(function TimeDisplay({
         <Text
           style={[
             styles.recentTimeOngoing,
-            { color: eventColors.sommeil.dark },
+            { color: ongoingColor ?? eventColors.sommeil.dark },
           ]}
           accessibilityLiveRegion="polite"
         >
@@ -408,7 +413,10 @@ function RecentEventsListComponent({
             : undefined;
 
           const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
-          const elapsedMinutes = isOngoingSleep
+          const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !event.heureFin && event.heureDebut;
+          const isOngoing = isOngoingSleep || isOngoingPromenade;
+          const hasStartEnd = (isSleep || (event.type === "activite" && event.typeActivite === "promenade")) && !!event.heureDebut;
+          const elapsedMinutes = isOngoing
             ? Math.max(
                 0,
                 Math.round(
@@ -427,7 +435,7 @@ function RecentEventsListComponent({
             currentDayLabel !== "Aujourd'hui" &&
             (index === 0 || currentDayLabel !== prevDayLabel);
 
-          const displayDetails = isOngoingSleep
+          const displayDetails = isOngoing
             ? details
               ? `${formatDuration(elapsedMinutes)} · ${details}`
               : formatDuration(elapsedMinutes)
@@ -478,13 +486,15 @@ function RecentEventsListComponent({
                     <View style={styles.recentTimeLeft}>
                       <TimeDisplay
                         isSleep={isSleep}
+                        hasStartEnd={hasStartEnd}
                         hasEndTime={!!event.heureFin}
-                        startTime={formatTime(date)}
+                        startTime={hasStartEnd && event.heureDebut ? formatTime(toDate(event.heureDebut)) : formatTime(date)}
                         endTime={
                           event.heureFin
                             ? formatTime(toDate(event.heureFin))
                             : undefined
                         }
+                        ongoingColor={isOngoingPromenade ? eventColors.activite.dark : eventColors.sommeil.dark}
                         textColor={textColor}
                       />
                     </View>
