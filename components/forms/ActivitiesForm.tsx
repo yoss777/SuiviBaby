@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Platform,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -24,6 +25,8 @@ import {
   modifierActivite,
   supprimerActivite,
 } from "@/migration/eventsDoubleWriteService";
+import { obtenirEvenements } from "@/services/eventsService";
+import type { EventType } from "@/services/eventsService";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -221,6 +224,47 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
     }
     try {
       setIsSubmitting(true);
+
+      // Prevent duplicate ongoing promenade (like RoutinesForm does for sleep)
+      if (isChronoMode && isOngoing && !isEditing) {
+        const recentActivites = await obtenirEvenements(activeChild.id, {
+          type: "activite" as EventType,
+          limite: 10,
+        });
+        const hasOngoing = recentActivites.some(
+          (e: any) => e.typeActivite === "promenade" && e.heureDebut && !e.heureFin,
+        );
+        if (hasOngoing) {
+          showAlert(
+            "Attention",
+            "Une promenade est déjà en cours. Terminez-la avant d'en commencer une nouvelle.",
+          );
+          setIsSubmitting(false);
+          return;
+        }
+      }
+      // Prevent toggling "En cours" on edit if another promenade is already ongoing
+      if (isChronoMode && isOngoing && isEditing) {
+        const recentActivites = await obtenirEvenements(activeChild.id, {
+          type: "activite" as EventType,
+          limite: 10,
+        });
+        const otherOngoing = recentActivites.some(
+          (e: any) =>
+            e.typeActivite === "promenade" &&
+            e.heureDebut &&
+            !e.heureFin &&
+            e.id !== editData?.id,
+        );
+        if (otherOngoing) {
+          showAlert(
+            "Attention",
+            "Une autre promenade est déjà en cours. Terminez-la d'abord.",
+          );
+          setIsSubmitting(false);
+          return;
+        }
+      }
       const data = removeUndefined({
         date: isChronoMode ? heureDebut : dateHeure,
         typeActivite,
@@ -295,10 +339,10 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                     borderColor: eventColors.activite.dark,
                   },
                 ]}
-                onPress={() => setTypeActivite(type)}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTypeActivite(type); }}
                 disabled={isSubmitting}
                 accessibilityLabel={config.label}
-                hitSlop={8}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Text
                   style={[
@@ -412,7 +456,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 backgroundColor: isOngoing ? eventColors.activite.dark + "10" : nc.background,
               },
             ]}
-            onPress={() => setIsOngoing((prev) => !prev)}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsOngoing((prev) => !prev); }}
             disabled={isSubmitting}
             accessibilityRole="switch"
             accessibilityLabel="Promenade en cours"
@@ -520,7 +564,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
-              onPress={() => setDuree((value) => Math.max(0, value - 5))}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDuree((value) => Math.max(0, value - 5)); }}
               disabled={isSubmitting}
               accessibilityLabel="Diminuer la durée"
             >
@@ -543,7 +587,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
-              onPress={() => setDuree((value) => value + 5)}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDuree((value) => value + 5); }}
               disabled={isSubmitting}
               accessibilityLabel="Augmenter la durée"
             >
@@ -591,7 +635,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               onPress={() => handleShowDate(true)}
               disabled={isSubmitting}
               accessibilityLabel="Choisir la date"
-              hitSlop={8}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <FontAwesome5
                 name="calendar-alt"
@@ -610,7 +654,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               onPress={() => handleShowTime(true)}
               disabled={isSubmitting}
               accessibilityLabel="Choisir l'heure"
-              hitSlop={8}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <FontAwesome5
                 name="clock"
@@ -736,15 +780,15 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           <TouchableOpacity
             style={[
               styles.deleteButton,
-              { backgroundColor: nc.errorBg },
+              { backgroundColor: nc.errorBg, borderColor: nc.error + "40" },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
-            <FontAwesome name="trash" size={14} color="#dc3545" />
-            <Text style={styles.deleteText}>Supprimer</Text>
+            <FontAwesome name="trash" size={14} color={nc.error} />
+            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -891,12 +935,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#f1b1b1",
     gap: 8,
   },
   deleteText: {
     fontSize: 14,
-    color: "#dc3545",
     fontWeight: "700",
     letterSpacing: 0.2,
   },

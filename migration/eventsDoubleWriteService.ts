@@ -471,10 +471,36 @@ export async function supprimerSymptome(childId: string, id: string) {
 // ============================================
 
 export async function ajouterActivite(childId: string, data: any) {
+  // For promenade: convert heureDebut/heureFin like sommeil
+  if (data.typeActivite === "promenade") {
+    const heureDebut = toDate(data.heureDebut || data.date);
+    const heureFin = toDate(data.heureFin);
+    const duree = computeSleepDuration(heureDebut, heureFin, data.duree);
+    const eventData = removeUndefined({
+      type: "activite" as EventType,
+      typeActivite: "promenade",
+      heureDebut,
+      heureFin,
+      duree,
+      date: heureDebut || new Date(),
+      description: data.description,
+      note: data.note,
+    });
+    return ajouterEvenement(childId, eventData as any);
+  }
   return ajouterEvenement(childId, removeUndefined({ type: "activite", ...data }) as any);
 }
 
 export async function modifierActivite(childId: string, id: string, data: any) {
+  // For promenade: handle null heureFin like sommeil (deleteField)
+  if (data.typeActivite === "promenade") {
+    const heureFinIsNull = data.heureFin === null;
+    const dureeIsNull = data.duree === null || (heureFinIsNull && !data.duree);
+    const cleaned = removeUndefined(data);
+    if (heureFinIsNull) (cleaned as any).heureFin = null;
+    if (dureeIsNull) (cleaned as any).duree = null;
+    return modifierEvenement(childId, id, cleaned);
+  }
   return modifierEvenement(childId, id, removeUndefined(data));
 }
 
