@@ -107,29 +107,74 @@ Ces formulaires utilisent déjà le style chronoRow mais avec du code inline.
 
 | # | Formulaire | Event types | Pattern actuel | Statut |
 |---|-----------|-------------|---------------|--------|
-| 8 | RoutinesForm.tsx — Sommeil | sommeil | chronoRow (nouveau, inline) | ⏳ À migrer |
-| 9 | RoutinesForm.tsx — Bain | bain | chronoRow (nouveau, inline) | ⏳ À migrer |
-| 10 | RoutinesForm.tsx — Nez | nettoyage_nez | chronoRow (nouveau, inline) | ⏳ À migrer |
-| 11 | ActivitiesForm.tsx — Promenade | promenade | chronoRow (nouveau, inline) | ⏳ À migrer |
-| 12 | ActivitiesForm.tsx — Autres activités | activite (non-promenade) | dateButton (ancien) | ⏳ À migrer |
-
-**Pour Sommeil et Promenade** :
-- Remplacer les TouchableOpacity chronoRow inline par `DateTimePickerRow`
-- Le toggle "En cours" reste un composant séparé (pas dans DateTimePickerRow)
-- La durée calculée reste un composant séparé
+| 8 | RoutinesForm.tsx — Bain | bain | chronoRow (nouveau, inline) | ⏳ À migrer |
+| 9 | RoutinesForm.tsx — Nez | nettoyage_nez | chronoRow (nouveau, inline) | ⏳ À migrer |
+| 10 | ActivitiesForm.tsx — Autres activités | activite (non-promenade) | dateButton (ancien) | ⏳ À migrer |
 
 **Pour Bain et Nez** :
-- Remplacer par `DateTimeSectionRow` (comme les formulaires simples)
+- Remplacer par `DateTimeSectionRow` (1 date + 1 heure, pas de début/fin)
 
-### Phase 4 — Nettoyage
+**Pour Autres activités (non-promenade)** :
+- Remplacer le bloc dateButton + selectedDateTime par `DateTimeSectionRow`
+- Le bloc est conditionnel : affiché seulement quand `!isChronoMode`
+
+### Phase 4 — Migrer RoutinesForm Sommeil (le plus complexe)
+
+| # | Formulaire | Event types | Pattern actuel | Statut |
+|---|-----------|-------------|---------------|--------|
+| 11 | RoutinesForm.tsx — Sommeil | sommeil | chronoRow (nouveau, inline) | ⏳ À migrer |
+
+**Spécificités sommeil** :
+- **Date début** : `DateTimePickerRow` mode="date" → modifie `heureDebut`
+- **Heure début** : `DateTimePickerRow` mode="time" → modifie `heureDebut`
+- **Toggle "En cours"** : composant séparé (PAS dans DateTimePickerRow) — reste inline
+- **Date fin** : `DateTimePickerRow` mode="date" → modifie `heureFin`
+  - Visible uniquement quand `!isOngoing`
+  - Nécessaire pour les nuits qui débordent sur le lendemain (22h → 7h)
+  - Affiche la date de `heureFin`, pas de `heureDebut`
+- **Heure fin** : `DateTimePickerRow` mode="time" → modifie `heureFin`
+  - Visible uniquement quand `!isOngoing`
+  - Quand `heureFin` est null, initialise à `new Date()` avant d'ouvrir le picker
+- **Durée calculée** : reste inline (calculée depuis heureDebut/heureFin)
+- **Validation** : heureFin doit être après heureDebut (gérée dans handleSubmit)
+- **States** : `heureDebut`, `heureFin` (Date|null), `showDateStart`, `showTimeStart`, `showDateEnd`, `showTimeEnd`, `isOngoing`
+
+### Phase 5 — Migrer ActivitiesForm Promenade (similaire sommeil)
+
+| # | Formulaire | Event types | Pattern actuel | Statut |
+|---|-----------|-------------|---------------|--------|
+| 12 | ActivitiesForm.tsx — Promenade | promenade | chronoRow (nouveau, inline) | ⏳ À migrer |
+
+**Spécificités promenade** :
+- **Date** : `DateTimePickerRow` mode="date" → modifie `heureDebut` (et `heureFin` si non null, même jour)
+- **Heure début** : `DateTimePickerRow` mode="time" → modifie `heureDebut`
+  - Si nouvelle heureDebut >= heureFin → heureFin décalée à heureDebut + 1min
+- **Toggle "En cours"** : composant séparé — reste inline
+- **Heure fin** : `DateTimePickerRow` mode="time" → modifie `heureFin`
+  - Visible uniquement quand `!isOngoing`
+  - `minimumDate={heureDebut}` sur le picker
+  - Clamp si valeur sélectionnée < heureDebut
+- **Durée calculée** : reste inline
+- **Pas de date fin séparée** (pas de promenade de nuit)
+- **States** : `heureDebut`, `heureFin` (Date|null), `showChronoDate`, `showStartPicker`, `showEndPicker`, `isOngoing`
+- **Différence avec sommeil** : un seul picker date (pas de date fin), le changement de date modifie les deux heures
+
+### Phase 6 — Nettoyage
 
 - [ ] Supprimer les styles orphelins dans chaque formulaire :
   - `dateTimeContainerWithPadding`
   - `dateButton` / `dateButtonText`
   - `selectedDateTime` / `selectedDate` / `selectedTime`
   - `sleepSelectedDateTime` / `sleepSelectedDate` / `sleepSelectedTime`
-- [ ] Supprimer les styles `chronoRow` / `chronoLabel` / `chronoValue` des formulaires (déplacés dans le composant)
+  - `chronoRow` / `chronoLabel` / `chronoValue` / `chronoDureeRow` / `chronoDureeText` (déplacés dans le composant)
+- [ ] Supprimer les states/callbacks orphelins dans chaque formulaire :
+  - `showDate` / `showTime` / `handleShowDate` / `handleShowTime` (gérés dans le composant)
+  - `showDateStart` / `showTimeStart` / `showDateEnd` / `showTimeEnd` + handlers (pour sommeil)
+  - `showDateNez` / `showTimeNez` + handlers (pour nez)
+  - `showChronoDate` / `showStartPicker` / `showEndPicker` (pour promenade)
 - [ ] Vérifier que les styles restants sont utilisés
+- [ ] TypeScript 0 erreurs
+- [ ] Audit P-items sur DateTimePickerRow (nc.*, accessibility, haptic, dark mode)
 
 ---
 
@@ -159,20 +204,20 @@ Ces formulaires utilisent déjà le style chronoRow mais avec du code inline.
 ## Ordre d'exécution recommandé
 
 ```
-Phase 1 (composant)              — créer DateTimePickerRow + DateTimeSectionRow
-Phase 2.1 (DiapersForm)          — le plus simple, sert de validation
-Phase 2.2 (CroissanceForm)       — simple
-Phase 2.3 (MealsForm)            — simple
-Phase 2.4 (PumpingForm)          — simple
-Phase 2.5 (MilestonesForm)       — simple
-Phase 2.6 (ImmunizationForm)     — simple
-Phase 2.7 (SoinsForm)            — le plus gros (5 event types)
-Phase 3.1 (RoutinesForm Bain)    — chronoRow → DateTimeSectionRow
-Phase 3.2 (RoutinesForm Nez)     — chronoRow → DateTimeSectionRow
-Phase 3.3 (RoutinesForm Sommeil) — chronoRow → DateTimePickerRow (avec toggle)
-Phase 3.4 (ActivitiesForm std)   — dateButton → DateTimeSectionRow
-Phase 3.5 (ActivitiesForm prom.) — chronoRow → DateTimePickerRow (avec toggle)
-Phase 4 (nettoyage styles)       — supprimer le code mort
+Phase 1 (composant)                — créer DateTimePickerRow + DateTimeSectionRow
+Phase 2.1 (DiapersForm)            — le plus simple, sert de validation
+Phase 2.2 (CroissanceForm)         — simple
+Phase 2.3 (MealsForm)              — simple
+Phase 2.4 (PumpingForm)            — simple
+Phase 2.5 (MilestonesForm)         — simple
+Phase 2.6 (ImmunizationForm)       — simple
+Phase 2.7 (SoinsForm)              — le plus gros (5 event types)
+Phase 3.1 (RoutinesForm Bain)      — chronoRow inline → DateTimeSectionRow
+Phase 3.2 (RoutinesForm Nez)       — chronoRow inline → DateTimeSectionRow
+Phase 3.3 (ActivitiesForm std)     — dateButton → DateTimeSectionRow
+Phase 4   (RoutinesForm Sommeil)   — le plus complexe (date début/fin, heure début/fin, toggle en cours)
+Phase 5   (ActivitiesForm Prom.)   — similaire sommeil (date, heure début/fin, toggle, pas de date fin)
+Phase 6   (nettoyage styles)       — supprimer le code mort dans les 9 fichiers
 ```
 
 ---
