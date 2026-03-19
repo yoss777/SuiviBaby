@@ -10,7 +10,7 @@
 - **Confiance d'abord** : une app de suivi bébé touche à l'intime. Jamais de dark patterns.
 - **Valeur avant paywall** : l'utilisateur doit comprendre la valeur Premium avant qu'on lui propose.
 - **Opt-in strict** : promos = `marketing: false` par défaut. L'utilisateur choisit.
-- **Pas de pub intrusive** : pas de banner/interstitiel dans les écrans de saisie. Rewarded ads acceptables uniquement pour débloquer ponctuellement une feature.
+- **Zéro publicité** : aucune pub (ni banner, ni interstitiel, ni rewarded ads). Un parent qui enregistre un biberon à 3h du matin ne doit jamais voir de pub. La monétisation repose sur la valeur (Premium + partenariats), pas sur l'attention.
 - **Fréquence respectueuse** : max 1 promo/24h, jamais la nuit (22h-7h), jamais pendant un épisode de santé.
 
 ---
@@ -107,23 +107,9 @@
   - Après 30 jours d'utilisation active → "Vous adorez Samaye ?"
   - **Jamais** pendant un épisode de santé (fièvre, sommeil agité)
 
-### Phase 2 — Publicité légère (tier gratuit uniquement) ⏳ À FAIRE
+### ~~Phase 2 — Publicité~~ ❌ SUPPRIMÉE
 
-- [ ] **Rewarded ads uniquement** (pas de banner/interstitiel)
-  - "Regardez une courte vidéo pour exporter ce PDF gratuitement"
-  - "Débloquez 5 commandes vocales supplémentaires"
-  - Max 2 rewarded ads par jour
-
-- [ ] **Stack technique**
-  - `react-native-google-mobile-ads` (AdMob)
-  - Médiation : AdMob + Meta Audience Network (meilleur fill rate)
-  - Revenus estimés : 1-3€ eCPM (niche parentale = bon CPM)
-
-- [ ] **Règles strictes**
-  - **Zéro pub** dans les écrans de saisie (biberon, couche, sommeil)
-  - **Zéro pub** pour les Premium
-  - **Zéro pub** pendant les épisodes de santé
-  - Pub identifiée clairement ("Publicité")
+> **Décision** : zéro publicité dans Samaye. Ni banner, ni interstitiel, ni rewarded ads. La monétisation repose sur Premium + partenariats + parrainage. La confiance parentale n'est pas monétisable via de la pub.
 
 ### Phase 3 — IA Premium (différenciateur clé) ⏳ À FAIRE
 
@@ -204,9 +190,8 @@ C'est le **game changer** par rapport aux concurrents.
 |---|---|---|
 | Abonnements Premium (6% conversion) | 600 × 30€/an | **18 000€** |
 | Abonnements Famille (2% conversion) | 200 × 40€/an | **8 000€** |
-| Rewarded ads (gratuit seulement) | 9200 × 0.50€/an | **4 600€** |
 | Partenariats/affiliation | 5 partenaires × 200€/mois | **12 000€** |
-| **Total** | | **~42 600€/an** |
+| **Total** | | **~38 000€/an** |
 
 ### Scénario 50K utilisateurs actifs (objectif 18 mois)
 
@@ -214,9 +199,8 @@ C'est le **game changer** par rapport aux concurrents.
 |---|---|---|
 | Abonnements Premium (7% conversion) | 3500 × 30€/an | **105 000€** |
 | Abonnements Famille (3% conversion) | 1500 × 40€/an | **60 000€** |
-| Rewarded ads | 45000 × 0.50€/an | **22 500€** |
 | Partenariats | 10 partenaires × 500€/mois | **60 000€** |
-| **Total** | | **~247 500€/an** |
+| **Total** | | **~225 000€/an** |
 
 ---
 
@@ -237,7 +221,6 @@ C'est le **game changer** par rapport aux concurrents.
 ```
 Phase 1 (RevenueCat + Paywall)       — fondation monétisation, indispensable
 Phase 3 (IA Premium)                  — différenciateur, justifie le pricing
-Phase 2 (Rewarded ads)                — revenu complémentaire, rapide à mettre en place
 Phase 5 backend (parrainage serveur)  — acquisition virale
 Phase 6 (Partenariats + B2B)         — quand base > 5K users
 ```
