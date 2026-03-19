@@ -1,6 +1,7 @@
-import { Colors } from "@/constants/theme";
-import { eventColors } from "@/constants/eventColors";
+import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { eventColors } from "@/constants/eventColors";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -24,15 +25,7 @@ import {
   supprimerVitamine,
 } from "@/migration/eventsDoubleWriteService";
 import { normalizeQuery } from "@/utils/text";
-
-// Helper to remove undefined values from objects (Firebase doesn't accept undefined)
-function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined)
-  ) as T;
-}
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -45,13 +38,31 @@ import {
   View,
 } from "react-native";
 
+// Helper to remove undefined values from objects (Firebase doesn't accept undefined)
+function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined),
+  ) as T;
+}
+
 // ============================================
 // TYPES
 // ============================================
 
-export type SoinsType = "temperature" | "medicament" | "symptome" | "vaccin" | "vitamine";
+export type SoinsType =
+  | "temperature"
+  | "medicament"
+  | "symptome"
+  | "vaccin"
+  | "vitamine";
 
-type ModePrise = "axillaire" | "auriculaire" | "buccale" | "frontale" | "rectale" | "autre";
+type ModePrise =
+  | "axillaire"
+  | "auriculaire"
+  | "buccale"
+  | "frontale"
+  | "rectale"
+  | "autre";
 type Voie = "orale" | "topique" | "inhalation" | "autre";
 type Intensite = "léger" | "modéré" | "fort";
 
@@ -93,7 +104,10 @@ type FormStep = "form" | "vaccinPicker" | "vitaminePicker";
 // CONSTANTS
 // ============================================
 
-const TYPE_CONFIG: Record<SoinsType, { label: string; color: string; icon: string }> = {
+const TYPE_CONFIG: Record<
+  SoinsType,
+  { label: string; color: string; icon: string }
+> = {
   temperature: {
     label: "Température",
     color: eventColors.temperature.dark,
@@ -125,10 +139,22 @@ const VACCINS_LIST = [
   { nomVaccin: "BCG (Tuberculose)", dosage: null },
   { nomVaccin: "Bronchiolite", dosage: null },
   { nomVaccin: "DTCaP", dosage: "rappel" },
-  { nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)", dosage: "1ère injection" },
-  { nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)", dosage: "2ème injection" },
-  { nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)", dosage: "3ème injection" },
-  { nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)", dosage: "rappel" },
+  {
+    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
+    dosage: "1ère injection",
+  },
+  {
+    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
+    dosage: "2ème injection",
+  },
+  {
+    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
+    dosage: "3ème injection",
+  },
+  {
+    nomVaccin: "Diphtérie, Tétanos, Coqueluche, Polio, Haemophilus (DTCaP-Hib)",
+    dosage: "rappel",
+  },
   { nomVaccin: "Grippe saisonnière", dosage: "" },
   { nomVaccin: "Hépatite B", dosage: "" },
   { nomVaccin: "Méningocoque A,C,W,Y", dosage: "1ère injection" },
@@ -201,48 +227,65 @@ export function SoinsForm({
   const [searchQuery, setSearchQuery] = useState("");
 
   // Wrapper to notify parent of step changes
-  const setFormStep = useCallback((step: FormStep) => {
-    setFormStepInternal(step);
-    onFormStepChange?.(step !== "form");
-  }, [onFormStepChange]);
+  const setFormStep = useCallback(
+    (step: FormStep) => {
+      setFormStepInternal(step);
+      onFormStepChange?.(step !== "form");
+    },
+    [onFormStepChange],
+  );
 
   // Type selection state
   const [selectedType, setSelectedType] = useState<SoinsType>(
-    editData?.type ?? initialType
+    editData?.type ?? initialType,
   );
   const [includeTemperature, setIncludeTemperature] = useState(
-    editData?.type === "temperature" || initialType === "temperature"
+    editData?.type === "temperature" || initialType === "temperature",
   );
   const [includeSymptome, setIncludeSymptome] = useState(
-    editData?.type === "symptome" || initialType === "symptome"
+    editData?.type === "symptome" || initialType === "symptome",
   );
 
   // Common state
-  const [dateHeure, setDateHeure] = useState<Date>(editData?.date ?? new Date());
+  const [dateHeure, setDateHeure] = useState<Date>(
+    editData?.date ?? new Date(),
+  );
   const [note, setNote] = useState(editData?.note ?? "");
 
   // Temperature state
-  const [temperatureValue, setTemperatureValue] = useState(editData?.valeur ?? 36.8);
+  const [temperatureValue, setTemperatureValue] = useState(
+    editData?.valeur ?? 36.8,
+  );
   const [temperatureMode, setTemperatureMode] = useState<ModePrise>(
-    editData?.modePrise ?? "axillaire"
+    editData?.modePrise ?? "axillaire",
   );
 
   // Medicament state
-  const [medicamentName, setMedicamentName] = useState(editData?.nomMedicament ?? "");
-  const [medicamentDosage, setMedicamentDosage] = useState(editData?.dosage ?? "");
-  const [medicamentVoie, setMedicamentVoie] = useState<Voie | undefined>(editData?.voie);
+  const [medicamentName, setMedicamentName] = useState(
+    editData?.nomMedicament ?? "",
+  );
+  const [medicamentDosage, setMedicamentDosage] = useState(
+    editData?.dosage ?? "",
+  );
+  const [medicamentVoie, setMedicamentVoie] = useState<Voie | undefined>(
+    editData?.voie,
+  );
 
   // Symptome state
-  const [symptomes, setSymptomes] = useState<string[]>(editData?.symptomes ?? []);
-  const [symptomeAutre, setSymptomeAutre] = useState("");
-  const [symptomeIntensite, setSymptomeIntensite] = useState<Intensite | undefined>(
-    editData?.intensite
+  const [symptomes, setSymptomes] = useState<string[]>(
+    editData?.symptomes ?? [],
   );
+  const [symptomeAutre, setSymptomeAutre] = useState("");
+  const [symptomeIntensite, setSymptomeIntensite] = useState<
+    Intensite | undefined
+  >(editData?.intensite);
 
   // Vaccin state
   const [vaccinName, setVaccinName] = useState(() => {
     if (editData?.nomVaccin) {
-      const isKnown = VACCINS_LIST.some(v => v.nomVaccin === editData.nomVaccin);
+      const isKnown = VACCINS_LIST.some(
+        (v) => v.nomVaccin === editData.nomVaccin,
+      );
       return isKnown ? editData.nomVaccin : "Autre vaccin";
     }
     return "";
@@ -250,7 +293,9 @@ export function SoinsForm({
   const [vaccinDosage, setVaccinDosage] = useState(editData?.dosage ?? "");
   const [vaccinCustomName, setVaccinCustomName] = useState(() => {
     if (editData?.nomVaccin) {
-      const isKnown = VACCINS_LIST.some(v => v.nomVaccin === editData.nomVaccin);
+      const isKnown = VACCINS_LIST.some(
+        (v) => v.nomVaccin === editData.nomVaccin,
+      );
       return isKnown ? "" : editData.nomVaccin;
     }
     return "";
@@ -267,7 +312,10 @@ export function SoinsForm({
   });
   const [vitamineDosage, setVitamineDosage] = useState(editData?.dosage ?? "");
   const [vitamineCustomName, setVitamineCustomName] = useState(() => {
-    if (editData?.nomVitamine && !VITAMINES_LIST.includes(editData.nomVitamine)) {
+    if (
+      editData?.nomVitamine &&
+      !VITAMINES_LIST.includes(editData.nomVitamine)
+    ) {
       return editData.nomVitamine;
     }
     return "";
@@ -306,17 +354,17 @@ export function SoinsForm({
   const filteredVaccins = useMemo(
     () =>
       VACCINS_LIST.filter((vaccin) =>
-        normalizeQuery(vaccin.nomVaccin).includes(normalizeQuery(searchQuery))
+        normalizeQuery(vaccin.nomVaccin).includes(normalizeQuery(searchQuery)),
       ),
-    [searchQuery]
+    [searchQuery],
   );
 
   const filteredVitamines = useMemo(
     () =>
       VITAMINES_LIST.filter((vitamine) =>
-        normalizeQuery(vitamine).includes(normalizeQuery(searchQuery))
+        normalizeQuery(vitamine).includes(normalizeQuery(searchQuery)),
       ),
-    [searchQuery]
+    [searchQuery],
   );
 
   // Templates
@@ -555,11 +603,15 @@ export function SoinsForm({
               setIsSubmitting(false);
               return;
             }
-            await modifierTemperature(activeChild.id, editData!.id, removeUndefined({
-              ...common,
-              valeur,
-              modePrise: temperatureMode,
-            }));
+            await modifierTemperature(
+              activeChild.id,
+              editData!.id,
+              removeUndefined({
+                ...common,
+                valeur,
+                modePrise: temperatureMode,
+              }),
+            );
             showSuccess("temperature", "Température modifiée");
           } else {
             const list = [...symptomes];
@@ -569,16 +621,23 @@ export function SoinsForm({
               setIsSubmitting(false);
               return;
             }
-            await modifierSymptome(activeChild.id, editData!.id, removeUndefined({
-              ...common,
-              symptomes: list,
-              intensite: symptomeIntensite,
-            }));
+            await modifierSymptome(
+              activeChild.id,
+              editData!.id,
+              removeUndefined({
+                ...common,
+                symptomes: list,
+                intensite: symptomeIntensite,
+              }),
+            );
             showSuccess("symptome", "Symptôme modifié");
           }
         } else {
           if (!includeTemperature && !includeSymptome) {
-            showAlert("Erreur", "Sélectionnez au moins Température ou Symptôme.");
+            showAlert(
+              "Erreur",
+              "Sélectionnez au moins Température ou Symptôme.",
+            );
             setIsSubmitting(false);
             return;
           }
@@ -594,11 +653,14 @@ export function SoinsForm({
               setIsSubmitting(false);
               return;
             }
-            await ajouterTemperature(activeChild.id, removeUndefined({
-              ...common,
-              valeur,
-              modePrise: temperatureMode,
-            }));
+            await ajouterTemperature(
+              activeChild.id,
+              removeUndefined({
+                ...common,
+                valeur,
+                modePrise: temperatureMode,
+              }),
+            );
             showSuccess("temperature", "Température enregistrée");
           }
           if (includeSymptome) {
@@ -609,11 +671,14 @@ export function SoinsForm({
               setIsSubmitting(false);
               return;
             }
-            await ajouterSymptome(activeChild.id, removeUndefined({
-              ...common,
-              symptomes: list,
-              intensite: symptomeIntensite,
-            }));
+            await ajouterSymptome(
+              activeChild.id,
+              removeUndefined({
+                ...common,
+                symptomes: list,
+                intensite: symptomeIntensite,
+              }),
+            );
             showSuccess("symptome", "Symptôme enregistré");
           }
         }
@@ -624,20 +689,27 @@ export function SoinsForm({
           return;
         }
         if (isEditing) {
-          await modifierMedicament(activeChild.id, editData!.id, removeUndefined({
-            ...common,
-            nomMedicament: medicamentName.trim(),
-            dosage: medicamentDosage.trim() || undefined,
-            voie: medicamentVoie,
-          }));
+          await modifierMedicament(
+            activeChild.id,
+            editData!.id,
+            removeUndefined({
+              ...common,
+              nomMedicament: medicamentName.trim(),
+              dosage: medicamentDosage.trim() || undefined,
+              voie: medicamentVoie,
+            }),
+          );
           showSuccess("medicament", "Médicament modifié");
         } else {
-          await ajouterMedicament(activeChild.id, removeUndefined({
-            ...common,
-            nomMedicament: medicamentName.trim(),
-            dosage: medicamentDosage.trim() || undefined,
-            voie: medicamentVoie,
-          }));
+          await ajouterMedicament(
+            activeChild.id,
+            removeUndefined({
+              ...common,
+              nomMedicament: medicamentName.trim(),
+              dosage: medicamentDosage.trim() || undefined,
+              voie: medicamentVoie,
+            }),
+          );
           showSuccess("medicament", "Médicament enregistré");
         }
       } else if (selectedType === "vaccin") {
@@ -650,18 +722,25 @@ export function SoinsForm({
         }
         const finalDosage = vaccinDosage.trim() || undefined;
         if (isEditing) {
-          await modifierVaccin(activeChild.id, editData!.id, removeUndefined({
-            ...common,
-            nomVaccin: normalizedVaccinName.trim(),
-            dosage: finalDosage,
-          }));
+          await modifierVaccin(
+            activeChild.id,
+            editData!.id,
+            removeUndefined({
+              ...common,
+              nomVaccin: normalizedVaccinName.trim(),
+              dosage: finalDosage,
+            }),
+          );
           showSuccess("vaccine", "Vaccin modifié");
         } else {
-          await ajouterVaccin(activeChild.id, removeUndefined({
-            ...common,
-            nomVaccin: normalizedVaccinName.trim(),
-            dosage: finalDosage,
-          }));
+          await ajouterVaccin(
+            activeChild.id,
+            removeUndefined({
+              ...common,
+              nomVaccin: normalizedVaccinName.trim(),
+              dosage: finalDosage,
+            }),
+          );
           showSuccess("vaccine", "Vaccin enregistré");
         }
       } else if (selectedType === "vitamine") {
@@ -677,18 +756,25 @@ export function SoinsForm({
             ? `${gouttesCount} gouttes`
             : vitamineDosage.trim() || undefined;
         if (isEditing) {
-          await modifierVitamine(activeChild.id, editData!.id, removeUndefined({
-            ...common,
-            nomVitamine: normalizedVitamineName.trim(),
-            dosage: computedDosage,
-          }));
+          await modifierVitamine(
+            activeChild.id,
+            editData!.id,
+            removeUndefined({
+              ...common,
+              nomVitamine: normalizedVitamineName.trim(),
+              dosage: computedDosage,
+            }),
+          );
           showSuccess("vitamin", "Vitamine modifiée");
         } else {
-          await ajouterVitamine(activeChild.id, removeUndefined({
-            ...common,
-            nomVitamine: normalizedVitamineName.trim(),
-            dosage: computedDosage,
-          }));
+          await ajouterVitamine(
+            activeChild.id,
+            removeUndefined({
+              ...common,
+              nomVitamine: normalizedVitamineName.trim(),
+              dosage: computedDosage,
+            }),
+          );
           showSuccess("vitamin", "Vitamine enregistrée");
         }
       }
@@ -734,7 +820,7 @@ export function SoinsForm({
         } finally {
           setIsSubmitting(false);
         }
-      }
+      },
     );
   };
 
@@ -754,11 +840,20 @@ export function SoinsForm({
             accessibilityLabel="Retour"
           >
             <FontAwesome5 name="chevron-left" size={14} color={nc.textLight} />
-            <Text style={[styles.backText, { color: nc.textLight }]}>Retour</Text>
+            <Text style={[styles.backText, { color: nc.textLight }]}>
+              Retour
+            </Text>
           </Pressable>
-          <Text style={[styles.breadcrumbText, { color: nc.textMuted }]}>Soins / Vaccins / Choisir</Text>
+          <Text style={[styles.breadcrumbText, { color: nc.textMuted }]}>
+            Soins / Vaccins / Choisir
+          </Text>
         </View>
-        <View style={[styles.searchContainer, { backgroundColor: nc.background, borderColor: nc.border }]}>
+        <View
+          style={[
+            styles.searchContainer,
+            { backgroundColor: nc.background, borderColor: nc.border },
+          ]}
+        >
           <FontAwesome5
             name="search"
             size={16}
@@ -779,7 +874,11 @@ export function SoinsForm({
               onPress={() => setSearchQuery("")}
               accessibilityLabel="Effacer la recherche"
             >
-              <FontAwesome5 name="times-circle" size={16} color={nc.textMuted} />
+              <FontAwesome5
+                name="times-circle"
+                size={16}
+                color={nc.textMuted}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -809,7 +908,10 @@ export function SoinsForm({
                     setSearchQuery("");
                   }}
                   activeOpacity={0.7}
-                  accessibilityLabel={getVaccinDisplay(vaccin.nomVaccin, vaccin.dosage)}
+                  accessibilityLabel={getVaccinDisplay(
+                    vaccin.nomVaccin,
+                    vaccin.dosage,
+                  )}
                 >
                   <FontAwesome5
                     name="syringe"
@@ -828,7 +930,12 @@ export function SoinsForm({
                       {vaccin.nomVaccin}
                     </Text>
                     {!!vaccin.dosage && (
-                      <Text style={[styles.pickerItemSubtext, { color: nc.textLight }]}>
+                      <Text
+                        style={[
+                          styles.pickerItemSubtext,
+                          { color: nc.textLight },
+                        ]}
+                      >
                         Dose : {vaccin.dosage}
                       </Text>
                     )}
@@ -844,7 +951,9 @@ export function SoinsForm({
               );
             })
           ) : (
-            <Text style={[styles.noResultsText, { color: nc.textLight }]}>Aucun vaccin trouvé</Text>
+            <Text style={[styles.noResultsText, { color: nc.textLight }]}>
+              Aucun vaccin trouvé
+            </Text>
           )}
         </ScrollView>
       </View>
@@ -864,11 +973,20 @@ export function SoinsForm({
             accessibilityLabel="Retour"
           >
             <FontAwesome5 name="chevron-left" size={14} color={nc.textLight} />
-            <Text style={[styles.backText, { color: nc.textLight }]}>Retour</Text>
+            <Text style={[styles.backText, { color: nc.textLight }]}>
+              Retour
+            </Text>
           </Pressable>
-          <Text style={[styles.breadcrumbText, { color: nc.textMuted }]}>Soins / Vitamines / Choisir</Text>
+          <Text style={[styles.breadcrumbText, { color: nc.textMuted }]}>
+            Soins / Vitamines / Choisir
+          </Text>
         </View>
-        <View style={[styles.searchContainer, { backgroundColor: nc.background, borderColor: nc.border }]}>
+        <View
+          style={[
+            styles.searchContainer,
+            { backgroundColor: nc.background, borderColor: nc.border },
+          ]}
+        >
           <FontAwesome5
             name="search"
             size={16}
@@ -889,7 +1007,11 @@ export function SoinsForm({
               onPress={() => setSearchQuery("")}
               accessibilityLabel="Effacer la recherche"
             >
-              <FontAwesome5 name="times-circle" size={16} color={nc.textMuted} />
+              <FontAwesome5
+                name="times-circle"
+                size={16}
+                color={nc.textMuted}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -945,7 +1067,9 @@ export function SoinsForm({
               </TouchableOpacity>
             ))
           ) : (
-            <Text style={[styles.noResultsText, { color: nc.textLight }]}>Aucune vitamine trouvée</Text>
+            <Text style={[styles.noResultsText, { color: nc.textLight }]}>
+              Aucune vitamine trouvée
+            </Text>
           )}
         </ScrollView>
       </View>
@@ -961,7 +1085,15 @@ export function SoinsForm({
     <View style={styles.container}>
       {/* Type selector */}
       <View style={styles.typeRow}>
-        {(["temperature", "symptome", "medicament", "vaccin", "vitamine"] as SoinsType[]).map((type) => {
+        {(
+          [
+            "temperature",
+            "symptome",
+            "medicament",
+            "vaccin",
+            "vitamine",
+          ] as SoinsType[]
+        ).map((type) => {
           const isTempSymptome = type === "temperature" || type === "symptome";
           const active = isEditing
             ? selectedType === type
@@ -1038,7 +1170,9 @@ export function SoinsForm({
       {!isEditing &&
         (includeTemperature || includeSymptome) &&
         includeTemperature !== includeSymptome && (
-          <Text style={[styles.toggleHint, { color: Colors[colorScheme].tint }]}>
+          <Text
+            style={[styles.toggleHint, { color: Colors[colorScheme].tint }]}
+          >
             Vous pouvez sélectionner Température et Symptôme ensemble
           </Text>
         )}
@@ -1046,23 +1180,42 @@ export function SoinsForm({
       {/* Templates */}
       {templates.length > 0 && (
         <View style={styles.templatesSection}>
-          <Text style={[styles.templatesTitle, { color: nc.textNormal }]}>Templates rapides</Text>
+          <Text style={[styles.templatesTitle, { color: nc.textLight }]}>
+            Templates rapides
+          </Text>
           {templates.map((section, index) => (
-            <View key={`${section.title ?? "default"}-${index}`} style={styles.templatesGroup}>
+            <View
+              key={`${section.title ?? "default"}-${index}`}
+              style={styles.templatesGroup}
+            >
               {section.title && (
-                <Text style={[styles.templatesSubtitle, { color: nc.textLight }]}>{section.title}</Text>
+                <Text
+                  style={[styles.templatesSubtitle, { color: nc.textLight }]}
+                >
+                  {section.title}
+                </Text>
               )}
               <View style={styles.templatesRow}>
                 {section.items.map((template) => (
                   <TouchableOpacity
                     key={template.label}
-                    style={[styles.templateChip, { backgroundColor: nc.backgroundPressed }]}
+                    style={[
+                      styles.templateChip,
+                      { backgroundColor: nc.backgroundPressed },
+                    ]}
                     onPress={template.onPress}
                     activeOpacity={0.8}
                     accessibilityLabel={`Template ${template.label}`}
                     hitSlop={8}
                   >
-                    <Text style={[styles.templateChipText, { color: nc.textNormal }]}>{template.label}</Text>
+                    <Text
+                      style={[
+                        styles.templateChipText,
+                        { color: nc.textNormal },
+                      ]}
+                    >
+                      {template.label}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -1075,7 +1228,9 @@ export function SoinsForm({
       {includeTemperature && (
         <>
           <View style={styles.inputGroup}>
-            <Text style={[styles.inputLabel, { color: nc.textLight }]}>Température (°C)</Text>
+            <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+              Température (°C)
+            </Text>
             <View style={styles.quantityPickerRow}>
               <TouchableOpacity
                 style={[
@@ -1086,8 +1241,8 @@ export function SoinsForm({
                 onPressIn={() =>
                   handlePressIn(() =>
                     setTemperatureValue((value) =>
-                      Math.max(34, Math.round((value - 0.1) * 10) / 10)
-                    )
+                      Math.max(34, Math.round((value - 0.1) * 10) / 10),
+                    ),
                   )
                 }
                 onPressOut={handlePressOut}
@@ -1104,7 +1259,9 @@ export function SoinsForm({
                   -
                 </Text>
               </TouchableOpacity>
-              <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
+              <Text
+                style={[styles.quantityPickerValue, { color: nc.textStrong }]}
+              >
                 {temperatureValue.toFixed(1)}°C
               </Text>
               <TouchableOpacity
@@ -1116,8 +1273,8 @@ export function SoinsForm({
                 onPressIn={() =>
                   handlePressIn(() =>
                     setTemperatureValue((value) =>
-                      Math.min(45, Math.round((value + 0.1) * 10) / 10)
-                    )
+                      Math.min(45, Math.round((value + 0.1) * 10) / 10),
+                    ),
                   )
                 }
                 onPressOut={handlePressOut}
@@ -1137,7 +1294,9 @@ export function SoinsForm({
             </View>
           </View>
           <View style={styles.chipSection}>
-            <Text style={[styles.chipLabel, { color: nc.textLight }]}>Mode de prise</Text>
+            <Text style={[styles.chipLabel, { color: nc.textLight }]}>
+              Mode de prise
+            </Text>
             <View style={styles.chipRow}>
               {MODE_TEMPERATURE.map((mode) => (
                 <TouchableOpacity
@@ -1171,27 +1330,39 @@ export function SoinsForm({
       {selectedType === "medicament" && (
         <>
           <View style={styles.inputGroup}>
-            <Text style={[styles.inputLabel, { color: nc.textLight }]}>Médicament</Text>
+            <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+              Médicament
+            </Text>
             <TextInput
               value={medicamentName}
               onChangeText={setMedicamentName}
               placeholder="Paracétamol"
               placeholderTextColor={nc.textMuted}
-              style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+              style={[
+                styles.input,
+                { borderColor: nc.border, color: nc.textStrong },
+              ]}
             />
           </View>
           <View style={styles.inputGroup}>
-            <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dosage</Text>
+            <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+              Dosage
+            </Text>
             <TextInput
               value={medicamentDosage}
               onChangeText={setMedicamentDosage}
               placeholder="5 ml"
               placeholderTextColor={nc.textMuted}
-              style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+              style={[
+                styles.input,
+                { borderColor: nc.border, color: nc.textStrong },
+              ]}
             />
           </View>
           <View style={styles.chipSection}>
-            <Text style={[styles.chipLabel, { color: nc.textLight }]}>Voie</Text>
+            <Text style={[styles.chipLabel, { color: nc.textLight }]}>
+              Voie
+            </Text>
             <View style={styles.chipRow}>
               {VOIES_MEDICAMENT.map((voie) => (
                 <TouchableOpacity
@@ -1202,7 +1373,9 @@ export function SoinsForm({
                     medicamentVoie === voie && styles.chipActive,
                   ]}
                   onPress={() =>
-                    setMedicamentVoie(medicamentVoie === voie ? undefined : voie)
+                    setMedicamentVoie(
+                      medicamentVoie === voie ? undefined : voie,
+                    )
                   }
                   accessibilityLabel={`Voie ${voie}`}
                   hitSlop={8}
@@ -1227,14 +1400,23 @@ export function SoinsForm({
       {includeSymptome && (
         <>
           <View style={[styles.chipSection, { marginTop: 6 }]}>
-            <Text style={[styles.chipLabel, { color: nc.textLight }]}>Symptômes</Text>
+            <Text style={[styles.chipLabel, { color: nc.textLight }]}>
+              Symptômes
+            </Text>
             <View style={styles.chipRow}>
               {SYMPTOMES_OPTIONS.map((symptome) => {
                 const active = symptomes.includes(symptome);
                 return (
                   <TouchableOpacity
                     key={symptome}
-                    style={[styles.chip, { borderColor: nc.border, backgroundColor: nc.background }, active && styles.chipActive]}
+                    style={[
+                      styles.chip,
+                      {
+                        borderColor: nc.border,
+                        backgroundColor: nc.background,
+                      },
+                      active && styles.chipActive,
+                    ]}
                     accessibilityLabel={`Symptôme ${symptome}`}
                     hitSlop={8}
                     onPress={() => {
@@ -1265,18 +1447,25 @@ export function SoinsForm({
           </View>
           {symptomes.includes("autre") && (
             <View style={[styles.inputGroup, { marginTop: 6 }]}>
-              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Autre(s) symptôme(s)</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+                Autre(s) symptôme(s)
+              </Text>
               <TextInput
                 value={symptomeAutre}
                 onChangeText={setSymptomeAutre}
                 placeholder="Préciser"
                 placeholderTextColor={nc.textMuted}
-                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+                style={[
+                  styles.input,
+                  { borderColor: nc.border, color: nc.textStrong },
+                ]}
               />
             </View>
           )}
           <View style={[styles.chipSection, { marginTop: 6 }]}>
-            <Text style={[styles.chipLabel, { color: nc.textLight }]}>Intensité</Text>
+            <Text style={[styles.chipLabel, { color: nc.textLight }]}>
+              Intensité
+            </Text>
             <View style={styles.chipRow}>
               {INTENSITES.map((item) => (
                 <TouchableOpacity
@@ -1292,7 +1481,7 @@ export function SoinsForm({
                         ? undefined
                         : symptomeIntensite === item
                           ? undefined
-                          : item
+                          : item,
                     )
                   }
                   disabled={symptomes.length === 0}
@@ -1344,7 +1533,10 @@ export function SoinsForm({
               style={[
                 styles.selectorText,
                 { color: nc.textMuted },
-                vaccinName && { color: nc.textStrong, fontWeight: "500" as const },
+                vaccinName && {
+                  color: nc.textStrong,
+                  fontWeight: "500" as const,
+                },
                 isSubmitting && styles.selectorTextDisabled,
               ]}
             >
@@ -1354,32 +1546,55 @@ export function SoinsForm({
           </TouchableOpacity>
           {vaccinName === "Autre vaccin" && (
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Nom du vaccin</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+                Nom du vaccin
+              </Text>
               <TextInput
                 value={vaccinCustomName}
                 onChangeText={setVaccinCustomName}
                 placeholder="Nom du vaccin"
                 placeholderTextColor={nc.textMuted}
-                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+                style={[
+                  styles.input,
+                  { borderColor: nc.border, color: nc.textStrong },
+                ]}
               />
             </View>
           )}
           {vaccinName ? (
             vaccinName === "Autre vaccin" ? (
               <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dose</Text>
+                <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+                  Dose
+                </Text>
                 <TextInput
                   value={vaccinDosage}
                   onChangeText={setVaccinDosage}
                   placeholder="1ère injection"
                   placeholderTextColor={nc.textMuted}
-                  style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+                  style={[
+                    styles.input,
+                    { borderColor: nc.border, color: nc.textStrong },
+                  ]}
                 />
               </View>
             ) : (
               <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dose</Text>
-                <Text style={[styles.readOnlyValue, { borderColor: nc.border, color: nc.textNormal, backgroundColor: nc.background }]}>{vaccinDosage || "—"}</Text>
+                <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+                  Dose
+                </Text>
+                <Text
+                  style={[
+                    styles.readOnlyValue,
+                    {
+                      borderColor: nc.border,
+                      color: nc.textNormal,
+                      backgroundColor: nc.background,
+                    },
+                  ]}
+                >
+                  {vaccinDosage || "—"}
+                </Text>
               </View>
             )
           ) : null}
@@ -1413,7 +1628,10 @@ export function SoinsForm({
               style={[
                 styles.selectorText,
                 { color: nc.textMuted },
-                vitamineName && { color: nc.textStrong, fontWeight: "500" as const },
+                vitamineName && {
+                  color: nc.textStrong,
+                  fontWeight: "500" as const,
+                },
                 isSubmitting && styles.selectorTextDisabled,
               ]}
             >
@@ -1423,19 +1641,26 @@ export function SoinsForm({
           </TouchableOpacity>
           {vitamineName === "Autre vitamine" && (
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Nom de la vitamine</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+                Nom de la vitamine
+              </Text>
               <TextInput
                 value={vitamineCustomName}
                 onChangeText={setVitamineCustomName}
                 placeholder="Nom de la vitamine"
                 placeholderTextColor={nc.textMuted}
-                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+                style={[
+                  styles.input,
+                  { borderColor: nc.border, color: nc.textStrong },
+                ]}
               />
             </View>
           )}
           {(vitamineName === "Vitamine D" || vitamineName === "Vitamine K") && (
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Quantité</Text>
+              <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+                Quantité
+              </Text>
               <View style={styles.quantityPickerRow}>
                 <TouchableOpacity
                   style={[
@@ -1445,7 +1670,7 @@ export function SoinsForm({
                   ]}
                   onPressIn={() =>
                     handlePressIn(() =>
-                      setGouttesCount((value) => Math.max(0, value - 1))
+                      setGouttesCount((value) => Math.max(0, value - 1)),
                     )
                   }
                   onPressOut={handlePressOut}
@@ -1462,7 +1687,9 @@ export function SoinsForm({
                     -
                   </Text>
                 </TouchableOpacity>
-                <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
+                <Text
+                  style={[styles.quantityPickerValue, { color: nc.textStrong }]}
+                >
                   {gouttesCount} gouttes
                 </Text>
                 <TouchableOpacity
@@ -1491,18 +1718,25 @@ export function SoinsForm({
               </View>
             </View>
           )}
-          {vitamineName !== "Vitamine D" && vitamineName !== "Vitamine K" && vitamineName && (
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: nc.textLight }]}>Dosage</Text>
-              <TextInput
-                value={vitamineDosage}
-                onChangeText={setVitamineDosage}
-                placeholder="1 goutte"
-                placeholderTextColor={nc.textMuted}
-                style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
-              />
-            </View>
-          )}
+          {vitamineName !== "Vitamine D" &&
+            vitamineName !== "Vitamine K" &&
+            vitamineName && (
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+                  Dosage
+                </Text>
+                <TextInput
+                  value={vitamineDosage}
+                  onChangeText={setVitamineDosage}
+                  placeholder="1 goutte"
+                  placeholderTextColor={nc.textMuted}
+                  style={[
+                    styles.input,
+                    { borderColor: nc.border, color: nc.textStrong },
+                  ]}
+                />
+              </View>
+            )}
         </>
       )}
 
@@ -1514,7 +1748,10 @@ export function SoinsForm({
           onChangeText={setNote}
           placeholder="Ajouter une note"
           placeholderTextColor={nc.textMuted}
-          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+          style={[
+            styles.input,
+            { borderColor: nc.border, color: nc.textStrong },
+          ]}
         />
       </View>
 
@@ -1540,7 +1777,9 @@ export function SoinsForm({
             disabled={isSubmitting}
             accessibilityLabel="Annuler"
           >
-            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+              Annuler
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1554,9 +1793,26 @@ export function SoinsForm({
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
+              <ActivityIndicator
+                size="small"
+                color={
+                  colorScheme === "dark"
+                    ? Colors[colorScheme].background
+                    : nc.white
+                }
+              />
             ) : (
-              <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
+              <Text
+                style={[
+                  styles.validateText,
+                  {
+                    color:
+                      colorScheme === "dark"
+                        ? Colors[colorScheme].background
+                        : nc.white,
+                  },
+                ]}
+              >
                 {isEditing ? "Enregistrer" : "Ajouter"}
               </Text>
             )}
@@ -1711,9 +1967,12 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   templatesTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 16,
+    marginTop: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   templatesGroup: {
     marginBottom: 8,
@@ -1744,6 +2003,10 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   input: {
     borderWidth: 1,
@@ -1764,6 +2027,10 @@ const styles = StyleSheet.create({
   chipLabel: {
     fontSize: 12,
     fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   chipRow: {
     flexDirection: "row",
@@ -1827,7 +2094,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     borderWidth: 1,
-    marginBottom: 8,
   },
   selectorButtonDisabled: {
     opacity: 0.5,

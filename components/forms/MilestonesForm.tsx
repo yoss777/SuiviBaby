@@ -1,38 +1,38 @@
 // components/forms/MilestonesForm.tsx
-import React, { useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-} from "react-native";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
-import * as ImagePicker from "expo-image-picker";
-import * as ImageManipulator from "expo-image-manipulator";
-import * as FileSystem from "expo-file-system";
 import { auth } from "@/config/firebase";
+import { getNeutralColors } from "@/constants/dashboardColors";
+import { eventColors } from "@/constants/eventColors";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { Colors } from "@/constants/theme";
-import { eventColors } from "@/constants/eventColors";
-import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ajouterJalon,
   modifierJalon,
   supprimerJalon,
 } from "@/migration/eventsDoubleWriteService";
+import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import * as FileSystem from "expo-file-system";
+import * as ImageManipulator from "expo-image-manipulator";
+import * as ImagePicker from "expo-image-picker";
+import React, { useCallback, useState } from "react";
+import {
+  Image,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined)
+    Object.entries(obj).filter(([, v]) => v !== undefined),
   ) as T;
 }
 
@@ -155,7 +155,7 @@ const compressImage = async (uri: string): Promise<string> => {
   const result = await ImageManipulator.manipulateAsync(
     uri,
     [{ resize: { width: MAX_IMAGE_WIDTH } }],
-    { compress: IMAGE_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
+    { compress: IMAGE_QUALITY, format: ImageManipulator.SaveFormat.JPEG },
   );
   return result.uri;
 };
@@ -163,7 +163,7 @@ const compressImage = async (uri: string): Promise<string> => {
 const uploadMilestonePhoto = async (
   childId: string,
   uri: string,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
 ): Promise<string> => {
   try {
     const extension = uri.split(".").pop()?.split("?")[0] || "jpg";
@@ -233,25 +233,25 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
   // Form state with undefined value handling
   const [typeJalon, setTypeJalon] = useState<JalonType>(
-    editData?.typeJalon ?? initialType
+    editData?.typeJalon ?? initialType,
   );
   const [title, setTitle] = useState<string>(
-    editData?.typeJalon === "autre" ? (editData?.titre ?? "") : ""
+    editData?.typeJalon === "autre" ? (editData?.titre ?? "") : "",
   );
   const [titleTouched, setTitleTouched] = useState(!!editData?.titre);
   const [titleError, setTitleError] = useState(false);
   const [description, setDescription] = useState<string>(
-    editData?.description ?? ""
+    editData?.description ?? "",
   );
   const [note, setNote] = useState<string>(editData?.note ?? "");
   const [dateHeure, setDateHeure] = useState<Date>(
-    editData ? toDate(editData.date) : new Date()
+    editData ? toDate(editData.date) : new Date(),
   );
   const [mood, setMood] = useState<1 | 2 | 3 | 4 | 5 | null>(
-    editData?.humeur ?? null
+    editData?.humeur ?? null,
   );
   const [photoUri, setPhotoUri] = useState<string | null>(
-    editData?.photos?.[0] ?? null
+    editData?.photos?.[0] ?? null,
   );
   const [photoUploading, setPhotoUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -325,7 +325,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
         const uploadedUrl = await uploadMilestonePhoto(
           activeChild.id,
           photoUri,
-          (progress) => setUploadProgress(Math.round(progress))
+          (progress) => setUploadProgress(Math.round(progress)),
         );
         photoUrls = [uploadedUrl];
       }
@@ -381,7 +381,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
         } finally {
           setIsSubmitting(false);
         }
-      }
+      },
     );
   };
 
@@ -402,7 +402,10 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
               style={[
                 styles.typeChip,
                 { borderColor: nc.border, backgroundColor: nc.background },
-                active && { backgroundColor: nc.backgroundCard, borderColor: eventColors.jalon.dark },
+                active && {
+                  backgroundColor: nc.backgroundCard,
+                  borderColor: eventColors.jalon.dark,
+                },
               ]}
               onPress={() => handleTypeChange(type)}
               disabled={isSubmitting}
@@ -426,7 +429,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       {/* Titre (seulement pour Autre moment) */}
       {typeJalon === "autre" && (
         <View style={styles.inputGroup}>
-          <Text style={[styles.inputLabel, { color: nc.textLight }]}>Titre</Text>
+          <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+            Titre
+          </Text>
           <TextInput
             value={title}
             onChangeText={(value) => {
@@ -438,7 +443,11 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             }}
             placeholder="Ajouter un titre"
             placeholderTextColor={nc.textMuted}
-            style={[styles.input, { borderColor: nc.border, color: nc.textStrong }, titleError && styles.inputError]}
+            style={[
+              styles.input,
+              { borderColor: nc.border, color: nc.textStrong },
+              titleError && styles.inputError,
+            ]}
             editable={!isSubmitting}
           />
         </View>
@@ -446,13 +455,18 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
       {/* Description */}
       <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Description</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+          Description
+        </Text>
         <TextInput
           value={description}
           onChangeText={setDescription}
           placeholder="Ajouter un détail ou un souvenir..."
           placeholderTextColor={nc.textMuted}
-          style={[styles.noteInput, { borderColor: nc.border, color: nc.textStrong }]}
+          style={[
+            styles.noteInput,
+            { borderColor: nc.border, color: nc.textStrong },
+          ]}
           multiline
           editable={!isSubmitting}
         />
@@ -461,7 +475,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       {/* Humeur (si type humeur) */}
       {typeJalon === "humeur" && (
         <View style={styles.chipSection}>
-          <Text style={[styles.chipLabel, { color: nc.textLight }]}>Humeur</Text>
+          <Text style={[styles.chipLabel, { color: nc.textLight }]}>
+            Humeur
+          </Text>
           <View style={styles.chipRow}>
             {MOOD_OPTIONS.map((option) => {
               const active = mood === option.value;
@@ -500,9 +516,15 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
         <Text style={[styles.inputLabel, { color: nc.textLight }]}>Photo</Text>
         {photoUri ? (
           <View style={styles.photoPreviewContainer}>
-            <Image source={{ uri: photoUri }} style={[styles.photoPreview, { backgroundColor: nc.background }]} />
+            <Image
+              source={{ uri: photoUri }}
+              style={[styles.photoPreview, { backgroundColor: nc.background }]}
+            />
             <TouchableOpacity
-              style={[styles.photoRemoveButton, { backgroundColor: nc.backgroundCard }]}
+              style={[
+                styles.photoRemoveButton,
+                { backgroundColor: nc.backgroundCard },
+              ]}
               onPress={() => setPhotoUri(null)}
               activeOpacity={0.8}
               disabled={isSubmitting}
@@ -512,21 +534,34 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
               <FontAwesome name="xmark" size={12} color="#dc3545" />
             </TouchableOpacity>
             {photoUploading && (
-              <Text style={[styles.photoUploading, { color: eventColors.jalon.dark }]}>
-                Téléversement... {uploadProgress > 0 ? `${uploadProgress}%` : ""}
+              <Text
+                style={[
+                  styles.photoUploading,
+                  { color: eventColors.jalon.dark },
+                ]}
+              >
+                Téléversement...{" "}
+                {uploadProgress > 0 ? `${uploadProgress}%` : ""}
               </Text>
             )}
           </View>
         ) : (
           <TouchableOpacity
-            style={[styles.photoPlaceholder, { borderColor: nc.border, backgroundColor: nc.background }]}
+            style={[
+              styles.photoPlaceholder,
+              { borderColor: nc.border, backgroundColor: nc.background },
+            ]}
             onPress={handlePickPhoto}
             activeOpacity={0.8}
             disabled={isSubmitting}
             accessibilityLabel="Ajouter une photo"
           >
             <FontAwesome5 name="camera" size={20} color={nc.textMuted} />
-            <Text style={[styles.photoPlaceholderText, { color: nc.textMuted }]}>Ajouter une photo</Text>
+            <Text
+              style={[styles.photoPlaceholderText, { color: nc.textMuted }]}
+            >
+              Ajouter une photo
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -539,7 +574,10 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           onChangeText={setNote}
           placeholder="Ajouter une note personnelle..."
           placeholderTextColor={nc.textMuted}
-          style={[styles.noteInput, { borderColor: nc.border, color: nc.textStrong }]}
+          style={[
+            styles.noteInput,
+            { borderColor: nc.border, color: nc.textStrong },
+          ]}
           multiline
           editable={!isSubmitting}
         />
@@ -567,7 +605,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Annuler"
           >
-            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+              Annuler
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -580,7 +620,17 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
-            <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
+            <Text
+              style={[
+                styles.validateText,
+                {
+                  color:
+                    colorScheme === "dark"
+                      ? Colors[colorScheme].background
+                      : nc.white,
+                },
+              ]}
+            >
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
           </TouchableOpacity>
@@ -620,6 +670,10 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   input: {
     borderWidth: 1,
@@ -666,6 +720,10 @@ const styles = StyleSheet.create({
   chipLabel: {
     fontSize: 12,
     fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   chipRow: {
     flexDirection: "row",

@@ -1,7 +1,7 @@
 // components/forms/RoutinesForm.tsx
-import { Colors } from "@/constants/theme";
+import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { getNeutralColors } from "@/constants/dashboardColors";
-import * as Haptics from "expo-haptics";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -18,13 +18,10 @@ import {
   supprimerNettoyageNez,
   supprimerSommeil,
 } from "@/migration/eventsDoubleWriteService";
-import { obtenirEvenements, EventType } from "@/services/eventsService";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import { EventType, obtenirEvenements } from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import React, { useState } from "react";
 import {
-
   StyleSheet,
   Text,
   TextInput,
@@ -53,7 +50,11 @@ export type SleepLocation =
   | "autre";
 export type SleepQuality = "paisible" | "agité" | "mauvais";
 export type NezMethode = "serum" | "mouche_bebe" | "coton" | "autre";
-export type NezResultat = "efficace" | "mucus_clair" | "mucus_epais" | "mucus_colore";
+export type NezResultat =
+  | "efficace"
+  | "mucus_clair"
+  | "mucus_epais"
+  | "mucus_colore";
 
 export type RoutinesEditData = {
   id: string;
@@ -210,7 +211,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
   // Nettoyage nez state
   const [dateNez, setDateNez] = useState<Date>(
-    editData && editData.type === "nettoyage_nez" ? toDate(editData.date) : new Date(),
+    editData && editData.type === "nettoyage_nez"
+      ? toDate(editData.date)
+      : new Date(),
   );
   const [methodeNez, setMethodeNez] = useState<NezMethode | undefined>(
     editData?.methode ?? undefined,
@@ -246,7 +249,6 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const [noteSommeil, setNoteSommeil] = useState<string>(
     editData?.type === "sommeil" ? (editData.note ?? "") : "",
   );
-
 
   // ============================================
   // TYPE SELECTION
@@ -374,8 +376,14 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             return;
           }
         }
-        const isEditingSameOngoingSleep = editData && sommeilEnCours && editData.id === sommeilEnCours.id;
-        if (isOngoing && sommeilEnCours && isEditing && !isEditingSameOngoingSleep) {
+        const isEditingSameOngoingSleep =
+          editData && sommeilEnCours && editData.id === sommeilEnCours.id;
+        if (
+          isOngoing &&
+          sommeilEnCours &&
+          isEditing &&
+          !isEditingSameOngoingSleep
+        ) {
           showAlert(
             "Attention",
             "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
@@ -440,7 +448,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
 
-    const typeLabel = editData.type === "nettoyage_nez" ? "ce nettoyage de nez" : editData.type === "bain" ? "ce bain" : "ce sommeil";
+    const typeLabel =
+      editData.type === "nettoyage_nez"
+        ? "ce nettoyage de nez"
+        : editData.type === "bain"
+          ? "ce bain"
+          : "ce sommeil";
     showConfirm(
       "Supprimer",
       `Voulez-vous vraiment supprimer ${typeLabel} ?`,
@@ -537,8 +550,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               style={[
                 styles.chip,
                 {
-                  backgroundColor: location === option ? chipActiveColors.bg : nc.background,
-                  borderColor: location === option ? chipActiveColors.border : nc.border,
+                  backgroundColor:
+                    location === option ? chipActiveColors.bg : nc.background,
+                  borderColor:
+                    location === option ? chipActiveColors.border : nc.border,
                 },
               ]}
               onPress={() =>
@@ -553,7 +568,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               <Text
                 style={[
                   styles.chipText,
-                  { color: location === option ? chipActiveColors.text : nc.textLight },
+                  {
+                    color:
+                      location === option
+                        ? chipActiveColors.text
+                        : nc.textLight,
+                  },
                 ]}
               >
                 {option}
@@ -572,8 +592,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               style={[
                 styles.chip,
                 {
-                  backgroundColor: quality === option ? chipActiveColors.bg : nc.background,
-                  borderColor: quality === option ? chipActiveColors.border : nc.border,
+                  backgroundColor:
+                    quality === option ? chipActiveColors.bg : nc.background,
+                  borderColor:
+                    quality === option ? chipActiveColors.border : nc.border,
                 },
               ]}
               onPress={() =>
@@ -588,7 +610,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               <Text
                 style={[
                   styles.chipText,
-                  { color: quality === option ? chipActiveColors.text : nc.textLight },
+                  {
+                    color:
+                      quality === option ? chipActiveColors.text : nc.textLight,
+                  },
                 ]}
               >
                 {option}
@@ -605,7 +630,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           onChangeText={setNoteSommeil}
           placeholder="Ajouter une note"
           placeholderTextColor={nc.textMuted}
-          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+          style={[
+            styles.input,
+            { borderColor: nc.border, color: nc.textStrong },
+          ]}
           editable={!isSubmitting}
         />
       </View>
@@ -650,12 +678,20 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               style={[
                 styles.chip,
                 {
-                  backgroundColor: methodeNez === option.value ? chipActiveColors.bg : nc.background,
-                  borderColor: methodeNez === option.value ? chipActiveColors.border : nc.border,
+                  backgroundColor:
+                    methodeNez === option.value
+                      ? chipActiveColors.bg
+                      : nc.background,
+                  borderColor:
+                    methodeNez === option.value
+                      ? chipActiveColors.border
+                      : nc.border,
                 },
               ]}
               onPress={() =>
-                setMethodeNez(methodeNez === option.value ? undefined : option.value)
+                setMethodeNez(
+                  methodeNez === option.value ? undefined : option.value,
+                )
               }
               disabled={isSubmitting}
               accessibilityLabel={option.label}
@@ -666,7 +702,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               <Text
                 style={[
                   styles.chipText,
-                  { color: methodeNez === option.value ? chipActiveColors.text : nc.textLight },
+                  {
+                    color:
+                      methodeNez === option.value
+                        ? chipActiveColors.text
+                        : nc.textLight,
+                  },
                 ]}
               >
                 {option.label}
@@ -677,7 +718,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       </View>
 
       <View style={styles.chipSection}>
-        <Text style={[styles.chipLabel, { color: nc.textLight }]}>Résultat</Text>
+        <Text style={[styles.chipLabel, { color: nc.textLight }]}>
+          Résultat
+        </Text>
         <View style={styles.chipRow}>
           {RESULTAT_NEZ_OPTIONS.map((option) => (
             <TouchableOpacity
@@ -685,12 +728,20 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               style={[
                 styles.chip,
                 {
-                  backgroundColor: resultatNez === option.value ? chipActiveColors.bg : nc.background,
-                  borderColor: resultatNez === option.value ? chipActiveColors.border : nc.border,
+                  backgroundColor:
+                    resultatNez === option.value
+                      ? chipActiveColors.bg
+                      : nc.background,
+                  borderColor:
+                    resultatNez === option.value
+                      ? chipActiveColors.border
+                      : nc.border,
                 },
               ]}
               onPress={() =>
-                setResultatNez(resultatNez === option.value ? undefined : option.value)
+                setResultatNez(
+                  resultatNez === option.value ? undefined : option.value,
+                )
               }
               disabled={isSubmitting}
               accessibilityLabel={option.label}
@@ -701,7 +752,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               <Text
                 style={[
                   styles.chipText,
-                  { color: resultatNez === option.value ? chipActiveColors.text : nc.textLight },
+                  {
+                    color:
+                      resultatNez === option.value
+                        ? chipActiveColors.text
+                        : nc.textLight,
+                  },
                 ]}
               >
                 {option.label}
@@ -718,7 +774,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           onChangeText={setNoteNez}
           placeholder="Ajouter une note"
           placeholderTextColor={nc.textMuted}
-          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+          style={[
+            styles.input,
+            { borderColor: nc.border, color: nc.textStrong },
+          ]}
           editable={!isSubmitting}
         />
       </View>
@@ -740,7 +799,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const renderBainForm = () => (
     <>
       <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Durée (minutes)</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+          Durée (minutes)
+        </Text>
         <View style={styles.quantityPickerRow}>
           <TouchableOpacity
             style={[
@@ -762,7 +823,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               -
             </Text>
           </TouchableOpacity>
-          <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>{dureeBain} min</Text>
+          <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
+            {dureeBain} min
+          </Text>
           <TouchableOpacity
             style={[
               styles.quantityButton,
@@ -787,7 +850,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Température de l'eau (°C)</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+          Température de l'eau (°C)
+        </Text>
         <View style={styles.quantityPickerRow}>
           <TouchableOpacity
             style={[
@@ -840,13 +905,18 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Produits</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+          Produits
+        </Text>
         <TextInput
           value={produits}
           onChangeText={setProduits}
           placeholder="Gel lavant, huile..."
           placeholderTextColor={nc.textMuted}
-          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+          style={[
+            styles.input,
+            { borderColor: nc.border, color: nc.textStrong },
+          ]}
           editable={!isSubmitting}
         />
       </View>
@@ -858,7 +928,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           onChangeText={setNoteBain}
           placeholder="Ajouter une note"
           placeholderTextColor={nc.textMuted}
-          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+          style={[
+            styles.input,
+            { borderColor: nc.border, color: nc.textStrong },
+          ]}
           editable={!isSubmitting}
         />
       </View>
@@ -900,7 +973,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Annuler"
           >
-            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+              Annuler
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -913,10 +988,17 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
-            <Text style={[
-              styles.validateText,
-              { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white },
-            ]}>
+            <Text
+              style={[
+                styles.validateText,
+                {
+                  color:
+                    colorScheme === "dark"
+                      ? Colors[colorScheme].background
+                      : nc.white,
+                },
+              ]}
+            >
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
           </TouchableOpacity>
@@ -983,6 +1065,10 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   input: {
     borderWidth: 1,
@@ -997,6 +1083,10 @@ const styles = StyleSheet.create({
   chipLabel: {
     fontSize: 12,
     fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   chipRow: {
     flexDirection: "row",

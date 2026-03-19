@@ -1,31 +1,31 @@
 // components/forms/CroissanceForm.tsx
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-} from "react-native";
-import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { getNeutralColors } from "@/constants/dashboardColors";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { Colors } from "@/constants/theme";
-import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ajouterCroissance,
   modifierCroissance,
   supprimerCroissance,
 } from "@/migration/eventsDoubleWriteService";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import React, { useState } from "react";
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined)
+    Object.entries(obj).filter(([, v]) => v !== undefined),
   ) as T;
 }
 
@@ -93,16 +93,16 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
 
   // Form state
   const [dateHeure, setDateHeure] = useState<Date>(
-    editData ? toDate(editData.date) : new Date()
+    editData ? toDate(editData.date) : new Date(),
   );
   const [tailleCm, setTailleCm] = useState<string>(
-    editData?.tailleCm?.toString() ?? ""
+    editData?.tailleCm?.toString() ?? "",
   );
   const [poidsKg, setPoidsKg] = useState<string>(
-    editData?.poidsKg?.toString() ?? ""
+    editData?.poidsKg?.toString() ?? "",
   );
   const [teteCm, setTeteCm] = useState<string>(
-    editData?.teteCm?.toString() ?? ""
+    editData?.teteCm?.toString() ?? "",
   );
   // ============================================
   // HANDLERS
@@ -165,7 +165,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
         } finally {
           setIsSubmitting(false);
         }
-      }
+      },
     );
   };
 
@@ -177,42 +177,57 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
     <View style={styles.sheetContent}>
       {/* Taille */}
       <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Taille (cm)</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+          Taille (cm)
+        </Text>
         <TextInput
           value={tailleCm}
           onChangeText={setTailleCm}
           placeholder="ex: 62.5"
           placeholderTextColor={nc.textMuted}
           keyboardType="decimal-pad"
-          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+          style={[
+            styles.input,
+            { borderColor: nc.border, color: nc.textStrong },
+          ]}
           editable={!isSubmitting}
         />
       </View>
 
       {/* Poids */}
       <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Poids (kg)</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+          Poids (kg)
+        </Text>
         <TextInput
           value={poidsKg}
           onChangeText={setPoidsKg}
           placeholder="ex: 5.8"
           placeholderTextColor={nc.textMuted}
           keyboardType="decimal-pad"
-          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+          style={[
+            styles.input,
+            { borderColor: nc.border, color: nc.textStrong },
+          ]}
           editable={!isSubmitting}
         />
       </View>
 
       {/* Tour de tête */}
       <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, { color: nc.textLight }]}>Tour de tête (cm)</Text>
+        <Text style={[styles.inputLabel, { color: nc.textLight }]}>
+          Tour de tête (cm)
+        </Text>
         <TextInput
           value={teteCm}
           onChangeText={setTeteCm}
           placeholder="ex: 41"
           placeholderTextColor={nc.textMuted}
           keyboardType="decimal-pad"
-          style={[styles.input, { borderColor: nc.border, color: nc.textStrong }]}
+          style={[
+            styles.input,
+            { borderColor: nc.border, color: nc.textStrong },
+          ]}
           editable={!isSubmitting}
         />
       </View>
@@ -239,7 +254,9 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Annuler"
           >
-            <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
+            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+              Annuler
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -252,7 +269,17 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
-            <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
+            <Text
+              style={[
+                styles.validateText,
+                {
+                  color:
+                    colorScheme === "dark"
+                      ? Colors[colorScheme].background
+                      : nc.white,
+                },
+              ]}
+            >
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
           </TouchableOpacity>
@@ -293,6 +320,10 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   input: {
     borderWidth: 1,

@@ -1,37 +1,35 @@
 // components/forms/ActivitiesForm.tsx
-import React, { useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-
-} from "react-native";
-import * as Haptics from "expo-haptics";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { getNeutralColors } from "@/constants/dashboardColors";
+import { eventColors } from "@/constants/eventColors";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { Colors } from "@/constants/theme";
-import { eventColors } from "@/constants/eventColors";
-import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ajouterActivite,
   modifierActivite,
   supprimerActivite,
 } from "@/migration/eventsDoubleWriteService";
-import { obtenirEvenements } from "@/services/eventsService";
 import type { EventType } from "@/services/eventsService";
+import { obtenirEvenements } from "@/services/eventsService";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import * as Haptics from "expo-haptics";
+import React, { useState } from "react";
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined)
+    Object.entries(obj).filter(([, v]) => v !== undefined),
   ) as T;
 }
 
@@ -163,21 +161,25 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 
   // Chip colors aligned with RoutinesForm pattern
   const chipActiveColors = isDark
-    ? { bg: eventColors.activite.dark + "30", border: "#6EE7B7", text: "#A7F3D0" }
+    ? {
+        bg: eventColors.activite.dark + "30",
+        border: "#6EE7B7",
+        text: "#A7F3D0",
+      }
     : { bg: "#ECFDF5", border: eventColors.activite.dark, text: "#065F46" };
 
   const isEditing = !!editData;
 
   // Form state with undefined value handling
   const [typeActivite, setTypeActivite] = useState<ActiviteType>(
-    editData?.typeActivite ?? initialType
+    editData?.typeActivite ?? initialType,
   );
   const [duree, setDuree] = useState<number>(editData?.duree ?? 15);
   const [description, setDescription] = useState<string>(
-    editData?.description ?? ""
+    editData?.description ?? "",
   );
   const [dateHeure, setDateHeure] = useState<Date>(
-    editData ? toDate(editData.date) : new Date()
+    editData ? toDate(editData.date) : new Date(),
   );
 
   // Promenade always uses heureDebut/heureFin pickers (like sommeil)
@@ -194,9 +196,13 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   );
 
   // Auto-compute duree from heureDebut/heureFin in chrono mode
-  const chronoDuree = isChronoMode && heureFin
-    ? Math.max(1, Math.round((heureFin.getTime() - heureDebut.getTime()) / 60000))
-    : duree;
+  const chronoDuree =
+    isChronoMode && heureFin
+      ? Math.max(
+          1,
+          Math.round((heureFin.getTime() - heureDebut.getTime()) / 60000),
+        )
+      : duree;
 
   // ============================================
   // HANDLERS
@@ -220,7 +226,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             limite: 10,
           });
           hasOngoing = recentActivites.some(
-            (e: any) => e.typeActivite === "promenade" && e.heureDebut && !e.heureFin,
+            (e: any) =>
+              e.typeActivite === "promenade" && e.heureDebut && !e.heureFin,
           );
         }
         if (hasOngoing) {
@@ -232,7 +239,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           return;
         }
       }
-      const isEditingSamePromenade = editData && promenadeEnCours && editData.id === promenadeEnCours.id;
+      const isEditingSamePromenade =
+        editData && promenadeEnCours && editData.id === promenadeEnCours.id;
       if (isChronoMode && isOngoing && isEditing && !isEditingSamePromenade) {
         showAlert(
           "Attention",
@@ -243,9 +251,13 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       }
       // Build data — iso sommeil pattern: null for ongoing fields, undefined to omit
       const fin = isOngoing ? null : (heureFin ?? undefined);
-      const computedDuree = heureDebut && fin
-        ? Math.max(1, Math.round((fin.getTime() - heureDebut.getTime()) / 60000))
-        : undefined;
+      const computedDuree =
+        heureDebut && fin
+          ? Math.max(
+              1,
+              Math.round((fin.getTime() - heureDebut.getTime()) / 60000),
+            )
+          : undefined;
 
       if (isChronoMode && editData) {
         // Edit mode: keep null values to trigger deleteField (iso modifierSommeil)
@@ -313,16 +325,16 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
-        await supprimerActivite(activeChild.id, editData.id);
-        showToast("Activité supprimée");
-        onDelete?.();
+          await supprimerActivite(activeChild.id, editData.id);
+          showToast("Activité supprimée");
+          onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);
           showAlert("Erreur", "Impossible de supprimer.");
         } finally {
           setIsSubmitting(false);
         }
-      }
+      },
     );
   };
 
@@ -351,7 +363,10 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                     borderColor: chipActiveColors.border,
                   },
                 ]}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTypeActivite(type); }}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setTypeActivite(type);
+                }}
                 disabled={isSubmitting}
                 accessibilityLabel={config.label}
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -408,7 +423,10 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDuree((value) => Math.max(0, value - 5)); }}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setDuree((value) => Math.max(0, value - 5));
+              }}
               disabled={isSubmitting}
               accessibilityLabel="Diminuer la durée"
             >
@@ -422,7 +440,9 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 -
               </Text>
             </TouchableOpacity>
-            <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
+            <Text
+              style={[styles.quantityPickerValue, { color: nc.textStrong }]}
+            >
               {duree} min
             </Text>
             <TouchableOpacity
@@ -431,7 +451,10 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDuree((value) => value + 5); }}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setDuree((value) => value + 5);
+              }}
               disabled={isSubmitting}
               accessibilityLabel="Augmenter la durée"
             >
@@ -534,7 +557,9 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color={nc.error} />
-            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
+            <Text style={[styles.deleteText, { color: nc.error }]}>
+              Supprimer
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -556,6 +581,10 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   input: {
     borderWidth: 1,

@@ -339,6 +339,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    paddingTop: 16,
     marginBottom: 12,
   },
   toggleRow: {

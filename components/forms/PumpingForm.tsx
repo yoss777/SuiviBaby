@@ -1,6 +1,5 @@
-import { Colors } from "@/constants/theme";
 import { getNeutralColors } from "@/constants/dashboardColors";
-import { eventColors } from "@/constants/eventColors";
+import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -12,8 +11,8 @@ import {
   supprimerPompage,
 } from "@/migration/eventsDoubleWriteService";
 
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -70,19 +69,18 @@ export function PumpingForm({
 
   // Form state
   const [useLeftBreast, setUseLeftBreast] = useState(
-    editData ? (editData.quantiteGauche ?? 0) > 0 : true
+    editData ? (editData.quantiteGauche ?? 0) > 0 : true,
   );
   const [useRightBreast, setUseRightBreast] = useState(
-    editData ? (editData.quantiteDroite ?? 0) > 0 : true
+    editData ? (editData.quantiteDroite ?? 0) > 0 : true,
   );
   const [quantiteGauche, setQuantiteGauche] = useState(
-    editData?.quantiteGauche ?? 100
+    editData?.quantiteGauche ?? 100,
   );
   const [quantiteDroite, setQuantiteDroite] = useState(
-    editData?.quantiteDroite ?? 100
+    editData?.quantiteDroite ?? 100,
   );
   const [dateHeure, setDateHeure] = useState(editData?.date ?? new Date());
-
 
   // Refs for quantity memory
   const lastLeftQuantityRef = useRef(quantiteGauche);
@@ -199,14 +197,14 @@ export function PumpingForm({
         } finally {
           setIsSubmitting(false);
         }
-      }
+      },
     );
   };
 
   return (
     <View style={styles.container}>
       {/* Breast selection */}
-      <Text style={[styles.categoryLabel, { color: nc.textStrong }]}>Seins</Text>
+      <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Seins</Text>
       <View style={styles.breastToggleRow}>
         <TouchableOpacity
           style={[
@@ -269,7 +267,7 @@ export function PumpingForm({
       {/* Left breast quantity */}
       {useLeftBreast && (
         <>
-          <Text style={[styles.categoryLabel, { color: nc.textStrong }]}>
+          <Text style={[styles.categoryLabel, { color: nc.textLight }]}>
             Quantité Sein Gauche
           </Text>
           <View style={styles.quantityPickerRow}>
@@ -281,7 +279,7 @@ export function PumpingForm({
               ]}
               onPressIn={() =>
                 handlePressIn(() =>
-                  setQuantiteGauche((q) => Math.max(0, q - 5))
+                  setQuantiteGauche((q) => Math.max(0, q - 5)),
                 )
               }
               onPressOut={handlePressOut}
@@ -298,7 +296,9 @@ export function PumpingForm({
                 -
               </Text>
             </TouchableOpacity>
-            <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
+            <Text
+              style={[styles.quantityPickerValue, { color: nc.textStrong }]}
+            >
               {quantiteGauche} ml
             </Text>
             <TouchableOpacity
@@ -331,7 +331,7 @@ export function PumpingForm({
       {/* Right breast quantity */}
       {useRightBreast && (
         <>
-          <Text style={[styles.categoryLabel, { color: nc.textStrong }]}>
+          <Text style={[styles.categoryLabel, { color: nc.textLight }]}>
             Quantité Sein Droit
           </Text>
           <View style={styles.quantityPickerRow}>
@@ -343,7 +343,7 @@ export function PumpingForm({
               ]}
               onPressIn={() =>
                 handlePressIn(() =>
-                  setQuantiteDroite((q) => Math.max(0, q - 5))
+                  setQuantiteDroite((q) => Math.max(0, q - 5)),
                 )
               }
               onPressOut={handlePressOut}
@@ -360,7 +360,9 @@ export function PumpingForm({
                 -
               </Text>
             </TouchableOpacity>
-            <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
+            <Text
+              style={[styles.quantityPickerValue, { color: nc.textStrong }]}
+            >
               {quantiteDroite} ml
             </Text>
             <TouchableOpacity
@@ -391,9 +393,6 @@ export function PumpingForm({
       )}
 
       {/* Date/Time */}
-      <Text style={[styles.categoryLabel, { color: nc.textStrong }]}>
-        Date & Heure
-      </Text>
       <DateTimeSectionRow
         value={dateHeure}
         onChange={setDateHeure}
@@ -482,11 +481,12 @@ const styles = StyleSheet.create({
   },
   // Category label
   categoryLabel: {
-    alignSelf: "center",
-    fontSize: 16,
-    fontWeight: "600",
-    paddingTop: 20,
-    marginBottom: 10,
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   // Breast toggle
   breastToggleRow: {
