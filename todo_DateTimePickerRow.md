@@ -209,14 +209,16 @@ Ces formulaires utilisent déjà le style chronoRow mais avec du code inline.
 
 ## Estimation
 
-| Phase | Effort | Impact |
-|-------|--------|--------|
-| Phase 1 (composant) | ~1h | Fondation |
-| Phase 2 (7 formulaires simples) | ~2h | Gros gain — 7 fichiers simplifiés |
-| Phase 3 (5 formulaires chrono) | ~1.5h | Alignement final |
-| Phase 4 (nettoyage) | ~30min | Code mort retiré |
+| Phase | Cible | Effort | Impact |
+|-------|-------|--------|--------|
+| Phase 1 | Créer DateTimePickerRow + DateTimeSectionRow | ~1.5h | Fondation |
+| Phase 2 | 7 formulaires simples (Diapers, Croissance, Meals, Pumping, Milestones, Immunization, Soins) | ~2h | Gros gain — 7 fichiers simplifiés |
+| Phase 3 | 3 formulaires chrono simples (RoutinesForm Bain, RoutinesForm Nez, ActivitiesForm std) | ~1h | Alignement |
+| Phase 4 | RoutinesForm Sommeil (date début/fin, heure début/fin, toggle, durée) | ~1h | Le plus complexe |
+| Phase 5 | ActivitiesForm Promenade (date, heure début/fin, toggle, clamp) | ~45min | Similaire sommeil |
+| Phase 6 | Nettoyage styles/states orphelins dans les 9 fichiers | ~30min | Code mort retiré |
 
-**Total** : ~5h, retire ~500+ lignes de code dupliqué.
+**Total** : ~6.5h, retire ~500+ lignes de code dupliqué.
 
 ---
 
