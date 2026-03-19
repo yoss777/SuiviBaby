@@ -40,6 +40,7 @@ export const UpdateBanner = memo(function UpdateBanner({
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     if (visible) {
       setIsVisible(true);
       Animated.spring(slideAnim, {
@@ -53,8 +54,9 @@ export const UpdateBanner = memo(function UpdateBanner({
         toValue: -100,
         duration: 200,
         useNativeDriver: true,
-      }).start(() => setIsVisible(false));
+      }).start(() => { if (mounted) setIsVisible(false); });
     }
+    return () => { mounted = false; };
   }, [visible, slideAnim]);
 
   const handleInstall = useCallback(() => {
@@ -82,6 +84,7 @@ export const UpdateBanner = memo(function UpdateBanner({
       ]}
       accessibilityRole="alert"
       accessibilityLabel={`Nouvelle version ${latestVersion} disponible`}
+      accessibilityHint="Une mise à jour est disponible pour Samaye"
     >
       <View style={styles.content}>
         <View style={[styles.iconCircle, { backgroundColor: tint + "15" }]}>
@@ -103,8 +106,9 @@ export const UpdateBanner = memo(function UpdateBanner({
             accessibilityRole="link"
             accessibilityLabel="Installer la mise à jour"
             accessibilityHint="Ouvre le store pour mettre à jour"
+            accessibilityState={{ disabled: false }}
           >
-            <Text style={[styles.installText, { color: nc.white }]}>
+            <Text style={[styles.installText, { color: nc.background }]}>
               {"Installer"}
             </Text>
           </TouchableOpacity>
@@ -115,6 +119,7 @@ export const UpdateBanner = memo(function UpdateBanner({
               accessibilityRole="button"
               accessibilityLabel="Fermer"
               accessibilityHint="Masquer la notification de mise à jour"
+              accessibilityState={{ disabled: false }}
             >
               <FontAwesome name="xmark" size={14} color={nc.textMuted} />
             </TouchableOpacity>
@@ -167,6 +172,8 @@ const styles = StyleSheet.create({
   installBtn: {
     paddingHorizontal: 14,
     paddingVertical: 7,
+    minHeight: 44,
+    justifyContent: "center",
     borderRadius: 8,
   },
   installText: {

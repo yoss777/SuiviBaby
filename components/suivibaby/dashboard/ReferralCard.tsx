@@ -21,6 +21,7 @@ interface ReferralCardProps {
   referralCount: number;
   onCopyCode: () => void;
   colorScheme?: "light" | "dark";
+  transparent?: boolean;
 }
 
 export const ReferralCard = memo(function ReferralCard({
@@ -28,6 +29,7 @@ export const ReferralCard = memo(function ReferralCard({
   referralCount,
   onCopyCode,
   colorScheme = "light",
+  transparent = false,
 }: ReferralCardProps) {
   const nc = getNeutralColors(colorScheme);
   const tint = Colors[colorScheme].tint;
@@ -57,11 +59,19 @@ export const ReferralCard = memo(function ReferralCard({
     <View
       style={[
         styles.card,
-        { backgroundColor: nc.backgroundCard, borderColor: tint + "30" },
+        {
+          backgroundColor: transparent ? "transparent" : nc.backgroundCard,
+          borderColor: colorScheme === "dark" ? nc.textMuted : tint + "30",
+        },
       ]}
       accessibilityRole="summary"
       accessibilityLabel={`Programme parrainage : ${referralCount} parrainage${referralCount > 1 ? "s" : ""}`}
+      accessibilityHint="Partagez votre code pour gagner des récompenses"
     >
+      {/* Accent strip */}
+      <View style={[styles.accentStrip, { backgroundColor: tint }]} />
+
+      <View style={styles.cardContent}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -122,6 +132,8 @@ export const ReferralCard = memo(function ReferralCard({
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={`Code parrainage : ${referralCode}. Appuyez pour copier`}
+          accessibilityHint="Copie le code dans le presse-papier"
+          accessibilityState={{ disabled: false }}
         >
           <FontAwesome name="copy" size={12} color={nc.textMuted} />
           <Text style={[styles.codeText, { color: nc.textStrong }]}>
@@ -136,12 +148,14 @@ export const ReferralCard = memo(function ReferralCard({
           accessibilityRole="button"
           accessibilityLabel="Partager le code de parrainage"
           accessibilityHint="Ouvre le menu de partage"
+          accessibilityState={{ disabled: false }}
         >
-          <FontAwesome name="share-nodes" size={12} color={nc.white} />
-          <Text style={[styles.shareText, { color: nc.white }]}>
+          <FontAwesome name="share-nodes" size={12} color={nc.background} />
+          <Text style={[styles.shareText, { color: nc.background }]}>
             {"Partager"}
           </Text>
         </TouchableOpacity>
+      </View>
       </View>
     </View>
   );
@@ -151,6 +165,14 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     borderWidth: 1,
+    overflow: "hidden",
+    flexDirection: "row",
+  },
+  accentStrip: {
+    width: 4,
+  },
+  cardContent: {
+    flex: 1,
     padding: 14,
   },
   header: {
@@ -216,6 +238,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
+    minHeight: 44,
     paddingVertical: 10,
     borderRadius: 10,
   },
@@ -228,7 +251,9 @@ const styles = StyleSheet.create({
   shareBtn: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
+    minHeight: 44,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,

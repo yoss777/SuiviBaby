@@ -1,7 +1,7 @@
 // components/suivibaby/dashboard/PromoBanner.tsx
 // Contextual promotion banner for the dashboard
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, promoAccent } from "@/constants/dashboardColors";
 import type { Promotion } from "@/types/promo";
 import { PROMO_TYPE_ICONS, PROMO_TYPE_LABELS } from "@/types/promo";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -21,9 +21,10 @@ interface PromoBannerProps {
   onDismiss: (promoId: string) => void;
   onCopyCode?: (code: string) => void;
   colorScheme?: "light" | "dark";
+  transparent?: boolean;
 }
 
-const PROMO_ACCENT = "#D4A017"; // Gold — universal promo accent
+const PROMO_ACCENT = promoAccent;
 
 export const PromoBanner = memo(function PromoBanner({
   promo,
@@ -31,6 +32,7 @@ export const PromoBanner = memo(function PromoBanner({
   onDismiss,
   onCopyCode,
   colorScheme = "light",
+  transparent = false,
 }: PromoBannerProps) {
   const nc = getNeutralColors(colorScheme);
   const typeIcon = PROMO_TYPE_ICONS[promo.type] ?? "tag";
@@ -58,7 +60,7 @@ export const PromoBanner = memo(function PromoBanner({
       style={[
         styles.card,
         {
-          backgroundColor: nc.backgroundCard,
+          backgroundColor: transparent ? "transparent" : nc.backgroundCard,
           borderColor: PROMO_ACCENT + "40",
         },
       ]}
@@ -67,6 +69,7 @@ export const PromoBanner = memo(function PromoBanner({
       accessibilityRole="button"
       accessibilityLabel={`Offre : ${promo.title}`}
       accessibilityHint="Appuyez pour voir les détails de l'offre"
+      accessibilityState={{ disabled: false }}
     >
       {/* Gold accent strip */}
       <View style={[styles.accentStrip, { backgroundColor: PROMO_ACCENT }]} />
@@ -99,6 +102,7 @@ export const PromoBanner = memo(function PromoBanner({
             accessibilityRole="button"
             accessibilityLabel="Masquer cette offre"
             accessibilityHint="Cette offre ne sera plus affichée"
+            accessibilityState={{ disabled: false }}
           >
             <FontAwesome name="xmark" size={14} color={nc.textMuted} />
           </TouchableOpacity>
@@ -130,8 +134,11 @@ export const PromoBanner = memo(function PromoBanner({
               ]}
               onPress={handleCopyCode}
               activeOpacity={0.7}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
               accessibilityLabel={`Code promo : ${promo.promoCode}. Appuyez pour copier`}
+              accessibilityHint="Copie le code dans le presse-papier"
+              accessibilityState={{ disabled: false }}
             >
               <FontAwesome name="copy" size={10} color={nc.textMuted} />
               <Text style={[styles.codeText, { color: nc.textStrong }]}>

@@ -1,9 +1,7 @@
 import {
   InsightCard,
   MilestoneTimelineCard,
-  PromoBanner,
   RecentEventsList,
-  ReferralCard,
   SleepWidget,
   StatsGroup,
   TipsCarousel,
@@ -27,7 +25,6 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
-import { usePromos } from "@/hooks/usePromos";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
 import {
@@ -636,7 +633,6 @@ export default function HomeDashboard() {
   }>({ visible: false, event: null });
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
   const [tipsEnabled, setTipsEnabled] = useState(true);
-  const [marketingEnabled, setMarketingEnabled] = useState(false);
 
   // États des données
   const [data, setData] = useState<DashboardData>({
@@ -1088,7 +1084,6 @@ export default function HomeDashboard() {
         .then((prefs) => {
           if (mounted) {
           setTipsEnabled(prefs.tips);
-          setMarketingEnabled(prefs.marketing);
         }
         })
         .catch(() => {});
@@ -1161,11 +1156,6 @@ export default function HomeDashboard() {
     babyBirthDate: activeChild?.birthDate ?? null,
     babyName: activeChild?.name ?? "",
     tipsEnabled,
-  });
-
-  const promos = usePromos({
-    babyBirthDate: activeChild?.birthDate ?? null,
-    marketingEnabled,
   });
 
   const todayJalons = useMemo(() => {
@@ -2590,39 +2580,6 @@ export default function HomeDashboard() {
                   colorScheme={colorScheme}
                 />
               </StaggeredCard>
-            )}
-          </View>
-        )}
-
-        {/* Promotions & Referral (controlled by marketing toggle) */}
-        {isDataLoaded && marketingEnabled && !promos.isLoading && (
-          <View style={{ paddingHorizontal: 20, gap: 12, marginBottom: 12 }}>
-            {/* Current promo */}
-            {promos.currentPromo && (
-              <PromoBanner
-                promo={promos.currentPromo}
-                onPress={(p) => {
-                  promos.trackClick(p.id);
-                  if (p.deepLink) {
-                    import("react-native").then(({ Linking }) =>
-                      Linking.openURL(p.deepLink).catch(() => {}),
-                    );
-                  }
-                }}
-                onDismiss={promos.dismissPromo}
-                onCopyCode={() => showToast("Code copié !")}
-                colorScheme={colorScheme}
-              />
-            )}
-
-            {/* Referral card */}
-            {promos.referralCode && (
-              <ReferralCard
-                referralCode={promos.referralCode}
-                referralCount={promos.referralCount}
-                onCopyCode={() => showToast("Code copié !")}
-                colorScheme={colorScheme}
-              />
             )}
           </View>
         )}

@@ -33,6 +33,12 @@ export const categoryColors = {
 } as const;
 
 // ============================================
+// PROMO ACCENT (gold — consistent across light/dark)
+// ============================================
+
+export const promoAccent = "#D4A017";
+
+// ============================================
 // ITEM COLORS (sous-éléments)
 // ============================================
 

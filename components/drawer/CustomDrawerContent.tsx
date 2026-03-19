@@ -3,6 +3,7 @@ import { DrawerContentComponentProps, DrawerContentScrollView } from "@react-nav
 import * as Haptics from "expo-haptics";
 import { usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   Modal,
   Pressable,
@@ -24,7 +25,11 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { masquerEnfant } from "@/services/userPreferencesService";
+import { masquerEnfant, obtenirPreferencesNotifications } from "@/services/userPreferencesService";
+import { getUserPromoState, fetchActivePromos, trackClick, dismissPromo as dismissPromoService } from "@/services/promoService";
+import { ReferralCard } from "@/components/suivibaby/dashboard/ReferralCard";
+import { PromoBanner } from "@/components/suivibaby/dashboard/PromoBanner";
+import { getAgeInMonths } from "@/utils/ageUtils";
 import { db } from "@/config/firebase";
 import type { ChildRole } from "@/types/permissions";
 
@@ -47,6 +52,10 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
   const [childRoles, setChildRoles] = useState<Record<string, ChildRole | null>>({});
+  const [referralCode, setReferralCode] = useState("");
+  const [referralCount, setReferralCount] = useState(0);
+  const [marketingEnabled, setMarketingEnabled] = useState(false);
+  const [currentPromo, setCurrentPromo] = useState<import("@/types/promo").Promotion | null>(null);
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canAddChild =
     permissions.role === "owner" || permissions.role === "admin";
@@ -55,6 +64,34 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
+
+  // Load referral data + marketing preference (re-check on every drawer focus)
+  useFocusEffect(
+    useCallback(() => {
+      if (!firebaseUser) return;
+      let mounted = true;
+      Promise.all([getUserPromoState(), obtenirPreferencesNotifications()])
+        .then(async ([promoState, prefs]) => {
+          if (!mounted) return;
+          setReferralCode(promoState.referralCode ?? "");
+          setReferralCount(promoState.referralCount);
+          setMarketingEnabled(prefs.marketing);
+          // Load active promos if marketing enabled
+          if (prefs.marketing && activeChild?.birthDate) {
+            const ageMonths = getAgeInMonths(activeChild.birthDate);
+            const promos = await fetchActivePromos(ageMonths);
+            if (!mounted) return;
+            const dismissed = new Set(promoState.dismissedPromos ?? []);
+            const available = promos.filter((p) => !dismissed.has(p.id));
+            setCurrentPromo(available[0] ?? null);
+          } else if (!prefs.marketing) {
+            setCurrentPromo(null);
+          }
+        })
+        .catch(() => {});
+      return () => { mounted = false; };
+    }, [firebaseUser, activeChild?.birthDate]),
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -307,6 +344,44 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
 
       {/* Section: Compte utilisateur */}
       <View style={[styles.section, styles.actionsSection, { borderTopColor: nc.border }]}>
+
+        {/* Promo banner (controlled by marketing toggle) */}
+        {marketingEnabled && currentPromo && (
+          <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
+            <PromoBanner
+              promo={currentPromo}
+              onPress={(p) => {
+                trackClick(p.id).catch(() => {});
+                if (p.deepLink) {
+                  import("react-native").then(({ Linking }) =>
+                    Linking.openURL(p.deepLink).catch(() => {}),
+                  );
+                }
+              }}
+              onDismiss={(promoId) => {
+                setCurrentPromo(null);
+                dismissPromoService(promoId).catch(() => {});
+              }}
+              onCopyCode={() => showToast("Code copié !")}
+              colorScheme={colorScheme}
+              transparent
+            />
+          </View>
+        )}
+
+        {/* Referral card (controlled by marketing toggle) */}
+        {marketingEnabled && referralCode && (
+          <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
+            <ReferralCard
+              referralCode={referralCode}
+              referralCount={referralCount}
+              onCopyCode={() => showToast("Code copié !")}
+              colorScheme={colorScheme}
+              transparent
+            />
+          </View>
+        )}
+
         <TouchableOpacity
           style={[
             styles.settingsButton,
@@ -541,7 +616,7 @@ const styles = StyleSheet.create({
   childItemContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 8,
+    marginHorizontal: 16,
     marginVertical: 4,
     gap: 4,
   },

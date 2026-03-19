@@ -43,6 +43,7 @@ export const ChangelogModal = memo(function ChangelogModal({
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
+    let mounted = true;
     if (visible) {
       setCurrentIndex(0);
       Animated.timing(fadeAnim, {
@@ -51,8 +52,9 @@ export const ChangelogModal = memo(function ChangelogModal({
         useNativeDriver: true,
       }).start();
     } else {
-      fadeAnim.setValue(0);
+      if (mounted) fadeAnim.setValue(0);
     }
+    return () => { mounted = false; };
   }, [visible, fadeAnim]);
 
   const handleClose = useCallback(() => {
@@ -158,6 +160,8 @@ export const ChangelogModal = memo(function ChangelogModal({
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
               accessibilityLabel="Fermer"
+              accessibilityHint="Fermer la fenêtre des nouveautés"
+              accessibilityState={{ disabled: false }}
             >
               <FontAwesome name="xmark" size={18} color={nc.textMuted} />
             </TouchableOpacity>
@@ -209,8 +213,14 @@ export const ChangelogModal = memo(function ChangelogModal({
             accessibilityLabel={
               currentIndex === entries.length - 1 ? "Compris" : "Suivant"
             }
+            accessibilityHint={
+              currentIndex === entries.length - 1
+                ? "Ferme la fenêtre des nouveautés"
+                : "Affiche la nouveauté suivante"
+            }
+            accessibilityState={{ disabled: false }}
           >
-            <Text style={[styles.ctaText, { color: nc.white }]}>
+            <Text style={[styles.ctaText, { color: nc.background }]}>
               {currentIndex === entries.length - 1 ? "Compris !" : "Suivant"}
             </Text>
           </TouchableOpacity>
