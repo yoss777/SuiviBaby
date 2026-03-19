@@ -1352,9 +1352,13 @@ export default function HomeDashboard() {
       today.getMonth(),
       today.getDate() + 1,
     );
+    // Only count lait maternel/infantile biberons as meals (not eau, jus, autre)
+    const mealBiberons = data.biberons.filter(
+      (e: any) => !e.typeBiberon || e.typeBiberon === "lait_maternel" || e.typeBiberon === "lait_infantile",
+    );
     const allMealTimestamps = [
       ...data.tetees,
-      ...data.biberons,
+      ...mealBiberons,
       ...data.solides,
     ]
       .map((e) => toDate(e.date).getTime())
