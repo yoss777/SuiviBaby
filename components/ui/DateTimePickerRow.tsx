@@ -2,9 +2,10 @@
 // Reusable row: label left, date/time value right, tap to open picker
 
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { Colors } from "@/constants/theme";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
-import React, { memo, useCallback, useState } from "react";
+import React, { memo, useCallback, useRef, useState } from "react";
 import {
   Platform,
   StyleSheet,
@@ -58,15 +59,19 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
 }: DateTimePickerRowProps) {
   const nc = getNeutralColors(colorScheme);
   const [showPicker, setShowPicker] = useState(false);
+  // On iOS spinner, track pending value until user confirms
+  const pendingValueRef = useRef<Date>(value);
 
   const handleOpen = useCallback(() => {
     if (disabled) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    pendingValueRef.current = value;
     setShowPicker(true);
     onPickerToggle?.(true);
-  }, [disabled, onPickerToggle]);
+  }, [disabled, onPickerToggle, value]);
 
-  const handleChange = useCallback(
+  // Android: onChange fires once on confirm, dismiss fires with no date
+  const handleChangeAndroid = useCallback(
     (_: unknown, date?: Date) => {
       setShowPicker(false);
       onPickerToggle?.(false);
@@ -74,6 +79,28 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
     },
     [onChange, onPickerToggle],
   );
+
+  // iOS spinner: onChange fires on every scroll tick — just track the value
+  const handleChangeIOS = useCallback(
+    (_: unknown, date?: Date) => {
+      if (date) pendingValueRef.current = date;
+    },
+    [],
+  );
+
+  const handleConfirmIOS = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowPicker(false);
+    onPickerToggle?.(false);
+    onChange(pendingValueRef.current);
+  }, [onChange, onPickerToggle]);
+
+  const handleCancelIOS = useCallback(() => {
+    setShowPicker(false);
+    onPickerToggle?.(false);
+  }, [onPickerToggle]);
+
+  const isIOS = Platform.OS === "ios";
 
   const displayValue =
     mode === "date" ? formatDate(value) : formatTime(value);
@@ -118,15 +145,41 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
       </TouchableOpacity>
 
       {showPicker && (
-        <DateTimePicker
-          value={value}
-          mode={mode}
-          is24Hour={mode === "time"}
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          themeVariant={colorScheme}
-          minimumDate={minimumDate}
-          onChange={handleChange}
-        />
+        <View>
+          {isIOS && (
+            <View style={[styles.pickerToolbar, { borderColor: nc.border }]}>
+              <TouchableOpacity
+                onPress={handleCancelIOS}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Annuler"
+              >
+                <Text style={[styles.toolbarButton, { color: nc.textMuted }]}>
+                  Annuler
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleConfirmIOS}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Valider"
+              >
+                <Text style={[styles.toolbarButton, styles.toolbarConfirm, { color: Colors[colorScheme].tint }]}>
+                  OK
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <DateTimePicker
+            value={isIOS ? pendingValueRef.current : value}
+            mode={mode}
+            is24Hour={mode === "time"}
+            display={isIOS ? "spinner" : "default"}
+            themeVariant={colorScheme}
+            minimumDate={minimumDate}
+            onChange={isIOS ? handleChangeIOS : handleChangeAndroid}
+          />
+        </View>
       )}
     </>
   );
@@ -156,5 +209,20 @@ const styles = StyleSheet.create({
   valueSmall: {
     fontSize: 15,
     fontWeight: "500",
+  },
+  pickerToolbar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  toolbarButton: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  toolbarConfirm: {
+    fontWeight: "700",
   },
 });
