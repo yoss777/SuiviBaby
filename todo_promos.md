@@ -1,4 +1,4 @@
-# Système Promotionnel & Monétisation — Samaye
+# Système Promotionnel & Monétisation — SuiviBaby
 
 > **Contexte** : Le toggle "Offres promotionnelles" (`marketing`) existe dans les préférences notifications et contrôle l'affichage des promos et du parrainage dans le dashboard.
 
@@ -53,7 +53,7 @@
   - Bouton "Copier le code" avec Clipboard + toast
   - Bouton "Voir l'offre" avec deeplink
   - Bouton dismiss avec haptic
-  - Dark mode, nc.* tokens, accessibilityRole/Label/Hint
+  - Dark mode, nc.\* tokens, accessibilityRole/Label/Hint
 
 - [x] **Intégration home.tsx** — contrôlé par `marketing` toggle
   - `useFocusEffect` relit la préférence marketing à chaque focus
@@ -75,12 +75,12 @@
   - 3 paliers : Parrain (1+), Ambassadeur (3+), Super Parent (10+)
 
 - [x] **4 promotions seedées dans Firestore** :
-  - Samaye Premium (essai gratuit)
-  - Joone couches éco (-15%, code SAMAYE15)
-  - Good Goût diversification (-20%, code SAMAYE20, 4-12 mois)
+  - SuiviBaby Premium (essai gratuit)
+  - Joone couches éco (-15%, code SUIVIBABY15)
+  - Good Goût diversification (-20%, code SUIVIBABY20, 4-12 mois)
   - Petit Bateau printemps (-25%, code SAMSPRING25)
 
-### Phase 3 — Samaye Premium (monétisation directe) : ⏳ À FAIRE
+### Phase 3 — SuiviBaby Premium (monétisation directe) : ⏳ À FAIRE
 
 - [ ] **Offre Premium** — fonctionnalités avancées payantes
   - Export PDF illimité
@@ -93,7 +93,7 @@
 - [ ] **Paywall contextuel** — proposer Premium au bon moment
   - Quand l'utilisateur essaie d'exporter un 2ème PDF → "Passez à Premium"
   - Quand le stockage photo approche la limite → "Besoin de plus d'espace ?"
-  - Après 30 jours d'utilisation active → "Vous adorez Samaye ? Découvrez Premium"
+  - Après 30 jours d'utilisation active → "Vous adorez SuiviBaby ? Découvrez Premium"
   - **Jamais** pendant un moment stressant (fièvre enregistrée, sommeil agité)
 
 - [ ] **Pricing** (à valider) :
@@ -117,7 +117,7 @@
   - **Apps complémentaires** : méditation parent, recettes bébé, suivi grossesse
 
 - [ ] **Modèle économique** :
-  - Affiliation : commission sur chaque vente via lien Samaye (5-15%)
+  - Affiliation : commission sur chaque vente via lien SuiviBaby (5-15%)
   - Sponsoring : placement dans le carousel tips (identifié "Sponsorisé")
   - Codes promo exclusifs : négociés en échange de visibilité
 
@@ -149,14 +149,14 @@
 
 ### Ce que les concurrents font (et qu'on peut améliorer)
 
-| Feature | Baby Tracker | Huckleberry | Kinedu | **Samaye** |
-|---------|:------------:|:-----------:|:------:|:----------:|
-| Promos in-app | Bannières génériques | Non | Paywall agressif | **Contextuel + éthique** |
-| Partenariats | Non | Non | Contenu payant | **Codes promo pertinents par âge** |
-| Parrainage | Non | Non | Non | **Programme gamifié** |
-| Respect opt-out | Pas de toggle | N/A | Pas de choix | **Toggle granulaire** |
-| Ciblage intelligent | Non | Non | Par âge seulement | **Par âge + habitudes + saison** |
-| Éthique promo | Variable | N/A | Variable | **Charte éthique stricte** |
+| Feature             |     Baby Tracker     | Huckleberry |      Kinedu       |           **SuiviBaby**            |
+| ------------------- | :------------------: | :---------: | :---------------: | :--------------------------------: |
+| Promos in-app       | Bannières génériques |     Non     | Paywall agressif  |      **Contextuel + éthique**      |
+| Partenariats        |         Non          |     Non     |  Contenu payant   | **Codes promo pertinents par âge** |
+| Parrainage          |         Non          |     Non     |        Non        |       **Programme gamifié**        |
+| Respect opt-out     |    Pas de toggle     |     N/A     |   Pas de choix    |       **Toggle granulaire**        |
+| Ciblage intelligent |         Non          |     Non     | Par âge seulement |  **Par âge + habitudes + saison**  |
+| Éthique promo       |       Variable       |     N/A     |     Variable      |     **Charte éthique stricte**     |
 
 ### Ce que personne ne fait (nos innovations)
 
@@ -176,17 +176,17 @@
 
 ## Fichiers créés/modifiés
 
-| Fichier | Rôle |
-|---------|------|
-| `types/promo.ts` | Types Promotion, UserPromos, ReferralTier |
-| `services/promoService.ts` | CRUD Firestore promos + tracking + referral |
-| `hooks/usePromos.ts` | Orchestration promos avec anti-spam et night guard |
-| `components/suivibaby/dashboard/PromoBanner.tsx` | Bannière promo dashboard |
-| `components/suivibaby/dashboard/ReferralCard.tsx` | Carte parrainage avec partage |
-| `data/promos_seed.json` | 4 promos sample |
-| `scripts/seedPromos.mjs` | Script de seed Firestore |
-| `firestore.rules` | Collections promotions + user_promos |
-| `app/(drawer)/baby/(tabs)/home.tsx` | Intégration contrôlée par marketing toggle |
+| Fichier                                           | Rôle                                               |
+| ------------------------------------------------- | -------------------------------------------------- |
+| `types/promo.ts`                                  | Types Promotion, UserPromos, ReferralTier          |
+| `services/promoService.ts`                        | CRUD Firestore promos + tracking + referral        |
+| `hooks/usePromos.ts`                              | Orchestration promos avec anti-spam et night guard |
+| `components/suivibaby/dashboard/PromoBanner.tsx`  | Bannière promo dashboard                           |
+| `components/suivibaby/dashboard/ReferralCard.tsx` | Carte parrainage avec partage                      |
+| `data/promos_seed.json`                           | 4 promos sample                                    |
+| `scripts/seedPromos.mjs`                          | Script de seed Firestore                           |
+| `firestore.rules`                                 | Collections promotions + user_promos               |
+| `app/(drawer)/baby/(tabs)/home.tsx`               | Intégration contrôlée par marketing toggle         |
 
 ---
 
@@ -211,4 +211,4 @@ Phase 6 (Contenu sponsorisé)      — quand le carousel tips a prouvé son enga
 
 ---
 
-*Dernière mise à jour : 2026-03-19*
+_Dernière mise à jour : 2026-03-19_

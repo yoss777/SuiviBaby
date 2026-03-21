@@ -9,7 +9,6 @@ import React, {
 } from 'react';
 import { BackHandler } from 'react-native';
 import type { FormBottomSheetProps } from '@/components/ui/FormBottomSheet';
-import type { ImmunizationType, ImmunizationEditData } from '@/components/forms/ImmunizationForm';
 import type { SoinsType, SoinsEditData } from '@/components/forms/SoinsForm';
 import type { MealType, MealsEditData } from '@/components/forms/MealsForm';
 import type { PumpingEditData } from '@/components/forms/PumpingForm';
@@ -24,16 +23,6 @@ import type { CroissanceEditData } from '@/components/forms/CroissanceForm';
 export type SheetViewProps = Omit<FormBottomSheetProps, 'onCancel' | 'onClose'> & {
   ownerId: string;
   onDismiss?: () => void;
-};
-
-// Props for opening an immunization form sheet (vaccin/vitamine only - legacy)
-export type ImmunizationFormSheetProps = {
-  ownerId: string;
-  formType: 'immunization';
-  immunizationType: ImmunizationType;
-  onSuccess?: () => void;
-  onDismiss?: () => void;
-  editData?: ImmunizationEditData;
 };
 
 // Props for opening a soins form sheet (temperature, medicament, symptome, vaccin, vitamine)
@@ -128,7 +117,7 @@ export type ContentSheetProps = {
 };
 
 // Union type for form-based sheets
-export type FormSheetProps = ImmunizationFormSheetProps | SoinsFormSheetProps | MealsFormSheetProps | PumpingFormSheetProps | ActivitiesFormSheetProps | MilestonesFormSheetProps | DiapersFormSheetProps | RoutinesFormSheetProps | CroissanceFormSheetProps | ContentSheetProps;
+export type FormSheetProps = SoinsFormSheetProps | MealsFormSheetProps | PumpingFormSheetProps | ActivitiesFormSheetProps | MilestonesFormSheetProps | DiapersFormSheetProps | RoutinesFormSheetProps | CroissanceFormSheetProps | ContentSheetProps;
 
 // Union type for all sheet props
 export type AnySheetProps = SheetViewProps | FormSheetProps;
@@ -136,11 +125,6 @@ export type AnySheetProps = SheetViewProps | FormSheetProps;
 // Type guard to check if props are form-based
 export function isFormSheetProps(props: AnySheetProps): props is FormSheetProps {
   return 'formType' in props;
-}
-
-// Type guard for immunization form
-export function isImmunizationFormProps(props: FormSheetProps): props is ImmunizationFormSheetProps {
-  return props.formType === 'immunization';
 }
 
 // Type guard for soins form

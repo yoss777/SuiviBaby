@@ -1,9 +1,8 @@
 // components/ui/GlobalSheetManager.tsx
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import BottomSheet from '@gorhom/bottom-sheet';
-import { useSheet, isFormSheetProps, isImmunizationFormProps, isSoinsFormProps, isMealsFormProps, isPumpingFormProps, isActivitiesFormProps, isMilestonesFormProps, isDiapersFormProps, isRoutinesFormProps, isCroissanceFormProps, isContentSheetProps } from '@/contexts/SheetContext';
+import { useSheet, isFormSheetProps, isSoinsFormProps, isMealsFormProps, isPumpingFormProps, isActivitiesFormProps, isMilestonesFormProps, isDiapersFormProps, isRoutinesFormProps, isCroissanceFormProps, isContentSheetProps } from '@/contexts/SheetContext';
 import { FormBottomSheet } from './FormBottomSheet';
-import { ImmunizationForm } from '@/components/forms/ImmunizationForm';
 import { SoinsForm } from '@/components/forms/SoinsForm';
 import { MealsForm } from '@/components/forms/MealsForm';
 import { PumpingForm } from '@/components/forms/PumpingForm';
@@ -119,45 +118,6 @@ export const GlobalSheetManager = () => {
 
   // Handle form-based sheets
   if (viewProps && isFormSheetProps(viewProps)) {
-    // Handle immunization form (legacy - vaccin/vitamine only)
-    if (isImmunizationFormProps(viewProps)) {
-      const { immunizationType, editData } = viewProps;
-      const isEditing = !!editData;
-      const title = isEditing
-        ? (immunizationType === 'vaccin' ? 'Modifier le vaccin' : 'Modifier la vitamine')
-        : (immunizationType === 'vaccin' ? 'Ajouter un vaccin' : 'Ajouter une vitamine');
-      const icon = immunizationType === 'vaccin' ? 'syringe' : 'pills';
-      const accentColor = immunizationType === 'vaccin'
-        ? eventColors.vaccin.dark
-        : eventColors.vitamine.dark;
-
-      return (
-        <FormBottomSheet
-          ref={sheetRef}
-          title={title}
-          icon={icon}
-          accentColor={accentColor}
-          showActions={false}
-          enablePanDownToClose={!isInPicker}
-          onSubmit={() => {}}
-          onCancel={closeSheet}
-          onClose={closeSheet}
-        >
-          <ImmunizationForm
-            key={formKey}
-            type={immunizationType}
-            onSuccess={handleSuccess}
-            onCancel={closeSheet}
-            isSubmitting={isSubmitting}
-            setIsSubmitting={setIsSubmitting}
-            onFormStepChange={handleFormStepChange}
-            editData={editData}
-            onDelete={closeSheet}
-          />
-        </FormBottomSheet>
-      );
-    }
-
     // Handle soins form (temperature, medicament, symptome, vaccin, vitamine)
     if (isSoinsFormProps(viewProps)) {
       const { soinsType, editData } = viewProps;

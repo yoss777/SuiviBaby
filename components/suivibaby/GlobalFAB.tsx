@@ -1,14 +1,20 @@
-import { QUICK_ADD_CATEGORIES } from "@/constants/dashboardConfig";
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { QUICK_ADD_CATEGORIES } from "@/constants/dashboardConfig";
 import { Colors } from "@/constants/theme";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import * as Haptics from "expo-haptics";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -18,6 +24,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const ACTIONS = [
   // Position 3 (la plus proche - zone de pouce optimale)
@@ -226,19 +233,32 @@ export const GlobalFAB = () => {
         <View style={styles.quickSheetList}>
           {QUICK_ADD_CATEGORIES.map((category) => (
             <View key={category.key}>
-              <Text style={[styles.quickSheetCategoryLabel, { color: colors.text }]}>
+              <Text
+                style={[styles.quickSheetCategoryLabel, { color: colors.text }]}
+              >
                 {category.label}
               </Text>
               {category.actions.map((action) => (
                 <TouchableOpacity
                   key={action.key}
-                  style={[styles.quickSheetItem, { backgroundColor: nc.background, borderColor: nc.borderLight }]}
+                  style={[
+                    styles.quickSheetItem,
+                    {
+                      backgroundColor: nc.background,
+                      borderColor: nc.borderLight,
+                    },
+                  ]}
                   onPress={() => handleQuickAddPress(action.sheetParams)}
                   activeOpacity={0.8}
                   accessibilityRole="button"
                   accessibilityLabel={`Ajouter ${action.label}`}
                 >
-                  <View style={[styles.quickSheetIcon, { backgroundColor: nc.backgroundCard }]}>
+                  <View
+                    style={[
+                      styles.quickSheetIcon,
+                      { backgroundColor: nc.backgroundCard },
+                    ]}
+                  >
                     {action.icon.type === "mc" ? (
                       <MaterialCommunityIcons
                         name={action.icon.name as any}
@@ -253,7 +273,9 @@ export const GlobalFAB = () => {
                       />
                     )}
                   </View>
-                  <Text style={[styles.quickSheetLabel, { color: colors.text }]}>
+                  <Text
+                    style={[styles.quickSheetLabel, { color: colors.text }]}
+                  >
                     {action.label}
                   </Text>
                 </TouchableOpacity>
@@ -269,7 +291,9 @@ export const GlobalFAB = () => {
   const handleActionPress = (action: (typeof ACTIONS)[0]) => {
     if (actionBusy.current) return;
     actionBusy.current = true;
-    setTimeout(() => { actionBusy.current = false; }, 400);
+    setTimeout(() => {
+      actionBusy.current = false;
+    }, 400);
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsOpen(false);
@@ -310,7 +334,12 @@ export const GlobalFAB = () => {
       </Animated.View>
 
       {/* FAB Container */}
-      <View style={[styles.fabContainer, { bottom: Platform.OS === "ios" ? 16 + insets.bottom + 49 : 32 }]}>
+      <View
+        style={[
+          styles.fabContainer,
+          { bottom: Platform.OS === "ios" ? insets.bottom : 32 },
+        ]}
+      >
         {/* Action buttons */}
         {ACTIONS.map((action, index) => (
           <ActionButton
@@ -341,7 +370,15 @@ export const GlobalFAB = () => {
           ]}
         >
           <Animated.View style={mainButtonStyle}>
-            <FontAwesome6 name="plus" size={24} color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
+            <FontAwesome6
+              name="plus"
+              size={24}
+              color={
+                colorScheme === "dark"
+                  ? Colors[colorScheme].background
+                  : nc.white
+              }
+            />
           </Animated.View>
         </Pressable>
       </View>
