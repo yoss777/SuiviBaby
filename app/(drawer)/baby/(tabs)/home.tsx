@@ -1496,23 +1496,21 @@ export default function HomeDashboard() {
     const vitamineCount = todayStats.vitamines.count;
     const vaccinCount = todayStats.vaccins.count;
 
-    // Check for warnings — single "changes" threshold covers mictions + selles
+    // Check for warnings — based on most recent change (miction OR selle)
     const changesThresholdMs =
       remindersEnabled && reminderThresholds.changes > 0
         ? reminderThresholds.changes * 60 * 60 * 1000
         : null;
 
     const now = currentTime.getTime();
-    const mictionWarning =
+    const lastChangeTimestamp = Math.max(
+      todayStats.mictions.lastTimestamp ?? 0,
+      todayStats.selles.lastTimestamp ?? 0,
+    );
+    const isWarning =
       changesThresholdMs !== null &&
-      todayStats.mictions.lastTimestamp &&
-      now - todayStats.mictions.lastTimestamp > changesThresholdMs;
-    const selleWarning =
-      changesThresholdMs !== null &&
-      todayStats.selles.lastTimestamp &&
-      now - todayStats.selles.lastTimestamp > changesThresholdMs;
-
-    const isWarning = !!(mictionWarning || selleWarning);
+      lastChangeTimestamp > 0 &&
+      now - lastChangeTimestamp > changesThresholdMs;
 
     // Use only changes (mictions/selles) timestamp for "il y a" display (not vitamines/vaccins)
     const changesTimestampsToday = [
