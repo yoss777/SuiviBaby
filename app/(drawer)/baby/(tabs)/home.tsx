@@ -2664,7 +2664,7 @@ export default function HomeDashboard() {
         {isDataLoaded && !smartContent.isLoading && (
           <View style={{ paddingHorizontal: 20, gap: 12, marginBottom: 12 }}>
             {/* Data-driven insights */}
-            {smartContent.insights
+            {hasAnyTodayData && smartContent.insights
               .filter((ins) => !dismissedInsightIds.has(ins.id))
               .map((insight, i) => (
               <StaggeredCard
@@ -2690,7 +2690,7 @@ export default function HomeDashboard() {
             ))}
 
             {/* Cross-data correlations */}
-            {smartContent.correlations
+            {hasAnyTodayData && smartContent.correlations
               .filter((corr) => !dismissedInsightIds.has(corr.id))
               .map((corr, i) => (
               <StaggeredCard key={corr.id} index={7 + i} visible={isDataLoaded}>
@@ -2722,45 +2722,6 @@ export default function HomeDashboard() {
                 />
               </StaggeredCard>
             )}
-          </View>
-        )}
-
-        {/* P3: Enhanced empty state */}
-        {!hasAnyTodayData && isDataLoaded && (
-          <View
-            style={{
-              alignItems: "center",
-              paddingVertical: 24,
-              paddingHorizontal: 20,
-            }}
-          >
-            <Ionicons
-              name="sunny-outline"
-              size={48}
-              color={nc.textLight}
-              style={{ marginBottom: 12 }}
-            />
-            <Text
-              style={{
-                fontSize: 17,
-                fontWeight: "600",
-                color: nc.textStrong,
-                textAlign: "center",
-                marginBottom: 6,
-              }}
-            >
-              {"Rien encore aujourd'hui"}
-            </Text>
-            <Text
-              style={{
-                fontSize: 14,
-                color: nc.textLight,
-                textAlign: "center",
-                lineHeight: 20,
-              }}
-            >
-              Appuyez sur + pour enregistrer le premier événement de la journée
-            </Text>
           </View>
         )}
 

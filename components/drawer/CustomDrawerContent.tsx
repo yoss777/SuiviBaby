@@ -18,7 +18,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { AddChildModal } from "@/components/suivibaby/AddChildModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
+import { getBackgroundTint, getChartColors, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -38,6 +38,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const pathname = usePathname();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const chartColors = getChartColors(colorScheme);
   const { width } = useWindowDimensions();
   const { activeChild, children, childrenLoaded, setActiveChild } = useBaby();
   const { signOut, user, userName, email, firebaseUser } = useAuth();
@@ -225,8 +226,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
             { color: Colors[colorScheme].tabIconDefault },
           ]}
         >
-          <FontAwesome name="baby" size={16} color={nc.todayAccent} />
-          &nbsp;SUIVI POUR
+          SUIVI POUR
         </Text>
 
         {/* Liste des enfants */}
@@ -234,7 +234,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           const ageText = calculateAge(child.birthDate);
           const isActive = child.id === activeChild?.id;
           const itemColor = isActive
-            ? Colors[colorScheme].tint
+            ? (colorScheme === "dark" ? chartColors.tetees.gold : Colors[colorScheme].tint)
             : Colors[colorScheme].text;
           const childRole = childRoles[child.id] ?? permissions.role;
           const canShareThisChild =
@@ -332,7 +332,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           <View style={styles.buttonContent}>
             <FontAwesome name="plus" size={14} color={Colors[colorScheme].tint} />
             <Text
-              style={[styles.addBabyText, { color: Colors[colorScheme].tint }]}
+              style={[styles.addBabyText, { color: colorScheme === "dark" ? nc.white : Colors[colorScheme].tint }]}
             >
               Ajouter un enfant
             </Text>
@@ -394,7 +394,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           <View style={styles.buttonContent}>
             <FontAwesome name="cog" size={14} color={Colors[colorScheme].tint} />
             <Text
-              style={[styles.settingsText, { color: Colors[colorScheme].tint }]}
+              style={[styles.settingsText, { color: colorScheme === "dark" ? nc.white : Colors[colorScheme].tint }]}
             >
               Paramètres
             </Text>
