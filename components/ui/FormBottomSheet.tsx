@@ -148,9 +148,9 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
-                    <ActivityIndicator size="small" color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
+                    <ActivityIndicator size="small" color={nc.white} />
                   ) : (
-                    <Text style={[styles.validateText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
+                    <Text style={[styles.validateText, { color: nc.white }]}>
                       {isEditing ? "Enregistrer" : "Ajouter"}
                     </Text>
                   )}
@@ -161,14 +161,13 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                 <TouchableOpacity
                   style={[
                     styles.deleteOutlineButton,
-                    { borderColor: "#f1b1b1", backgroundColor: nc.errorBg },
                     isSubmitting && styles.buttonDisabled,
                   ]}
                   onPress={onDelete}
                   disabled={isSubmitting}
                 >
-                  <FontAwesome name="trash" size={14} color="#dc3545" />
-                  <Text style={styles.deleteOutlineText}>Supprimer</Text>
+                  <FontAwesome name="trash" size={14} color={nc.error} />
+                  <Text style={[styles.deleteOutlineText, { color: nc.error }]}>Supprimer</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -217,18 +216,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   deleteOutlineButton: {
-    alignSelf: "stretch",
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    paddingHorizontal: 16,
     gap: 8,
   },
   deleteOutlineText: {
     fontSize: 14,
-    color: "#dc3545",
     fontWeight: "700",
     letterSpacing: 0.2,
   },

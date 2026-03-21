@@ -511,10 +511,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
               style={[
                 styles.validateText,
                 {
-                  color:
-                    colorScheme === "dark"
-                      ? Colors[colorScheme].background
-                      : nc.white,
+                  color: nc.white,
                 },
               ]}
             >
@@ -527,15 +524,14 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           <TouchableOpacity
             style={[
               styles.deleteButton,
-              { backgroundColor: nc.errorBg },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
-            <FontAwesome name="trash" size={14} color="#dc3545" />
-            <Text style={styles.deleteText}>Supprimer</Text>
+            <FontAwesome name="trash" size={14} color={nc.error} />
+            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -670,18 +666,16 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   deleteButton: {
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#f1b1b1",
+    paddingHorizontal: 16,
     gap: 8,
   },
   deleteText: {
     fontSize: 14,
-    color: "#dc3545",
     fontWeight: "700",
     letterSpacing: 0.2,
   },

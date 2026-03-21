@@ -224,10 +224,7 @@ export function PumpingForm({
               styles.breastToggleText,
               { color: nc.textLight },
               useLeftBreast && {
-                color:
-                  colorScheme === "dark"
-                    ? Colors[colorScheme].background
-                    : nc.white,
+                color: nc.white,
               },
             ]}
           >
@@ -252,10 +249,7 @@ export function PumpingForm({
               styles.breastToggleText,
               { color: nc.textLight },
               useRightBreast && {
-                color:
-                  colorScheme === "dark"
-                    ? Colors[colorScheme].background
-                    : nc.white,
+                color: nc.white,
               },
             ]}
           >
@@ -430,11 +424,7 @@ export function PumpingForm({
           >
             {isSubmitting ? (
               <ActivityIndicator
-                color={
-                  colorScheme === "dark"
-                    ? Colors[colorScheme].background
-                    : nc.white
-                }
+                color={nc.white}
                 size="small"
               />
             ) : (
@@ -442,10 +432,7 @@ export function PumpingForm({
                 style={[
                   styles.validateText,
                   {
-                    color:
-                      colorScheme === "dark"
-                        ? Colors[colorScheme].background
-                        : nc.white,
+                    color: nc.white,
                   },
                 ]}
               >
@@ -462,8 +449,8 @@ export function PumpingForm({
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
-            <FontAwesome5 name="trash" size={14} color="#dc3545" />
-            <Text style={styles.deleteText}>Supprimer</Text>
+            <FontAwesome5 name="trash" size={14} color={nc.error} />
+            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -569,19 +556,16 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   deleteButton: {
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#f1b1b1",
-    backgroundColor: "#fff5f5",
+    paddingHorizontal: 16,
     gap: 8,
   },
   deleteText: {
     fontSize: 14,
-    color: "#dc3545",
     fontWeight: "700",
     letterSpacing: 0.2,
   },

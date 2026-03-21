@@ -533,10 +533,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               style={[
                 styles.validateText,
                 {
-                  color:
-                    colorScheme === "dark"
-                      ? Colors[colorScheme].background
-                      : nc.white,
+                  color: nc.white,
                 },
               ]}
             >
@@ -549,7 +546,6 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           <TouchableOpacity
             style={[
               styles.deleteButton,
-              { backgroundColor: nc.errorBg, borderColor: nc.error + "40" },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleDelete}
@@ -670,12 +666,12 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   deleteButton: {
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    paddingHorizontal: 16,
     gap: 8,
   },
   deleteText: {

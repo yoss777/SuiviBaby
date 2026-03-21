@@ -612,7 +612,7 @@ export default function HomeDashboard() {
   const warningStateRef = useRef<
     Record<
       string,
-      { miction?: number; selle?: number; repas?: number; pompage?: number }
+      { change?: number; repas?: number; pompage?: number }
     >
   >({});
   // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
@@ -1795,54 +1795,25 @@ export default function HomeDashboard() {
     const changesThresholdMs =
       changesThresholdHours > 0 ? changesThresholdHours * 60 * 60 * 1000 : null;
 
-    const mictionTs = todayStats.mictions.lastTimestamp;
-    const selleTs = todayStats.selles.lastTimestamp;
-    const mictionExceeded =
+    const lastChangeTs = Math.max(
+      todayStats.mictions.lastTimestamp ?? 0,
+      todayStats.selles.lastTimestamp ?? 0,
+    );
+    const changeExceeded =
       remindersEnabled &&
       changesThresholdMs !== null &&
-      !!mictionTs &&
-      now - mictionTs > changesThresholdMs;
-    const selleExceeded =
-      remindersEnabled &&
-      changesThresholdMs !== null &&
-      !!selleTs &&
-      now - selleTs > changesThresholdMs;
-    const mictionNotified = mictionTs && warningState.miction === mictionTs;
-    const selleNotified = selleTs && warningState.selle === selleTs;
+      lastChangeTs > 0 &&
+      now - lastChangeTs > changesThresholdMs;
+    const changeNotified = lastChangeTs > 0 && warningState.change === lastChangeTs;
     const changesHoursLabel = `${changesThresholdHours}h`;
 
-    if (
-      mictionExceeded &&
-      !mictionNotified &&
-      selleExceeded &&
-      !selleNotified
-    ) {
+    if (changeExceeded && !changeNotified) {
       showToast(
-        `⚠️ Attention: plus de ${changesHoursLabel} depuis le dernier pipi et popo.`,
+        `⚠️ Attention: plus de ${changesHoursLabel} depuis le dernier change.`,
         3200,
         "top",
       );
-      warningState.miction = mictionTs;
-      warningState.selle = selleTs;
-      return;
-    }
-
-    if (mictionExceeded && !mictionNotified) {
-      showToast(
-        `⚠️ Attention: plus de ${changesHoursLabel} depuis le dernier pipi.`,
-        3200,
-        "top",
-      );
-      warningState.miction = mictionTs;
-    }
-
-    if (selleExceeded && !selleNotified) {
-      showToast(
-        `⚠️ Attention: plus de ${changesHoursLabel} depuis le dernier popo.`,
-        3200,
-        "top",
-      );
-      warningState.selle = selleTs;
+      warningState.change = lastChangeTs;
     }
 
     // Repas warning
