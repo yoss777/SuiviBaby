@@ -34,7 +34,7 @@ import {
   ajouterSommeil,
 } from "@/migration/eventsDoubleWriteService";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
-import { supprimerEvenement } from "@/services/eventsService";
+import { obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import {
   buildTodayEventsData,
@@ -628,6 +628,7 @@ export default function HomeDashboard() {
 
   const [refreshTick, setRefreshTick] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dismissedInsightIds, setDismissedInsightIds] = useState<Set<string>>(new Set());
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
@@ -1097,65 +1098,83 @@ export default function HomeDashboard() {
     }, []),
   );
 
-  // Smart Content: combine all events for insight engine
-  const allEventsForInsights = useMemo(() => {
-    const all: {
-      id: string;
-      type: string;
-      date: Date;
-      quality?: string;
-      location?: string;
-      isNap?: boolean;
-      duree?: number;
-      heureDebut?: Date;
-      heureFin?: Date;
-      typeSolide?: string;
-      nouveauAliment?: boolean;
-      nomNouvelAliment?: string;
-      reaction?: string;
-      quantiteMl?: number;
-      valeur?: number;
-      jalonType?: string;
-      titre?: string;
-    }[] = [];
-    const push = (items: any[], type: string) => {
-      for (const e of items) {
-        all.push({
-          id: e.id ?? "",
-          type,
-          date: toDate(e.date),
-          quality: e.quality,
-          location: e.location,
-          isNap: e.isNap,
-          duree: e.duree,
-          heureDebut: e.heureDebut ? toDate(e.heureDebut) : undefined,
-          heureFin: e.heureFin ? toDate(e.heureFin) : undefined,
-          typeSolide: e.typeSolide,
-          nouveauAliment: e.nouveauAliment,
-          nomNouvelAliment: e.nomNouvelAliment,
-          reaction: e.reaction,
-          quantiteMl: e.quantiteMl,
-          valeur: e.valeur,
-          jalonType: e.typeJalon ?? e.jalonType,
-          titre: e.titre,
-        });
-      }
-    };
-    push(data.tetees, "tetee");
-    push(data.biberons, "biberon");
-    push(data.solides, "solide");
-    push(data.pompages, "pompage");
-    push(data.sommeils, "sommeil");
-    push(data.bains, "bain");
-    push(data.temperatures, "temperature");
-    push(data.medicaments, "medicament");
-    push(data.symptomes, "symptome");
-    push(data.vitamines, "vitamine");
-    push(data.vaccins, "vaccin");
-    push(data.activites, "activite");
-    push(data.jalons, "jalon");
-    return all;
-  }, [data, toDate]);
+  // Load dismissed insight IDs from storage
+  useEffect(() => {
+    AsyncStorage.getItem("@dismissed_insights")
+      .then((raw) => {
+        if (raw) setDismissedInsightIds(new Set(JSON.parse(raw)));
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleDismissInsight = useCallback((insightId: string) => {
+    setDismissedInsightIds((prev) => {
+      const next = new Set(prev);
+      next.add(insightId);
+      AsyncStorage.setItem("@dismissed_insights", JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  // Smart Content: load last 7 days of events for insight engine
+  const [weeklyEvents, setWeeklyEvents] = useState<{
+    id: string;
+    type: string;
+    date: Date;
+    quality?: string;
+    location?: string;
+    isNap?: boolean;
+    duree?: number;
+    heureDebut?: Date;
+    heureFin?: Date;
+    typeSolide?: string;
+    nouveauAliment?: boolean;
+    nomNouvelAliment?: string;
+    reaction?: string;
+    quantiteMl?: number;
+    valeur?: number;
+    jalonType?: string;
+    titre?: string;
+  }[]>([]);
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    let cancelled = false;
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    obtenirEvenements(activeChild.id, { depuis: sevenDaysAgo })
+      .then((events) => {
+        if (cancelled) return;
+        setWeeklyEvents(
+          events.map((e: any) => ({
+            id: e.id ?? "",
+            type: e.type,
+            date: toDate(e.date),
+            quality: e.quality,
+            location: e.location,
+            isNap: e.isNap,
+            duree: e.duree,
+            heureDebut: e.heureDebut ? toDate(e.heureDebut) : undefined,
+            heureFin: e.heureFin ? toDate(e.heureFin) : undefined,
+            typeSolide: e.typeSolide,
+            nouveauAliment: e.nouveauAliment,
+            nomNouvelAliment: e.nomNouvelAliment,
+            reaction: e.reaction,
+            quantiteMl: e.quantiteMl,
+            valeur: e.valeur,
+            jalonType: e.typeJalon ?? e.jalonType,
+            titre: e.titre,
+          })),
+        );
+      })
+      .catch(console.warn);
+
+    return () => { cancelled = true; };
+  }, [activeChild?.id, refreshTick, toDate]);
+
+  const allEventsForInsights = weeklyEvents;
 
   const smartContent = useSmartContent({
     events: allEventsForInsights,
@@ -2647,7 +2666,9 @@ export default function HomeDashboard() {
         {isDataLoaded && !smartContent.isLoading && (
           <View style={{ paddingHorizontal: 20, gap: 12, marginBottom: 12 }}>
             {/* Data-driven insights */}
-            {smartContent.insights.map((insight, i) => (
+            {smartContent.insights
+              .filter((ins) => !dismissedInsightIds.has(ins.id))
+              .map((insight, i) => (
               <StaggeredCard
                 key={insight.id}
                 index={4 + i}
@@ -2655,6 +2676,7 @@ export default function HomeDashboard() {
               >
                 <InsightCard
                   insight={insight}
+                  onDismiss={handleDismissInsight}
                   onLearnMore={(ins) => {
                     if (ins.relatedTipId) {
                       openSheetRaw({
@@ -2670,9 +2692,11 @@ export default function HomeDashboard() {
             ))}
 
             {/* Cross-data correlations */}
-            {smartContent.correlations.map((corr, i) => (
+            {smartContent.correlations
+              .filter((corr) => !dismissedInsightIds.has(corr.id))
+              .map((corr, i) => (
               <StaggeredCard key={corr.id} index={7 + i} visible={isDataLoaded}>
-                <InsightCard insight={corr} colorScheme={colorScheme} />
+                <InsightCard insight={corr} onDismiss={handleDismissInsight} colorScheme={colorScheme} />
               </StaggeredCard>
             ))}
 
