@@ -66,24 +66,24 @@ export default function SettingsScreen() {
   const deleteParamHandledRef = useRef(false);
   const navigation = useNavigation();
 
-  // Header right: home shortcut when activeChild exists
+  // Header right: home shortcut (baby home if activeChild, explore otherwise)
   useLayoutEffect(() => {
-    if (!activeChild) {
-      navigation.setOptions({ headerRight: undefined });
-      return;
-    }
     navigation.setOptions({
       headerRight: () => (
         <TouchableOpacity
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.replace("/baby/home");
+            if (activeChild) {
+              router.replace("/baby/home");
+            } else {
+              router.replace("/explore");
+            }
           }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={{ marginRight: 16 }}
           accessibilityRole="button"
-          accessibilityLabel={`Accueil de ${activeChild.name}`}
-          accessibilityHint="Retourner au tableau de bord"
+          accessibilityLabel={activeChild ? `Accueil de ${activeChild.name}` : "Retour à l'accueil"}
+          accessibilityHint="Retourner à l'accueil"
         >
           <FontAwesome name="house" size={20} color={nc.textNormal} />
         </TouchableOpacity>

@@ -32,12 +32,20 @@ export async function createPatientUser(
   babyName?: string
 ): Promise<User> {
   const safeUserName = userName?.trim() || email.split("@")[0];
+
+  // Check if doc already exists to avoid overwriting data from a concurrent call
+  // (race condition: login.tsx and AuthContext can both call this simultaneously)
+  const existingDoc = await getDoc(doc(db, 'users', uid));
+  if (existingDoc.exists()) {
+    return { uid, ...existingDoc.data() } as User;
+  }
+
   const user: User = {
     uid,
     email,
     userName: safeUserName,
     userType: 'patient',
-    babyName: babyName?.trim() ? babyName.trim() : undefined,
+    ...(babyName?.trim() ? { babyName: babyName.trim() } : {}),
     children: [],
     createdAt: Timestamp.now(),
     lastLogin: Timestamp.now(),

@@ -94,9 +94,8 @@ export async function obtenirPreferences(): Promise<UserPreferences> {
       };
     } else {
       // Si le document n'existe pas, le créer avec des valeurs par défaut
-      const defaultPrefs: UserPreferences = {
+      const defaultPrefs = {
         hiddenChildrenIds: [],
-        lastActiveChildId: undefined,
         notifications: defaultNotificationPreferences,
         theme: defaultThemePreference,
         language: defaultLanguagePreference,

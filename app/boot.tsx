@@ -4,15 +4,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import BackgroundImage from "@/components/ui/BackgroundImage";
+import { InfoModal } from "@/components/ui/InfoModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { obtenirEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
+import {
+  getBiometricType,
+  clearCredentials,
+} from "@/services/biometricAuthService";
 import {
   buildTodayEventsData,
   getTodayEventsCache,
   setTodayEventsCache,
 } from "@/services/todayEventsCache";
+import { BIOMETRIC_PROMPT_PENDING_KEY } from "@/app/(auth)/login";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 
 function BootScreenContent() {
@@ -25,6 +34,11 @@ function BootScreenContent() {
   } = useBaby();
   const [delayDone, setDelayDone] = useState(false);
   const [unauthDelayDone, setUnauthDelayDone] = useState(false);
+  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+  const [biometricType, setBiometricType] = useState("Biométrie");
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+  const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
 
   // R1+R9: Splash minimum — shorter if cache exists (warm return)
   useEffect(() => {
@@ -53,6 +67,28 @@ function BootScreenContent() {
       console.warn("[BOOT] Préchargement today échoué:", error);
     }
   }, []);
+
+  const handleAcceptBiometric = useCallback(async () => {
+    setShowBiometricPrompt(false);
+    await AsyncStorage.removeItem(BIOMETRIC_PROMPT_PENDING_KEY);
+    // Credentials already saved by login.tsx via saveCredentials()
+    // Just navigate
+    if (pendingNavigation) {
+      pendingNavigation();
+      setPendingNavigation(null);
+    }
+  }, [pendingNavigation]);
+
+  const handleDeclineBiometric = useCallback(async () => {
+    setShowBiometricPrompt(false);
+    await AsyncStorage.removeItem(BIOMETRIC_PROMPT_PENDING_KEY);
+    // User declined — remove saved credentials
+    await clearCredentials();
+    if (pendingNavigation) {
+      pendingNavigation();
+      setPendingNavigation(null);
+    }
+  }, [pendingNavigation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,52 +133,56 @@ function BootScreenContent() {
         return;
       }
 
-      // Étape 4 : Décision de navigation basée sur le nombre d'enfants
-      console.log(
-        "[BOOT] Décision de navigation avec",
-        children.length,
-        "enfant(s), activeChild:",
-        activeChild?.id,
-        activeChild?.name,
-      );
+      // Étape 4 : Déterminer la destination
+      let navigate: () => void;
 
       if (children.length === 0) {
         console.log("[BOOT] Aucun enfant, redirection vers explore");
-        router.replace("/explore");
-        return;
-      }
-
-      if (children.length >= 1) {
+        navigate = () => router.replace("/explore");
+      } else if (children.length >= 1) {
         const targetChild = activeChild ?? children[0];
         if (!targetChild) {
           console.log("[BOOT] Aucun enfant, redirection vers explore");
-          router.replace("/explore");
-          return;
-        }
-
-        if (children.length === 1) {
-          console.log("[BOOT] 1 enfant, redirection vers baby");
+          navigate = () => router.replace("/explore");
         } else {
-          console.log("[BOOT] Enfant actif trouvé, redirection vers baby");
-        }
-        // Ne pas écraser activeChild s'il est déjà défini par le contexte
-        if (!activeChild) {
-          setActiveChild(targetChild);
-        }
+          if (children.length === 1) {
+            console.log("[BOOT] 1 enfant, redirection vers baby");
+          } else {
+            console.log("[BOOT] Enfant actif trouvé, redirection vers baby");
+          }
+          // Ne pas écraser activeChild s'il est déjà défini par le contexte
+          if (!activeChild) {
+            setActiveChild(targetChild);
+          }
 
-        const preloadTimeout = new Promise((resolve) =>
-          setTimeout(resolve, 2500),
-        );
-        await Promise.race([prefetchToday(targetChild.id), preloadTimeout]);
-        if (cancelled) return;
+          const preloadTimeout = new Promise((resolve) =>
+            setTimeout(resolve, 2500),
+          );
+          await Promise.race([prefetchToday(targetChild.id), preloadTimeout]);
+          if (cancelled) return;
 
-        router.replace("/(drawer)/baby" as any);
+          navigate = () => router.replace("/(drawer)/baby" as any);
+        }
+      } else {
+        console.log("[BOOT] Fallback, redirection vers explore");
+        navigate = () => router.replace("/explore" as any);
+      }
+
+      // Étape 5 : Vérifier si un prompt biométrique est en attente
+      const biometricPending = await AsyncStorage.getItem(BIOMETRIC_PROMPT_PENDING_KEY);
+      console.log("[BOOT] biometricPending flag:", biometricPending);
+      if (biometricPending) {
+        const type = await getBiometricType();
+        console.log("[BOOT] Affichage prompt biométrique, type:", type);
+        setBiometricType(type);
+        setPendingNavigation(() => navigate!);
+        setShowBiometricPrompt(true);
         return;
       }
 
-      // Fallback
-      console.log("[BOOT] Plusieurs enfants, redirection vers explore");
-      router.replace("/explore" as any);
+      // Pas de prompt — naviguer directement
+      console.log("[BOOT] Pas de prompt biométrique, navigation directe");
+      navigate!();
     };
 
     run();
@@ -189,6 +229,17 @@ function BootScreenContent() {
           />
         </View>
       </SafeAreaView>
+      <InfoModal
+        visible={showBiometricPrompt}
+        title={`Activer ${biometricType} ?`}
+        message={`Souhaitez-vous utiliser ${biometricType} pour vous connecter plus rapidement la prochaine fois ?`}
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
+        confirmText="Activer"
+        dismissText="Plus tard"
+        onConfirm={handleAcceptBiometric}
+        onClose={handleDeclineBiometric}
+      />
     </View>
   );
 }

@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 let LocalAuthentication: typeof import("expo-local-authentication") | null =
   null;
 let SecureStore: typeof import("expo-secure-store") | null = null;
@@ -30,22 +32,25 @@ export async function getBiometricType(): Promise<string> {
   try {
     const types =
       await LocalAuthentication.supportedAuthenticationTypesAsync();
-    if (
-      types.includes(
-        LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
-      )
-    ) {
-      return "Face ID";
-    }
-    if (
-      types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)
-    ) {
-      return "Touch ID";
+    const hasFace = types.includes(
+      LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
+    );
+    const hasFingerprint = types.includes(
+      LocalAuthentication.AuthenticationType.FINGERPRINT,
+    );
+
+    if (Platform.OS === "ios") {
+      if (hasFace) return "Face ID";
+      if (hasFingerprint) return "Touch ID";
+    } else {
+      // Android: priorité empreinte (plus courant), termes génériques
+      if (hasFingerprint) return "l'empreinte digitale";
+      if (hasFace) return "la reconnaissance faciale";
     }
   } catch {
     // fall through
   }
-  return "Biométrie";
+  return "la biométrie";
 }
 
 export async function isBiometricEnabled(): Promise<boolean> {

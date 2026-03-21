@@ -40,6 +40,7 @@ import {
 import { auth } from "../../config/firebase";
 
 const LAST_EMAIL_KEY = "@samaye_last_email";
+export const BIOMETRIC_PROMPT_PENDING_KEY = "@biometric_prompt_pending";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Enable LayoutAnimation on Android
@@ -97,8 +98,6 @@ export default function LoginScreen() {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricType, setBiometricType] = useState("Biométrie");
-  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
-  const pendingCredentials = useRef<{ email: string; password: string } | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const [infoModal, setInfoModal] = useState({
     visible: false,
@@ -330,15 +329,17 @@ export default function LoginScreen() {
 
     try {
       if (isLogin) {
+        // Poser le flag et sauvegarder les credentials AVANT signIn
+        // car onAuthStateChanged déclenche boot.tsx immédiatement après signIn
+        if (biometricAvailable && !biometricEnabled) {
+          console.log("[LOGIN] Sauvegarde credentials + flag biométrique avant signIn");
+          await saveCredentials(email.trim(), password);
+          await AsyncStorage.setItem(BIOMETRIC_PROMPT_PENDING_KEY, "1");
+        }
         await signInWithEmailAndPassword(auth, email.trim(), password);
         setFailedAttempts(0);
         // Sauvegarder l'email pour pré-remplissage (#6 Remember me)
         AsyncStorage.setItem(LAST_EMAIL_KEY, email.trim()).catch(() => {});
-        // Proposer la biométrie si disponible et pas encore activée (#1)
-        if (biometricAvailable && !biometricEnabled) {
-          pendingCredentials.current = { email: email.trim(), password };
-          setShowBiometricPrompt(true);
-        }
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         const userCredential = await createUserWithEmailAndPassword(
@@ -354,11 +355,17 @@ export default function LoginScreen() {
           userName.trim() || defaultUserName,
         );
 
+        // Sauvegarder l'email pour pré-remplissage
+        AsyncStorage.setItem(LAST_EMAIL_KEY, email.trim()).catch(() => {});
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         resetAllFields();
-        showModal("Succès", "Compte créé avec succès !");
+        // Biométrie proposée au premier login, pas à l'inscription
+        // (l'écran est démonté par la navigation automatique avant que
+        // l'user puisse répondre au prompt)
       }
     } catch (error: any) {
+      // Nettoyer le flag biométrique en cas d'échec de signIn
+      AsyncStorage.removeItem(BIOMETRIC_PROMPT_PENDING_KEY).catch(() => {});
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
       // Track failed login attempts for rate limiting
@@ -431,19 +438,6 @@ export default function LoginScreen() {
     }
   }, [showModal]);
 
-  const handleAcceptBiometric = useCallback(async () => {
-    setShowBiometricPrompt(false);
-    if (pendingCredentials.current) {
-      await saveCredentials(pendingCredentials.current.email, pendingCredentials.current.password);
-      setBiometricEnabled(true);
-      pendingCredentials.current = null;
-    }
-  }, []);
-
-  const handleDeclineBiometric = useCallback(() => {
-    setShowBiometricPrompt(false);
-    pendingCredentials.current = null;
-  }, []);
 
   const handleEmailChange = useCallback((text: string) => {
     setEmail(text);
@@ -499,17 +493,6 @@ export default function LoginScreen() {
         backgroundColor={nc.backgroundCard}
         textColor={nc.textStrong}
         onClose={() => setInfoModal({ visible: false, title: "", message: "" })}
-      />
-      <InfoModal
-        visible={showBiometricPrompt}
-        title={`Activer ${biometricType} ?`}
-        message={`Souhaitez-vous utiliser ${biometricType} pour vous connecter plus rapidement la prochaine fois ?`}
-        backgroundColor={nc.backgroundCard}
-        textColor={nc.textStrong}
-        confirmText="Activer"
-        dismissText="Plus tard"
-        onConfirm={handleAcceptBiometric}
-        onClose={handleDeclineBiometric}
       />
       <ScrollView
         ref={scrollViewRef}
@@ -598,7 +581,7 @@ export default function LoginScreen() {
                 <FontAwesome name="lock" size={20} color={nc.textMuted} />
               </View>
               <TextInput
-                style={[styles.input, { color: nc.textStrong }]}
+                style={[styles.input, { color: nc.textStrong, backgroundColor: 'transparent' }]}
                 placeholder="Mot de passe"
                 placeholderTextColor={nc.textLight}
                 value={password}
@@ -686,7 +669,7 @@ export default function LoginScreen() {
                 <FontAwesome name="lock" size={20} color={nc.textMuted} />
               </View>
               <TextInput
-                style={[styles.input, { color: nc.textStrong }]}
+                style={[styles.input, { color: nc.textStrong, backgroundColor: 'transparent' }]}
                 placeholder="Confirmer le mot de passe"
                 placeholderTextColor={nc.textLight}
                 value={confirmPassword}

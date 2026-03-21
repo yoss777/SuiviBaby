@@ -111,14 +111,23 @@ export function AuthProvider({
             ? "professional"
             : "patient";
 
-        // R4: Parallelize user doc fetch + access check
-        const [userDoc, accessCheck] = await Promise.all([
-          getDoc(doc(db, "users", fbUser.uid)),
-          canUserAccessApp(fbUser.uid, appType),
-        ]);
+        // Step 1: Fetch user doc (retry once after short delay for signup race condition)
+        let userDoc = await getDoc(doc(db, "users", fbUser.uid));
         if (!isMountedRef.current) return;
 
         if (!userDoc.exists()) {
+          // Doc may not exist yet if onAuthStateChanged fired before
+          // login.tsx finished writing it — wait briefly and retry
+          await new Promise((r) => setTimeout(r, 1500));
+          if (!isMountedRef.current) return;
+          userDoc = await getDoc(doc(db, "users", fbUser.uid));
+          if (!isMountedRef.current) return;
+        }
+
+        let userData: User;
+
+        if (!userDoc.exists()) {
+          // Still no doc after retry — create it as fallback
           if (appType === "patient" && fbUser.email) {
             const fallbackName =
               fbUser.displayName || fbUser.email.split("@")[0];
@@ -141,10 +150,14 @@ export function AuthProvider({
           return;
         }
 
-        const userData = {
+        userData = {
           uid: fbUser.uid,
           ...userDoc.data(),
         } as User;
+
+        // Step 2: Check access only after we know the doc exists
+        const accessCheck = await canUserAccessApp(fbUser.uid, appType);
+        if (!isMountedRef.current) return;
 
         if (!accessCheck.canAccess) {
           showAlert(
@@ -184,7 +197,7 @@ export function AuthProvider({
       } catch (error) {
         if (!isMountedRef.current) return;
         console.error(
-          "Erreur lors de la récupération des données utilisateur:",
+          "[AuthContext] loadUserData CATCH — error:",
           error,
         );
         showAlert(

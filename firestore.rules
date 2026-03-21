@@ -347,8 +347,11 @@ service cloud.firestore {
     // ============================================
 
     match /device_tokens/{tokenId} {
-      // Lecture/création/mise à jour : l'utilisateur ne gère que ses propres tokens
-      allow read, create: if isSignedIn() &&
+      // Lecture : l'utilisateur ne peut lire que ses propres tokens
+      allow read: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+      // Création : l'utilisateur ne peut créer que des tokens à son nom
+      allow create: if isSignedIn() &&
         request.resource.data.userId == request.auth.uid;
       allow update: if isSignedIn() &&
         resource.data.userId == request.auth.uid &&

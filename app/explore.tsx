@@ -312,6 +312,15 @@ export default function Explore() {
             )}
 
             <TouchableOpacity
+              onPress={() => router.push('/(drawer)/settings' as any)}
+              style={styles.settingsButton}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Paramètres"
+            >
+              <Ionicons name="settings-outline" size={22} color={Colors[colorScheme].tint} />
+            </TouchableOpacity>
+            <TouchableOpacity
               onPress={handleSignOut}
               style={styles.logoutButton}
               activeOpacity={0.7}
@@ -503,6 +512,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  settingsButton: {
+    position: 'absolute',
+    top: 0,
+    left: 20,
+    padding: 8,
   },
   logoutButton: {
     position: 'absolute',
