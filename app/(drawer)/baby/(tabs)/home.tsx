@@ -651,6 +651,9 @@ export default function HomeDashboard() {
     event: any | null;
   }>({ visible: false, event: null });
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const softDeletedIdsRef = useRef<Set<string>>(new Set());
+  // Keep ref in sync with state for use in closures (scheduleMerge)
+  softDeletedIdsRef.current = softDeletedIds;
   const [tipsEnabled, setTipsEnabled] = useState(true);
 
   // États des données
@@ -2059,60 +2062,85 @@ export default function HomeDashboard() {
       });
     }
 
+    // Unified debounced pipeline: both Firestore snapshots and optimistic store
+    // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
+    // Skip setData when the visible event set hasn't changed (e.g. soft-deleted
+    // events disappearing from Firestore snapshot).
+    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
+    let loadingSet = false;
+    let lastEventIdsKey = '';
+
+    const scheduleMerge = () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      mergeTimer = setTimeout(() => {
+        const firestoreEvents = latestFirestoreEventsRef.current;
+        const mergedEvents = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
+
+        // Build a stable fingerprint from visible events to detect real changes.
+        // Includes optimistic flag so the opacity transition triggers a render,
+        // but excludes raw IDs so the tempId→realId swap doesn't flash.
+        const visibleEvents = mergedEvents.filter(
+          (e: any) => !softDeletedIdsRef.current.has(e.id),
+        );
+        const hasOptimistic = visibleEvents.some(
+          (e: any) => e.id?.startsWith?.('__optimistic_'),
+        );
+        const idsKey = `${visibleEvents.length}_${hasOptimistic ? 'O' : 'C'}_${visibleEvents
+          .slice(0, 20)
+          .map((e: any) => `${e.type}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
+          .join('|')}`;
+
+        if (idsKey === lastEventIdsKey) return; // No visible change — skip render.
+        lastEventIdsKey = idsKey;
+
+        const todayData = buildTodayEventsData(mergedEvents);
+        setData((prev) => ({ ...prev, ...todayData }));
+      }, 50);
+    };
+
     const unsubscribe = ecouterEvenementsDuJourHybrid(
       activeChild.id,
       (events) => {
         latestFirestoreEventsRef.current = events;
-        const mergedEvents = mergeWithFirestoreEvents(events, activeChild.id);
-        const todayData = buildTodayEventsData(mergedEvents);
-        setData((prev) => ({ ...prev, ...todayData }));
-        setLoading({
-          tetees: false,
-          biberons: false,
-          solides: false,
-          pompages: false,
-          croissances: false,
-          sommeils: false,
-          bains: false,
-          mictions: false,
-          selles: false,
-          temperatures: false,
-          medicaments: false,
-          symptomes: false,
-          vitamines: false,
-          vaccins: false,
-          activites: false,
-          jalons: false,
-          nettoyagesNez: false,
-        });
+        if (!loadingSet) {
+          loadingSet = true;
+          setLoading({
+            tetees: false,
+            biberons: false,
+            solides: false,
+            pompages: false,
+            croissances: false,
+            sommeils: false,
+            bains: false,
+            mictions: false,
+            selles: false,
+            temperatures: false,
+            medicaments: false,
+            symptomes: false,
+            vitamines: false,
+            vaccins: false,
+            activites: false,
+            jalons: false,
+            nettoyagesNez: false,
+          });
+        }
+        scheduleMerge();
       },
       { waitForServer: true },
     );
 
-    return () => {
-      unsubscribe();
-    };
-  }, [activeChild, currentDay, refreshTick]);
-
-  // Re-merge when the optimistic store changes (e.g. new optimistic event added)
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    const unsubOptimistic = subscribeOptimistic(() => {
-      const firestoreEvents = latestFirestoreEventsRef.current;
-      const mergedEvents = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
-      const todayData = buildTodayEventsData(mergedEvents);
-      setData((prev) => ({ ...prev, ...todayData }));
-    });
+    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
 
     // Connect optimistic failure notifications to the toast system.
     setOptimisticOnFailure((message) => showToast(message));
 
     return () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      unsubscribe();
       unsubOptimistic();
       setOptimisticOnFailure(null);
     };
-  }, [activeChild?.id]);
+  }, [activeChild, currentDay, refreshTick]);
 
   // ============================================
   // EFFECTS - STATS CALCULATION

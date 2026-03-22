@@ -241,31 +241,58 @@ export default function StatsScreen() {
     setSommeilLoaded(true);
   }, []);
 
-  // écoute en temps réel des tetees, biberons ET solides
+  // Unified debounced pipeline: both Firestore snapshots and optimistic store
+  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
 
-    let teteesData: any[] = [];
-    let biberonsData: any[] = [];
-    let solidesData: any[] = [];
-
-    const mergeRepas = () => {
-      const raw = [...teteesData, ...biberonsData, ...solidesData].sort(
-        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
-      );
-      const merged = mergeWithFirestoreEvents(raw, activeChild.id);
-      setTetees(merged);
-    };
-
     setLoadError(null);
+
+    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFingerprint = '';
+
+    const scheduleMerge = () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      mergeTimer = setTimeout(() => {
+        // Re-merge repas (tetees + biberons + solides)
+        const rawRepas = [
+          ...latestFirestoreTeteesRef.current,
+          ...latestFirestoreBiberonsRef.current,
+          ...latestFirestoreSolidesRef.current,
+        ];
+        const mergedRepas = mergeWithFirestoreEvents(rawRepas, activeChild.id);
+        mergedRepas.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+
+        // Re-merge pompages
+        const mergedPompages = mergeWithFirestoreEvents(latestFirestorePompagesRef.current, activeChild.id);
+
+        // Re-merge sommeils
+        const mergedSommeils = mergeWithFirestoreEvents(latestFirestoreSommeilsRef.current, activeChild.id);
+
+        const allMerged = [...mergedRepas, ...mergedPompages, ...mergedSommeils];
+        const hasOptimistic = allMerged.some(
+          (e: any) => e.id?.startsWith?.('__optimistic_'),
+        );
+        const fingerprint = `${allMerged.length}_${hasOptimistic ? 'O' : 'C'}_${allMerged
+          .slice(0, 20)
+          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
+          .join('|')}`;
+
+        if (fingerprint === lastFingerprint) return;
+        lastFingerprint = fingerprint;
+
+        setTetees(mergedRepas);
+        setPompages(mergedPompages);
+        setSommeils(mergedSommeils);
+      }, 50);
+    };
 
     const unsubscribeTetees = ecouterTetees(
       activeChild.id,
       (tetees) => {
-        teteesData = tetees;
         latestFirestoreTeteesRef.current = tetees;
         setTeteesLoaded(true);
-        mergeRepas();
+        scheduleMerge();
       },
       { waitForServer: true },
       handleListenerError,
@@ -274,10 +301,9 @@ export default function StatsScreen() {
     const unsubscribeBiberons = ecouterBiberons(
       activeChild.id,
       (biberons) => {
-        biberonsData = biberons;
         latestFirestoreBiberonsRef.current = biberons;
         setBiberonsLoaded(true);
-        mergeRepas();
+        scheduleMerge();
       },
       { waitForServer: true },
       handleListenerError,
@@ -286,90 +312,48 @@ export default function StatsScreen() {
     const unsubscribeSolides = ecouterSolides(
       activeChild.id,
       (solides) => {
-        solidesData = solides;
         latestFirestoreSolidesRef.current = solides;
         setSolidesLoaded(true);
-        mergeRepas();
+        scheduleMerge();
       },
       { waitForServer: true },
       handleListenerError,
     );
 
-    return () => {
-      unsubscribeTetees();
-      unsubscribeBiberons();
-      unsubscribeSolides();
-    };
-  }, [activeChild, refreshKey, handleListenerError]);
-
-  // écoute en temps réel des pompages
-  useEffect(() => {
-    if (!activeChild?.id) return;
     const unsubscribePompages = ecouterPompages(
       activeChild.id,
       (data) => {
         latestFirestorePompagesRef.current = data;
-        const merged = mergeWithFirestoreEvents(data, activeChild.id);
-        setPompages(merged);
         setPompagesLoaded(true);
+        scheduleMerge();
       },
       { waitForServer: true },
       handleListenerError,
     );
-    return () => unsubscribePompages();
-  }, [activeChild, refreshKey, handleListenerError]);
 
-  // écoute en temps réel du sommeil
-  useEffect(() => {
-    if (!activeChild?.id) return;
     const unsubscribeSommeils = ecouterSommeils(
       activeChild.id,
       (data) => {
         latestFirestoreSommeilsRef.current = data;
-        const merged = mergeWithFirestoreEvents(data, activeChild.id);
-        setSommeils(merged);
         setSommeilLoaded(true);
+        scheduleMerge();
       },
       { waitForServer: true },
       handleListenerError,
     );
-    return () => unsubscribeSommeils();
+
+    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
+
+    return () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      unsubscribeTetees();
+      unsubscribeBiberons();
+      unsubscribeSolides();
+      unsubscribePompages();
+      unsubscribeSommeils();
+      unsubOptimistic();
+    };
   }, [activeChild, refreshKey, handleListenerError]);
-
-  // Re-merge when optimistic store changes
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    const unsubOptimistic = subscribeOptimistic(() => {
-      // Re-merge repas (tetees + biberons + solides)
-      const rawRepas = [
-        ...latestFirestoreTeteesRef.current,
-        ...latestFirestoreBiberonsRef.current,
-        ...latestFirestoreSolidesRef.current,
-      ];
-      if (rawRepas.length > 0) {
-        const mergedRepas = mergeWithFirestoreEvents(rawRepas, activeChild.id);
-        mergedRepas.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
-        setTetees(mergedRepas);
-      }
-
-      // Re-merge pompages
-      const rawPompages = latestFirestorePompagesRef.current;
-      if (rawPompages.length > 0) {
-        const mergedPompages = mergeWithFirestoreEvents(rawPompages, activeChild.id);
-        setPompages(mergedPompages);
-      }
-
-      // Re-merge sommeils
-      const rawSommeils = latestFirestoreSommeilsRef.current;
-      if (rawSommeils.length > 0) {
-        const mergedSommeils = mergeWithFirestoreEvents(rawSommeils, activeChild.id);
-        setSommeils(mergedSommeils);
-      }
-    });
-
-    return () => unsubOptimistic();
-  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

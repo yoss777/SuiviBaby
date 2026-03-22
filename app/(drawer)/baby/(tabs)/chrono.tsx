@@ -1594,7 +1594,8 @@ export default function ChronoScreen() {
     "nettoyage_nez",
   ];
 
-  // Load events with unified listener
+  // Unified debounced pipeline: both Firestore snapshots and optimistic store
+  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
 
@@ -1608,18 +1609,50 @@ export default function ChronoScreen() {
     const since = startOfDay(new Date());
     since.setDate(since.getDate() - (maxRange - 1));
 
+    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFingerprint = '';
+    let loadingSet = false;
+
+    const scheduleMerge = () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      mergeTimer = setTimeout(() => {
+        const firestoreEvents = latestFirestoreEventsRef.current;
+        const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
+        const sorted = merged.sort(
+          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        );
+
+        const hasOptimistic = sorted.some(
+          (e: any) => e.id?.startsWith?.('__optimistic_'),
+        );
+        const fingerprint = `${sorted.length}_${hasOptimistic ? 'O' : 'C'}_${sorted
+          .slice(0, 20)
+          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
+          .join('|')}`;
+
+        if (fingerprint === lastFingerprint) return;
+        lastFingerprint = fingerprint;
+
+        setEvents(sorted);
+      }, 50);
+    };
+
     const unsubscribe = ecouterEvenementsHybrid(
       activeChild.id,
       (data) => {
         latestFirestoreEventsRef.current = data;
-        const merged = mergeWithFirestoreEvents(data, activeChild.id);
-        const sorted = merged.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-        );
-        setEvents(sorted);
-        hasInitialLoad.current = true;
-        setLoading(false);
-        setIsRefreshing(false);
+        if (!loadingSet) {
+          loadingSet = true;
+          hasInitialLoad.current = true;
+          setLoading(false);
+          setIsRefreshing(false);
+
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }).start();
+        }
 
         // P5: Clean up soft-deleted IDs that are no longer in the dataset
         setSoftDeletedIds((prev) => {
@@ -1632,11 +1665,7 @@ export default function ChronoScreen() {
           return next.size === prev.size ? prev : next;
         });
 
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }).start();
+        scheduleMerge();
       },
       {
         types: ALL_EVENT_TYPES,
@@ -1645,27 +1674,14 @@ export default function ChronoScreen() {
       },
     );
 
-    return unsubscribe;
-  }, [activeChild?.id, maxRange, currentDay, refreshTick]);
-
-  // Re-merge when optimistic store changes
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    const unsubOptimistic = subscribeOptimistic(() => {
-      const firestoreEvents = latestFirestoreEventsRef.current;
-      if (firestoreEvents.length === 0) return;
-      const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
-      const sorted = merged.sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-      );
-      setEvents(sorted);
-    });
+    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
 
     return () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      unsubscribe();
       unsubOptimistic();
     };
-  }, [activeChild?.id]);
+  }, [activeChild?.id, maxRange, currentDay, refreshTick]);
 
   // Reset on child change
   useEffect(() => {

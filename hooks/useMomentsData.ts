@@ -111,24 +111,52 @@ export function useMomentsData(
     }, 3000);
   }, []);
 
-  // Data loading
+  // Unified debounced pipeline: both Firestore snapshots and optimistic store
+  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!childId) return;
 
     setLoadError(false);
 
+    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFingerprint = '';
+    let loadingSet = false;
+
+    const scheduleMerge = () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      mergeTimer = setTimeout(() => {
+        const firestoreEvents = latestFirestoreEventsRef.current;
+        const merged = mergeWithFirestoreEvents(firestoreEvents, childId) as MilestoneEventWithId[];
+
+        const hasOptimistic = merged.some(
+          (e: any) => e.id?.startsWith?.('__optimistic_'),
+        );
+        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+          .slice(0, 20)
+          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
+          .join('|')}`;
+
+        if (fingerprint === lastFingerprint) return;
+        lastFingerprint = fingerprint;
+
+        setEvents(merged);
+      }, 50);
+    };
+
     const unsubscribe = ecouterJalonsHybrid(
       childId,
       (data) => {
         latestFirestoreEventsRef.current = data as MilestoneEventWithId[];
-        const merged = mergeWithFirestoreEvents(data, childId) as MilestoneEventWithId[];
-        setEvents(merged);
-        setLoaded(true);
+        if (!loadingSet) {
+          loadingSet = true;
+          setLoaded(true);
+        }
         // End pull-to-refresh when data actually arrives
         if (refreshResolveRef.current) {
           refreshResolveRef.current();
           refreshResolveRef.current = null;
         }
+        scheduleMerge();
       },
       { waitForServer: true, limite: 100 },
       () => {
@@ -141,24 +169,14 @@ export function useMomentsData(
       },
     );
 
-    return () => unsubscribe();
-  }, [childId, refreshTick]);
-
-  // Re-merge when optimistic store changes
-  useEffect(() => {
-    if (!childId) return;
-
-    const unsubOptimistic = subscribeOptimistic(() => {
-      const firestoreEvents = latestFirestoreEventsRef.current;
-      if (firestoreEvents.length === 0) return;
-      const merged = mergeWithFirestoreEvents(firestoreEvents, childId) as MilestoneEventWithId[];
-      setEvents(merged);
-    });
+    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
 
     return () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      unsubscribe();
       unsubOptimistic();
     };
-  }, [childId]);
+  }, [childId, refreshTick]);
 
   // Mood data processing
   const { moods, currentMood } = useMemo((): {

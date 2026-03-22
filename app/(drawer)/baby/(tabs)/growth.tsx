@@ -525,6 +525,8 @@ export default function GrowthScreen() {
   // ============================================
   // DATA LISTENERS
   // ============================================
+  // Unified debounced pipeline: both Firestore snapshots and optimistic store
+  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     const versionAtSubscribe = loadMoreVersionRef.current;
@@ -534,66 +536,74 @@ export default function GrowthScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
-    let croissanceData: GrowthEventWithId[] = [];
+    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFingerprint = '';
+    let loadingSet = false;
 
-    const merge = () => {
-      const merged = mergeWithFirestoreEvents(croissanceData, activeChild.id) as GrowthEventWithId[];
-      merged.sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-      );
-      setEvents(merged);
+    const scheduleMerge = () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      mergeTimer = setTimeout(() => {
+        const firestoreEvents = latestFirestoreCroissancesRef.current;
+        const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as GrowthEventWithId[];
+        merged.sort(
+          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        );
 
-      // Clean up soft-deleted IDs that are no longer in the dataset
-      setSoftDeletedIds((prev) => {
-        if (prev.size === 0) return prev;
-        const mergedIds = new Set(merged.map((e) => e.id));
-        const next = new Set<string>();
-        prev.forEach((id) => { if (mergedIds.has(id)) next.add(id); });
-        return next.size === prev.size ? prev : next;
-      });
+        const hasOptimistic = merged.some(
+          (e: any) => e.id?.startsWith?.('__optimistic_'),
+        );
+        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+          .slice(0, 20)
+          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
+          .join('|')}`;
 
-      if (
-        pendingLoadMoreRef.current > 0 &&
-        versionAtSubscribe === loadMoreVersionRef.current
-      ) {
-        pendingLoadMoreRef.current -= 1;
-        if (pendingLoadMoreRef.current <= 0) {
-          setIsLoadingMore(false);
-        }
-      }
+        if (fingerprint === lastFingerprint) return;
+        lastFingerprint = fingerprint;
+
+        setEvents(merged);
+
+        // Clean up soft-deleted IDs that are no longer in the dataset
+        setSoftDeletedIds((prev) => {
+          if (prev.size === 0) return prev;
+          const mergedIds = new Set(merged.map((e) => e.id));
+          const next = new Set<string>();
+          prev.forEach((id) => { if (mergedIds.has(id)) next.add(id); });
+          return next.size === prev.size ? prev : next;
+        });
+      }, 50);
     };
 
     const unsubscribe = ecouterCroissancesHybrid(
       activeChild.id,
       (data) => {
-        croissanceData = data as GrowthEventWithId[];
-        latestFirestoreCroissancesRef.current = croissanceData;
-        setLoaded({ croissance: true });
-        setIsRefreshing(false);
-        merge();
+        latestFirestoreCroissancesRef.current = data as GrowthEventWithId[];
+        if (!loadingSet) {
+          loadingSet = true;
+          setLoaded({ croissance: true });
+          setIsRefreshing(false);
+        }
+        if (
+          pendingLoadMoreRef.current > 0 &&
+          versionAtSubscribe === loadMoreVersionRef.current
+        ) {
+          pendingLoadMoreRef.current -= 1;
+          if (pendingLoadMoreRef.current <= 0) {
+            setIsLoadingMore(false);
+          }
+        }
+        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
+    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
+
     return () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribe();
+      unsubOptimistic();
     };
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
-
-  // Re-merge when optimistic store changes
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    const unsubOptimistic = subscribeOptimistic(() => {
-      const firestoreEvents = latestFirestoreCroissancesRef.current;
-      if (firestoreEvents.length === 0) return;
-      const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as GrowthEventWithId[];
-      merged.sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
-      setEvents(merged);
-    });
-
-    return () => unsubOptimistic();
-  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

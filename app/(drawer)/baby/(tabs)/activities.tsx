@@ -553,6 +553,8 @@ export default function ActivitiesScreen() {
   // ============================================
   // DATA LISTENERS
   // ============================================
+  // Unified debounced pipeline: both Firestore snapshots and optimistic store
+  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     const versionAtSubscribe = loadMoreVersionRef.current;
@@ -562,25 +564,50 @@ export default function ActivitiesScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
+    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFingerprint = '';
+    let loadingSet = false;
+
+    const scheduleMerge = () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      mergeTimer = setTimeout(() => {
+        const firestoreEvents = latestFirestoreActivitesRef.current;
+        const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as ActivityEventWithId[];
+
+        const hasOptimistic = merged.some(
+          (e: any) => e.id?.startsWith?.('__optimistic_'),
+        );
+        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+          .slice(0, 20)
+          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
+          .join('|')}`;
+
+        if (fingerprint === lastFingerprint) return;
+        lastFingerprint = fingerprint;
+
+        setEvents(merged);
+
+        // Clean up soft-deleted IDs that are no longer in the dataset
+        setSoftDeletedIds((prev) => {
+          if (prev.size === 0) return prev;
+          const ids = new Set(merged.map((e) => e.id));
+          const next = new Set<string>();
+          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+          return next.size === prev.size ? prev : next;
+        });
+      }, 50);
+    };
+
     const unsubscribe = ecouterActivitesHybrid(
       activeChild.id,
       (data) => {
         const evts = data as ActivityEventWithId[];
         latestFirestoreActivitesRef.current = evts;
-        const merged = mergeWithFirestoreEvents(evts, activeChild.id) as ActivityEventWithId[];
-        setEvents(merged);
-        setLoaded({ activites: true });
-        setIsRefreshing(false);
-
-        // Clean up soft-deleted IDs that are no longer in the dataset
-        setSoftDeletedIds((prev) => {
-          if (prev.size === 0) return prev;
-          const ids = new Set(evts.map((e) => e.id));
-          const next = new Set<string>();
-          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
-          return next.size === prev.size ? prev : next;
-        });
-
+        if (!loadingSet) {
+          loadingSet = true;
+          setLoaded({ activites: true });
+          setIsRefreshing(false);
+        }
         if (
           pendingLoadMoreRef.current > 0 &&
           versionAtSubscribe === loadMoreVersionRef.current
@@ -588,28 +615,19 @@ export default function ActivitiesScreen() {
           pendingLoadMoreRef.current = 0;
           setIsLoadingMore(false);
         }
+        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
+    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
+
     return () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribe();
+      unsubOptimistic();
     };
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
-
-  // Re-merge when optimistic store changes
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    const unsubOptimistic = subscribeOptimistic(() => {
-      const firestoreEvents = latestFirestoreActivitesRef.current;
-      if (firestoreEvents.length === 0) return;
-      const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as ActivityEventWithId[];
-      setEvents(merged);
-    });
-
-    return () => unsubOptimistic();
-  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

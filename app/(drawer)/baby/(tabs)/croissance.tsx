@@ -990,10 +990,38 @@ export default function CroissanceScreen() {
     }, [canManageContent, palette.tint, openAddModal, setHeaderRight]),
   );
 
+  // Unified debounced pipeline: both Firestore snapshots and optimistic store
+  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     let cancelled = false;
     setLoading(true);
+
+    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFingerprint = '';
+    let loadingSet = false;
+
+    const scheduleMerge = () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      mergeTimer = setTimeout(() => {
+        const firestoreEntries = latestFirestoreEntriesRef.current;
+        const merged = mergeWithFirestoreEvents(firestoreEntries, activeChild.id) as CroissanceEntry[];
+
+        const hasOptimistic = merged.some(
+          (e: any) => e.id?.startsWith?.('__optimistic_'),
+        );
+        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+          .slice(0, 20)
+          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
+          .join('|')}`;
+
+        if (fingerprint === lastFingerprint) return;
+        lastFingerprint = fingerprint;
+
+        setEntries(merged);
+      }, 50);
+    };
+
     const unsubscribe = ecouterCroissancesHybrid(
       activeChild.id,
       (data) => {
@@ -1005,34 +1033,25 @@ export default function CroissanceScreen() {
           }))
           .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
         latestFirestoreEntriesRef.current = normalized as CroissanceEntry[];
-        const merged = mergeWithFirestoreEvents(normalized, activeChild.id) as CroissanceEntry[];
-        setEntries(merged);
-        setLoading(false);
-        setIsRefreshing(false);
+        if (!loadingSet) {
+          loadingSet = true;
+          setLoading(false);
+          setIsRefreshing(false);
+        }
+        scheduleMerge();
       },
       { waitForServer: true },
     );
+
+    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
+
     return () => {
       cancelled = true;
+      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribe();
-    };
-  }, [activeChild?.id, refreshTick]);
-
-  // Re-merge when optimistic store changes
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    const unsubOptimistic = subscribeOptimistic(() => {
-      const firestoreEntries = latestFirestoreEntriesRef.current;
-      if (firestoreEntries.length === 0) return;
-      const merged = mergeWithFirestoreEvents(firestoreEntries, activeChild.id) as CroissanceEntry[];
-      setEntries(merged);
-    });
-
-    return () => {
       unsubOptimistic();
     };
-  }, [activeChild?.id]);
+  }, [activeChild?.id, refreshTick]);
 
   useEffect(() => {
     setSelectedPointIndex(null);

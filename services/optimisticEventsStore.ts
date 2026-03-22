@@ -113,6 +113,8 @@ export function confirmOptimistic(tempIdOrEventId: string, realId?: string): voi
     }
   }
 
+  // Notify so the merge can reconcile: replace optimistic entry with real data,
+  // remove the opacity indicator, and clean up confirmed entries.
   notify();
 }
 

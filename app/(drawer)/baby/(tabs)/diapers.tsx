@@ -654,6 +654,8 @@ export default function DiapersScreen() {
   // EFFECTS - DATA LISTENERS
   // ============================================
 
+  // Unified debounced pipeline: both Firestore snapshots and optimistic store
+  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     const versionAtSubscribe = loadMoreVersionRef.current;
@@ -663,47 +665,64 @@ export default function DiapersScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
-    let mictionsData: Excretion[] = [];
-    let sellesData: Excretion[] = [];
+    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFingerprint = '';
+    let refreshCleared = false;
 
-    const mergeAndSortExcretions = () => {
-      const raw = [...mictionsData, ...sellesData].sort(
-        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
-      );
-      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Excretion[];
-      setExcretions(merged);
-      setIsRefreshing(false);
+    const scheduleMerge = () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      mergeTimer = setTimeout(() => {
+        const raw = [...latestMictionsRef.current, ...latestSellesRef.current].sort(
+          (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+        );
+        const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Excretion[];
 
-      // Clean up soft-deleted IDs that are no longer in the dataset
-      setSoftDeletedIds((prev) => {
-        if (prev.size === 0) return prev;
-        const ids = new Set(merged.map((e) => e.id));
-        const next = new Set<string>();
-        prev.forEach((id) => { if (ids.has(id)) next.add(id); });
-        return next.size === prev.size ? prev : next;
-      });
+        const hasOptimistic = merged.some(
+          (e: any) => e.id?.startsWith?.('__optimistic_'),
+        );
+        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+          .slice(0, 20)
+          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
+          .join('|')}`;
 
-      if (
-        pendingLoadMoreRef.current > 0 &&
-        versionAtSubscribe === loadMoreVersionRef.current
-      ) {
-        pendingLoadMoreRef.current -= 1;
-        if (pendingLoadMoreRef.current <= 0) {
-          setIsLoadingMore(false);
-        }
-      }
+        if (fingerprint === lastFingerprint) return;
+        lastFingerprint = fingerprint;
+
+        setExcretions(merged);
+
+        // Clean up soft-deleted IDs that are no longer in the dataset
+        setSoftDeletedIds((prev) => {
+          if (prev.size === 0) return prev;
+          const ids = new Set(merged.map((e) => e.id));
+          const next = new Set<string>();
+          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+          return next.size === prev.size ? prev : next;
+        });
+      }, 50);
     };
 
     const unsubscribeMictions = ecouterMictions(
       activeChild.id,
       (mictions) => {
-        mictionsData = mictions.map((m) => ({
+        latestMictionsRef.current = mictions.map((m) => ({
           ...m,
           type: "miction" as DiapersType,
         }));
-        latestMictionsRef.current = mictionsData;
         setMictionsLoaded(true);
-        mergeAndSortExcretions();
+        if (!refreshCleared) {
+          refreshCleared = true;
+          setIsRefreshing(false);
+        }
+        if (
+          pendingLoadMoreRef.current > 0 &&
+          versionAtSubscribe === loadMoreVersionRef.current
+        ) {
+          pendingLoadMoreRef.current -= 1;
+          if (pendingLoadMoreRef.current <= 0) {
+            setIsLoadingMore(false);
+          }
+        }
+        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
     );
@@ -711,37 +730,25 @@ export default function DiapersScreen() {
     const unsubscribeSelles = ecouterSelles(
       activeChild.id,
       (selles) => {
-        sellesData = selles.map((s) => ({
+        latestSellesRef.current = selles.map((s) => ({
           ...s,
           type: "selle" as DiapersType,
         }));
-        latestSellesRef.current = sellesData;
         setSellesLoaded(true);
-        mergeAndSortExcretions();
+        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
     );
 
+    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
+
     return () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribeMictions();
       unsubscribeSelles();
+      unsubOptimistic();
     };
   }, [activeChild, daysWindow, rangeEndDate, refreshKey]);
-
-  // Re-merge when optimistic store changes
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    const unsubOptimistic = subscribeOptimistic(() => {
-      const raw = [...latestMictionsRef.current, ...latestSellesRef.current];
-      if (raw.length === 0) return;
-      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Excretion[];
-      merged.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
-      setExcretions(merged);
-    });
-
-    return () => unsubOptimistic();
-  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

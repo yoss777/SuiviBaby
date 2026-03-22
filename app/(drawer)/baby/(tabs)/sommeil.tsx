@@ -260,6 +260,8 @@ export default function SommeilScreen() {
     }, [closeSheet, isOpen, returnTargetParam, router]),
   );
 
+  // Unified debounced pipeline: both Firestore snapshots and optimistic store
+  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
@@ -269,6 +271,31 @@ export default function SommeilScreen() {
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
     const versionAtSubscribe = loadMoreVersionRef.current;
+    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFingerprint = '';
+    let loadingSet = false;
+
+    const scheduleMerge = () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      mergeTimer = setTimeout(() => {
+        const firestoreEvents = latestFirestoreSommeilsRef.current;
+        const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
+
+        const hasOptimistic = merged.some(
+          (e: any) => e.id?.startsWith?.('__optimistic_'),
+        );
+        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+          .slice(0, 20)
+          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
+          .join('|')}`;
+
+        if (fingerprint === lastFingerprint) return;
+        lastFingerprint = fingerprint;
+
+        setSommeils(merged);
+      }, 50);
+    };
+
     const unsubscribe = ecouterSommeilsHybrid(
       activeChild.id,
       (data) => {
@@ -282,10 +309,11 @@ export default function SommeilScreen() {
               toDate(b.date).getTime() - toDate(a.date).getTime(),
           );
         latestFirestoreSommeilsRef.current = formatted;
-        const merged = mergeWithFirestoreEvents(formatted, activeChild.id);
-        setSommeils(merged);
-        setSommeilsLoaded(true);
-        setLoading(false);
+        if (!loadingSet) {
+          loadingSet = true;
+          setSommeilsLoaded(true);
+          setLoading(false);
+        }
         if (
           pendingLoadMoreRef.current > 0 &&
           versionAtSubscribe === loadMoreVersionRef.current
@@ -295,26 +323,19 @@ export default function SommeilScreen() {
             setIsLoadingMore(false);
           }
         }
+        scheduleMerge();
       },
       { depuis: startOfRange, waitForServer: true },
     );
 
-    return () => unsubscribe();
+    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
+
+    return () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      unsubscribe();
+      unsubOptimistic();
+    };
   }, [activeChild?.id, daysWindow, rangeEndDate]);
-
-  // Re-merge when optimistic store changes
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    const unsubOptimistic = subscribeOptimistic(() => {
-      const firestoreEvents = latestFirestoreSommeilsRef.current;
-      if (firestoreEvents.length === 0) return;
-      const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
-      setSommeils(merged);
-    });
-
-    return () => unsubOptimistic();
-  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

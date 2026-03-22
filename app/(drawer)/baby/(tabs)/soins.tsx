@@ -552,6 +552,8 @@ export default function SoinsScreen() {
   // ============================================
   // DATA LISTENERS
   // ============================================
+  // Unified debounced pipeline: both Firestore snapshots and optimistic store
+  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     const versionAtSubscribe = loadMoreVersionRef.current;
@@ -561,33 +563,47 @@ export default function SoinsScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
-    let temperaturesData: HealthEvent[] = [];
-    let medicamentsData: HealthEvent[] = [];
-    let symptomesData: HealthEvent[] = [];
-    let vaccinsData: HealthEvent[] = [];
-    let vitaminesData: HealthEvent[] = [];
+    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFingerprint = '';
+    let refreshCleared = false;
 
-    const merge = () => {
-      const raw = [
-        ...temperaturesData,
-        ...medicamentsData,
-        ...symptomesData,
-        ...vaccinsData,
-        ...vitaminesData,
-      ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
-      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as HealthEvent[];
-      setEvents(merged);
-      setIsRefreshing(false);
+    const scheduleMerge = () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
+      mergeTimer = setTimeout(() => {
+        const raw = [
+          ...latestTemperaturesRef.current,
+          ...latestMedicamentsRef.current,
+          ...latestSymptomesRef.current,
+          ...latestVaccinsRef.current,
+          ...latestVitaminesRef.current,
+        ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+        const merged = mergeWithFirestoreEvents(raw, activeChild.id) as HealthEvent[];
 
-      // Clean up soft-deleted IDs that are no longer in the dataset
-      setSoftDeletedIds((prev) => {
-        if (prev.size === 0) return prev;
-        const dataIds = new Set(merged.map((e: any) => e.id));
-        const next = new Set<string>();
-        prev.forEach((id) => { if (dataIds.has(id)) next.add(id); });
-        return next.size === prev.size ? prev : next;
-      });
+        const hasOptimistic = merged.some(
+          (e: any) => e.id?.startsWith?.('__optimistic_'),
+        );
+        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+          .slice(0, 20)
+          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
+          .join('|')}`;
 
+        if (fingerprint === lastFingerprint) return;
+        lastFingerprint = fingerprint;
+
+        setEvents(merged);
+
+        // Clean up soft-deleted IDs that are no longer in the dataset
+        setSoftDeletedIds((prev) => {
+          if (prev.size === 0) return prev;
+          const dataIds = new Set(merged.map((e: any) => e.id));
+          const next = new Set<string>();
+          prev.forEach((id) => { if (dataIds.has(id)) next.add(id); });
+          return next.size === prev.size ? prev : next;
+        });
+      }, 50);
+    };
+
+    const handleLoadMore = () => {
       if (
         pendingLoadMoreRef.current > 0 &&
         versionAtSubscribe === loadMoreVersionRef.current
@@ -602,83 +618,66 @@ export default function SoinsScreen() {
     const unsubscribeTemperatures = ecouterTemperaturesHybrid(
       activeChild.id,
       (data) => {
-        temperaturesData = data as HealthEvent[];
-        latestTemperaturesRef.current = temperaturesData;
+        latestTemperaturesRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, temperature: true }));
-        merge();
+        if (!refreshCleared) {
+          refreshCleared = true;
+          setIsRefreshing(false);
+        }
+        handleLoadMore();
+        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
     const unsubscribeMedicaments = ecouterMedicamentsHybrid(
       activeChild.id,
       (data) => {
-        medicamentsData = data as HealthEvent[];
-        latestMedicamentsRef.current = medicamentsData;
+        latestMedicamentsRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, medicament: true }));
-        merge();
+        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
     const unsubscribeSymptomes = ecouterSymptomesHybrid(
       activeChild.id,
       (data) => {
-        symptomesData = data as HealthEvent[];
-        latestSymptomesRef.current = symptomesData;
+        latestSymptomesRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, symptome: true }));
-        merge();
+        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
     const unsubscribeVaccins = ecouterVaccinsHybrid(
       activeChild.id,
       (data) => {
-        vaccinsData = data as HealthEvent[];
-        latestVaccinsRef.current = vaccinsData;
+        latestVaccinsRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, vaccin: true }));
-        merge();
+        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
     const unsubscribeVitamines = ecouterVitaminesHybrid(
       activeChild.id,
       (data) => {
-        vitaminesData = data as HealthEvent[];
-        latestVitaminesRef.current = vitaminesData;
+        latestVitaminesRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, vitamine: true }));
-        merge();
+        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
+    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
+
     return () => {
+      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribeTemperatures();
       unsubscribeMedicaments();
       unsubscribeSymptomes();
       unsubscribeVaccins();
       unsubscribeVitamines();
+      unsubOptimistic();
     };
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
-
-  // Re-merge when optimistic store changes
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    const unsubOptimistic = subscribeOptimistic(() => {
-      const raw = [
-        ...latestTemperaturesRef.current,
-        ...latestMedicamentsRef.current,
-        ...latestSymptomesRef.current,
-        ...latestVaccinsRef.current,
-        ...latestVitaminesRef.current,
-      ];
-      if (raw.length === 0) return;
-      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as HealthEvent[];
-      merged.sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
-      setEvents(merged);
-    });
-
-    return () => unsubOptimistic();
-  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
