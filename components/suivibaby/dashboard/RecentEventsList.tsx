@@ -456,7 +456,7 @@ function RecentEventsListComponent({
                 <ReanimatedSwipeable
                   containerStyle={styles.swipeableContainer}
                   renderRightActions={
-                    onEventDelete && event.id
+                    onEventDelete && event.id && !event.id?.startsWith?.('__optimistic_')
                       ? () => (
                           <DeleteAction onPress={() => onEventDelete(event)} backgroundColor={nc.error} />
                         )
@@ -465,7 +465,7 @@ function RecentEventsListComponent({
                   friction={2}
                   rightThreshold={40}
                   overshootRight={false}
-                  enabled={!!onEventDelete && !!event.id}
+                  enabled={!!onEventDelete && !!event.id && !event.id?.startsWith?.('__optimistic_')}
                 >
                   <View style={[styles.recentRow, event.id?.startsWith?.('__optimistic_') && { opacity: 0.7 }]}>
                     <View style={styles.recentTimelineColumn}>

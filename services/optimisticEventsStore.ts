@@ -202,6 +202,10 @@ export function mergeWithFirestoreEvents(
       if (entry.realId && firestoreIds.has(entry.realId)) {
         // Firestore already has the document – confirm silently.
         entry.status = 'confirmed';
+      } else if (entry.status === 'confirmed' && entry.realId) {
+        // CF succeeded (realId set) but onSnapshot hasn't arrived yet.
+        // Use realId so there's no duplicate when onSnapshot arrives.
+        merged.push({ ...entry.event, id: entry.realId });
       } else if (entry.status === 'pending') {
         merged.push(entry.event);
       }

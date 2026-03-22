@@ -908,6 +908,19 @@ export async function obtenirStats24h(childId: string) {
 // Retry helper: 2 retries with increasing delay (1s, 3s)
 const RETRY_DELAYS = [1000, 3000];
 
+function isNetworkError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    msg.includes('network') ||
+    msg.includes('timeout') ||
+    msg.includes('fetch') ||
+    msg.includes('failed to connect') ||
+    msg.includes('internet') ||
+    msg.includes('offline') ||
+    msg.includes('unavailable')
+  );
+}
+
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   let lastError: unknown;
   // First attempt (no delay)
@@ -953,7 +966,11 @@ export function ajouterEvenementOptimistic(
     .then((realId) => {
       confirmOptimistic(tempId, realId);
     })
-    .catch(() => {
+    .catch((error) => {
+      if (isNetworkError(error)) {
+        // Keep optimistic entry visible — offline queue or next session will sync.
+        return;
+      }
       failOptimistic(tempId);
     });
 
@@ -984,7 +1001,10 @@ export function modifierEvenementOptimistic(
     .then(() => {
       confirmOptimistic(eventId);
     })
-    .catch(() => {
+    .catch((error) => {
+      if (isNetworkError(error)) {
+        return;
+      }
       failOptimistic(eventId);
     });
 }

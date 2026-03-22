@@ -296,9 +296,14 @@ function useEventEditHandler(
   headerOwnerId: React.MutableRefObject<string>,
   sommeilEnCours: any,
   promenadeEnCours: any,
+  showToast?: (msg: string) => void,
 ) {
   return useCallback(
     (event: any) => {
+      if (event.id?.startsWith?.('__optimistic_')) {
+        showToast?.('Enregistrement en cours...');
+        return;
+      }
       if (!event.id) {
         const route = getEditRoute(event);
         if (route) router.push(route as any);
@@ -752,8 +757,12 @@ export default function HomeDashboard() {
   );
 
   const handleEventDelete = useCallback((event: any) => {
+    if (event.id?.startsWith?.('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     setDeleteConfirm({ visible: true, event });
-  }, []);
+  }, [showToast]);
 
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
@@ -1256,6 +1265,7 @@ export default function HomeDashboard() {
     headerOwnerId,
     sommeilEnCours,
     promenadeEnCours,
+    showToast,
   );
 
   const elapsedSleepMinutes = useMemo(() => {
@@ -2131,6 +2141,10 @@ export default function HomeDashboard() {
         return itemDate >= startOfToday && itemDate < endOfToday;
       });
 
+    // Exclure les events optimistic des calculs de timestamps pour les notifications
+    const excludeOptimistic = (items: any[]) =>
+      items.filter((item) => !item.id?.startsWith?.('__optimistic_'));
+
     // Filtre spécial pour le sommeil : inclure les sessions qui chevauchent aujourd'hui
     // (ex: nuit commencée hier à 21h et terminée aujourd'hui à 6h)
     const filterTodaySleep = (items: any[]) =>
@@ -2198,9 +2212,10 @@ export default function HomeDashboard() {
     // Calculer les statistiques totales pour tous les repas
     const allMeals = [...todayTetees, ...todayBiberons, ...todaySolides];
     const totalMealsQuantity = biberonsQuantity; // Seuls les biberons ont une quantité mesurable
+    const confirmedMeals = excludeOptimistic(allMeals);
     const lastMealOverall =
-      allMeals.length > 0
-        ? allMeals.reduce((latest, current) =>
+      confirmedMeals.length > 0
+        ? confirmedMeals.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
               : latest,
@@ -2212,9 +2227,10 @@ export default function HomeDashboard() {
       (sum, p) => sum + ((p.quantiteDroite || 0) + (p.quantiteGauche || 0)),
       0,
     );
+    const confirmedPompages = excludeOptimistic(todayPompages);
     const lastPompage =
-      todayPompages.length > 0
-        ? todayPompages.reduce((latest, current) =>
+      confirmedPompages.length > 0
+        ? confirmedPompages.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
               : latest,
@@ -2246,18 +2262,20 @@ export default function HomeDashboard() {
         : null;
 
     // Calculer les dernières activités (aujourd'hui)
+    const confirmedMictions = excludeOptimistic(todayMictions);
     const lastMiction =
-      todayMictions.length > 0
-        ? todayMictions.reduce((latest, current) =>
+      confirmedMictions.length > 0
+        ? confirmedMictions.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
               : latest,
           )
         : null;
 
+    const confirmedSelles = excludeOptimistic(todaySelles);
     const lastSelle =
-      todaySelles.length > 0
-        ? todaySelles.reduce((latest, current) =>
+      confirmedSelles.length > 0
+        ? confirmedSelles.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
               : latest,
@@ -2265,11 +2283,11 @@ export default function HomeDashboard() {
         : null;
 
     // Calculer le dernier événement absolu (tous jours confondus) pour alimentation et santé
-    const allMealsAbsolute = [
+    const allMealsAbsolute = excludeOptimistic([
       ...data.tetees,
       ...data.biberons,
       ...data.solides,
-    ];
+    ]);
     const lastMealAbsolute =
       allMealsAbsolute.length > 0
         ? allMealsAbsolute.reduce((latest, current) =>
@@ -2280,8 +2298,8 @@ export default function HomeDashboard() {
         : null;
 
     const lastMictionAbsolute =
-      data.mictions.length > 0
-        ? data.mictions.reduce((latest, current) =>
+      excludeOptimistic(data.mictions).length > 0
+        ? excludeOptimistic(data.mictions).reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
               : latest,
@@ -2289,17 +2307,18 @@ export default function HomeDashboard() {
         : null;
 
     const lastSelleAbsolute =
-      data.selles.length > 0
-        ? data.selles.reduce((latest, current) =>
+      excludeOptimistic(data.selles).length > 0
+        ? excludeOptimistic(data.selles).reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
               : latest,
           )
         : null;
 
+    const confirmedVitamines = excludeOptimistic(todayVitamines);
     const lastVitamine =
-      todayVitamines.length > 0
-        ? todayVitamines.reduce((latest, current) =>
+      confirmedVitamines.length > 0
+        ? confirmedVitamines.reduce((latest, current) =>
             (current.date?.seconds || 0) > (latest.date?.seconds || 0)
               ? current
               : latest,
