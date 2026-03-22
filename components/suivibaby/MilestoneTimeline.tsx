@@ -29,7 +29,7 @@ interface MilestoneTimelineProps {
   milestones: MilestoneRef[];
   ageWeeks: number;
   milestoneStatuses: Record<string, MilestoneStatus>;
-  onStatusChange: (milestoneId: string, status: MilestoneStatus) => void;
+  onStatusChange?: (milestoneId: string, status: MilestoneStatus) => void;
   colorScheme?: "light" | "dark";
 }
 
@@ -198,6 +198,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
 
   const handleStatusChange = useCallback(
     (milestoneId: string, status: MilestoneStatus) => {
+      if (!onStatusChange) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       onStatusChange(milestoneId, status);
     },
@@ -670,13 +671,31 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
                           )}
 
                           {/* Status selector */}
-                          <StatusSelector
-                            currentStatus={status}
-                            onSelect={(s) =>
-                              handleStatusChange(milestone.id, s)
-                            }
-                            nc={nc}
-                          />
+                          {onStatusChange ? (
+                            <StatusSelector
+                              currentStatus={status}
+                              onSelect={(s) =>
+                                handleStatusChange(milestone.id, s)
+                              }
+                              nc={nc}
+                            />
+                          ) : (
+                            <View style={styles.statusRow}>
+                              <View
+                                style={[
+                                  styles.statusBtn,
+                                  {
+                                    backgroundColor: getStatusColors(nc)[status] + "20",
+                                    borderColor: getStatusColors(nc)[status],
+                                  },
+                                ]}
+                              >
+                                <Text style={[styles.statusLabel, { color: getStatusColors(nc)[status] }]}>
+                                  {MILESTONE_STATUS_LABELS[status]}
+                                </Text>
+                              </View>
+                            </View>
+                          )}
 
                           {/* Source */}
                           {milestone.source && (

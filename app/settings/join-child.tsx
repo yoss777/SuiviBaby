@@ -356,7 +356,7 @@ export default function JoinChildScreen() {
                         style={[
                           styles.invitationButton,
                           styles.rejectButton,
-                          { borderColor: nc.error, backgroundColor: nc.errorBg },
+                          { borderColor: "transparent", backgroundColor: nc.error, opacity: 0.85 },
                         ]}
                         onPress={() => handleRejectInvitation(invitation.id!)}
                         disabled={processingInvitation === invitation.id}
@@ -365,18 +365,18 @@ export default function JoinChildScreen() {
                         accessibilityLabel={`Refuser l'invitation de ${invitation.childName}`}
                       >
                         {processingInvitation === invitation.id ? (
-                          <ActivityIndicator size="small" color={nc.error} />
+                          <ActivityIndicator size="small" color={nc.white} />
                         ) : (
                           <>
                             <FontAwesome
                               name="times"
                               size={16}
-                              color={nc.error}
+                              color={nc.white}
                             />
                             <Text
                               style={[
                                 styles.rejectButtonText,
-                                { color: nc.error },
+                                { color: nc.white },
                               ]}
                             >
                               Refuser
@@ -408,19 +408,19 @@ export default function JoinChildScreen() {
                         {processingInvitation === invitation.id ? (
                           <ActivityIndicator
                             size="small"
-                            color={nc.backgroundCard}
+                            color={nc.white}
                           />
                         ) : (
                           <>
                             <FontAwesome
                               name="check"
                               size={16}
-                              color={nc.backgroundCard}
+                              color={nc.white}
                             />
                             <Text
                               style={[
                                 styles.acceptButtonText,
-                                { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard },
+                                { color: nc.white },
                               ]}
                             >
                               Accepter

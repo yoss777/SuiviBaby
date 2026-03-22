@@ -1178,6 +1178,7 @@ export default function HomeDashboard() {
 
   const smartContent = useSmartContent({
     events: allEventsForInsights,
+    childId: activeChild?.id ?? null,
     babyBirthDate: activeChild?.birthDate ?? null,
     babyName: activeChild?.name ?? "",
     tipsEnabled,
@@ -2753,7 +2754,7 @@ export default function HomeDashboard() {
             milestones={smartContent.allMilestones}
             ageWeeks={activeChild?.birthDate ? getAgeInWeeks(activeChild.birthDate) : 0}
             milestoneStatuses={smartContent.userContent.milestoneStatuses ?? {}}
-            onStatusChange={smartContent.updateMilestoneStatus}
+            onStatusChange={canManageContent ? smartContent.updateMilestoneStatus : undefined}
             colorScheme={colorScheme}
           />
         </View>

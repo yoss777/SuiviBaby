@@ -16,6 +16,8 @@ import {
   removeBookmark as removeBookmarkService,
   updateMilestoneStatus as updateMilestoneStatusService,
 } from "@/services/smartContentService";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/config/firebase";
 import type { MilestoneStatus } from "@/types/content";
 import type { Insight, MilestoneRef, Tip, UserContent } from "@/types/content";
 import { DEFAULT_USER_CONTENT } from "@/types/content";
@@ -45,6 +47,7 @@ interface SmartContentParams {
     titre?: string;
     note?: string;
   }>;
+  childId: string | null;
   babyBirthDate: string | Date | null;
   babyName: string;
   tipsEnabled: boolean; // From notification preferences
@@ -66,7 +69,7 @@ interface SmartContentResult {
   refreshContent: () => void;
 }
 
-const CACHE_KEY = "samaye_smart_content_cache_v2"; // Bumped to invalidate stale cache
+const CACHE_KEY_PREFIX = "samaye_smart_content_cache_v3_"; // Per-child cache
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const TIP_HISTORY_KEY = "samaye_tip_history"; // { [tipId]: lastShownTimestamp }
 const MAX_CAROUSEL_TIPS = 5;
@@ -77,7 +80,8 @@ const TIP_COOLDOWN_DAYS = 7; // Don't show the same tip again for 7 days
 // ============================================
 
 export function useSmartContent(params: SmartContentParams): SmartContentResult {
-  const { events, babyBirthDate, babyName, tipsEnabled } = params;
+  const { events, childId, babyBirthDate, babyName, tipsEnabled } = params;
+  const cacheKey = childId ? `${CACHE_KEY_PREFIX}${childId}` : null;
 
   const [tips, setTips] = useState<Tip[]>([]);
   const [milestones, setMilestones] = useState<MilestoneRef[]>([]);
@@ -119,7 +123,8 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
     const fetchData = async () => {
       try {
         // Try cache first
-        const cached = await AsyncStorage.getItem(CACHE_KEY);
+        if (!cacheKey) throw new Error("no cache key");
+        const cached = await AsyncStorage.getItem(cacheKey);
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Date.now() - parsed.timestamp < CACHE_TTL_MS) {
@@ -143,7 +148,7 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
             fetchTipsForAge(ageMonths, 20),
             getUpcomingMilestones(ageWeeks, 5),
             fetchAllMilestones(),
-            getUserContentState(),
+            getUserContentState(childId ?? undefined),
           ]);
 
         if (mounted) {
@@ -153,14 +158,14 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
           setUserContent(fetchedUserContent);
           setIsLoading(false);
 
-          // Cache results
-          AsyncStorage.setItem(
-            CACHE_KEY,
+          // Cache results (exclude milestoneStatuses — synced real-time via onSnapshot)
+          if (cacheKey) AsyncStorage.setItem(
+            cacheKey,
             JSON.stringify({
               tips: fetchedTips,
               milestones: fetchedMilestones,
               allMilestones: fetchedAllMilestones,
-              userContent: fetchedUserContent,
+              userContent: { ...fetchedUserContent, milestoneStatuses: {} },
               timestamp: Date.now(),
             }),
           ).catch(() => {});
@@ -174,7 +179,29 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
     return () => {
       mounted = false;
     };
-  }, [babyBirthDate, ageMonths, ageWeeks, tipsEnabled, refreshKey]);
+  }, [babyBirthDate, ageMonths, ageWeeks, tipsEnabled, refreshKey, cacheKey]);
+
+  // Real-time listener for shared milestoneStatuses on child doc
+  useEffect(() => {
+    if (!childId) return;
+    const unsubscribe = onSnapshot(
+      doc(db, "children", childId),
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (data.milestoneStatuses) {
+          setUserContent((prev) => ({
+            ...prev,
+            milestoneStatuses: data.milestoneStatuses,
+          }));
+        }
+      },
+      () => {
+        // Ignore errors (offline, permissions)
+      },
+    );
+    return unsubscribe;
+  }, [childId]);
 
   // Generate insights from events (client-side, no Firestore)
   const insights = useMemo(() => {
@@ -317,16 +344,16 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
         },
       }));
       try {
-        await updateMilestoneStatusService(milestoneId, status);
+        await updateMilestoneStatusService(milestoneId, status, childId ?? undefined);
       } catch {
         // Optimistic update already applied
       }
     },
-    [],
+    [childId],
   );
 
   const refreshContent = useCallback(() => {
-    AsyncStorage.removeItem(CACHE_KEY).catch(() => {});
+    if (cacheKey) AsyncStorage.removeItem(cacheKey).catch(() => {});
     setRefreshKey((k) => k + 1);
     setIsLoading(true);
   }, []);

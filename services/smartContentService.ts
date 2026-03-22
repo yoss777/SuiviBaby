@@ -167,23 +167,44 @@ export async function getUpcomingMilestones(
 
 /**
  * Get the user's content state (dismissed tips, bookmarks, etc.)
+ * Merges per-user state with shared child milestone statuses.
  */
-export async function getUserContentState(): Promise<UserContent> {
+export async function getUserContentState(childId?: string): Promise<UserContent> {
   const userId = getUserId();
   const docRef = doc(db, "user_content", userId);
   const docSnap = await getDoc(docRef);
 
+  let userContent: UserContent;
   if (docSnap.exists()) {
     const data = docSnap.data();
-    return {
+    userContent = {
       ...DEFAULT_USER_CONTENT,
       ...data,
     } as UserContent;
+  } else {
+    await setDoc(docRef, DEFAULT_USER_CONTENT);
+    userContent = DEFAULT_USER_CONTENT;
   }
 
-  // Create default state
-  await setDoc(docRef, DEFAULT_USER_CONTENT);
-  return DEFAULT_USER_CONTENT;
+  // Override milestoneStatuses from shared child document
+  if (childId) {
+    try {
+      const childDoc = await getDoc(doc(db, "children", childId));
+      if (childDoc.exists()) {
+        const childData = childDoc.data();
+        if (childData.milestoneStatuses) {
+          userContent = {
+            ...userContent,
+            milestoneStatuses: childData.milestoneStatuses,
+          };
+        }
+      }
+    } catch {
+      // Fallback to user-level statuses
+    }
+  }
+
+  return userContent;
 }
 
 /**
@@ -315,25 +336,36 @@ export async function updateTipFrequency(
 
 /**
  * Update a milestone's status (not_started, in_progress, done)
+ * Stored on the child document so all users sharing the child see the same state.
  */
 export async function updateMilestoneStatus(
   milestoneId: string,
   status: MilestoneStatus,
+  childId?: string,
 ): Promise<void> {
-  const userId = getUserId();
-  const docRef = doc(db, "user_content", userId);
-  const docSnap = await getDoc(docRef);
-
-  if (docSnap.exists()) {
-    await updateDoc(docRef, {
+  if (childId) {
+    // Shared: store on child document
+    const childRef = doc(db, "children", childId);
+    await updateDoc(childRef, {
       [`milestoneStatuses.${milestoneId}`]: status,
-      updatedAt: new Date(),
     });
   } else {
-    await setDoc(docRef, {
-      ...DEFAULT_USER_CONTENT,
-      milestoneStatuses: { [milestoneId]: status },
-      updatedAt: new Date(),
-    });
+    // Fallback: per-user (legacy)
+    const userId = getUserId();
+    const docRef = doc(db, "user_content", userId);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      await updateDoc(docRef, {
+        [`milestoneStatuses.${milestoneId}`]: status,
+        updatedAt: new Date(),
+      });
+    } else {
+      await setDoc(docRef, {
+        ...DEFAULT_USER_CONTENT,
+        milestoneStatuses: { [milestoneId]: status },
+        updatedAt: new Date(),
+      });
+    }
   }
 }

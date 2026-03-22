@@ -110,8 +110,14 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         request.resource.data.ownerId == request.auth.uid;
 
-      // Modification/Suppression : uniquement le owner (ou via parentIds en fallback)
-      allow update, delete: if isOwner(childId) ||
+      // Modification : owner ou admin uniquement
+      allow update: if isOwner(childId) || isAdmin(childId) ||
+        (isSignedIn() &&
+         exists(/databases/$(database)/documents/children/$(childId)) &&
+         get(/databases/$(database)/documents/children/$(childId)).data.ownerId == request.auth.uid);
+
+      // Suppression : uniquement le owner
+      allow delete: if isOwner(childId) ||
         (isSignedIn() &&
          exists(/databases/$(database)/documents/children/$(childId)) &&
          get(/databases/$(database)/documents/children/$(childId)).data.ownerId == request.auth.uid);
@@ -125,9 +131,8 @@ service cloud.firestore {
           isOwner(childId)
         );
 
-        // Liste : owner peut lister, sinon uniquement via query userId == uid
-        allow list: if isOwner(childId) ||
-          (isSignedIn() && request.query.where('userId', '==', request.auth.uid));
+        // Liste : tout user avec accès peut lister (pour voir les co-parents/contributeurs)
+        allow list: if hasAccess(childId) || isChildOwner(childId);
 
         // Création/Modification :
         // 1. Owner peut tout gérer
