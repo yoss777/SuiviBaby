@@ -37,20 +37,13 @@ import {
   Text,
   View,
 } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
-} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../_layout";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const POLAROID_WIDTH = (SCREEN_WIDTH - 40 - 12) / 2;
+const GRID_GAP = 2;
+const NUM_COLUMNS = 3;
+const THUMB_SIZE = (SCREEN_WIDTH - GRID_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
 
 // ============================================
 // TYPES
@@ -79,37 +72,32 @@ const toDate = (value: any): Date => {
   return new Date(value);
 };
 
-const formatDateShort = (date: Date) =>
-  date.toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+const MONTH_NAMES = [
+  "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+  "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+];
 
-const getDayLabel = (date: Date): string => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
+const getMonthKey = (date: Date): string => {
+  return `${date.getFullYear()}-${String(date.getMonth()).padStart(2, "0")}`;
+};
 
-  const eventDay = new Date(date);
-  eventDay.setHours(0, 0, 0, 0);
-
-  if (eventDay.getTime() === today.getTime()) {
-    return "Aujourd'hui";
-  }
-  if (eventDay.getTime() === yesterday.getTime()) {
-    return "Hier";
-  }
-  return date.toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+const getMonthLabel = (date: Date): string => {
+  return `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
 };
 
 // ============================================
-// STYLES (moved before components that reference them)
+// NOTIFICATION BADGE CONFIG
+// ============================================
+
+const NOTIF_ICON: Record<NotificationType, { name: string; solid: boolean }> = {
+  photo: { name: 'star', solid: true },
+  like: { name: 'heart', solid: true },
+  comment: { name: 'comment', solid: true },
+};
+const NOTIF_COLOR = '#E8A85A';
+
+// ============================================
+// STYLES
 // ============================================
 
 const styles = StyleSheet.create({
@@ -129,7 +117,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   headerBlock: {
-    marginBottom: 12,
+    marginBottom: 4,
     paddingHorizontal: 20,
     paddingTop: 20,
   },
@@ -152,98 +140,77 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   listContent: {
-    paddingHorizontal: 20,
     paddingBottom: 40,
   },
-  dayGroup: {
-    marginTop: 8,
-  },
-  daySeparator: {
+  // Month header
+  monthHeader: {
     flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    gap: 12,
+    alignItems: "baseline",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  daySeparatorLine: {
-    flex: 1,
-    height: 1,
-  },
-  daySeparatorText: {
-    fontSize: 13,
+  monthLabel: {
+    fontSize: 15,
     fontWeight: "600",
-    textTransform: "capitalize",
   },
-  photoGrid: {
+  monthCount: {
+    fontSize: 13,
+    fontWeight: "400",
+    marginLeft: 8,
+  },
+  // Grid
+  monthGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: GRID_GAP,
   },
-  polaroidWrapper: {
-    width: POLAROID_WIDTH,
-  },
-  polaroid: {
-    borderRadius: 4,
-    padding: 8,
-    paddingBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  newBadge: {
-    position: "absolute",
-    top: 2,
-    right: 2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    borderWidth: 2,
-    zIndex: 10,
-  },
-  polaroidImageContainer: {
-    width: "100%",
-    aspectRatio: 1,
+  // Thumbnail
+  thumbContainer: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
     borderRadius: 2,
     overflow: "hidden",
   },
-  polaroidImage: {
+  thumbImage: {
     width: "100%",
     height: "100%",
   },
-  imagePlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  polaroidCaption: {
-    marginTop: 10,
-    alignItems: "center",
-  },
-  captionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+  thumbPlaceholder: {
     width: "100%",
-    position: "relative",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  iconsRow: {
+  // Overlays on thumbnail
+  notifBadge: {
     position: "absolute",
-    right: 0,
+    top: 4,
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  likeOverlay: {
+    position: "absolute",
+    bottom: 4,
+    left: 4,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
-  polaroidDate: {
-    fontSize: 11,
-    fontStyle: "italic",
+  likeOverlayText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "600",
   },
-  polaroidTitle: {
-    fontSize: 12,
-    fontWeight: "500",
-    marginTop: 2,
-  },
+  // Empty / error states
   emptyState: {
     flex: 1,
     alignItems: "center",
@@ -308,7 +275,7 @@ const styles = StyleSheet.create({
 });
 
 // ============================================
-// SKELETON LOADING (P1)
+// SKELETON LOADING
 // ============================================
 
 function GallerySkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
@@ -345,26 +312,16 @@ function GallerySkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
         <Block width="50%" height={26} />
         <Block width="30%" height={14} />
         <View style={{ height: 20 }} />
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Block width="100%" height={POLAROID_WIDTH} />
-            <Block width="60%" height={12} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Block width="100%" height={POLAROID_WIDTH} />
-            <Block width="60%" height={12} />
-          </View>
+        <View style={{ flexDirection: "row", gap: GRID_GAP }}>
+          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
+          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
+          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
         </View>
-        <View style={{ height: 16 }} />
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Block width="100%" height={POLAROID_WIDTH} />
-            <Block width="60%" height={12} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Block width="100%" height={POLAROID_WIDTH} />
-            <Block width="60%" height={12} />
-          </View>
+        <View style={{ height: GRID_GAP }} />
+        <View style={{ flexDirection: "row", gap: GRID_GAP }}>
+          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
+          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
+          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
         </View>
       </View>
     </View>
@@ -372,86 +329,32 @@ function GallerySkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
 }
 
 // ============================================
-// POLAROID CARD COMPONENT
+// THUMBNAIL COMPONENT
 // ============================================
 
-// Notification badge icon config
-const NOTIF_ICON: Record<NotificationType, { name: string; solid: boolean }> = {
-  photo: { name: 'star', solid: true },
-  like: { name: 'heart', solid: true },
-  comment: { name: 'comment', solid: true },
-};
-const NOTIF_COLOR = '#E8A85A';
-
-const PolaroidCard = React.memo(function PolaroidCard({
+const PhotoThumbnail = React.memo(function PhotoThumbnail({
   photo,
-  index,
   onPhotoPress,
   onPhotoEdit,
   canEdit,
   likeCount,
-  hasComments,
+  commentCount,
   notificationType,
   nc,
 }: {
   photo: PhotoMilestone;
-  index: number;
   onPhotoPress: (photo: PhotoMilestone) => void;
   onPhotoEdit: (photoId: string) => void;
   canEdit: boolean;
   likeCount?: number;
-  hasComments?: boolean;
+  commentCount?: number;
   notificationType?: NotificationType;
   nc: ReturnType<typeof getNeutralColors>;
 }) {
   const hasLikes = (likeCount ?? 0) > 0;
+  const hasComments = (commentCount ?? 0) > 0;
+  const hasSocialInfo = hasLikes || hasComments;
   const [imageError, setImageError] = useState(false);
-
-  const rotation = useMemo(() => {
-    let hash = 0;
-    for (let i = 0; i < photo.id.length; i++) {
-      hash = ((hash << 5) - hash + photo.id.charCodeAt(i)) | 0;
-    }
-    const rotations = [-3, 2, -2, 3, -1, 1];
-    return rotations[Math.abs(hash) % rotations.length];
-  }, [photo.id]);
-
-  const scale = useSharedValue(0.8);
-  const opacity = useSharedValue(0);
-  const pressScale = useSharedValue(1);
-
-  // Pulse animation for notification badge
-  const badgePulse = useSharedValue(1);
-  useEffect(() => {
-    if (notificationType) {
-      badgePulse.value = withRepeat(
-        withSequence(
-          withTiming(1.15, { duration: 800 }),
-          withTiming(1, { duration: 800 }),
-        ),
-        -1,
-        true,
-      );
-    }
-  }, [notificationType, badgePulse]);
-
-  const badgeAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: badgePulse.value }],
-  }));
-
-  const clampedIndex = Math.min(index, 5);
-  useEffect(() => {
-    opacity.value = withDelay(clampedIndex * 50, withSpring(1));
-    scale.value = withDelay(clampedIndex * 50, withSpring(1, { damping: 12 }));
-  }, []);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [
-      { scale: scale.value * pressScale.value },
-      { rotate: `${rotation}deg` },
-    ],
-  }));
 
   const handlePress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -466,71 +369,58 @@ const PolaroidCard = React.memo(function PolaroidCard({
   }, [canEdit, onPhotoEdit, photo.id]);
 
   return (
-    <Animated.View style={[styles.polaroidWrapper, animatedStyle]}>
-      <Pressable
-        onPress={handlePress}
-        onLongPress={canEdit ? handleLongPress : undefined}
-        delayLongPress={400}
-        onPressIn={() => { pressScale.value = withSpring(0.97, { damping: 15 }); }}
-        onPressOut={() => { pressScale.value = withSpring(1, { damping: 15 }); }}
-        style={[styles.polaroid, { backgroundColor: nc.backgroundCard }]}
-        accessibilityRole="button"
-        accessibilityLabel={`Photo ${photo.titre || formatDateShort(photo.date)}${hasLikes ? ", aimée" : ""}${hasComments ? ", commentée" : ""}`}
-        accessibilityHint={canEdit ? "Appuyez longuement pour modifier" : "Appuyez pour voir en plein écran"}
-      >
-        {notificationType && (
-          <Animated.View
-            style={[
-              styles.newBadge,
-              { borderColor: nc.backgroundCard, backgroundColor: NOTIF_COLOR },
-              badgeAnimatedStyle,
-            ]}
-          >
-            <FontAwesome6
-              name={NOTIF_ICON[notificationType].name}
-              size={8}
-              color="#fff"
-              solid={NOTIF_ICON[notificationType].solid}
-            />
-          </Animated.View>
-        )}
+    <Pressable
+      onPress={handlePress}
+      onLongPress={canEdit ? handleLongPress : undefined}
+      delayLongPress={400}
+      style={[styles.thumbContainer, { backgroundColor: nc.borderLight }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Photo${photo.titre ? ` ${photo.titre}` : ""}${hasLikes ? ", aimée" : ""}`}
+      accessibilityHint={canEdit ? "Appuyez longuement pour modifier" : "Appuyez pour voir en plein écran"}
+    >
+      {imageError ? (
+        <View style={[styles.thumbPlaceholder, { backgroundColor: nc.backgroundPressed }]}>
+          <FontAwesome6 name="image" size={20} color={nc.textMuted} />
+        </View>
+      ) : (
+        <Image
+          source={{ uri: photo.photo }}
+          style={styles.thumbImage}
+          resizeMode="cover"
+          onError={() => setImageError(true)}
+        />
+      )}
 
-        <View style={[styles.polaroidImageContainer, { backgroundColor: nc.borderLight }]}>
-          {imageError ? (
-            <View style={[styles.polaroidImage, styles.imagePlaceholder, { backgroundColor: nc.backgroundPressed }]}>
-              <FontAwesome6 name="image" size={24} color={nc.textMuted} />
-            </View>
-          ) : (
-            <Image
-              source={{ uri: photo.photo }}
-              style={styles.polaroidImage}
-              resizeMode="cover"
-              onError={() => setImageError(true)}
-            />
+      {/* Notification badge */}
+      {notificationType && (
+        <View style={[styles.notifBadge, { backgroundColor: NOTIF_COLOR }]}>
+          <FontAwesome6
+            name={NOTIF_ICON[notificationType].name}
+            size={8}
+            color="#fff"
+            solid={NOTIF_ICON[notificationType].solid}
+          />
+        </View>
+      )}
+
+      {/* Social overlay */}
+      {hasSocialInfo && (
+        <View style={styles.likeOverlay}>
+          {hasLikes && (
+            <>
+              <FontAwesome6 name="heart" size={8} color="#fff" solid />
+              <Text style={styles.likeOverlayText}>{likeCount}</Text>
+            </>
+          )}
+          {hasComments && (
+            <>
+              <FontAwesome6 name="comment" size={8} color="#fff" solid />
+              <Text style={styles.likeOverlayText}>{commentCount}</Text>
+            </>
           )}
         </View>
-        <View style={styles.polaroidCaption}>
-          <View style={styles.captionRow}>
-            <Text style={[styles.polaroidDate, { color: nc.textLight }]} numberOfLines={1}>
-              {formatDateShort(photo.date)}
-            </Text>
-            <View style={styles.iconsRow}>
-              {hasLikes && (
-                <FontAwesome6 name="heart" size={10} color={nc.error} solid />
-              )}
-              {hasComments && (
-                <FontAwesome6 name="comment" size={10} color={nc.todayAccent} solid />
-              )}
-            </View>
-          </View>
-          {photo.titre && (
-            <Text style={[styles.polaroidTitle, { color: nc.textNormal }]} numberOfLines={1}>
-              {photo.titre}
-            </Text>
-          )}
-        </View>
-      </Pressable>
-    </Animated.View>
+      )}
+    </Pressable>
   );
 });
 
@@ -673,8 +563,6 @@ export default function GalleryScreen() {
     events.forEach((event) => {
       const eventDate = toDate(event.date);
       if (event.photos && event.photos.length > 0) {
-        // Pour les jalons de type "photo", utiliser la description comme titre si elle existe
-        // Pour "autre" et autres types, garder le titre original
         const photoTitre =
           event.typeJalon === "photo" && event.description
             ? event.description
@@ -695,25 +583,21 @@ export default function GalleryScreen() {
     return photos.sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [events]);
 
-  // Group photos by day
+  // Group photos by month
   const groupedPhotos = useMemo(() => {
-    const groups: { label: string; date: Date; photos: PhotoMilestone[] }[] =
-      [];
-    let currentGroup: {
-      label: string;
-      date: Date;
-      photos: PhotoMilestone[];
-    } | null = null;
+    const groups: { key: string; label: string; count: number; photos: PhotoMilestone[] }[] = [];
+    let currentGroup: typeof groups[number] | null = null;
 
     allPhotoMilestones.forEach((photo) => {
-      const dayLabel = getDayLabel(photo.date);
+      const monthKey = getMonthKey(photo.date);
 
-      if (!currentGroup || currentGroup.label !== dayLabel) {
-        currentGroup = { label: dayLabel, date: photo.date, photos: [] };
+      if (!currentGroup || currentGroup.key !== monthKey) {
+        currentGroup = { key: monthKey, label: getMonthLabel(photo.date), count: 0, photos: [] };
         groups.push(currentGroup);
       }
 
       currentGroup.photos.push(photo);
+      currentGroup.count = currentGroup.photos.length;
     });
 
     return groups;
@@ -934,38 +818,38 @@ export default function GalleryScreen() {
     [allPhotoMilestones],
   );
 
-  // Render photo grid for a day
-  const renderDayGroup = useCallback(({
+  // Render monthly group
+  const renderMonthGroup = useCallback(({
     item,
   }: {
-    item: { label: string; date: Date; photos: PhotoMilestone[] };
+    item: { key: string; label: string; count: number; photos: PhotoMilestone[] };
   }) => (
-    <View style={styles.dayGroup}>
-      <View style={styles.daySeparator}>
-        <View style={[styles.daySeparatorLine, { backgroundColor: nc.border }]} />
-        <Text style={[styles.daySeparatorText, { color: nc.textLight }]}>{item.label}</Text>
-        <View style={[styles.daySeparatorLine, { backgroundColor: nc.border }]} />
+    <View>
+      <View style={styles.monthHeader}>
+        <Text style={[styles.monthLabel, { color: nc.textStrong }]}>{item.label}</Text>
+        <Text style={[styles.monthCount, { color: nc.textLight }]}>
+          {item.count} photo{item.count > 1 ? "s" : ""}
+        </Text>
       </View>
-      <View style={styles.photoGrid}>
-        {item.photos.map((photo, index) => (
-          <PolaroidCard
+      <View style={styles.monthGrid}>
+        {item.photos.map((photo) => (
+          <PhotoThumbnail
             key={photo.id}
             photo={photo}
-            index={index}
             onPhotoPress={handlePhotoPress}
             onPhotoEdit={handleEditPhoto}
             canEdit={canManageContent}
             likeCount={likesInfo[photo.id]?.count}
-            hasComments={(commentCounts[photo.id] ?? 0) > 0}
+            commentCount={commentCounts[photo.id]}
             notificationType={newEventIds.has(photo.id) ? newEventTypes.get(photo.id) : undefined}
             nc={nc}
           />
         ))}
       </View>
     </View>
-  ), [handlePhotoPress, canManageContent, handleEditPhoto, likesInfo, commentCounts, newEventIds, newEventTypes, nc]);
+  ), [handlePhotoPress, canManageContent, handleEditPhoto, likesInfo, newEventIds, newEventTypes, nc]);
 
-  // P9b: Pull-to-refresh
+  // Pull-to-refresh
   const [isRefreshing, setIsRefreshing] = useState(false);
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -973,7 +857,7 @@ export default function GalleryScreen() {
     setTimeout(() => setIsRefreshing(false), 800);
   }, []);
 
-  // Loading state - P1: skeleton shimmer
+  // Loading state - skeleton shimmer
   if (!loaded) {
     return <GallerySkeleton colorScheme={colorScheme} />;
   }
@@ -996,7 +880,7 @@ export default function GalleryScreen() {
   return (
     <View style={[styles.container, { backgroundColor: nc.backgroundWarm }]}>
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
-        {/* Header block - aligned with croissance.tsx */}
+        {/* Header block */}
         <View style={styles.headerBlock}>
           <Text style={[styles.title, { color: nc.textStrong }]}>Souvenirs</Text>
           <Text style={[styles.subtitle, { color: nc.textLight }]}>
@@ -1027,12 +911,12 @@ export default function GalleryScreen() {
         ) : (
           <FlatList
             data={groupedPhotos}
-            keyExtractor={(item) => item.date.toISOString().slice(0, 10)}
-            renderItem={renderDayGroup}
+            keyExtractor={(item) => item.key}
+            renderItem={renderMonthGroup}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            initialNumToRender={5}
-            maxToRenderPerBatch={3}
+            initialNumToRender={3}
+            maxToRenderPerBatch={2}
             windowSize={5}
             removeClippedSubviews={true}
             refreshControl={
@@ -1065,4 +949,3 @@ export default function GalleryScreen() {
     </View>
   );
 }
-

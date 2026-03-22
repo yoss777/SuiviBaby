@@ -77,7 +77,7 @@ const PolaroidCard = ({
   onPress,
   onLongPress,
   likeCount,
-  hasComments,
+  commentCount,
   notificationType,
   nc,
 }: {
@@ -86,12 +86,13 @@ const PolaroidCard = ({
   onPress: () => void;
   onLongPress: () => void;
   likeCount?: number;
-  isLikedByMe?: boolean;
-  hasComments?: boolean;
+  commentCount?: number;
   notificationType?: NotificationType;
   nc: ReturnType<typeof getNeutralColors>;
 }) => {
   const hasLikes = (likeCount ?? 0) > 0;
+  const hasComments = (commentCount ?? 0) > 0;
+  const hasSocialInfo = hasLikes || hasComments;
   const [imageError, setImageError] = useState(false);
 
   const handleImageError = useCallback((_e: NativeSyntheticEvent<ImageErrorEventData>) => {
@@ -185,24 +186,32 @@ const PolaroidCard = ({
           ) : (
             <Image source={{ uri: photo.photo }} style={styles.polaroidImage} onError={handleImageError} />
           )}
-        </View>
-        <View style={styles.polaroidCaption}>
-          <View style={styles.captionRow}>
-            <Text
-              style={[styles.polaroidDate, { color: nc.textLight }]}
-              numberOfLines={1}
-            >
-              {formatDateShort(photo.date)}
-            </Text>
-            <View style={styles.iconsRow}>
+
+          {/* Social overlay */}
+          {hasSocialInfo && (
+            <View style={styles.socialOverlay}>
               {hasLikes && (
-                <FontAwesome6 name="heart" size={10} color="#ef4444" solid />
+                <>
+                  <FontAwesome6 name="heart" size={9} color="#fff" solid />
+                  <Text style={styles.socialOverlayText}>{likeCount}</Text>
+                </>
               )}
               {hasComments && (
-                <FontAwesome6 name="comment" size={10} color="#0a7ea4" solid />
+                <>
+                  <FontAwesome6 name="comment" size={9} color="#fff" solid />
+                  <Text style={styles.socialOverlayText}>{commentCount}</Text>
+                </>
               )}
             </View>
-          </View>
+          )}
+        </View>
+        <View style={styles.polaroidCaption}>
+          <Text
+            style={[styles.polaroidDate, { color: nc.textLight }]}
+            numberOfLines={1}
+          >
+            {formatDateShort(photo.date)}
+          </Text>
           {photo.titre && (
             <Text
               style={[styles.polaroidTitle, { color: nc.textNormal }]}
@@ -381,8 +390,7 @@ export const PolaroidGallery = ({
                 onPress={() => onPhotoPress(photo)}
                 onLongPress={() => onPhotoLongPress?.(photo)}
                 likeCount={likesInfo[photo.id]?.count}
-                isLikedByMe={likesInfo[photo.id]?.likedByMe}
-                hasComments={(commentCounts[photo.id] ?? 0) > 0}
+                commentCount={commentCounts[photo.id]}
                 notificationType={newEventIds.has(photo.id) ? newEventTypes.get(photo.id) : undefined}
                 nc={nc}
               />
@@ -481,23 +489,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  socialOverlay: {
+    position: "absolute",
+    bottom: 4,
+    left: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  socialOverlayText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "600",
+    marginRight: 2,
+  },
   polaroidCaption: {
     marginTop: 10,
     alignItems: "center",
-  },
-  captionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    position: "relative",
-  },
-  iconsRow: {
-    position: "absolute",
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
   },
   polaroidDate: {
     fontSize: 11,
