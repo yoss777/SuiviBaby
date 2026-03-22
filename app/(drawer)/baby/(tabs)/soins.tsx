@@ -24,6 +24,10 @@ import {
 } from "@/migration/eventsDoubleWriteService";
 import { supprimerEvenement } from "@/services/eventsService";
 import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
+import {
   ecouterMedicamentsHybrid,
   ecouterSymptomesHybrid,
   ecouterTemperaturesHybrid,
@@ -324,6 +328,11 @@ export default function SoinsScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const latestTemperaturesRef = useRef<HealthEvent[]>([]);
+  const latestMedicamentsRef = useRef<HealthEvent[]>([]);
+  const latestSymptomesRef = useRef<HealthEvent[]>([]);
+  const latestVaccinsRef = useRef<HealthEvent[]>([]);
+  const latestVitaminesRef = useRef<HealthEvent[]>([]);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
@@ -559,13 +568,14 @@ export default function SoinsScreen() {
     let vitaminesData: HealthEvent[] = [];
 
     const merge = () => {
-      const merged = [
+      const raw = [
         ...temperaturesData,
         ...medicamentsData,
         ...symptomesData,
         ...vaccinsData,
         ...vitaminesData,
       ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as HealthEvent[];
       setEvents(merged);
       setIsRefreshing(false);
 
@@ -593,6 +603,7 @@ export default function SoinsScreen() {
       activeChild.id,
       (data) => {
         temperaturesData = data as HealthEvent[];
+        latestTemperaturesRef.current = temperaturesData;
         setLoaded((prev) => ({ ...prev, temperature: true }));
         merge();
       },
@@ -602,6 +613,7 @@ export default function SoinsScreen() {
       activeChild.id,
       (data) => {
         medicamentsData = data as HealthEvent[];
+        latestMedicamentsRef.current = medicamentsData;
         setLoaded((prev) => ({ ...prev, medicament: true }));
         merge();
       },
@@ -611,6 +623,7 @@ export default function SoinsScreen() {
       activeChild.id,
       (data) => {
         symptomesData = data as HealthEvent[];
+        latestSymptomesRef.current = symptomesData;
         setLoaded((prev) => ({ ...prev, symptome: true }));
         merge();
       },
@@ -620,6 +633,7 @@ export default function SoinsScreen() {
       activeChild.id,
       (data) => {
         vaccinsData = data as HealthEvent[];
+        latestVaccinsRef.current = vaccinsData;
         setLoaded((prev) => ({ ...prev, vaccin: true }));
         merge();
       },
@@ -629,6 +643,7 @@ export default function SoinsScreen() {
       activeChild.id,
       (data) => {
         vitaminesData = data as HealthEvent[];
+        latestVitaminesRef.current = vitaminesData;
         setLoaded((prev) => ({ ...prev, vitamine: true }));
         merge();
       },
@@ -643,6 +658,27 @@ export default function SoinsScreen() {
       unsubscribeVitamines();
     };
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const raw = [
+        ...latestTemperaturesRef.current,
+        ...latestMedicamentsRef.current,
+        ...latestSymptomesRef.current,
+        ...latestVaccinsRef.current,
+        ...latestVitaminesRef.current,
+      ];
+      if (raw.length === 0) return;
+      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as HealthEvent[];
+      merged.sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+      setEvents(merged);
+    });
+
+    return () => unsubOptimistic();
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

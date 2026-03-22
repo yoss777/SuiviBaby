@@ -29,6 +29,10 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { BiberonEvent, SolideEvent, supprimerEvenement } from "@/services/eventsService";
+import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -265,6 +269,9 @@ export default function MealsScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const latestTeteesRef = useRef<Meal[]>([]);
+  const latestBiberonsRef = useRef<Meal[]>([]);
+  const latestSolidesRef = useRef<Meal[]>([]);
 
   // États du formulaire (simplifié - le MealsForm gère les détails)
   const [mealType, setMealType] = useState<MealType>("tetee");
@@ -567,9 +574,10 @@ export default function MealsScreen() {
     let solidesData: Meal[] = [];
 
     const mergeAndSortMeals = () => {
-      const merged = [...teteesData, ...biberonsData, ...solidesData].sort(
+      const raw = [...teteesData, ...biberonsData, ...solidesData].sort(
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
+      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Meal[];
       setMeals(merged);
       setIsRefreshing(false);
 
@@ -596,6 +604,7 @@ export default function MealsScreen() {
       activeChild.id,
       (tetees) => {
         teteesData = tetees;
+        latestTeteesRef.current = tetees;
         setTeteesLoaded(true);
         mergeAndSortMeals();
       },
@@ -606,6 +615,7 @@ export default function MealsScreen() {
       activeChild.id,
       (biberons) => {
         biberonsData = biberons;
+        latestBiberonsRef.current = biberons;
         setBiberonsLoaded(true);
         mergeAndSortMeals();
       },
@@ -616,6 +626,7 @@ export default function MealsScreen() {
       activeChild.id,
       (solides) => {
         solidesData = solides;
+        latestSolidesRef.current = solides;
         setSolidesLoaded(true);
         mergeAndSortMeals();
       },
@@ -628,6 +639,25 @@ export default function MealsScreen() {
       unsubscribeSolides();
     };
   }, [activeChild, daysWindow, rangeEndDate, refreshKey]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const raw = [
+        ...latestTeteesRef.current,
+        ...latestBiberonsRef.current,
+        ...latestSolidesRef.current,
+      ];
+      if (raw.length === 0) return;
+      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Meal[];
+      merged.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+      setMeals(merged);
+    });
+
+    return () => unsubOptimistic();
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

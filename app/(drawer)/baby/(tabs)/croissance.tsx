@@ -14,6 +14,10 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { ecouterCroissancesHybrid } from "@/migration/eventsHybridService";
+import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -722,6 +726,7 @@ export default function CroissanceScreen() {
   );
   const chartScrollRef = useRef<ScrollView | null>(null);
   const autoScrollRef = useRef(false);
+  const latestFirestoreEntriesRef = useRef<CroissanceEntry[]>([]);
 
   const sheetOwnerId = "croissance";
   const returnToRef = useRef<string | null>(null);
@@ -999,7 +1004,9 @@ export default function CroissanceScreen() {
             type: "croissance",
           }))
           .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
-        setEntries(normalized);
+        latestFirestoreEntriesRef.current = normalized as CroissanceEntry[];
+        const merged = mergeWithFirestoreEvents(normalized, activeChild.id) as CroissanceEntry[];
+        setEntries(merged);
         setLoading(false);
         setIsRefreshing(false);
       },
@@ -1010,6 +1017,22 @@ export default function CroissanceScreen() {
       unsubscribe();
     };
   }, [activeChild?.id, refreshTick]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const firestoreEntries = latestFirestoreEntriesRef.current;
+      if (firestoreEntries.length === 0) return;
+      const merged = mergeWithFirestoreEvents(firestoreEntries, activeChild.id) as CroissanceEntry[];
+      setEntries(merged);
+    });
+
+    return () => {
+      unsubOptimistic();
+    };
+  }, [activeChild?.id]);
 
   useEffect(() => {
     setSelectedPointIndex(null);

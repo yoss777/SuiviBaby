@@ -8,16 +8,8 @@ import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterMedicament,
-  ajouterSymptome,
-  ajouterTemperature,
-  ajouterVaccin,
-  ajouterVitamine,
-  modifierMedicament,
-  modifierSymptome,
-  modifierTemperature,
-  modifierVaccin,
-  modifierVitamine,
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerMedicament,
   supprimerSymptome,
   supprimerTemperature,
@@ -580,212 +572,222 @@ export function SoinsForm({
   // ============================================
   // SUBMIT / DELETE
   // ============================================
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
-    try {
-      setIsSubmitting(true);
-      const common = {
-        date: dateHeure,
-        note: note.trim() ? note.trim() : undefined,
-      };
 
-      if (selectedType === "temperature" || selectedType === "symptome") {
-        if (isEditing) {
-          if (selectedType === "temperature") {
-            const valeur = Number(temperatureValue);
-            if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
-              showAlert("Erreur", "Indiquez une température valide.");
-              setIsSubmitting(false);
-              return;
-            }
-            if (!temperatureMode) {
-              showAlert("Erreur", "Sélectionnez un mode de prise.");
-              setIsSubmitting(false);
-              return;
-            }
-            await modifierTemperature(
-              activeChild.id,
-              editData!.id,
-              removeUndefined({
-                ...common,
-                valeur,
-                modePrise: temperatureMode,
-              }),
-            );
-            showSuccess("temperature", "Température modifiée");
-          } else {
-            const list = [...symptomes];
-            if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
-            if (list.length === 0) {
-              showAlert("Erreur", "Sélectionnez au moins un symptôme.");
-              setIsSubmitting(false);
-              return;
-            }
-            await modifierSymptome(
-              activeChild.id,
-              editData!.id,
-              removeUndefined({
-                ...common,
-                symptomes: list,
-                intensite: symptomeIntensite,
-              }),
-            );
-            showSuccess("symptome", "Symptôme modifié");
-          }
-        } else {
-          if (!includeTemperature && !includeSymptome) {
-            showAlert(
-              "Erreur",
-              "Sélectionnez au moins Température ou Symptôme.",
-            );
+    setIsSubmitting(true);
+    const common = {
+      date: dateHeure,
+      note: note.trim() ? note.trim() : undefined,
+    };
+
+    if (selectedType === "temperature" || selectedType === "symptome") {
+      if (isEditing) {
+        if (selectedType === "temperature") {
+          const valeur = Number(temperatureValue);
+          if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
+            showAlert("Erreur", "Indiquez une température valide.");
             setIsSubmitting(false);
             return;
           }
-          if (includeTemperature) {
-            const valeur = Number(temperatureValue);
-            if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
-              showAlert("Erreur", "Indiquez une température valide.");
-              setIsSubmitting(false);
-              return;
-            }
-            if (!temperatureMode) {
-              showAlert("Erreur", "Sélectionnez un mode de prise.");
-              setIsSubmitting(false);
-              return;
-            }
-            await ajouterTemperature(
-              activeChild.id,
-              removeUndefined({
-                ...common,
-                valeur,
-                modePrise: temperatureMode,
-              }),
-            );
-            showSuccess("temperature", "Température enregistrée");
+          if (!temperatureMode) {
+            showAlert("Erreur", "Sélectionnez un mode de prise.");
+            setIsSubmitting(false);
+            return;
           }
-          if (includeSymptome) {
-            const list = [...symptomes];
-            if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
-            if (list.length === 0) {
-              showAlert("Erreur", "Sélectionnez au moins un symptôme.");
-              setIsSubmitting(false);
-              return;
-            }
-            await ajouterSymptome(
-              activeChild.id,
-              removeUndefined({
-                ...common,
-                symptomes: list,
-                intensite: symptomeIntensite,
-              }),
-            );
-            showSuccess("symptome", "Symptôme enregistré");
+          modifierEvenementOptimistic(
+            activeChild.id,
+            editData!.id,
+            removeUndefined({
+              type: "temperature" as const,
+              ...common,
+              valeur,
+              modePrise: temperatureMode,
+            }) as any,
+            editData!,
+          );
+          showSuccess("temperature", "Température modifiée");
+        } else {
+          const list = [...symptomes];
+          if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
+          if (list.length === 0) {
+            showAlert("Erreur", "Sélectionnez au moins un symptôme.");
+            setIsSubmitting(false);
+            return;
           }
-        }
-      } else if (selectedType === "medicament") {
-        if (!medicamentName.trim()) {
-          showAlert("Erreur", "Indiquez un médicament.");
-          setIsSubmitting(false);
-          return;
-        }
-        if (isEditing) {
-          await modifierMedicament(
+          modifierEvenementOptimistic(
             activeChild.id,
             editData!.id,
             removeUndefined({
+              type: "symptome" as const,
               ...common,
-              nomMedicament: medicamentName.trim(),
-              dosage: medicamentDosage.trim() || undefined,
-              voie: medicamentVoie,
-            }),
+              symptomes: list,
+              intensite: symptomeIntensite,
+            }) as any,
+            editData!,
           );
-          showSuccess("medicament", "Médicament modifié");
-        } else {
-          await ajouterMedicament(
-            activeChild.id,
-            removeUndefined({
-              ...common,
-              nomMedicament: medicamentName.trim(),
-              dosage: medicamentDosage.trim() || undefined,
-              voie: medicamentVoie,
-            }),
-          );
-          showSuccess("medicament", "Médicament enregistré");
+          showSuccess("symptome", "Symptôme modifié");
         }
-      } else if (selectedType === "vaccin") {
-        const normalizedVaccinName =
-          vaccinName === "Autre vaccin" ? vaccinCustomName : vaccinName;
-        if (!normalizedVaccinName.trim()) {
-          showAlert("Erreur", "Indiquez un vaccin.");
+      } else {
+        if (!includeTemperature && !includeSymptome) {
+          showAlert(
+            "Erreur",
+            "Sélectionnez au moins Température ou Symptôme.",
+          );
           setIsSubmitting(false);
           return;
         }
-        const finalDosage = vaccinDosage.trim() || undefined;
-        if (isEditing) {
-          await modifierVaccin(
+        if (includeTemperature) {
+          const valeur = Number(temperatureValue);
+          if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
+            showAlert("Erreur", "Indiquez une température valide.");
+            setIsSubmitting(false);
+            return;
+          }
+          if (!temperatureMode) {
+            showAlert("Erreur", "Sélectionnez un mode de prise.");
+            setIsSubmitting(false);
+            return;
+          }
+          ajouterEvenementOptimistic(
             activeChild.id,
-            editData!.id,
             removeUndefined({
+              type: "temperature" as const,
               ...common,
-              nomVaccin: normalizedVaccinName.trim(),
-              dosage: finalDosage,
+              valeur,
+              modePrise: temperatureMode,
             }),
           );
-          showSuccess("vaccine", "Vaccin modifié");
-        } else {
-          await ajouterVaccin(
-            activeChild.id,
-            removeUndefined({
-              ...common,
-              nomVaccin: normalizedVaccinName.trim(),
-              dosage: finalDosage,
-            }),
-          );
-          showSuccess("vaccine", "Vaccin enregistré");
+          showSuccess("temperature", "Température enregistrée");
         }
-      } else if (selectedType === "vitamine") {
-        const normalizedVitamineName =
-          vitamineName === "Autre vitamine" ? vitamineCustomName : vitamineName;
-        if (!normalizedVitamineName.trim()) {
-          showAlert("Erreur", "Indiquez une vitamine.");
-          setIsSubmitting(false);
-          return;
-        }
-        const computedDosage =
-          vitamineName === "Vitamine D" || vitamineName === "Vitamine K"
-            ? `${gouttesCount} gouttes`
-            : vitamineDosage.trim() || undefined;
-        if (isEditing) {
-          await modifierVitamine(
-            activeChild.id,
-            editData!.id,
-            removeUndefined({
-              ...common,
-              nomVitamine: normalizedVitamineName.trim(),
-              dosage: computedDosage,
-            }),
-          );
-          showSuccess("vitamin", "Vitamine modifiée");
-        } else {
-          await ajouterVitamine(
+        if (includeSymptome) {
+          const list = [...symptomes];
+          if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
+          if (list.length === 0) {
+            showAlert("Erreur", "Sélectionnez au moins un symptôme.");
+            setIsSubmitting(false);
+            return;
+          }
+          ajouterEvenementOptimistic(
             activeChild.id,
             removeUndefined({
+              type: "symptome" as const,
               ...common,
-              nomVitamine: normalizedVitamineName.trim(),
-              dosage: computedDosage,
+              symptomes: list,
+              intensite: symptomeIntensite,
             }),
           );
-          showSuccess("vitamin", "Vitamine enregistrée");
+          showSuccess("symptome", "Symptôme enregistré");
         }
       }
-
-      onSuccess();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
-      setIsSubmitting(false);
+    } else if (selectedType === "medicament") {
+      if (!medicamentName.trim()) {
+        showAlert("Erreur", "Indiquez un médicament.");
+        setIsSubmitting(false);
+        return;
+      }
+      if (isEditing) {
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData!.id,
+          removeUndefined({
+            type: "medicament" as const,
+            ...common,
+            nomMedicament: medicamentName.trim(),
+            dosage: medicamentDosage.trim() || undefined,
+            voie: medicamentVoie,
+          }),
+          editData!,
+        );
+        showSuccess("medicament", "Médicament modifié");
+      } else {
+        ajouterEvenementOptimistic(
+          activeChild.id,
+          removeUndefined({
+            type: "medicament" as const,
+            ...common,
+            nomMedicament: medicamentName.trim(),
+            dosage: medicamentDosage.trim() || undefined,
+            voie: medicamentVoie,
+          }),
+        );
+        showSuccess("medicament", "Médicament enregistré");
+      }
+    } else if (selectedType === "vaccin") {
+      const normalizedVaccinName =
+        vaccinName === "Autre vaccin" ? vaccinCustomName : vaccinName;
+      if (!normalizedVaccinName.trim()) {
+        showAlert("Erreur", "Indiquez un vaccin.");
+        setIsSubmitting(false);
+        return;
+      }
+      const finalDosage = vaccinDosage.trim() || undefined;
+      if (isEditing) {
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData!.id,
+          removeUndefined({
+            type: "vaccin" as const,
+            ...common,
+            nomVaccin: normalizedVaccinName.trim(),
+            dosage: finalDosage,
+          }),
+          editData!,
+        );
+        showSuccess("vaccine", "Vaccin modifié");
+      } else {
+        ajouterEvenementOptimistic(
+          activeChild.id,
+          removeUndefined({
+            type: "vaccin" as const,
+            ...common,
+            nomVaccin: normalizedVaccinName.trim(),
+            dosage: finalDosage,
+          }),
+        );
+        showSuccess("vaccine", "Vaccin enregistré");
+      }
+    } else if (selectedType === "vitamine") {
+      const normalizedVitamineName =
+        vitamineName === "Autre vitamine" ? vitamineCustomName : vitamineName;
+      if (!normalizedVitamineName.trim()) {
+        showAlert("Erreur", "Indiquez une vitamine.");
+        setIsSubmitting(false);
+        return;
+      }
+      const computedDosage =
+        vitamineName === "Vitamine D" || vitamineName === "Vitamine K"
+          ? `${gouttesCount} gouttes`
+          : vitamineDosage.trim() || undefined;
+      if (isEditing) {
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData!.id,
+          removeUndefined({
+            type: "vitamine" as const,
+            ...common,
+            nomVitamine: normalizedVitamineName.trim(),
+            dosage: computedDosage,
+          }),
+          editData!,
+        );
+        showSuccess("vitamin", "Vitamine modifiée");
+      } else {
+        ajouterEvenementOptimistic(
+          activeChild.id,
+          removeUndefined({
+            type: "vitamine" as const,
+            ...common,
+            nomVitamine: normalizedVitamineName.trim(),
+            dosage: computedDosage,
+          }),
+        );
+        showSuccess("vitamin", "Vitamine enregistrée");
+      }
     }
+
+    setIsSubmitting(false);
+    onSuccess();
   };
 
   const handleDelete = () => {

@@ -10,6 +10,11 @@ import {
   supprimerEvenement,
   type EventType,
 } from "@/services/eventsService";
+
+export {
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
+} from "@/services/eventsService";
 import { auth } from "@/config/firebase";
 
 // ============================================

@@ -32,6 +32,10 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { supprimerEvenement } from "@/services/eventsService";
+import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
@@ -328,6 +332,8 @@ export default function DiapersScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const latestMictionsRef = useRef<Excretion[]>([]);
+  const latestSellesRef = useRef<Excretion[]>([]);
 
   // Form pattern states
   const [pendingEditData, setPendingEditData] =
@@ -661,9 +667,10 @@ export default function DiapersScreen() {
     let sellesData: Excretion[] = [];
 
     const mergeAndSortExcretions = () => {
-      const merged = [...mictionsData, ...sellesData].sort(
+      const raw = [...mictionsData, ...sellesData].sort(
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
       );
+      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Excretion[];
       setExcretions(merged);
       setIsRefreshing(false);
 
@@ -694,6 +701,7 @@ export default function DiapersScreen() {
           ...m,
           type: "miction" as DiapersType,
         }));
+        latestMictionsRef.current = mictionsData;
         setMictionsLoaded(true);
         mergeAndSortExcretions();
       },
@@ -707,6 +715,7 @@ export default function DiapersScreen() {
           ...s,
           type: "selle" as DiapersType,
         }));
+        latestSellesRef.current = sellesData;
         setSellesLoaded(true);
         mergeAndSortExcretions();
       },
@@ -718,6 +727,21 @@ export default function DiapersScreen() {
       unsubscribeSelles();
     };
   }, [activeChild, daysWindow, rangeEndDate, refreshKey]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const raw = [...latestMictionsRef.current, ...latestSellesRef.current];
+      if (raw.length === 0) return;
+      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Excretion[];
+      merged.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+      setExcretions(merged);
+    });
+
+    return () => unsubOptimistic();
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

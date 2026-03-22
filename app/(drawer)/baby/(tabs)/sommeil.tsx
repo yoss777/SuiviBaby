@@ -22,6 +22,10 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { SommeilEvent } from "@/services/eventsService";
+import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -145,6 +149,7 @@ export default function SommeilScreen() {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const latestFirestoreSommeilsRef = useRef<any[]>([]);
 
   const [heureDebut, setHeureDebut] = useState<Date>(new Date());
   const [heureFin, setHeureFin] = useState<Date | null>(null);
@@ -276,7 +281,9 @@ export default function SommeilScreen() {
             (a: any, b: any) =>
               toDate(b.date).getTime() - toDate(a.date).getTime(),
           );
-        setSommeils(formatted);
+        latestFirestoreSommeilsRef.current = formatted;
+        const merged = mergeWithFirestoreEvents(formatted, activeChild.id);
+        setSommeils(merged);
         setSommeilsLoaded(true);
         setLoading(false);
         if (
@@ -294,6 +301,20 @@ export default function SommeilScreen() {
 
     return () => unsubscribe();
   }, [activeChild?.id, daysWindow, rangeEndDate]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const firestoreEvents = latestFirestoreSommeilsRef.current;
+      if (firestoreEvents.length === 0) return;
+      const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
+      setSommeils(merged);
+    });
+
+    return () => unsubOptimistic();
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

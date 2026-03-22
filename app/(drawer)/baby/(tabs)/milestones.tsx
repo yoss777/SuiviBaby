@@ -24,6 +24,10 @@ import {
 } from "@/migration/eventsHybridService";
 import { supprimerJalon } from "@/migration/eventsDoubleWriteService";
 import { JalonEvent } from "@/services/eventsService";
+import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -315,6 +319,7 @@ export default function MilestonesScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const latestFirestoreJalonsRef = useRef<MilestoneEventWithId[]>([]);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
@@ -574,7 +579,9 @@ export default function MilestonesScreen() {
       activeChild.id,
       (data) => {
         const evts = data as MilestoneEventWithId[];
-        setEvents(evts);
+        latestFirestoreJalonsRef.current = evts;
+        const merged = mergeWithFirestoreEvents(evts, activeChild.id) as MilestoneEventWithId[];
+        setEvents(merged);
         setLoaded({ jalons: true });
         setIsRefreshing(false);
 
@@ -600,6 +607,20 @@ export default function MilestonesScreen() {
 
     return () => unsubscribe();
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const firestoreEvents = latestFirestoreJalonsRef.current;
+      if (firestoreEvents.length === 0) return;
+      const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as MilestoneEventWithId[];
+      setEvents(merged);
+    });
+
+    return () => unsubOptimistic();
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

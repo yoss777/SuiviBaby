@@ -10,8 +10,8 @@ import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterJalon,
-  modifierJalon,
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerJalon,
 } from "@/migration/eventsDoubleWriteService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
@@ -336,6 +336,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           : TYPE_CONFIG[typeJalon].defaultTitle;
 
       const data = removeUndefined({
+        type: "jalon" as const,
         date: dateHeure,
         typeJalon,
         titre: titreToSave,
@@ -346,18 +347,19 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       });
 
       if (editData) {
-        await modifierJalon(activeChild.id, editData.id, data);
+        modifierEvenementOptimistic(activeChild.id, editData.id, data, editData);
         showSuccess("milestone", "Jalon modifié");
       } else {
-        await ajouterJalon(activeChild.id, data);
+        ajouterEvenementOptimistic(activeChild.id, data);
         showSuccess("milestone", "Jalon ajouté");
       }
 
+      setPhotoUploading(false);
+      setIsSubmitting(false);
       onSuccess?.();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde:", error);
       showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
       setPhotoUploading(false);
       setIsSubmitting(false);
     }

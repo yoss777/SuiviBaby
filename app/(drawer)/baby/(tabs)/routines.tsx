@@ -24,6 +24,10 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { BainEvent, NettoyageNezEvent, SommeilEvent, supprimerEvenement } from "@/services/eventsService";
+import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
@@ -289,6 +293,9 @@ export default function RoutinesScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const latestSommeilsRef = useRef<RoutineEvent[]>([]);
+  const latestBainsRef = useRef<RoutineEvent[]>([]);
+  const latestNezRef = useRef<RoutineEvent[]>([]);
 
   const [pendingEditData, setPendingEditData] = useState<RoutinesEditData | null>(null);
   const [pendingRoutineType, setPendingRoutineType] = useState<RoutineType>("sommeil");
@@ -513,9 +520,10 @@ export default function RoutinesScreen() {
     let nezData: RoutineEvent[] = [];
 
     const merge = () => {
-      const merged = [...sommeilsData, ...bainsData, ...nezData].sort(
+      const raw = [...sommeilsData, ...bainsData, ...nezData].sort(
         (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
       );
+      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as RoutineEvent[];
       setEvents(merged);
       setIsRefreshing(false);
 
@@ -543,6 +551,7 @@ export default function RoutinesScreen() {
       activeChild.id,
       (data) => {
         sommeilsData = data as RoutineEvent[];
+        latestSommeilsRef.current = sommeilsData;
         setLoaded((prev) => ({ ...prev, sommeil: true }));
         merge();
       },
@@ -553,6 +562,7 @@ export default function RoutinesScreen() {
       activeChild.id,
       (data) => {
         bainsData = data as RoutineEvent[];
+        latestBainsRef.current = bainsData;
         setLoaded((prev) => ({ ...prev, bain: true }));
         merge();
       },
@@ -563,6 +573,7 @@ export default function RoutinesScreen() {
       activeChild.id,
       (data) => {
         nezData = data as RoutineEvent[];
+        latestNezRef.current = nezData;
         setLoaded((prev) => ({ ...prev, nez: true }));
         merge();
       },
@@ -575,6 +586,25 @@ export default function RoutinesScreen() {
       unsubscribeNez();
     };
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const raw = [
+        ...latestSommeilsRef.current,
+        ...latestBainsRef.current,
+        ...latestNezRef.current,
+      ];
+      if (raw.length === 0) return;
+      const merged = mergeWithFirestoreEvents(raw, activeChild.id) as RoutineEvent[];
+      merged.sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+      setEvents(merged);
+    });
+
+    return () => unsubOptimistic();
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

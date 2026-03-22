@@ -16,12 +16,8 @@ import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterBiberon,
-  ajouterSolide,
-  ajouterTetee,
-  modifierBiberon,
-  modifierSolide,
-  modifierTetee,
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerBiberon,
   supprimerSolide,
   supprimerTetee,
@@ -255,90 +251,79 @@ export function MealsForm({
   // SUBMIT / DELETE
   // ============================================
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
-    try {
-      setIsSubmitting(true);
 
-      if (mealType === "tetee") {
-        const leftMinutes = Math.round(leftSeconds / 60);
-        const rightMinutes = Math.round(rightSeconds / 60);
-        const dataToSave = removeUndefined({
-          type: mealType,
-          quantite: null,
-          coteGauche: leftSeconds > 0,
-          coteDroit: rightSeconds > 0,
-          dureeGauche: leftMinutes > 0 ? leftMinutes : undefined,
-          dureeDroite: rightMinutes > 0 ? rightMinutes : undefined,
-          date: dateHeure,
-        });
+    setIsSubmitting(true);
 
-        let successMessage = "";
-        if (isEditing && editData?.id) {
-          await modifierTetee(activeChild.id, editData.id, dataToSave);
-          successMessage = "Tétée modifiée";
-        } else {
-          await ajouterTetee(activeChild.id, dataToSave);
-          successMessage = "Tétée enregistrée";
-        }
-        showSuccess("meal", successMessage);
-      } else if (mealType === "biberon") {
-        const dataToSave = removeUndefined({
-          type: mealType,
-          quantite,
-          typeBiberon,
-          date: dateHeure,
-        });
+    if (mealType === "tetee") {
+      const leftMinutes = Math.round(leftSeconds / 60);
+      const rightMinutes = Math.round(rightSeconds / 60);
+      const dataToSave = removeUndefined({
+        type: mealType,
+        quantite: null,
+        coteGauche: leftSeconds > 0,
+        coteDroit: rightSeconds > 0,
+        dureeGauche: leftMinutes > 0 ? leftMinutes : undefined,
+        dureeDroite: rightMinutes > 0 ? rightMinutes : undefined,
+        date: dateHeure,
+      });
 
-        let successMessage = "";
-        if (isEditing && editData?.id) {
-          await modifierBiberon(activeChild.id, editData.id, dataToSave);
-          successMessage = "Biberon modifié";
-        } else {
-          await ajouterBiberon(activeChild.id, dataToSave);
-          successMessage = "Biberon enregistré";
-        }
-        showSuccess("meal", successMessage);
-      } else if (mealType === "solide") {
-        const dataToSave = removeUndefined({
-          type: mealType,
-          typeSolide,
-          momentRepas,
-          ingredients: ingredients.trim() || undefined,
-          quantite: quantiteSolide,
-          nouveauAliment: typeSolide === "autre" ? nouveauAliment : false,
-          nomNouvelAliment:
-            typeSolide === "autre" && nouveauAliment && nomNouvelAliment.trim()
-              ? nomNouvelAliment.trim()
-              : "",
-          allergenes:
-            typeSolide === "autre" && nouveauAliment && allergenes.length > 0
-              ? allergenes
-              : undefined,
-          reaction:
-            typeSolide === "autre" && nouveauAliment ? reaction : undefined,
-          aime: aime ?? (editData ? null : undefined),
-          date: dateHeure,
-        });
-
-        let successMessage = "";
-        if (isEditing && editData?.id) {
-          await modifierSolide(activeChild.id, editData.id, dataToSave);
-          successMessage = "Repas solide modifié";
-        } else {
-          await ajouterSolide(activeChild.id, dataToSave);
-          successMessage = "Repas solide enregistré";
-        }
-        showSuccess("meal", successMessage);
+      if (isEditing && editData?.id) {
+        modifierEvenementOptimistic(activeChild.id, editData.id, dataToSave, editData);
+        showSuccess("meal", "Tétée modifiée");
+      } else {
+        ajouterEvenementOptimistic(activeChild.id, dataToSave);
+        showSuccess("meal", "Tétée enregistrée");
       }
+    } else if (mealType === "biberon") {
+      const dataToSave = removeUndefined({
+        type: mealType,
+        quantite,
+        typeBiberon,
+        date: dateHeure,
+      });
 
-      onSuccess();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
-      setIsSubmitting(false);
+      if (isEditing && editData?.id) {
+        modifierEvenementOptimistic(activeChild.id, editData.id, dataToSave, editData);
+        showSuccess("meal", "Biberon modifié");
+      } else {
+        ajouterEvenementOptimistic(activeChild.id, dataToSave);
+        showSuccess("meal", "Biberon enregistré");
+      }
+    } else if (mealType === "solide") {
+      const dataToSave = removeUndefined({
+        type: mealType,
+        typeSolide,
+        momentRepas,
+        ingredients: ingredients.trim() || undefined,
+        quantite: quantiteSolide,
+        nouveauAliment: typeSolide === "autre" ? nouveauAliment : false,
+        nomNouvelAliment:
+          typeSolide === "autre" && nouveauAliment && nomNouvelAliment.trim()
+            ? nomNouvelAliment.trim()
+            : "",
+        allergenes:
+          typeSolide === "autre" && nouveauAliment && allergenes.length > 0
+            ? allergenes
+            : undefined,
+        reaction:
+          typeSolide === "autre" && nouveauAliment ? reaction : undefined,
+        aime: aime ?? (editData ? null : undefined),
+        date: dateHeure,
+      });
+
+      if (isEditing && editData?.id) {
+        modifierEvenementOptimistic(activeChild.id, editData.id, dataToSave as any, editData);
+        showSuccess("meal", "Repas solide modifié");
+      } else {
+        ajouterEvenementOptimistic(activeChild.id, dataToSave);
+        showSuccess("meal", "Repas solide enregistré");
+      }
     }
+
+    setIsSubmitting(false);
+    onSuccess();
   };
 
   const handleDelete = () => {

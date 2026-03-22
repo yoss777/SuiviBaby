@@ -20,6 +20,10 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { CroissanceEvent, obtenirEvenements } from "@/services/eventsService";
+import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -251,6 +255,7 @@ export default function GrowthScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const latestFirestoreCroissancesRef = useRef<GrowthEventWithId[]>([]);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
@@ -532,7 +537,8 @@ export default function GrowthScreen() {
     let croissanceData: GrowthEventWithId[] = [];
 
     const merge = () => {
-      const merged = [...croissanceData].sort(
+      const merged = mergeWithFirestoreEvents(croissanceData, activeChild.id) as GrowthEventWithId[];
+      merged.sort(
         (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
       );
       setEvents(merged);
@@ -561,6 +567,7 @@ export default function GrowthScreen() {
       activeChild.id,
       (data) => {
         croissanceData = data as GrowthEventWithId[];
+        latestFirestoreCroissancesRef.current = croissanceData;
         setLoaded({ croissance: true });
         setIsRefreshing(false);
         merge();
@@ -572,6 +579,21 @@ export default function GrowthScreen() {
       unsubscribe();
     };
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const firestoreEvents = latestFirestoreCroissancesRef.current;
+      if (firestoreEvents.length === 0) return;
+      const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as GrowthEventWithId[];
+      merged.sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+      setEvents(merged);
+    });
+
+    return () => unsubOptimistic();
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

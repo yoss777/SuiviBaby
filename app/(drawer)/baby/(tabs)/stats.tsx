@@ -13,6 +13,10 @@ import {
   ecouterSommeilsHybrid as ecouterSommeils,
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
+import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
@@ -107,6 +111,11 @@ export default function StatsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const latestFirestoreTeteesRef = useRef<any[]>([]);
+  const latestFirestoreBiberonsRef = useRef<any[]>([]);
+  const latestFirestoreSolidesRef = useRef<any[]>([]);
+  const latestFirestorePompagesRef = useRef<any[]>([]);
+  const latestFirestoreSommeilsRef = useRef<any[]>([]);
 
   // Récupérer les paramètres de l'URL
   const { tab, returnTo } = useLocalSearchParams();
@@ -241,9 +250,10 @@ export default function StatsScreen() {
     let solidesData: any[] = [];
 
     const mergeRepas = () => {
-      const merged = [...teteesData, ...biberonsData, ...solidesData].sort(
+      const raw = [...teteesData, ...biberonsData, ...solidesData].sort(
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
+      const merged = mergeWithFirestoreEvents(raw, activeChild.id);
       setTetees(merged);
     };
 
@@ -253,6 +263,7 @@ export default function StatsScreen() {
       activeChild.id,
       (tetees) => {
         teteesData = tetees;
+        latestFirestoreTeteesRef.current = tetees;
         setTeteesLoaded(true);
         mergeRepas();
       },
@@ -264,6 +275,7 @@ export default function StatsScreen() {
       activeChild.id,
       (biberons) => {
         biberonsData = biberons;
+        latestFirestoreBiberonsRef.current = biberons;
         setBiberonsLoaded(true);
         mergeRepas();
       },
@@ -275,6 +287,7 @@ export default function StatsScreen() {
       activeChild.id,
       (solides) => {
         solidesData = solides;
+        latestFirestoreSolidesRef.current = solides;
         setSolidesLoaded(true);
         mergeRepas();
       },
@@ -295,7 +308,9 @@ export default function StatsScreen() {
     const unsubscribePompages = ecouterPompages(
       activeChild.id,
       (data) => {
-        setPompages(data);
+        latestFirestorePompagesRef.current = data;
+        const merged = mergeWithFirestoreEvents(data, activeChild.id);
+        setPompages(merged);
         setPompagesLoaded(true);
       },
       { waitForServer: true },
@@ -310,7 +325,9 @@ export default function StatsScreen() {
     const unsubscribeSommeils = ecouterSommeils(
       activeChild.id,
       (data) => {
-        setSommeils(data);
+        latestFirestoreSommeilsRef.current = data;
+        const merged = mergeWithFirestoreEvents(data, activeChild.id);
+        setSommeils(merged);
         setSommeilLoaded(true);
       },
       { waitForServer: true },
@@ -318,6 +335,41 @@ export default function StatsScreen() {
     );
     return () => unsubscribeSommeils();
   }, [activeChild, refreshKey, handleListenerError]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      // Re-merge repas (tetees + biberons + solides)
+      const rawRepas = [
+        ...latestFirestoreTeteesRef.current,
+        ...latestFirestoreBiberonsRef.current,
+        ...latestFirestoreSolidesRef.current,
+      ];
+      if (rawRepas.length > 0) {
+        const mergedRepas = mergeWithFirestoreEvents(rawRepas, activeChild.id);
+        mergedRepas.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+        setTetees(mergedRepas);
+      }
+
+      // Re-merge pompages
+      const rawPompages = latestFirestorePompagesRef.current;
+      if (rawPompages.length > 0) {
+        const mergedPompages = mergeWithFirestoreEvents(rawPompages, activeChild.id);
+        setPompages(mergedPompages);
+      }
+
+      // Re-merge sommeils
+      const rawSommeils = latestFirestoreSommeilsRef.current;
+      if (rawSommeils.length > 0) {
+        const mergedSommeils = mergeWithFirestoreEvents(rawSommeils, activeChild.id);
+        setSommeils(mergedSommeils);
+      }
+    });
+
+    return () => unsubOptimistic();
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

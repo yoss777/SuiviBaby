@@ -8,8 +8,8 @@ import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterCroissance,
-  modifierCroissance,
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerCroissance,
 } from "@/migration/eventsDoubleWriteService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -108,7 +108,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
   // HANDLERS
   // ============================================
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
 
     const tailleValue = parseNumber(tailleCm);
@@ -120,31 +120,26 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
       return;
     }
 
-    try {
-      setIsSubmitting(true);
+    setIsSubmitting(true);
 
-      const data = removeUndefined({
-        date: dateHeure,
-        tailleCm: tailleValue,
-        poidsKg: poidsValue,
-        teteCm: teteValue,
-      });
+    const data = removeUndefined({
+      type: "croissance" as const,
+      date: dateHeure,
+      tailleCm: tailleValue,
+      poidsKg: poidsValue,
+      teteCm: teteValue,
+    });
 
-      if (editData) {
-        await modifierCroissance(activeChild.id, editData.id, data);
-        showSuccess("growth", "Mesure modifiée");
-      } else {
-        await ajouterCroissance(activeChild.id, data);
-        showSuccess("growth", "Mesure ajoutée");
-      }
-
-      onSuccess?.();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder la mesure.");
-    } finally {
-      setIsSubmitting(false);
+    if (editData) {
+      modifierEvenementOptimistic(activeChild.id, editData.id, data, editData);
+      showSuccess("growth", "Mesure modifiée");
+    } else {
+      ajouterEvenementOptimistic(activeChild.id, data);
+      showSuccess("growth", "Mesure ajoutée");
     }
+
+    setIsSubmitting(false);
+    onSuccess?.();
   };
 
   const handleDelete = () => {

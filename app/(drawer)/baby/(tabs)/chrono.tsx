@@ -21,6 +21,10 @@ import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { ecouterEvenementsHybrid } from "@/migration/eventsHybridService";
 import type { Event, EventType } from "@/services/eventsService";
 import { supprimerEvenement } from "@/services/eventsService";
+import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1492,6 +1496,7 @@ export default function ChronoScreen() {
   const hasLoadedPrefs = useRef(false);
   const hasInitialLoad = useRef(false);
   const hasPrefetchedMore = useRef(false);
+  const latestFirestoreEventsRef = useRef<Event[]>([]);
   const [infoModalMessage, setInfoModalMessage] = useState<string | null>(null);
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
@@ -1606,7 +1611,9 @@ export default function ChronoScreen() {
     const unsubscribe = ecouterEvenementsHybrid(
       activeChild.id,
       (data) => {
-        const sorted = data.sort(
+        latestFirestoreEventsRef.current = data;
+        const merged = mergeWithFirestoreEvents(data, activeChild.id);
+        const sorted = merged.sort(
           (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
         );
         setEvents(sorted);
@@ -1640,6 +1647,25 @@ export default function ChronoScreen() {
 
     return unsubscribe;
   }, [activeChild?.id, maxRange, currentDay, refreshTick]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const firestoreEvents = latestFirestoreEventsRef.current;
+      if (firestoreEvents.length === 0) return;
+      const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
+      const sorted = merged.sort(
+        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+      );
+      setEvents(sorted);
+    });
+
+    return () => {
+      unsubOptimistic();
+    };
+  }, [activeChild?.id]);
 
   // Reset on child change
   useEffect(() => {

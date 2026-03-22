@@ -8,12 +8,8 @@ import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterBain,
-  ajouterNettoyageNez,
-  ajouterSommeil,
-  modifierBain,
-  modifierNettoyageNez,
-  modifierSommeil,
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerBain,
   supprimerNettoyageNez,
   supprimerSommeil,
@@ -305,85 +301,70 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;
 
-    try {
-      setIsSubmitting(true);
+    setIsSubmitting(true);
 
-      if (sheetType === "nez") {
-        const data = removeUndefined({
-          date: dateNez,
-          methode: methodeNez ?? undefined,
-          resultat: resultatNez ?? undefined,
-          note: noteNez.trim() ? noteNez.trim() : undefined,
-        });
+    if (sheetType === "nez") {
+      const data = removeUndefined({
+        type: "nettoyage_nez" as const,
+        date: dateNez,
+        methode: methodeNez ?? undefined,
+        resultat: resultatNez ?? undefined,
+        note: noteNez.trim() ? noteNez.trim() : undefined,
+      });
 
-        if (editData && editData.type === "nettoyage_nez") {
-          await modifierNettoyageNez(activeChild.id, editData.id, data);
-          showSuccess("default", "Nettoyage nez modifié");
-        } else {
-          await ajouterNettoyageNez(activeChild.id, data);
-          showSuccess("default", "Nettoyage nez ajouté");
-        }
-      } else if (sheetType === "bain") {
-        const data = removeUndefined({
-          date: dateHeure,
-          duree: dureeBain > 0 ? dureeBain : undefined,
-          temperatureEau: temperatureEau > 0 ? temperatureEau : undefined,
-          produits: produits.trim() ? produits.trim() : undefined,
-          note: noteBain.trim() ? noteBain.trim() : undefined,
-        });
-
-        if (editData && editData.type === "bain") {
-          await modifierBain(activeChild.id, editData.id, data);
-          showSuccess("bath", "Bain modifié");
-        } else {
-          await ajouterBain(activeChild.id, data);
-          showSuccess("bath", "Bain ajouté");
-        }
+      if (editData && editData.type === "nettoyage_nez") {
+        modifierEvenementOptimistic(activeChild.id, editData.id, data, editData);
+        showSuccess("default", "Nettoyage nez modifié");
       } else {
-        // Sommeil
-        if (
-          !isOngoing &&
-          heureFin &&
-          heureFin.getTime() < heureDebut.getTime()
-        ) {
-          showAlert(
-            "Attention",
-            "La date de fin ne peut pas être antérieure à la date de début.",
-          );
-          setIsSubmitting(false);
-          return;
-        }
+        ajouterEvenementOptimistic(activeChild.id, data);
+        showSuccess("default", "Nettoyage nez ajouté");
+      }
+    } else if (sheetType === "bain") {
+      const data = removeUndefined({
+        type: "bain" as const,
+        date: dateHeure,
+        duree: dureeBain > 0 ? dureeBain : undefined,
+        temperatureEau: temperatureEau > 0 ? temperatureEau : undefined,
+        produits: produits.trim() ? produits.trim() : undefined,
+        note: noteBain.trim() ? noteBain.trim() : undefined,
+      });
 
-        // Prevent creating ongoing sleep if one already exists (unless editing the same sleep)
-        if (isOngoing && !isEditing) {
-          // If sommeilEnCours prop is provided, use it; otherwise query Firestore
-          let hasOngoingSleep = !!sommeilEnCours;
-          if (!sommeilEnCours && activeChild?.id) {
-            const recentSleeps = await obtenirEvenements(activeChild.id, {
-              type: "sommeil" as EventType,
-              limite: 5,
-            });
-            hasOngoingSleep = recentSleeps.some(
-              (e: any) => e.heureDebut && !e.heureFin,
-            );
-          }
-          if (hasOngoingSleep) {
-            showAlert(
-              "Attention",
-              "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
-            );
-            setIsSubmitting(false);
-            return;
-          }
+      if (editData && editData.type === "bain") {
+        modifierEvenementOptimistic(activeChild.id, editData.id, data, editData);
+        showSuccess("bath", "Bain modifié");
+      } else {
+        ajouterEvenementOptimistic(activeChild.id, data);
+        showSuccess("bath", "Bain ajouté");
+      }
+    } else {
+      // Sommeil
+      if (
+        !isOngoing &&
+        heureFin &&
+        heureFin.getTime() < heureDebut.getTime()
+      ) {
+        showAlert(
+          "Attention",
+          "La date de fin ne peut pas être antérieure à la date de début.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Prevent creating ongoing sleep if one already exists (unless editing the same sleep)
+      if (isOngoing && !isEditing) {
+        // If sommeilEnCours prop is provided, use it; otherwise query Firestore
+        let hasOngoingSleep = !!sommeilEnCours;
+        if (!sommeilEnCours && activeChild?.id) {
+          const recentSleeps = await obtenirEvenements(activeChild.id, {
+            type: "sommeil" as EventType,
+            limite: 5,
+          });
+          hasOngoingSleep = recentSleeps.some(
+            (e: any) => e.heureDebut && !e.heureFin,
+          );
         }
-        const isEditingSameOngoingSleep =
-          editData && sommeilEnCours && editData.id === sommeilEnCours.id;
-        if (
-          isOngoing &&
-          sommeilEnCours &&
-          isEditing &&
-          !isEditingSameOngoingSleep
-        ) {
+        if (hasOngoingSleep) {
           showAlert(
             "Attention",
             "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
@@ -391,58 +372,71 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           setIsSubmitting(false);
           return;
         }
-
-        const fin = isOngoing ? null : (heureFin ?? undefined);
-        const duree =
-          heureDebut && fin
-            ? Math.max(
-                1,
-                Math.round((fin.getTime() - heureDebut.getTime()) / 60000),
-              )
-            : undefined;
-
-        if (editData && editData.type === "sommeil") {
-          // For editing, we need to explicitly send null to delete fields
-          const editDataToSend: any = {
-            date: heureDebut,
-            heureDebut: heureDebut,
-            heureFin: isOngoing ? null : fin, // null will trigger deleteField() in service
-            duree: isOngoing ? null : duree, // null will trigger deleteField() in service
-            isNap: sheetType === "nap",
-            location: location ?? undefined,
-            quality: quality ?? undefined,
-            note: noteSommeil.trim() ? noteSommeil.trim() : undefined,
-          };
-          // Remove undefined but keep null values
-          const cleanedEditData = Object.fromEntries(
-            Object.entries(editDataToSend).filter(([, v]) => v !== undefined),
-          );
-          await modifierSommeil(activeChild.id, editData.id, cleanedEditData);
-          showSuccess("sleep", "Sommeil modifié");
-        } else {
-          // For new entries, just remove undefined values
-          const data = removeUndefined({
-            date: heureDebut,
-            heureDebut: heureDebut,
-            heureFin: fin ?? undefined,
-            duree,
-            isNap: sheetType === "nap",
-            location: location ?? undefined,
-            quality: quality ?? undefined,
-            note: noteSommeil.trim() ? noteSommeil.trim() : undefined,
-          });
-          await ajouterSommeil(activeChild.id, data);
-          showSuccess("sleep", "Sommeil ajouté");
-        }
+      }
+      const isEditingSameOngoingSleep =
+        editData && sommeilEnCours && editData.id === sommeilEnCours.id;
+      if (
+        isOngoing &&
+        sommeilEnCours &&
+        isEditing &&
+        !isEditingSameOngoingSleep
+      ) {
+        showAlert(
+          "Attention",
+          "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
+        );
+        setIsSubmitting(false);
+        return;
       }
 
-      onSuccess?.();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
-      setIsSubmitting(false);
+      const fin = isOngoing ? null : (heureFin ?? undefined);
+      const duree =
+        heureDebut && fin
+          ? Math.max(
+              1,
+              Math.round((fin.getTime() - heureDebut.getTime()) / 60000),
+            )
+          : undefined;
+
+      if (editData && editData.type === "sommeil") {
+        // For editing, we need to explicitly send null to delete fields
+        const editDataToSend: any = {
+          type: "sommeil" as const,
+          date: heureDebut,
+          heureDebut: heureDebut,
+          heureFin: isOngoing ? null : fin, // null will trigger deleteField() in service
+          duree: isOngoing ? null : duree, // null will trigger deleteField() in service
+          isNap: sheetType === "nap",
+          location: location ?? undefined,
+          quality: quality ?? undefined,
+          note: noteSommeil.trim() ? noteSommeil.trim() : undefined,
+        };
+        // Remove undefined but keep null values
+        const cleanedEditData = Object.fromEntries(
+          Object.entries(editDataToSend).filter(([, v]) => v !== undefined),
+        );
+        modifierEvenementOptimistic(activeChild.id, editData.id, cleanedEditData, editData);
+        showSuccess("sleep", "Sommeil modifié");
+      } else {
+        // For new entries, just remove undefined values
+        const data = removeUndefined({
+          type: "sommeil" as const,
+          date: heureDebut,
+          heureDebut: heureDebut,
+          heureFin: fin ?? undefined,
+          duree,
+          isNap: sheetType === "nap",
+          location: location ?? undefined,
+          quality: quality ?? undefined,
+          note: noteSommeil.trim() ? noteSommeil.trim() : undefined,
+        });
+        ajouterEvenementOptimistic(activeChild.id, data);
+        showSuccess("sleep", "Sommeil ajouté");
+      }
     }
+
+    setIsSubmitting(false);
+    onSuccess?.();
   };
 
   const handleDelete = () => {

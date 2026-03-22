@@ -6,8 +6,8 @@ import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterPompage,
-  modifierPompage,
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerPompage,
 } from "@/migration/eventsDoubleWriteService";
 
@@ -146,36 +146,31 @@ export function PumpingForm({
   };
 
   // Submit handler
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
     if (!useLeftBreast && !useRightBreast) {
       showAlert("Erreur", "Sélectionnez au moins un sein.");
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const data = {
-        quantiteGauche: useLeftBreast ? quantiteGauche : 0,
-        quantiteDroite: useRightBreast ? quantiteDroite : 0,
-        date: dateHeure,
-      };
+    setIsSubmitting(true);
+    const data = {
+      type: "pompage" as const,
+      quantiteGauche: useLeftBreast ? quantiteGauche : 0,
+      quantiteDroite: useRightBreast ? quantiteDroite : 0,
+      date: dateHeure,
+    };
 
-      if (isEditing && editData) {
-        await modifierPompage(activeChild.id, editData.id, data);
-        showSuccess("pumping", "Session modifiée");
-      } else {
-        await ajouterPompage(activeChild.id, data);
-        showSuccess("pumping", "Session enregistrée");
-      }
-
-      onSuccess();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
-      setIsSubmitting(false);
+    if (isEditing && editData) {
+      modifierEvenementOptimistic(activeChild.id, editData.id, data, editData);
+      showSuccess("pumping", "Session modifiée");
+    } else {
+      ajouterEvenementOptimistic(activeChild.id, data);
+      showSuccess("pumping", "Session enregistrée");
     }
+
+    setIsSubmitting(false);
+    onSuccess();
   };
 
   // Delete handler

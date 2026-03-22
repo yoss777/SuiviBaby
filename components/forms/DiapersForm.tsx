@@ -9,10 +9,8 @@ import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterMiction,
-  ajouterSelle,
-  modifierMiction,
-  modifierSelle,
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerMiction,
   supprimerSelle,
 } from "@/migration/eventsDoubleWriteService";
@@ -120,7 +118,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
   // HANDLERS
   // ============================================
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
 
     // Verify at least one type is selected
@@ -132,64 +130,62 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       return;
     }
 
-    try {
-      setIsSubmitting(true);
+    setIsSubmitting(true);
 
-      let successMessage = "";
-      if (editData) {
-        // Edit mode: modify existing excretion
-        const isMiction = editData.type === "miction";
-        if (isMiction) {
-          const mictionData = removeUndefined({
-            date: dateHeure,
-            couleur: mictionCouleur ?? undefined,
-          });
-          await modifierMiction(activeChild.id, editData.id, mictionData);
-          successMessage = "Miction modifiée";
-        } else {
-          const selleData = removeUndefined({
-            date: dateHeure,
-            consistance: selleConsistance ?? undefined,
-            quantite: selleQuantite ?? undefined,
-          });
-          await modifierSelle(activeChild.id, editData.id, selleData);
-          successMessage = "Selle modifiée";
-        }
+    let successMessage = "";
+    if (editData) {
+      // Edit mode: modify existing excretion
+      const isMiction = editData.type === "miction";
+      if (isMiction) {
+        const mictionData = removeUndefined({
+          type: "miction" as const,
+          date: dateHeure,
+          couleur: mictionCouleur ?? undefined,
+        });
+        modifierEvenementOptimistic(activeChild.id, editData.id, mictionData, editData);
+        successMessage = "Miction modifiée";
       } else {
-        // Add mode: add one or two excretions
-        if (includeMiction) {
-          const mictionData = removeUndefined({
-            date: dateHeure,
-            couleur: mictionCouleur ?? undefined,
-          });
-          await ajouterMiction(activeChild.id, mictionData);
-        }
-        if (includeSelle) {
-          const selleData = removeUndefined({
-            date: dateHeure,
-            consistance: selleConsistance ?? undefined,
-            quantite: selleQuantite ?? undefined,
-          });
-          await ajouterSelle(activeChild.id, selleData);
-        }
-        successMessage =
-          includeMiction && includeSelle
-            ? "Miction et selle ajoutées"
-            : includeMiction
-              ? "Miction ajoutée"
-              : "Selle ajoutée";
+        const selleData = removeUndefined({
+          type: "selle" as const,
+          date: dateHeure,
+          consistance: selleConsistance ?? undefined,
+          quantite: selleQuantite ?? undefined,
+        });
+        modifierEvenementOptimistic(activeChild.id, editData.id, selleData, editData);
+        successMessage = "Selle modifiée";
       }
-
-      // Afficher l'animation de succès avant de fermer le formulaire
-      showSuccess("diaper", successMessage);
-
-      onSuccess?.();
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      // Add mode: add one or two excretions
+      if (includeMiction) {
+        const mictionData = removeUndefined({
+          type: "miction" as const,
+          date: dateHeure,
+          couleur: mictionCouleur ?? undefined,
+        });
+        ajouterEvenementOptimistic(activeChild.id, mictionData);
+      }
+      if (includeSelle) {
+        const selleData = removeUndefined({
+          type: "selle" as const,
+          date: dateHeure,
+          consistance: selleConsistance ?? undefined,
+          quantite: selleQuantite ?? undefined,
+        });
+        ajouterEvenementOptimistic(activeChild.id, selleData);
+      }
+      successMessage =
+        includeMiction && includeSelle
+          ? "Miction et selle ajoutées"
+          : includeMiction
+            ? "Miction ajoutée"
+            : "Selle ajoutée";
     }
+
+    // Afficher l'animation de succès avant de fermer le formulaire
+    showSuccess("diaper", successMessage);
+
+    setIsSubmitting(false);
+    onSuccess?.();
   };
 
   const handleDelete = () => {

@@ -9,8 +9,8 @@ import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ajouterActivite,
-  modifierActivite,
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerActivite,
 } from "@/migration/eventsDoubleWriteService";
 import type { EventType } from "@/services/eventsService";
@@ -262,6 +262,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       if (isChronoMode && editData) {
         // Edit mode: keep null values to trigger deleteField (iso modifierSommeil)
         const editPayload: Record<string, any> = {
+          type: "activite" as const,
           date: heureDebut,
           typeActivite,
           heureDebut,
@@ -274,11 +275,12 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         const cleanedPayload = Object.fromEntries(
           Object.entries(editPayload).filter(([, v]) => v !== undefined),
         );
-        await modifierActivite(activeChild.id, editData.id, cleanedPayload);
+        modifierEvenementOptimistic(activeChild.id, editData.id, cleanedPayload, editData);
         showSuccess("activity", "Promenade modifiée");
       } else if (isChronoMode) {
         // Create mode: use removeUndefined (no null needed for new events)
         const data = removeUndefined({
+          type: "activite" as const,
           date: heureDebut,
           typeActivite,
           heureDebut,
@@ -287,11 +289,12 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           description: description.trim() || undefined,
           note: description.trim() || undefined,
         });
-        await ajouterActivite(activeChild.id, data);
+        ajouterEvenementOptimistic(activeChild.id, data);
         showSuccess("activity", "Promenade ajoutée");
       } else {
         // Non-chrono activities
         const data = removeUndefined({
+          type: "activite" as const,
           date: dateHeure,
           typeActivite,
           duree: duree || undefined,
@@ -299,19 +302,19 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           note: description.trim() || undefined,
         });
         if (editData) {
-          await modifierActivite(activeChild.id, editData.id, data);
+          modifierEvenementOptimistic(activeChild.id, editData.id, data, editData);
           showSuccess("activity", "Activité modifiée");
         } else {
-          await ajouterActivite(activeChild.id, data);
+          ajouterEvenementOptimistic(activeChild.id, data);
           showSuccess("activity", "Activité ajoutée");
         }
       }
 
+      setIsSubmitting(false);
       onSuccess?.();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde:", error);
       showAlert("Erreur", "Impossible de sauvegarder.");
-    } finally {
       setIsSubmitting(false);
     }
   };

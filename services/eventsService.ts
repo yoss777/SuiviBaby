@@ -16,6 +16,13 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "../config/firebase";
 import { enqueueEvent, isOnline } from "./offlineQueueService";
+import {
+  addOptimisticCreate,
+  addOptimisticUpdate,
+  confirmOptimistic,
+  failOptimistic,
+  generateTempId,
+} from "./optimisticEventsStore";
 
 const getUserId = () => {
   const user = auth.currentUser;
@@ -892,4 +899,92 @@ export async function obtenirStats24h(childId: string) {
   });
 
   return stats;
+}
+
+// ============================================
+// OPTIMISTIC UI WRAPPERS
+// ============================================
+
+// Retry helper: 2 retries with increasing delay (1s, 3s)
+const RETRY_DELAYS = [1000, 3000];
+
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  // First attempt (no delay)
+  try {
+    return await fn();
+  } catch (e) {
+    lastError = e;
+  }
+  // Retries
+  for (const delay of RETRY_DELAYS) {
+    await new Promise((r) => setTimeout(r, delay));
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Ajoute un événement avec affichage optimiste immédiat.
+ * Retourne un tempId synchrone ; le CF tourne en arrière-plan avec 2 retries.
+ */
+export function ajouterEvenementOptimistic(
+  childId: string,
+  data: any,
+): string {
+  const tempId = generateTempId();
+  const optimisticEvent = {
+    ...data,
+    id: tempId,
+    childId,
+    date: data.date || new Date(),
+    userId: auth.currentUser?.uid || '',
+    createdAt: new Date(),
+  };
+
+  addOptimisticCreate(childId, optimisticEvent, tempId);
+
+  // Fire CF in background with retries
+  withRetry(() => ajouterEvenement(childId, data))
+    .then((realId) => {
+      confirmOptimistic(tempId, realId);
+    })
+    .catch(() => {
+      failOptimistic(tempId);
+    });
+
+  return tempId;
+}
+
+/**
+ * Modifie un événement avec affichage optimiste immédiat.
+ * Le CF tourne en arrière-plan avec 2 retries.
+ */
+export function modifierEvenementOptimistic(
+  childId: string,
+  eventId: string,
+  data: Partial<Event>,
+  previousEvent: any,
+): void {
+  const updatedEvent = {
+    ...previousEvent,
+    ...data,
+    id: eventId,
+    childId,
+  };
+
+  addOptimisticUpdate(eventId, childId, updatedEvent, previousEvent);
+
+  // Fire CF in background with retries
+  withRetry(() => modifierEvenement(childId, eventId, data))
+    .then(() => {
+      confirmOptimistic(eventId);
+    })
+    .catch(() => {
+      failOptimistic(eventId);
+    });
 }

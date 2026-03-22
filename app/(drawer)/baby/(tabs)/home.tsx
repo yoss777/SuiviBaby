@@ -37,6 +37,11 @@ import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import { obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import {
+  mergeWithFirestoreEvents,
+  setOnFailure as setOptimisticOnFailure,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
+import {
   buildTodayEventsData,
   getTodayEventsCache,
 } from "@/services/todayEventsCache";
@@ -625,6 +630,7 @@ export default function HomeDashboard() {
   const headerMicVisibleRef = useRef(false);
   const headerRowLayoutRef = useRef<{ y: number; height: number } | null>(null);
   const scrollYRef = useRef(0);
+  const latestFirestoreEventsRef = useRef<any[]>([]);
 
   const [refreshTick, setRefreshTick] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -2046,7 +2052,9 @@ export default function HomeDashboard() {
     const unsubscribe = ecouterEvenementsDuJourHybrid(
       activeChild.id,
       (events) => {
-        const todayData = buildTodayEventsData(events);
+        latestFirestoreEventsRef.current = events;
+        const mergedEvents = mergeWithFirestoreEvents(events, activeChild.id);
+        const todayData = buildTodayEventsData(mergedEvents);
         setData((prev) => ({ ...prev, ...todayData }));
         setLoading({
           tetees: false,
@@ -2075,6 +2083,26 @@ export default function HomeDashboard() {
       unsubscribe();
     };
   }, [activeChild, currentDay, refreshTick]);
+
+  // Re-merge when the optimistic store changes (e.g. new optimistic event added)
+  useEffect(() => {
+    if (!activeChild?.id) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const firestoreEvents = latestFirestoreEventsRef.current;
+      const mergedEvents = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
+      const todayData = buildTodayEventsData(mergedEvents);
+      setData((prev) => ({ ...prev, ...todayData }));
+    });
+
+    // Connect optimistic failure notifications to the toast system.
+    setOptimisticOnFailure((message) => showToast(message));
+
+    return () => {
+      unsubOptimistic();
+      setOptimisticOnFailure(null);
+    };
+  }, [activeChild?.id]);
 
   // ============================================
   // EFFECTS - STATS CALCULATION

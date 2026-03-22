@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
 import {
+  mergeWithFirestoreEvents,
+  subscribe as subscribeOptimistic,
+} from "@/services/optimisticEventsStore";
+import {
   ecouterInteractionsSociales,
   getUserNames,
 } from "@/services/socialService";
@@ -75,6 +79,7 @@ export function useMomentsData(
 
   // Track whether data has arrived after a refresh
   const refreshResolveRef = useRef<(() => void) | null>(null);
+  const latestFirestoreEventsRef = useRef<MilestoneEventWithId[]>([]);
 
   const refreshToday = useCallback(() => {
     setRefreshTick((prev) => prev + 1);
@@ -115,7 +120,9 @@ export function useMomentsData(
     const unsubscribe = ecouterJalonsHybrid(
       childId,
       (data) => {
-        setEvents(data as MilestoneEventWithId[]);
+        latestFirestoreEventsRef.current = data as MilestoneEventWithId[];
+        const merged = mergeWithFirestoreEvents(data, childId) as MilestoneEventWithId[];
+        setEvents(merged);
         setLoaded(true);
         // End pull-to-refresh when data actually arrives
         if (refreshResolveRef.current) {
@@ -136,6 +143,22 @@ export function useMomentsData(
 
     return () => unsubscribe();
   }, [childId, refreshTick]);
+
+  // Re-merge when optimistic store changes
+  useEffect(() => {
+    if (!childId) return;
+
+    const unsubOptimistic = subscribeOptimistic(() => {
+      const firestoreEvents = latestFirestoreEventsRef.current;
+      if (firestoreEvents.length === 0) return;
+      const merged = mergeWithFirestoreEvents(firestoreEvents, childId) as MilestoneEventWithId[];
+      setEvents(merged);
+    });
+
+    return () => {
+      unsubOptimistic();
+    };
+  }, [childId]);
 
   // Mood data processing
   const { moods, currentMood } = useMemo((): {

@@ -690,7 +690,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
                                   },
                                 ]}
                               >
-                                <Text style={[styles.statusLabel, { color: getStatusColors(nc)[status] }]}>
+                                <Text style={[styles.statusText, { color: getStatusColors(nc)[status] }]}>
                                   {MILESTONE_STATUS_LABELS[status]}
                                 </Text>
                               </View>
