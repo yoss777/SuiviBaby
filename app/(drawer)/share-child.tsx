@@ -11,6 +11,7 @@ import {
   listenToActiveShareCode,
 } from "@/services/childSharingService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import { HeaderBackButton } from "@react-navigation/elements";
 import * as Haptics from "expo-haptics";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
@@ -30,7 +31,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft } from "./_layout";
-import { HeaderBackButton } from "@react-navigation/elements";
 
 export default function ShareChildScreen() {
   const colorScheme = useColorScheme() ?? "light";
@@ -270,7 +270,7 @@ export default function ShareChildScreen() {
       );
       setHeaderLeft(backButton, childId);
       return () => setHeaderLeft(null, childId);
-    }, [childId, colorScheme, returnTo, router, setHeaderLeft])
+    }, [childId, colorScheme, returnTo, router, setHeaderLeft]),
   );
 
   const handleGenerateCode = useCallback(async () => {
@@ -279,10 +279,10 @@ export default function ShareChildScreen() {
       const code = await createShareCode(childId, childName);
       setShareCode(code);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showAlert("Succes", "Code de partage cree avec succes !", [{ text: "" }]);
+      showAlert("Succes", "Code de partage créé avec succes !", [{ text: "" }]);
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showAlert("Erreur", error.message || "Impossible de creer le code");
+      showAlert("Erreur", error.message || "Impossible de crer le code");
     } finally {
       setIsLoadingCode(false);
     }
@@ -292,7 +292,7 @@ export default function ShareChildScreen() {
     if (shareCode) {
       Clipboard.setString(shareCode);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      showAlert("\u2705", "Code copie dans le presse-papier", [{ text: "" }]);
+      showAlert("\u2705", "Code copié dans le presse-papier", [{ text: "" }]);
     }
   }, [shareCode, showAlert]);
 
@@ -302,7 +302,7 @@ export default function ShareChildScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await RNShare.share({
-        message: `Voici le code pour acceder au suivi de ${childName} : ${shareCode}\n\nUtilise ce code dans l'app Suivi Baby pour voir les informations de notre enfant. Le code est valide pendant 7 jours.`,
+        message: `Voici le code pour accéder au suivi de ${childName} : ${shareCode}\n\nUtilise ce code dans l'app Suivi Baby pour voir les informations de notre enfant. Le code est valide pendant 7 jours.`,
       });
     } catch (error) {
       console.error("Erreur partage:", error);
@@ -336,8 +336,8 @@ export default function ShareChildScreen() {
       await createEmailInvitation(childId, childName, trimmedEmail);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showAlert(
-        "Invitation envoyee",
-        `Une invitation a ete envoyee a ${trimmedEmail}. L'autre parent recevra une notification dans l'app.`,
+        "Invitation envoyée",
+        `Une invitation a été envoyée a ${trimmedEmail}. L'autre parent recevra une notification dans l'app.`,
         [{ text: "" }],
       );
       setInviteEmail("");
@@ -346,8 +346,8 @@ export default function ShareChildScreen() {
       if (error?.code === "already-linked") {
         const email = error?.email ?? trimmedEmail;
         showAlert(
-          "Deja lie",
-          `Cet enfant est deja lie au destinataire ${email}.`,
+          "Déjà lié",
+          `Cet enfant est déjà lié au destinataire ${email}.`,
           [{ text: "" }],
         );
       } else {
@@ -390,10 +390,7 @@ export default function ShareChildScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
-        <SafeAreaView
-          style={styles.safeArea}
-          edges={["bottom"]}
-        >
+        <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
           <ScrollView
             style={styles.container}
             showsVerticalScrollIndicator={false}
@@ -421,7 +418,7 @@ export default function ShareChildScreen() {
                 </Text>
               </View>
               <Text style={dynamicStyles.methodDescription}>
-                Generez un code a partager par SMS, WhatsApp ou autre. Valide
+                Générez un code à partager par SMS, WhatsApp ou autre. Valide
                 pendant 7 jours.
               </Text>
 
@@ -478,7 +475,7 @@ export default function ShareChildScreen() {
                   disabled={isLoadingCode}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel="Generer un code de partage"
+                  accessibilityLabel="Générer un code de partage"
                 >
                   {isLoadingCode ? (
                     <ActivityIndicator size="small" color={nc.white} />
@@ -523,7 +520,7 @@ export default function ShareChildScreen() {
                     keyboardType="email-address"
                     autoCapitalize="none"
                     editable={!isLoadingInvite}
-                    accessibilityLabel="Adresse email du parent a inviter"
+                    accessibilityLabel="Adresse email du parent à inviter"
                   />
                 </View>
 
@@ -565,17 +562,13 @@ export default function ShareChildScreen() {
             <View
               style={dynamicStyles.infoBox}
               accessibilityRole="text"
-              accessibilityLabel="Information de securite : les deux parents auront un acces complet au suivi de l'enfant"
+              accessibilityLabel="Information de sécurité : les deux parents auront un accès complet au suivi de l'enfant"
             >
-              <FontAwesome
-                name="shield-alt"
-                size={20}
-                color={nc.todayAccent}
-              />
+              <FontAwesome name="shield-alt" size={20} color={nc.todayAccent} />
               <Text style={dynamicStyles.infoText}>
                 Les deux parents auront un acces complet au suivi de l'enfant.
-                Vous pourrez retirer l'acces a tout moment depuis les
-                parametres.
+                Vous pourrez retirer l'acces à tout moment depuis les
+                paramètres.
               </Text>
             </View>
           </ScrollView>

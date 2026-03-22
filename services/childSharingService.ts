@@ -105,7 +105,7 @@ export async function createShareCode(
 /**
  * Utilise un code de partage pour accéder à un enfant
  */
-export async function useShareCode(
+export async function redeemShareCode(
   code: string,
 ): Promise<{ childId: string; childName: string }> {
   try {
@@ -206,7 +206,9 @@ export async function createEmailInvitation(
     }
 
     // Étape 2: Trouver l'id de l'utilisateur invité basé sur son email
+    console.log("[Invitation] Étape 2: recherche email", invitedEmailLower);
     const invitedUserDoc = await getUserByEmail(invitedEmailLower);
+    console.log("[Invitation] Étape 2 OK, invitedUser:", invitedUserDoc?.id ?? "non trouvé");
     if (!invitedUserDoc) {
       const error: Error & { code?: string } = new Error(
         "Aucun utilisateur trouvé avec cet email. Veuillez demander au destinataire de créer un compte d'abord.",
@@ -218,16 +220,20 @@ export async function createEmailInvitation(
     const invitedUserId = invitedUserDoc?.id;
 
     // Étape 3: Récupérer les parentIds de l'enfant
+    console.log("[Invitation] Étape 3: lecture child", childId);
     const childDoc = await getDocFromServer(doc(db, "children", childId));
+    console.log("[Invitation] Étape 3 OK, exists:", childDoc.exists());
     if (!childDoc.exists()) {
       throw new Error("Enfant introuvable");
     }
 
     // Étape 4: Vérifier si l'utilisateur invité est déjà parent de l'enfant
     if (invitedUserId) {
+      console.log("[Invitation] Étape 4: lecture access pour invité", invitedUserId);
       const accessDoc = await getDoc(
         doc(db, "children", childId, "access", invitedUserId)
       );
+      console.log("[Invitation] Étape 4 OK, accessExists:", accessDoc.exists());
       if (accessDoc.exists()) {
       const error: Error & { code?: string; email?: string } = new Error(
         "Cet enfant est déjà lié à ce destinataire.",
@@ -239,14 +245,17 @@ export async function createEmailInvitation(
     }
 
     // Étape 5: Vérifier s'il n'y a pas déjà une invitation en cours
+    console.log("[Invitation] Étape 5: vérif invitations existantes");
     const pendingInvitesQuery = query(
       collection(db, "shareInvitations"),
       where("childId", "==", childId),
       where("invitedEmail", "==", invitedEmailLower),
       where("inviterId", "==", user.uid),
       where("status", "==", "pending"),
+      limit(1),
     );
     const existingInvites = await getDocs(pendingInvitesQuery);
+    console.log("[Invitation] Étape 5 OK, existing:", existingInvites.size);
 
     // Étape 6: Blocage si invitation déjà en cours
     if (!existingInvites.empty) {

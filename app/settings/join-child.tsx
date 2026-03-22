@@ -14,7 +14,7 @@ import {
   cleanupDuplicatePendingInvitations,
   listenToPendingInvitations,
   rejectInvitation,
-  useShareCode,
+  redeemShareCode,
   type ShareInvitation,
 } from "@/services/childSharingService";
 import {
@@ -150,7 +150,7 @@ export default function JoinChildScreen() {
 
     setIsLoadingCode(true);
     try {
-      const result = await useShareCode(shareCode.trim().toUpperCase());
+      const result = await redeemShareCode(shareCode.trim().toUpperCase());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Code validé avec succès");
       queueNavigateToChild(result.childId);
