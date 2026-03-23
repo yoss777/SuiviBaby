@@ -270,10 +270,10 @@ export default function StatsScreen() {
         const mergedSommeils = mergeWithFirestoreEvents(latestFirestoreSommeilsRef.current, activeChild.id);
 
         const allMerged = [...mergedRepas, ...mergedPompages, ...mergedSommeils];
-        const hasOptimistic = allMerged.some(
+        const optimisticCount = allMerged.filter(
           (e: any) => e.id?.startsWith?.('__optimistic_'),
-        );
-        const fingerprint = `${allMerged.length}_${hasOptimistic ? 'O' : 'C'}_${allMerged
+        ).length;
+        const fingerprint = `${allMerged.length}_${optimisticCount}_${allMerged
           .slice(0, 20)
           .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
           .join('|')}`;

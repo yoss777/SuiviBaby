@@ -390,10 +390,14 @@ export default function GrowthScreen() {
 
   const openEditModal = useCallback(
     (event: GrowthEventWithId) => {
+      if (event.id?.startsWith?.('__optimistic_')) {
+        showToast('Enregistrement en cours...');
+        return;
+      }
       setPendingEditData(buildEditData(event));
       setPendingOpen(true);
     },
-    [buildEditData],
+    [buildEditData, showToast],
   );
 
   // ============================================
@@ -549,10 +553,10 @@ export default function GrowthScreen() {
           (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
         );
 
-        const hasOptimistic = merged.some(
+        const optimisticCount = merged.filter(
           (e: any) => e.id?.startsWith?.('__optimistic_'),
-        );
-        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+        ).length;
+        const fingerprint = `${merged.length}_${optimisticCount}_${merged
           .slice(0, 20)
           .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
           .join('|')}`;
@@ -1017,9 +1021,13 @@ export default function GrowthScreen() {
   }, []);
 
   const handleEventDelete = useCallback((event: GrowthEventWithId) => {
+    if (event.id?.startsWith?.('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDeleteConfirm({ visible: true, event });
-  }, []);
+  }, [showToast]);
 
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
@@ -1134,12 +1142,17 @@ export default function GrowthScreen() {
       <ReanimatedSwipeable
         ref={isFirstInList ? swipeableRef : undefined}
         key={event.id}
-        renderRightActions={() => (
-          <DeleteAction onPress={() => handleEventDelete(event)} />
-        )}
+        renderRightActions={
+          !event.id?.startsWith?.('__optimistic_')
+            ? () => (
+                <DeleteAction onPress={() => handleEventDelete(event)} />
+              )
+            : undefined
+        }
         friction={2}
         rightThreshold={40}
         overshootRight={false}
+        enabled={!event.id?.startsWith?.('__optimistic_')}
       >
         <Pressable
           style={({ pressed }) => {

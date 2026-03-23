@@ -113,8 +113,9 @@ export function confirmOptimistic(tempIdOrEventId: string, realId?: string): voi
     }
   }
 
-  // Notify so the merge can reconcile: replace optimistic entry with real data,
-  // remove the opacity indicator, and clean up confirmed entries.
+  // Notify so the merge can reconcile: replace tempId with realId and
+  // clean up confirmed entries. The fingerprint will detect the optimistic
+  // count change (1→0) and trigger setData to unblock edit/delete.
   notify();
 }
 

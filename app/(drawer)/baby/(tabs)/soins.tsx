@@ -418,10 +418,14 @@ export default function SoinsScreen() {
   }, []);
 
   const openEditModal = useCallback((event: HealthEvent) => {
+    if (event.id?.startsWith?.('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     setPendingSoinsType(event.type);
     setPendingEditData(buildEditData(event));
     setPendingOpen(true);
-  }, [buildEditData]);
+  }, [buildEditData, showToast]);
 
   // ============================================
   // HEADER
@@ -579,10 +583,10 @@ export default function SoinsScreen() {
         ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
         const merged = mergeWithFirestoreEvents(raw, activeChild.id) as HealthEvent[];
 
-        const hasOptimistic = merged.some(
+        const optimisticCount = merged.filter(
           (e: any) => e.id?.startsWith?.('__optimistic_'),
-        );
-        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+        ).length;
+        const fingerprint = `${merged.length}_${optimisticCount}_${merged
           .slice(0, 20)
           .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
           .join('|')}`;
@@ -1057,9 +1061,13 @@ export default function SoinsScreen() {
   }, []);
 
   const handleEventDelete = useCallback((event: HealthEvent) => {
+    if (event.id?.startsWith?.('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDeleteConfirm({ visible: true, event });
-  }, []);
+  }, [showToast]);
 
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
@@ -1195,7 +1203,12 @@ export default function SoinsScreen() {
         friction={2}
         rightThreshold={40}
         overshootRight={false}
-        renderRightActions={() => <DeleteAction onPress={() => handleEventDelete(event)} nc={nc} />}
+        renderRightActions={
+          !event.id?.startsWith?.('__optimistic_')
+            ? () => <DeleteAction onPress={() => handleEventDelete(event)} nc={nc} />
+            : undefined
+        }
+        enabled={!event.id?.startsWith?.('__optimistic_')}
       >
         <Pressable
           accessibilityRole="button"

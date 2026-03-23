@@ -420,10 +420,14 @@ export default function ActivitiesScreen() {
   }, []);
 
   const openEditModal = useCallback((event: ActivityEventWithId) => {
+    if (event.id?.startsWith?.('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     setPendingActiviteType(event.typeActivite as ActiviteType);
     setPendingEditData(buildEditData(event));
     setPendingOpen(true);
-  }, [buildEditData]);
+  }, [buildEditData, showToast]);
 
   // ============================================
   // HEADER
@@ -574,10 +578,10 @@ export default function ActivitiesScreen() {
         const firestoreEvents = latestFirestoreActivitesRef.current;
         const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as ActivityEventWithId[];
 
-        const hasOptimistic = merged.some(
+        const optimisticCount = merged.filter(
           (e: any) => e.id?.startsWith?.('__optimistic_'),
-        );
-        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+        ).length;
+        const fingerprint = `${merged.length}_${optimisticCount}_${merged
           .slice(0, 20)
           .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
           .join('|')}`;
@@ -1031,9 +1035,13 @@ export default function ActivitiesScreen() {
   }, []);
 
   const handleEventDelete = useCallback((event: ActivityEventWithId) => {
+    if (event.id?.startsWith?.('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDeleteConfirm({ visible: true, event });
-  }, []);
+  }, [showToast]);
 
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
@@ -1171,12 +1179,17 @@ export default function ActivitiesScreen() {
       <ReanimatedSwipeable
         key={event.id}
         ref={isFirstInList ? swipeableRef : undefined}
-        renderRightActions={() => (
-          <DeleteAction onPress={() => handleEventDelete(event)} colorScheme={colorScheme} />
-        )}
+        renderRightActions={
+          !event.id?.startsWith?.('__optimistic_')
+            ? () => (
+                <DeleteAction onPress={() => handleEventDelete(event)} colorScheme={colorScheme} />
+              )
+            : undefined
+        }
         friction={2}
         rightThreshold={40}
         overshootRight={false}
+        enabled={!event.id?.startsWith?.('__optimistic_')}
       >
         <Pressable
           style={({ pressed }) => {

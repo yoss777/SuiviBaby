@@ -132,12 +132,6 @@ export default function BabyTabLayout() {
           }}
         />
         <Tabs.Screen
-          name="sommeil"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
           name="routines"
           options={{
             href: null,

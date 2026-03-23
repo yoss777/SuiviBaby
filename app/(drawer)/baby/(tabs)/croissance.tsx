@@ -894,6 +894,10 @@ export default function CroissanceScreen() {
 
   const openEditModal = useCallback(
     (entry: CroissanceEntry) => {
+      if (entry.id?.startsWith?.('__optimistic_')) {
+        showToast('Enregistrement en cours...');
+        return;
+      }
       openSheet({
         ownerId: sheetOwnerId,
         formType: "croissance",
@@ -915,9 +919,13 @@ export default function CroissanceScreen() {
   );
 
   const handleEventDelete = useCallback((event: CroissanceEntry) => {
+    if (event.id?.startsWith?.('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDeleteConfirm({ visible: true, event });
-  }, []);
+  }, [showToast]);
 
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
@@ -1007,10 +1015,10 @@ export default function CroissanceScreen() {
         const firestoreEntries = latestFirestoreEntriesRef.current;
         const merged = mergeWithFirestoreEvents(firestoreEntries, activeChild.id) as CroissanceEntry[];
 
-        const hasOptimistic = merged.some(
+        const optimisticCount = merged.filter(
           (e: any) => e.id?.startsWith?.('__optimistic_'),
-        );
-        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+        ).length;
+        const fingerprint = `${merged.length}_${optimisticCount}_${merged
           .slice(0, 20)
           .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
           .join('|')}`;
@@ -1234,7 +1242,7 @@ export default function CroissanceScreen() {
           )}
           <ReanimatedSwipeable
             renderRightActions={
-              canManageContent && item.id
+              canManageContent && item.id && !item.id?.startsWith?.('__optimistic_')
                 ? () => (
                     <DeleteAction onPress={() => handleEventDelete(item)} />
                   )
@@ -1243,7 +1251,7 @@ export default function CroissanceScreen() {
             friction={2}
             rightThreshold={40}
             overshootRight={false}
-            enabled={canManageContent && !!item.id}
+            enabled={canManageContent && !!item.id && !item.id?.startsWith?.('__optimistic_')}
           >
             <View style={styles.itemRow}>
               <View style={styles.timelineColumn}>

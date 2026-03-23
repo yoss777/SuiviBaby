@@ -51,6 +51,8 @@ interface SmartContentParams {
   babyBirthDate: string | Date | null;
   babyName: string;
   tipsEnabled: boolean; // From notification preferences
+  insightsEnabled?: boolean;
+  correlationsEnabled?: boolean;
 }
 
 interface SmartContentResult {
@@ -80,7 +82,7 @@ const TIP_COOLDOWN_DAYS = 7; // Don't show the same tip again for 7 days
 // ============================================
 
 export function useSmartContent(params: SmartContentParams): SmartContentResult {
-  const { events, childId, babyBirthDate, babyName, tipsEnabled } = params;
+  const { events, childId, babyBirthDate, babyName, tipsEnabled, insightsEnabled = true, correlationsEnabled = true } = params;
   const cacheKey = childId ? `${CACHE_KEY_PREFIX}${childId}` : null;
 
   const [tips, setTips] = useState<Tip[]>([]);
@@ -204,9 +206,28 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
   }, [childId]);
 
   // Generate insights from events (client-side, no Firestore)
+  // Stabilize insights: only recompute when the event count changes significantly,
+  // not on every optimistic→real ID swap. Use a stable key based on event count + types.
+  const eventsFingerprint = useMemo(() => {
+    if (events.length === 0) return '';
+    const typeCounts: Record<string, number> = {};
+    for (const e of events) {
+      const t = (e as any).type || 'unknown';
+      typeCounts[t] = (typeCounts[t] || 0) + 1;
+    }
+    return `${events.length}_${Object.entries(typeCounts).sort().map(([k, v]) => `${k}:${v}`).join(',')}`;
+  }, [events]);
+
+  const insightsRef = useRef<ReturnType<typeof getTopInsights>>([]);
+  const correlationsRef = useRef<ReturnType<typeof generateCorrelations>>([]);
+  const lastInsightsFp = useRef('');
+  const lastCorrelationsFp = useRef('');
+
   const insights = useMemo(() => {
-    if (!babyBirthDate || events.length === 0) return [];
-    return getTopInsights(
+    if (!insightsEnabled || !babyBirthDate || events.length === 0) return insightsRef.current = [];
+    if (eventsFingerprint === lastInsightsFp.current) return insightsRef.current;
+    lastInsightsFp.current = eventsFingerprint;
+    insightsRef.current = getTopInsights(
       {
         events: events as Parameters<typeof getTopInsights>[0]["events"],
         babyName,
@@ -214,16 +235,20 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
       },
       3,
     );
-  }, [events, babyName, ageMonths, babyBirthDate]);
+    return insightsRef.current;
+  }, [eventsFingerprint, babyName, ageMonths, babyBirthDate, insightsEnabled]);
 
   // Generate correlations (needs 30+ days of data)
   const correlations = useMemo(() => {
-    if (!babyBirthDate || events.length < 20) return [];
-    return generateCorrelations({
+    if (!correlationsEnabled || !babyBirthDate || events.length < 20) return correlationsRef.current = [];
+    if (eventsFingerprint === lastCorrelationsFp.current) return correlationsRef.current;
+    lastCorrelationsFp.current = eventsFingerprint;
+    correlationsRef.current = generateCorrelations({
       events: events as Parameters<typeof generateCorrelations>[0]["events"],
       babyName,
     });
-  }, [events, babyName, babyBirthDate]);
+    return correlationsRef.current;
+  }, [eventsFingerprint, babyName, babyBirthDate, correlationsEnabled]);
 
   // Tip history: { [tipId]: timestamp } — loaded from AsyncStorage
   const [tipHistory, setTipHistory] = useState<Record<string, number>>({});

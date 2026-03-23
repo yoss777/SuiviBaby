@@ -110,6 +110,10 @@ export function useMomentsActions({
 
   const handleEditPhoto = useCallback(
     (photoId: string, photoIndex: number) => {
+      if (photoId?.startsWith?.('__optimistic_')) {
+        showToast('Enregistrement en cours...');
+        return;
+      }
       const event = events.find((e) => e.id === photoId);
       if (!event) return;
 

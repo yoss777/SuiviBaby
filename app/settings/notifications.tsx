@@ -41,6 +41,8 @@ export default function NotificationsScreen() {
   const [marketing, setMarketing] = useState(false);
   const [updates, setUpdates] = useState(true);
   const [tips, setTips] = useState(false);
+  const [insightsEnabled, setInsightsEnabled] = useState(true);
+  const [correlationsEnabled, setCorrelationsEnabled] = useState(true);
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [reminderThresholds, setReminderThresholds] = useState({
     repas: 0,
@@ -71,6 +73,8 @@ export default function NotificationsScreen() {
         setMarketing(preferences.marketing);
         setUpdates(preferences.updates);
         setTips(preferences.tips);
+        setInsightsEnabled(preferences.insights ?? true);
+        setCorrelationsEnabled(preferences.correlations ?? true);
         const loadedThresholds = {
           repas: preferences.reminders?.thresholds?.repas ?? 0,
           pompages: preferences.reminders?.thresholds?.pompages ?? 0,
@@ -158,7 +162,7 @@ export default function NotificationsScreen() {
   }, []);
 
   const handleToggle = async (
-    key: "push" | "email" | "marketing" | "updates" | "tips",
+    key: "push" | "email" | "marketing" | "updates" | "tips" | "insights" | "correlations",
     value: boolean,
   ) => {
     if (isLoading) return;
@@ -168,6 +172,8 @@ export default function NotificationsScreen() {
       marketing,
       updates,
       tips,
+      insights: insightsEnabled,
+      correlations: correlationsEnabled,
     }[key];
 
     const setters = {
@@ -176,6 +182,8 @@ export default function NotificationsScreen() {
       marketing: setMarketing,
       updates: setUpdates,
       tips: setTips,
+      insights: setInsightsEnabled,
+      correlations: setCorrelationsEnabled,
     };
 
     if (key === "push" && value) {
@@ -448,6 +456,28 @@ export default function NotificationsScreen() {
               reminderThresholds.vitamines,
               24,
               (value) => updateReminders({ vitamines: value }),
+            )}
+          </View>
+
+          <View
+            style={[styles.section, { backgroundColor: nc.backgroundCard }]}
+          >
+            <ThemedText
+              style={[styles.sectionTitle, { color: Colors[colorScheme].tint }]}
+            >
+              Contenu intelligent
+            </ThemedText>
+            {renderSettingItem(
+              "Analyses",
+              "Afficher les analyses basées sur les données de votre bébé",
+              insightsEnabled,
+              (value) => handleToggle("insights", value),
+            )}
+            {renderSettingItem(
+              "Corrélations",
+              "Afficher les corrélations entre différents types de données",
+              correlationsEnabled,
+              (value) => handleToggle("correlations", value),
             )}
           </View>
 

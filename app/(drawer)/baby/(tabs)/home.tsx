@@ -655,6 +655,8 @@ export default function HomeDashboard() {
   // Keep ref in sync with state for use in closures (scheduleMerge)
   softDeletedIdsRef.current = softDeletedIds;
   const [tipsEnabled, setTipsEnabled] = useState(true);
+  const [insightsEnabled, setInsightsEnabled] = useState(true);
+  const [correlationsEnabled, setCorrelationsEnabled] = useState(true);
 
   // États des données
   const [data, setData] = useState<DashboardData>({
@@ -1110,6 +1112,8 @@ export default function HomeDashboard() {
         .then((prefs) => {
           if (!mounted) return;
           setTipsEnabled((prev) => prev === prefs.tips ? prev : prefs.tips);
+          setInsightsEnabled((prev) => prev === (prefs.insights ?? true) ? prev : (prefs.insights ?? true));
+          setCorrelationsEnabled((prev) => prev === (prefs.correlations ?? true) ? prev : (prefs.correlations ?? true));
         })
         .catch(() => {});
       return () => { mounted = false; };
@@ -1200,6 +1204,8 @@ export default function HomeDashboard() {
     babyBirthDate: activeChild?.birthDate ?? null,
     babyName: activeChild?.name ?? "",
     tipsEnabled,
+    insightsEnabled,
+    correlationsEnabled,
   });
 
   const todayJalons = useMemo(() => {
@@ -2077,15 +2083,15 @@ export default function HomeDashboard() {
         const mergedEvents = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
 
         // Build a stable fingerprint from visible events to detect real changes.
-        // Includes optimistic flag so the opacity transition triggers a render,
-        // but excludes raw IDs so the tempId→realId swap doesn't flash.
+        // Includes count of optimistic events so the tempId→realId reconciliation
+        // (which unblocks edit/delete) triggers a setData.
         const visibleEvents = mergedEvents.filter(
           (e: any) => !softDeletedIdsRef.current.has(e.id),
         );
-        const hasOptimistic = visibleEvents.some(
+        const optimisticCount = visibleEvents.filter(
           (e: any) => e.id?.startsWith?.('__optimistic_'),
-        );
-        const idsKey = `${visibleEvents.length}_${hasOptimistic ? 'O' : 'C'}_${visibleEvents
+        ).length;
+        const idsKey = `${visibleEvents.length}_${optimisticCount}_${visibleEvents
           .slice(0, 20)
           .map((e: any) => `${e.type}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
           .join('|')}`;

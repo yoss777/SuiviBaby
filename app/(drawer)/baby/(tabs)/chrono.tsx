@@ -1622,10 +1622,10 @@ export default function ChronoScreen() {
           (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
         );
 
-        const hasOptimistic = sorted.some(
+        const optimisticCount = sorted.filter(
           (e: any) => e.id?.startsWith?.('__optimistic_'),
-        );
-        const fingerprint = `${sorted.length}_${hasOptimistic ? 'O' : 'C'}_${sorted
+        ).length;
+        const fingerprint = `${sorted.length}_${optimisticCount}_${sorted
           .slice(0, 20)
           .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
           .join('|')}`;
@@ -1911,6 +1911,10 @@ export default function ChronoScreen() {
         setInfoModalMessage("Cet événement ne peut pas être modifié ici.");
         return;
       }
+      if (event.id?.startsWith?.('__optimistic_')) {
+        showToast('Enregistrement en cours...');
+        return;
+      }
 
       const eventDate = toDate(event.date);
 
@@ -2177,13 +2181,17 @@ export default function ChronoScreen() {
       // Fallback for unsupported types
       setInfoModalMessage("Cet événement ne peut pas être modifié ici.");
     },
-    [openSheet],
+    [openSheet, showToast],
   );
 
   const handleEventDelete = useCallback((event: Event) => {
+    if (event.id?.startsWith?.('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDeleteConfirm({ visible: true, event });
-  }, []);
+  }, [showToast]);
 
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.event?.id) return;
@@ -2281,14 +2289,14 @@ export default function ChronoScreen() {
       return (
         <ReanimatedSwipeable
           renderRightActions={
-            canManageContent && item.id
+            canManageContent && item.id && !item.id?.startsWith?.('__optimistic_')
               ? () => <DeleteAction onPress={() => handleEventDelete(item)} />
               : undefined
           }
           friction={2}
           rightThreshold={40}
           overshootRight={false}
-          enabled={canManageContent && !!item.id}
+          enabled={canManageContent && !!item.id && !item.id?.startsWith?.('__optimistic_')}
         >
           <TimelineCard
             event={item}

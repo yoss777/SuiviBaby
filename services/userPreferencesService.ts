@@ -31,6 +31,8 @@ interface NotificationPreferences {
   email: boolean;
   updates: boolean;
   tips: boolean;
+  insights: boolean;
+  correlations: boolean;
   marketing: boolean;
   reminders?: ReminderPreferences;
 }
@@ -40,6 +42,8 @@ const defaultNotificationPreferences: NotificationPreferences = {
   email: false,
   updates: true,
   tips: true,
+  insights: true,
+  correlations: true,
   marketing: false,
   reminders: {
     enabled: false,

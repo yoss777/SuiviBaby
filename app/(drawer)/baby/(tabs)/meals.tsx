@@ -237,7 +237,7 @@ export default function MealsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showUndoToast, showActionToast } = useToast();
+  const { showToast, showUndoToast, showActionToast } = useToast();
   const { swipeableRef, triggerHint } = useSwipeHint();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
@@ -584,10 +584,10 @@ export default function MealsScreen() {
         ].sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
         const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Meal[];
 
-        const hasOptimistic = merged.some(
+        const optimisticCount = merged.filter(
           (e: any) => e.id?.startsWith?.('__optimistic_'),
-        );
-        const fingerprint = `${merged.length}_${hasOptimistic ? 'O' : 'C'}_${merged
+        ).length;
+        const fingerprint = `${merged.length}_${optimisticCount}_${merged
           .slice(0, 20)
           .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
           .join('|')}`;
@@ -1007,9 +1007,13 @@ export default function MealsScreen() {
   // ============================================
 
   const openEditModal = useCallback((meal: Meal) => {
+    if (meal.id?.startsWith?.('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     setPendingEditData(meal);
     setPendingOpen(true);
-  }, []);
+  }, [showToast]);
 
   const normalizeParam = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value;
@@ -1063,9 +1067,13 @@ export default function MealsScreen() {
   // ============================================
 
   const handleMealDelete = useCallback((meal: Meal) => {
+    if (meal.id?.startsWith?.('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDeleteConfirm({ visible: true, meal });
-  }, []);
+  }, [showToast]);
 
   const confirmDelete = useCallback(async () => {
     if (!activeChild?.id || !deleteConfirm.meal?.id) return;
@@ -1221,14 +1229,14 @@ export default function MealsScreen() {
         key={meal.id}
         ref={isFirstInList ? swipeableRef : undefined}
         renderRightActions={
-          canManageContent && meal.id
+          canManageContent && meal.id && !meal.id?.startsWith?.('__optimistic_')
             ? () => <DeleteAction onPress={() => handleMealDelete(meal)} />
             : undefined
         }
         friction={2}
         rightThreshold={40}
         overshootRight={false}
-        enabled={canManageContent && !!meal.id}
+        enabled={canManageContent && !!meal.id && !meal.id?.startsWith?.('__optimistic_')}
       >
       <Pressable
         accessibilityRole="button"

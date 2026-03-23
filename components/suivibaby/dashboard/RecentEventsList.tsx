@@ -467,7 +467,7 @@ function RecentEventsListComponent({
                   overshootRight={false}
                   enabled={!!onEventDelete && !!event.id && !event.id?.startsWith?.('__optimistic_')}
                 >
-                  <View style={[styles.recentRow, event.id?.startsWith?.('__optimistic_') && { opacity: 0.7 }]}>
+                  <View style={styles.recentRow}>
                     <View style={styles.recentTimelineColumn}>
                       <View
                         style={[
