@@ -1285,6 +1285,74 @@ const DeleteAction = React.memo(function DeleteAction({
 });
 
 // ============================================
+// EVENT ROW (memoized — stable callbacks prevent ReanimatedSwipeable re-layout)
+// ============================================
+
+interface ChronoEventRowProps {
+  item: Event;
+  isLastInSection: boolean;
+  canManageContent: boolean;
+  borderColor: string;
+  backgroundColor: string;
+  textColor: string;
+  secondaryTextColor: string;
+  colorScheme: "light" | "dark";
+  currentTime: Date;
+  onEdit?: (event: Event) => void;
+  onDelete?: (event: Event) => void;
+}
+
+const ChronoEventRow = React.memo(function ChronoEventRow({
+  item,
+  isLastInSection,
+  canManageContent,
+  borderColor,
+  backgroundColor,
+  textColor,
+  secondaryTextColor,
+  colorScheme,
+  currentTime,
+  onEdit,
+  onDelete,
+}: ChronoEventRowProps) {
+  const canDelete = canManageContent && !!item.id && !item.id?.startsWith?.('__optimistic_');
+
+  const handleDelete = useCallback(() => {
+    onDelete?.(item);
+  }, [onDelete, item]);
+
+  const handlePress = useCallback(() => {
+    onEdit?.(item);
+  }, [onEdit, item]);
+
+  const renderDeleteAction = useCallback(
+    () => <DeleteAction onPress={handleDelete} />,
+    [handleDelete],
+  );
+
+  return (
+    <ReanimatedSwipeable
+      renderRightActions={canDelete ? renderDeleteAction : undefined}
+      friction={2}
+      rightThreshold={40}
+      overshootRight={false}
+      enabled={canDelete}
+    >
+      <TimelineCard
+        event={item}
+        borderColor={borderColor}
+        backgroundColor={backgroundColor}
+        textColor={textColor}
+        secondaryTextColor={secondaryTextColor}
+        isLastInSection={isLastInSection}
+        onPress={canManageContent ? handlePress : undefined}
+        currentTime={currentTime}
+      />
+    </ReanimatedSwipeable>
+  );
+});
+
+// ============================================
 // P1: SKELETON SHIMMER COMPONENT
 // ============================================
 
@@ -2268,6 +2336,8 @@ export default function ChronoScreen() {
   );
 
   // Render item
+  const borderColor = `${Colors[colorScheme].tabIconDefault}30`;
+
   const renderItem = useCallback(
     ({
       item,
@@ -2277,35 +2347,24 @@ export default function ChronoScreen() {
       item: Event;
       index: number;
       section: TimelineSection;
-    }) => {
-      const isLastInSection = index === section.data.length - 1;
-      return (
-        <ReanimatedSwipeable
-          renderRightActions={
-            canManageContent && item.id && !item.id?.startsWith?.('__optimistic_')
-              ? () => <DeleteAction onPress={() => handleEventDelete(item)} />
-              : undefined
-          }
-          friction={2}
-          rightThreshold={40}
-          overshootRight={false}
-          enabled={canManageContent && !!item.id && !item.id?.startsWith?.('__optimistic_')}
-        >
-          <TimelineCard
-            event={item}
-            borderColor={`${Colors[colorScheme].tabIconDefault}30`}
-            backgroundColor={colors.background}
-            textColor={colors.text}
-            secondaryTextColor={colors.secondaryText}
-            isLastInSection={isLastInSection}
-            onPress={canManageContent ? () => handleEdit(item) : undefined}
-            currentTime={currentTime}
-          />
-        </ReanimatedSwipeable>
-      );
-    },
+    }) => (
+      <ChronoEventRow
+        item={item}
+        isLastInSection={index === section.data.length - 1}
+        canManageContent={canManageContent}
+        borderColor={borderColor}
+        backgroundColor={colors.background}
+        textColor={colors.text}
+        secondaryTextColor={colors.secondaryText}
+        colorScheme={colorScheme}
+        currentTime={currentTime}
+        onEdit={canManageContent ? handleEdit : undefined}
+        onDelete={canManageContent ? handleEventDelete : undefined}
+      />
+    ),
     [
       canManageContent,
+      borderColor,
       colors.background,
       colors.secondaryText,
       colors.text,

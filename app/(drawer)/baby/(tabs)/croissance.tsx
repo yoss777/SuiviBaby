@@ -592,6 +592,146 @@ const DeleteAction = React.memo(function DeleteAction({
 });
 
 // ============================================
+// EVENT ROW (memoized — stable callbacks prevent ReanimatedSwipeable re-layout)
+// ============================================
+
+interface CroissanceRowProps {
+  item: CroissanceEntry;
+  index: number;
+  visibleEntries: CroissanceEntry[];
+  canManageContent: boolean;
+  palette: any;
+  nc: any;
+  getDayLabel: (date: Date) => string;
+  toDate: (value: any) => Date;
+  onEdit: (entry: CroissanceEntry) => void;
+  onDelete: (entry: CroissanceEntry) => void;
+}
+
+const CroissanceEventRow = React.memo(function CroissanceEventRow({
+  item,
+  index,
+  visibleEntries,
+  canManageContent,
+  palette,
+  nc,
+  getDayLabel,
+  toDate,
+  onEdit,
+  onDelete,
+}: CroissanceRowProps) {
+  const date = toDate(item.date);
+  const currentDayLabel = getDayLabel(date);
+  const prevEntry = index > 0 ? visibleEntries[index - 1] : null;
+  const prevDate = prevEntry ? toDate(prevEntry.date) : null;
+  const prevDayLabel = prevDate ? getDayLabel(prevDate) : null;
+  const showDaySeparator = index === 0 || currentDayLabel !== prevDayLabel;
+  const nextEntry = index < visibleEntries.length - 1 ? visibleEntries[index + 1] : null;
+  const nextDayLabel = nextEntry ? getDayLabel(toDate(nextEntry.date)) : null;
+  const isLastInSection = !nextEntry || currentDayLabel !== nextDayLabel;
+
+  const canDelete = canManageContent && !!item.id && !item.id?.startsWith?.('__optimistic_');
+
+  const handleDelete = useCallback(() => {
+    onDelete(item);
+  }, [onDelete, item]);
+
+  const handlePress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onEdit(item);
+  }, [onEdit, item]);
+
+  const renderDeleteAction = useCallback(
+    () => <DeleteAction onPress={handleDelete} />,
+    [handleDelete],
+  );
+
+  return (
+    <>
+      {showDaySeparator && (
+        <View style={styles.daySeparator}>
+          <View style={[styles.daySeparatorLine, { backgroundColor: palette.border }]} />
+          <Text style={[styles.daySeparatorText, { color: palette.muted }]}>
+            {currentDayLabel}
+          </Text>
+          <View style={[styles.daySeparatorLine, { backgroundColor: palette.border }]} />
+        </View>
+      )}
+      <ReanimatedSwipeable
+        renderRightActions={canDelete ? renderDeleteAction : undefined}
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
+        enabled={canDelete}
+      >
+        <View style={styles.itemRow}>
+          <View style={styles.timelineColumn}>
+            <View style={[styles.dot, { backgroundColor: palette.green }]} />
+            <View
+              style={[
+                styles.line,
+                { backgroundColor: nc.borderLightAlpha },
+                isLastInSection && styles.lineLast,
+              ]}
+            />
+          </View>
+          <Text style={[styles.timeText, { color: palette.muted }]}>
+            {date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+          </Text>
+          <View style={styles.cardSwipeWrapper}>
+            <TouchableOpacity
+              onPress={canManageContent ? handlePress : undefined}
+              disabled={!canManageContent}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`Mesure du ${currentDayLabel}${item.poidsKg ? `, poids ${item.poidsKg} kg` : ""}${item.tailleCm ? `, taille ${item.tailleCm} cm` : ""}${item.teteCm ? `, tour de tête ${item.teteCm} cm` : ""}`}
+              accessibilityHint={canManageContent ? "Appuyer pour modifier" : undefined}
+              style={[styles.card, { borderColor: palette.border, backgroundColor: palette.surface }]}
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.cardTitleRow}>
+                  <FontAwesome name="seedling" size={14} color={palette.green} />
+                  <Text style={[styles.cardTitle, { color: palette.ink }]}>Croissance</Text>
+                </View>
+              </View>
+              <View style={styles.metricPillRow}>
+                {item.tailleCm ? (
+                  <View style={[styles.metricPill, { backgroundColor: palette.blueSoft }]}>
+                    <View style={styles.metricHeader}>
+                      <FontAwesome name="ruler-vertical" size={12} color={palette.blue} />
+                      <Text style={[styles.metricLabel, { color: palette.ink }]}>Taille</Text>
+                    </View>
+                    <Text style={[styles.metricValue, { color: palette.ink }]}>{item.tailleCm} cm</Text>
+                  </View>
+                ) : null}
+                {item.poidsKg ? (
+                  <View style={[styles.metricPill, { backgroundColor: palette.violetSoft }]}>
+                    <View style={styles.metricHeader}>
+                      <FontAwesome name="weight-scale" size={12} color={palette.violet} />
+                      <Text style={[styles.metricLabel, { color: palette.ink }]}>Poids</Text>
+                    </View>
+                    <Text style={[styles.metricValue, { color: palette.ink }]}>{item.poidsKg} kg</Text>
+                  </View>
+                ) : null}
+                {item.teteCm ? (
+                  <View style={[styles.metricPill, { backgroundColor: palette.amberSoft }]}>
+                    <View style={styles.metricHeader}>
+                      <MaterialCommunityIcons name="baby-face-outline" size={12} color={palette.amber} />
+                      <Text style={[styles.metricLabel, { color: palette.ink }]}>Tête</Text>
+                    </View>
+                    <Text style={[styles.metricValue, { color: palette.ink }]}>{item.teteCm} cm</Text>
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ReanimatedSwipeable>
+    </>
+  );
+});
+
+// ============================================
 // SKELETON LOADING COMPONENT
 // ============================================
 
@@ -1098,188 +1238,29 @@ export default function CroissanceScreen() {
   }, []);
 
   const renderItem = useCallback(
-    ({ item, index }: { item: CroissanceEntry; index: number }) => {
-      const date = toDate(item.date);
-      const currentDayLabel = getDayLabel(date);
-      const prevEntry = index > 0 ? visibleEntries[index - 1] : null;
-      const prevDate = prevEntry ? toDate(prevEntry.date) : null;
-      const prevDayLabel = prevDate ? getDayLabel(prevDate) : null;
-      const showDaySeparator = index === 0 || currentDayLabel !== prevDayLabel;
-      const nextEntry = index < visibleEntries.length - 1 ? visibleEntries[index + 1] : null;
-      const nextDayLabel = nextEntry ? getDayLabel(toDate(nextEntry.date)) : null;
-      const isLastInSection = !nextEntry || currentDayLabel !== nextDayLabel;
-
-      const cardContent = (
-        <TouchableOpacity
-          onPress={
-            canManageContent
-              ? () => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  openEditModal(item);
-                }
-              : undefined
-          }
-          disabled={!canManageContent}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel={`Mesure du ${currentDayLabel}${item.poidsKg ? `, poids ${item.poidsKg} kg` : ""}${item.tailleCm ? `, taille ${item.tailleCm} cm` : ""}${item.teteCm ? `, tour de tête ${item.teteCm} cm` : ""}`}
-          accessibilityHint={
-            canManageContent ? "Appuyer pour modifier" : undefined
-          }
-          style={[
-            styles.card,
-            {
-              borderColor: palette.border,
-              backgroundColor: palette.surface,
-            },
-          ]}
-        >
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleRow}>
-              <FontAwesome name="seedling" size={14} color={palette.green} />
-              <Text style={[styles.cardTitle, { color: palette.ink }]}>
-                Croissance
-              </Text>
-            </View>
-          </View>
-          <View style={styles.metricPillRow}>
-            {item.tailleCm ? (
-              <View
-                style={[
-                  styles.metricPill,
-                  { backgroundColor: palette.blueSoft },
-                ]}
-              >
-                <View style={styles.metricHeader}>
-                  <FontAwesome
-                    name="ruler-vertical"
-                    size={12}
-                    color={palette.blue}
-                  />
-                  <Text style={[styles.metricLabel, { color: palette.ink }]}>
-                    Taille
-                  </Text>
-                </View>
-                <Text style={[styles.metricValue, { color: palette.ink }]}>
-                  {item.tailleCm} cm
-                </Text>
-              </View>
-            ) : null}
-            {item.poidsKg ? (
-              <View
-                style={[
-                  styles.metricPill,
-                  { backgroundColor: palette.violetSoft },
-                ]}
-              >
-                <View style={styles.metricHeader}>
-                  <FontAwesome
-                    name="weight-scale"
-                    size={12}
-                    color={palette.violet}
-                  />
-                  <Text style={[styles.metricLabel, { color: palette.ink }]}>
-                    Poids
-                  </Text>
-                </View>
-                <Text style={[styles.metricValue, { color: palette.ink }]}>
-                  {item.poidsKg} kg
-                </Text>
-              </View>
-            ) : null}
-            {item.teteCm ? (
-              <View
-                style={[
-                  styles.metricPill,
-                  { backgroundColor: palette.amberSoft },
-                ]}
-              >
-                <View style={styles.metricHeader}>
-                  <MaterialCommunityIcons
-                    name="baby-face-outline"
-                    size={12}
-                    color={palette.amber}
-                  />
-                  <Text style={[styles.metricLabel, { color: palette.ink }]}>
-                    Tête
-                  </Text>
-                </View>
-                <Text style={[styles.metricValue, { color: palette.ink }]}>
-                  {item.teteCm} cm
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </TouchableOpacity>
-      );
-
-      return (
-        <React.Fragment>
-          {showDaySeparator && (
-            <View style={styles.daySeparator}>
-              <View
-                style={[
-                  styles.daySeparatorLine,
-                  { backgroundColor: palette.border },
-                ]}
-              />
-              <Text style={[styles.daySeparatorText, { color: palette.muted }]}>
-                {currentDayLabel}
-              </Text>
-              <View
-                style={[
-                  styles.daySeparatorLine,
-                  { backgroundColor: palette.border },
-                ]}
-              />
-            </View>
-          )}
-          <ReanimatedSwipeable
-            renderRightActions={
-              canManageContent && item.id && !item.id?.startsWith?.('__optimistic_')
-                ? () => (
-                    <DeleteAction onPress={() => handleEventDelete(item)} />
-                  )
-                : undefined
-            }
-            friction={2}
-            rightThreshold={40}
-            overshootRight={false}
-            enabled={canManageContent && !!item.id && !item.id?.startsWith?.('__optimistic_')}
-          >
-            <View style={styles.itemRow}>
-              <View style={styles.timelineColumn}>
-                <View style={[styles.dot, { backgroundColor: palette.green }]} />
-                <View
-                  style={[
-                    styles.line,
-                    { backgroundColor: nc.borderLightAlpha },
-                    isLastInSection && styles.lineLast,
-                  ]}
-                />
-              </View>
-              <Text style={[styles.timeText, { color: palette.muted }]}>
-                {date.toLocaleTimeString("fr-FR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </Text>
-              <View style={styles.cardSwipeWrapper}>
-                {cardContent}
-              </View>
-            </View>
-          </ReanimatedSwipeable>
-        </React.Fragment>
-      );
-    },
+    ({ item, index }: { item: CroissanceEntry; index: number }) => (
+      <CroissanceEventRow
+        item={item}
+        index={index}
+        visibleEntries={visibleEntries}
+        canManageContent={canManageContent}
+        palette={palette}
+        nc={nc}
+        getDayLabel={getDayLabel}
+        toDate={toDate}
+        onEdit={openEditModal}
+        onDelete={handleEventDelete}
+      />
+    ),
     [
       visibleEntries,
       canManageContent,
-      colorScheme,
+      palette,
+      nc,
       getDayLabel,
+      toDate,
       handleEventDelete,
       openEditModal,
-      palette,
     ],
   );
 
