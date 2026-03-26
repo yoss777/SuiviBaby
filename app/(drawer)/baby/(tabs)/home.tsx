@@ -30,11 +30,10 @@ import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
 import {
   ajouterActivite,
-  ajouterJalon,
   ajouterSommeil,
 } from "@/migration/eventsDoubleWriteService";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
-import { obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
+import { ajouterEvenementOptimistic, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import {
   mergeWithFirestoreEvents,
@@ -695,7 +694,6 @@ export default function HomeDashboard() {
   });
 
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [isMoodSaving, setIsMoodSaving] = useState(false);
   // Track current day to detect day changes (for listener refresh)
   const [currentDay, setCurrentDay] = useState(() => {
     const now = new Date();
@@ -736,10 +734,6 @@ export default function HomeDashboard() {
     );
   }, [loading]);
 
-  const triggerRefresh = useCallback(() => {
-    setRefreshTick((prev) => prev + 1);
-  }, []);
-
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     setRefreshTick((prev) => prev + 1);
@@ -753,12 +747,11 @@ export default function HomeDashboard() {
         ...props,
         onSuccess: () => {
           (props as any).onSuccess?.();
-          triggerRefresh();
           showToast("Enregistré ✓");
         },
       });
     },
-    [openSheetRaw, triggerRefresh],
+    [openSheetRaw],
   );
 
   const handleEventDelete = useCallback((event: any) => {
@@ -778,7 +771,6 @@ export default function HomeDashboard() {
     const timer = setTimeout(async () => {
       try {
         await supprimerEvenement(activeChild.id!, eventId);
-        triggerRefresh();
       } catch {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
@@ -804,7 +796,6 @@ export default function HomeDashboard() {
     deleteConfirm.event,
     showUndoToast,
     showActionToast,
-    triggerRefresh,
   ]);
 
   const cancelDelete = useCallback(() => {
@@ -1026,6 +1017,10 @@ export default function HomeDashboard() {
     });
   }, []);
 
+  const handleViewAllPress = useCallback(() => {
+    router.push("/baby/chrono" as any);
+  }, []);
+
   const recentEvents = useMemo(() => {
     const cutoff = new Date(
       currentTime.getTime() - RECENT_EVENTS_CUTOFF_HOURS * 60 * 60 * 1000,
@@ -1054,13 +1049,14 @@ export default function HomeDashboard() {
       date: event.date,
     }));
 
-    return merged
+    const filtered = merged
       .filter(
         (event) =>
           toDate(event.date) >= cutoff && !softDeletedIds.has(event.id),
       )
       .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime())
       .slice(0, RECENT_EVENTS_MAX);
+    return filtered;
   }, [
     data.biberons,
     data.solides,
@@ -1214,10 +1210,11 @@ export default function HomeDashboard() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     return data.jalons.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
       const date = toDate(item.date);
       return date >= today && date < tomorrow;
     });
-  }, [data.jalons, toDate]);
+  }, [data.jalons, toDate, softDeletedIds]);
 
   const todayMoodEvent = useMemo(() => {
     const moods = todayJalons
@@ -1227,46 +1224,31 @@ export default function HomeDashboard() {
   }, [todayJalons, toDate]);
 
   const handleSetMood = useCallback(
-    async (value: 1 | 2 | 3 | 4 | 5) => {
-      if (!activeChild?.id || isMoodSaving) return;
-      // Haptic feedback on selection
+    (value: 1 | 2 | 3 | 4 | 5) => {
+      if (!activeChild?.id) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      try {
-        setIsMoodSaving(true);
-        const now = new Date();
-        const dataToSave = {
-          date: now,
-          typeJalon: "humeur" as const,
-          humeur: value,
-          titre: "Humeur du jour",
-        };
-        // Toujours ajouter une nouvelle entrée (l'enfant peut changer d'humeur plusieurs fois par jour)
-        const moodId = await ajouterJalon(activeChild.id, dataToSave);
-
-        if (moodId) {
-          showToast("Humeur enregistrée");
-        } else {
-          showToast("Impossible d'enregistrer l'humeur.");
-        }
-      } catch {
-        showToast("Impossible d'enregistrer l'humeur.");
-      } finally {
-        setIsMoodSaving(false);
-      }
+      ajouterEvenementOptimistic(activeChild.id, {
+        type: "jalon",
+        typeJalon: "humeur",
+        humeur: value,
+        titre: "Humeur du jour",
+        date: new Date(),
+      });
+      showToast("Humeur enregistrée");
     },
-    [activeChild?.id, isMoodSaving, showToast],
+    [activeChild?.id, showToast],
   );
   const sommeilEnCours = useMemo(() => {
-    return data.sommeils.find((item) => !item.heureFin && item.heureDebut);
-  }, [data.sommeils]);
+    return data.sommeils.find((item) => !softDeletedIds.has(item.id) && !item.heureFin && item.heureDebut);
+  }, [data.sommeils, softDeletedIds]);
 
   // Promenade en cours detection (same pattern as sommeil)
   const promenadeEnCours = useMemo(() => {
     return data.activites.find(
       (item: any) =>
-        item.typeActivite === "promenade" && item.heureDebut && !item.heureFin,
+        !softDeletedIds.has(item.id) && item.typeActivite === "promenade" && item.heureDebut && !item.heureFin,
     );
-  }, [data.activites]);
+  }, [data.activites, softDeletedIds]);
 
   const handleEventEdit = useEventEditHandler(
     openSheet,
@@ -1275,6 +1257,15 @@ export default function HomeDashboard() {
     sommeilEnCours,
     promenadeEnCours,
     showToast,
+  );
+
+  const stableOnEventPress = useMemo(
+    () => (canManageContent ? handleEventEdit : undefined),
+    [canManageContent, handleEventEdit],
+  );
+  const stableOnEventDelete = useMemo(
+    () => (canManageContent ? handleEventDelete : undefined),
+    [canManageContent, handleEventDelete],
   );
 
   const elapsedSleepMinutes = useMemo(() => {
@@ -2167,8 +2158,10 @@ export default function HomeDashboard() {
     );
 
     // Filtrer les entrées pour ne garder que celles d'aujourd'hui
+    // (exclut aussi les events en cours de soft-delete pour cohérence avec la timeline)
     const filterToday = (items: any[]) =>
       items.filter((item) => {
+        if (softDeletedIdsRef.current.has(item.id)) return false;
         const itemDate = item.date?.seconds
           ? new Date(item.date.seconds * 1000)
           : new Date(item.date);
@@ -2183,6 +2176,7 @@ export default function HomeDashboard() {
     // (ex: nuit commencée hier à 21h et terminée aujourd'hui à 6h)
     const filterTodaySleep = (items: any[]) =>
       items.filter((item) => {
+        if (softDeletedIdsRef.current.has(item.id)) return false;
         const start = item.heureDebut
           ? toDate(item.heureDebut)
           : toDate(item.date);
@@ -2444,7 +2438,7 @@ export default function HomeDashboard() {
         lastTimestamp: getTimestamp(lastVaccin),
       },
     });
-  }, [data, toDate]);
+  }, [data, toDate, softDeletedIds]);
 
   // ============================================
   // HELPERS - UI
@@ -2674,7 +2668,6 @@ export default function HomeDashboard() {
                     {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
                       const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
                       const isSelected = todayMoodEvent?.humeur === moodValue;
-                      const isCurrentlySaving = isMoodSaving && isSelected;
                       return (
                         <TouchableOpacity
                           key={key}
@@ -2690,19 +2683,11 @@ export default function HomeDashboard() {
                             ],
                           ]}
                           onPress={() => handleSetMood(moodValue)}
-                          disabled={isMoodSaving}
                           activeOpacity={0.7}
                           accessibilityLabel={`Humeur ${moodValue} sur 5`}
                           accessibilityState={{ selected: isSelected }}
                         >
-                          {isCurrentlySaving ? (
-                            <ActivityIndicator
-                              size="small"
-                              color={cat.moments.primary}
-                            />
-                          ) : (
-                            <Text style={styles.moodEmojiText}>{emoji}</Text>
-                          )}
+                          <Text style={styles.moodEmojiText}>{emoji}</Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -2786,9 +2771,9 @@ export default function HomeDashboard() {
             showHint={showRecentHint && canManageContent}
             colorScheme={colorScheme}
             currentTime={currentTime}
-            onEventPress={canManageContent ? handleEventEdit : undefined}
-            onEventDelete={canManageContent ? handleEventDelete : undefined}
-            onViewAllPress={() => router.push("/baby/chrono" as any)}
+            onEventPress={stableOnEventPress}
+            onEventDelete={stableOnEventDelete}
+            onViewAllPress={handleViewAllPress}
             toDate={toDate}
             formatTime={formatTime}
             formatDuration={formatDuration}

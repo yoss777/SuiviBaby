@@ -731,14 +731,10 @@ export default function CroissanceScreen() {
   const sheetOwnerId = "croissance";
   const returnToRef = useRef<string | null>(null);
 
-  const triggerRefresh = useCallback(() => {
-    setRefreshTick((prev) => prev + 1);
-  }, []);
-
   const handlePullToRefresh = useCallback(() => {
     setIsRefreshing(true);
-    triggerRefresh();
-  }, [triggerRefresh]);
+    setRefreshTick((prev) => prev + 1);
+  }, []);
 
   const palette = useMemo(
     () => ({
@@ -868,7 +864,6 @@ export default function CroissanceScreen() {
       ownerId: sheetOwnerId,
       formType: "croissance",
       onSuccess: () => {
-        triggerRefresh();
         showToast("Mesure enregistrée");
       },
       onDismiss: () => {
@@ -876,7 +871,7 @@ export default function CroissanceScreen() {
         maybeReturnTo(returnTarget);
       },
     });
-  }, [openSheet, returnTo, maybeReturnTo, triggerRefresh, showToast]);
+  }, [openSheet, returnTo, maybeReturnTo, showToast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -902,7 +897,6 @@ export default function CroissanceScreen() {
         ownerId: sheetOwnerId,
         formType: "croissance",
         onSuccess: () => {
-          triggerRefresh();
           showToast("Mesure enregistrée");
         },
         editData: {
@@ -915,7 +909,7 @@ export default function CroissanceScreen() {
         onDismiss: () => maybeReturnTo(returnToRef.current),
       });
     },
-    [openSheet, maybeReturnTo, triggerRefresh, showToast],
+    [openSheet, maybeReturnTo, showToast],
   );
 
   const handleEventDelete = useCallback((event: CroissanceEntry) => {

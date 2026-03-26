@@ -10,7 +10,7 @@ import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { memo, useEffect, useRef } from "react";
+import React, { memo, useCallback, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -55,6 +55,25 @@ export interface RecentEventsListProps {
   formatDuration: (minutes?: number) => string;
   buildDetails: (event: RecentEvent) => string | undefined;
   getDayLabel: (date: Date) => string;
+}
+
+function getEventTimestamp(value: any): number {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value?.toDate === "function") return value.toDate().getTime();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  const parsed = Date.parse(String(value));
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getFallbackEventKey(event: RecentEvent): string {
+  return [
+    event.type,
+    event.typeActivite ?? "",
+    event.typeJalon ?? "",
+    event.titre ?? "",
+    getEventTimestamp(event.heureDebut ?? event.date),
+  ].join(":");
 }
 
 // ============================================
@@ -179,21 +198,29 @@ const TimeDisplay = memo(function TimeDisplay({
 });
 
 const StaggeredRow = memo(function StaggeredRow({
-  index,
+  animate,
+  delay,
   children,
 }: {
-  index: number;
+  animate: boolean;
+  delay: number;
   children: React.ReactNode;
 }) {
-  const anim = useRef(new Animated.Value(0)).current;
+  const anim = useRef(new Animated.Value(animate ? 0 : 1)).current;
+  const hasAnimated = useRef(!animate ? true : false);
 
   useEffect(() => {
+    if (hasAnimated.current) return;
+    hasAnimated.current = true;
+
+    anim.setValue(0);
     Animated.timing(anim, {
       toValue: 1,
       duration: 300,
-      delay: index * 50,
+      delay,
       useNativeDriver: true,
     }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -256,6 +283,321 @@ const EmptyState = memo(function EmptyState({
 });
 
 // ============================================
+// EVENT ROW (memoized to prevent re-render of unchanged items)
+// ============================================
+
+interface EventRowProps {
+  event: RecentEvent;
+  index: number;
+  isLast: boolean;
+  prevEvent: RecentEvent | null;
+  colorScheme: "light" | "dark";
+  currentTime: Date;
+  animate: boolean;
+  onEventPress?: (event: RecentEvent) => void;
+  onEventDelete?: (event: RecentEvent) => void;
+  toDate: (value: any) => Date;
+  formatTime: (date: Date) => string;
+  formatDuration: (minutes?: number) => string;
+  buildDetails: (event: RecentEvent) => string | undefined;
+  getDayLabel: (date: Date) => string;
+}
+
+function getDisplayLabel(event: RecentEvent, config: EventConfigItem): string {
+  const isSleep = event.type === "sommeil";
+  const isActivity = event.type === "activite";
+  const isJalon = event.type === "jalon";
+
+  if (isSleep && typeof event.isNap === "boolean") {
+    return event.isNap ? "Sieste" : "Nuit de sommeil";
+  }
+  if (isActivity && event.typeActivite) {
+    if (event.typeActivite === "autre") {
+      const customLabel =
+        typeof event.description === "string"
+          ? event.description.trim()
+          : typeof event.note === "string"
+            ? event.note.trim()
+            : "";
+      if (customLabel) {
+        return `Activité : ${customLabel}`;
+      }
+    }
+    return ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
+  }
+  if (isJalon && event.typeJalon) {
+    if (event.typeJalon === "autre") {
+      return event.titre || JALON_TYPE_LABELS.autre || config.label;
+    }
+    return JALON_TYPE_LABELS[event.typeJalon] || config.label;
+  }
+  return config.label;
+}
+
+const SOLIDE_TYPE_LABELS: Record<string, string> = {
+  puree: "Purée", compote: "Compote", cereales: "Céréales",
+  yaourt: "Yaourt", morceaux: "Morceaux", autre: "Autre",
+};
+const SOLIDE_QTY_LABELS: Record<string, string> = {
+  peu: "Un peu", moyen: "Moyen", beaucoup: "Beaucoup",
+};
+
+const EventRow = memo(function EventRow({
+  event,
+  index,
+  isLast,
+  prevEvent,
+  colorScheme,
+  currentTime,
+  animate,
+  onEventPress,
+  onEventDelete,
+  toDate,
+  formatTime,
+  formatDuration,
+  buildDetails,
+  getDayLabel,
+}: EventRowProps) {
+  const nc = getNeutralColors(colorScheme);
+  const borderColor = nc.borderLightAlpha;
+  const textColor = nc.textLight;
+
+  const config = EVENT_CONFIG[event.type] || {
+    label: event.type,
+    icon: { lib: "fa6" as const, name: "circle" },
+    color: Colors[colorScheme].tint,
+  };
+
+  const isSleep = event.type === "sommeil";
+  const isJalon = event.type === "jalon";
+  const displayLabel = getDisplayLabel(event, config);
+  const sleepIconName =
+    isSleep && typeof event.isNap === "boolean"
+      ? event.isNap
+        ? "bed"
+        : "moon"
+      : null;
+
+  const date = toDate(event.date);
+  const isSolide = event.type === "solide";
+  const details = buildDetails(event);
+
+  const solideMomentLabel = isSolide && event.momentRepas
+    ? MOMENT_REPAS_LABELS[event.momentRepas] ?? null
+    : null;
+  const solideQtyLabel = isSolide && event.quantite
+    ? `Qté : ${SOLIDE_QTY_LABELS[event.quantite as string] ?? ""}`
+    : null;
+  const solideTypeLabel = isSolide && event.typeSolide
+    ? SOLIDE_TYPE_LABELS[event.typeSolide] ?? null
+    : null;
+  const solideLine1Parts = [solideMomentLabel, solideTypeLabel, solideQtyLabel].filter(Boolean);
+  const solideLine2 = solideLine1Parts.length > 0 ? solideLine1Parts.join(" · ") : null;
+
+  const solideDishName = isSolide
+    ? event.nomNouvelAliment || event.ingredients || ""
+    : "";
+  const solideLikeLabel = isSolide
+    ? event.aime === undefined
+      ? solideDishName || null
+      : event.aime
+        ? solideDishName
+          ? `A aimé ce plat : ${solideDishName}`
+          : "A aimé ce plat"
+        : solideDishName
+          ? `N'a pas aimé ce plat : ${solideDishName}`
+          : "N'a pas aimé ce plat"
+    : null;
+  const solideLikeColor = isSolide
+    ? event.aime === undefined
+      ? nc.success
+      : event.aime
+        ? nc.success
+        : nc.error
+    : undefined;
+
+  const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
+  const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !event.heureFin && event.heureDebut;
+  const isOngoing = isOngoingSleep || isOngoingPromenade;
+  const hasStartEnd = (isSleep || (event.type === "activite" && event.typeActivite === "promenade")) && !!event.heureDebut;
+  const elapsedMinutes = isOngoing
+    ? Math.max(
+        0,
+        Math.round(
+          (currentTime.getTime() - toDate(event.heureDebut).getTime()) /
+            60000,
+        ),
+      )
+    : 0;
+
+  const currentDayLabel = getDayLabel(date);
+  const prevDayLabel = prevEvent
+    ? getDayLabel(toDate(prevEvent.date))
+    : null;
+  const showDaySeparator =
+    currentDayLabel !== "Aujourd'hui" &&
+    (index === 0 || currentDayLabel !== prevDayLabel);
+
+  const displayDetails = isOngoing
+    ? details
+      ? `${formatDuration(elapsedMinutes)} · ${details}`
+      : formatDuration(elapsedMinutes)
+    : isSolide
+      ? [solideLine2, solideLikeLabel].filter(Boolean).join("\n")
+      : details;
+
+  const canDelete = !!onEventDelete && !!event.id && !event.id?.startsWith?.('__optimistic_');
+
+  const handleDelete = useCallback(() => {
+    onEventDelete?.(event);
+  }, [onEventDelete, event]);
+
+  const handlePress = useCallback(() => {
+    onEventPress?.(event);
+  }, [onEventPress, event]);
+
+  const renderDeleteAction = useCallback(
+    () => <DeleteAction onPress={handleDelete} backgroundColor={nc.error} />,
+    [handleDelete, nc.error],
+  );
+
+  return (
+    <>
+      {showDaySeparator && (
+        <DaySeparator
+          label={currentDayLabel}
+          borderColor={borderColor}
+          textColor={textColor}
+        />
+      )}
+      <StaggeredRow
+        animate={animate}
+        delay={animate ? index * 50 : 0}
+      >
+        <ReanimatedSwipeable
+          containerStyle={styles.swipeableContainer}
+          renderRightActions={canDelete ? renderDeleteAction : undefined}
+          friction={2}
+          rightThreshold={40}
+          overshootRight={false}
+          enabled={canDelete}
+        >
+          <View style={styles.recentRow}>
+            <View style={styles.recentTimelineColumn}>
+              <View
+                style={[
+                  styles.recentDot,
+                  { backgroundColor: config.color },
+                ]}
+              />
+              <View
+                style={[
+                  styles.recentLine,
+                  { backgroundColor: borderColor },
+                  isLast && styles.recentLineLast,
+                ]}
+              />
+            </View>
+            <View style={styles.recentTimeLeft}>
+              <TimeDisplay
+                isSleep={isSleep}
+                hasStartEnd={hasStartEnd}
+                hasEndTime={!!event.heureFin}
+                startTime={hasStartEnd && event.heureDebut ? formatTime(toDate(event.heureDebut)) : formatTime(date)}
+                endTime={
+                  event.heureFin
+                    ? formatTime(toDate(event.heureFin))
+                    : undefined
+                }
+                ongoingColor={isOngoingPromenade ? eventColors.activite.dark : eventColors.sommeil.dark}
+                textColor={textColor}
+              />
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.recentCard,
+                {
+                  borderColor,
+                  backgroundColor: nc.backgroundCard,
+                },
+              ]}
+              activeOpacity={0.85}
+              onPress={onEventPress ? handlePress : undefined}
+              disabled={!onEventPress}
+              accessibilityRole="button"
+              accessibilityLabel={`${displayLabel}${displayDetails ? `, ${displayDetails}` : ""}`}
+              accessibilityHint={
+                onEventPress ? "Appuyez pour modifier" : undefined
+              }
+            >
+              <View style={styles.recentTitleRow}>
+                <EventIcon
+                  config={config}
+                  isSleep={isSleep}
+                  sleepIconName={sleepIconName}
+                />
+                <Text
+                  style={[
+                    styles.recentTitle,
+                    { color: nc.textStrong },
+                  ]}
+                >
+                  {displayLabel}
+                </Text>
+                {isJalon && event.photos?.[0] && (
+                  <Image
+                    source={{ uri: event.photos[0] }}
+                    style={[
+                      styles.recentThumb,
+                      { backgroundColor: nc.backgroundPressed },
+                    ]}
+                    accessibilityLabel="Photo de l'événement"
+                  />
+                )}
+              </View>
+              {!isSolide && displayDetails && (
+                <Text
+                  style={[styles.recentDetails, { color: textColor }]}
+                  accessibilityLiveRegion={
+                    isOngoingSleep ? "polite" : "none"
+                  }
+                >
+                  {displayDetails}
+                </Text>
+              )}
+              {isSolide && (solideLine2 || solideLikeLabel) && (
+                <View style={styles.solideDetails}>
+                  {solideLine2 && (
+                    <Text
+                      style={[
+                        styles.solideDetailsText,
+                        { color: textColor },
+                      ]}
+                    >
+                      {solideLine2}
+                    </Text>
+                  )}
+                  {solideLikeLabel && (
+                    <Text
+                      style={[
+                        styles.solideDetailsText,
+                        { color: solideLikeColor ?? textColor },
+                      ]}
+                    >
+                      {solideLikeLabel}
+                    </Text>
+                  )}
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ReanimatedSwipeable>
+      </StaggeredRow>
+    </>
+  );
+});
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -275,39 +617,15 @@ function RecentEventsListComponent({
   getDayLabel,
 }: RecentEventsListProps) {
   const nc = getNeutralColors(colorScheme);
-  const borderColor = nc.borderLightAlpha;
-  const textColor = nc.textLight;
+  const hasPlayedEntranceRef = useRef(false);
 
-  const getDisplayLabel = (event: RecentEvent, config: EventConfigItem) => {
-    const isSleep = event.type === "sommeil";
-    const isActivity = event.type === "activite";
-    const isJalon = event.type === "jalon";
+  const shouldAnimateRows = !loading && !hasPlayedEntranceRef.current;
 
-    if (isSleep && typeof event.isNap === "boolean") {
-      return event.isNap ? "Sieste" : "Nuit de sommeil";
+  useEffect(() => {
+    if (!loading && events.length > 0 && !hasPlayedEntranceRef.current) {
+      hasPlayedEntranceRef.current = true;
     }
-    if (isActivity && event.typeActivite) {
-      if (event.typeActivite === "autre") {
-        const customLabel =
-          typeof event.description === "string"
-            ? event.description.trim()
-            : typeof event.note === "string"
-              ? event.note.trim()
-              : "";
-        if (customLabel) {
-          return `Activité : ${customLabel}`;
-        }
-      }
-      return ACTIVITY_TYPE_LABELS[event.typeActivite] || config.label;
-    }
-    if (isJalon && event.typeJalon) {
-      if (event.typeJalon === "autre") {
-        return event.titre || JALON_TYPE_LABELS.autre || config.label;
-      }
-      return JALON_TYPE_LABELS[event.typeJalon] || config.label;
-    }
-    return config.label;
-  };
+  }, [events.length, loading]);
 
   return (
     <View style={styles.section}>
@@ -351,238 +669,25 @@ function RecentEventsListComponent({
       ) : events.length === 0 ? (
         <EmptyState titleColor={nc.textStrong} subtitleColor={nc.textMuted} />
       ) : (
-        events.map((event, index) => {
-          const config = EVENT_CONFIG[event.type] || {
-            label: event.type,
-            icon: { lib: "fa6" as const, name: "circle" },
-            color: Colors[colorScheme].tint,
-          };
-
-          const isSleep = event.type === "sommeil";
-          const isJalon = event.type === "jalon";
-          const displayLabel = getDisplayLabel(event, config);
-          const sleepIconName =
-            isSleep && typeof event.isNap === "boolean"
-              ? event.isNap
-                ? "bed"
-                : "moon"
-              : null;
-
-          const date = toDate(event.date);
-          const isSolide = event.type === "solide";
-          const details = buildDetails(event);
-          const solideTypeLabels: Record<string, string> = {
-            puree: "Purée", compote: "Compote", cereales: "Céréales",
-            yaourt: "Yaourt", morceaux: "Morceaux", autre: "Autre",
-          };
-          const solideQtyLabels: Record<string, string> = {
-            peu: "Un peu", moyen: "Moyen", beaucoup: "Beaucoup",
-          };
-          const solideMomentLabel = isSolide && event.momentRepas
-            ? MOMENT_REPAS_LABELS[event.momentRepas] ?? null
-            : null;
-          const solideQtyLabel = isSolide && event.quantite
-            ? `Qté : ${solideQtyLabels[event.quantite as string] ?? ""}`
-            : null;
-          const solideTypeLabel = isSolide && event.typeSolide
-            ? solideTypeLabels[event.typeSolide] ?? null
-            : null;
-          const solideLine1Parts = [solideMomentLabel, solideTypeLabel, solideQtyLabel].filter(Boolean);
-          const solideLine2 = solideLine1Parts.length > 0 ? solideLine1Parts.join(" · ") : null;
-
-          const solideDishName = isSolide
-            ? event.nomNouvelAliment || event.ingredients || ""
-            : "";
-          const solideLikeLabel = isSolide
-            ? event.aime === undefined
-              ? solideDishName || null
-              : event.aime
-                ? solideDishName
-                  ? `A aimé ce plat : ${solideDishName}`
-                  : "A aimé ce plat"
-                : solideDishName
-                  ? `N'a pas aimé ce plat : ${solideDishName}`
-                  : "N'a pas aimé ce plat"
-            : null;
-          const solideLikeColor = isSolide
-            ? event.aime === undefined
-              ? nc.success
-              : event.aime
-                ? nc.success
-                : nc.error
-            : undefined;
-
-          const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
-          const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !event.heureFin && event.heureDebut;
-          const isOngoing = isOngoingSleep || isOngoingPromenade;
-          const hasStartEnd = (isSleep || (event.type === "activite" && event.typeActivite === "promenade")) && !!event.heureDebut;
-          const elapsedMinutes = isOngoing
-            ? Math.max(
-                0,
-                Math.round(
-                  (currentTime.getTime() - toDate(event.heureDebut).getTime()) /
-                    60000,
-                ),
-              )
-            : 0;
-
-          const currentDayLabel = getDayLabel(date);
-          const prevEvent = index > 0 ? events[index - 1] : null;
-          const prevDayLabel = prevEvent
-            ? getDayLabel(toDate(prevEvent.date))
-            : null;
-          const showDaySeparator =
-            currentDayLabel !== "Aujourd'hui" &&
-            (index === 0 || currentDayLabel !== prevDayLabel);
-
-          const displayDetails = isOngoing
-            ? details
-              ? `${formatDuration(elapsedMinutes)} · ${details}`
-              : formatDuration(elapsedMinutes)
-            : isSolide
-              ? [solideLine2, solideLikeLabel].filter(Boolean).join("\n")
-              : details;
-
-          return (
-            <React.Fragment key={event.id ?? `${event.type}-${event.date}`}>
-              {showDaySeparator && (
-                <DaySeparator
-                  label={currentDayLabel}
-                  borderColor={borderColor}
-                  textColor={textColor}
-                />
-              )}
-              <StaggeredRow index={index}>
-                <ReanimatedSwipeable
-                  containerStyle={styles.swipeableContainer}
-                  renderRightActions={
-                    onEventDelete && event.id && !event.id?.startsWith?.('__optimistic_')
-                      ? () => (
-                          <DeleteAction onPress={() => onEventDelete(event)} backgroundColor={nc.error} />
-                        )
-                      : undefined
-                  }
-                  friction={2}
-                  rightThreshold={40}
-                  overshootRight={false}
-                  enabled={!!onEventDelete && !!event.id && !event.id?.startsWith?.('__optimistic_')}
-                >
-                  <View style={styles.recentRow}>
-                    <View style={styles.recentTimelineColumn}>
-                      <View
-                        style={[
-                          styles.recentDot,
-                          { backgroundColor: config.color },
-                        ]}
-                      />
-                      <View
-                        style={[
-                          styles.recentLine,
-                          { backgroundColor: borderColor },
-                          index === events.length - 1 && styles.recentLineLast,
-                        ]}
-                      />
-                    </View>
-                    <View style={styles.recentTimeLeft}>
-                      <TimeDisplay
-                        isSleep={isSleep}
-                        hasStartEnd={hasStartEnd}
-                        hasEndTime={!!event.heureFin}
-                        startTime={hasStartEnd && event.heureDebut ? formatTime(toDate(event.heureDebut)) : formatTime(date)}
-                        endTime={
-                          event.heureFin
-                            ? formatTime(toDate(event.heureFin))
-                            : undefined
-                        }
-                        ongoingColor={isOngoingPromenade ? eventColors.activite.dark : eventColors.sommeil.dark}
-                        textColor={textColor}
-                      />
-                    </View>
-                    <TouchableOpacity
-                      style={[
-                        styles.recentCard,
-                        {
-                          borderColor,
-                          backgroundColor: nc.backgroundCard,
-                        },
-                      ]}
-                      activeOpacity={0.85}
-                      onPress={
-                        onEventPress ? () => onEventPress(event) : undefined
-                      }
-                      disabled={!onEventPress}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${displayLabel}${displayDetails ? `, ${displayDetails}` : ""}`}
-                      accessibilityHint={
-                        onEventPress ? "Appuyez pour modifier" : undefined
-                      }
-                    >
-                      <View style={styles.recentTitleRow}>
-                        <EventIcon
-                          config={config}
-                          isSleep={isSleep}
-                          sleepIconName={sleepIconName}
-                        />
-                        <Text
-                          style={[
-                            styles.recentTitle,
-                            { color: nc.textStrong },
-                          ]}
-                        >
-                          {displayLabel}
-                        </Text>
-                        {isJalon && event.photos?.[0] && (
-                          <Image
-                            source={{ uri: event.photos[0] }}
-                            style={[
-                              styles.recentThumb,
-                              { backgroundColor: nc.backgroundPressed },
-                            ]}
-                            accessibilityLabel="Photo de l'événement"
-                          />
-                        )}
-                      </View>
-                      {!isSolide && displayDetails && (
-                        <Text
-                          style={[styles.recentDetails, { color: textColor }]}
-                          accessibilityLiveRegion={
-                            isOngoingSleep ? "polite" : "none"
-                          }
-                        >
-                          {displayDetails}
-                        </Text>
-                      )}
-                      {isSolide && (solideLine2 || solideLikeLabel) && (
-                        <View style={styles.solideDetails}>
-                          {solideLine2 && (
-                            <Text
-                              style={[
-                                styles.solideDetailsText,
-                                { color: textColor },
-                              ]}
-                            >
-                              {solideLine2}
-                            </Text>
-                          )}
-                          {solideLikeLabel && (
-                            <Text
-                              style={[
-                                styles.solideDetailsText,
-                                { color: solideLikeColor ?? textColor },
-                              ]}
-                            >
-                              {solideLikeLabel}
-                            </Text>
-                          )}
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </ReanimatedSwipeable>
-              </StaggeredRow>
-            </React.Fragment>
-          );
-        })
+        events.map((event, index) => (
+          <EventRow
+            key={event.id ?? getFallbackEventKey(event)}
+            event={event}
+            index={index}
+            isLast={index === events.length - 1}
+            prevEvent={index > 0 ? events[index - 1] : null}
+            colorScheme={colorScheme}
+            currentTime={currentTime}
+            animate={shouldAnimateRows}
+            onEventPress={onEventPress}
+            onEventDelete={onEventDelete}
+            toDate={toDate}
+            formatTime={formatTime}
+            formatDuration={formatDuration}
+            buildDetails={buildDetails}
+            getDayLabel={getDayLabel}
+          />
+        ))
       )}
     </View>
   );

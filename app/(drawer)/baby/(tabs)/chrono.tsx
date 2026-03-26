@@ -1514,23 +1514,18 @@ export default function ChronoScreen() {
   // P5: Soft-delete state
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
-  const triggerRefresh = useCallback(() => {
-    setRefreshTick((prev) => prev + 1);
-  }, []);
-
   const openSheet = useCallback(
     (props: Parameters<typeof openSheetRaw>[0]) => {
       openSheetRaw({
         ...props,
         onSuccess: () => {
           (props as any).onSuccess?.();
-          triggerRefresh();
           // P6: Toast on sheet success
           showToast("Événement enregistré");
         },
       });
     },
-    [openSheetRaw, triggerRefresh, showToast],
+    [openSheetRaw, showToast],
   );
 
   // Fade animation
@@ -1851,8 +1846,8 @@ export default function ChronoScreen() {
 
   const handlePullToRefresh = useCallback(() => {
     setIsRefreshing(true);
-    triggerRefresh();
-  }, [triggerRefresh]);
+    setRefreshTick((prev) => prev + 1);
+  }, []);
 
   // P4: Calendar date picker handlers
   const handleCalendarToggle = useCallback(() => {
@@ -2217,7 +2212,6 @@ export default function ChronoScreen() {
       async () => {
         try {
           await supprimerEvenement(childId, eventId);
-          triggerRefresh();
         } catch {
           // P27: Restore on error + retry action toast
           setSoftDeletedIds((prev) => {
@@ -2245,7 +2239,6 @@ export default function ChronoScreen() {
     deleteConfirm.event,
     showUndoToast,
     showActionToast,
-    triggerRefresh,
   ]);
 
   const cancelDelete = useCallback(() => {
