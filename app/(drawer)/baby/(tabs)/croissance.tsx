@@ -1470,9 +1470,12 @@ export default function CroissanceScreen() {
   useEffect(() => {
     if (!hasData || chartWidth <= 0) return;
     if (plotWidth <= chartWidth) return;
-    chartScrollRef.current?.scrollTo({
-      x: Math.max(plotWidth - chartWidth, 0),
-      animated: false,
+    // Wait for ScrollView layout before scrolling to end
+    requestAnimationFrame(() => {
+      chartScrollRef.current?.scrollTo({
+        x: Math.max(plotWidth - chartWidth, 0),
+        animated: false,
+      });
     });
   }, [chartWidth, hasData, metric, plotWidth]);
 
