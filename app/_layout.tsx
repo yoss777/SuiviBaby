@@ -28,6 +28,7 @@ import { AppUpdateManager } from "@/components/ui/AppUpdateManager";
 
 import { setupNotificationHandler } from "@/services/localNotificationService";
 import { startAutoSync } from "@/services/offlineQueueService";
+import { ensureFirebaseAppCheck } from "@/config/firebase";
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || "",
@@ -41,6 +42,9 @@ setupNotificationHandler();
 
 // Démarrer la synchronisation automatique de la queue offline
 startAutoSync();
+
+// Initialiser App Check le plus tôt possible pour les appels Functions.
+void ensureFirebaseAppCheck();
 
 export const unstable_settings = {
   anchor: "(drawer)",

@@ -7,6 +7,7 @@ import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ensureFirebaseAppCheck as ensureAppCheckForApp } from "./appCheck";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBJUP-b3NPExx-4RfWFLvrbAM5pEfHvAOg",
@@ -52,3 +53,9 @@ if (functionsEmulatorHost) {
   const [fHost, fPort] = functionsEmulatorHost.split(":");
   connectFunctionsEmulator(functions, fHost, Number(fPort));
 }
+
+export function ensureFirebaseAppCheck() {
+  return ensureAppCheckForApp(app);
+}
+
+void ensureFirebaseAppCheck();

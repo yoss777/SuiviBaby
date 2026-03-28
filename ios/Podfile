@@ -15,6 +15,8 @@ prepare_react_native_project!
 
 target 'SuiviBaby' do
   use_expo_modules!
+  pod 'FirebaseCoreInternal', :modular_headers => true
+  pod 'GoogleUtilities', :modular_headers => true
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
@@ -50,15 +52,56 @@ target 'SuiviBaby' do
       :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
     )
 
+    # RN 0.79/CocoaPods can inject React-jsitooling's modulemap alongside
+    # React-RuntimeCore, which produces a duplicate `react_runtime` module.
+    react_jsitooling_module_flag = '-fmodule-map-file="${PODS_ROOT}/Headers/Public/react_runtime/React-jsitooling.modulemap"'
+    react_jsitooling_swift_flag = '-Xcc -fmodule-map-file="${PODS_ROOT}/Headers/Public/react_runtime/React-jsitooling.modulemap"'
+
     # This is necessary for Xcode 14, because it signs resource bundles by default
     # when building for devices.
     installer.target_installation_results.pod_target_installation_results
       .each do |pod_name, target_installation_result|
-      target_installation_result.resource_bundle_targets.each do |resource_bundle_target|
-        resource_bundle_target.build_configurations.each do |config|
-          config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+        target_installation_result.resource_bundle_targets.each do |resource_bundle_target|
+          resource_bundle_target.build_configurations.each do |config|
+            config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+          end
         end
       end
+
+    installer.pods_project.targets.each do |target|
+      if target.name == 'React-jsitooling'
+        target.build_configurations.each do |config|
+          config.build_settings['DEFINES_MODULE'] = 'NO'
+          config.build_settings.delete('MODULEMAP_FILE')
+        end
+      end
+
+      target.build_configurations.each do |config|
+        %w[OTHER_CFLAGS OTHER_SWIFT_FLAGS].each do |setting|
+          value = config.build_settings[setting]
+          next unless value.is_a?(String)
+
+          config.build_settings[setting] = value
+            .gsub(" #{react_jsitooling_module_flag}", '')
+            .gsub(react_jsitooling_module_flag, '')
+            .gsub(" #{react_jsitooling_swift_flag}", '')
+            .gsub(react_jsitooling_swift_flag, '')
+            .gsub(/\s-Xcc\s+-Xcc\s+/, ' -Xcc ')
+        end
+      end
+    end
+
+    Dir.glob(File.join(__dir__, 'Pods', 'Target Support Files', '**', '*.xcconfig')).each do |xcconfig_path|
+      contents = File.read(xcconfig_path)
+      updated = contents
+        .gsub(" #{react_jsitooling_module_flag}", '')
+        .gsub(react_jsitooling_module_flag, '')
+        .gsub(" #{react_jsitooling_swift_flag}", '')
+        .gsub(react_jsitooling_swift_flag, '')
+        .gsub(/\s-Xcc\s+-Xcc\s+/, ' -Xcc ')
+      next if updated == contents
+
+      File.write(xcconfig_path, updated)
     end
   end
 end

@@ -1,16 +1,13 @@
 // services/usersService.ts
 import {
-  collection,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
-  query,
   setDoc,
   updateDoc,
-  where,
 } from "firebase/firestore";
-import { auth, db } from "../config/firebase";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "../config/firebase";
 
 // Interface pour le profil utilisateur
 interface UserProfile {
@@ -38,18 +35,21 @@ export async function getUserById(uid: string): Promise<UserProfile | null> {
 export async function getUserByEmail(
   email: string,
 ): Promise<UserProfile | null> {
-  const emailQuery = query(
-    collection(db, "users_public"),
-    where("email", "==", email.toLowerCase()),
-  );
-  const snapshot = await getDocs(emailQuery);
+  const findUser = httpsCallable<
+    { email: string },
+    { found: boolean; user: { id: string; userName: string } | null }
+  >(functions, "findUserByEmail");
 
-  if (snapshot.empty) {
+  const result = await findUser({ email: email.toLowerCase() });
+
+  if (!result.data.found || !result.data.user) {
     return null;
   }
 
-  const userDoc = snapshot.docs[0];
-  return { id: userDoc.id, ...userDoc.data() } as UserProfile;
+  return {
+    id: result.data.user.id,
+    userName: result.data.user.userName,
+  } as UserProfile;
 }
 
 // Créer ou mettre à jour le profil utilisateur
@@ -74,7 +74,6 @@ export async function creerOuMettreAJourProfil(data: {
       publicRef,
       {
         userName: data.userName,
-        ...(data.email ? { email: data.email.toLowerCase() } : {}),
         updatedAt: new Date(),
       },
       { merge: true },

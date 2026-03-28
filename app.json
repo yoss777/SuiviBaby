@@ -2,7 +2,7 @@
   "expo": {
     "name": "Suivi Baby",
     "slug": "Samaye",
-    "version": "1.0.10",
+    "version": "1.0.15",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "samaye",
@@ -34,7 +34,7 @@
       "compileSdkVersion": 35,
       "targetSdkVersion": 35,
       "minSdkVersion": 21,
-      "versionCode": 11
+      "versionCode": 16
     },
     "web": {
       "bundler": "metro",
@@ -55,8 +55,8 @@
       [
         "@sentry/react-native/expo",
         {
-          "organization": "samaye",
-          "project": "samaye-mobile"
+          "organization": "tesfa-f9",
+          "project": "suivibaby"
         }
       ],
       [

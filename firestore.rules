@@ -337,8 +337,11 @@ service cloud.firestore {
     }
 
     match /users_public/{userId} {
-      // Données publiques minimales (nom/email)
-      allow read: if isSignedIn();
+      // Données publiques minimales (nom uniquement — email retiré pour privacy)
+      // get: tout user connecté peut lire un profil par uid (pour afficher le nom)
+      // list: interdit — la recherche par email passe par la CF findUserByEmail
+      allow get: if isSignedIn();
+      allow list: if false;
       allow write: if isSignedIn() && request.auth.uid == userId;
     }
 

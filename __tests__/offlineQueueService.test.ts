@@ -8,6 +8,8 @@ import {
   getPendingEvents,
   processQueue,
   isOnline,
+  cleanupFailedEvents,
+  onSignOut,
 } from "@/services/offlineQueueService";
 
 // Get mock db instance
@@ -40,6 +42,7 @@ describe("offlineQueueService", () => {
       expect(mockDb.runAsync).toHaveBeenCalledWith(
         expect.stringContaining("INSERT INTO pending_events"),
         expect.stringMatching(/^offline_/),
+        "test-uid",
         "create",
         expect.any(String),
         expect.any(Number),
@@ -56,6 +59,7 @@ describe("offlineQueueService", () => {
       expect(size).toBe(5);
       expect(mockDb.getFirstAsync).toHaveBeenCalledWith(
         expect.stringContaining("COUNT(*)"),
+        "test-uid",
       );
     });
 
@@ -111,6 +115,40 @@ describe("offlineQueueService", () => {
       const synced = await processQueue();
 
       expect(synced).toBe(0);
+    });
+  });
+
+  describe("cleanupFailedEvents", () => {
+    it("should delete failed events only for the current user", async () => {
+      mockDb.runAsync.mockResolvedValueOnce({ changes: 2 });
+
+      const deleted = await cleanupFailedEvents();
+
+      expect(deleted).toBe(2);
+      expect(mockDb.runAsync).toHaveBeenCalledWith(
+        expect.stringContaining("DELETE FROM pending_events WHERE retryCount >= 3 AND uid = ?"),
+        "test-uid",
+      );
+    });
+  });
+
+  describe("onSignOut", () => {
+    it("should cleanup orphaned events and failed events for the current user", async () => {
+      mockDb.runAsync
+        .mockResolvedValueOnce({ changes: 1 })
+        .mockResolvedValueOnce({ changes: 2 });
+
+      await onSignOut();
+
+      expect(mockDb.runAsync).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining("DELETE FROM pending_events WHERE uid = ''"),
+      );
+      expect(mockDb.runAsync).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining("DELETE FROM pending_events WHERE retryCount >= 3 AND uid = ?"),
+        "test-uid",
+      );
     });
   });
 });

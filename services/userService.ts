@@ -59,7 +59,6 @@ export async function createPatientUser(
   await setDoc(doc(db, 'users', uid), user);
   await setDoc(doc(db, 'users_public', uid), {
     userName: safeUserName,
-    email: email.toLowerCase(),
     updatedAt: Timestamp.now(),
   }, { merge: true });
   return user;
@@ -117,7 +116,6 @@ export async function createProfessionalRegistrationRequest(
   await setDoc(doc(db, 'users', uid), user);
   await setDoc(doc(db, 'users_public', uid), {
     userName,
-    email: email.toLowerCase(),
     updatedAt: Timestamp.now(),
   }, { merge: true });
 
@@ -140,10 +138,9 @@ export async function getUserById(uid: string): Promise<User | null> {
  */
 export async function updateUser(uid: string, data: Partial<User>): Promise<void> {
   await updateDoc(doc(db, 'users', uid), data as any);
-  if (data.userName || data.email) {
+  if (data.userName) {
     await updateDoc(doc(db, 'users_public', uid), {
-      ...(data.userName ? { userName: data.userName } : {}),
-      ...(data.email ? { email: data.email.toLowerCase() } : {}),
+      userName: data.userName,
       updatedAt: Timestamp.now(),
     });
   }

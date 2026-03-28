@@ -2,6 +2,9 @@
   "functions": {
     "source": "functions"
   },
+  "react-native": {
+    "app_check_token_auto_refresh": true
+  },
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

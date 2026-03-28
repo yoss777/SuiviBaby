@@ -2,7 +2,7 @@
 // Queue de synchronisation offline avec SQLite
 import NetInfo from "@react-native-community/netinfo";
 import { httpsCallable } from "firebase/functions";
-import { functions } from "@/config/firebase";
+import { auth, functions } from "@/config/firebase";
 import * as SQLite from "expo-sqlite";
 
 // ============================================
@@ -13,6 +13,7 @@ type QueueAction = "create" | "update" | "delete";
 
 interface QueuedEvent {
   id: string;
+  uid: string;
   action: QueueAction;
   payload: string; // JSON stringified
   status: "pending" | "syncing" | "failed";
@@ -35,6 +36,7 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS pending_events (
         id TEXT PRIMARY KEY,
+        uid TEXT NOT NULL DEFAULT '',
         action TEXT NOT NULL,
         payload TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending',
@@ -43,6 +45,12 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
         createdAt INTEGER NOT NULL
       );
     `);
+    // Migration: ajouter colonne uid si absente (tables existantes)
+    try {
+      await db.execAsync(`ALTER TABLE pending_events ADD COLUMN uid TEXT NOT NULL DEFAULT ''`);
+    } catch {
+      // Colonne existe déjà — OK
+    }
   }
   return db;
 }
@@ -59,19 +67,25 @@ function notifyListeners(size: number) {
 }
 
 /**
- * Ajoute un événement à la queue offline
+ * Ajoute un événement à la queue offline, scopé par uid
  */
 export async function enqueueEvent(
   action: QueueAction,
   payload: Record<string, unknown>,
 ): Promise<string> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    throw new Error("Cannot enqueue event: no authenticated user");
+  }
+
   const database = await getDb();
   const id = `offline_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
   await database.runAsync(
-    `INSERT INTO pending_events (id, action, payload, status, retryCount, createdAt)
-     VALUES (?, ?, ?, 'pending', 0, ?)`,
+    `INSERT INTO pending_events (id, uid, action, payload, status, retryCount, createdAt)
+     VALUES (?, ?, ?, ?, 'pending', 0, ?)`,
     id,
+    uid,
     action,
     JSON.stringify(payload),
     Date.now(),
@@ -84,23 +98,29 @@ export async function enqueueEvent(
 }
 
 /**
- * Nombre d'événements en attente
+ * Nombre d'événements en attente pour l'utilisateur courant (strict, pas de legacy uid='')
  */
 export async function getQueueSize(): Promise<number> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return 0;
   const database = await getDb();
   const result = await database.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM pending_events WHERE status IN ('pending', 'failed')`,
+    `SELECT COUNT(*) as count FROM pending_events WHERE status IN ('pending', 'failed') AND uid = ?`,
+    uid,
   );
   return result?.count ?? 0;
 }
 
 /**
- * Récupère tous les événements en attente
+ * Récupère les événements en attente pour l'utilisateur courant uniquement (strict)
  */
 export async function getPendingEvents(): Promise<QueuedEvent[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
   const database = await getDb();
   const rows = await database.getAllAsync<QueuedEvent>(
-    `SELECT * FROM pending_events WHERE status IN ('pending', 'failed') AND retryCount < 3 ORDER BY createdAt ASC`,
+    `SELECT * FROM pending_events WHERE status IN ('pending', 'failed') AND retryCount < 3 AND uid = ? ORDER BY createdAt ASC`,
+    uid,
   );
   return rows;
 }
@@ -182,11 +202,43 @@ export async function processQueue(): Promise<number> {
  * Supprime les événements échoués définitivement (3+ tentatives)
  */
 export async function cleanupFailedEvents(): Promise<number> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return 0;
   const database = await getDb();
   const result = await database.runAsync(
-    `DELETE FROM pending_events WHERE retryCount >= 3`,
+    `DELETE FROM pending_events WHERE retryCount >= 3 AND uid = ?`,
+    uid,
   );
   return result.changes;
+}
+
+/**
+ * Supprime les événements legacy sans uid (orphelins de la migration)
+ */
+export async function cleanupOrphanedEvents(): Promise<number> {
+  const database = await getDb();
+  const result = await database.runAsync(
+    `DELETE FROM pending_events WHERE uid = ''`,
+  );
+  return result.changes;
+}
+
+/**
+ * Appelé au signOut — stoppe la sync et nettoie les orphelins.
+ * Les events avec un uid valide restent pour être rejoués au re-login.
+ */
+export async function onSignOut(): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  stopAutoSync();
+  await cleanupOrphanedEvents();
+  if (uid) {
+    const database = await getDb();
+    await database.runAsync(
+      `DELETE FROM pending_events WHERE retryCount >= 3 AND uid = ?`,
+      uid,
+    );
+  }
+  notifyListeners(0);
 }
 
 // ============================================

@@ -6,13 +6,21 @@ jest.mock("firebase/app", () => ({
 }));
 
 jest.mock("firebase/auth", () => ({
-  getAuth: jest.fn(() => ({})),
+  getAuth: jest.fn(() => ({ currentUser: { uid: "test-uid" }, languageCode: "fr" })),
   getReactNativePersistence: jest.fn(),
-  initializeAuth: jest.fn(() => ({})),
+  initializeAuth: jest.fn(() => ({ currentUser: { uid: "test-uid" }, languageCode: "fr" })),
   onAuthStateChanged: jest.fn(),
   signInWithEmailAndPassword: jest.fn(),
   createUserWithEmailAndPassword: jest.fn(),
   signOut: jest.fn(),
+}));
+
+jest.mock("firebase/app-check", () => ({
+  CustomProvider: jest.fn().mockImplementation((options: { getToken: () => Promise<unknown> }) => ({
+    getToken: options.getToken,
+  })),
+  ReCaptchaV3Provider: jest.fn(),
+  initializeAppCheck: jest.fn(() => ({})),
 }));
 
 jest.mock("firebase/firestore", () => ({
@@ -71,7 +79,7 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 
 // Mock expo-constants
 jest.mock("expo-constants", () => ({
-  expoConfig: { extra: {} },
+  expoConfig: { extra: { appCheck: { nativeConfigured: false } } },
 }));
 
 // Mock Sentry

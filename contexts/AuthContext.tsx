@@ -3,6 +3,7 @@ import { auth, db } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
 import { cancelAllReminders } from "@/services/localNotificationService";
 import { registerPushToken, removePushTokens } from "@/services/pushTokenService";
+import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
 import {
   canUserAccessApp,
@@ -218,6 +219,8 @@ export function AuthProvider({
       if (!isMountedRef.current) return;
       if (fbUser) {
         await loadUserData(fbUser);
+        // Relancer l'auto-sync offline après login (stopAutoSync est appelé au signOut)
+        startAutoSync();
       } else {
         dispatch({ type: "CLEAR_USER" });
       }
@@ -232,6 +235,7 @@ export function AuthProvider({
   const signOut = useCallback(async () => {
     try {
       clearTodayEventsCache();
+      await onOfflineQueueSignOut();
       await cancelAllReminders();
       // Supprimer les push tokens avant signOut (nécessite auth active)
       const uid = auth.currentUser?.uid;
