@@ -40,7 +40,6 @@ import {
 import { auth } from "../../config/firebase";
 
 const LAST_EMAIL_KEY = "@samaye_last_email";
-export const BIOMETRIC_PROMPT_PENDING_KEY = "@biometric_prompt_pending";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Enable LayoutAnimation on Android
@@ -329,17 +328,15 @@ export default function LoginScreen() {
 
     try {
       if (isLogin) {
-        // Poser le flag et sauvegarder les credentials AVANT signIn
-        // car onAuthStateChanged déclenche boot.tsx immédiatement après signIn
-        if (biometricAvailable && !biometricEnabled) {
-          console.log("[LOGIN] Sauvegarde credentials + flag biométrique avant signIn");
-          await saveCredentials(email.trim(), password);
-          await AsyncStorage.setItem(BIOMETRIC_PROMPT_PENDING_KEY, "1");
-        }
         await signInWithEmailAndPassword(auth, email.trim(), password);
         setFailedAttempts(0);
         // Sauvegarder l'email pour pré-remplissage (#6 Remember me)
         AsyncStorage.setItem(LAST_EMAIL_KEY, email.trim()).catch(() => {});
+        // Si biometric activé (via onboarding) mais pas de credentials sauvés,
+        // les sauvegarder maintenant après login réussi
+        if (biometricEnabled) {
+          saveCredentials(email.trim(), password).catch(() => {});
+        }
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         const userCredential = await createUserWithEmailAndPassword(
@@ -364,8 +361,6 @@ export default function LoginScreen() {
         // l'user puisse répondre au prompt)
       }
     } catch (error: any) {
-      // Nettoyer le flag biométrique en cas d'échec de signIn
-      AsyncStorage.removeItem(BIOMETRIC_PROMPT_PENDING_KEY).catch(() => {});
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
       // Track failed login attempts for rate limiting

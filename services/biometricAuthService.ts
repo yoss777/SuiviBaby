@@ -93,6 +93,15 @@ export async function getCredentials(): Promise<{
   return { email, password };
 }
 
+/**
+ * Enable biometric preference without saving credentials yet.
+ * Credentials will be saved on next successful login.
+ */
+export async function enableBiometric(): Promise<void> {
+  if (!SecureStore) return;
+  await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, "true");
+}
+
 export async function clearCredentials(): Promise<void> {
   if (!SecureStore) return;
   await SecureStore.deleteItemAsync(BIOMETRIC_EMAIL_KEY);

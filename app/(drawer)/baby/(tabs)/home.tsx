@@ -31,6 +31,7 @@ import { getAgeInWeeks } from "@/utils/ageUtils";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import { ajouterEvenementOptimistic, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
+import { getPreferencesCache } from "@/services/userPreferencesCache";
 import {
   buildEventFingerprint,
   mergeWithFirestoreEvents,
@@ -161,8 +162,8 @@ function StaggeredCard({
     if (visible) {
       Animated.timing(anim, {
         toValue: 1,
-        duration: 350,
-        delay: index * 80,
+        duration: 300,
+        delay: index * 60,
         useNativeDriver: true,
       }).start();
     }
@@ -651,12 +652,13 @@ export default function HomeDashboard() {
   const softDeletedIdsRef = useRef<Set<string>>(new Set());
   // Keep ref in sync with state for use in closures (scheduleMerge)
   softDeletedIdsRef.current = softDeletedIds;
-  const [tipsEnabled, setTipsEnabled] = useState(true);
-  const [insightsEnabled, setInsightsEnabled] = useState(true);
-  const [correlationsEnabled, setCorrelationsEnabled] = useState(true);
+  const prefsCached = getPreferencesCache();
+  const [tipsEnabled, setTipsEnabled] = useState(prefsCached?.tips ?? true);
+  const [insightsEnabled, setInsightsEnabled] = useState(prefsCached?.insights ?? true);
+  const [correlationsEnabled, setCorrelationsEnabled] = useState(prefsCached?.correlations ?? true);
 
-  // États des données
-  const [data, setData] = useState<DashboardData>({
+  // États des données — initialisés depuis le cache boot pour éviter le flash
+  const emptyData: DashboardData = {
     tetees: [],
     biberons: [],
     solides: [],
@@ -674,7 +676,11 @@ export default function HomeDashboard() {
     activites: [],
     jalons: [],
     nettoyagesNez: [],
-  });
+  };
+  const initialCache = activeChild?.id ? getTodayEventsCache(activeChild.id) : null;
+  const [data, setData] = useState<DashboardData>(
+    initialCache ? { ...emptyData, ...initialCache } : emptyData,
+  );
 
   const [todayStats, setTodayStats] = useState<TodayStats>({
     meals: {
@@ -697,24 +703,25 @@ export default function HomeDashboard() {
     const now = new Date();
     return `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
   });
+  const hasInitialCache = !!initialCache;
   const [loading, setLoading] = useState({
-    tetees: true,
-    biberons: true,
-    solides: true,
-    pompages: true,
-    croissances: true,
-    sommeils: true,
-    bains: true,
-    mictions: true,
-    selles: true,
-    temperatures: true,
-    medicaments: true,
-    symptomes: true,
-    vitamines: true,
-    vaccins: true,
-    activites: true,
-    jalons: true,
-    nettoyagesNez: true,
+    tetees: !hasInitialCache,
+    biberons: !hasInitialCache,
+    solides: !hasInitialCache,
+    pompages: !hasInitialCache,
+    croissances: !hasInitialCache,
+    sommeils: !hasInitialCache,
+    bains: !hasInitialCache,
+    mictions: !hasInitialCache,
+    selles: !hasInitialCache,
+    temperatures: !hasInitialCache,
+    medicaments: !hasInitialCache,
+    symptomes: !hasInitialCache,
+    vitamines: !hasInitialCache,
+    vaccins: !hasInitialCache,
+    activites: !hasInitialCache,
+    jalons: !hasInitialCache,
+    nettoyagesNez: !hasInitialCache,
   });
 
   // Global loaded state for entrance animations
@@ -2471,6 +2478,23 @@ export default function HomeDashboard() {
     return "Bonsoir";
   };
 
+  // Sequential stagger indices — consecutive for visible blocks only (no gaps)
+  const showSleep = canManageContent || !!sommeilEnCours;
+  const showPromenade = canManageContent || !!promenadeEnCours;
+  const showMood = canManageContent;
+  const stagger = useMemo(() => {
+    let i = 0;
+    return {
+      alimentation: i++,
+      sante: i++,
+      sommeil: showSleep ? i++ : -1,
+      promenade: showPromenade ? i++ : -1,
+      humeur: showMood ? i++ : -1,
+      smartContentBase: i,        // insights/correlations/milestones start here
+      recentEvents: i + 10,       // reserve 10 slots for dynamic smart content items
+    };
+  }, [showSleep, showPromenade, showMood]);
+
   // ============================================
   // RENDER
   // ============================================
@@ -2581,7 +2605,7 @@ export default function HomeDashboard() {
           </View>
 
           {/* Alimentation Group */}
-          <StaggeredCard index={0} visible={isDataLoaded}>
+          <StaggeredCard index={stagger.alimentation} visible={isDataLoaded}>
             <View style={styles.statsGroupContainer}>
               <StatsGroup
                 title="Alimentation"
@@ -2602,7 +2626,7 @@ export default function HomeDashboard() {
           </StaggeredCard>
 
           {/* Santé Group (Couches + Vitamines + Vaccins) */}
-          <StaggeredCard index={1} visible={isDataLoaded}>
+          <StaggeredCard index={stagger.sante} visible={isDataLoaded}>
             <View style={styles.statsGroupContainer}>
               <StatsGroup
                 title="Santé & Hygiène"
@@ -2623,8 +2647,8 @@ export default function HomeDashboard() {
           </StaggeredCard>
 
           {/* Sommeil Section */}
-          {(canManageContent || !!sommeilEnCours) && (
-            <StaggeredCard index={2} visible={isDataLoaded}>
+          {showSleep && (
+            <StaggeredCard index={stagger.sommeil} visible={isDataLoaded}>
               <View style={styles.statsGroupContainer}>
                 <SleepWidget
                   isActive={!!sommeilEnCours}
@@ -2646,8 +2670,8 @@ export default function HomeDashboard() {
           )}
 
           {/* Promenade Section */}
-          {(canManageContent || !!promenadeEnCours) && (
-            <StaggeredCard index={3} visible={isDataLoaded}>
+          {showPromenade && (
+            <StaggeredCard index={stagger.promenade} visible={isDataLoaded}>
               <View style={styles.statsGroupContainer}>
                 <PromenadeWidget
                   isActive={!!promenadeEnCours}
@@ -2668,8 +2692,8 @@ export default function HomeDashboard() {
           )}
 
           {/* Humeur du jour */}
-          {canManageContent && (
-            <StaggeredCard index={4} visible={isDataLoaded}>
+          {showMood && (
+            <StaggeredCard index={stagger.humeur} visible={isDataLoaded}>
               <View style={styles.statsGroupContainer}>
                 <View
                   style={[
@@ -2726,7 +2750,7 @@ export default function HomeDashboard() {
               .map((insight, i) => (
               <StaggeredCard
                 key={insight.id}
-                index={4 + i}
+                index={stagger.smartContentBase + i}
                 visible={isDataLoaded}
               >
                 <InsightCard
@@ -2750,14 +2774,14 @@ export default function HomeDashboard() {
             {hasAnyTodayData && smartContent.correlations
               .filter((corr) => !dismissedInsightIds.has(corr.id))
               .map((corr, i) => (
-              <StaggeredCard key={corr.id} index={7 + i} visible={isDataLoaded}>
+              <StaggeredCard key={corr.id} index={stagger.smartContentBase + 5 + i} visible={isDataLoaded}>
                 <InsightCard insight={corr} onDismiss={handleDismissInsight} colorScheme={colorScheme} />
               </StaggeredCard>
             ))}
 
             {/* Upcoming milestones */}
             {smartContent.upcomingMilestones.length > 0 && (
-              <StaggeredCard index={9} visible={isDataLoaded}>
+              <StaggeredCard index={stagger.smartContentBase + 8} visible={isDataLoaded}>
                 <MilestoneTimelineCard
                   milestones={smartContent.upcomingMilestones}
                   ageWeeks={
@@ -2783,7 +2807,7 @@ export default function HomeDashboard() {
         )}
 
         {/* Chronologie récente */}
-        <View>
+        <StaggeredCard index={stagger.recentEvents} visible={isDataLoaded}>
           <RecentEventsList
             events={recentEvents}
             loading={!isDataLoaded}
@@ -2799,7 +2823,7 @@ export default function HomeDashboard() {
             buildDetails={buildDetails}
             getDayLabel={getDayLabel}
           />
-        </View>
+        </StaggeredCard>
       </ScrollView>
       {canManageContent && <GlobalFAB />}
       <ConfirmModal

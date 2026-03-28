@@ -4,24 +4,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import BackgroundImage from "@/components/ui/BackgroundImage";
-import { InfoModal } from "@/components/ui/InfoModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
-import { useColorScheme } from "@/hooks/use-color-scheme";
-import { getNeutralColors } from "@/constants/dashboardColors";
 import { obtenirEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
-import {
-  getBiometricType,
-  clearCredentials,
-} from "@/services/biometricAuthService";
+import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
+import { setPreferencesCache } from "@/services/userPreferencesCache";
 import {
   buildTodayEventsData,
   getTodayEventsCache,
   setTodayEventsCache,
 } from "@/services/todayEventsCache";
-import { BIOMETRIC_PROMPT_PENDING_KEY } from "@/app/(auth)/login";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 
 function BootScreenContent() {
@@ -34,12 +27,6 @@ function BootScreenContent() {
   } = useBaby();
   const [delayDone, setDelayDone] = useState(false);
   const [unauthDelayDone, setUnauthDelayDone] = useState(false);
-  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
-  const [biometricType, setBiometricType] = useState("Biométrie");
-  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
-  const colorScheme = useColorScheme() ?? "light";
-  const nc = getNeutralColors(colorScheme);
-
   // R1+R9: Splash minimum — shorter if cache exists (warm return)
   useEffect(() => {
     const hasCache = activeChild?.id ? !!getTodayEventsCache(activeChild.id) : false;
@@ -67,28 +54,6 @@ function BootScreenContent() {
       console.warn("[BOOT] Préchargement today échoué:", error);
     }
   }, []);
-
-  const handleAcceptBiometric = useCallback(async () => {
-    setShowBiometricPrompt(false);
-    await AsyncStorage.removeItem(BIOMETRIC_PROMPT_PENDING_KEY);
-    // Credentials already saved by login.tsx via saveCredentials()
-    // Just navigate
-    if (pendingNavigation) {
-      pendingNavigation();
-      setPendingNavigation(null);
-    }
-  }, [pendingNavigation]);
-
-  const handleDeclineBiometric = useCallback(async () => {
-    setShowBiometricPrompt(false);
-    await AsyncStorage.removeItem(BIOMETRIC_PROMPT_PENDING_KEY);
-    // User declined — remove saved credentials
-    await clearCredentials();
-    if (pendingNavigation) {
-      pendingNavigation();
-      setPendingNavigation(null);
-    }
-  }, [pendingNavigation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +123,20 @@ function BootScreenContent() {
           const preloadTimeout = new Promise((resolve) =>
             setTimeout(resolve, 2500),
           );
-          await Promise.race([prefetchToday(targetChild.id), preloadTimeout]);
+          // Prefetch events + user preferences in parallel
+          await Promise.race([
+            Promise.all([
+              prefetchToday(targetChild.id),
+              obtenirPreferencesNotifications()
+                .then((prefs) => setPreferencesCache({
+                  tips: prefs.tips ?? true,
+                  insights: prefs.insights ?? true,
+                  correlations: prefs.correlations ?? true,
+                }))
+                .catch(() => {}),
+            ]),
+            preloadTimeout,
+          ]);
           if (cancelled) return;
 
           navigate = () => router.replace("/(drawer)/baby" as any);
@@ -168,20 +146,8 @@ function BootScreenContent() {
         navigate = () => router.replace("/explore" as any);
       }
 
-      // Étape 5 : Vérifier si un prompt biométrique est en attente
-      const biometricPending = await AsyncStorage.getItem(BIOMETRIC_PROMPT_PENDING_KEY);
-      console.log("[BOOT] biometricPending flag:", biometricPending);
-      if (biometricPending) {
-        const type = await getBiometricType();
-        console.log("[BOOT] Affichage prompt biométrique, type:", type);
-        setBiometricType(type);
-        setPendingNavigation(() => navigate!);
-        setShowBiometricPrompt(true);
-        return;
-      }
-
-      // Pas de prompt — naviguer directement
-      console.log("[BOOT] Pas de prompt biométrique, navigation directe");
+      // Naviguer directement
+      console.log("[BOOT] Navigation directe");
       navigate!();
     };
 
@@ -229,17 +195,6 @@ function BootScreenContent() {
           />
         </View>
       </SafeAreaView>
-      <InfoModal
-        visible={showBiometricPrompt}
-        title={`Activer ${biometricType} ?`}
-        message={`Souhaitez-vous utiliser ${biometricType} pour vous connecter plus rapidement la prochaine fois ?`}
-        backgroundColor={nc.backgroundCard}
-        textColor={nc.textStrong}
-        confirmText="Activer"
-        dismissText="Plus tard"
-        onConfirm={handleAcceptBiometric}
-        onClose={handleDeclineBiometric}
-      />
     </View>
   );
 }

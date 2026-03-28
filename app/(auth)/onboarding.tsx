@@ -1,6 +1,12 @@
 // app/(auth)/onboarding.tsx
+import { InfoModal } from "@/components/ui/InfoModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import {
+  enableBiometric,
+  getBiometricType,
+  isBiometricAvailable,
+} from "@/services/biometricAuthService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
@@ -63,6 +69,36 @@ export default function OnboardingScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
+  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+  const [biometricType, setBiometricType] = useState("Biométrie");
+
+  const goToLogin = useCallback(() => {
+    router.replace("/(auth)/login");
+  }, [router]);
+
+  const finishOnboarding = useCallback(async () => {
+    markOnboardingComplete();
+    // Check if biometric is available to propose it
+    const available = await isBiometricAvailable();
+    if (available) {
+      const type = await getBiometricType();
+      setBiometricType(type);
+      setShowBiometricPrompt(true);
+    } else {
+      goToLogin();
+    }
+  }, [goToLogin]);
+
+  const handleAcceptBiometric = useCallback(async () => {
+    setShowBiometricPrompt(false);
+    await enableBiometric();
+    goToLogin();
+  }, [goToLogin]);
+
+  const handleDeclineBiometric = useCallback(() => {
+    setShowBiometricPrompt(false);
+    goToLogin();
+  }, [goToLogin]);
 
   const handleNext = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -70,16 +106,15 @@ export default function OnboardingScreen() {
       flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
       setCurrentIndex(currentIndex + 1);
     } else {
-      markOnboardingComplete();
-      router.replace("/(auth)/login");
+      finishOnboarding();
     }
-  }, [currentIndex, router]);
+  }, [currentIndex, finishOnboarding]);
 
   const handleSkip = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     markOnboardingComplete();
-    router.replace("/(auth)/login");
-  }, [router]);
+    goToLogin();
+  }, [goToLogin]);
 
   const renderItem = useCallback(
     ({ item }: { item: (typeof SLIDES)[number] }) => (
@@ -185,6 +220,17 @@ export default function OnboardingScreen() {
           color={nc.white}
         />
       </TouchableOpacity>
+      <InfoModal
+        visible={showBiometricPrompt}
+        title={`Activer ${biometricType} ?`}
+        message={`Connectez-vous plus rapidement avec ${biometricType}. Vous pourrez modifier ce choix dans les réglages.`}
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
+        confirmText="Activer"
+        dismissText="Plus tard"
+        onConfirm={handleAcceptBiometric}
+        onClose={handleDeclineBiometric}
+      />
     </View>
   );
 }

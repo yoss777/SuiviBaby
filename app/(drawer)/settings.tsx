@@ -29,6 +29,13 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useThemePreference } from "@/contexts/ThemeContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { deleteAccountAndData } from "@/services/accountDeletionService";
+import {
+  clearCredentials,
+  enableBiometric,
+  getBiometricType,
+  isBiometricAvailable,
+  isBiometricEnabled,
+} from "@/services/biometricAuthService";
 
 interface SettingItem {
   id: string;
@@ -41,6 +48,8 @@ interface SettingItem {
   color?: string;
   disabled?: boolean;
   showChevron?: boolean;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export default function SettingsScreen() {
@@ -64,7 +73,26 @@ export default function SettingsScreen() {
   const [deletePassword, setDeletePassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const deleteParamHandledRef = useRef(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricLabel, setBiometricLabel] = useState("Biométrie");
   const navigation = useNavigation();
+
+  // Check biometric availability on mount
+  useEffect(() => {
+    (async () => {
+      const available = await isBiometricAvailable();
+      setBiometricAvailable(available);
+      if (available) {
+        const [enabled, type] = await Promise.all([
+          isBiometricEnabled(),
+          getBiometricType(),
+        ]);
+        setBiometricEnabled(enabled);
+        setBiometricLabel(type);
+      }
+    })();
+  }, []);
 
   // Header right: home shortcut (baby home if activeChild, explore otherwise)
   useLayoutEffect(() => {
@@ -212,6 +240,35 @@ export default function SettingsScreen() {
           router.push("/settings/theme");
         },
       },
+      ...(biometricAvailable
+        ? [
+            {
+              id: "biometric",
+              icon: (biometricLabel === "Face ID"
+                ? "scan-outline"
+                : "finger-print-outline") as keyof typeof Ionicons.glyphMap,
+              label: biometricLabel,
+              value: biometricEnabled ? "Activé" : "Désactivé",
+              description: biometricEnabled
+                ? "Connexion rapide activée"
+                : "Activer la connexion rapide",
+              accessibilityLabel: `${biometricLabel}, ${biometricEnabled ? "activé" : "désactivé"}`,
+              accessibilityHint: biometricEnabled
+                ? `Appuyez pour désactiver ${biometricLabel}`
+                : `Appuyez pour activer ${biometricLabel}`,
+              onPress: async () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                if (biometricEnabled) {
+                  await clearCredentials();
+                  setBiometricEnabled(false);
+                } else {
+                  await enableBiometric();
+                  setBiometricEnabled(true);
+                }
+              },
+            },
+          ]
+        : []),
       // {
       //   id: 'language',
       //   icon: 'language-outline',
@@ -231,7 +288,7 @@ export default function SettingsScreen() {
       //   },
       // },
     ],
-    [hiddenChildrenCount, hasHiddenChildren, router, themePreference],
+    [hiddenChildrenCount, hasHiddenChildren, router, themePreference, biometricAvailable, biometricEnabled, biometricLabel],
   );
 
   const dataSettings: SettingItem[] = useMemo(
@@ -348,6 +405,8 @@ export default function SettingsScreen() {
           activeOpacity={isDisabled ? 1 : 0.7}
           disabled={isDisabled}
           accessibilityRole="button"
+          accessibilityLabel={item.accessibilityLabel || `${item.label}${item.value ? `, ${item.value}` : ''}`}
+          accessibilityHint={item.accessibilityHint || item.description}
           accessibilityState={{ disabled: isDisabled }}
         >
           <View style={styles.settingItemLeft}>
