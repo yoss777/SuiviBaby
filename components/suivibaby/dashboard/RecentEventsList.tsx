@@ -13,7 +13,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { memo, useCallback, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
-  Animated,
   Image,
   Pressable,
   StyleSheet,
@@ -197,49 +196,15 @@ const TimeDisplay = memo(function TimeDisplay({
   );
 });
 
+// Instant render — no stagger animation
 const StaggeredRow = memo(function StaggeredRow({
-  animate,
-  delay,
   children,
 }: {
-  animate: boolean;
-  delay: number;
+  animate?: boolean;
+  delay?: number;
   children: React.ReactNode;
 }) {
-  const anim = useRef(new Animated.Value(animate ? 0 : 1)).current;
-  const hasAnimated = useRef(!animate ? true : false);
-
-  useEffect(() => {
-    if (hasAnimated.current) return;
-    hasAnimated.current = true;
-
-    anim.setValue(0);
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 300,
-      delay,
-      useNativeDriver: true,
-    }).start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <Animated.View
-      style={{
-        opacity: anim,
-        transform: [
-          {
-            translateY: anim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [12, 0],
-            }),
-          },
-        ],
-      }}
-    >
-      {children}
-    </Animated.View>
-  );
+  return <>{children}</>;
 });
 
 const DeleteAction = memo(function DeleteAction({
