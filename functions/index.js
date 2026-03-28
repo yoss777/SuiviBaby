@@ -5,10 +5,12 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
 const { buildRecapHTML } = require("./emailTemplates");
+const { hasRequiredChildAccess } = require("./accessControl");
 
 admin.initializeApp();
 
 const BATCH_LIMIT = 450;
+const APP_CHECK_ENFORCED = process.env.APPCHECK_ENFORCE === "true";
 const expo = new Expo();
 
 // ============================================
@@ -46,8 +48,15 @@ async function checkRateLimit(db, uid, bucket, maxPerMinute) {
 }
 
 /**
- * App Check monitoring — log sans bloquer.
- * Quand prêt pour l'enforcement, ajouter enforceAppCheck: true dans les options onCall.
+ * App Check monitoring.
+ *
+ * L'enforcement est piloté par APPCHECK_ENFORCE=true au déploiement.
+ * Le client prépare maintenant les tokens via Firebase JS SDK + CustomProvider,
+ * alimenté par RNFirebase App Check en natif et reCAPTCHA sur le web.
+ *
+ * Tant que les fichiers natifs Firebase / clés App Check ne sont pas fournis
+ * puis redéployés côté app, laisser APPCHECK_ENFORCE=false évite de bloquer
+ * les appels légitimes.
  */
 function monitorAppCheck(request, functionName) {
   if (request.app) {
@@ -55,6 +64,17 @@ function monitorAppCheck(request, functionName) {
   } else {
     console.warn(`[AppCheck] ${functionName}: UNVERIFIED (uid: ${request.auth?.uid})`);
   }
+}
+
+function withAppCheck(options) {
+  if (!APP_CHECK_ENFORCED) {
+    return options;
+  }
+
+  return {
+    ...options,
+    enforceAppCheck: true,
+  };
 }
 
 /**
@@ -191,12 +211,12 @@ exports.cleanupExpiredShareCodes = onSchedule("every 24 hours", async () => {
  * - Quota par tier : FREE = 5/jour, PREMIUM = illimité
  */
 exports.transcribeAudio = onCall(
-  {
+  withAppCheck({
     region: "europe-west1",
     memory: "512MiB",
     timeoutSeconds: 120,
     secrets: ["ASSEMBLYAI_API_KEY"],
-  },
+  }),
   async (request) => {
     // 1. Auth check
     if (!request.auth) {
@@ -404,6 +424,93 @@ function toFirestoreTimestamp(dateValue) {
   return dateValue;
 }
 
+// ============================================
+// CLOUD FUNCTIONS
+// ============================================
+
+/**
+ * findUserByEmail — Recherche un utilisateur par email (côté serveur uniquement)
+ * Évite d'exposer les emails dans users_public via des queries client.
+ */
+exports.findUserByEmail = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    monitorAppCheck(request, "findUserByEmail");
+
+    const db = admin.firestore();
+    await checkRateLimit(db, request.auth.uid, "findUser", 10);
+
+    const { email } = request.data;
+    if (!email || typeof email !== "string") {
+      throw new HttpsError("invalid-argument", "Email requis.");
+    }
+
+    // Chercher dans 'users' (collection privée) via admin SDK — pas dans users_public
+    // pour ne pas dépendre d'emails potentiellement non nettoyés dans users_public
+    const snapshot = await db
+      .collection("users")
+      .where("email", "==", email.toLowerCase())
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      return { found: false, user: null };
+    }
+
+    const userDoc = snapshot.docs[0];
+    return {
+      found: true,
+      user: {
+        id: userDoc.id,
+        userName: userDoc.data().userName || "Utilisateur",
+      },
+    };
+  }
+);
+
+/**
+ * migrateUsersPublicRemoveEmail — One-shot migration: retire le champ email de users_public.
+ * À appeler une fois via Firebase Console ou CLI, puis supprimer.
+ */
+exports.migrateUsersPublicRemoveEmail = onCall(
+  { region: "europe-west1", timeoutSeconds: 300, memory: "512MiB" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+
+    const db = admin.firestore();
+    let totalUpdated = 0;
+
+    while (true) {
+      const snapshot = await db
+        .collection("users_public")
+        .where("email", "!=", null)
+        .limit(BATCH_LIMIT)
+        .get();
+
+      if (snapshot.empty) break;
+
+      const batch = db.batch();
+      snapshot.docs.forEach((doc) => {
+        batch.update(doc.ref, {
+          email: admin.firestore.FieldValue.delete(),
+        });
+      });
+      await batch.commit();
+
+      totalUpdated += snapshot.size;
+      if (snapshot.size < BATCH_LIMIT) break;
+    }
+
+    console.log(`[Migration] Removed email from ${totalUpdated} users_public docs`);
+    return { success: true, totalUpdated };
+  }
+);
+
 /**
  * Vérifie que l'utilisateur a accès à l'enfant (owner, admin ou contributor)
  */
@@ -419,15 +526,13 @@ async function checkChildAccess(db, uid, childId, requiredRoles) {
     );
   }
 
-  const role = accessDoc.data().role;
-  if (requiredRoles && !requiredRoles.includes(role)) {
-    const canWrite = accessDoc.data().canWriteEvents === true;
-    if (!canWrite) {
-      throw new HttpsError(
-        "permission-denied",
-        `Rôle '${role}' insuffisant. Requis: ${requiredRoles.join("/")}.`
-      );
-    }
+  const accessData = accessDoc.data();
+  const role = accessData.role;
+  if (!hasRequiredChildAccess(accessData, requiredRoles)) {
+    throw new HttpsError(
+      "permission-denied",
+      `Rôle '${role}' insuffisant. Requis: ${requiredRoles.join("/")}.`
+    );
   }
 
   return role;
@@ -557,7 +662,7 @@ function validateEventData(type, data) {
  * validateAndCreateEvent — Création d'événement avec validation serveur
  */
 exports.validateAndCreateEvent = onCall(
-  { region: "europe-west1" },
+  withAppCheck({ region: "europe-west1" }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -587,17 +692,37 @@ exports.validateAndCreateEvent = onCall(
     // Validation des données
     validateEventData(eventData.type, eventData);
 
+    // Idempotency: if the client sends an idempotencyKey, check whether an
+    // event with that key already exists to prevent duplicates on retry.
+    const { idempotencyKey, ...cleanEventData } = eventData;
+    if (idempotencyKey && typeof idempotencyKey === "string") {
+      const existing = await db
+        .collection("events")
+        .where("childId", "==", childId)
+        .where("idempotencyKey", "==", idempotencyKey)
+        .limit(1)
+        .get();
+      if (!existing.empty) {
+        return { id: existing.docs[0].id };
+      }
+    }
+
     // Enrichissement serveur
     const serverData = {
-      ...eventData,
+      ...cleanEventData,
       childId,
       userId: uid,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
+    // Persist the idempotency key so future retries can detect the duplicate.
+    if (idempotencyKey) {
+      serverData.idempotencyKey = idempotencyKey;
+    }
+
     // Convertir date en Firestore Timestamp
-    if (eventData.date) {
-      serverData.date = toFirestoreTimestamp(eventData.date);
+    if (cleanEventData.date) {
+      serverData.date = toFirestoreTimestamp(cleanEventData.date);
     }
 
     const ref = await db.collection("events").add(serverData);
@@ -609,7 +734,7 @@ exports.validateAndCreateEvent = onCall(
  * validateAndUpdateEvent — Modification d'événement avec validation serveur
  */
 exports.validateAndUpdateEvent = onCall(
-  { region: "europe-west1" },
+  withAppCheck({ region: "europe-west1" }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -671,7 +796,7 @@ exports.validateAndUpdateEvent = onCall(
  * deleteEventCascade — Suppression atomique événement + likes + commentaires
  */
 exports.deleteEventCascade = onCall(
-  { region: "europe-west1" },
+  withAppCheck({ region: "europe-west1" }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -703,26 +828,21 @@ exports.deleteEventCascade = onCall(
       throw new HttpsError("permission-denied", "Cet événement n'appartient pas à cet enfant.");
     }
 
-    // Collecter les likes et commentaires à supprimer
-    const [likesSnap, commentsSnap] = await Promise.all([
-      db.collection("eventLikes").where("eventId", "==", eventId).limit(500).get(),
-      db.collection("eventComments").where("eventId", "==", eventId).limit(500).get(),
+    // Supprimer likes et commentaires en sous-batches paginés (évite la limite de 500 ops/batch)
+    const [deletedLikes, deletedComments] = await Promise.all([
+      deleteDocsByFieldBatched(db, "eventLikes", "eventId", eventId),
+      deleteDocsByFieldBatched(db, "eventComments", "eventId", eventId),
     ]);
 
-    // Suppression atomique via batch write (max 500 opérations par batch)
-    const batch = db.batch();
-    batch.delete(eventRef);
-    likesSnap.docs.forEach((doc) => batch.delete(doc.ref));
-    commentsSnap.docs.forEach((doc) => batch.delete(doc.ref));
-
-    await batch.commit();
+    // Supprimer l'événement lui-même
+    await eventRef.delete();
 
     return {
       success: true,
       deleted: {
         event: 1,
-        likes: likesSnap.size,
-        comments: commentsSnap.size,
+        likes: deletedLikes,
+        comments: deletedComments,
       },
     };
   }
@@ -737,7 +857,7 @@ exports.deleteEventCascade = onCall(
  * Obligatoire pour conformité RGPD (Apple/Google Store requirement).
  */
 exports.deleteUserAccount = onCall(
-  { region: "europe-west1", timeoutSeconds: 300, memory: "512MiB" },
+  withAppCheck({ region: "europe-west1", timeoutSeconds: 300, memory: "512MiB" }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");

@@ -28,14 +28,11 @@ import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
-import {
-  ajouterActivite,
-  ajouterSommeil,
-} from "@/migration/eventsDoubleWriteService";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import { ajouterEvenementOptimistic, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   setOnFailure as setOptimisticOnFailure,
   subscribe as subscribeOptimistic,
@@ -637,6 +634,7 @@ export default function HomeDashboard() {
   const latestFirestoreEventsRef = useRef<any[]>([]);
 
   const [refreshTick, setRefreshTick] = useState(0);
+  const [loadError, setLoadError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dismissedInsightIds, setDismissedInsightIds] = useState<Set<string>>(new Set());
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
@@ -1661,24 +1659,25 @@ export default function HomeDashboard() {
   ]);
 
   const handleStartSleep = useCallback(
-    async (isNap: boolean) => {
+    (isNap: boolean) => {
       if (!activeChild?.id || sommeilEnCours) return;
-      try {
-        await ajouterSommeil(activeChild.id, {
-          heureDebut: new Date(),
-          isNap,
-        });
-        showToast(isNap ? "Sieste démarrée" : "Nuit démarrée");
-      } catch (error) {
-        console.error("Erreur démarrage sommeil:", error);
-        showToast("Impossible de démarrer le sommeil");
-      }
+      ajouterEvenementOptimistic(activeChild.id, {
+        type: "sommeil" as const,
+        heureDebut: new Date(),
+        date: new Date(),
+        isNap,
+      });
+      showToast(isNap ? "Sieste démarrée" : "Nuit démarrée");
     },
     [activeChild?.id, sommeilEnCours, showToast],
   );
 
   const handleStopSleep = useCallback(() => {
     if (!activeChild?.id || !sommeilEnCours?.id) return;
+    if (sommeilEnCours.id.startsWith('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     const start = toDate(sommeilEnCours.heureDebut);
 
     // Open the form with heureFin pre-filled so it's ready to terminate
@@ -1700,26 +1699,26 @@ export default function HomeDashboard() {
       },
       sommeilEnCours,
     });
-  }, [activeChild?.id, sommeilEnCours, toDate, openSheet]);
+  }, [activeChild?.id, sommeilEnCours, toDate, openSheet, showToast]);
 
   // Promenade start/stop handlers
-  const handleStartPromenade = useCallback(async () => {
+  const handleStartPromenade = useCallback(() => {
     if (!activeChild?.id || promenadeEnCours) return;
-    try {
-      await ajouterActivite(activeChild.id, {
-        typeActivite: "promenade",
-        heureDebut: new Date(),
-        date: new Date(),
-      });
-      showToast("Promenade démarrée");
-    } catch (error) {
-      console.error("Erreur démarrage promenade:", error);
-      showToast("Impossible de démarrer la promenade");
-    }
+    ajouterEvenementOptimistic(activeChild.id, {
+      type: "activite" as const,
+      typeActivite: "promenade",
+      heureDebut: new Date(),
+      date: new Date(),
+    });
+    showToast("Promenade démarrée");
   }, [activeChild?.id, promenadeEnCours, showToast]);
 
   const handleStopPromenade = useCallback(() => {
     if (!activeChild?.id || !promenadeEnCours?.id) return;
+    if (promenadeEnCours.id.startsWith('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     const start = toDate(promenadeEnCours.heureDebut);
 
     openSheet({
@@ -1740,7 +1739,7 @@ export default function HomeDashboard() {
       },
       promenadeEnCours,
     });
-  }, [activeChild?.id, promenadeEnCours, toDate, openSheet]);
+  }, [activeChild?.id, promenadeEnCours, toDate, openSheet, showToast]);
 
   // ============================================
   // EFFECTS - TIMER
@@ -2011,6 +2010,31 @@ export default function HomeDashboard() {
   // Re-subscribe when day changes to get fresh "today" range
   useEffect(() => {
     if (!activeChild?.id) return;
+    setLoadError(false);
+
+    const handleListenerError = () => {
+      setLoadError(true);
+      setLoading({
+        tetees: false,
+        biberons: false,
+        solides: false,
+        pompages: false,
+        croissances: false,
+        sommeils: false,
+        bains: false,
+        mictions: false,
+        selles: false,
+        temperatures: false,
+        medicaments: false,
+        symptomes: false,
+        vitamines: false,
+        vaccins: false,
+        activites: false,
+        jalons: false,
+        nettoyagesNez: false,
+      });
+      setIsRefreshing(false);
+    };
 
     const cached = getTodayEventsCache(activeChild.id);
 
@@ -2079,13 +2103,7 @@ export default function HomeDashboard() {
         const visibleEvents = mergedEvents.filter(
           (e: any) => !softDeletedIdsRef.current.has(e.id),
         );
-        const optimisticCount = visibleEvents.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const idsKey = `${visibleEvents.length}_${optimisticCount}_${visibleEvents
-          .slice(0, 20)
-          .map((e: any) => `${e.type}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const idsKey = buildEventFingerprint(visibleEvents);
 
         if (idsKey === lastEventIdsKey) return; // No visible change — skip render.
         lastEventIdsKey = idsKey;
@@ -2124,6 +2142,7 @@ export default function HomeDashboard() {
         scheduleMerge();
       },
       { waitForServer: true },
+      handleListenerError,
     );
 
     const unsubOptimistic = subscribeOptimistic(scheduleMerge);
@@ -2137,7 +2156,7 @@ export default function HomeDashboard() {
       unsubOptimistic();
       setOptimisticOnFailure(null);
     };
-  }, [activeChild, currentDay, refreshTick]);
+  }, [activeChild?.id, currentDay, refreshTick]);
 
   // ============================================
   // EFFECTS - STATS CALCULATION

@@ -24,7 +24,7 @@ const entries = new Map<string, OptimisticEntry>();
 const subscribers = new Set<() => void>();
 let onFailureCallback: ((message: string) => void) | null = null;
 
-const STALE_THRESHOLD_MS = 60_000; // 60 seconds
+const STALE_THRESHOLD_MS = 20_000; // 20 seconds
 
 /**
  * Register a callback to be called when an optimistic operation fails.
@@ -157,6 +157,25 @@ export function failOptimistic(
 }
 
 /**
+ * Silently remove an optimistic entry (e.g. when the offline queue takes over).
+ * Unlike failOptimistic, this does NOT show an error toast.
+ */
+export function removeOptimistic(tempIdOrEventId: string): void {
+  if (entries.delete(tempIdOrEventId)) {
+    notify();
+    return;
+  }
+  // Fallback: search by realId
+  for (const [key, e] of entries) {
+    if (e.realId === tempIdOrEventId) {
+      entries.delete(key);
+      notify();
+      return;
+    }
+  }
+}
+
+/**
  * Return all optimistic entries for a given child, regardless of status.
  */
 export function getOptimisticEntries(childId: string): OptimisticEntry[] {
@@ -230,6 +249,24 @@ export function mergeWithFirestoreEvents(
   return merged;
 }
 
+/**
+ * Build a fingerprint string for a list of events that detects mutations
+ * (heureFin, duree, note, quantity changes) — not just additions/removals.
+ */
+export function buildEventFingerprint(events: any[]): string {
+  const optimisticCount = events.filter(
+    (e: any) => e.id?.startsWith?.('__optimistic_'),
+  ).length;
+  return `${events.length}_${optimisticCount}_${events
+    .slice(0, 30)
+    .map((e: any) => {
+      const dateSec = e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000);
+      const finSec = e.heureFin?.seconds || Math.floor((e.heureFin?.getTime?.() || 0) / 1000);
+      return `${e.id}_${e.type}_${dateSec}_${finSec}_${e.duree ?? ''}_${e.quantite ?? ''}`;
+    })
+    .join('|')}`;
+}
+
 function extractTime(value: any): number {
   if (!value) return 0;
   if (typeof value === 'number') return value;
@@ -273,7 +310,7 @@ function cleanupSilent(): void {
 
 /**
  * Remove confirmed entries and entries that have been pending for longer than
- * 60 seconds (the CF probably succeeded but reconciliation was missed).
+ * 20 seconds (the CF probably succeeded but reconciliation was missed).
  */
 export function cleanup(): void {
   const sizeBefore = entries.size;

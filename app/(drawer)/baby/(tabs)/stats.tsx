@@ -14,6 +14,7 @@ import {
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   subscribe as subscribeOptimistic,
 } from "@/services/optimisticEventsStore";
@@ -270,13 +271,7 @@ export default function StatsScreen() {
         const mergedSommeils = mergeWithFirestoreEvents(latestFirestoreSommeilsRef.current, activeChild.id);
 
         const allMerged = [...mergedRepas, ...mergedPompages, ...mergedSommeils];
-        const optimisticCount = allMerged.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const fingerprint = `${allMerged.length}_${optimisticCount}_${allMerged
-          .slice(0, 20)
-          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const fingerprint = buildEventFingerprint(allMerged);
 
         if (fingerprint === lastFingerprint) return;
         lastFingerprint = fingerprint;
@@ -353,7 +348,7 @@ export default function StatsScreen() {
       unsubscribeSommeils();
       unsubOptimistic();
     };
-  }, [activeChild, refreshKey, handleListenerError]);
+  }, [activeChild?.id, refreshKey, handleListenerError]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

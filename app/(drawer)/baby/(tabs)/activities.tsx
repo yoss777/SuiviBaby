@@ -24,6 +24,7 @@ import {
 import { supprimerActivite } from "@/migration/eventsDoubleWriteService";
 import { ActiviteEvent } from "@/services/eventsService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   subscribe as subscribeOptimistic,
 } from "@/services/optimisticEventsStore";
@@ -308,6 +309,7 @@ export default function ActivitiesScreen() {
   const [groupedEvents, setGroupedEvents] = useState<ActivityGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({ activites: false });
+  const [loadError, setLoadError] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
@@ -561,6 +563,7 @@ export default function ActivitiesScreen() {
   // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
+    setLoadError(false);
     const versionAtSubscribe = loadMoreVersionRef.current;
     const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
     endOfRange.setHours(23, 59, 59, 999);
@@ -572,19 +575,19 @@ export default function ActivitiesScreen() {
     let lastFingerprint = '';
     let loadingSet = false;
 
+    const handleListenerError = () => {
+      setLoadError(true);
+      setIsRefreshing(false);
+      setLoaded({ activites: true });
+    };
+
     const scheduleMerge = () => {
       if (mergeTimer) clearTimeout(mergeTimer);
       mergeTimer = setTimeout(() => {
         const firestoreEvents = latestFirestoreActivitesRef.current;
         const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as ActivityEventWithId[];
 
-        const optimisticCount = merged.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const fingerprint = `${merged.length}_${optimisticCount}_${merged
-          .slice(0, 20)
-          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const fingerprint = buildEventFingerprint(merged);
 
         if (fingerprint === lastFingerprint) return;
         lastFingerprint = fingerprint;
@@ -622,6 +625,7 @@ export default function ActivitiesScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubOptimistic = subscribeOptimistic(scheduleMerge);

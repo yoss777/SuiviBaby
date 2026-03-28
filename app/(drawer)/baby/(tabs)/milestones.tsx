@@ -25,6 +25,7 @@ import {
 import { supprimerJalon } from "@/migration/eventsDoubleWriteService";
 import { JalonEvent } from "@/services/eventsService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   subscribe as subscribeOptimistic,
 } from "@/services/optimisticEventsStore";
@@ -308,6 +309,7 @@ export default function MilestonesScreen() {
   const [groupedEvents, setGroupedEvents] = useState<MilestoneGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({ jalons: false });
+  const [loadError, setLoadError] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
@@ -573,6 +575,13 @@ export default function MilestonesScreen() {
   // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
+    setLoadError(false);
+
+    const handleListenerError = () => {
+      setLoadError(true);
+      setLoaded({ jalons: true });
+      setIsRefreshing(false);
+    };
 
     const versionAtSubscribe = loadMoreVersionRef.current;
     const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
@@ -591,13 +600,7 @@ export default function MilestonesScreen() {
         const firestoreEvents = latestFirestoreJalonsRef.current;
         const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as MilestoneEventWithId[];
 
-        const optimisticCount = merged.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const fingerprint = `${merged.length}_${optimisticCount}_${merged
-          .slice(0, 20)
-          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const fingerprint = buildEventFingerprint(merged);
 
         if (fingerprint === lastFingerprint) return;
         lastFingerprint = fingerprint;
@@ -634,7 +637,8 @@ export default function MilestonesScreen() {
         }
         scheduleMerge();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubOptimistic = subscribeOptimistic(scheduleMerge);

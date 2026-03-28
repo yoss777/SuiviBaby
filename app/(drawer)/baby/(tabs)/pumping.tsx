@@ -22,6 +22,7 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   subscribe as subscribeOptimistic,
 } from "@/services/optimisticEventsStore";
@@ -58,6 +59,13 @@ if (
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+const toDate = (value: any): Date => {
+  if (value?.seconds) return new Date(value.seconds * 1000);
+  if (value?.toDate) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date(value);
+};
 
 const formatSelectedDateLabel = (dateString: string) => {
   const [year, month, day] = dateString.split("-").map(Number);
@@ -232,6 +240,7 @@ export default function PumpingScreen() {
   const [groupedPompages, setGroupedPompages] = useState<PompageGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [pompagesLoaded, setPompagesLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
@@ -424,7 +433,7 @@ export default function PumpingScreen() {
   // Helper to build edit data from a Pompage
   const buildEditData = useCallback((pompage: Pompage): PumpingEditData => ({
     id: pompage.id,
-    date: new Date(pompage.date.seconds * 1000),
+    date: toDate(pompage.date),
     quantiteGauche: pompage.quantiteGauche,
     quantiteDroite: pompage.quantiteDroite,
   }), []);
@@ -487,6 +496,7 @@ export default function PumpingScreen() {
   // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
+    setLoadError(false);
     const versionAtSubscribe = loadMoreVersionRef.current;
     const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
     endOfRange.setHours(23, 59, 59, 999);
@@ -498,19 +508,19 @@ export default function PumpingScreen() {
     let lastFingerprint = '';
     let loadingSet = false;
 
+    const handleListenerError = () => {
+      setLoadError(true);
+      setIsRefreshing(false);
+      setPompagesLoaded(true);
+    };
+
     const scheduleMerge = () => {
       if (mergeTimer) clearTimeout(mergeTimer);
       mergeTimer = setTimeout(() => {
         const firestoreEvents = latestFirestorePompagesRef.current;
         const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as Pompage[];
 
-        const optimisticCount = merged.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const fingerprint = `${merged.length}_${optimisticCount}_${merged
-          .slice(0, 20)
-          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const fingerprint = buildEventFingerprint(merged);
 
         if (fingerprint === lastFingerprint) return;
         lastFingerprint = fingerprint;
@@ -549,6 +559,7 @@ export default function PumpingScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubOptimistic = subscribeOptimistic(scheduleMerge);
@@ -558,7 +569,7 @@ export default function PumpingScreen() {
       unsubscribe();
       unsubOptimistic();
     };
-  }, [activeChild, daysWindow, rangeEndDate, refreshKey]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -754,7 +765,7 @@ export default function PumpingScreen() {
 
     const filtered = pompages.filter((pompage) => {
       if (softDeletedIds.has(pompage.id)) return false;
-      const pompageDate = new Date(pompage.date.seconds * 1000);
+      const pompageDate = toDate(pompage.date);
       pompageDate.setHours(0, 0, 0, 0);
       const pompageTime = pompageDate.getTime();
 
@@ -789,7 +800,7 @@ export default function PumpingScreen() {
     const marked: Record<string, any> = {};
 
     pompages.forEach((pompage) => {
-      const date = new Date(pompage.date.seconds * 1000);
+      const date = toDate(pompage.date);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");

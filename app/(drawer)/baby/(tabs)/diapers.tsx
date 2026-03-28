@@ -33,6 +33,7 @@ import {
 } from "@/migration/eventsHybridService";
 import { supprimerEvenement } from "@/services/eventsService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   subscribe as subscribeOptimistic,
 } from "@/services/optimisticEventsStore";
@@ -70,6 +71,13 @@ if (
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+const toDate = (value: any): Date => {
+  if (value?.seconds) return new Date(value.seconds * 1000);
+  if (value?.toDate) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date(value);
+};
 
 const formatSelectedDateLabel = (dateString: string) => {
   const [year, month, day] = dateString.split("-").map(Number);
@@ -323,6 +331,7 @@ export default function DiapersScreen() {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [mictionsLoaded, setMictionsLoaded] = useState(false);
   const [sellesLoaded, setSellesLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
@@ -363,7 +372,7 @@ export default function DiapersScreen() {
     (excretion: Excretion): DiapersEditData => ({
       id: excretion.id,
       type: excretion.type || "miction",
-      date: new Date(excretion.date.seconds * 1000),
+      date: toDate(excretion.date),
       couleur: excretion.couleur,
       consistance: excretion.consistance,
       quantite: excretion.quantite,
@@ -662,6 +671,7 @@ export default function DiapersScreen() {
   // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
+    setLoadError(false);
     const versionAtSubscribe = loadMoreVersionRef.current;
     const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
     endOfRange.setHours(23, 59, 59, 999);
@@ -673,6 +683,13 @@ export default function DiapersScreen() {
     let lastFingerprint = '';
     let refreshCleared = false;
 
+    const handleListenerError = () => {
+      setLoadError(true);
+      setIsRefreshing(false);
+      setMictionsLoaded(true);
+      setSellesLoaded(true);
+    };
+
     const scheduleMerge = () => {
       if (mergeTimer) clearTimeout(mergeTimer);
       mergeTimer = setTimeout(() => {
@@ -681,13 +698,7 @@ export default function DiapersScreen() {
         );
         const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Excretion[];
 
-        const optimisticCount = merged.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const fingerprint = `${merged.length}_${optimisticCount}_${merged
-          .slice(0, 20)
-          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const fingerprint = buildEventFingerprint(merged);
 
         if (fingerprint === lastFingerprint) return;
         lastFingerprint = fingerprint;
@@ -728,7 +739,8 @@ export default function DiapersScreen() {
         }
         scheduleMerge();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubscribeSelles = ecouterSelles(
@@ -741,7 +753,8 @@ export default function DiapersScreen() {
         setSellesLoaded(true);
         scheduleMerge();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange }
+      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubOptimistic = subscribeOptimistic(scheduleMerge);
@@ -752,7 +765,7 @@ export default function DiapersScreen() {
       unsubscribeSelles();
       unsubOptimistic();
     };
-  }, [activeChild, daysWindow, rangeEndDate, refreshKey]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -962,7 +975,7 @@ export default function DiapersScreen() {
 
     return excretions.filter((excretion) => {
       if (softDeletedIds.has(excretion.id)) return false;
-      const excretionDate = new Date(excretion.date.seconds * 1000);
+      const excretionDate = toDate(excretion.date);
       excretionDate.setHours(0, 0, 0, 0);
       const excretionTime = excretionDate.getTime();
 
@@ -993,7 +1006,7 @@ export default function DiapersScreen() {
     const marked: Record<string, any> = {};
 
     excretions.forEach((excretion) => {
-      const date = new Date(excretion.date.seconds * 1000);
+      const date = toDate(excretion.date);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");

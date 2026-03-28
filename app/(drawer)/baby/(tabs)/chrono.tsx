@@ -22,6 +22,7 @@ import { ecouterEvenementsHybrid } from "@/migration/eventsHybridService";
 import type { Event, EventType } from "@/services/eventsService";
 import { supprimerEvenement } from "@/services/eventsService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   subscribe as subscribeOptimistic,
 } from "@/services/optimisticEventsStore";
@@ -1557,6 +1558,7 @@ export default function ChronoScreen() {
   }, [events]);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [currentDay, setCurrentDay] = useState(() => dayKey(new Date()));
@@ -1661,6 +1663,13 @@ export default function ChronoScreen() {
   // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
+    setLoadError(false);
+
+    const handleListenerError = () => {
+      setLoadError(true);
+      setLoading(false);
+      setIsRefreshing(false);
+    };
 
     const showFullLoading = !hasInitialLoad.current;
     setLoading(showFullLoading);
@@ -1685,13 +1694,7 @@ export default function ChronoScreen() {
           (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
         );
 
-        const optimisticCount = sorted.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const fingerprint = `${sorted.length}_${optimisticCount}_${sorted
-          .slice(0, 20)
-          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const fingerprint = buildEventFingerprint(sorted);
 
         if (fingerprint === lastFingerprint) return;
         lastFingerprint = fingerprint;
@@ -1735,6 +1738,7 @@ export default function ChronoScreen() {
         depuis: since,
         waitForServer: true,
       },
+      handleListenerError,
     );
 
     const unsubOptimistic = subscribeOptimistic(scheduleMerge);

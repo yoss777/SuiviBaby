@@ -25,6 +25,7 @@ import {
 } from "@/migration/eventsHybridService";
 import { BainEvent, NettoyageNezEvent, SommeilEvent, supprimerEvenement } from "@/services/eventsService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   subscribe as subscribeOptimistic,
 } from "@/services/optimisticEventsStore";
@@ -284,6 +285,7 @@ export default function RoutinesScreen() {
   const [groupedEvents, setGroupedEvents] = useState<RoutineGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({ sommeil: false, bain: false, nez: false });
+  const [loadError, setLoadError] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
@@ -510,6 +512,7 @@ export default function RoutinesScreen() {
   // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
+    setLoadError(false);
     const versionAtSubscribe = loadMoreVersionRef.current;
     const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
     endOfRange.setHours(23, 59, 59, 999);
@@ -520,6 +523,12 @@ export default function RoutinesScreen() {
     let mergeTimer: ReturnType<typeof setTimeout> | null = null;
     let lastFingerprint = '';
     let refreshCleared = false;
+
+    const handleListenerError = () => {
+      setLoadError(true);
+      setIsRefreshing(false);
+      setLoaded({ sommeil: true, bain: true, nez: true });
+    };
 
     const scheduleMerge = () => {
       if (mergeTimer) clearTimeout(mergeTimer);
@@ -533,13 +542,7 @@ export default function RoutinesScreen() {
         );
         const merged = mergeWithFirestoreEvents(raw, activeChild.id) as RoutineEvent[];
 
-        const optimisticCount = merged.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const fingerprint = `${merged.length}_${optimisticCount}_${merged
-          .slice(0, 20)
-          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const fingerprint = buildEventFingerprint(merged);
 
         if (fingerprint === lastFingerprint) return;
         lastFingerprint = fingerprint;
@@ -582,6 +585,7 @@ export default function RoutinesScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubscribeBains = ecouterBainsHybrid(
@@ -592,6 +596,7 @@ export default function RoutinesScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubscribeNez = ecouterNettoyageNezHybrid(
@@ -602,6 +607,7 @@ export default function RoutinesScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubOptimistic = subscribeOptimistic(scheduleMerge);

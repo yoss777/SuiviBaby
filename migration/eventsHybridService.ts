@@ -84,23 +84,25 @@ export async function getNextEventDateBeforeHybrid(
 export function ecouterEvenementsDuJourHybrid(
   childId: string,
   callback: (events: any[]) => void,
-  options?: { waitForServer?: boolean }
+  options?: { waitForServer?: boolean },
+  onError?: (error: Error) => void,
 ): () => void {
   const { startOfYesterday, endOfDayInclusive } = getRecentRange();
   const types = getTodayTypes() as EventType[];
   return ecouterEvenements(childId, callback, {
     type: types, depuis: startOfYesterday, jusqu: endOfDayInclusive, waitForServer: options?.waitForServer,
-  });
+  }, onError);
 }
 
 export function ecouterEvenementsHybrid(
   childId: string,
   callback: (events: any[]) => void,
-  options: { types: EventType[]; depuis: Date; jusqu?: Date; waitForServer?: boolean }
+  options: { types: EventType[]; depuis: Date; jusqu?: Date; waitForServer?: boolean },
+  onError?: (error: Error) => void,
 ): () => void {
   return ecouterEvenements(childId, callback, {
     type: options.types, depuis: options.depuis, jusqu: options.jusqu, waitForServer: options.waitForServer,
-  });
+  }, onError);
 }
 
 // ============================================

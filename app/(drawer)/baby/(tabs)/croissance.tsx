@@ -15,6 +15,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { ecouterCroissancesHybrid } from "@/migration/eventsHybridService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   subscribe as subscribeOptimistic,
 } from "@/services/optimisticEventsStore";
@@ -837,6 +838,7 @@ export default function CroissanceScreen() {
   const [entries, setEntries] = useState<CroissanceEntry[]>([]);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -1136,8 +1138,15 @@ export default function CroissanceScreen() {
   // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
+    setLoadError(false);
     let cancelled = false;
     setLoading(true);
+
+    const handleListenerError = () => {
+      setLoadError(true);
+      setLoading(false);
+      setIsRefreshing(false);
+    };
 
     let mergeTimer: ReturnType<typeof setTimeout> | null = null;
     let lastFingerprint = '';
@@ -1149,18 +1158,21 @@ export default function CroissanceScreen() {
         const firestoreEntries = latestFirestoreEntriesRef.current;
         const merged = mergeWithFirestoreEvents(firestoreEntries, activeChild.id) as CroissanceEntry[];
 
-        const optimisticCount = merged.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const fingerprint = `${merged.length}_${optimisticCount}_${merged
-          .slice(0, 20)
-          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const fingerprint = buildEventFingerprint(merged);
 
         if (fingerprint === lastFingerprint) return;
         lastFingerprint = fingerprint;
 
         setEntries(merged);
+
+        // Clean up soft-deleted IDs that are no longer in the dataset
+        setSoftDeletedIds((prev) => {
+          if (prev.size === 0) return prev;
+          const ids = new Set(merged.map((e) => e.id));
+          const next = new Set<string>();
+          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+          return next.size === prev.size ? prev : next;
+        });
       }, 50);
     };
 
@@ -1183,6 +1195,7 @@ export default function CroissanceScreen() {
         scheduleMerge();
       },
       { waitForServer: true },
+      handleListenerError,
     );
 
     const unsubOptimistic = subscribeOptimistic(scheduleMerge);

@@ -37,7 +37,7 @@ export function MealCard({ meal, onEdit }: MealCardProps) {
   };
 
   const formatTime = () => {
-    const date = new Date(meal.date.seconds * 1000);
+    const date = meal.date?.seconds ? new Date(meal.date.seconds * 1000) : new Date(meal.date as any);
     return date.toLocaleTimeString("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",

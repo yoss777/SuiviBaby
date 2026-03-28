@@ -58,6 +58,13 @@ import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 
+const toDate = (value: any): Date => {
+  if (value?.seconds) return new Date(value.seconds * 1000);
+  if (value?.toDate) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date(value);
+};
+
 // ============================================
 // TYPES
 // ============================================
@@ -548,7 +555,7 @@ export default function ImmunizationsScreen() {
       unsubscribeVitamines();
       unsubscribeVaccins();
     };
-  }, [activeChild, daysWindow, rangeEndDate]);
+  }, [activeChild?.id, daysWindow, rangeEndDate]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -747,7 +754,7 @@ export default function ImmunizationsScreen() {
 
     // Filtrer par date
     const filtered = filteredByType.filter((immuno) => {
-      const immunoDate = new Date(immuno.date.seconds * 1000);
+      const immunoDate = toDate(immuno.date);
       immunoDate.setHours(0, 0, 0, 0);
       const immunoTime = immunoDate.getTime();
 
@@ -781,7 +788,7 @@ export default function ImmunizationsScreen() {
     const marked: Record<string, any> = {};
 
     immunos.forEach((immuno) => {
-      const date = new Date(immuno.date.seconds * 1000);
+      const date = toDate(immuno.date);
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
@@ -967,7 +974,7 @@ export default function ImmunizationsScreen() {
   // ============================================
 
   const openEditModal = (immuno: Immuno) => {
-    setDateHeure(new Date(immuno.date.seconds * 1000));
+    setDateHeure(toDate(immuno.date));
     setEditingImmuno(immuno);
     setIsSubmitting(false);
     setSearchQuery("");

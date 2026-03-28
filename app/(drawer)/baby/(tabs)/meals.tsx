@@ -30,6 +30,7 @@ import {
 } from "@/migration/eventsHybridService";
 import { BiberonEvent, SolideEvent, supprimerEvenement } from "@/services/eventsService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   subscribe as subscribeOptimistic,
 } from "@/services/optimisticEventsStore";
@@ -69,6 +70,13 @@ if (
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+const toDate = (value: any): Date => {
+  if (value?.seconds) return new Date(value.seconds * 1000);
+  if (value?.toDate) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date(value);
+};
 
 const formatSelectedDateLabel = (dateString: string) => {
   const [year, month, day] = dateString.split("-").map(Number);
@@ -281,6 +289,7 @@ export default function MealsScreen() {
 
   // États spécifiques aux solides (pour le listener)
   const [solidesLoaded, setSolidesLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
@@ -480,7 +489,7 @@ export default function MealsScreen() {
     (meal: Meal) => ({
       id: meal.id,
       type: meal.type || ("tetee" as MealType),
-      date: new Date(meal.date.seconds * 1000),
+      date: toDate(meal.date),
       dureeGauche: meal.dureeGauche,
       dureeDroite: meal.dureeDroite,
       quantite: typeof meal.quantite === "number" ? meal.quantite : undefined,
@@ -563,6 +572,7 @@ export default function MealsScreen() {
   // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
+    setLoadError(false);
     const versionAtSubscribe = loadMoreVersionRef.current;
     const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
     endOfRange.setHours(23, 59, 59, 999);
@@ -574,6 +584,14 @@ export default function MealsScreen() {
     let lastFingerprint = '';
     let refreshCleared = false;
 
+    const handleListenerError = () => {
+      setLoadError(true);
+      setIsRefreshing(false);
+      setTeteesLoaded(true);
+      setBiberonsLoaded(true);
+      setSolidesLoaded(true);
+    };
+
     const scheduleMerge = () => {
       if (mergeTimer) clearTimeout(mergeTimer);
       mergeTimer = setTimeout(() => {
@@ -584,13 +602,7 @@ export default function MealsScreen() {
         ].sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
         const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Meal[];
 
-        const optimisticCount = merged.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const fingerprint = `${merged.length}_${optimisticCount}_${merged
-          .slice(0, 20)
-          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const fingerprint = buildEventFingerprint(merged);
 
         if (fingerprint === lastFingerprint) return;
         lastFingerprint = fingerprint;
@@ -629,6 +641,7 @@ export default function MealsScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubscribeBiberons = ecouterBiberons(
@@ -639,6 +652,7 @@ export default function MealsScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubscribeSolides = ecouterSolides(
@@ -649,6 +663,7 @@ export default function MealsScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubOptimistic = subscribeOptimistic(scheduleMerge);
@@ -660,7 +675,7 @@ export default function MealsScreen() {
       unsubscribeSolides();
       unsubOptimistic();
     };
-  }, [activeChild, daysWindow, rangeEndDate, refreshKey]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -829,7 +844,7 @@ export default function MealsScreen() {
     // Filtrer les repas en fonction du filtre sélectionné ou de la date du calendrier
     const filtered = meals.filter((meal) => {
       if (softDeletedIds.has(meal.id)) return false;
-      const mealDate = new Date(meal.date.seconds * 1000);
+      const mealDate = toDate(meal.date);
       mealDate.setHours(0, 0, 0, 0);
       const mealTime = mealDate.getTime();
 
@@ -867,7 +882,7 @@ export default function MealsScreen() {
 
     meals.forEach((meal) => {
       // Convertir le timestamp en date
-      const date = new Date(meal.date.seconds * 1000);
+      const date = toDate(meal.date);
 
       // Créer la clé au format YYYY-MM-DD
       const year = date.getFullYear();

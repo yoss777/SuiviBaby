@@ -24,6 +24,7 @@ import {
 } from "@/migration/eventsDoubleWriteService";
 import { supprimerEvenement } from "@/services/eventsService";
 import {
+  buildEventFingerprint,
   mergeWithFirestoreEvents,
   subscribe as subscribeOptimistic,
 } from "@/services/optimisticEventsStore";
@@ -319,6 +320,7 @@ export default function SoinsScreen() {
     vaccin: false,
     vitamine: false,
   });
+  const [loadError, setLoadError] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [daysWindow, setDaysWindow] = useState(14);
   const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
@@ -560,6 +562,7 @@ export default function SoinsScreen() {
   // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
+    setLoadError(false);
     const versionAtSubscribe = loadMoreVersionRef.current;
     const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
     endOfRange.setHours(23, 59, 59, 999);
@@ -570,6 +573,12 @@ export default function SoinsScreen() {
     let mergeTimer: ReturnType<typeof setTimeout> | null = null;
     let lastFingerprint = '';
     let refreshCleared = false;
+
+    const handleListenerError = () => {
+      setLoadError(true);
+      setIsRefreshing(false);
+      setLoaded({ temperature: true, medicament: true, symptome: true, vaccin: true, vitamine: true });
+    };
 
     const scheduleMerge = () => {
       if (mergeTimer) clearTimeout(mergeTimer);
@@ -583,13 +592,7 @@ export default function SoinsScreen() {
         ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
         const merged = mergeWithFirestoreEvents(raw, activeChild.id) as HealthEvent[];
 
-        const optimisticCount = merged.filter(
-          (e: any) => e.id?.startsWith?.('__optimistic_'),
-        ).length;
-        const fingerprint = `${merged.length}_${optimisticCount}_${merged
-          .slice(0, 20)
-          .map((e: any) => `${e.type || ''}_${e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000)}`)
-          .join('|')}`;
+        const fingerprint = buildEventFingerprint(merged);
 
         if (fingerprint === lastFingerprint) return;
         lastFingerprint = fingerprint;
@@ -632,6 +635,7 @@ export default function SoinsScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
     const unsubscribeMedicaments = ecouterMedicamentsHybrid(
       activeChild.id,
@@ -641,6 +645,7 @@ export default function SoinsScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
     const unsubscribeSymptomes = ecouterSymptomesHybrid(
       activeChild.id,
@@ -650,6 +655,7 @@ export default function SoinsScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
     const unsubscribeVaccins = ecouterVaccinsHybrid(
       activeChild.id,
@@ -659,6 +665,7 @@ export default function SoinsScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
     const unsubscribeVitamines = ecouterVitaminesHybrid(
       activeChild.id,
@@ -668,6 +675,7 @@ export default function SoinsScreen() {
         scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      handleListenerError,
     );
 
     const unsubOptimistic = subscribeOptimistic(scheduleMerge);

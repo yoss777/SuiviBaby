@@ -22,6 +22,7 @@ import {
   confirmOptimistic,
   failOptimistic,
   generateTempId,
+  removeOptimistic,
 } from "./optimisticEventsStore";
 
 const getUserId = () => {
@@ -950,6 +951,9 @@ export function ajouterEvenementOptimistic(
   data: any,
 ): string {
   const tempId = generateTempId();
+  // Idempotency key: if the CF succeeds but the response is lost, retries
+  // will send the same key — the CF deduplicates instead of creating a second event.
+  const idempotencyKey = `${auth.currentUser?.uid}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   const optimisticEvent = {
     ...data,
     id: tempId,
@@ -961,14 +965,30 @@ export function ajouterEvenementOptimistic(
 
   addOptimisticCreate(childId, optimisticEvent, tempId);
 
-  // Fire CF in background with retries
-  withRetry(() => ajouterEvenement(childId, data))
+  // Fire CF in background with retries — same idempotencyKey across all attempts
+  const dataWithKey = { ...data, idempotencyKey };
+  withRetry(() => ajouterEvenement(childId, dataWithKey))
     .then((realId) => {
       confirmOptimistic(tempId, realId);
     })
-    .catch((error) => {
+    .catch(async (error) => {
       if (isNetworkError(error)) {
-        // Keep optimistic entry visible — offline queue or next session will sync.
+        // Enqueue for offline sync so the create isn't lost
+        const payload: Record<string, unknown> = {
+          ...dataWithKey,
+          childId,
+        };
+        if (data.date && data.date instanceof Date) {
+          payload.date = Timestamp.fromDate(data.date);
+        }
+        try {
+          await enqueueEvent('create', payload);
+          // Offline queue takes over — remove optimistic entry so there's no
+          // duplicate when the queue syncs and the Firestore snapshot arrives.
+          removeOptimistic(tempId);
+        } catch {
+          // enqueue failed — keep optimistic entry visible as last resort
+        }
         return;
       }
       failOptimistic(tempId);
@@ -1001,8 +1021,25 @@ export function modifierEvenementOptimistic(
     .then(() => {
       confirmOptimistic(eventId);
     })
-    .catch((error) => {
+    .catch(async (error) => {
       if (isNetworkError(error)) {
+        // Enqueue for offline sync so the update isn't lost
+        const payload: Record<string, unknown> = {
+          ...data,
+          childId,
+          eventId,
+        };
+        if (data.date && data.date instanceof Date) {
+          payload.date = Timestamp.fromDate(data.date);
+        }
+        try {
+          await enqueueEvent('update', payload);
+          // Offline queue takes over — remove optimistic entry to avoid
+          // stale overlay when the queue syncs.
+          removeOptimistic(eventId);
+        } catch {
+          // enqueue failed — keep optimistic entry visible as last resort
+        }
         return;
       }
       failOptimistic(eventId);
