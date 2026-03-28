@@ -1,5 +1,5 @@
 // components/suivibaby/dashboard/PromenadeWidget.tsx
-// Start/stop chrono widget for walks (same pattern as SleepWidget)
+// Unified layout — same container size whether active or inactive
 
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
@@ -15,10 +15,6 @@ import {
   View,
 } from "react-native";
 
-// ============================================
-// TYPES
-// ============================================
-
 export interface PromenadeWidgetProps {
   isActive: boolean;
   elapsedMinutes: number;
@@ -27,12 +23,8 @@ export interface PromenadeWidgetProps {
   onStop: () => void;
   showStopButton?: boolean;
   colorScheme?: "light" | "dark";
-  sharedPulseAnim?: Animated.Value; // Shared pulse for sync with other widgets
+  sharedPulseAnim?: Animated.Value;
 }
-
-// ============================================
-// HELPERS
-// ============================================
 
 const formatDuration = (minutes?: number): string => {
   if (!minutes || minutes <= 0) return "0 min";
@@ -41,10 +33,6 @@ const formatDuration = (minutes?: number): string => {
   const m = minutes % 60;
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
 };
-
-// ============================================
-// COMPONENT
-// ============================================
 
 export const PromenadeWidget = memo(function PromenadeWidget({
   isActive,
@@ -57,16 +45,16 @@ export const PromenadeWidget = memo(function PromenadeWidget({
   sharedPulseAnim,
 }: PromenadeWidgetProps) {
   const nc = getNeutralColors(colorScheme);
-  const accentColor = eventColors.activite.dark; // #10b981 — border, bg, button
-  const textColor = colorScheme === "dark" ? "#A7F3D0" : "#065F46"; // light mint / dark emerald
+  const accentColor = eventColors.activite.dark;
+  const textColor = colorScheme === "dark" ? "#A7F3D0" : "#065F46";
   const subtitleColor = colorScheme === "dark" ? "#6EE7B7" : "#047857";
+  const bgColor = colorScheme === "dark" ? `${accentColor}15` : `${accentColor}10`;
   const ownPulseAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = sharedPulseAnim ?? ownPulseAnim;
   const busy = useRef(false);
 
-  // Pulse animation when active (only if using own anim, not shared)
   useEffect(() => {
-    if (sharedPulseAnim) return; // Shared pulse managed by parent
+    if (sharedPulseAnim) return;
     if (isActive) {
       const loop = Animated.loop(
         Animated.sequence([
@@ -96,9 +84,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
     busy.current = true;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onStart();
-    setTimeout(() => {
-      busy.current = false;
-    }, 600);
+    setTimeout(() => { busy.current = false; }, 600);
   }, [onStart]);
 
   const handleStop = useCallback(() => {
@@ -106,132 +92,127 @@ export const PromenadeWidget = memo(function PromenadeWidget({
     busy.current = true;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onStop();
-    setTimeout(() => {
-      busy.current = false;
-    }, 600);
+    setTimeout(() => { busy.current = false; }, 600);
   }, [onStop]);
 
-  // ============================================
-  // ACTIVE STATE — chrono running
-  // ============================================
-
-  if (isActive) {
-    return (
-      <Animated.View
-        style={[
-          styles.activeContainer,
-          {
-            backgroundColor: accentColor + "10",
-            borderWidth: 2,
-            borderColor: accentColor,
-            shadowColor: accentColor,
-            shadowOpacity: 0.25,
-            shadowRadius: 12,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: 4,
-          },
-          { transform: [{ scale: pulseAnim }] },
-        ]}
-        accessibilityRole="timer"
-        accessibilityLabel={`Promenade en cours depuis ${formatDuration(elapsedMinutes)}`}
-      >
-        <View style={styles.activeHeader}>
-          <FontAwesome name="person-walking" size={14} color={textColor} />
-          <Text style={[styles.activeLabel, { color: textColor }]}>
-            {"Promenade en cours"}
-          </Text>
-        </View>
-        <Text
-          style={[styles.activeTime, { color: textColor }]}
-          accessibilityLiveRegion="polite"
-        >
-          {formatDuration(elapsedMinutes)}
-        </Text>
-        {startTime && (
-          <Text style={[styles.activeSubtitle, { color: subtitleColor }]}>
-            {`Début ${startTime}`}
-          </Text>
-        )}
-        {showStopButton && (
-          <TouchableOpacity
-            style={[styles.stopButton, { backgroundColor: accentColor }]}
-            onPress={handleStop}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Terminer la promenade"
-            accessibilityHint="Arrête le chrono et ouvre le formulaire"
-            accessibilityState={{ disabled: false }}
-          >
-            <Text style={[styles.stopText, { color: nc.backgroundCard }]}>
-              {"Terminer"}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </Animated.View>
-    );
-  }
-
-  // ============================================
-  // INACTIVE STATE — start button
-  // ============================================
-
+  // Unified container — same structure in both states
   return (
-    <TouchableOpacity
+    <Animated.View
       style={[
         styles.container,
         {
-          backgroundColor: nc.backgroundCard,
-          borderColor: nc.borderLight,
+          backgroundColor: isActive ? bgColor : nc.backgroundCard,
+          borderWidth: isActive ? 2 : 1,
+          borderColor: isActive ? accentColor : nc.borderLight,
+        },
+        isActive && {
+          shadowColor: accentColor,
+          shadowOpacity: 0.25,
+          shadowRadius: 12,
+          transform: [{ scale: pulseAnim }],
         },
       ]}
-      onPress={handleStart}
-      activeOpacity={0.7}
-      accessibilityRole="button"
-      accessibilityLabel="Démarrer une promenade"
-      accessibilityHint="Lance le chrono de promenade"
-      accessibilityState={{ disabled: false }}
+      accessibilityRole={isActive ? "timer" : "button"}
+      accessibilityLabel={
+        isActive
+          ? `Promenade en cours depuis ${formatDuration(elapsedMinutes)}`
+          : "Démarrer une promenade"
+      }
+      accessibilityHint={isActive ? undefined : "Lance le chrono de promenade"}
     >
-      <View style={styles.inactiveRow}>
-        <FontAwesome name="person-walking" size={18} color={accentColor} />
-        <Text style={[styles.inactiveLabel, { color: nc.textStrong }]}>
-          {"Démarrer une promenade"}
+      {/* Header row */}
+      <View style={styles.headerRow}>
+        <FontAwesome
+          name="person-walking"
+          size={14}
+          color={isActive ? textColor : accentColor}
+        />
+        <Text
+          style={[
+            styles.title,
+            { color: isActive ? textColor : nc.textStrong },
+          ]}
+        >
+          {isActive ? "Promenade en cours" : "Démarrer une promenade"}
         </Text>
-        <FontAwesome name="play" size={12} color={accentColor} />
+        {!isActive && (
+          <TouchableOpacity
+            onPress={handleStart}
+            style={styles.playButton}
+            accessibilityRole="button"
+            accessibilityLabel="Démarrer une promenade"
+          >
+            <FontAwesome name="play" size={12} color={accentColor} />
+          </TouchableOpacity>
+        )}
       </View>
-    </TouchableOpacity>
+
+      {/* Active content */}
+      {isActive && (
+        <>
+          <Text
+            style={[styles.timerValue, { color: textColor }]}
+            accessibilityLiveRegion="polite"
+          >
+            {formatDuration(elapsedMinutes)}
+          </Text>
+          {startTime && (
+            <Text style={[styles.subtitle, { color: subtitleColor }]}>
+              Début {startTime}
+            </Text>
+          )}
+          {showStopButton && (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: accentColor }]}
+              onPress={handleStop}
+              accessibilityRole="button"
+              accessibilityLabel="Terminer la promenade"
+            >
+              <Text style={[styles.actionButtonText, { color: nc.backgroundCard }]}>
+                Terminer
+              </Text>
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+    </Animated.View>
   );
 });
 
-// ============================================
-// STYLES
-// ============================================
-
 const styles = StyleSheet.create({
-  // Active state (vertical layout — hero duration, full-width stop button)
-  activeContainer: {
+  container: {
     borderRadius: 16,
     padding: 16,
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  activeHeader: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  activeLabel: {
+  title: {
+    flex: 1,
     fontSize: 14,
     fontWeight: "700",
   },
-  activeTime: {
+  playButton: {
+    padding: 4,
+  },
+  timerValue: {
     marginTop: 6,
     fontSize: 26,
     fontWeight: "700",
   },
-  activeSubtitle: {
+  subtitle: {
     marginTop: 4,
     fontSize: 12,
   },
-  stopButton: {
+  actionButton: {
     marginTop: 10,
     minHeight: 44,
     paddingVertical: 10,
@@ -239,24 +220,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  stopText: {
+  actionButtonText: {
     fontWeight: "700",
-  },
-  // Inactive state (horizontal — compact start button)
-  container: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-  },
-  // Inactive state
-  inactiveRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  inactiveLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "500",
   },
 });

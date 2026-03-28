@@ -14,10 +14,6 @@ import {
   View,
 } from "react-native";
 
-// ============================================
-// TYPES
-// ============================================
-
 export interface SleepWidgetProps {
   isActive: boolean;
   isNap?: boolean;
@@ -27,12 +23,8 @@ export interface SleepWidgetProps {
   onStopSleep: () => void;
   showStopButton?: boolean;
   colorScheme?: "light" | "dark";
-  sharedPulseAnim?: Animated.Value; // Shared pulse for sync with other widgets
+  sharedPulseAnim?: Animated.Value;
 }
-
-// ============================================
-// HELPERS
-// ============================================
 
 const formatDuration = (minutes?: number): string => {
   if (!minutes || minutes <= 0) return "0 min";
@@ -41,10 +33,6 @@ const formatDuration = (minutes?: number): string => {
   const m = minutes % 60;
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
 };
-
-// ============================================
-// COMPONENT
-// ============================================
 
 export const SleepWidget = memo(function SleepWidget({
   isActive,
@@ -60,7 +48,6 @@ export const SleepWidget = memo(function SleepWidget({
   const nc = getNeutralColors(colorScheme);
   const cat = getCategoryColors(colorScheme);
 
-  // Derive sleep colors from category colors + dark-aware variants
   const sleepColors = {
     primary: cat.sommeil.primary,
     background: cat.sommeil.background,
@@ -98,7 +85,7 @@ export const SleepWidget = memo(function SleepWidget({
   const pulseAnim = sharedPulseAnim ?? ownPulseAnim;
 
   useEffect(() => {
-    if (sharedPulseAnim) return; // Shared pulse managed by parent
+    if (sharedPulseAnim) return;
     if (isActive) {
       const pulse = Animated.loop(
         Animated.sequence([
@@ -123,186 +110,174 @@ export const SleepWidget = memo(function SleepWidget({
     }
   }, [isActive, pulseAnim]);
 
-  if (isActive) {
-    return (
-      <Animated.View
-        style={[
-          styles.statsCard,
-          { backgroundColor: nc.backgroundCard },
-          styles.sleepWidget,
-          {
-            backgroundColor: sleepColors.background,
-            borderWidth: 2,
-            borderColor: sleepColors.primary,
-            shadowColor: sleepColors.primary,
-            shadowOpacity: 0.25,
-            shadowRadius: 12,
-          },
-          { transform: [{ scale: pulseAnim }] },
-        ]}
-        accessibilityRole="timer"
-        accessibilityLabel={`${isNap ? "Sieste" : "Nuit"} en cours depuis ${formatDuration(elapsedMinutes)}`}
-      >
-        <View style={styles.sleepWidgetHeader}>
-          <View style={styles.sleepWidgetHeaderRow}>
-            <FontAwesome
-              name={isNap ? "bed" : "moon"}
-              size={14}
-              color={sleepColors.textDark}
-            />
-            <Text style={[styles.sleepWidgetTitle, { color: sleepColors.textDark }]}>
-              {isNap ? "Sieste" : "Nuit"} en cours
-            </Text>
-          </View>
-        </View>
-        <Text
-          style={[styles.sleepWidgetValue, { color: sleepColors.textDark }]}
-          accessibilityLiveRegion="polite"
-        >
-          {formatDuration(elapsedMinutes)}
+  // Unified container — same size whether active or inactive
+  return (
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          backgroundColor: sleepColors.background,
+          borderWidth: isActive ? 2 : 1,
+          borderColor: isActive ? sleepColors.primary : sleepColors.border,
+        },
+        isActive && {
+          shadowColor: sleepColors.primary,
+          shadowOpacity: 0.25,
+          shadowRadius: 12,
+          transform: [{ scale: pulseAnim }],
+        },
+      ]}
+      accessibilityRole={isActive ? "timer" : "none"}
+      accessibilityLabel={
+        isActive
+          ? `${isNap ? "Sieste" : "Nuit"} en cours depuis ${formatDuration(elapsedMinutes)}`
+          : "Démarrer un sommeil"
+      }
+    >
+      {/* Header row — always present */}
+      <View style={styles.headerRow}>
+        <FontAwesome
+          name={isActive ? (isNap ? "bed" : "moon") : "cloud-moon"}
+          size={14}
+          color={sleepColors.textDark}
+        />
+        <Text style={[styles.title, { color: sleepColors.textDark }]}>
+          {isActive
+            ? `${isNap ? "Sieste" : "Nuit"} en cours`
+            : "C'est l'heure des beaux rêves ?"}
         </Text>
-        <Text style={[styles.sleepWidgetSubtitle, { color: sleepColors.textMuted }]}>
-          Début {startTime}
+      </View>
+
+      {/* Middle content */}
+      {isActive ? (
+        <>
+          <Text
+            style={[styles.timerValue, { color: sleepColors.textDark }]}
+            accessibilityLiveRegion="polite"
+          >
+            {formatDuration(elapsedMinutes)}
+          </Text>
+          <Text style={[styles.subtitle, { color: sleepColors.textMuted }]}>
+            Début {startTime}
+          </Text>
+        </>
+      ) : (
+        <Text style={[styles.subtitle, { color: sleepColors.textMuted, marginTop: 4 }]}>
+          Tap pour démarrer
         </Text>
-        {showStopButton && (
+      )}
+
+      {/* Action buttons — always at the bottom */}
+      {isActive ? (
+        showStopButton && (
           <TouchableOpacity
-            style={[styles.sleepWidgetStop, { backgroundColor: sleepColors.primary }]}
+            style={[styles.actionButton, { backgroundColor: sleepColors.primary }]}
             onPress={handleStop}
             accessibilityRole="button"
             accessibilityLabel="Terminer le sommeil"
           >
-            <Text style={[styles.sleepWidgetStopText, { color: nc.backgroundCard }]}>
+            <Text style={[styles.actionButtonText, { color: nc.backgroundCard }]}>
               Terminer
             </Text>
           </TouchableOpacity>
-        )}
-      </Animated.View>
-    );
-  }
-
-  return (
-    <View
-      style={[
-        styles.statsCard,
-        { backgroundColor: nc.backgroundCard },
-        styles.sleepWidget,
-        {
-          backgroundColor: sleepColors.background,
-          borderWidth: 1,
-          borderColor: sleepColors.border,
-        },
-      ]}
-      accessibilityRole="none"
-    >
-      <Text style={[styles.sleepWidgetTitle, { color: sleepColors.textDark }]}>
-        C'est l'heure des beaux rêves ?
-      </Text>
-      <Text style={[styles.sleepWidgetSubtitle, { color: sleepColors.textMuted }]}>
-        Tap pour démarrer
-      </Text>
-      <View style={styles.sleepWidgetButtons}>
-        <TouchableOpacity
-          style={[
-            styles.sleepWidgetButton,
-            preferNight
-              ? { backgroundColor: sleepColors.buttonSecondaryBg }
-              : { backgroundColor: sleepColors.primary },
-          ]}
-          onPress={() => handleStart(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Démarrer une sieste"
-        >
-          <FontAwesome
-            name="bed"
-            size={12}
-            color={preferNight ? sleepColors.primary : nc.backgroundCard}
-          />
-          <Text
+        )
+      ) : (
+        <View style={styles.buttonsRow}>
+          <TouchableOpacity
             style={[
-              styles.sleepWidgetButtonText,
-              { color: preferNight ? sleepColors.primary : nc.backgroundCard },
+              styles.startButton,
+              {
+                backgroundColor: preferNight
+                  ? sleepColors.buttonSecondaryBg
+                  : sleepColors.primary,
+              },
             ]}
+            onPress={() => handleStart(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Démarrer une sieste"
           >
-            Sieste
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.sleepWidgetButton,
-            preferNight
-              ? { backgroundColor: sleepColors.primary }
-              : { backgroundColor: sleepColors.buttonSecondaryBg },
-          ]}
-          onPress={() => handleStart(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Démarrer une nuit de sommeil"
-        >
-          <FontAwesome
-            name="moon"
-            size={12}
-            color={preferNight ? nc.backgroundCard : sleepColors.primary}
-          />
-          <Text
+            <FontAwesome
+              name="bed"
+              size={12}
+              color={preferNight ? sleepColors.primary : nc.backgroundCard}
+            />
+            <Text
+              style={[
+                styles.startButtonText,
+                { color: preferNight ? sleepColors.primary : nc.backgroundCard },
+              ]}
+            >
+              Sieste
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[
-              styles.sleepWidgetButtonText,
-              { color: preferNight ? nc.backgroundCard : sleepColors.primary },
+              styles.startButton,
+              {
+                backgroundColor: preferNight
+                  ? sleepColors.primary
+                  : sleepColors.buttonSecondaryBg,
+              },
             ]}
+            onPress={() => handleStart(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Démarrer une nuit de sommeil"
           >
-            Nuit
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+            <FontAwesome
+              name="moon"
+              size={12}
+              color={preferNight ? nc.backgroundCard : sleepColors.primary}
+            />
+            <Text
+              style={[
+                styles.startButtonText,
+                { color: preferNight ? nc.backgroundCard : sleepColors.primary },
+              ]}
+            >
+              Nuit
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </Animated.View>
   );
 });
 
-// ============================================
-// STYLES (layout only — colors applied inline)
-// ============================================
-
 const styles = StyleSheet.create({
-  statsCard: {
-    flex: 1,
-    padding: 16,
+  container: {
     borderRadius: 16,
+    padding: 16,
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
   },
-  sleepWidget: {
-    overflow: "hidden",
-  },
-  sleepWidgetHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  sleepWidgetHeaderRow: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  sleepWidgetTitle: {
+  title: {
     fontSize: 14,
     fontWeight: "700",
   },
-  sleepWidgetValue: {
+  timerValue: {
     marginTop: 6,
     fontSize: 26,
     fontWeight: "700",
   },
-  sleepWidgetSubtitle: {
+  subtitle: {
     marginTop: 4,
     fontSize: 12,
   },
-  sleepWidgetButtons: {
+  buttonsRow: {
     flexDirection: "row",
     gap: 10,
     marginTop: 10,
   },
-  sleepWidgetButton: {
+  startButton: {
     flex: 1,
     minHeight: 44,
     paddingVertical: 10,
@@ -312,10 +287,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-  sleepWidgetButtonText: {
+  startButtonText: {
     fontWeight: "700",
   },
-  sleepWidgetStop: {
+  actionButton: {
     marginTop: 10,
     minHeight: 44,
     paddingVertical: 10,
@@ -323,7 +298,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sleepWidgetStopText: {
+  actionButtonText: {
     fontWeight: "700",
   },
 });
