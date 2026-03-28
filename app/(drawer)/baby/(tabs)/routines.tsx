@@ -14,6 +14,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { supprimerSommeil, supprimerBain, supprimerNettoyageNez } from "@/migration/eventsDoubleWriteService";
 import {
@@ -24,11 +25,6 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { BainEvent, NettoyageNezEvent, SommeilEvent, supprimerEvenement } from "@/services/eventsService";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
@@ -281,7 +277,6 @@ export default function RoutinesScreen() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
 
-  const [events, setEvents] = useState<RoutineEvent[]>([]);
   const [groupedEvents, setGroupedEvents] = useState<RoutineGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({ sommeil: false, bain: false, nez: false });
@@ -312,6 +307,21 @@ export default function RoutinesScreen() {
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
   const [now, setNow] = useState(new Date());
+  const sortMergedEvents = useCallback(
+    (merged: any[]) =>
+      [...(merged as RoutineEvent[])].sort(
+        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+      ),
+    [],
+  );
+  const {
+    mergedEvents: events,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<RoutineEvent>({
+    childId: activeChild?.id,
+    transformMerged: sortMergedEvents,
+  });
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -505,11 +515,17 @@ export default function RoutinesScreen() {
     setRefreshKey((k) => k + 1);
   }, []);
 
+  const pushRoutineFirestoreEvents = useCallback(() => {
+    setFirestoreEvents([
+      ...latestSommeilsRef.current,
+      ...latestBainsRef.current,
+      ...latestNezRef.current,
+    ]);
+  }, [setFirestoreEvents]);
+
   // ============================================
   // DATA LISTENERS
   // ============================================
-  // Unified debounced pipeline: both Firestore snapshots and optimistic store
-  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     setLoadError(false);
@@ -519,45 +535,16 @@ export default function RoutinesScreen() {
     const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+    latestSommeilsRef.current = [];
+    latestBainsRef.current = [];
+    latestNezRef.current = [];
 
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
     let refreshCleared = false;
 
     const handleListenerError = () => {
       setLoadError(true);
       setIsRefreshing(false);
       setLoaded({ sommeil: true, bain: true, nez: true });
-    };
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const raw = [
-          ...latestSommeilsRef.current,
-          ...latestBainsRef.current,
-          ...latestNezRef.current,
-        ].sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-        );
-        const merged = mergeWithFirestoreEvents(raw, activeChild.id) as RoutineEvent[];
-
-        const fingerprint = buildEventFingerprint(merged);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setEvents(merged);
-
-        // Clean up soft-deleted IDs that are no longer in the dataset
-        setSoftDeletedIds((prev) => {
-          if (prev.size === 0) return prev;
-          const ids = new Set(merged.map((e) => e.id));
-          const next = new Set<string>();
-          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
-          return next.size === prev.size ? prev : next;
-        });
-      }, 50);
     };
 
     const handleLoadMore = () => {
@@ -582,7 +569,7 @@ export default function RoutinesScreen() {
           setIsRefreshing(false);
         }
         handleLoadMore();
-        scheduleMerge();
+        pushRoutineFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
@@ -593,7 +580,7 @@ export default function RoutinesScreen() {
       (data) => {
         latestBainsRef.current = data as RoutineEvent[];
         setLoaded((prev) => ({ ...prev, bain: true }));
-        scheduleMerge();
+        pushRoutineFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
@@ -604,26 +591,38 @@ export default function RoutinesScreen() {
       (data) => {
         latestNezRef.current = data as RoutineEvent[];
         setLoaded((prev) => ({ ...prev, nez: true }));
-        scheduleMerge();
+        pushRoutineFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribeSommeils();
       unsubscribeBains();
       unsubscribeNez();
-      unsubOptimistic();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey, pushRoutineFirestoreEvents]);
+
+  useEffect(() => {
+    setSoftDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const ids = new Set(events.map((e) => e.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [events]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshMerged();
+    }, [refreshMerged]),
+  );
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setEvents([]);
     setGroupedEvents([]);
     setLoaded({ sommeil: false, bain: false, nez: false });
     setEmptyDelayDone(false);
@@ -634,7 +633,11 @@ export default function RoutinesScreen() {
     setExpandedDays(new Set());
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-  }, [activeChild?.id]);
+    latestSommeilsRef.current = [];
+    latestBainsRef.current = [];
+    latestNezRef.current = [];
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   useEffect(() => {
     if (!Object.values(loaded).every(Boolean)) {

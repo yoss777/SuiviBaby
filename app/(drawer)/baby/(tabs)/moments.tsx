@@ -75,6 +75,7 @@ export default function MomentsScreen() {
     authorNames,
     refreshToday,
     handleRefresh,
+    refocus,
   } = useMomentsData(activeChild?.id, firebaseUser?.uid);
 
   const handleSheetSuccess = useCallback(() => {
@@ -105,6 +106,13 @@ export default function MomentsScreen() {
     onSuccess: handleSheetSuccess,
     canManageContent,
   });
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refocus();
+    }, [refocus]),
+  );
 
   // Marquer les moments comme vus quand on entre dans l'onglet
   useFocusEffect(

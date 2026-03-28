@@ -1,38 +1,7 @@
 // hooks/useVoiceCommand.ts
 import {
-  ajouterActivite,
-  ajouterBain,
-  ajouterBiberon,
-  ajouterCroissance,
-  ajouterJalon,
-  ajouterMedicament,
-  ajouterMiction,
-  ajouterPompage,
-  ajouterSelle,
-  ajouterSolide,
-  ajouterSommeil,
-  ajouterSymptome,
-  ajouterTemperature,
-  ajouterTetee,
-  ajouterVaccin,
-  ajouterVitamine,
-  modifierBiberon,
-  modifierTetee,
-  modifierPompage,
-  modifierMiction,
-  modifierSelle,
-  modifierVitamine,
-  modifierSommeil,
-  modifierActivite,
-  modifierJalon,
-  modifierCroissance,
-  modifierSolide,
-  modifierBain,
-  modifierNettoyageNez,
-  modifierTemperature,
-  modifierMedicament,
-  modifierSymptome,
-  modifierVaccin,
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerBiberon,
   supprimerTetee,
   supprimerPompage,
@@ -976,28 +945,18 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
     type: string,
     childId: string,
     eventId: string,
-    modifications: Partial<ParsedCommandResult>
+    modifications: Partial<ParsedCommandResult>,
+    previousEvent: Event | null,
   ) => {
     try {
-      const modifyMap: Record<string, (childId: string, id: string, data: any) => Promise<void>> = {
-        biberon: modifierBiberon,
-        tetee: modifierTetee,
-        pompage: modifierPompage,
-        miction: modifierMiction,
-        selle: modifierSelle,
-        vitamine: modifierVitamine,
-        sommeil: modifierSommeil,
-        activite: modifierActivite,
-        jalon: modifierJalon,
-        croissance: modifierCroissance,
-        solide: modifierSolide,
-        bain: modifierBain,
-        temperature: modifierTemperature,
-        medicament: modifierMedicament,
-        symptome: modifierSymptome,
-        vaccin: modifierVaccin,
-        nettoyage_nez: modifierNettoyageNez,
-      };
+      if (!previousEvent) {
+        setInfoModal({
+          visible: true,
+          title: "Erreur",
+          message: "Impossible de modifier sans l'événement courant",
+        });
+        return;
+      }
 
       // Convertir les modifications au format Firebase
       const dataToUpdate: Record<string, any> = {};
@@ -1033,9 +992,13 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       dataToUpdate.updatedAt = new Date();
       dataToUpdate.note = `Modifié par commande vocale`;
 
-      const modifyFn = modifyMap[type];
-      if (modifyFn) {
-        await modifyFn(childId, eventId, dataToUpdate);
+      if (previousEvent.type === type) {
+        modifierEvenementOptimistic(
+          childId,
+          eventId,
+          dataToUpdate,
+          previousEvent,
+        );
         setInfoModal({
           visible: true,
           title: "Succès",
@@ -1098,7 +1061,13 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         }
 
         const modifications = command.modifications || {};
-        await executeModify(command.type, childId, targetEvent.id, modifications);
+        await executeModify(
+          command.type,
+          childId,
+          targetEvent.id,
+          modifications,
+          targetEvent,
+        );
         return;
       }
 
@@ -1116,11 +1085,11 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
               : command.quantite;
           const dataTetee = {
             ...data, // quantité, durée, sein, notes, etc.
-            type: "seins" as const,
+            type: "tetee" as const,
             dureeGauche: command.coteGauche ? splitDuration : undefined,
             dureeDroite: command.coteDroit ? splitDuration : undefined,
           };
-          await ajouterTetee(childId, dataTetee);
+          ajouterEvenementOptimistic(childId, dataTetee);
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1133,7 +1102,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
             ...data,
             type: "biberon" as const,
           };
-          await ajouterBiberon(childId, dataBiberon);
+          ajouterEvenementOptimistic(childId, dataBiberon);
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1146,7 +1115,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
             ...data, // quantité, durée, sein, notes, etc.
             type: "pompage" as const,
           };
-          await ajouterPompage(childId, dataPompage);
+          ajouterEvenementOptimistic(childId, dataPompage);
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1158,6 +1127,8 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           const { type: _unusedType, ...dataCoucheBase } = data as {
             type?: string;
           };
+          // `couche` remains a backend/legacy command type; in the modern UI we
+          // materialize diaper tracking through `miction` / `selle`.
           const dataCouche = {
             ...dataCoucheBase,
             avecCouche: true,
@@ -1169,12 +1140,20 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
 
           // Si pipi → on ajoute une miction
           if (shouldAddPipi) {
-            promesses.push(ajouterMiction(childId, dataCouche));
+            ajouterEvenementOptimistic(childId, {
+              ...dataCouche,
+              type: "miction" as const,
+            });
+            promesses.push(Promise.resolve());
           }
 
           // Si popo → on ajoute une selle
           if (shouldAddPopo) {
-            promesses.push(ajouterSelle(childId, dataCouche));
+            ajouterEvenementOptimistic(childId, {
+              ...dataCouche,
+              type: "selle" as const,
+            });
+            promesses.push(Promise.resolve());
           }
 
           // On attend que toutes les opérations soient terminées (il peut y en avoir 1 ou 2)
@@ -1203,9 +1182,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           };
           const dataMiction = {
             ...dataMictionBase,
+            type: "miction" as const,
             avecCouche: !!avecCouche,
           };
-          await ajouterMiction(childId, dataMiction);
+          ajouterEvenementOptimistic(childId, dataMiction);
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1219,9 +1199,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           };
           const dataSelle = {
             ...dataSelleBase,
+            type: "selle" as const,
             avecCouche: !!avecCouche,
           };
-          await ajouterSelle(childId, dataSelle);
+          ajouterEvenementOptimistic(childId, dataSelle);
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1232,9 +1213,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         case "vitamine":
           const dataVitamine = {
             ...data,
+            type: "vitamine" as const,
             nomVitamine: command.nomVitamine || "Vitamine D",
           };
-          await ajouterVitamine(childId, dataVitamine);
+          ajouterEvenementOptimistic(childId, dataVitamine);
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1261,7 +1243,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
               break;
             }
           }
-          await ajouterSommeil(childId, data);
+          ajouterEvenementOptimistic(childId, {
+            ...data,
+            type: "sommeil" as const,
+          });
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1270,7 +1255,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "activite":
-          await ajouterActivite(childId, data);
+          ajouterEvenementOptimistic(childId, {
+            ...data,
+            type: "activite" as const,
+          });
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1279,7 +1267,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "jalon":
-          await ajouterJalon(childId, data);
+          ajouterEvenementOptimistic(childId, {
+            ...data,
+            type: "jalon" as const,
+          });
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1288,7 +1279,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "croissance":
-          await ajouterCroissance(childId, data);
+          ajouterEvenementOptimistic(childId, {
+            ...data,
+            type: "croissance" as const,
+          });
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1297,7 +1291,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "solide":
-          await ajouterSolide(childId, data);
+          ajouterEvenementOptimistic(childId, {
+            ...data,
+            type: "solide" as const,
+          });
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1306,7 +1303,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "bain":
-          await ajouterBain(childId, data);
+          ajouterEvenementOptimistic(childId, {
+            ...data,
+            type: "bain" as const,
+          });
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1315,7 +1315,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "temperature":
-          await ajouterTemperature(childId, data);
+          ajouterEvenementOptimistic(childId, {
+            ...data,
+            type: "temperature" as const,
+          });
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1324,7 +1327,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "medicament":
-          await ajouterMedicament(childId, data);
+          ajouterEvenementOptimistic(childId, {
+            ...data,
+            type: "medicament" as const,
+          });
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1333,7 +1339,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "symptome":
-          await ajouterSymptome(childId, data);
+          ajouterEvenementOptimistic(childId, {
+            ...data,
+            type: "symptome" as const,
+          });
           setInfoModal({
             visible: true,
             title: "Succès",
@@ -1342,7 +1351,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           break;
 
         case "vaccin":
-          await ajouterVaccin(childId, data);
+          ajouterEvenementOptimistic(childId, {
+            ...data,
+            type: "vaccin" as const,
+          });
           setInfoModal({
             visible: true,
             title: "Succès",

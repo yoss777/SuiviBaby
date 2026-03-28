@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
 import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
-import {
   ecouterInteractionsSociales,
   getUserNames,
 } from "@/services/socialService";
 import { JalonEvent } from "@/services/eventsService";
 import { LikeInfo } from "@/types/social";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 
 // ============================================
 // TYPES
@@ -65,7 +61,6 @@ export function useMomentsData(
   childId: string | undefined,
   firebaseUid: string | undefined,
 ) {
-  const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -80,7 +75,13 @@ export function useMomentsData(
 
   // Track whether data has arrived after a refresh
   const refreshResolveRef = useRef<(() => void) | null>(null);
-  const latestFirestoreEventsRef = useRef<MilestoneEventWithId[]>([]);
+  const {
+    mergedEvents: events,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<MilestoneEventWithId>({
+    childId,
+  });
 
   const refreshToday = useCallback(() => {
     setRefreshTick((prev) => prev + 1);
@@ -118,30 +119,12 @@ export function useMomentsData(
     if (!childId) return;
 
     setLoadError(false);
-
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
     let loadingSet = false;
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const firestoreEvents = latestFirestoreEventsRef.current;
-        const merged = mergeWithFirestoreEvents(firestoreEvents, childId) as MilestoneEventWithId[];
-
-        const fingerprint = buildEventFingerprint(merged);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setEvents(merged);
-      }, 50);
-    };
 
     const unsubscribe = ecouterJalonsHybrid(
       childId,
       (data) => {
-        latestFirestoreEventsRef.current = data as MilestoneEventWithId[];
+        setFirestoreEvents(data as MilestoneEventWithId[]);
         if (!loadingSet) {
           loadingSet = true;
           setLoaded(true);
@@ -151,7 +134,6 @@ export function useMomentsData(
           refreshResolveRef.current();
           refreshResolveRef.current = null;
         }
-        scheduleMerge();
       },
       { waitForServer: true, limite: 100 },
       () => {
@@ -164,14 +146,16 @@ export function useMomentsData(
       },
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribe();
-      unsubOptimistic();
     };
-  }, [childId, refreshTick]);
+  }, [childId, refreshTick, setFirestoreEvents]);
+
+  // Re-merge callback for tab focus — frozen tabs miss state updates.
+  // The consumer screen should call this from its own useFocusEffect.
+  const refocus = useCallback(() => {
+    refreshMerged();
+  }, [refreshMerged]);
 
   // Mood data processing
   const { moods, currentMood } = useMemo((): {
@@ -298,5 +282,6 @@ export function useMomentsData(
     authorNames,
     refreshToday,
     handleRefresh,
+    refocus,
   };
 }

@@ -22,7 +22,7 @@ import {
   confirmOptimistic,
   failOptimistic,
   generateTempId,
-  removeOptimistic,
+  markOptimisticQueued,
 } from "./optimisticEventsStore";
 
 const getUserId = () => {
@@ -40,7 +40,7 @@ export type EventType =
   | "tetee"
   | "solide" // Repas solide (diversification)
   | "pompage"
-  | "couche" // Change de couche (sans détail)
+  | "couche" // Legacy/backend event; modern UI derives diaper tracking from miction/selle
   | "miction" // Pipi
   | "selle" // Popo
   | "sommeil"
@@ -115,8 +115,9 @@ export interface PompageEvent extends BaseEvent {
 
 export interface CoucheEvent extends BaseEvent {
   type: "couche";
-  // Juste un change de couche, sans détail médical
-  // Les détails médicaux sont dans MictionEvent et SelleEvent
+  // Legacy/backend-only raw diaper change event.
+  // The modern UI product contract models diaper tracking through
+  // MictionEvent and SelleEvent.
 }
 
 export interface MictionEvent extends BaseEvent {
@@ -249,6 +250,59 @@ export type Event =
 
 const COLLECTION_NAME = "events";
 
+function buildCreatePayload(
+  childId: string,
+  data: Omit<Event, "id" | "childId" | "userId" | "createdAt"> | any,
+) {
+  return {
+    ...data,
+    childId,
+    date:
+      data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
+  };
+}
+
+function buildUpdatePayload(
+  childId: string,
+  id: string,
+  data: Partial<Event>,
+) {
+  const payload = {
+    ...data,
+    childId,
+    eventId: id,
+  };
+
+  if (data.date && data.date instanceof Date) {
+    (payload as any).date = Timestamp.fromDate(data.date);
+  }
+
+  return payload;
+}
+
+async function callCreateEventCF(
+  payload: Record<string, unknown>,
+): Promise<string> {
+  const createEvent = httpsCallable<
+    Record<string, unknown>,
+    { id: string }
+  >(functions, "validateAndCreateEvent");
+
+  const result = await createEvent(payload);
+  return result.data.id;
+}
+
+async function callUpdateEventCF(
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const updateEvent = httpsCallable<
+    Record<string, unknown>,
+    { success: boolean }
+  >(functions, "validateAndUpdateEvent");
+
+  await updateEvent(payload);
+}
+
 /**
  * Ajoute un événement via Cloud Function (validation serveur)
  * Si offline, l'événement est mis en queue et synchronisé au retour en ligne.
@@ -257,12 +311,7 @@ export async function ajouterEvenement(
   childId: string,
   data: Omit<Event, "id" | "childId" | "userId" | "createdAt">,
 ): Promise<string> {
-  const payload = {
-    ...data,
-    childId,
-    date:
-      data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
-  };
+  const payload = buildCreatePayload(childId, data);
 
   // Si offline, mettre en queue
   const online = await isOnline();
@@ -271,13 +320,7 @@ export async function ajouterEvenement(
     return offlineId;
   }
 
-  const createEvent = httpsCallable<
-    Record<string, unknown>,
-    { id: string }
-  >(functions, "validateAndCreateEvent");
-
-  const result = await createEvent(payload);
-  return result.data.id;
+  return callCreateEventCF(payload);
 }
 
 /**
@@ -498,16 +541,7 @@ export async function modifierEvenement(
   id: string,
   data: Partial<Event>,
 ): Promise<void> {
-  const payload = {
-    ...data,
-    childId,
-    eventId: id,
-  };
-
-  // Convertir les dates si nécessaire
-  if (data.date && data.date instanceof Date) {
-    (payload as any).date = Timestamp.fromDate(data.date);
-  }
+  const payload = buildUpdatePayload(childId, id, data);
 
   // Si offline, mettre en queue
   const online = await isOnline();
@@ -516,12 +550,7 @@ export async function modifierEvenement(
     return;
   }
 
-  const updateEvent = httpsCallable<
-    Record<string, unknown>,
-    { success: boolean }
-  >(functions, "validateAndUpdateEvent");
-
-  await updateEvent(payload);
+  await callUpdateEventCF(payload as Record<string, unknown>);
 }
 
 /**
@@ -607,7 +636,9 @@ export async function ajouterPompage(
 }
 
 /**
- * Ajoute un simple change de couche (sans détail médical)
+ * Ajoute un simple change de couche (sans détail médical).
+ * Ce type reste supporté côté backend mais n'est plus un event UI moderne de
+ * premier niveau: l'application affiche surtout `miction` / `selle`.
  */
 export async function ajouterCouche(
   childId: string,
@@ -672,8 +703,9 @@ export async function ajouterSelle(
 }
 
 /**
- * Helper combiné : couche + miction et/ou selle
- * Utile pour enregistrer rapidement "change de couche avec pipi et popo"
+ * Helper combiné : couche + miction et/ou selle.
+ * Kept for compatibility with legacy/backend flows; the modern UI still reads
+ * and propagates the diaper domain primarily through `miction` / `selle`.
  */
 export async function ajouterCoucheAvecDetails(
   childId: string,
@@ -887,6 +919,7 @@ export async function obtenirStats24h(childId: string) {
         stats.selles.count++;
         break;
       case "couche":
+        // Legacy raw diaper-change stats are still counted for historical data.
         stats.couches.count++;
         break;
       case "sommeil":
@@ -956,6 +989,7 @@ export function ajouterEvenementOptimistic(
   const idempotencyKey = `${auth.currentUser?.uid}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   const optimisticEvent = {
     ...data,
+    idempotencyKey,
     id: tempId,
     childId,
     date: data.date || new Date(),
@@ -965,34 +999,32 @@ export function ajouterEvenementOptimistic(
 
   addOptimisticCreate(childId, optimisticEvent, tempId);
 
-  // Fire CF in background with retries — same idempotencyKey across all attempts
   const dataWithKey = { ...data, idempotencyKey };
-  withRetry(() => ajouterEvenement(childId, dataWithKey))
-    .then((realId) => {
+  const payload = buildCreatePayload(childId, dataWithKey);
+
+  void (async () => {
+    try {
+      if (!(await isOnline())) {
+        await enqueueEvent('create', payload);
+        markOptimisticQueued(tempId);
+        return;
+      }
+
+      const realId = await withRetry(() => callCreateEventCF(payload));
       confirmOptimistic(tempId, realId);
-    })
-    .catch(async (error) => {
+    } catch (error) {
       if (isNetworkError(error)) {
-        // Enqueue for offline sync so the create isn't lost
-        const payload: Record<string, unknown> = {
-          ...dataWithKey,
-          childId,
-        };
-        if (data.date && data.date instanceof Date) {
-          payload.date = Timestamp.fromDate(data.date);
-        }
         try {
           await enqueueEvent('create', payload);
-          // Offline queue takes over — remove optimistic entry so there's no
-          // duplicate when the queue syncs and the Firestore snapshot arrives.
-          removeOptimistic(tempId);
+          markOptimisticQueued(tempId);
         } catch {
           // enqueue failed — keep optimistic entry visible as last resort
         }
         return;
       }
       failOptimistic(tempId);
-    });
+    }
+  })();
 
   return tempId;
 }
@@ -1016,32 +1048,29 @@ export function modifierEvenementOptimistic(
 
   addOptimisticUpdate(eventId, childId, updatedEvent, previousEvent);
 
-  // Fire CF in background with retries
-  withRetry(() => modifierEvenement(childId, eventId, data))
-    .then(() => {
+  const payload = buildUpdatePayload(childId, eventId, data);
+
+  void (async () => {
+    try {
+      if (!(await isOnline())) {
+        await enqueueEvent('update', payload as Record<string, unknown>);
+        markOptimisticQueued(eventId);
+        return;
+      }
+
+      await withRetry(() => callUpdateEventCF(payload as Record<string, unknown>));
       confirmOptimistic(eventId);
-    })
-    .catch(async (error) => {
+    } catch (error) {
       if (isNetworkError(error)) {
-        // Enqueue for offline sync so the update isn't lost
-        const payload: Record<string, unknown> = {
-          ...data,
-          childId,
-          eventId,
-        };
-        if (data.date && data.date instanceof Date) {
-          payload.date = Timestamp.fromDate(data.date);
-        }
         try {
-          await enqueueEvent('update', payload);
-          // Offline queue takes over — remove optimistic entry to avoid
-          // stale overlay when the queue syncs.
-          removeOptimistic(eventId);
+          await enqueueEvent('update', payload as Record<string, unknown>);
+          markOptimisticQueued(eventId);
         } catch {
           // enqueue failed — keep optimistic entry visible as last resort
         }
         return;
       }
       failOptimistic(eventId);
-    });
+    }
+  })();
 }

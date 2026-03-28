@@ -14,6 +14,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { supprimerPompage } from "@/migration/eventsDoubleWriteService";
 import {
@@ -21,11 +22,6 @@ import {
   getNextEventDateBeforeHybrid,
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import { Ionicons } from "@expo/vector-icons";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -236,7 +232,6 @@ export default function PumpingScreen() {
   const [pendingEditData, setPendingEditData] = useState<PumpingEditData | null>(null);
 
   // États des données
-  const [pompages, setPompages] = useState<Pompage[]>([]);
   const [groupedPompages, setGroupedPompages] = useState<PompageGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [pompagesLoaded, setPompagesLoaded] = useState(false);
@@ -252,7 +247,13 @@ export default function PumpingScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
-  const latestFirestorePompagesRef = useRef<Pompage[]>([]);
+  const {
+    mergedEvents: pompages,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<Pompage>({
+    childId: activeChild?.id,
+  });
 
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
@@ -492,8 +493,6 @@ export default function PumpingScreen() {
   // EFFECTS - DATA LISTENERS
   // ============================================
 
-  // Unified debounced pipeline: both Firestore snapshots and optimistic store
-  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     setLoadError(false);
@@ -504,8 +503,6 @@ export default function PumpingScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
     let loadingSet = false;
 
     const handleListenerError = () => {
@@ -514,34 +511,10 @@ export default function PumpingScreen() {
       setPompagesLoaded(true);
     };
 
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const firestoreEvents = latestFirestorePompagesRef.current;
-        const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as Pompage[];
-
-        const fingerprint = buildEventFingerprint(merged);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setPompages(merged);
-
-        // Clean up soft-deleted IDs that are no longer in the dataset
-        setSoftDeletedIds((prev) => {
-          if (prev.size === 0) return prev;
-          const dataIds = new Set(merged.map((e: Pompage) => e.id));
-          const next = new Set<string>();
-          prev.forEach((id) => { if (dataIds.has(id)) next.add(id); });
-          return next.size === prev.size ? prev : next;
-        });
-      }, 50);
-    };
-
     const unsubscribe = ecouterPompages(
       activeChild.id,
       (data) => {
-        latestFirestorePompagesRef.current = data;
+        setFirestoreEvents(data);
         if (!loadingSet) {
           loadingSet = true;
           setPompagesLoaded(true);
@@ -556,24 +529,35 @@ export default function PumpingScreen() {
             setIsLoadingMore(false);
           }
         }
-        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribe();
-      unsubOptimistic();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey, setFirestoreEvents]);
+
+  useEffect(() => {
+    setSoftDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const dataIds = new Set(pompages.map((e: Pompage) => e.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (dataIds.has(id)) next.add(id); });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [pompages]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshMerged();
+    }, [refreshMerged]),
+  );
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setPompages([]);
     setGroupedPompages([]);
     setPompagesLoaded(false);
     setEmptyDelayDone(false);
@@ -583,7 +567,8 @@ export default function PumpingScreen() {
     setHasMore(true);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-  }, [activeChild?.id]);
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   // P7: Jump to most recent event date at mount
   useEffect(() => {

@@ -15,6 +15,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -24,11 +25,6 @@ import {
 } from "@/migration/eventsHybridService";
 import { supprimerJalon } from "@/migration/eventsDoubleWriteService";
 import { JalonEvent } from "@/services/eventsService";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -305,7 +301,6 @@ export default function MilestonesScreen() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
 
-  const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
   const [groupedEvents, setGroupedEvents] = useState<MilestoneGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({ jalons: false });
@@ -321,7 +316,13 @@ export default function MilestonesScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
-  const latestFirestoreJalonsRef = useRef<MilestoneEventWithId[]>([]);
+  const {
+    mergedEvents: events,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<MilestoneEventWithId>({
+    childId: activeChild?.id,
+  });
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
@@ -571,8 +572,6 @@ export default function MilestonesScreen() {
   // ============================================
   // DATA LISTENERS
   // ============================================
-  // Unified debounced pipeline: both Firestore snapshots and optimistic store
-  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     setLoadError(false);
@@ -589,40 +588,13 @@ export default function MilestonesScreen() {
     const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
     let loadingSet = false;
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const firestoreEvents = latestFirestoreJalonsRef.current;
-        const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as MilestoneEventWithId[];
-
-        const fingerprint = buildEventFingerprint(merged);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setEvents(merged);
-
-        // Clean up soft-deleted IDs that are no longer in the dataset
-        setSoftDeletedIds((prev) => {
-          if (prev.size === 0) return prev;
-          const ids = new Set(merged.map((e) => e.id));
-          const next = new Set<string>();
-          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
-          return next.size === prev.size ? prev : next;
-        });
-      }, 50);
-    };
 
     const unsubscribe = ecouterJalonsHybrid(
       activeChild.id,
       (data) => {
         const evts = data as MilestoneEventWithId[];
-        latestFirestoreJalonsRef.current = evts;
+        setFirestoreEvents(evts);
         if (!loadingSet) {
           loadingSet = true;
           setLoaded({ jalons: true });
@@ -635,25 +607,36 @@ export default function MilestonesScreen() {
           pendingLoadMoreRef.current = 0;
           setIsLoadingMore(false);
         }
-        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribe();
-      unsubOptimistic();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey, setFirestoreEvents]);
+
+  useEffect(() => {
+    setSoftDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const ids = new Set(events.map((e) => e.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [events]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshMerged();
+    }, [refreshMerged]),
+  );
 
   useEffect(() => {
     if (!activeChild?.id) return;
 
-    setEvents([]);
     setGroupedEvents([]);
     setLoaded({ jalons: false });
     setEmptyDelayDone(false);
@@ -664,7 +647,8 @@ export default function MilestonesScreen() {
     setExpandedDays(new Set());
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-  }, [activeChild?.id]);
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   // Jump to most recent event date at mount
   useEffect(() => {

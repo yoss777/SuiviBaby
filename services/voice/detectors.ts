@@ -151,7 +151,10 @@ export function detectPompage(lowerText: string, rawText: string, timestampInfo:
 }
 
 /**
- * Détecte une couche/miction/selle dans le texte
+ * Détecte le domaine "couches" dans le texte.
+ * `couche` reste ici un type parapluie de compatibilité pour les commandes
+ * vocales; le flux moderne UI continue ensuite à s'appuyer sur `miction` /
+ * `selle`.
  */
 export function detectCouche(lowerText: string, rawText: string, timestampInfo: TimestampInfo): ParsedCommandResult | null {
   const hasPipi = lowerText.includes("pipi") || lowerText.includes("miction") || lowerText.includes("urine") || lowerText.includes("mouillé");
@@ -164,6 +167,7 @@ export function detectCouche(lowerText: string, rawText: string, timestampInfo: 
 
   let type: CommandType;
   if (hasCouche || (hasPipi && hasPopo)) {
+    // Preserve the historical umbrella command when the utterance is generic.
     type = "couche";
   } else if (hasPipi) {
     type = "miction";

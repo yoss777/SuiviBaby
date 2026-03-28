@@ -20,6 +20,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
@@ -29,11 +30,6 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { BiberonEvent, SolideEvent, supprimerEvenement } from "@/services/eventsService";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -263,7 +259,6 @@ export default function MealsScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   // États des données
-  const [meals, setMeals] = useState<Meal[]>([]);
   const [groupedMeals, setGroupedMeals] = useState<MealGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [teteesLoaded, setTeteesLoaded] = useState(false);
@@ -277,6 +272,21 @@ export default function MealsScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const sortMergedMeals = useCallback(
+    (merged: any[]) =>
+      [...(merged as Meal[])].sort(
+        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
+      ),
+    [],
+  );
+  const {
+    mergedEvents: meals,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<Meal>({
+    childId: activeChild?.id,
+    transformMerged: sortMergedMeals,
+  });
   const latestTeteesRef = useRef<Meal[]>([]);
   const latestBiberonsRef = useRef<Meal[]>([]);
   const latestSolidesRef = useRef<Meal[]>([]);
@@ -564,12 +574,18 @@ export default function MealsScreen() {
     setRefreshKey((k) => k + 1);
   }, []);
 
+  const pushMealsFirestoreEvents = useCallback(() => {
+    setFirestoreEvents([
+      ...latestTeteesRef.current,
+      ...latestBiberonsRef.current,
+      ...latestSolidesRef.current,
+    ]);
+  }, [setFirestoreEvents]);
+
   // ============================================
   // EFFECTS - DATA LISTENERS
   // ============================================
 
-  // Unified debounced pipeline: both Firestore snapshots and optimistic store
-  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     setLoadError(false);
@@ -579,9 +595,9 @@ export default function MealsScreen() {
     const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
+    latestTeteesRef.current = [];
+    latestBiberonsRef.current = [];
+    latestSolidesRef.current = [];
     let refreshCleared = false;
 
     const handleListenerError = () => {
@@ -590,34 +606,6 @@ export default function MealsScreen() {
       setTeteesLoaded(true);
       setBiberonsLoaded(true);
       setSolidesLoaded(true);
-    };
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const raw = [
-          ...latestTeteesRef.current,
-          ...latestBiberonsRef.current,
-          ...latestSolidesRef.current,
-        ].sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
-        const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Meal[];
-
-        const fingerprint = buildEventFingerprint(merged);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setMeals(merged);
-
-        // Clean up soft-deleted IDs that are no longer in the dataset
-        setSoftDeletedIds((prev) => {
-          if (prev.size === 0) return prev;
-          const ids = new Set(merged.map((e) => e.id));
-          const next = new Set<string>();
-          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
-          return next.size === prev.size ? prev : next;
-        });
-      }, 50);
     };
 
     const unsubscribeTetees = ecouterTetees(
@@ -638,7 +626,7 @@ export default function MealsScreen() {
             setIsLoadingMore(false);
           }
         }
-        scheduleMerge();
+        pushMealsFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
@@ -649,7 +637,7 @@ export default function MealsScreen() {
       (biberons) => {
         latestBiberonsRef.current = biberons;
         setBiberonsLoaded(true);
-        scheduleMerge();
+        pushMealsFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
@@ -660,26 +648,38 @@ export default function MealsScreen() {
       (solides) => {
         latestSolidesRef.current = solides;
         setSolidesLoaded(true);
-        scheduleMerge();
+        pushMealsFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribeTetees();
       unsubscribeBiberons();
       unsubscribeSolides();
-      unsubOptimistic();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey, pushMealsFirestoreEvents]);
+
+  useEffect(() => {
+    setSoftDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const ids = new Set(meals.map((e) => e.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [meals]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshMerged();
+    }, [refreshMerged]),
+  );
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setMeals([]);
     setGroupedMeals([]);
     setTeteesLoaded(false);
     setBiberonsLoaded(false);
@@ -691,7 +691,11 @@ export default function MealsScreen() {
     setHasMore(true);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-  }, [activeChild?.id]);
+    latestTeteesRef.current = [];
+    latestBiberonsRef.current = [];
+    latestSolidesRef.current = [];
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   const isMealsLoading = !(teteesLoaded && biberonsLoaded && solidesLoaded);
   const mealsLoaded = !isMealsLoading;

@@ -13,6 +13,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   ecouterCroissancesHybrid,
@@ -20,11 +21,6 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { CroissanceEvent, obtenirEvenements } from "@/services/eventsService";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -241,7 +237,6 @@ export default function GrowthScreen() {
   const [pendingEditData, setPendingEditData] =
     useState<CroissanceEditData | null>(null);
 
-  const [events, setEvents] = useState<GrowthEventWithId[]>([]);
   const [groupedEvents, setGroupedEvents] = useState<GrowthGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({ croissance: false });
@@ -257,7 +252,21 @@ export default function GrowthScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
-  const latestFirestoreCroissancesRef = useRef<GrowthEventWithId[]>([]);
+  const sortMergedEvents = useCallback(
+    (merged: any[]) =>
+      [...(merged as GrowthEventWithId[])].sort(
+        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+      ),
+    [],
+  );
+  const {
+    mergedEvents: events,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<GrowthEventWithId>({
+    childId: activeChild?.id,
+    transformMerged: sortMergedEvents,
+  });
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
@@ -531,8 +540,6 @@ export default function GrowthScreen() {
   // ============================================
   // DATA LISTENERS
   // ============================================
-  // Unified debounced pipeline: both Firestore snapshots and optimistic store
-  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     setLoadError(false);
@@ -550,41 +557,12 @@ export default function GrowthScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
     let loadingSet = false;
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const firestoreEvents = latestFirestoreCroissancesRef.current;
-        const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id) as GrowthEventWithId[];
-        merged.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-        );
-
-        const fingerprint = buildEventFingerprint(merged);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setEvents(merged);
-
-        // Clean up soft-deleted IDs that are no longer in the dataset
-        setSoftDeletedIds((prev) => {
-          if (prev.size === 0) return prev;
-          const mergedIds = new Set(merged.map((e) => e.id));
-          const next = new Set<string>();
-          prev.forEach((id) => { if (mergedIds.has(id)) next.add(id); });
-          return next.size === prev.size ? prev : next;
-        });
-      }, 50);
-    };
 
     const unsubscribe = ecouterCroissancesHybrid(
       activeChild.id,
       (data) => {
-        latestFirestoreCroissancesRef.current = data as GrowthEventWithId[];
+        setFirestoreEvents(data as GrowthEventWithId[]);
         if (!loadingSet) {
           loadingSet = true;
           setLoaded({ croissance: true });
@@ -599,24 +577,35 @@ export default function GrowthScreen() {
             setIsLoadingMore(false);
           }
         }
-        scheduleMerge();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribe();
-      unsubOptimistic();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey, setFirestoreEvents]);
+
+  useEffect(() => {
+    setSoftDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const mergedIds = new Set(events.map((e) => e.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (mergedIds.has(id)) next.add(id); });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [events]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshMerged();
+    }, [refreshMerged]),
+  );
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setEvents([]);
     setGroupedEvents([]);
     setLoaded({ croissance: false });
     setEmptyDelayDone(false);
@@ -628,7 +617,8 @@ export default function GrowthScreen() {
     setPrecedingEvent(null);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-  }, [activeChild?.id]);
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

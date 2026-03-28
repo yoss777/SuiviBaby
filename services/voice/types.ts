@@ -3,7 +3,7 @@
 export type CommandType =
   | "biberon"
   | "tetee"
-  | "couche"
+  | "couche" // Legacy voice command type; modern UI materializes diaper tracking via miction/selle
   | "miction"
   | "selle"
   | "vitamine"
@@ -61,7 +61,7 @@ interface PompageCommand extends BaseCommand {
 }
 
 interface CoucheCommand extends BaseCommand {
-  type: "couche";
+  type: "couche"; // Parsed legacy umbrella command, normalized downstream as needed
   pipi: boolean;
   popo: boolean;
 }

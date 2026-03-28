@@ -1,6 +1,10 @@
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { EventType, obtenirEvenements } from "./eventsService";
+import {
+  LEGACY_BACKEND_EVENT_TYPES,
+  MODERN_UI_EVENT_TYPES,
+} from "./eventTypeSupport";
 
 function toDate(value: any): Date {
   if (value?.seconds) return new Date(value.seconds * 1000);
@@ -55,6 +59,7 @@ function buildDetails(type: string, event: any): string {
     case "pompage":
       return `G: ${event.quantiteGauche || 0}ml, D: ${event.quantiteDroite || 0}ml`;
     case "couche":
+      // Export remains backend-compatible and may include legacy raw events.
       return "Change";
     case "miction":
       return (
@@ -111,12 +116,13 @@ export async function exportAllEventsCSV(
   childId: string,
   childName: string,
 ): Promise<void> {
+  // CSV export intentionally covers both the modern UI contract and legacy
+  // backend events so historical data stays visible to the user.
   const eventTypes: EventType[] = [
     "tetee",
     "biberon",
     "solide",
     "pompage",
-    "couche",
     "miction",
     "selle",
     "sommeil",
@@ -129,6 +135,28 @@ export async function exportAllEventsCSV(
     "croissance",
     "activite",
     "jalon",
+    ...MODERN_UI_EVENT_TYPES.filter(
+      (type) =>
+        ![
+          "tetee",
+          "biberon",
+          "solide",
+          "pompage",
+          "miction",
+          "selle",
+          "sommeil",
+          "bain",
+          "temperature",
+          "medicament",
+          "symptome",
+          "vaccin",
+          "vitamine",
+          "croissance",
+          "activite",
+          "jalon",
+        ].includes(type),
+    ),
+    ...LEGACY_BACKEND_EVENT_TYPES,
   ];
 
   const rows: string[][] = [];

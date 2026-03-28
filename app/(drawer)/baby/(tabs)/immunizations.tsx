@@ -12,11 +12,10 @@ import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import {
-  ajouterVaccin,
-  ajouterVitamine,
-  modifierVaccin,
-  modifierVitamine,
+  ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerVaccin,
   supprimerVitamine,
 } from "@/migration/eventsDoubleWriteService";
@@ -226,7 +225,6 @@ export default function ImmunizationsScreen() {
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
   // États des données
-  const [immunos, setImmunos] = useState<Immuno[]>([]);
   const [groupedImmunos, setGroupedImmunos] = useState<ImmunoGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [vitaminesLoaded, setVitaminesLoaded] = useState(false);
@@ -240,6 +238,15 @@ export default function ImmunizationsScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const latestVitaminesRef = useRef<Immuno[]>([]);
+  const latestVaccinsRef = useRef<Immuno[]>([]);
+  const {
+    mergedEvents: immunos,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<Immuno>({
+    childId: activeChild?.id,
+  });
 
   // États du formulaire
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -506,14 +513,14 @@ export default function ImmunizationsScreen() {
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
-    let vitaminesData: Immuno[] = [];
-    let vaccinsData: Immuno[] = [];
-
     const mergeAndSortImmunos = () => {
-      const merged = [...vitaminesData, ...vaccinsData].sort(
+      const merged = [
+        ...latestVitaminesRef.current,
+        ...latestVaccinsRef.current,
+      ].sort(
         (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
       );
-      setImmunos(merged);
+      setFirestoreEvents(merged);
       if (
         pendingLoadMoreRef.current > 0 &&
         versionAtSubscribe === loadMoreVersionRef.current
@@ -528,7 +535,7 @@ export default function ImmunizationsScreen() {
     const unsubscribeVitamines = ecouterVitamines(
       activeChild.id,
       (vitamines) => {
-        vitaminesData = vitamines.map((v) => ({
+        latestVitaminesRef.current = vitamines.map((v) => ({
           ...v,
           type: "vitamine" as ImmunoType,
         }));
@@ -541,7 +548,7 @@ export default function ImmunizationsScreen() {
     const unsubscribeVaccins = ecouterVaccins(
       activeChild.id,
       (vaccins) => {
-        vaccinsData = vaccins.map((v) => ({
+        latestVaccinsRef.current = vaccins.map((v) => ({
           ...v,
           type: "vaccin" as ImmunoType,
         }));
@@ -555,11 +562,10 @@ export default function ImmunizationsScreen() {
       unsubscribeVitamines();
       unsubscribeVaccins();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, setFirestoreEvents]);
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setImmunos([]);
     setGroupedImmunos([]);
     setVitaminesLoaded(false);
     setVaccinsLoaded(false);
@@ -572,7 +578,10 @@ export default function ImmunizationsScreen() {
     setAutoLoadMoreAttempts(0);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-  }, [activeChild?.id]);
+    latestVitaminesRef.current = [];
+    latestVaccinsRef.current = [];
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   const isImmunosLoading =
     selectedType === "vitamine" ? !vitaminesLoaded : !vaccinsLoaded;
@@ -841,10 +850,11 @@ export default function ImmunizationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      refreshMerged();
       if (!selectedFilter && !selectedDate) {
         applyTodayFilter();
       }
-    }, [applyTodayFilter, selectedDate, selectedFilter]),
+    }, [applyTodayFilter, refreshMerged, selectedDate, selectedFilter]),
   );
 
   // ============================================
@@ -1079,19 +1089,20 @@ export default function ImmunizationsScreen() {
       });
 
       if (editingImmuno) {
-        // Modification
-        if (isVitamine) {
-          await modifierVitamine(activeChild.id, editingImmuno.id, dataToSave);
-        } else {
-          await modifierVaccin(activeChild.id, editingImmuno.id, dataToSave);
-        }
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editingImmuno.id,
+          {
+            type: isVitamine ? "vitamine" : "vaccin",
+            ...dataToSave,
+          },
+          editingImmuno,
+        );
       } else {
-        // Ajout
-        if (isVitamine) {
-          await ajouterVitamine(activeChild.id, dataToSave);
-        } else {
-          await ajouterVaccin(activeChild.id, dataToSave);
-        }
+        ajouterEvenementOptimistic(activeChild.id, {
+          type: isVitamine ? "vitamine" : "vaccin",
+          ...dataToSave,
+        });
       }
 
       if (isOffline) {

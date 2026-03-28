@@ -13,12 +13,8 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { ecouterCroissancesHybrid } from "@/migration/eventsHybridService";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -835,7 +831,6 @@ export default function CroissanceScreen() {
     permissions.role === "owner" || permissions.role === "admin";
 
   const PAGE_SIZE = 3;
-  const [entries, setEntries] = useState<CroissanceEntry[]>([]);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -868,7 +863,21 @@ export default function CroissanceScreen() {
   );
   const chartScrollRef = useRef<ScrollView | null>(null);
   const autoScrollRef = useRef(false);
-  const latestFirestoreEntriesRef = useRef<CroissanceEntry[]>([]);
+  const sortMergedEntries = useCallback(
+    (merged: any[]) =>
+      [...(merged as CroissanceEntry[])].sort(
+        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+      ),
+    [],
+  );
+  const {
+    mergedEvents: entries,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<CroissanceEntry>({
+    childId: activeChild?.id,
+    transformMerged: sortMergedEntries,
+  });
 
   const sheetOwnerId = "croissance";
   const returnToRef = useRef<string | null>(null);
@@ -1134,8 +1143,6 @@ export default function CroissanceScreen() {
     }, [canManageContent, palette.tint, openAddModal, setHeaderRight]),
   );
 
-  // Unified debounced pipeline: both Firestore snapshots and optimistic store
-  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     setLoadError(false);
@@ -1148,33 +1155,7 @@ export default function CroissanceScreen() {
       setIsRefreshing(false);
     };
 
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
     let loadingSet = false;
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const firestoreEntries = latestFirestoreEntriesRef.current;
-        const merged = mergeWithFirestoreEvents(firestoreEntries, activeChild.id) as CroissanceEntry[];
-
-        const fingerprint = buildEventFingerprint(merged);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setEntries(merged);
-
-        // Clean up soft-deleted IDs that are no longer in the dataset
-        setSoftDeletedIds((prev) => {
-          if (prev.size === 0) return prev;
-          const ids = new Set(merged.map((e) => e.id));
-          const next = new Set<string>();
-          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
-          return next.size === prev.size ? prev : next;
-        });
-      }, 50);
-    };
 
     const unsubscribe = ecouterCroissancesHybrid(
       activeChild.id,
@@ -1186,27 +1167,48 @@ export default function CroissanceScreen() {
             type: "croissance",
           }))
           .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
-        latestFirestoreEntriesRef.current = normalized as CroissanceEntry[];
+        setFirestoreEvents(normalized as CroissanceEntry[]);
         if (!loadingSet) {
           loadingSet = true;
           setLoading(false);
           setIsRefreshing(false);
         }
-        scheduleMerge();
       },
       { waitForServer: true },
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
       cancelled = true;
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribe();
-      unsubOptimistic();
     };
-  }, [activeChild?.id, refreshTick]);
+  }, [activeChild?.id, refreshTick, setFirestoreEvents]);
+
+  useEffect(() => {
+    setSoftDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const ids = new Set(entries.map((e) => e.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [entries]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshMerged();
+    }, [refreshMerged]),
+  );
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setLoading(true);
+    setLoadError(false);
+    setVisibleCount(PAGE_SIZE);
+    setSelectedPointIndex(null);
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   useEffect(() => {
     setSelectedPointIndex(null);
@@ -2117,4 +2119,3 @@ export default function CroissanceScreen() {
     </ThemedView>
   );
 }
-

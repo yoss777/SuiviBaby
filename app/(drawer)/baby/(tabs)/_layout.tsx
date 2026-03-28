@@ -28,7 +28,6 @@ export default function BabyTabLayout() {
           tabBarActiveTintColor: Colors[colorScheme].tint,
           tabBarInactiveTintColor: Colors[colorScheme].tabIconDefault,
           headerShown: false,
-          freezeOnBlur: true,
           tabBarStyle: {},
         }}
       >

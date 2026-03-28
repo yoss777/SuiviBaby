@@ -14,6 +14,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   supprimerTemperature,
@@ -23,11 +24,6 @@ import {
   supprimerVitamine,
 } from "@/migration/eventsDoubleWriteService";
 import { supprimerEvenement } from "@/services/eventsService";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import {
   ecouterMedicamentsHybrid,
   ecouterSymptomesHybrid,
@@ -310,7 +306,6 @@ export default function SoinsScreen() {
   const [pendingEditData, setPendingEditData] = useState<SoinsEditData | null>(null);
   const [pendingSoinsType, setPendingSoinsType] = useState<SoinsType>("temperature");
 
-  const [events, setEvents] = useState<HealthEvent[]>([]);
   const [groupedEvents, setGroupedEvents] = useState<HealthGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({
@@ -330,6 +325,21 @@ export default function SoinsScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const sortMergedEvents = useCallback(
+    (merged: any[]) =>
+      [...(merged as HealthEvent[])].sort(
+        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+      ),
+    [],
+  );
+  const {
+    mergedEvents: events,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<HealthEvent>({
+    childId: activeChild?.id,
+    transformMerged: sortMergedEvents,
+  });
   const latestTemperaturesRef = useRef<HealthEvent[]>([]);
   const latestMedicamentsRef = useRef<HealthEvent[]>([]);
   const latestSymptomesRef = useRef<HealthEvent[]>([]);
@@ -555,11 +565,19 @@ export default function SoinsScreen() {
     setRefreshKey((k) => k + 1);
   }, []);
 
+  const pushHealthFirestoreEvents = useCallback(() => {
+    setFirestoreEvents([
+      ...latestTemperaturesRef.current,
+      ...latestMedicamentsRef.current,
+      ...latestSymptomesRef.current,
+      ...latestVaccinsRef.current,
+      ...latestVitaminesRef.current,
+    ]);
+  }, [setFirestoreEvents]);
+
   // ============================================
   // DATA LISTENERS
   // ============================================
-  // Unified debounced pipeline: both Firestore snapshots and optimistic store
-  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     setLoadError(false);
@@ -569,45 +587,17 @@ export default function SoinsScreen() {
     const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
+    latestTemperaturesRef.current = [];
+    latestMedicamentsRef.current = [];
+    latestSymptomesRef.current = [];
+    latestVaccinsRef.current = [];
+    latestVitaminesRef.current = [];
     let refreshCleared = false;
 
     const handleListenerError = () => {
       setLoadError(true);
       setIsRefreshing(false);
       setLoaded({ temperature: true, medicament: true, symptome: true, vaccin: true, vitamine: true });
-    };
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const raw = [
-          ...latestTemperaturesRef.current,
-          ...latestMedicamentsRef.current,
-          ...latestSymptomesRef.current,
-          ...latestVaccinsRef.current,
-          ...latestVitaminesRef.current,
-        ].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
-        const merged = mergeWithFirestoreEvents(raw, activeChild.id) as HealthEvent[];
-
-        const fingerprint = buildEventFingerprint(merged);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setEvents(merged);
-
-        // Clean up soft-deleted IDs that are no longer in the dataset
-        setSoftDeletedIds((prev) => {
-          if (prev.size === 0) return prev;
-          const dataIds = new Set(merged.map((e: any) => e.id));
-          const next = new Set<string>();
-          prev.forEach((id) => { if (dataIds.has(id)) next.add(id); });
-          return next.size === prev.size ? prev : next;
-        });
-      }, 50);
     };
 
     const handleLoadMore = () => {
@@ -632,7 +622,7 @@ export default function SoinsScreen() {
           setIsRefreshing(false);
         }
         handleLoadMore();
-        scheduleMerge();
+        pushHealthFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
@@ -642,7 +632,7 @@ export default function SoinsScreen() {
       (data) => {
         latestMedicamentsRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, medicament: true }));
-        scheduleMerge();
+        pushHealthFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
@@ -652,7 +642,7 @@ export default function SoinsScreen() {
       (data) => {
         latestSymptomesRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, symptome: true }));
-        scheduleMerge();
+        pushHealthFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
@@ -662,7 +652,7 @@ export default function SoinsScreen() {
       (data) => {
         latestVaccinsRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, vaccin: true }));
-        scheduleMerge();
+        pushHealthFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
@@ -672,28 +662,40 @@ export default function SoinsScreen() {
       (data) => {
         latestVitaminesRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, vitamine: true }));
-        scheduleMerge();
+        pushHealthFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribeTemperatures();
       unsubscribeMedicaments();
       unsubscribeSymptomes();
       unsubscribeVaccins();
       unsubscribeVitamines();
-      unsubOptimistic();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey, pushHealthFirestoreEvents]);
+
+  useEffect(() => {
+    setSoftDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const dataIds = new Set(events.map((e: any) => e.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (dataIds.has(id)) next.add(id); });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [events]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshMerged();
+    }, [refreshMerged]),
+  );
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setEvents([]);
     setGroupedEvents([]);
     setLoaded({
       temperature: false,
@@ -710,7 +712,13 @@ export default function SoinsScreen() {
     setExpandedDays(new Set());
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-  }, [activeChild?.id]);
+    latestTemperaturesRef.current = [];
+    latestMedicamentsRef.current = [];
+    latestSymptomesRef.current = [];
+    latestVaccinsRef.current = [];
+    latestVitaminesRef.current = [];
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   useEffect(() => {
     if (!Object.values(loaded).every(Boolean)) {

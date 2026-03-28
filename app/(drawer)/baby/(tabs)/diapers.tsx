@@ -20,6 +20,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   supprimerMiction,
@@ -32,11 +33,6 @@ import {
   hasMoreEventsBeforeHybrid,
 } from "@/migration/eventsHybridService";
 import { supprimerEvenement } from "@/services/eventsService";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
@@ -324,7 +320,6 @@ export default function DiapersScreen() {
   const sheetOwnerId = "diapers";
 
   // Data states
-  const [excretions, setExcretions] = useState<Excretion[]>([]);
   const [groupedExcretions, setGroupedExcretions] = useState<ExcretionGroup[]>(
     []
   );
@@ -341,6 +336,21 @@ export default function DiapersScreen() {
   const [autoLoadMoreAttempts, setAutoLoadMoreAttempts] = useState(0);
   const loadMoreVersionRef = useRef(0);
   const pendingLoadMoreRef = useRef(0);
+  const sortMergedExcretions = useCallback(
+    (merged: any[]) =>
+      [...(merged as Excretion[])].sort(
+        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
+      ),
+    [],
+  );
+  const {
+    mergedEvents: excretions,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<Excretion>({
+    childId: activeChild?.id,
+    transformMerged: sortMergedExcretions,
+  });
   const latestMictionsRef = useRef<Excretion[]>([]);
   const latestSellesRef = useRef<Excretion[]>([]);
 
@@ -663,12 +673,17 @@ export default function DiapersScreen() {
     setRefreshKey((k) => k + 1);
   }, []);
 
+  const pushDiapersFirestoreEvents = useCallback(() => {
+    setFirestoreEvents([
+      ...latestMictionsRef.current,
+      ...latestSellesRef.current,
+    ]);
+  }, [setFirestoreEvents]);
+
   // ============================================
   // EFFECTS - DATA LISTENERS
   // ============================================
 
-  // Unified debounced pipeline: both Firestore snapshots and optimistic store
-  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     setLoadError(false);
@@ -678,9 +693,8 @@ export default function DiapersScreen() {
     const startOfRange = new Date(endOfRange);
     startOfRange.setHours(0, 0, 0, 0);
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
-
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
+    latestMictionsRef.current = [];
+    latestSellesRef.current = [];
     let refreshCleared = false;
 
     const handleListenerError = () => {
@@ -688,32 +702,6 @@ export default function DiapersScreen() {
       setIsRefreshing(false);
       setMictionsLoaded(true);
       setSellesLoaded(true);
-    };
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const raw = [...latestMictionsRef.current, ...latestSellesRef.current].sort(
-          (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
-        );
-        const merged = mergeWithFirestoreEvents(raw, activeChild.id) as Excretion[];
-
-        const fingerprint = buildEventFingerprint(merged);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setExcretions(merged);
-
-        // Clean up soft-deleted IDs that are no longer in the dataset
-        setSoftDeletedIds((prev) => {
-          if (prev.size === 0) return prev;
-          const ids = new Set(merged.map((e) => e.id));
-          const next = new Set<string>();
-          prev.forEach((id) => { if (ids.has(id)) next.add(id); });
-          return next.size === prev.size ? prev : next;
-        });
-      }, 50);
     };
 
     const unsubscribeMictions = ecouterMictions(
@@ -737,7 +725,7 @@ export default function DiapersScreen() {
             setIsLoadingMore(false);
           }
         }
-        scheduleMerge();
+        pushDiapersFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
@@ -751,25 +739,37 @@ export default function DiapersScreen() {
           type: "selle" as DiapersType,
         }));
         setSellesLoaded(true);
-        scheduleMerge();
+        pushDiapersFirestoreEvents();
       },
       { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribeMictions();
       unsubscribeSelles();
-      unsubOptimistic();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey, pushDiapersFirestoreEvents]);
+
+  useEffect(() => {
+    setSoftDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const ids = new Set(excretions.map((e) => e.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (ids.has(id)) next.add(id); });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [excretions]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshMerged();
+    }, [refreshMerged]),
+  );
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setExcretions([]);
     setGroupedExcretions([]);
     setMictionsLoaded(false);
     setSellesLoaded(false);
@@ -780,7 +780,10 @@ export default function DiapersScreen() {
     setHasMore(true);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-  }, [activeChild?.id]);
+    latestMictionsRef.current = [];
+    latestSellesRef.current = [];
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   const isExcretionsLoading = !(mictionsLoaded && sellesLoaded);
 

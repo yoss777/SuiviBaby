@@ -3,7 +3,11 @@
 // show them instantly while the CF runs in the background.
 
 export type OptimisticOperation = 'create' | 'update';
-export type OptimisticStatus = 'pending' | 'confirmed' | 'failed';
+export type OptimisticStatus =
+  | 'pending'
+  | 'queued_offline'
+  | 'confirmed'
+  | 'failed';
 
 export interface OptimisticEntry {
   tempId: string;
@@ -120,6 +124,31 @@ export function confirmOptimistic(tempIdOrEventId: string, realId?: string): voi
 }
 
 /**
+ * Mark an optimistic entry as queued for offline replay.
+ * The entry remains visible in the UI until Firestore catches up.
+ */
+export function markOptimisticQueued(tempIdOrEventId: string): void {
+  let changed = false;
+
+  const entry = entries.get(tempIdOrEventId);
+  if (entry && entry.status !== 'queued_offline') {
+    entry.status = 'queued_offline';
+    changed = true;
+  }
+
+  for (const e of entries.values()) {
+    if (e.realId === tempIdOrEventId && e.status !== 'queued_offline') {
+      e.status = 'queued_offline';
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    notify();
+  }
+}
+
+/**
  * Mark an optimistic entry as failed and return its data so the caller can
  * trigger a rollback or show an error.
  */
@@ -206,29 +235,40 @@ export function mergeWithFirestoreEvents(
   childId: string,
 ): any[] {
   const merged = [...firestoreEvents];
-  const firestoreIds = new Set(merged.map((e) => e.id));
 
   for (const entry of entries.values()) {
     if (entry.childId !== childId) continue;
 
     // -- Updates --
-    if (entry.operation === 'update' && entry.status === 'pending') {
+    if (
+      entry.operation === 'update' &&
+      (entry.status === 'pending' || entry.status === 'queued_offline')
+    ) {
       const idx = merged.findIndex((e) => e.id === entry.realId);
       if (idx !== -1) {
-        merged[idx] = entry.event;
+        if (entryMatchesFirestore(entry.event, merged[idx])) {
+          entry.status = 'confirmed';
+        } else {
+          merged[idx] = { ...merged[idx], ...entry.event, id: entry.realId };
+        }
       }
     }
 
     // -- Creates --
     if (entry.operation === 'create') {
-      if (entry.realId && firestoreIds.has(entry.realId)) {
+      const firestoreMatch = findCreateMatch(entry, merged);
+      if (firestoreMatch) {
         // Firestore already has the document – confirm silently.
+        entry.realId = firestoreMatch.id;
         entry.status = 'confirmed';
       } else if (entry.status === 'confirmed' && entry.realId) {
         // CF succeeded (realId set) but onSnapshot hasn't arrived yet.
         // Use realId so there's no duplicate when onSnapshot arrives.
         merged.push({ ...entry.event, id: entry.realId });
-      } else if (entry.status === 'pending') {
+      } else if (
+        entry.status === 'pending' ||
+        entry.status === 'queued_offline'
+      ) {
         merged.push(entry.event);
       }
     }
@@ -250,20 +290,24 @@ export function mergeWithFirestoreEvents(
 }
 
 /**
- * Build a fingerprint string for a list of events that detects mutations
- * (heureFin, duree, note, quantity changes) — not just additions/removals.
+ * Lightweight hash of an event — captures all mutable fields so that any
+ * edit (humeur, note, quantite, heureFin, temperature, etc.) changes the
+ * fingerprint and triggers a re-render.
+ */
+function hashEvent(e: any): string {
+  return JSON.stringify(normalizeValue(e));
+}
+
+/**
+ * Build a fingerprint for a list of events that detects ANY mutation across
+ * the full merged list, not only the first visible items.
  */
 export function buildEventFingerprint(events: any[]): string {
   const optimisticCount = events.filter(
     (e: any) => e.id?.startsWith?.('__optimistic_'),
   ).length;
   return `${events.length}_${optimisticCount}_${events
-    .slice(0, 30)
-    .map((e: any) => {
-      const dateSec = e.date?.seconds || Math.floor((e.date?.getTime?.() || 0) / 1000);
-      const finSec = e.heureFin?.seconds || Math.floor((e.heureFin?.getTime?.() || 0) / 1000);
-      return `${e.id}_${e.type}_${dateSec}_${finSec}_${e.duree ?? ''}_${e.quantite ?? ''}`;
-    })
+    .map((event) => `${event?.id ?? ''}:${hashEvent(event)}`)
     .join('|')}`;
 }
 
@@ -272,9 +316,69 @@ function extractTime(value: any): number {
   if (typeof value === 'number') return value;
   if (value instanceof Date) return value.getTime();
   if (typeof value.toDate === 'function') return value.toDate().getTime();
-  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  if (typeof value.seconds === 'number') {
+    const nanos =
+      typeof value.nanoseconds === 'number' ? value.nanoseconds : 0;
+    return value.seconds * 1000 + Math.round(nanos / 1_000_000);
+  }
   const parsed = Date.parse(value);
   return isNaN(parsed) ? 0 : parsed;
+}
+
+function normalizeValue(value: any): any {
+  if (value == null) return null;
+  if (typeof value === 'function') return null;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value.toDate === 'function') return value.toDate().getTime();
+  if (typeof value.seconds === 'number') {
+    const nanos =
+      typeof value.nanoseconds === 'number' ? value.nanoseconds : 0;
+    return value.seconds * 1000 + Math.round(nanos / 1_000_000);
+  }
+  if (Array.isArray(value)) return value.map(normalizeValue);
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, current]) => typeof current !== 'function')
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, current]) => [key, normalizeValue(current)]),
+    );
+  }
+  return value;
+}
+
+function valuesEquivalent(a: any, b: any): boolean {
+  if (a == null && b == null) return true;
+  return JSON.stringify(normalizeValue(a)) === JSON.stringify(normalizeValue(b));
+}
+
+function entryMatchesFirestore(entryEvent: any, firestoreEvent: any): boolean {
+  if (!entryEvent || !firestoreEvent) return false;
+
+  for (const [key, value] of Object.entries(entryEvent)) {
+    if (key === 'createdAt' || key === 'updatedAt') continue;
+    if (!valuesEquivalent(value, firestoreEvent[key])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function findCreateMatch(entry: OptimisticEntry, firestoreEvents: any[]): any | null {
+  if (entry.realId) {
+    const byId = firestoreEvents.find((event) => event.id === entry.realId);
+    if (byId) return byId;
+  }
+
+  const idempotencyKey = entry.event?.idempotencyKey;
+  if (!idempotencyKey) return null;
+
+  return (
+    firestoreEvents.find(
+      (event) => event.idempotencyKey === idempotencyKey,
+    ) ?? null
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -318,4 +422,12 @@ export function cleanup(): void {
   if (entries.size !== sizeBefore) {
     notify();
   }
+}
+
+/**
+ * Test helper: clear the in-memory optimistic store between test cases.
+ */
+export function resetOptimisticStoreForTests(): void {
+  entries.clear();
+  onFailureCallback = null;
 }

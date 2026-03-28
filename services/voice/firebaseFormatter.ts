@@ -46,6 +46,8 @@ export function formatDataForFirebase(command: ParsedCommandResult) {
       };
 
     case "couche":
+      // Kept for voice parsing/confirmation, then normalized in UI flows to
+      // `miction` / `selle` for the modern product contract.
       return {
         ...baseData,
         type: "couche",

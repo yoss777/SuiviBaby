@@ -8,7 +8,7 @@ import { MomentsNotificationProvider } from "@/contexts/MomentsNotificationConte
 import { ThemeProvider as AppThemeProvider } from "@/contexts/ThemeContext";
 import { SheetProvider } from "@/contexts/SheetContext";
 import { SuccessAnimationProvider } from "@/contexts/SuccessAnimationContext";
-import { ToastProvider } from "@/contexts/ToastContext";
+import { ToastProvider, useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { composeProviders } from "@/utils/composeProviders";
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from "@react-navigation/native";
@@ -28,6 +28,7 @@ import { AppUpdateManager } from "@/components/ui/AppUpdateManager";
 
 import { setupNotificationHandler } from "@/services/localNotificationService";
 import { startAutoSync } from "@/services/offlineQueueService";
+import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
 import { ensureFirebaseAppCheck } from "@/config/firebase";
 
 Sentry.init({
@@ -86,6 +87,7 @@ const AppProviders = composeProviders([
 function RootLayout() {
   return (
     <AppProviders>
+      <OptimisticFailureToastBridge />
       <AppNavigation />
       <GlobalSheetManager />
       <InvitationListener />
@@ -96,6 +98,19 @@ function RootLayout() {
 }
 
 export default Sentry.wrap(RootLayout);
+
+function OptimisticFailureToastBridge() {
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    setOptimisticOnFailure((message) => showToast(message));
+    return () => {
+      setOptimisticOnFailure(null);
+    };
+  }, [showToast]);
+
+  return null;
+}
 
 function AppNavigation() {
   const colorScheme = useColorScheme() ?? "light";

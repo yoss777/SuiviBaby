@@ -98,6 +98,8 @@ const BASE_EVENT_TYPES: ExportTypeItem[] = [
   },
   {
     id: "couche",
+    // Kept for raw/historical export compatibility. The modern diaper domain in
+    // the product is otherwise represented through `miction` / `selle`.
     label: "Couche",
     icon: { lib: "MaterialCommunityIcons", name: "human-baby-changing-table" },
   },

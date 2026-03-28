@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ajouterJalon } from "@/migration/eventsDoubleWriteService";
+import { ajouterEvenementOptimistic } from "@/migration/eventsDoubleWriteService";
 import { toggleLike } from "@/services/socialService";
 import { JalonEvent } from "@/services/eventsService";
 import { toDate } from "@/hooks/useMomentsData";
@@ -55,19 +55,16 @@ export function useMomentsActions({
         try {
           setIsMoodSaving(true);
           const dataToSave = {
+            type: "jalon" as const,
             date: new Date(),
             typeJalon: "humeur" as const,
             humeur: mood,
             titre: "Humeur du jour",
           };
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          const moodId = await ajouterJalon(childId, dataToSave);
-          if (moodId) {
-            setConfettiTrigger((prev) => prev + 1);
-            showToast("Humeur enregistrée");
-          } else {
-            showToast("Impossible d'enregistrer l'humeur.");
-          }
+          ajouterEvenementOptimistic(childId, dataToSave);
+          setConfettiTrigger((prev) => prev + 1);
+          showToast("Humeur enregistrée");
         } catch {
           showToast("Impossible d'enregistrer l'humeur.");
         } finally {

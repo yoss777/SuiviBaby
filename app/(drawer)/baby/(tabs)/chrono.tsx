@@ -18,14 +18,11 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { ecouterEvenementsHybrid } from "@/migration/eventsHybridService";
 import type { Event, EventType } from "@/services/eventsService";
+import { MODERN_UI_DIAPER_EVENT_TYPES, MODERN_UI_EVENT_TYPES } from "@/services/eventTypeSupport";
 import { supprimerEvenement } from "@/services/eventsService";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -140,7 +137,7 @@ const FILTER_CONFIG: Record<
     icon: "human-baby-changing-table",
     iconLib: "mci",
     color: "#17a2b8",
-    eventTypes: ["couche", "miction", "selle"],
+    eventTypes: MODERN_UI_DIAPER_EVENT_TYPES,
   },
   activities: {
     label: "Activités",
@@ -1542,7 +1539,21 @@ export default function ChronoScreen() {
   const [range, setRange] = useState<RangeOption>(14);
   const [maxRange, setMaxRange] = useState<RangeOption>(14);
   const [selectedTypes, setSelectedTypes] = useState<FilterType[]>(ALL_FILTERS);
-  const [events, setEvents] = useState<Event[]>([]);
+  const sortMergedEvents = useCallback(
+    (merged: any[]) =>
+      [...(merged as Event[])].sort(
+        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+      ),
+    [],
+  );
+  const {
+    mergedEvents: events,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<Event>({
+    childId: activeChild?.id,
+    transformMerged: sortMergedEvents,
+  });
 
   // Detect ongoing sommeil & promenade (for duplicate prevention when editing)
   const sommeilEnCours = useMemo(() => {
@@ -1566,7 +1577,6 @@ export default function ChronoScreen() {
   const hasLoadedPrefs = useRef(false);
   const hasInitialLoad = useRef(false);
   const hasPrefetchedMore = useRef(false);
-  const latestFirestoreEventsRef = useRef<Event[]>([]);
   const [infoModalMessage, setInfoModalMessage] = useState<string | null>(null);
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
@@ -1638,29 +1648,8 @@ export default function ChronoScreen() {
   }, [updateCurrentDay]);
 
   // All event types for the timeline
-  const ALL_EVENT_TYPES: EventType[] = [
-    "tetee",
-    "biberon",
-    "solide",
-    "pompage",
-    "croissance",
-    "couche",
-    "miction",
-    "selle",
-    "vaccin",
-    "vitamine",
-    "sommeil",
-    "bain",
-    "temperature",
-    "medicament",
-    "symptome",
-    "activite",
-    "jalon",
-    "nettoyage_nez",
-  ];
+  const ALL_EVENT_TYPES: EventType[] = MODERN_UI_EVENT_TYPES;
 
-  // Unified debounced pipeline: both Firestore snapshots and optimistic store
-  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
   useEffect(() => {
     if (!activeChild?.id) return;
     setLoadError(false);
@@ -1680,33 +1669,12 @@ export default function ChronoScreen() {
 
     const since = startOfDay(new Date());
     since.setDate(since.getDate() - (maxRange - 1));
-
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
     let loadingSet = false;
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const firestoreEvents = latestFirestoreEventsRef.current;
-        const merged = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
-        const sorted = merged.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-        );
-
-        const fingerprint = buildEventFingerprint(sorted);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setEvents(sorted);
-      }, 50);
-    };
 
     const unsubscribe = ecouterEvenementsHybrid(
       activeChild.id,
       (data) => {
-        latestFirestoreEventsRef.current = data;
+        setFirestoreEvents(data);
         if (!loadingSet) {
           loadingSet = true;
           hasInitialLoad.current = true;
@@ -1717,21 +1685,8 @@ export default function ChronoScreen() {
             toValue: 1,
             duration: 300,
             useNativeDriver: true,
-          }).start();
+        }).start();
         }
-
-        // P5: Clean up soft-deleted IDs that are no longer in the dataset
-        setSoftDeletedIds((prev) => {
-          if (prev.size === 0) return prev;
-          const dataIds = new Set(data.map((e: Event) => e.id));
-          const next = new Set<string>();
-          prev.forEach((id) => {
-            if (id && dataIds.has(id)) next.add(id);
-          });
-          return next.size === prev.size ? prev : next;
-        });
-
-        scheduleMerge();
       },
       {
         types: ALL_EVENT_TYPES,
@@ -1741,19 +1696,33 @@ export default function ChronoScreen() {
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribe();
-      unsubOptimistic();
     };
-  }, [activeChild?.id, maxRange, currentDay, refreshTick]);
+  }, [activeChild?.id, maxRange, currentDay, refreshTick, setFirestoreEvents]);
+
+  useEffect(() => {
+    setSoftDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const dataIds = new Set(events.map((e: Event) => e.id));
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (id && dataIds.has(id)) next.add(id);
+      });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [events]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshMerged();
+    }, [refreshMerged]),
+  );
 
   // Reset on child change
   useEffect(() => {
     if (!activeChild?.id) return;
-    setEvents([]);
     setLoading(true);
     setIsRefreshing(false);
     setRange(14);
@@ -1763,7 +1732,8 @@ export default function ChronoScreen() {
     setSoftDeletedIds(new Set());
     setSelectedDate(null);
     setShowCalendar(false);
-  }, [activeChild?.id]);
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   // Load preferences
   useEffect(() => {
@@ -1780,9 +1750,14 @@ export default function ChronoScreen() {
           return;
         }
         const parsed = JSON.parse(raw);
-        if (parsed?.range) {
-          setRange(parsed.range);
-          setMaxRange(parsed.range);
+        const storedRange = parsed?.range;
+        if (
+          storedRange === 7 ||
+          storedRange === 14 ||
+          storedRange === 30
+        ) {
+          setRange(storedRange);
+          setMaxRange(storedRange);
         }
         if (Array.isArray(parsed?.selectedTypes)) {
           setSelectedTypes(parsed.selectedTypes);

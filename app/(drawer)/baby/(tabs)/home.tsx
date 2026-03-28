@@ -24,6 +24,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
@@ -32,12 +33,6 @@ import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import { ajouterEvenementOptimistic, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { getPreferencesCache, getPermissionsCache } from "@/services/userPreferencesCache";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  setOnFailure as setOptimisticOnFailure,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import {
   buildTodayEventsData,
   getTodayEventsCache,
@@ -594,7 +589,13 @@ export default function HomeDashboard() {
   const headerMicVisibleRef = useRef(false);
   const headerRowLayoutRef = useRef<{ y: number; height: number } | null>(null);
   const scrollYRef = useRef(0);
-  const latestFirestoreEventsRef = useRef<any[]>([]);
+  const {
+    mergedEvents: mergedTodayEvents,
+    setFirestoreEvents,
+    refreshMerged,
+  } = useMergedOptimisticEvents<any>({
+    childId: activeChild?.id,
+  });
 
   const [refreshTick, setRefreshTick] = useState(0);
   const [loadError, setLoadError] = useState(false);
@@ -2054,40 +2055,12 @@ export default function HomeDashboard() {
       });
     }
 
-    // Unified debounced pipeline: both Firestore snapshots and optimistic store
-    // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
-    // Skip setData when the visible event set hasn't changed (e.g. soft-deleted
-    // events disappearing from Firestore snapshot).
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
     let loadingSet = false;
-    let lastEventIdsKey = '';
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        const firestoreEvents = latestFirestoreEventsRef.current;
-        const mergedEvents = mergeWithFirestoreEvents(firestoreEvents, activeChild.id);
-
-        // Build a stable fingerprint from visible events to detect real changes.
-        // Includes count of optimistic events so the tempId→realId reconciliation
-        // (which unblocks edit/delete) triggers a setData.
-        const visibleEvents = mergedEvents.filter(
-          (e: any) => !softDeletedIdsRef.current.has(e.id),
-        );
-        const idsKey = buildEventFingerprint(visibleEvents);
-
-        if (idsKey === lastEventIdsKey) return; // No visible change — skip render.
-        lastEventIdsKey = idsKey;
-
-        const todayData = buildTodayEventsData(mergedEvents);
-        setData((prev) => ({ ...prev, ...todayData }));
-      }, 50);
-    };
 
     const unsubscribe = ecouterEvenementsDuJourHybrid(
       activeChild.id,
       (events) => {
-        latestFirestoreEventsRef.current = events;
+        setFirestoreEvents(events);
         if (!loadingSet) {
           loadingSet = true;
           setLoading({
@@ -2110,24 +2083,44 @@ export default function HomeDashboard() {
             nettoyagesNez: false,
           });
         }
-        scheduleMerge();
       },
       { waitForServer: true },
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
-    // Connect optimistic failure notifications to the toast system.
-    setOptimisticOnFailure((message) => showToast(message));
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribe();
-      unsubOptimistic();
-      setOptimisticOnFailure(null);
     };
-  }, [activeChild?.id, currentDay, refreshTick]);
+  }, [activeChild?.id, currentDay, refreshTick, setFirestoreEvents]);
+
+  useEffect(() => {
+    const todayData = buildTodayEventsData(mergedTodayEvents as any[]);
+    setData((prev) => ({ ...prev, ...todayData }));
+    setSoftDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const dataIds = new Set((mergedTodayEvents as any[]).map((e: any) => e.id));
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (id && dataIds.has(id)) next.add(id);
+      });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [mergedTodayEvents]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshMerged();
+    }, [refreshMerged]),
+  );
+
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    const cached = getTodayEventsCache(activeChild.id);
+    setData(cached ? { ...emptyData, ...cached } : emptyData);
+    setSoftDeletedIds(new Set());
+    setFirestoreEvents([]);
+  }, [activeChild?.id, setFirestoreEvents]);
 
   // ============================================
   // EFFECTS - STATS CALCULATION

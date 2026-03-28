@@ -6,6 +6,7 @@ import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import {
   ecouterBiberonsHybrid as ecouterBiberons,
   ecouterPompagesHybrid as ecouterPompages,
@@ -13,11 +14,6 @@ import {
   ecouterSommeilsHybrid as ecouterSommeils,
   ecouterTeteesHybrid as ecouterTetees,
 } from "@/migration/eventsHybridService";
-import {
-  buildEventFingerprint,
-  mergeWithFirestoreEvents,
-  subscribe as subscribeOptimistic,
-} from "@/services/optimisticEventsStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
@@ -81,9 +77,35 @@ export default function StatsScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const screenWidth = windowWidth - 40;
   const { setHeaderLeft } = useHeaderLeft();
-  const [tetees, setTetees] = useState<any[]>([]);
-  const [pompages, setPompages] = useState<any[]>([]);
-  const [sommeils, setSommeils] = useState<any[]>([]);
+  const sortRepasEvents = useCallback(
+    (merged: any[]) =>
+      [...merged].sort(
+        (a: any, b: any) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
+      ),
+    [],
+  );
+  const {
+    mergedEvents: tetees,
+    setFirestoreEvents: setRepasFirestoreEvents,
+    refreshMerged: refreshRepasMerged,
+  } = useMergedOptimisticEvents<any>({
+    childId: activeChild?.id,
+    transformMerged: sortRepasEvents,
+  });
+  const {
+    mergedEvents: pompages,
+    setFirestoreEvents: setPompagesFirestoreEvents,
+    refreshMerged: refreshPompagesMerged,
+  } = useMergedOptimisticEvents<any>({
+    childId: activeChild?.id,
+  });
+  const {
+    mergedEvents: sommeils,
+    setFirestoreEvents: setSommeilsFirestoreEvents,
+    refreshMerged: refreshSommeilsMerged,
+  } = useMergedOptimisticEvents<any>({
+    childId: activeChild?.id,
+  });
   const [teteesLoaded, setTeteesLoaded] = useState(false);
   const [biberonsLoaded, setBiberonsLoaded] = useState(false);
   const [solidesLoaded, setSolidesLoaded] = useState(false);
@@ -242,52 +264,30 @@ export default function StatsScreen() {
     setSommeilLoaded(true);
   }, []);
 
-  // Unified debounced pipeline: both Firestore snapshots and optimistic store
-  // changes feed into a single merge+setData, avoiding duplicate renders/flashes.
+  const pushRepasFirestoreEvents = useCallback(() => {
+    setRepasFirestoreEvents([
+      ...latestFirestoreTeteesRef.current,
+      ...latestFirestoreBiberonsRef.current,
+      ...latestFirestoreSolidesRef.current,
+    ]);
+  }, [setRepasFirestoreEvents]);
+
   useEffect(() => {
     if (!activeChild?.id) return;
 
     setLoadError(null);
-
-    let mergeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFingerprint = '';
-
-    const scheduleMerge = () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
-      mergeTimer = setTimeout(() => {
-        // Re-merge repas (tetees + biberons + solides)
-        const rawRepas = [
-          ...latestFirestoreTeteesRef.current,
-          ...latestFirestoreBiberonsRef.current,
-          ...latestFirestoreSolidesRef.current,
-        ];
-        const mergedRepas = mergeWithFirestoreEvents(rawRepas, activeChild.id);
-        mergedRepas.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
-
-        // Re-merge pompages
-        const mergedPompages = mergeWithFirestoreEvents(latestFirestorePompagesRef.current, activeChild.id);
-
-        // Re-merge sommeils
-        const mergedSommeils = mergeWithFirestoreEvents(latestFirestoreSommeilsRef.current, activeChild.id);
-
-        const allMerged = [...mergedRepas, ...mergedPompages, ...mergedSommeils];
-        const fingerprint = buildEventFingerprint(allMerged);
-
-        if (fingerprint === lastFingerprint) return;
-        lastFingerprint = fingerprint;
-
-        setTetees(mergedRepas);
-        setPompages(mergedPompages);
-        setSommeils(mergedSommeils);
-      }, 50);
-    };
+    latestFirestoreTeteesRef.current = [];
+    latestFirestoreBiberonsRef.current = [];
+    latestFirestoreSolidesRef.current = [];
+    latestFirestorePompagesRef.current = [];
+    latestFirestoreSommeilsRef.current = [];
 
     const unsubscribeTetees = ecouterTetees(
       activeChild.id,
       (tetees) => {
         latestFirestoreTeteesRef.current = tetees;
         setTeteesLoaded(true);
-        scheduleMerge();
+        pushRepasFirestoreEvents();
       },
       { waitForServer: true },
       handleListenerError,
@@ -298,7 +298,7 @@ export default function StatsScreen() {
       (biberons) => {
         latestFirestoreBiberonsRef.current = biberons;
         setBiberonsLoaded(true);
-        scheduleMerge();
+        pushRepasFirestoreEvents();
       },
       { waitForServer: true },
       handleListenerError,
@@ -309,7 +309,7 @@ export default function StatsScreen() {
       (solides) => {
         latestFirestoreSolidesRef.current = solides;
         setSolidesLoaded(true);
-        scheduleMerge();
+        pushRepasFirestoreEvents();
       },
       { waitForServer: true },
       handleListenerError,
@@ -320,7 +320,7 @@ export default function StatsScreen() {
       (data) => {
         latestFirestorePompagesRef.current = data;
         setPompagesLoaded(true);
-        scheduleMerge();
+        setPompagesFirestoreEvents(data);
       },
       { waitForServer: true },
       handleListenerError,
@@ -331,30 +331,39 @@ export default function StatsScreen() {
       (data) => {
         latestFirestoreSommeilsRef.current = data;
         setSommeilLoaded(true);
-        scheduleMerge();
+        setSommeilsFirestoreEvents(data);
       },
       { waitForServer: true },
       handleListenerError,
     );
 
-    const unsubOptimistic = subscribeOptimistic(scheduleMerge);
-
     return () => {
-      if (mergeTimer) clearTimeout(mergeTimer);
       unsubscribeTetees();
       unsubscribeBiberons();
       unsubscribeSolides();
       unsubscribePompages();
       unsubscribeSommeils();
-      unsubOptimistic();
     };
-  }, [activeChild?.id, refreshKey, handleListenerError]);
+  }, [
+    activeChild?.id,
+    refreshKey,
+    handleListenerError,
+    pushRepasFirestoreEvents,
+    setPompagesFirestoreEvents,
+    setSommeilsFirestoreEvents,
+  ]);
+
+  // Re-merge on tab focus — frozen tabs miss state updates
+  useFocusEffect(
+    useCallback(() => {
+      refreshRepasMerged();
+      refreshPompagesMerged();
+      refreshSommeilsMerged();
+    }, [refreshPompagesMerged, refreshRepasMerged, refreshSommeilsMerged]),
+  );
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setTetees([]);
-    setPompages([]);
-    setSommeils([]);
     setTeteesLoaded(false);
     setBiberonsLoaded(false);
     setSolidesLoaded(false);
@@ -364,7 +373,20 @@ export default function StatsScreen() {
     setPompagesEmptyDelayDone(false);
     setSommeilEmptyDelayDone(false);
     setLoadError(null);
-  }, [activeChild?.id]);
+    latestFirestoreTeteesRef.current = [];
+    latestFirestoreBiberonsRef.current = [];
+    latestFirestoreSolidesRef.current = [];
+    latestFirestorePompagesRef.current = [];
+    latestFirestoreSommeilsRef.current = [];
+    setRepasFirestoreEvents([]);
+    setPompagesFirestoreEvents([]);
+    setSommeilsFirestoreEvents([]);
+  }, [
+    activeChild?.id,
+    setPompagesFirestoreEvents,
+    setRepasFirestoreEvents,
+    setSommeilsFirestoreEvents,
+  ]);
 
   const isTeteesLoading = !(teteesLoaded && biberonsLoaded && solidesLoaded);
   const isPompagesLoading = !pompagesLoaded;

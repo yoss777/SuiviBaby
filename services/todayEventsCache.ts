@@ -1,4 +1,5 @@
 import type { Event, EventType } from "@/services/eventsService";
+import { MODERN_UI_EVENT_TYPES } from "@/services/eventTypeSupport";
 
 export type TodayEventsData = {
   tetees: Event[];
@@ -20,25 +21,7 @@ export type TodayEventsData = {
   nettoyagesNez: Event[];
 };
 
-const TODAY_TYPES: EventType[] = [
-  "biberon",
-  "tetee",
-  "solide",
-  "pompage",
-  "croissance",
-  "miction",
-  "selle",
-  "sommeil",
-  "bain",
-  "temperature",
-  "medicament",
-  "symptome",
-  "vaccin",
-  "vitamine",
-  "activite",
-  "jalon",
-  "nettoyage_nez",
-];
+const TODAY_TYPES: EventType[] = [...MODERN_UI_EVENT_TYPES];
 
 type CacheEntry = {
   dateKey: string;

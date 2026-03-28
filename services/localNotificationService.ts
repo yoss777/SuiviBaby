@@ -5,6 +5,7 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import type { ReminderKey } from "./userPreferencesService";
+import { DIAPER_DOMAIN_EVENT_TYPES } from "./eventTypeSupport";
 
 // ============================================
 // CONSTANTS
@@ -14,7 +15,10 @@ import type { ReminderKey } from "./userPreferencesService";
 export const REMINDER_EVENT_TYPES: Record<ReminderKey, string[]> = {
   repas: ["biberon", "tetee", "solide"],
   pompages: ["pompage"],
-  changes: ["miction", "selle", "couche"],
+  // The modern product tracks diapers through `miction` / `selle`, but
+  // reminder rescheduling still accepts legacy `couche` entries for
+  // historical compatibility.
+  changes: DIAPER_DOMAIN_EVENT_TYPES,
   vitamines: ["vitamine"],
 };
 
