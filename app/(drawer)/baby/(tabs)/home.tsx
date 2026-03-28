@@ -144,47 +144,9 @@ function HomeSkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
   );
 }
 
-// ============================================
-// STAGGERED ENTRANCE
-// ============================================
-
-function StaggeredCard({
-  index,
-  visible,
-  children,
-}: {
-  index: number;
-  visible: boolean;
-  children: React.ReactNode;
-}) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (visible) {
-      Animated.timing(anim, {
-        toValue: 1,
-        duration: 300,
-        delay: index * 60,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible, anim, index]);
-  return (
-    <Animated.View
-      style={{
-        opacity: anim,
-        transform: [
-          {
-            translateY: anim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [16, 0],
-            }),
-          },
-        ],
-      }}
-    >
-      {children}
-    </Animated.View>
-  );
+// Instant render — no stagger animation (utilitaire dashboard, pas de delay)
+function StaggeredCard({ children }: { index?: number; visible?: boolean; children: React.ReactNode }) {
+  return <>{children}</>;
 }
 
 // ============================================
@@ -2478,22 +2440,9 @@ export default function HomeDashboard() {
     return "Bonsoir";
   };
 
-  // Sequential stagger indices — consecutive for visible blocks only (no gaps)
   const showSleep = canManageContent || !!sommeilEnCours;
   const showPromenade = canManageContent || !!promenadeEnCours;
   const showMood = canManageContent;
-  const stagger = useMemo(() => {
-    let i = 0;
-    return {
-      alimentation: i++,
-      sante: i++,
-      sommeil: showSleep ? i++ : -1,
-      promenade: showPromenade ? i++ : -1,
-      humeur: showMood ? i++ : -1,
-      smartContentBase: i,        // insights/correlations/milestones start here
-      recentEvents: i + 10,       // reserve 10 slots for dynamic smart content items
-    };
-  }, [showSleep, showPromenade, showMood]);
 
   // ============================================
   // RENDER
@@ -2605,7 +2554,7 @@ export default function HomeDashboard() {
           </View>
 
           {/* Alimentation Group */}
-          <StaggeredCard index={stagger.alimentation} visible={isDataLoaded}>
+          <StaggeredCard>
             <View style={styles.statsGroupContainer}>
               <StatsGroup
                 title="Alimentation"
@@ -2626,7 +2575,7 @@ export default function HomeDashboard() {
           </StaggeredCard>
 
           {/* Santé Group (Couches + Vitamines + Vaccins) */}
-          <StaggeredCard index={stagger.sante} visible={isDataLoaded}>
+          <StaggeredCard>
             <View style={styles.statsGroupContainer}>
               <StatsGroup
                 title="Santé & Hygiène"
@@ -2648,7 +2597,7 @@ export default function HomeDashboard() {
 
           {/* Sommeil Section */}
           {showSleep && (
-            <StaggeredCard index={stagger.sommeil} visible={isDataLoaded}>
+            <StaggeredCard>
               <View style={styles.statsGroupContainer}>
                 <SleepWidget
                   isActive={!!sommeilEnCours}
@@ -2671,7 +2620,7 @@ export default function HomeDashboard() {
 
           {/* Promenade Section */}
           {showPromenade && (
-            <StaggeredCard index={stagger.promenade} visible={isDataLoaded}>
+            <StaggeredCard>
               <View style={styles.statsGroupContainer}>
                 <PromenadeWidget
                   isActive={!!promenadeEnCours}
@@ -2693,7 +2642,7 @@ export default function HomeDashboard() {
 
           {/* Humeur du jour */}
           {showMood && (
-            <StaggeredCard index={stagger.humeur} visible={isDataLoaded}>
+            <StaggeredCard>
               <View style={styles.statsGroupContainer}>
                 <View
                   style={[
@@ -2750,8 +2699,6 @@ export default function HomeDashboard() {
               .map((insight, i) => (
               <StaggeredCard
                 key={insight.id}
-                index={stagger.smartContentBase + i}
-                visible={isDataLoaded}
               >
                 <InsightCard
                   insight={insight}
@@ -2774,14 +2721,14 @@ export default function HomeDashboard() {
             {hasAnyTodayData && smartContent.correlations
               .filter((corr) => !dismissedInsightIds.has(corr.id))
               .map((corr, i) => (
-              <StaggeredCard key={corr.id} index={stagger.smartContentBase + 5 + i} visible={isDataLoaded}>
+              <StaggeredCard key={corr.id}>
                 <InsightCard insight={corr} onDismiss={handleDismissInsight} colorScheme={colorScheme} />
               </StaggeredCard>
             ))}
 
             {/* Upcoming milestones */}
             {smartContent.upcomingMilestones.length > 0 && (
-              <StaggeredCard index={stagger.smartContentBase + 8} visible={isDataLoaded}>
+              <StaggeredCard>
                 <MilestoneTimelineCard
                   milestones={smartContent.upcomingMilestones}
                   ageWeeks={
@@ -2807,7 +2754,7 @@ export default function HomeDashboard() {
         )}
 
         {/* Chronologie récente */}
-        <StaggeredCard index={stagger.recentEvents} visible={isDataLoaded}>
+        <StaggeredCard>
           <RecentEventsList
             events={recentEvents}
             loading={!isDataLoaded}
