@@ -167,7 +167,7 @@ export const SleepWidget = memo(function SleepWidget({
         </Text>
       )}
 
-      {/* Action buttons — always at the bottom */}
+      {/* Action buttons */}
       {isActive ? (
         showStopButton && (
           <TouchableOpacity

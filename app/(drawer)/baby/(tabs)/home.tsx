@@ -31,7 +31,7 @@ import { getAgeInWeeks } from "@/utils/ageUtils";
 import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import { ajouterEvenementOptimistic, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
-import { getPreferencesCache } from "@/services/userPreferencesCache";
+import { getPreferencesCache, getPermissionsCache } from "@/services/userPreferencesCache";
 import {
   buildEventFingerprint,
   mergeWithFirestoreEvents,
@@ -600,9 +600,11 @@ export default function HomeDashboard() {
   const [loadError, setLoadError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dismissedInsightIds, setDismissedInsightIds] = useState<Set<string>>(new Set());
+  const permsCached = getPermissionsCache();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const canManageContent =
-    permissions.role === "owner" || permissions.role === "admin";
+  const canManageContent = permissions.loading && permsCached
+    ? permsCached.canManageContent
+    : permissions.role === "owner" || permissions.role === "admin";
 
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
 

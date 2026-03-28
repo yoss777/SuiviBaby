@@ -5,7 +5,7 @@ import { cancelAllReminders } from "@/services/localNotificationService";
 import { registerPushToken, removePushTokens } from "@/services/pushTokenService";
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
-import { clearPreferencesCache } from "@/services/userPreferencesCache";
+import { clearPreferencesCache, clearPermissionsCache } from "@/services/userPreferencesCache";
 import {
   canUserAccessApp,
   createPatientUser,
@@ -237,6 +237,7 @@ export function AuthProvider({
     try {
       clearTodayEventsCache();
       clearPreferencesCache();
+      clearPermissionsCache();
       await onOfflineQueueSignOut();
       await cancelAllReminders();
       // Supprimer les push tokens avant signOut (nécessite auth active)

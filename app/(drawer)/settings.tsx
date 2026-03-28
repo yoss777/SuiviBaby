@@ -113,7 +113,7 @@ export default function SettingsScreen() {
           accessibilityLabel={activeChild ? `Accueil de ${activeChild.name}` : "Retour à l'accueil"}
           accessibilityHint="Retourner à l'accueil"
         >
-          <FontAwesome name="house" size={20} color={nc.textNormal} />
+          <FontAwesome name="house" size={20} color={Colors[colorScheme].tint} />
         </TouchableOpacity>
       ),
     });

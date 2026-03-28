@@ -1,6 +1,9 @@
-// In-memory cache for user notification preferences.
-// Prefilled during boot so home.tsx can render with correct initial values
-// and avoid the flash of widgets appearing then hiding.
+// In-memory caches prefilled during boot so home.tsx can render with
+// correct initial values and avoid layout shifts / flash of content.
+
+// ============================================
+// NOTIFICATION PREFERENCES
+// ============================================
 
 interface CachedNotificationPrefs {
   tips: boolean;
@@ -20,4 +23,27 @@ export function getPreferencesCache(): CachedNotificationPrefs | null {
 
 export function clearPreferencesCache(): void {
   cachedPrefs = null;
+}
+
+// ============================================
+// CHILD PERMISSIONS (role)
+// ============================================
+
+interface CachedPermissions {
+  role: string | null;
+  canManageContent: boolean;
+}
+
+let cachedPermissions: CachedPermissions | null = null;
+
+export function setPermissionsCache(perms: CachedPermissions): void {
+  cachedPermissions = perms;
+}
+
+export function getPermissionsCache(): CachedPermissions | null {
+  return cachedPermissions;
+}
+
+export function clearPermissionsCache(): void {
+  cachedPermissions = null;
 }

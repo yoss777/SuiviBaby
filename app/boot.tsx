@@ -9,7 +9,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { obtenirEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
-import { setPreferencesCache } from "@/services/userPreferencesCache";
+import { setPreferencesCache, setPermissionsCache } from "@/services/userPreferencesCache";
+import { getUserChildAccess } from "@/utils/permissions";
 import {
   buildTodayEventsData,
   getTodayEventsCache,
@@ -18,7 +19,7 @@ import {
 import { router } from "expo-router";
 
 function BootScreenContent() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, firebaseUser, loading: authLoading } = useAuth();
   const {
     children,
     loading: babyLoading,
@@ -123,7 +124,8 @@ function BootScreenContent() {
           const preloadTimeout = new Promise((resolve) =>
             setTimeout(resolve, 2500),
           );
-          // Prefetch events + user preferences in parallel
+          // Prefetch events + user preferences + permissions in parallel
+          const uid = firebaseUser?.uid;
           await Promise.race([
             Promise.all([
               prefetchToday(targetChild.id),
@@ -134,6 +136,17 @@ function BootScreenContent() {
                   correlations: prefs.correlations ?? true,
                 }))
                 .catch(() => {}),
+              uid
+                ? getUserChildAccess(targetChild.id, uid)
+                    .then((accessDoc) => {
+                      const role = accessDoc?.role ?? null;
+                      setPermissionsCache({
+                        role,
+                        canManageContent: role === 'owner' || role === 'admin',
+                      });
+                    })
+                    .catch(() => {})
+                : Promise.resolve(),
             ]),
             preloadTimeout,
           ]);
@@ -162,6 +175,7 @@ function BootScreenContent() {
     delayDone,
     unauthDelayDone,
     user,
+    firebaseUser?.uid,
     children,
     activeChild,
     setActiveChild,
