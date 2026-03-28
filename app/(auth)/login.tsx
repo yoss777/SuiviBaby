@@ -19,7 +19,6 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import {
   createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
   signInWithEmailAndPassword,
 } from "firebase/auth";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -90,8 +89,6 @@ export default function LoginScreen() {
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [cooldownEnd, setCooldownEnd] = useState<number | null>(null);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
-  const [forgotPasswordHint, setForgotPasswordHint] = useState(false);
-  const forgotPasswordOpacity = useRef(new Animated.Value(0)).current;
   const [emailTouched, setEmailTouched] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
@@ -224,70 +221,15 @@ export default function LoginScreen() {
     return () => clearInterval(interval);
   }, [cooldownEnd]);
 
-  // Forgot password hint animation
-  useEffect(() => {
-    if (forgotPasswordHint) {
-      Animated.sequence([
-        Animated.timing(forgotPasswordOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.delay(3000),
-        Animated.timing(forgotPasswordOpacity, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start(() => setForgotPasswordHint(false));
-    }
-  }, [forgotPasswordHint, forgotPasswordOpacity]);
-
   const isCoolingDown = cooldownEnd !== null && cooldownRemaining > 0;
 
-  const handleForgotPassword = useCallback(async () => {
-    if (!email.trim()) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      setForgotPasswordHint(true);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await sendPasswordResetEmail(auth, email.trim(), {
-        url: "https://samaye-53723.firebaseapp.com/reset-password",
-        handleCodeInApp: true,
-        iOS: { bundleId: "com.yoss7.samaye" },
-        android: { packageName: "com.yoss7.samaye", installApp: true },
-      });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showModal(
-        "Email envoyé",
-        "Un email de réinitialisation a été envoyé à " +
-          email.trim() +
-          ". Vérifiez votre boîte de réception (et vos spams).",
-      );
-    } catch (error: any) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      let errorMessage = "Une erreur est survenue";
-      switch (error.code) {
-        case "auth/invalid-email":
-          errorMessage = "Adresse email invalide";
-          break;
-        case "auth/user-not-found":
-          errorMessage = "Aucun compte trouvé avec cet email";
-          break;
-        case "auth/too-many-requests":
-          errorMessage = "Trop de tentatives. Réessayez dans quelques minutes.";
-          break;
-        default:
-          errorMessage = "Une erreur est survenue. Veuillez réessayer.";
-      }
-      showModal("Erreur", errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  }, [email, showModal]);
+  const handleForgotPassword = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({
+      pathname: "/(auth)/forgot-password",
+      params: email.trim() ? { email: email.trim() } : {},
+    } as any);
+  }, [email, router]);
 
   const handleAuth = useCallback(async () => {
     if (isCoolingDown) return;
@@ -629,16 +571,6 @@ export default function LoginScreen() {
                   Mot de passe oublié ?
                 </Text>
               </TouchableOpacity>
-              {forgotPasswordHint && (
-                <Animated.Text
-                  style={[
-                    styles.forgotPasswordHint,
-                    { color: nc.todayAccent, opacity: forgotPasswordOpacity },
-                  ]}
-                >
-                  Entrez d'abord votre email ci-dessus
-                </Animated.Text>
-              )}
             </View>
           )}
 
@@ -1012,12 +944,6 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     fontSize: 14,
     fontWeight: "500",
-  },
-  forgotPasswordHint: {
-    fontSize: 13,
-    fontWeight: "500",
-    textAlign: "right",
-    marginTop: 4,
   },
   emailValidationIcon: {
     marginLeft: 8,
