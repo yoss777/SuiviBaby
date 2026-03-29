@@ -131,22 +131,14 @@ export default function LoginScreen() {
     setInfoModal({ visible: true, title, message });
   }, []);
 
-  // Charger le dernier email (#6), check onboarding (#9), check biométrie (#1)
+  // Charger le dernier email (#6), check biométrie (#1)
+  // Note: onboarding check is handled by boot.tsx before reaching login
   useEffect(() => {
     AsyncStorage.getItem(LAST_EMAIL_KEY).then((saved) => {
       if (saved) setEmail(saved);
     }).catch(() => {});
 
     (async () => {
-      try {
-        const { hasCompletedOnboarding } = await import("./onboarding");
-        const done = await hasCompletedOnboarding();
-        if (!done) {
-          router.replace("/(auth)/onboarding");
-          return;
-        }
-      } catch {}
-
       try {
         const available = await isBiometricAvailable();
         setBiometricAvailable(available);
@@ -160,7 +152,7 @@ export default function LoginScreen() {
         setBiometricAvailable(false);
       }
     })();
-  }, [router]);
+  }, []);
 
   // Détection caps lock (#10)
   const handlePasswordKeyPress = useCallback((e: any) => {

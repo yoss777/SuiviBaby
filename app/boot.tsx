@@ -17,6 +17,7 @@ import {
   setTodayEventsCache,
 } from "@/services/todayEventsCache";
 import { router } from "expo-router";
+import { hasCompletedOnboarding } from "./(auth)/onboarding";
 
 function BootScreenContent() {
   const { user, firebaseUser, loading: authLoading } = useAuth();
@@ -28,6 +29,8 @@ function BootScreenContent() {
   } = useBaby();
   const [delayDone, setDelayDone] = useState(false);
   const [unauthDelayDone, setUnauthDelayDone] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState(false);
   // R1+R9: Splash minimum — shorter if cache exists (warm return)
   useEffect(() => {
     const hasCache = activeChild?.id ? !!getTodayEventsCache(activeChild.id) : false;
@@ -35,6 +38,14 @@ function BootScreenContent() {
     const timer = setTimeout(() => setDelayDone(true), minDelay);
     return () => clearTimeout(timer);
   }, [activeChild?.id]);
+
+  // Check onboarding status once on mount
+  useEffect(() => {
+    hasCompletedOnboarding().then((done) => {
+      setOnboardingDone(done);
+      setOnboardingChecked(true);
+    });
+  }, []);
 
   useEffect(() => {
     if (authLoading || user) {
@@ -77,13 +88,18 @@ function BootScreenContent() {
         return;
       }
 
-      // Étape 2 : Si pas d'utilisateur, rediriger vers login
+      // Étape 2 : Si pas d'utilisateur, vérifier onboarding puis rediriger
       if (!user) {
-        console.log("[BOOT] Pas de user, redirection vers login");
-        if (!unauthDelayDone) {
+        if (!onboardingChecked || !unauthDelayDone) {
           return;
         }
-        router.replace("/(auth)/login");
+        if (!onboardingDone) {
+          console.log("[BOOT] Onboarding non complété, redirection vers onboarding");
+          router.replace("/(auth)/onboarding");
+        } else {
+          console.log("[BOOT] Pas de user, redirection vers login");
+          router.replace("/(auth)/login");
+        }
         return;
       }
 
@@ -174,6 +190,8 @@ function BootScreenContent() {
     babyLoading,
     delayDone,
     unauthDelayDone,
+    onboardingChecked,
+    onboardingDone,
     user,
     firebaseUser?.uid,
     children,
