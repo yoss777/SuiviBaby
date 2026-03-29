@@ -3,6 +3,7 @@ import { auth, db } from "@/config/firebase";
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocFromServer,
@@ -11,6 +12,7 @@ import {
   onSnapshot,
   query,
   setDoc,
+  serverTimestamp,
   Timestamp,
   updateDoc,
   where,
@@ -139,11 +141,15 @@ export async function redeemShareCode(
 
     // IMPORTANT: Marquer le code comme utilisé AVANT de créer l'accès
     // Car les règles Firestore vérifient que used == true ET usedBy == request.auth.uid
+    // Rules also check usedByEmail == request.auth.token.email, so we must pass it
+    if (!user.email) {
+      throw new Error("Vous devez avoir un email associé à votre compte");
+    }
     await updateDoc(doc(db, "shareCodes", code.toUpperCase()), {
       used: true,
       usedBy: user.uid,
-      usedByEmail: user.email ?? null,
-      usedAt: Timestamp.now(),
+      usedByEmail: user.email,
+      usedAt: serverTimestamp(),
     });
 
     // Créer l'accès pour l'utilisateur invité APRÈS avoir marqué le code comme utilisé
@@ -666,6 +672,16 @@ export function listenToActiveShareCode(
     }
     callback(activeCode);
   });
+}
+
+/**
+ * Supprime un code de partage actif (non utilisé).
+ */
+export async function deleteShareCode(code: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Utilisateur non connecté");
+
+  await deleteDoc(doc(db, "shareCodes", code));
 }
 
 /**

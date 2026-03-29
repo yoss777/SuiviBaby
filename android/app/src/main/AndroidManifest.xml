@@ -32,7 +32,7 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="samaye"/>
+        <data android:scheme="suivibaby"/>
         <data android:scheme="exp+samaye"/>
       </intent-filter>
     </activity>

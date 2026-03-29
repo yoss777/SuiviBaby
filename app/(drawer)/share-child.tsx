@@ -8,6 +8,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   createEmailInvitation,
   createShareCode,
+  deleteShareCode,
   listenToActiveShareCode,
 } from "@/services/childSharingService";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
@@ -279,7 +280,6 @@ export default function ShareChildScreen() {
       const code = await createShareCode(childId, childName);
       setShareCode(code);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showAlert("Succes", "Code de partage créé avec succes !", [{ text: "" }]);
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showAlert("Erreur", error.message || "Impossible de crer le code");
@@ -308,6 +308,27 @@ export default function ShareChildScreen() {
       console.error("Erreur partage:", error);
     }
   }, [shareCode, childName]);
+
+  const handleDeleteCode = useCallback(() => {
+    if (!shareCode) return;
+    showAlert("Supprimer le code ?", "Le code ne sera plus utilisable.", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteShareCode(shareCode);
+            setShareCode(null);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (error: any) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            showAlert("Erreur", error.message || "Impossible de supprimer le code");
+          }
+        },
+      },
+    ]);
+  }, [shareCode, showAlert]);
 
   const handleSendInvitation = useCallback(async () => {
     if (isSendingInviteRef.current || isLoadingInvite) return;
@@ -426,6 +447,15 @@ export default function ShareChildScreen() {
                 <View style={styles.codeContainer}>
                   <View style={dynamicStyles.codeBox}>
                     <Text style={dynamicStyles.codeText}>{shareCode}</Text>
+                    <TouchableOpacity
+                      onPress={handleDeleteCode}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      style={styles.deleteCodeButton}
+                      accessibilityRole="button"
+                      accessibilityLabel="Supprimer le code de partage"
+                    >
+                      <FontAwesome name="trash-alt" size={16} color={nc.error} />
+                    </TouchableOpacity>
                   </View>
 
                   <View style={styles.codeActions}>
@@ -604,6 +634,14 @@ const styles = StyleSheet.create({
   },
   codeContainer: {
     alignItems: "center",
+  },
+  deleteCodeButton: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 4,
   },
   codeActions: {
     flexDirection: "row",

@@ -74,12 +74,7 @@ export default function ForgotPasswordScreen() {
     setError("");
 
     try {
-      await sendPasswordResetEmail(auth, trimmed, {
-        url: "https://samaye-53723.firebaseapp.com/reset-password",
-        handleCodeInApp: true,
-        iOS: { bundleId: "com.tesfa.suivibaby" },
-        android: { packageName: "com.tesfa.suivibaby", installApp: true },
-      });
+      await sendPasswordResetEmail(auth, trimmed);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSent(true);
       setCooldown(COOLDOWN_SECONDS);

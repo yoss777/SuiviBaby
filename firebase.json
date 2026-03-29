@@ -16,6 +16,14 @@
       {
         "source": "/reset-password",
         "destination": "/reset-password.html"
+      },
+      {
+        "source": "/terms",
+        "destination": "/terms.html"
+      },
+      {
+        "source": "/privacy",
+        "destination": "/privacy.html"
       }
     ]
   },
