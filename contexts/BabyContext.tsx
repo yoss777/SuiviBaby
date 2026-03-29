@@ -253,7 +253,18 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
             }
           },
           (error) => {
-            console.error('[BabyContext] Erreur listener child:', error);
+            console.warn('[BabyContext] Erreur listener child (permission denied, orphan access?):', childId, error.message);
+            // Remove this child from tracked data — the access doc is likely orphaned
+            unsub();
+            childListenersRef.current.delete(childId);
+            childDataRef.current.delete(childId);
+            currentChildIdsRef.current.delete(childId);
+            syncState();
+            // Ensure loading resolves even if all children fail
+            if (childDataRef.current.size >= currentChildIdsRef.current.size) {
+              setLoading(false);
+              setChildrenLoaded(true);
+            }
           }
         );
 
