@@ -1,5 +1,6 @@
 // app/(auth)/reset-password.tsx
-import { InfoModal } from "@/components/ui/InfoModal";
+// Reset password screen — same visual language as forgot-password.tsx
+
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -20,7 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth } from "../../config/firebase";
+import { auth } from "@/config/firebase";
 
 const PASSWORD_RULES = [
   {
@@ -54,11 +55,9 @@ export default function ResetPasswordScreen() {
   const [verifying, setVerifying] = useState(true);
   const [email, setEmail] = useState("");
   const [invalidCode, setInvalidCode] = useState(false);
-  const [infoModal, setInfoModal] = useState({
-    visible: false,
-    title: "",
-    message: "",
-  });
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
+  const confirmRef = useRef<TextInput>(null);
 
   const unmetRules = useMemo(
     () => PASSWORD_RULES.filter((rule) => !rule.test(password)),
@@ -70,10 +69,6 @@ export default function ResetPasswordScreen() {
   );
   const strengthLabel =
     strengthScore === 3 ? "Fort" : strengthScore === 2 ? "Moyen" : "Faible";
-
-  const showModal = useCallback((title: string, message: string) => {
-    setInfoModal({ visible: true, title, message });
-  }, []);
 
   // Vérifier que le code est valide au chargement
   useEffect(() => {
@@ -96,16 +91,15 @@ export default function ResetPasswordScreen() {
   }, [oobCode]);
 
   const handleResetPassword = useCallback(async () => {
+    setError("");
+
     if (unmetRules.length > 0) {
-      showModal(
-        "Erreur",
-        "Mot de passe trop faible. Utilisez 8+ caractères, 1 chiffre, 1 caractère spécial.",
-      );
+      setError("Mot de passe trop faible. Utilisez 8+ caractères, 1 chiffre, 1 caractère spécial.");
       return;
     }
 
     if (password !== confirmPassword) {
-      showModal("Erreur", "Les mots de passe ne correspondent pas.");
+      setError("Les mots de passe ne correspondent pas.");
       return;
     }
 
@@ -113,43 +107,36 @@ export default function ResetPasswordScreen() {
     try {
       await confirmPasswordReset(auth, oobCode!, password);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showModal(
-        "Mot de passe modifié",
-        "Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter.",
-      );
-    } catch (error: any) {
+      setSuccess(true);
+    } catch (err: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      let errorMessage = "Une erreur est survenue";
-      switch (error.code) {
+      switch (err.code) {
         case "auth/expired-action-code":
-          errorMessage =
-            "Ce lien a expiré. Veuillez refaire une demande de réinitialisation.";
+          setError("Ce lien a expiré. Veuillez refaire une demande de réinitialisation.");
           break;
         case "auth/invalid-action-code":
-          errorMessage =
-            "Ce lien est invalide ou a déjà été utilisé.";
+          setError("Ce lien est invalide ou a déjà été utilisé.");
           break;
         case "auth/weak-password":
-          errorMessage = "Le mot de passe est trop faible.";
+          setError("Le mot de passe est trop faible.");
           break;
         default:
-          errorMessage = "Une erreur est survenue. Veuillez réessayer.";
+          setError("Une erreur est survenue. Veuillez réessayer.");
       }
-      showModal("Erreur", errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [unmetRules, password, confirmPassword, oobCode, showModal]);
+  }, [unmetRules, password, confirmPassword, oobCode]);
 
   const handleTogglePassword = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setShowPassword(!showPassword);
-  }, [showPassword]);
+    setShowPassword((prev) => !prev);
+  }, []);
 
   const handleToggleConfirmPassword = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setShowConfirmPassword(!showConfirmPassword);
-  }, [showConfirmPassword]);
+    setShowConfirmPassword((prev) => !prev);
+  }, []);
 
   // Skeleton shimmer animation
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -176,46 +163,23 @@ export default function ResetPasswordScreen() {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: nc.background }]}>
         <View style={styles.skeletonContainer}>
-          {/* Skeleton icon circle */}
           <Animated.View
-            style={[
-              styles.skeletonCircle,
-              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
-            ]}
-          />
-          {/* Skeleton title */}
-          <Animated.View
-            style={[
-              styles.skeletonTitle,
-              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
-            ]}
-          />
-          {/* Skeleton subtitle */}
-          <Animated.View
-            style={[
-              styles.skeletonSubtitle,
-              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
-            ]}
-          />
-          {/* Skeleton input fields */}
-          <Animated.View
-            style={[
-              styles.skeletonInput,
-              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
-            ]}
+            style={[styles.skeletonCircle, { backgroundColor: nc.borderLight, opacity: shimmerOpacity }]}
           />
           <Animated.View
-            style={[
-              styles.skeletonInput,
-              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
-            ]}
+            style={[styles.skeletonTitle, { backgroundColor: nc.borderLight, opacity: shimmerOpacity }]}
           />
-          {/* Skeleton button */}
           <Animated.View
-            style={[
-              styles.skeletonButton,
-              { backgroundColor: nc.borderLight, opacity: shimmerOpacity },
-            ]}
+            style={[styles.skeletonSubtitle, { backgroundColor: nc.borderLight, opacity: shimmerOpacity }]}
+          />
+          <Animated.View
+            style={[styles.skeletonInput, { backgroundColor: nc.borderLight, opacity: shimmerOpacity }]}
+          />
+          <Animated.View
+            style={[styles.skeletonInput, { backgroundColor: nc.borderLight, opacity: shimmerOpacity }]}
+          />
+          <Animated.View
+            style={[styles.skeletonButton, { backgroundColor: nc.borderLight, opacity: shimmerOpacity }]}
           />
         </View>
         <Text style={[styles.verifyingText, { color: nc.textMuted }]}>
@@ -227,39 +191,48 @@ export default function ResetPasswordScreen() {
 
   if (invalidCode) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: nc.background }]}>
-        <InfoModal
-          visible={infoModal.visible}
-          title={infoModal.title}
-          message={infoModal.message}
-          backgroundColor={nc.backgroundCard}
-          textColor={nc.textStrong}
-          onClose={() =>
-            setInfoModal({ visible: false, title: "", message: "" })
-          }
-        />
-        <View style={styles.errorContainer}>
-          <FontAwesome name="circle-xmark" size={60} color={nc.error} />
-          <Text style={[styles.errorTitle, { color: nc.textStrong }]}>
-            Lien invalide
-          </Text>
-          <Text style={[styles.errorMessage, { color: nc.textMuted }]}>
-            Ce lien de réinitialisation est invalide ou a expiré. Veuillez
-            refaire une demande depuis l'écran de connexion.
-          </Text>
-          <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: nc.todayAccent }]}
-            onPress={() => router.replace("/(auth)/login")}
-            accessibilityRole="button"
-            accessibilityLabel="Retour à la connexion"
-          >
-            <FontAwesome name="arrow-left" size={16} color={nc.white} />
-            <Text style={[styles.backButtonText, { color: nc.white }]}>
-              Retour à la connexion
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={[styles.container, { backgroundColor: nc.background }]}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <View style={[styles.iconContainer, { backgroundColor: nc.backgroundCard }]}>
+              <FontAwesome name="circle-xmark" size={40} color={nc.error} />
+            </View>
+            <Text style={[styles.title, { color: nc.textStrong }]}>
+              Lien invalide
             </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+              Ce lien de réinitialisation est invalide ou a expiré. Veuillez refaire une demande depuis l'écran de connexion.
+            </Text>
+          </View>
+
+          <View style={styles.switchContainer}>
+            <TouchableOpacity
+              onPress={() => router.replace("/(auth)/login")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="link"
+              accessibilityLabel="Retour à la connexion"
+            >
+              <Text style={[styles.switchLink, { color: nc.todayAccent }]}>
+                Retour à la connexion
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.footer}>
+            <FontAwesome name="shield-halved" size={16} color={nc.textMuted} />
+            <Text style={[styles.footerText, { color: nc.textMuted }]}>
+              Vos données sont sécurisées et privées
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -268,163 +241,215 @@ export default function ResetPasswordScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={[styles.container, { backgroundColor: nc.background }]}
     >
-      <InfoModal
-        visible={infoModal.visible}
-        title={infoModal.title}
-        message={infoModal.message}
-        backgroundColor={nc.backgroundCard}
-        textColor={nc.textStrong}
-        onClose={() => {
-          setInfoModal({ visible: false, title: "", message: "" });
-          if (infoModal.title === "Mot de passe modifié") {
-            router.replace("/(auth)/login");
-          }
-        }}
-      />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
+        {/* Header — same pattern as forgot-password.tsx */}
         <View style={styles.header}>
           <View style={[styles.iconContainer, { backgroundColor: nc.backgroundCard }]}>
-            <FontAwesome name="key" size={36} color={nc.todayAccent} />
+            <FontAwesome
+              name={success ? "circle-check" : "key"}
+              size={40}
+              color={success ? nc.success : nc.todayAccent}
+            />
           </View>
           <Text style={[styles.title, { color: nc.textStrong }]}>
-            Nouveau mot de passe
+            {success ? "Mot de passe modifié" : "Nouveau mot de passe"}
           </Text>
           <Text style={[styles.subtitle, { color: nc.textMuted }]}>
-            Choisissez un nouveau mot de passe pour {email}
+            {success
+              ? "Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter."
+              : `Choisissez un nouveau mot de passe pour ${email}`}
           </Text>
         </View>
 
-        {/* Formulaire */}
         <View style={styles.formContainer}>
-          {/* Nouveau mot de passe */}
-          <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
-            <View style={styles.inputIconContainer}>
-              <FontAwesome name="lock" size={20} color={nc.textMuted} />
-            </View>
-            <TextInput
-              style={[styles.input, { color: nc.textStrong }]}
-              placeholder="Nouveau mot de passe"
-              placeholderTextColor={nc.textLight}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              editable={!loading}
-              accessibilityLabel="Nouveau mot de passe"
-            />
-            <TouchableOpacity
-              style={styles.eyeIcon}
-              onPress={handleTogglePassword}
-              disabled={loading}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+          {/* Success banner */}
+          {success && (
+            <View
+              style={[
+                styles.successBanner,
+                { backgroundColor: nc.successBg, borderColor: nc.success },
+              ]}
+              accessibilityRole="alert"
+              accessibilityLabel="Mot de passe réinitialisé avec succès"
             >
-              <FontAwesome
-                name={showPassword ? "eye" : "eye-slash"}
-                size={20}
-                color={nc.textMuted}
-              />
-            </TouchableOpacity>
-          </View>
-
-          {/* Barre de force */}
-          {password.length > 0 && (
-            <View style={styles.strengthRow}>
-              <View style={[styles.strengthBarTrack, { backgroundColor: nc.borderLight }]}>
-                <View
-                  style={[
-                    styles.strengthBarFill,
-                    { width: `${strengthPercent}%`, backgroundColor: nc.todayAccent },
-                  ]}
-                />
-              </View>
-              <Text style={[styles.strengthLabel, { color: nc.textMuted }]}>
-                Force: {strengthLabel}
+              <FontAwesome name="check" size={14} color={nc.successText} />
+              <Text style={[styles.successText, { color: nc.successText }]}>
+                Mot de passe modifié avec succès
               </Text>
             </View>
           )}
 
-          {/* Confirmer mot de passe */}
-          <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
-            <View style={styles.inputIconContainer}>
-              <FontAwesome name="lock" size={20} color={nc.textMuted} />
-            </View>
-            <TextInput
-              style={[styles.input, { color: nc.textStrong }]}
-              placeholder="Confirmer le mot de passe"
-              placeholderTextColor={nc.textLight}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showConfirmPassword}
-              autoCapitalize="none"
-              editable={!loading}
-              accessibilityLabel="Confirmer le mot de passe"
-            />
-            <TouchableOpacity
-              style={styles.eyeIcon}
-              onPress={handleToggleConfirmPassword}
-              disabled={loading}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel={showConfirmPassword ? "Masquer la confirmation" : "Afficher la confirmation"}
-            >
-              <FontAwesome
-                name={showConfirmPassword ? "eye" : "eye-slash"}
-                size={20}
-                color={nc.textMuted}
-              />
-            </TouchableOpacity>
-          </View>
+          {!success && (
+            <>
+              {/* Nouveau mot de passe */}
+              <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
+                <View style={styles.inputIconContainer}>
+                  <FontAwesome name="lock" size={20} color={nc.textMuted} />
+                </View>
+                <TextInput
+                  style={[styles.input, { color: nc.textStrong }]}
+                  placeholder="Nouveau mot de passe"
+                  placeholderTextColor={nc.textLight}
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    if (error) setError("");
+                  }}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="new-password"
+                  returnKeyType="next"
+                  onSubmitEditing={() => confirmRef.current?.focus()}
+                  editable={!loading}
+                  accessibilityLabel="Nouveau mot de passe"
+                  accessibilityHint="Entrez votre nouveau mot de passe"
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={handleTogglePassword}
+                  disabled={loading}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                >
+                  <FontAwesome
+                    name={showPassword ? "eye" : "eye-slash"}
+                    size={20}
+                    color={nc.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
 
-          {/* Bouton valider */}
+              {/* Barre de force */}
+              {password.length > 0 && (
+                <View style={styles.strengthRow}>
+                  <View style={[styles.strengthBarTrack, { backgroundColor: nc.borderLight }]}>
+                    <View
+                      style={[
+                        styles.strengthBarFill,
+                        { width: `${strengthPercent}%`, backgroundColor: nc.todayAccent },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.strengthLabel, { color: nc.textMuted }]}>
+                    Force: {strengthLabel}
+                  </Text>
+                </View>
+              )}
+
+              {/* Confirmer mot de passe */}
+              <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
+                <View style={styles.inputIconContainer}>
+                  <FontAwesome name="lock" size={20} color={nc.textMuted} />
+                </View>
+                <TextInput
+                  ref={confirmRef}
+                  style={[styles.input, { color: nc.textStrong }]}
+                  placeholder="Confirmer le mot de passe"
+                  placeholderTextColor={nc.textLight}
+                  value={confirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text);
+                    if (error) setError("");
+                  }}
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="new-password"
+                  returnKeyType="done"
+                  onSubmitEditing={handleResetPassword}
+                  editable={!loading}
+                  accessibilityLabel="Confirmer le mot de passe"
+                  accessibilityHint="Retapez le mot de passe pour confirmer"
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={handleToggleConfirmPassword}
+                  disabled={loading}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showConfirmPassword ? "Masquer la confirmation" : "Afficher la confirmation"}
+                >
+                  <FontAwesome
+                    name={showConfirmPassword ? "eye" : "eye-slash"}
+                    size={20}
+                    color={nc.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {/* Error message */}
+          {!!error && (
+            <Text
+              style={[styles.errorText, { color: nc.error }]}
+              accessibilityRole="alert"
+              accessibilityLabel={error}
+            >
+              {error}
+            </Text>
+          )}
+
+          {/* Submit / Go to login button */}
           <TouchableOpacity
             style={[
               styles.mainButton,
               { backgroundColor: nc.todayAccent, shadowColor: nc.todayAccent },
               loading && styles.mainButtonDisabled,
             ]}
-            onPress={handleResetPassword}
+            onPress={success ? () => router.replace("/(auth)/login") : handleResetPassword}
             disabled={loading}
+            activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel="Réinitialiser le mot de passe"
+            accessibilityLabel={success ? "Se connecter" : "Réinitialiser le mot de passe"}
+            accessibilityHint={success ? "Retourne à l'écran de connexion" : "Confirme le nouveau mot de passe"}
+            accessibilityState={{ disabled: loading }}
           >
             {loading ? (
-              <ActivityIndicator color={nc.white} />
+              <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <>
-                <Text style={[styles.mainButtonText, { color: nc.white }]}>
-                  Réinitialiser le mot de passe
-                </Text>
-                <FontAwesome name="check" size={20} color={nc.white} />
-              </>
+              <Text style={styles.mainButtonText}>
+                {success ? "Se connecter" : "Réinitialiser"}
+              </Text>
             )}
           </TouchableOpacity>
 
-          {/* Retour connexion */}
-          <TouchableOpacity
-            style={styles.linkContainer}
-            onPress={() => router.replace("/(auth)/login")}
-            disabled={loading}
-            accessibilityRole="button"
-            accessibilityLabel="Retour à la connexion"
-          >
-            <FontAwesome name="arrow-left" size={14} color={nc.todayAccent} />
-            <Text style={[styles.linkText, { color: nc.todayAccent }]}>
-              Retour à la connexion
-            </Text>
-          </TouchableOpacity>
+          {/* Back to login */}
+          {!success && (
+            <View style={styles.switchContainer}>
+              <TouchableOpacity
+                onPress={() => router.replace("/(auth)/login")}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="link"
+                accessibilityLabel="Retour à la connexion"
+              >
+                <Text style={[styles.switchLink, { color: nc.todayAccent }]}>
+                  Retour à la connexion
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* Footer — same as forgot-password */}
+        <View style={styles.footer}>
+          <FontAwesome name="shield-halved" size={16} color={nc.textMuted} />
+          <Text style={[styles.footerText, { color: nc.textMuted }]}>
+            Vos données sont sécurisées et privées
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
+// Styles matching forgot-password.tsx visual language
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -436,11 +461,12 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   header: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 28,
   },
   iconContainer: {
     width: 100,
@@ -463,10 +489,25 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     textAlign: "center",
-    paddingHorizontal: 20,
+    lineHeight: 22,
+    paddingHorizontal: 12,
   },
   formContainer: {
-    gap: 16,
+    gap: 12,
+  },
+  successBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  successText: {
+    fontSize: 14,
+    fontWeight: "600",
+    flex: 1,
   },
   inputContainer: {
     flexDirection: "row",
@@ -504,14 +545,18 @@ const styles = StyleSheet.create({
   strengthLabel: {
     fontSize: 12,
   },
+  errorText: {
+    fontSize: 13,
+    fontWeight: "500",
+    marginLeft: 4,
+  },
   mainButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     height: 56,
     borderRadius: 12,
-    marginTop: 8,
-    gap: 12,
+    marginTop: 4,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -521,51 +566,33 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   mainButtonText: {
+    color: "#fff",
     fontSize: 18,
     fontWeight: "600",
   },
-  linkContainer: {
+  switchContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  switchLink: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  footer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    marginTop: 8,
+    marginTop: 40,
   },
-  linkText: {
-    fontSize: 15,
-    fontWeight: "600",
+  footerText: {
+    fontSize: 13,
   },
   verifyingText: {
     marginTop: 16,
     fontSize: 16,
-  },
-  errorContainer: {
-    alignItems: "center",
-    paddingHorizontal: 32,
-    gap: 16,
-  },
-  errorTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  errorMessage: {
-    fontSize: 15,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  backButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    gap: 10,
-    marginTop: 8,
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
   },
   skeletonContainer: {
     width: "100%",

@@ -19,14 +19,7 @@ export default function AuthLayout() {
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="login" />
       <Stack.Screen name="forgot-password" />
-      <Stack.Screen
-        name="reset-password"
-        options={{
-          headerShown: true,
-          title: "Nouveau mot de passe",
-          headerBackTitle: "Retour",
-        }}
-      />
+      <Stack.Screen name="reset-password" />
       <Stack.Screen
         name="privacy"
         options={{
