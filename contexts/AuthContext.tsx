@@ -5,6 +5,7 @@ import { cancelAllReminders } from "@/services/localNotificationService";
 import { registerPushToken, removePushTokens } from "@/services/pushTokenService";
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
+import { signOutGoogle } from "@/services/socialAuthService";
 import { clearPreferencesCache, clearPermissionsCache } from "@/services/userPreferencesCache";
 import {
   canUserAccessApp,
@@ -243,6 +244,7 @@ export function AuthProvider({
       // Supprimer les push tokens avant signOut (nécessite auth active)
       const uid = auth.currentUser?.uid;
       if (uid) await removePushTokens(uid).catch(() => {});
+      await signOutGoogle().catch(() => {});
       await firebaseSignOut(auth);
       if (isMountedRef.current) {
         dispatch({ type: "CLEAR_USER" });

@@ -73,6 +73,8 @@
         }
       ],
       "expo-secure-store",
+      "expo-apple-authentication",
+      "@react-native-google-signin/google-signin",
       [
         "expo-notifications",
         {

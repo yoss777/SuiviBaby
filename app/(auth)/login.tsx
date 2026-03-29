@@ -12,6 +12,11 @@ import {
   isBiometricEnabled,
   saveCredentials,
 } from "@/services/biometricAuthService";
+import {
+  isAppleSignInAvailable,
+  signInWithApple,
+  signInWithGoogle,
+} from "@/services/socialAuthService";
 import { createPatientUser } from "@/services/userService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -94,6 +99,8 @@ export default function LoginScreen() {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricType, setBiometricType] = useState("Biométrie");
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const [infoModal, setInfoModal] = useState({
     visible: false,
@@ -151,8 +158,43 @@ export default function LoginScreen() {
       } catch {
         setBiometricAvailable(false);
       }
+
+      // Check Apple Sign-In availability
+      isAppleSignInAvailable().then(setAppleAvailable);
     })();
   }, []);
+
+  // Social sign-in handlers
+  const handleGoogleSignIn = useCallback(async () => {
+    setSocialLoading(true);
+    try {
+      await signInWithGoogle();
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error: any) {
+      // User cancelled — silent
+      const code = error?.code || "";
+      if (code === "SIGN_IN_CANCELLED" || code === "12501" || code === "ERR_REQUEST_CANCELED") return;
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showModal("Erreur", "La connexion avec Google a échoué. Veuillez réessayer.");
+    } finally {
+      setSocialLoading(false);
+    }
+  }, [showModal]);
+
+  const handleAppleSignIn = useCallback(async () => {
+    setSocialLoading(true);
+    try {
+      await signInWithApple();
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error: any) {
+      const code = error?.code || "";
+      if (code === "ERR_REQUEST_CANCELED" || code === "ERR_CANCELED") return;
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showModal("Erreur", "La connexion avec Apple a échoué. Veuillez réessayer.");
+    } finally {
+      setSocialLoading(false);
+    }
+  }, [showModal]);
 
   // Détection caps lock (#10)
   const handlePasswordKeyPress = useCallback((e: any) => {
@@ -671,6 +713,57 @@ export default function LoginScreen() {
             </TouchableOpacity>
           )}
 
+          {/* Séparateur social */}
+          <View style={styles.dividerRow}>
+            <View style={[styles.dividerLine, { backgroundColor: nc.borderLight }]} />
+            <Text style={[styles.dividerText, { color: nc.textMuted }]}>ou</Text>
+            <View style={[styles.dividerLine, { backgroundColor: nc.borderLight }]} />
+          </View>
+
+          {/* Boutons de connexion sociale */}
+          <TouchableOpacity
+            style={[styles.socialButton, { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight }]}
+            onPress={handleGoogleSignIn}
+            disabled={loading || socialLoading}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Continuer avec Google"
+            accessibilityHint="Se connecter ou créer un compte avec Google"
+          >
+            {socialLoading ? (
+              <ActivityIndicator size="small" color={nc.textMuted} />
+            ) : (
+              <>
+                <FontAwesome name="google" size={20} color="#4285F4" />
+                <Text style={[styles.socialButtonText, { color: nc.textStrong }]}>
+                  Continuer avec Google
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {appleAvailable && (
+            <TouchableOpacity
+              style={[styles.socialButton, { backgroundColor: nc.textStrong }]}
+              onPress={handleAppleSignIn}
+              disabled={loading || socialLoading}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Continuer avec Apple"
+              accessibilityHint="Se connecter ou créer un compte avec Apple"
+            >
+              <FontAwesome name="apple" size={22} color={nc.background} />
+              <Text style={[styles.socialButtonText, { color: nc.background }]}>
+                Continuer avec Apple
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Note légale pour connexion sociale */}
+          <Text style={[styles.socialLegalText, { color: nc.textLight }]}>
+            En continuant, vous acceptez les conditions et la politique de confidentialité.
+          </Text>
+
           {/* Consentement aux conditions et politique de confidentialité */}
           {!isLogin && (
             <View
@@ -952,6 +1045,39 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 4,
     marginLeft: 4,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginVertical: 4,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  socialButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 56,
+    borderRadius: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  socialButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  socialLegalText: {
+    fontSize: 11,
+    textAlign: "center",
+    lineHeight: 16,
   },
   biometricButton: {
     flexDirection: "row",
