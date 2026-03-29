@@ -1,4 +1,4 @@
-package com.yoss7.samaye
+package com.tesfa.suivibaby
 
 import android.app.Application
 import android.content.res.Configuration

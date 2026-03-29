@@ -2,10 +2,10 @@
   "expo": {
     "name": "Suivi Baby",
     "slug": "Samaye",
-    "version": "1.0.15",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "samaye",
+    "scheme": "suivibaby",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -17,8 +17,8 @@
         "NSMicrophoneUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser le microphone pour les commandes vocales.",
         "NSSpeechRecognitionUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser la reconnaissance vocale pour les commandes vocales."
       },
-      "bundleIdentifier": "com.yoss7.samaye",
-      "buildNumber": "9"
+      "bundleIdentifier": "com.tesfa.suivibaby",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -30,11 +30,11 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-      "package": "com.yoss7.samaye",
+      "package": "com.tesfa.suivibaby",
       "compileSdkVersion": 35,
       "targetSdkVersion": 35,
       "minSdkVersion": 21,
-      "versionCode": 16
+      "versionCode": 1
     },
     "web": {
       "bundler": "metro",

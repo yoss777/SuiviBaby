@@ -1,4 +1,4 @@
-package com.yoss7.samaye
+package com.tesfa.suivibaby
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

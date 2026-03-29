@@ -46,7 +46,7 @@ async function main() {
     releaseNotes: "Smart Content System, Tips carousel, Milestone timeline",
     storeUrl: {
       ios: "https://apps.apple.com/app/samaye/id0000000000",
-      android: "https://play.google.com/store/apps/details?id=com.yoss7.samaye",
+      android: "https://play.google.com/store/apps/details?id=com.tesfa.suivibaby",
     },
   };
 
