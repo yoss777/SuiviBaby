@@ -4,7 +4,14 @@ import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { doc, onSnapshot } from "firebase/firestore";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -110,10 +117,18 @@ export default function SettingsScreen() {
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={{ marginRight: 16 }}
           accessibilityRole="button"
-          accessibilityLabel={activeChild ? `Accueil de ${activeChild.name}` : "Retour à l'accueil"}
+          accessibilityLabel={
+            activeChild
+              ? `Accueil de ${activeChild.name}`
+              : "Retour à l'accueil"
+          }
           accessibilityHint="Retourner à l'accueil"
         >
-          <FontAwesome name="house" size={20} color={Colors[colorScheme].tint} />
+          <FontAwesome
+            name="house"
+            size={20}
+            color={Colors[colorScheme].tint}
+          />
         </TouchableOpacity>
       ),
     });
@@ -288,7 +303,15 @@ export default function SettingsScreen() {
       //   },
       // },
     ],
-    [hiddenChildrenCount, hasHiddenChildren, router, themePreference, biometricAvailable, biometricEnabled, biometricLabel],
+    [
+      hiddenChildrenCount,
+      hasHiddenChildren,
+      router,
+      themePreference,
+      biometricAvailable,
+      biometricEnabled,
+      biometricLabel,
+    ],
   );
 
   const dataSettings: SettingItem[] = useMemo(
@@ -405,7 +428,10 @@ export default function SettingsScreen() {
           activeOpacity={isDisabled ? 1 : 0.7}
           disabled={isDisabled}
           accessibilityRole="button"
-          accessibilityLabel={item.accessibilityLabel || `${item.label}${item.value ? `, ${item.value}` : ''}`}
+          accessibilityLabel={
+            item.accessibilityLabel ||
+            `${item.label}${item.value ? `, ${item.value}` : ""}`
+          }
           accessibilityHint={item.accessibilityHint || item.description}
           accessibilityState={{ disabled: isDisabled }}
         >
