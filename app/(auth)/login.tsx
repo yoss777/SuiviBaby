@@ -175,7 +175,8 @@ export default function LoginScreen() {
       const code = error?.code || "";
       if (code === "SIGN_IN_CANCELLED" || code === "12501" || code === "ERR_REQUEST_CANCELED") return;
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showModal("Erreur", "La connexion avec Google a échoué. Veuillez réessayer.");
+      console.error("[LOGIN] Google sign-in error:", error?.code, error?.message, error);
+      showModal("Erreur", `La connexion avec Google a échoué: ${error?.message || error}`);
     } finally {
       setSocialLoading(false);
     }
