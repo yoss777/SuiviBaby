@@ -168,15 +168,14 @@ export default function LoginScreen() {
   const handleGoogleSignIn = useCallback(async () => {
     setSocialLoading(true);
     try {
-      await signInWithGoogle();
+      const user = await signInWithGoogle();
+      if (!user) return; // User cancelled
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
-      // User cancelled — silent
       const code = error?.code || "";
       if (code === "SIGN_IN_CANCELLED" || code === "12501" || code === "ERR_REQUEST_CANCELED") return;
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      console.error("[LOGIN] Google sign-in error:", error?.code, error?.message, error);
-      showModal("Erreur", `La connexion avec Google a échoué: ${error?.message || error}`);
+      showModal("Erreur", "La connexion avec Google a échoué. Veuillez réessayer.");
     } finally {
       setSocialLoading(false);
     }

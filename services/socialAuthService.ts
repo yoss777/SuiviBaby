@@ -66,6 +66,10 @@ export async function signInWithGoogle() {
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   const response = await GoogleSignin.signIn();
 
+  if (response.type === "cancelled") {
+    return null;
+  }
+
   const idToken = response.data?.idToken;
   if (!idToken) {
     throw new Error("Impossible de récupérer le token Google");

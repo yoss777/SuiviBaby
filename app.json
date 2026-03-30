@@ -18,7 +18,11 @@
         "NSSpeechRecognitionUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser la reconnaissance vocale pour les commandes vocales."
       },
       "bundleIdentifier": "com.tesfa.suivibaby",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "associatedDomains": [
+        "applinks:samaye-53723.firebaseapp.com",
+        "applinks:samaye-53723.web.app"
+      ]
     },
     "android": {
       "adaptiveIcon": {
