@@ -1,6 +1,7 @@
 import { SwipeGallery } from "@/components/moments";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
+import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -356,6 +357,20 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
   const hasSocialInfo = hasLikes || hasComments;
   const [imageError, setImageError] = useState(false);
 
+  // Pulse animation for notification badge
+  const badgePulse = useRef(new RNAnimated.Value(1)).current;
+  useEffect(() => {
+    if (!notificationType) return;
+    const loop = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(badgePulse, { toValue: 1.25, duration: 800, useNativeDriver: true }),
+        RNAnimated.timing(badgePulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [notificationType, badgePulse]);
+
   const handlePress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPhotoPress(photo);
@@ -391,16 +406,16 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
         />
       )}
 
-      {/* Notification badge */}
+      {/* Notification badge with pulse */}
       {notificationType && (
-        <View style={[styles.notifBadge, { backgroundColor: NOTIF_COLOR }]}>
+        <RNAnimated.View style={[styles.notifBadge, { backgroundColor: NOTIF_COLOR, transform: [{ scale: badgePulse }] }]}>
           <FontAwesome6
             name={NOTIF_ICON[notificationType].name}
             size={8}
             color="#fff"
             solid={NOTIF_ICON[notificationType].solid}
           />
-        </View>
+        </RNAnimated.View>
       )}
 
       {/* Social overlay */}
@@ -432,7 +447,7 @@ export default function GalleryScreen() {
   const { activeChild } = useBaby();
   const { userName, firebaseUser } = useAuth();
   const { showToast } = useToast();
-  const { newEventIds, newEventTypes, markMomentsAsSeen, markEventAsSeen } = useMomentsNotification();
+  const { newEventIds, newEventTypes, markEventAsSeen, markMomentsAsSeen } = useMomentsNotification();
   const { openSheet, closeSheet, isOpen } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -496,26 +511,41 @@ export default function GalleryScreen() {
     }, [colorScheme, setHeaderLeft]),
   );
 
-  // Header right - add button
+  // Header right - mark all read + add button
+  const hasNotifications = newEventIds.size > 0;
+
+  const handleMarkAllRead = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    markMomentsAsSeen();
+  }, [markMomentsAsSeen]);
+
   useFocusEffect(
     useCallback(() => {
-      if (!canManageContent) {
-        setHeaderRight(null, headerOwnerId.current);
-        return () => {
-          setHeaderRight(null, headerOwnerId.current);
-        };
-      }
       const headerButtons = (
         <View style={styles.headerActions}>
-          <Pressable
-            onPress={handleAddPhoto}
-            style={styles.headerButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityRole="button"
-            accessibilityLabel="Ajouter un souvenir photo"
-          >
-            <Ionicons name="add" size={24} color={nc.todayAccent} />
-          </Pressable>
+          {hasNotifications && (
+            <Pressable
+              onPress={handleMarkAllRead}
+              style={styles.headerButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Tout marquer comme lu"
+              accessibilityHint="Supprime tous les badges de notification"
+            >
+              <Ionicons name="checkmark-done" size={22} color={Colors[colorScheme].tint} />
+            </Pressable>
+          )}
+          {canManageContent && (
+            <Pressable
+              onPress={handleAddPhoto}
+              style={styles.headerButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Ajouter un souvenir photo"
+            >
+              <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+            </Pressable>
+          )}
         </View>
       );
 
@@ -524,7 +554,7 @@ export default function GalleryScreen() {
       return () => {
         setHeaderRight(null, headerOwnerId.current);
       };
-    }, [canManageContent, colorScheme, setHeaderRight, handleAddPhoto]),
+    }, [canManageContent, hasNotifications, colorScheme, setHeaderRight, handleAddPhoto, handleMarkAllRead]),
   );
 
   // Handle hardware back button
@@ -547,14 +577,8 @@ export default function GalleryScreen() {
     }, [closeSheet, isOpen]),
   );
 
-  // Marquer les moments comme vus quand on quitte la galerie
-  useFocusEffect(
-    useCallback(() => {
-      return () => {
-        markMomentsAsSeen();
-      };
-    }, [markMomentsAsSeen]),
-  );
+  // Ne PAS appeler markMomentsAsSeen à la sortie — les badges restent
+  // jusqu'à ce que l'utilisateur tape sur chaque photo (markEventAsSeen)
 
   // Extract photos from events
   const allPhotoMilestones = useMemo(() => {

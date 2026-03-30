@@ -24,6 +24,7 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import {
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signInWithEmailAndPassword,
 } from "firebase/auth";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -328,13 +329,16 @@ export default function LoginScreen() {
           userName.trim() || defaultUserName,
         );
 
+        // Envoyer l'email de vérification
+        sendEmailVerification(userCredential.user).catch(() => {});
+
         // Sauvegarder l'email pour pré-remplissage
         AsyncStorage.setItem(LAST_EMAIL_KEY, email.trim()).catch(() => {});
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         resetAllFields();
-        // Biométrie proposée au premier login, pas à l'inscription
-        // (l'écran est démonté par la navigation automatique avant que
-        // l'user puisse répondre au prompt)
+
+        // Rediriger vers l'écran de vérification email
+        router.replace("/(auth)/verify-email");
       }
     } catch (error: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

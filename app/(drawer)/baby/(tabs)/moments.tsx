@@ -22,6 +22,7 @@ import { useMomentsActions } from "@/hooks/useMomentsActions";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect } from "@react-navigation/native";
+import * as Haptics from "expo-haptics";
 import { useCallback, useRef } from "react";
 import {
   Dimensions,
@@ -114,23 +115,21 @@ export default function MomentsScreen() {
     }, [refocus]),
   );
 
-  // Marquer les moments comme vus quand on entre dans l'onglet
-  useFocusEffect(
-    useCallback(() => {
-      markMomentsAsSeen();
-    }, [markMomentsAsSeen]),
-  );
+  // Ne PAS appeler markMomentsAsSeen ici — les badges restent visibles
+  // jusqu'à ce que l'utilisateur tape sur chaque photo (markEventAsSeen)
+  // ou ouvre la galerie complète (gallery.tsx marque à la sortie)
 
   // Header setup
+  const hasNotifications = newEventIds.size > 0;
+
+  const handleMarkAllRead = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    markMomentsAsSeen();
+  }, [markMomentsAsSeen]);
+
   useFocusEffect(
     useCallback(() => {
-      if (!canManageContent) {
-        setHeaderRight(null, headerOwnerId.current);
-        return () => {
-          setHeaderRight(null, headerOwnerId.current);
-        };
-      }
-      const addButton = (
+      const headerButtons = (
         <View
           style={{
             flexDirection: "row",
@@ -139,23 +138,37 @@ export default function MomentsScreen() {
             gap: 0,
           }}
         >
-          <Pressable
-            onPress={handleAddMilestone}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.headerButton}
-            accessibilityRole="button"
-            accessibilityLabel="Ajouter un souvenir"
-          >
-            <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
-          </Pressable>
+          {hasNotifications && (
+            <Pressable
+              onPress={handleMarkAllRead}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={styles.headerButton}
+              accessibilityRole="button"
+              accessibilityLabel="Tout marquer comme lu"
+              accessibilityHint="Supprime tous les badges de notification"
+            >
+              <Ionicons name="checkmark-done" size={22} color={Colors[colorScheme].tint} />
+            </Pressable>
+          )}
+          {canManageContent && (
+            <Pressable
+              onPress={handleAddMilestone}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={styles.headerButton}
+              accessibilityRole="button"
+              accessibilityLabel="Ajouter un souvenir"
+            >
+              <Ionicons name="add" size={24} color={Colors[colorScheme].tint} />
+            </Pressable>
+          )}
         </View>
       );
-      setHeaderRight(addButton, headerOwnerId.current);
+      setHeaderRight(headerButtons, headerOwnerId.current);
 
       return () => {
         setHeaderRight(null, headerOwnerId.current);
       };
-    }, [canManageContent, colorScheme, setHeaderRight, handleAddMilestone]),
+    }, [canManageContent, hasNotifications, colorScheme, setHeaderRight, handleAddMilestone, handleMarkAllRead]),
   );
 
   // Bound photo press handler
