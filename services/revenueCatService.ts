@@ -25,27 +25,35 @@ export const ENTITLEMENT_FAMILY = "family";
 // ============================================
 
 let isInitialized = false;
+let initPromise: Promise<void> | null = null;
 
 /**
  * Initialise le SDK RevenuCat. À appeler une seule fois au démarrage.
+ * Les appels suivants retournent la même promesse (singleton).
  */
-export async function initRevenueCat(userId?: string): Promise<void> {
-  if (isInitialized) return;
+export function initRevenueCat(userId?: string): Promise<void> {
+  if (isInitialized) return Promise.resolve();
+  if (initPromise) return initPromise;
 
-  try {
-    if (__DEV__) {
-      Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+  initPromise = (async () => {
+    try {
+      if (__DEV__) {
+        Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+      }
+
+      Purchases.configure({
+        apiKey: RC_API_KEY,
+        appUserID: userId ?? undefined,
+      });
+
+      isInitialized = true;
+    } catch (error) {
+      console.error("[RevenueCat] Init failed:", error);
+      initPromise = null; // Allow retry on failure
     }
+  })();
 
-    Purchases.configure({
-      apiKey: RC_API_KEY,
-      appUserID: userId ?? undefined,
-    });
-
-    isInitialized = true;
-  } catch (error) {
-    console.error("[RevenueCat] Init failed:", error);
-  }
+  return initPromise;
 }
 
 /**
@@ -141,6 +149,8 @@ export async function getOfferings(): Promise<{
   family: PurchasesOffering | null;
 }> {
   try {
+    // S'assurer que le SDK est initialisé avant d'appeler
+    await initRevenueCat();
     const offerings = await Purchases.getOfferings();
     return {
       default: offerings.current,
@@ -159,6 +169,7 @@ export async function purchasePackage(
   pkg: PurchasesPackage
 ): Promise<{ success: boolean; customerInfo: CustomerInfo | null }> {
   try {
+    await initRevenueCat();
     const { customerInfo } = await Purchases.purchasePackage(pkg);
     return { success: true, customerInfo };
   } catch (error: any) {
@@ -176,6 +187,7 @@ export async function purchasePackage(
  */
 export async function restorePurchases(): Promise<CustomerInfo | null> {
   try {
+    await initRevenueCat();
     return await Purchases.restorePurchases();
   } catch (error) {
     console.error("[RevenueCat] Restore failed:", error);

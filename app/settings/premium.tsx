@@ -13,7 +13,7 @@ import { InfoModal } from "@/components/ui/InfoModal";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import type { PurchasesPackage } from "react-native-purchases";
 import {
@@ -25,7 +25,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type BillingCycle = "monthly" | "annual";
+type BillingCycle = "monthly" | "annual" | "lifetime";
 
 interface PlanConfig {
   tier: PremiumTier;
@@ -113,8 +113,8 @@ const FAQ_ITEMS = [
 export default function PremiumScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const router = useRouter();
-  const { tier: currentTier, isPremium, isGrandfathered } = usePremium();
+  const { tier: currentTier, isGrandfathered } = usePremium();
+  const [selectedPlan, setSelectedPlan] = useState<"premium" | "family">("premium");
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("annual");
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [rcPackages, setRcPackages] = useState<Record<string, PurchasesPackage>>({});
@@ -136,6 +136,7 @@ export default function PremiumScreen() {
         for (const pkg of offerings.family.availablePackages) {
           if (pkg.packageType === "MONTHLY") pkgs["family_monthly"] = pkg;
           else if (pkg.packageType === "ANNUAL") pkgs["family_annual"] = pkg;
+          else if (pkg.packageType === "LIFETIME") pkgs["family_lifetime"] = pkg;
         }
       }
       setRcPackages(pkgs);
@@ -147,8 +148,11 @@ export default function PremiumScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       let pkgKey = "";
-      if (plan.tier === "premium") pkgKey = billingCycle === "monthly" ? "premium_monthly" : "premium_annual";
-      else if (plan.tier === "family") pkgKey = billingCycle === "monthly" ? "family_monthly" : "family_annual";
+      if (plan.tier === "premium") {
+        pkgKey = billingCycle === "lifetime" ? "lifetime" : billingCycle === "monthly" ? "premium_monthly" : "premium_annual";
+      } else if (plan.tier === "family") {
+        pkgKey = billingCycle === "lifetime" ? "family_lifetime" : billingCycle === "monthly" ? "family_monthly" : "family_annual";
+      }
       const pkg = rcPackages[pkgKey];
 
       if (!pkg) {
@@ -208,6 +212,7 @@ export default function PremiumScreen() {
       style={[styles.container, { backgroundColor: nc.background }]}
       edges={["bottom"]}
     >
+      <Stack.Screen options={{ title: "SuiviBaby+", headerBackTitle: "Retour" }} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -238,60 +243,81 @@ export default function PremiumScreen() {
           </View>
         )}
 
-        {/* Billing cycle toggle */}
+        {/* Plan toggle : Premium / Famille */}
         <View
           style={[styles.cycleToggle, { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight }]}
         >
           <TouchableOpacity
             style={[
               styles.cycleButton,
-              billingCycle === "monthly" && [styles.cycleButtonActive, { backgroundColor: nc.todayAccent }],
+              selectedPlan === "premium" && [styles.cycleButtonActive, { backgroundColor: nc.todayAccent }],
             ]}
-            onPress={() => setBillingCycle("monthly")}
+            onPress={() => setSelectedPlan("premium")}
           >
             <Text
-              style={[
-                styles.cycleButtonText,
-                { color: billingCycle === "monthly" ? nc.white : nc.textMuted },
-              ]}
+              style={[styles.cycleButtonText, { color: selectedPlan === "premium" ? nc.white : nc.textMuted }]}
             >
-              Mensuel
+              Premium
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.cycleButton,
-              billingCycle === "annual" && [styles.cycleButtonActive, { backgroundColor: nc.todayAccent }],
+              selectedPlan === "family" && [styles.cycleButtonActive, { backgroundColor: nc.todayAccent }],
             ]}
-            onPress={() => setBillingCycle("annual")}
+            onPress={() => setSelectedPlan("family")}
           >
             <Text
-              style={[
-                styles.cycleButtonText,
-                { color: billingCycle === "annual" ? nc.white : nc.textMuted },
-              ]}
+              style={[styles.cycleButtonText, { color: selectedPlan === "family" ? nc.white : nc.textMuted }]}
             >
-              Annuel
+              Famille
             </Text>
-            <View style={[styles.savingsBadge, { backgroundColor: "#22c55e" }]}>
-              <Text style={styles.savingsBadgeText}>-37%</Text>
-            </View>
           </TouchableOpacity>
         </View>
 
-        {/* Plan cards */}
-        {PLANS.map((plan) => {
+        {/* Plan Gratuit */}
+        {(() => {
+          const freePlan = PLANS[0];
+          const isCurrentFree = currentTier === "free";
+          return (
+            <View
+              style={[
+                styles.planCard,
+                { backgroundColor: nc.backgroundCard, borderColor: nc.border },
+                isCurrentFree && { borderColor: nc.success, borderWidth: 1.5 },
+              ]}
+            >
+              <View style={styles.radioRow}>
+                <Text style={[styles.planName, { color: nc.textStrong }]}>Gratuit</Text>
+                {isCurrentFree && (
+                  <View style={[styles.currentBadgeSmall, { backgroundColor: nc.success + "20" }]}>
+                    <Text style={[styles.currentBadgeSmallText, { color: nc.success }]}>Plan actuel</Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.featuresList}>
+                {freePlan.features.map((feature, i) => (
+                  <View key={i} style={styles.featureRow}>
+                    <Ionicons name="checkmark-circle" size={18} color={nc.textMuted} />
+                    <Text style={[styles.featureText, { color: nc.textNormal }]}>{feature}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
+
+        {/* Plan sélectionné (Premium ou Famille) */}
+        {(() => {
+          const plan = selectedPlan === "premium" ? PLANS[1] : PLANS[2];
           const isCurrentPlan = plan.tier === currentTier;
-          const price = billingCycle === "monthly" ? plan.monthlyPrice : plan.annualPrice;
-          const perMonth = billingCycle === "annual" ? plan.annualMonthly : plan.monthlyPrice;
+          const lifetimePrice = selectedPlan === "premium" ? "79,99€" : "119,99€";
 
           return (
             <View
-              key={plan.tier}
               style={[
                 styles.planCard,
-                { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight },
-                plan.highlighted && { borderColor: nc.todayAccent, borderWidth: 2 },
+                { backgroundColor: nc.backgroundCard, borderColor: nc.todayAccent, borderWidth: 2 },
               ]}
             >
               {plan.badge && (
@@ -300,64 +326,105 @@ export default function PremiumScreen() {
                 </View>
               )}
 
-              <Text style={[styles.planName, { color: nc.textStrong }]}>{plan.name}</Text>
-
-              <View style={styles.priceRow}>
-                <Text style={[styles.price, { color: nc.textStrong }]}>{price}</Text>
-                {plan.tier !== "free" && (
-                  <Text style={[styles.pricePeriod, { color: nc.textMuted }]}>
-                    /{billingCycle === "monthly" ? "mois" : "an"}
-                  </Text>
+              <View style={styles.radioRow}>
+                <Text style={[styles.planName, { color: nc.textStrong }]}>{plan.name}</Text>
+                {isCurrentPlan && (
+                  <View style={[styles.currentBadgeSmall, { backgroundColor: nc.todayAccent + "20" }]}>
+                    <Text style={[styles.currentBadgeSmallText, { color: nc.todayAccent }]}>Plan actuel</Text>
+                  </View>
                 )}
               </View>
 
-              {billingCycle === "annual" && plan.tier !== "free" && (
-                <Text style={[styles.perMonthText, { color: nc.textLight }]}>
-                  soit {perMonth}/mois
-                </Text>
-              )}
-
+              {/* Features */}
               <View style={styles.featuresList}>
                 {plan.features.map((feature, i) => (
                   <View key={i} style={styles.featureRow}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color={plan.tier === "free" ? nc.textMuted : nc.todayAccent}
-                    />
-                    <Text style={[styles.featureText, { color: nc.textNormal }]}>
-                      {feature}
-                    </Text>
+                    <Ionicons name="checkmark-circle" size={18} color={nc.todayAccent} />
+                    <Text style={[styles.featureText, { color: nc.textNormal }]}>{feature}</Text>
                   </View>
                 ))}
               </View>
 
-              {plan.tier === "free" ? (
-                isCurrentPlan && (
-                  <View style={[styles.currentBadge, { borderColor: nc.textMuted }]}>
-                    <Text style={[styles.currentBadgeText, { color: nc.textMuted }]}>
-                      Plan actuel
+              {/* Options de facturation */}
+              <View style={styles.billingOptions}>
+                {([
+                  { key: "monthly" as BillingCycle, label: "Mensuel", price: plan.monthlyPrice, sub: null },
+                  { key: "annual" as BillingCycle, label: "Annuel", price: plan.annualPrice, sub: `soit ${plan.annualMonthly}/mois`, badge: "-37%" },
+                  { key: "lifetime" as BillingCycle, label: "A vie", price: lifetimePrice, sub: "paiement unique" },
+                ]).map((opt) => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[
+                      styles.billingOption,
+                      { borderColor: billingCycle === opt.key ? nc.todayAccent : nc.border },
+                      billingCycle === opt.key && { backgroundColor: nc.todayAccent + "10" },
+                    ]}
+                    onPress={() => setBillingCycle(opt.key)}
+                  >
+                    <View style={[styles.radioOuter, { borderColor: billingCycle === opt.key ? nc.todayAccent : nc.textMuted }]}>
+                      {billingCycle === opt.key && <View style={[styles.radioInner, { backgroundColor: nc.todayAccent }]} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={[styles.billingLabel, { color: nc.textStrong }]}>{opt.label}</Text>
+                        {opt.badge && (
+                          <View style={[styles.savingsBadge, { backgroundColor: "#22c55e" }]}>
+                            <Text style={styles.savingsBadgeText}>{opt.badge}</Text>
+                          </View>
+                        )}
+                      </View>
+                      {opt.sub && <Text style={[styles.billingSub, { color: nc.textLight }]}>{opt.sub}</Text>}
+                    </View>
+                    <Text style={[styles.billingPrice, { color: nc.textStrong }]}>{opt.price}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Bouton d'action */}
+              {(() => {
+                // Logique du label basée sur le tier réel vs le plan affiché
+                const userIsPaying = currentTier === "premium" || currentTier === "family";
+                const exactSamePlan = plan.tier === currentTier;
+
+                let buttonLabel: string;
+                let disabled = false;
+
+                if (billingCycle === "lifetime") {
+                  if (exactSamePlan) {
+                    buttonLabel = "Deja abonne";
+                    disabled = true;
+                  } else {
+                    buttonLabel = "Acheter a vie";
+                  }
+                } else if (exactSamePlan) {
+                  buttonLabel = "Changer de cycle";
+                } else if (!userIsPaying) {
+                  // User free → premier abonnement
+                  buttonLabel = "Commencer";
+                } else {
+                  // User payant → changement de tier
+                  buttonLabel = plan.tier === "family" ? "Passer a Famille" : "Passer a Premium";
+                }
+
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.subscribeButton,
+                      { backgroundColor: nc.todayAccent },
+                      (disabled || purchasing) && { opacity: 0.5 },
+                    ]}
+                    onPress={() => handleSubscribe(plan)}
+                    disabled={disabled || purchasing}
+                  >
+                    <Text style={[styles.subscribeButtonText, { color: nc.white }]}>
+                      {buttonLabel}
                     </Text>
-                  </View>
-                )
-              ) : (
-                <TouchableOpacity
-                  style={[
-                    styles.subscribeButton,
-                    { backgroundColor: plan.highlighted ? nc.todayAccent : nc.textStrong },
-                    isCurrentPlan && { opacity: 0.5 },
-                  ]}
-                  onPress={() => handleSubscribe(plan)}
-                  disabled={isCurrentPlan || purchasing}
-                >
-                  <Text style={[styles.subscribeButtonText, { color: nc.white }]}>
-                    {isCurrentPlan ? "Plan actuel" : "Essai gratuit 14 jours"}
-                  </Text>
-                </TouchableOpacity>
-              )}
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
           );
-        })}
+        })()}
 
         {/* Restore purchases */}
         <TouchableOpacity style={styles.restoreButton} onPress={handleRestore}>
@@ -479,11 +546,41 @@ const styles = StyleSheet.create({
   featuresList: { marginTop: 12, gap: 8 },
   featureRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   featureText: { fontSize: 14, flex: 1 },
+  radioRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
   subscribeButton: {
     marginTop: 16,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
+  },
+  mainSubscribeButton: {
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: "center",
+    marginBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
   },
   subscribeButtonText: { fontSize: 16, fontWeight: "600" },
   currentBadge: {
@@ -494,6 +591,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   currentBadgeText: { fontSize: 14, fontWeight: "500" },
+  currentBadgeSmall: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginLeft: "auto",
+  },
+  currentBadgeSmallText: { fontSize: 12, fontWeight: "600" },
+  billingOptions: { gap: 10, marginTop: 16 },
+  billingOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  billingLabel: { fontSize: 15, fontWeight: "600" },
+  billingSub: { fontSize: 12, marginTop: 2 },
+  billingPrice: { fontSize: 16, fontWeight: "700" },
   restoreButton: { alignItems: "center", paddingVertical: 16 },
   restoreText: { fontSize: 14, fontWeight: "500" },
   faqSection: { marginTop: 8 },
