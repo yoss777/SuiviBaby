@@ -1035,10 +1035,19 @@ exports.revenueCatWebhook = onRequest(
     }
 
     // Mettre à jour Firestore
+    // Déterminer le billing period depuis le product ID
+    const productId = event.product_id || "";
+    let billingPeriod = "unknown";
+    if (productId.includes("lifetime")) billingPeriod = "lifetime";
+    else if (productId.includes("annual")) billingPeriod = "annual";
+    else if (productId.includes("monthly")) billingPeriod = "monthly";
+
     const subscriptionData = {
       tier,
       status,
+      billingPeriod,
       ...(expiresAt && { expiresAt }),
+      ...(productId && { productId }),
       updatedAt: admin.firestore.Timestamp.now(),
       lastEvent: eventType,
     };

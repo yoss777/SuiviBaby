@@ -56,6 +56,7 @@ export type SubscriptionStatus =
 interface SubscriptionData {
   tier: PremiumTier;
   status: SubscriptionStatus;
+  billingPeriod?: BillingPeriod;
   expiresAt?: string;
   grandfathered?: boolean;
   startDate?: string;
@@ -212,6 +213,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
             const data = snap.data() as SubscriptionData;
             setTier(data.tier ?? "free");
             setStatus(data.status ?? "active");
+            setBillingPeriod(data.billingPeriod ?? "unknown");
             setGrandfathered(data.grandfathered ?? false);
             saveCache({ tier: data.tier ?? "free", status: data.status ?? "active", grandfathered: data.grandfathered ?? false });
           }
@@ -244,6 +246,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
         if (snap.exists()) {
           const data = snap.data() as SubscriptionData;
           if (data.grandfathered) setGrandfathered(true);
+          if (data.billingPeriod) setBillingPeriod(data.billingPeriod);
         }
       },
       () => {}

@@ -352,14 +352,19 @@ export default function PremiumScreen() {
                 accessibilityLabel={`Plan ${labels[key]}`}
                 accessibilityState={{ selected: selectedPlan === key }}
               >
-                <Text
-                  style={[
-                    styles.cycleButtonText,
-                    { color: selectedPlan === key ? nc.white : nc.textMuted },
-                  ]}
-                >
-                  {labels[key]}
-                </Text>
+                <View style={styles.tabLabelRow}>
+                  <Text
+                    style={[
+                      styles.cycleButtonText,
+                      { color: selectedPlan === key ? nc.white : nc.textMuted },
+                    ]}
+                  >
+                    {labels[key]}
+                  </Text>
+                  {key === currentTier && (
+                    <View style={[styles.activeTabDot, { backgroundColor: selectedPlan === key ? nc.white : nc.success }]} />
+                  )}
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -899,6 +904,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cycleButtonText: { fontSize: 14, fontWeight: "700" },
+  tabLabelRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  activeTabDot: { width: 6, height: 6, borderRadius: 3 },
   savingsBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   savingsBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   planCard: {

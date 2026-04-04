@@ -13,8 +13,24 @@ import Purchases, {
 // CONFIG
 // ============================================
 
-// Clé publique RevenuCat (Test Store — remplacer par les clés prod iOS/Android)
-const RC_API_KEY = "test_BHbHbhlPMXdgMEKwlhISZchIPkO";
+// Clés RevenuCat par plateforme
+// TODO: remplacer par les vraies clés quand les apps seront créées dans App Store Connect / Google Play Console
+const RC_API_KEYS: Record<string, string> = {
+  ios: "appl_PLACEHOLDER", // Remplacer par la clé iOS RevenuCat
+  android: "goog_PLACEHOLDER", // Remplacer par la clé Android RevenuCat
+  test: "test_BHbHbhlPMXdgMEKwlhISZchIPkO", // Test Store (simulateur uniquement)
+};
+
+function getApiKey(): string | null {
+  if (__DEV__) {
+    // En dev sur simulateur, utiliser la clé test
+    return RC_API_KEYS.test;
+  }
+  const key = Platform.OS === "ios" ? RC_API_KEYS.ios : RC_API_KEYS.android;
+  // Ne pas initialiser si la clé est un placeholder
+  if (key.includes("PLACEHOLDER")) return null;
+  return key;
+}
 
 // Entitlement IDs (doivent matcher ceux configurés dans RevenuCat dashboard)
 export const ENTITLEMENT_PREMIUM = "premium";
@@ -37,19 +53,26 @@ export function initRevenueCat(userId?: string): Promise<void> {
 
   initPromise = (async () => {
     try {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        console.warn("[RevenueCat] No valid API key for this platform — skipping init");
+        isInitialized = false;
+        return;
+      }
+
       if (__DEV__) {
         Purchases.setLogLevel(LOG_LEVEL.DEBUG);
       }
 
       Purchases.configure({
-        apiKey: RC_API_KEY,
+        apiKey,
         appUserID: userId ?? undefined,
       });
 
       isInitialized = true;
     } catch (error) {
       console.error("[RevenueCat] Init failed:", error);
-      initPromise = null; // Allow retry on failure
+      initPromise = null;
     }
   })();
 
@@ -60,6 +83,7 @@ export function initRevenueCat(userId?: string): Promise<void> {
  * Identifie l'utilisateur après login (merge anonymous → authenticated).
  */
 export async function loginRevenueCat(userId: string): Promise<CustomerInfo | null> {
+  if (!isInitialized) return null;
   try {
     const { customerInfo } = await Purchases.logIn(userId);
     return customerInfo;
@@ -73,6 +97,7 @@ export async function loginRevenueCat(userId: string): Promise<CustomerInfo | nu
  * Déconnecte l'utilisateur (retour à anonymous).
  */
 export async function logoutRevenueCat(): Promise<void> {
+  if (!isInitialized) return;
   try {
     await Purchases.logOut();
   } catch (error) {
@@ -88,6 +113,7 @@ export async function logoutRevenueCat(): Promise<void> {
  * Récupère les infos d'abonnement actuelles.
  */
 export async function getCustomerInfo(): Promise<CustomerInfo | null> {
+  if (!isInitialized) return null;
   try {
     return await Purchases.getCustomerInfo();
   } catch (error) {
@@ -225,6 +251,7 @@ export async function restorePurchases(): Promise<CustomerInfo | null> {
 export function addCustomerInfoListener(
   callback: (info: CustomerInfo) => void
 ): () => void {
+  if (!isInitialized) return () => {};
   Purchases.addCustomerInfoUpdateListener(callback);
   return () => {
     Purchases.removeCustomerInfoUpdateListener(callback);
