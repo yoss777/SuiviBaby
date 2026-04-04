@@ -469,6 +469,8 @@ PODS:
   - libwebp/webp (1.5.0):
     - libwebp/sharpyuv
   - PromisesObjC (2.4.0)
+  - PurchasesHybridCommon (17.54.0):
+    - RevenueCat (= 5.67.0)
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -2267,6 +2269,7 @@ PODS:
     - React-logger (= 0.79.5)
     - React-perflogger (= 0.79.5)
     - React-utils (= 0.79.5)
+  - RevenueCat (5.67.0)
   - RNCAsyncStorage (2.1.2):
     - DoubleConversion
     - glog
@@ -2439,6 +2442,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - RNPurchases (9.15.1):
+    - PurchasesHybridCommon (= 17.54.0)
+    - React-Core
   - RNReanimated (3.17.5):
     - DoubleConversion
     - glog
@@ -2831,6 +2837,7 @@ DEPENDENCIES:
   - "RNFBAppCheck (from `../node_modules/@react-native-firebase/app-check`)"
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
   - "RNGoogleSignin (from `../node_modules/@react-native-google-signin/google-signin`)"
+  - RNPurchases (from `../node_modules/react-native-purchases`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - "RNSentry (from `../node_modules/@sentry/react-native`)"
@@ -2855,6 +2862,8 @@ SPEC REPOS:
     - libdav1d
     - libwebp
     - PromisesObjC
+    - PurchasesHybridCommon
+    - RevenueCat
     - SDWebImage
     - SDWebImageAVIFCoder
     - SDWebImageSVGCoder
@@ -3105,6 +3114,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-gesture-handler"
   RNGoogleSignin:
     :path: "../node_modules/@react-native-google-signin/google-signin"
+  RNPurchases:
+    :path: "../node_modules/react-native-purchases"
   RNReanimated:
     :path: "../node_modules/react-native-reanimated"
   RNScreens:
@@ -3179,6 +3190,7 @@ SPEC CHECKSUMS:
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
+  PurchasesHybridCommon: 6a8f4e30952167d2afaccf17ebcf8f8107060e4c
   RCT-Folly: e78785aa9ba2ed998ea4151e314036f6c49e6d82
   RCTDeprecation: 5f638f65935e273753b1f31a365db6a8d6dc53b5
   RCTRequired: 8b46a520ea9071e2bc47d474aa9ca31b4a935bd8
@@ -3246,6 +3258,7 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: f3e842e6cb5a825b6918a74a38402ba1409411f8
   ReactCodegen: 6cb6e0d0b52471abc883541c76589d1c367c64c7
   ReactCommon: 1ab5451fc5da87c4cc4c3046e19a8054624ca763
+  RevenueCat: f0d05079b59c33c645293bbc1fa78469ea7fcae7
   RNCAsyncStorage: 39c42c1e478e1f5166d1db52b5055e090e85ad66
   RNCPicker: e43c792aa6a990f94a252aa73556da2dfa9a5c05
   RNDateTimePicker: a4ad049fdd568755003c479beac3bdea742ac4d0
@@ -3253,6 +3266,7 @@ SPEC CHECKSUMS:
   RNFBAppCheck: 719f607c2a4416186a80402e1fa17ff40c3d980c
   RNGestureHandler: 7d0931a61d7ba0259f32db0ba7d0963c3ed15d2b
   RNGoogleSignin: fa5e389a0dea463d2d7a5b697dbfeeb805a703b8
+  RNPurchases: bd9310d7ae9f27f77bc636c562af4bf911d0dccd
   RNReanimated: 2313402fe27fecb7237619e9c6fcee3177f08a65
   RNScreens: 482e9707f9826230810c92e765751af53826d509
   RNSentry: 3bc708566b3390947b6ecd785645398cd1a0049e

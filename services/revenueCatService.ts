@@ -137,6 +137,25 @@ export function getStatusFromCustomerInfo(
   return "active";
 }
 
+/**
+ * Détermine le billing period (monthly, annual, lifetime) depuis CustomerInfo.
+ */
+export function getBillingPeriodFromCustomerInfo(
+  customerInfo: CustomerInfo
+): "monthly" | "annual" | "lifetime" | "unknown" {
+  const entitlement =
+    customerInfo.entitlements.active[ENTITLEMENT_FAMILY] ??
+    customerInfo.entitlements.active[ENTITLEMENT_PREMIUM];
+
+  if (!entitlement) return "unknown";
+
+  const productId = entitlement.productIdentifier;
+  if (productId.includes("lifetime")) return "lifetime";
+  if (productId.includes("annual")) return "annual";
+  if (productId.includes("monthly")) return "monthly";
+  return "unknown";
+}
+
 // ============================================
 // OFFERINGS & PURCHASES
 // ============================================

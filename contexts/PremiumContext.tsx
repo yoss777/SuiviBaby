@@ -22,6 +22,7 @@ import {
   logoutRevenueCat,
   getTierFromCustomerInfo,
   getStatusFromCustomerInfo,
+  getBillingPeriodFromCustomerInfo,
   addCustomerInfoListener,
 } from "@/services/revenueCatService";
 
@@ -60,9 +61,12 @@ interface SubscriptionData {
   startDate?: string;
 }
 
+export type BillingPeriod = "monthly" | "annual" | "lifetime" | "unknown";
+
 interface PremiumContextValue {
   tier: PremiumTier;
   status: SubscriptionStatus;
+  billingPeriod: BillingPeriod;
   isPremium: boolean;
   isFamily: boolean;
   isGrandfathered: boolean;
@@ -71,6 +75,7 @@ interface PremiumContextValue {
   checkFeatureAccess: (feature: PremiumFeature) => boolean;
   /** Mode dev uniquement — toggle pour simuler Premium */
   devOverrideTier: (tier: PremiumTier | null) => void;
+  devOverrideBilling: (period: BillingPeriod | null) => void;
   isLoading: boolean;
 }
 
@@ -145,8 +150,10 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
   const [tier, setTier] = useState<PremiumTier>("free");
   const [status, setStatus] = useState<SubscriptionStatus>("active");
   const [grandfathered, setGrandfathered] = useState(false);
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("unknown");
   const [isLoading, setIsLoading] = useState(true);
   const [devOverride, setDevOverride] = useState<PremiumTier | null>(null);
+  const [devBillingOverride, setDevBillingOverride] = useState<BillingPeriod | null>(null);
 
   // Step 1: Load cache on mount (instant, no network)
   useEffect(() => {
@@ -182,9 +189,11 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
 
         const rcTier = getTierFromCustomerInfo(customerInfo);
         const rcStatus = getStatusFromCustomerInfo(customerInfo);
+        const rcBilling = getBillingPeriodFromCustomerInfo(customerInfo);
 
         setTier(rcTier);
         setStatus(rcStatus);
+        setBillingPeriod(rcBilling);
         saveCache({ tier: rcTier, status: rcStatus, grandfathered: false });
         setIsLoading(false);
       } catch {
@@ -217,8 +226,10 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       const rcTier = getTierFromCustomerInfo(info);
       const rcStatus = getStatusFromCustomerInfo(info);
+      const rcBilling = getBillingPeriodFromCustomerInfo(info);
       setTier(rcTier);
       setStatus(rcStatus);
+      setBillingPeriod(rcBilling);
       saveCache({ tier: rcTier, status: rcStatus, grandfathered: false });
     });
 
@@ -279,9 +290,17 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     [isPremium, isFamily, grandfathered, devOverride]
   );
 
+  const effectiveBilling = devBillingOverride ?? billingPeriod;
+
   const devOverrideTier = useCallback((newTier: PremiumTier | null) => {
     if (__DEV__) {
       setDevOverride(newTier);
+    }
+  }, []);
+
+  const devOverrideBilling = useCallback((period: BillingPeriod | null) => {
+    if (__DEV__) {
+      setDevBillingOverride(period);
     }
   }, []);
 
@@ -289,6 +308,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     () => ({
       tier: effectiveTier,
       status,
+      billingPeriod: effectiveBilling,
       isPremium,
       isFamily,
       isGrandfathered: grandfathered,
@@ -296,9 +316,10 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       hasBillingIssue,
       checkFeatureAccess,
       devOverrideTier,
+      devOverrideBilling,
       isLoading,
     }),
-    [effectiveTier, status, isPremium, isFamily, grandfathered, isTrial, hasBillingIssue, checkFeatureAccess, devOverrideTier, isLoading]
+    [effectiveTier, status, effectiveBilling, isPremium, isFamily, grandfathered, isTrial, hasBillingIssue, checkFeatureAccess, devOverrideTier, devOverrideBilling, isLoading]
   );
 
   return (
