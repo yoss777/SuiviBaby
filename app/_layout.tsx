@@ -6,6 +6,7 @@ import { BabyProvider } from "@/contexts/BabyContext";
 import { ModalProvider } from "@/contexts/ModalContext";
 import { MomentsNotificationProvider } from "@/contexts/MomentsNotificationContext";
 import { ThemeProvider as AppThemeProvider } from "@/contexts/ThemeContext";
+import { PremiumProvider } from "@/contexts/PremiumContext";
 import { SheetProvider } from "@/contexts/SheetContext";
 import { SuccessAnimationProvider } from "@/contexts/SuccessAnimationContext";
 import { ToastProvider, useToast } from "@/contexts/ToastContext";
@@ -78,6 +79,7 @@ const AppProviders = composeProviders([
   ModalProvider,
   AuthProvider,
   AppThemeProvider,
+  PremiumProvider,
   BabyProvider,
   MomentsNotificationProvider,
   SheetProvider,

@@ -184,6 +184,17 @@ export default function SettingsScreen() {
   const accountSettings: SettingItem[] = useMemo(
     () => [
       {
+        id: "premium",
+        icon: "diamond-outline",
+        label: "SuiviBaby+",
+        description: "Gerer votre abonnement Premium",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/settings/premium");
+        },
+        color: nc.todayAccent,
+      },
+      {
         id: "profile",
         icon: "person-outline",
         label: "Profil",
@@ -204,7 +215,7 @@ export default function SettingsScreen() {
         },
       },
     ],
-    [router],
+    [router, nc.todayAccent],
   );
 
   const appSettings: SettingItem[] = useMemo(

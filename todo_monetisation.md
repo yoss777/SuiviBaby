@@ -75,70 +75,77 @@
 
 ## Implémentation par phase
 
-### Phase 1 — RevenueCat + Paywall (priorité 1) ⏳ À FAIRE
+### Phase 1 — RevenueCat + Paywall (priorité 1) 🔧 EN COURS
 
-- [ ] **Intégrer RevenueCat** (`react-native-purchases`)
-  - Gestion abonnements cross-platform (iOS + Android)
-  - Analytics revenus intégrés
-  - A/B testing prix natif
-  - Webhooks pour vérification serveur
+#### Étape A — Infra Premium (sans API keys) ✅ FAIT
 
-- [ ] **Créer `contexts/PremiumContext.tsx`**
-  - `isPremium: boolean` — état global
-  - `premiumTier: "free" | "premium" | "family"`
-  - `checkFeatureAccess(feature: string): boolean`
-  - Sync avec RevenueCat au login/logout
+- [x] **`contexts/PremiumContext.tsx`** ✅
+  - `isPremium`, `premiumTier: "free" | "premium" | "family"`, `checkFeatureAccess()`
+  - Cache local AsyncStorage (TTL 7 jours) pour offline access
+  - Mode dev : `devOverrideTier()` pour simuler Premium sans store
+  - Listener Firestore `subscriptions/{userId}` en temps réel
+  - Support `grandfathered`, `billing_issue`, `trial`
+  - Intégré dans `_layout.tsx` (14ème provider)
 
-- [ ] **Collection Firestore `subscriptions/{userId}`**
-  - Vérification serveur des receipts
-  - Historique d'abonnement
-  - Cloud Function pour webhook RevenueCat
+- [x] **`services/premiumGatingService.ts`** ✅
+  - `FREE_LIMITS` : 3 voix/jour, 1 export PDF total, 90j historique, 2 co-parents
+  - Compteurs AsyncStorage avec reset auto (voix = quotidien, export = lifetime)
+  - `getHistoryCutoffDate()` pour filtrage queries
+  - `PAYWALL_MESSAGES` : 6 messages contextuels avec titre, description, CTA
 
-- [ ] **Implémenter les limitations tier gratuit**
-  - Historique 90 jours : filtrer les queries Firestore
-  - Export PDF : compteur mensuel dans `user_preferences`
-  - Commandes vocales : compteur quotidien (reset à minuit)
-  - Partage : limiter `shareInvitations` à 2
-
-- [ ] **Page de pricing in-app** (`app/settings/premium.tsx`)
-  - Comparaison visuelle Gratuit vs Premium vs Famille
-  - Bouton "Essai gratuit 14 jours"
-  - Témoignages parents (social proof)
-  - FAQ (annulation, remboursement)
-
-- [ ] **Restore Purchases** (OBLIGATOIRE Apple/Google — rejet store sinon)
-  - Bouton "Restaurer mes achats" dans la page pricing ET dans les settings
-  - Appel `Purchases.restorePurchases()` de RevenueCat
-  - Gestion des edge cases : achat sur un autre device, changement d'Apple ID
-
-- [ ] **Grace period & billing retry**
-  - Gérer les échecs de paiement côté UI (RevenueCat fournit le statut)
-  - Afficher un banner "Problème de paiement" au lieu de couper Premium immédiatement
-  - RevenueCat gère le retry automatique, mais prévoir l'état `billing_issue` dans PremiumContext
-
-- [ ] **Offline access Premium**
-  - Cache du statut premium en local (AsyncStorage) avec TTL de 7 jours
-  - Si offline + cache expiré → mode dégradé (garder Premium mais désactiver les features nécessitant le réseau)
-  - Sync du statut au retour online
+- [x] **Collection Firestore `subscriptions/{userId}`** ✅
+  - Règles Firestore : lecture owner-only, écriture serveur-only
+  - Schéma : tier, status, expiresAt, grandfathered, startDate
 
 - [ ] **Migration users existants (Grandfather Plan)**
-  - Les users actuels qui ont déjà >1 bébé, >90j d'historique ou >2 partages ne doivent PAS perdre l'accès
-  - Flag `grandfathered: true` dans Firestore pour les comptes créés avant la mise en place du paywall
-  - Afficher : "Merci d'être un early adopter ! Vos données restent accessibles."
-  - Les features futures (IA, widgets) restent Premium même pour les grandfathered
+  - Flag `grandfathered: true` pour comptes existants avant le paywall
+  - À exécuter via script/Cloud Function au moment du lancement Premium
 
-- [ ] **Paywall contextuel** (proposer Premium au bon moment)
-  - Export PDF épuisé → "Passez à Premium pour des exports illimités"
-  - Commande vocale > 3/jour → "Débloquez la voix illimitée"
-  - Historique > 90 jours → "Accédez à tout l'historique"
-  - **Pendant l'onboarding** : montrer les features premium (le pic de churn est à J7, pas J30)
-  - Deep link paywall : permettre d'ouvrir le paywall depuis une notification push ou un lien externe
-  - **Jamais** pendant un épisode de santé (fièvre, sommeil agité)
+#### Étape B — Paywall UI ✅ FAIT
+
+- [x] **Page pricing in-app** (`app/settings/premium.tsx`) ✅
+  - Comparaison visuelle Gratuit vs Premium vs Famille
+  - Toggle Mensuel/Annuel avec badge économie
+  - Bouton "Essai gratuit 14 jours"
+  - FAQ accordion (3 questions)
+  - Bouton "Restaurer mes achats"
+  - Banner grandfathered pour les early adopters
+  - Mentions légales renouvellement auto
+
+- [x] **Composant `PaywallPrompt`** réutilisable ✅
+  - Variantes `inline` (compact) et `banner` (détaillé avec CTA + dismiss)
+  - 6 triggers : voice_limit, export_limit, history_limit, sharing_limit, advanced_stats, ai_insights
+  - Navigation vers `/settings/premium`
+
+- [x] **Gating intégré** dans les écrans existants ✅
+  - Export PDF : vérification compteur + PaywallPrompt banner (`app/settings/export.tsx`)
+  - Commandes vocales : vérification quotidienne + modal limite (`VoiceCommandButton.tsx`)
+  - Lien "SuiviBaby+" en haut des settings (`app/(drawer)/settings.tsx`)
+  - Historique : `getHistoryCutoffDate()` prêt à intégrer dans les queries
+
+- [x] **Grace period & billing retry UI** ✅
+  - État `billing_issue` dans PremiumContext (prêt pour RevenuCat)
+  - Le banner sera affiché quand le status passe en `billing_issue`
+
+#### Étape C — RevenueCat (quand API keys prêtes) ⏳ À FAIRE
+
+- [ ] **Intégrer `react-native-purchases`**
+  - SDK keys iOS + Android (placeholders en place)
+  - Produits : Premium 3.99€/mois, 29.99€/an, Famille 6.99€/mois, 44.99€/an, Lifetime 79.99€
+  - A/B testing prix natif, analytics revenus
+
+- [ ] **Restore Purchases**
+  - `Purchases.restorePurchases()` dans page pricing + settings
+  - Edge cases : achat sur autre device, changement Apple ID
+
+- [ ] **Webhooks serveur**
+  - Cloud Function pour recevoir les événements RevenueCat
+  - Mettre à jour `subscriptions/{userId}` en temps réel
 
 - [ ] **Winback flow** (rétention des churners)
-  - Quand un abonné annule → notification push **J+7 à J+14** (pas J+3 = trop agressif, risque bad review ; pas J+30 = trop tard, concurrent installé)
-  - Proposer une offre réduite : 2,49€/mois pendant 3 mois
-  - Seasonal pricing : offres spéciales rentrée/Noël (périodes de naissances)
+  - Notification push J+7 à J+14 après annulation
+  - Offre réduite : 2,49€/mois pendant 3 mois
+  - Seasonal pricing : offres rentrée/Noël
 
 ### Phase 1b — Onboarding "Moment Magie" J0–J7 (PRIORITÉ 1) ✅ FAIT
 
@@ -525,8 +532,8 @@ L'app est techniquement solide mais **personne ne s'occupe de l'acquisition**. S
 ## Ordre d'implémentation recommandé
 
 ```
-Phase 1  (RevenueCat + Paywall)       — fondation monétisation, indispensable
-  └─ Inclut : Restore Purchases, Grandfather Plan, Offline cache, Grace period
+Phase 1  (RevenueCat + Paywall)       — ✅ Étapes A+B FAITES, Étape C (RevenuCat) en attente des API keys
+  └─ PremiumContext, gating, paywall UI, pricing page — tout prêt sauf branchement store
 Phase 1b (Onboarding J0–J7)           — ✅ FAIT (slides, flow activation, célébration, métriques)
 Phase 1c (RGPD & conformité)          — ✅ PARTIELLEMENT FAIT (consentement, anonymisation, droit oubli, emails)
 Phase 1d (Mode Nuit)                  — ✅ FAIT (dark adaptatif, saisie rapide, a11y)
@@ -576,9 +583,11 @@ Localisation (Francophonie → ES → EN)  — levier x10 an 2
 | `hooks/useNightMode.ts` | Hook mode nuit (boutons, polices, animations, haptic) | ✅ |
 | `components/suivibaby/FirstTrackGuide.tsx` | Guide premier tracking + célébration | ✅ |
 | `services/onboardingAnalytics.ts` | Tracking funnel onboarding (local AsyncStorage) | ✅ |
-| `contexts/PremiumContext.tsx` | État premium global | ⏳ À créer |
-| `app/settings/premium.tsx` | Page pricing in-app | ⏳ À créer |
+| `contexts/PremiumContext.tsx` | État premium global, cache offline, dev toggle | ✅ |
+| `services/premiumGatingService.ts` | Limites tier gratuit, compteurs, messages paywall | ✅ |
+| `components/ui/PaywallPrompt.tsx` | Composant paywall contextuel (inline/banner) | ✅ |
+| `app/settings/premium.tsx` | Page pricing in-app (3 plans, FAQ, restore) | ✅ |
 
 ---
 
-*Dernière mise à jour : 2026-04-04 — Phases 1b + 1c + 1d implémentées (Onboarding + RGPD + Mode Nuit)*
+*Dernière mise à jour : 2026-04-04 — Phases 1 (A+B) + 1b + 1c + 1d implémentées (Premium infra + Onboarding + RGPD + Mode Nuit)*

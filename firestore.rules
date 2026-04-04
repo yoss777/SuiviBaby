@@ -398,6 +398,13 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
 
+    // Subscriptions Premium (géré par RevenuCat webhooks côté serveur)
+    // L'utilisateur peut lire son propre document, seul le serveur écrit
+    match /subscriptions/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list, create, update, delete: if false;
+    }
+
     // ============================================
     // SMART CONTENT — Tips (read-only for authenticated users)
     // ============================================

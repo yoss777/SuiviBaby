@@ -5,10 +5,14 @@ import { PromptModal } from '@/components/ui/PromptModal';
 import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
 import { useBaby } from '@/contexts/BabyContext';
+import { usePremium } from '@/contexts/PremiumContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useVoiceCommand } from '@/hooks/useVoiceCommand';
+import { incrementVoiceCommand } from '@/services/premiumGatingService';
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface VoiceCommandButtonProps {
@@ -57,15 +61,32 @@ export function VoiceCommandButton({
   } = useVoiceCommand(activeChild?.id || '', false); // true = mode test par défaut
   // } = useVoiceCommand(activeChild?.id || '', true); // true = mode test par défaut
 
-  const handlePress = () => {
+  const { checkFeatureAccess } = usePremium();
+  const router = useRouter();
+  const [voiceLimitReached, setVoiceLimitReached] = useState(false);
+
+  const checkVoiceLimit = async (): Promise<boolean> => {
+    if (checkFeatureAccess("unlimited_voice")) return true;
+    const allowed = await incrementVoiceCommand();
+    if (!allowed) {
+      setVoiceLimitReached(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return false;
+    }
+    return true;
+  };
+
+  const handlePress = async () => {
     if (isProcessing) return;
     if (testMode) {
+      if (!(await checkVoiceLimit())) return;
       startVoiceCommand();
     }
   };
 
-  const handlePressIn = () => {
+  const handlePressIn = async () => {
     if (isProcessing || testMode) return;
+    if (!(await checkVoiceLimit())) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     startVoiceCommand();
   };
@@ -374,6 +395,22 @@ export function VoiceCommandButton({
           setTranscriptionErrorModal(false);
           cancelTestPrompt();
         }}
+      />
+
+      {/* Voice limit paywall */}
+      <InfoModal
+        visible={voiceLimitReached}
+        title="Commandes vocales epuisees"
+        message="Vous avez utilise vos 3 commandes vocales du jour. Passez a Premium pour des commandes illimitees."
+        confirmText="Voir Premium"
+        dismissText="OK"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onConfirm={() => {
+          setVoiceLimitReached(false);
+          router.push("/settings/premium");
+        }}
+        onClose={() => setVoiceLimitReached(false)}
       />
     </View>
   );

@@ -28,6 +28,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { PaywallPrompt } from "@/components/ui/PaywallPrompt";
 import { db } from "@/config/firebase";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,6 +36,8 @@ import type { Child } from "@/contexts/BabyContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { usePremium } from "@/contexts/PremiumContext";
+import { incrementPdfExport } from "@/services/premiumGatingService";
 import { Event, EventType } from "@/services/eventsService";
 import { obtenirPreferences } from "@/services/userPreferencesService";
 import type { ChildRole } from "@/types/permissions";
@@ -741,6 +744,9 @@ export default function ExportScreen() {
     !hasSelectedTypes ||
     !hasSelectedData;
 
+  const { checkFeatureAccess } = usePremium();
+  const [showPaywall, setShowPaywall] = useState(false);
+
   const handleExport = async (force = false) => {
     if (Platform.OS === "web") {
       setModalConfig({
@@ -750,6 +756,15 @@ export default function ExportScreen() {
         mode: "text",
       });
       return;
+    }
+
+    // Vérifier la limite d'exports pour les utilisateurs free
+    if (!checkFeatureAccess("unlimited_export")) {
+      const allowed = await incrementPdfExport();
+      if (!allowed) {
+        setShowPaywall(true);
+        return;
+      }
     }
 
     if (!force && selectedChildren.length === 0) {
@@ -1105,6 +1120,14 @@ export default function ExportScreen() {
             headerBackTitle: "Retour",
           }}
         />
+        {showPaywall && (
+          <PaywallPrompt
+            trigger="export_limit"
+            variant="banner"
+            onDismiss={() => setShowPaywall(false)}
+          />
+        )}
+
         {isAutoDeleteFlow ? (
           <View style={styles.autoExportLoader}>
             <IconPulseDots color={nc.todayAccent} />
