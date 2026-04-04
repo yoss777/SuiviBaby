@@ -2,7 +2,7 @@ import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBaby } from '@/contexts/BabyContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { collection, limit, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
+import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, Timestamp, where } from 'firebase/firestore';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 export type NotificationType = 'photo' | 'like' | 'comment';
@@ -20,6 +20,7 @@ interface MomentsNotificationContextType {
 const MomentsNotificationContext = createContext<MomentsNotificationContextType | undefined>(undefined);
 
 const LAST_SEEN_KEY_PREFIX = 'moments_last_seen_';
+const SEEN_IDS_KEY_PREFIX = 'moments_seen_ids_';
 
 // Helper pour extraire le timestamp
 const getTimestamp = (createdAt: any): number => {
@@ -41,6 +42,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
   const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set());
   const [newEventTypes, setNewEventTypes] = useState<Map<string, NotificationType>>(new Map());
   const lastSeenTimestampRef = useRef<number>(0);
+  const seenEventIdsRef = useRef<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Compteurs par type pour éviter les problèmes de synchronisation
@@ -94,15 +96,46 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
 
     const loadLastSeen = async () => {
       try {
-        const key = `${LAST_SEEN_KEY_PREFIX}${user.uid}_${activeChild.id}`;
-        const stored = await AsyncStorage.getItem(key);
-        if (stored) {
-          lastSeenTimestampRef.current = parseInt(stored, 10);
-        } else {
-          // Première utilisation: marquer comme "maintenant" pour ne pas afficher de badge
-          lastSeenTimestampRef.current = Date.now();
-          await AsyncStorage.setItem(key, lastSeenTimestampRef.current.toString());
+        const localKey = `${LAST_SEEN_KEY_PREFIX}${user.uid}_${activeChild.id}`;
+        const localSeenKey = `${SEEN_IDS_KEY_PREFIX}${user.uid}_${activeChild.id}`;
+
+        // 1. Load local cache (fast)
+        const [localStored, localSeenIds] = await Promise.all([
+          AsyncStorage.getItem(localKey),
+          AsyncStorage.getItem(localSeenKey),
+        ]);
+
+        if (localStored) {
+          lastSeenTimestampRef.current = parseInt(localStored, 10);
         }
+        if (localSeenIds) {
+          seenEventIdsRef.current = new Set(JSON.parse(localSeenIds));
+        }
+
+        // 2. Load from Firestore (source of truth, may override local)
+        const firestoreDoc = await getDoc(
+          doc(db, 'user_preferences', user.uid)
+        );
+        const firestoreData = firestoreDoc.data();
+        const fsLastSeen = firestoreData?.momentsLastSeen as number | undefined;
+        const fsSeenIds = firestoreData?.momentsSeenIds as string[] | undefined;
+
+        if (fsLastSeen && fsLastSeen > lastSeenTimestampRef.current) {
+          lastSeenTimestampRef.current = fsLastSeen;
+          AsyncStorage.setItem(localKey, fsLastSeen.toString()).catch(() => {});
+        }
+        if (fsSeenIds) {
+          // Merge Firestore + local seen IDs
+          for (const id of fsSeenIds) seenEventIdsRef.current.add(id);
+          AsyncStorage.setItem(localSeenKey, JSON.stringify([...seenEventIdsRef.current].slice(-500))).catch(() => {});
+        }
+
+        // 3. If nothing found anywhere, set to now (first use)
+        if (!localStored && !fsLastSeen) {
+          lastSeenTimestampRef.current = Date.now();
+          AsyncStorage.setItem(localKey, lastSeenTimestampRef.current.toString()).catch(() => {});
+        }
+
         setIsInitialized(true);
       } catch (error) {
         console.error('[MomentsNotification] Erreur chargement lastSeen:', error);
@@ -143,7 +176,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
           const data = d.data();
           const timestamp = getTimestamp(data.createdAt);
           const hasPhotos = Array.isArray(data.photos) && data.photos.length > 0;
-          if (hasPhotos && data.userId !== userId && timestamp > lastSeenTimestampRef.current) {
+          if (hasPhotos && data.userId !== userId && timestamp > lastSeenTimestampRef.current && !seenEventIdsRef.current.has(d.id)) {
             count++;
             newJalonIds.add(d.id);
             console.log(`[MomentsNotification] NEW jalon with photo: ${d.id}, createdAt=${timestamp}, lastSeen=${lastSeenTimestampRef.current}, by=${data.userId}`);
@@ -172,7 +205,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
         snapshot.docs.forEach((d) => {
           const data = d.data();
           const timestamp = getTimestamp(data.createdAt);
-          if (data.userId !== userId && timestamp > lastSeenTimestampRef.current) {
+          if (data.userId !== userId && timestamp > lastSeenTimestampRef.current && !seenEventIdsRef.current.has(data.eventId)) {
             count++;
             if (data.eventId) {
               newLikeEventIds.add(data.eventId);
@@ -202,7 +235,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
         snapshot.docs.forEach((d) => {
           const data = d.data();
           const timestamp = getTimestamp(data.createdAt);
-          if (data.userId !== userId && timestamp > lastSeenTimestampRef.current) {
+          if (data.userId !== userId && timestamp > lastSeenTimestampRef.current && !seenEventIdsRef.current.has(data.eventId)) {
             count++;
             if (data.eventId) {
               newCommentEventIds.add(data.eventId);
@@ -230,6 +263,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
 
     const now = Date.now();
     lastSeenTimestampRef.current = now;
+    seenEventIdsRef.current = new Set();
     countsRef.current = { jalons: 0, likes: 0, comments: 0 };
     eventIdsRef.current = { jalons: new Set(), likesEvents: new Set(), commentsEvents: new Set() };
     setHasNewMoments(false);
@@ -239,7 +273,12 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
 
     try {
       const key = `${LAST_SEEN_KEY_PREFIX}${user.uid}_${activeChild.id}`;
-      await AsyncStorage.setItem(key, now.toString());
+      const seenKey = `${SEEN_IDS_KEY_PREFIX}${user.uid}_${activeChild.id}`;
+      await Promise.all([
+        AsyncStorage.setItem(key, now.toString()),
+        AsyncStorage.removeItem(seenKey),
+        setDoc(doc(db, 'user_preferences', user.uid), { momentsLastSeen: now, momentsSeenIds: [] }, { merge: true }),
+      ]);
     } catch (error) {
       console.error('[MomentsNotification] Erreur sauvegarde lastSeen:', error);
     }
@@ -251,13 +290,22 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     eventIdsRef.current.likesEvents.delete(eventId);
     eventIdsRef.current.commentsEvents.delete(eventId);
 
+    // Persist seen ID locally + Firestore
+    seenEventIdsRef.current.add(eventId);
+    if (activeChild?.id && user?.uid) {
+      const ids = [...seenEventIdsRef.current].slice(-500);
+      const seenKey = `${SEEN_IDS_KEY_PREFIX}${user.uid}_${activeChild.id}`;
+      AsyncStorage.setItem(seenKey, JSON.stringify(ids)).catch(() => {});
+      setDoc(doc(db, 'user_preferences', user.uid), { momentsSeenIds: ids }, { merge: true }).catch(() => {});
+    }
+
     // Recount
     countsRef.current.jalons = eventIdsRef.current.jalons.size;
     countsRef.current.likes = eventIdsRef.current.likesEvents.size;
     countsRef.current.comments = eventIdsRef.current.commentsEvents.size;
 
     updateTotalCount();
-  }, [updateTotalCount]);
+  }, [updateTotalCount, activeChild?.id, user?.uid]);
 
   return (
     <MomentsNotificationContext.Provider
