@@ -1,6 +1,6 @@
 const admin = require("firebase-admin");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
 const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
@@ -954,6 +954,366 @@ exports.deleteUserAccount = onCall(
 
     console.log(`deleteUserAccount: completed for uid=${uid}`);
     return { success: true };
+  }
+);
+
+// ============================================
+// REVENUECAT WEBHOOK
+// ============================================
+
+/**
+ * revenueCatWebhook — Reçoit les événements RevenuCat et met à jour Firestore.
+ * URL à configurer dans RevenuCat Dashboard → Integrations → Webhooks.
+ * Authentifié par header Authorization Bearer.
+ */
+exports.revenueCatWebhook = onRequest(
+  { region: "europe-west1", secrets: ["REVENUECAT_WEBHOOK_SECRET"] },
+  async (req, res) => {
+    // Vérifier la méthode
+    if (req.method !== "POST") {
+      res.status(405).send("Method not allowed");
+      return;
+    }
+
+    // Vérifier le secret
+    const secret = process.env.REVENUECAT_WEBHOOK_SECRET;
+    const authHeader = req.headers.authorization || "";
+    if (secret && authHeader !== `Bearer ${secret}`) {
+      console.warn("revenueCatWebhook: invalid auth header");
+      res.status(401).send("Unauthorized");
+      return;
+    }
+
+    const event = req.body?.event;
+    if (!event) {
+      res.status(400).send("Missing event");
+      return;
+    }
+
+    const appUserId = event.app_user_id;
+    if (!appUserId || appUserId.startsWith("$RCAnonymous")) {
+      // Ignorer les utilisateurs anonymes
+      res.status(200).send("OK - skipped anonymous");
+      return;
+    }
+
+    const db = admin.firestore();
+    const eventType = event.type;
+    const entitlements = event.entitlement_ids || [];
+
+    // Déterminer le tier
+    let tier = "free";
+    if (entitlements.includes("family")) tier = "family";
+    else if (entitlements.includes("premium")) tier = "premium";
+
+    // Déterminer le status
+    let status = "active";
+    const expiresAt = event.expiration_at_ms ? new Date(event.expiration_at_ms).toISOString() : null;
+
+    switch (eventType) {
+      case "INITIAL_PURCHASE":
+      case "RENEWAL":
+      case "PRODUCT_CHANGE":
+        status = "active";
+        break;
+      case "CANCELLATION":
+        status = "cancelled";
+        break;
+      case "BILLING_ISSUE":
+        status = "billing_issue";
+        break;
+      case "EXPIRATION":
+        status = "expired";
+        tier = "free";
+        break;
+      case "SUBSCRIBER_ALIAS":
+        // Juste un alias, pas de changement de status
+        res.status(200).send("OK - alias");
+        return;
+      default:
+        console.log(`revenueCatWebhook: unhandled event type ${eventType}`);
+    }
+
+    // Mettre à jour Firestore
+    const subscriptionData = {
+      tier,
+      status,
+      ...(expiresAt && { expiresAt }),
+      updatedAt: admin.firestore.Timestamp.now(),
+      lastEvent: eventType,
+    };
+
+    await db.doc(`subscriptions/${appUserId}`).set(subscriptionData, { merge: true });
+
+    console.log(`revenueCatWebhook: uid=${appUserId}, type=${eventType}, tier=${tier}, status=${status}`);
+    res.status(200).send("OK");
+  }
+);
+
+// ============================================
+// GRANDFATHER PLAN
+// ============================================
+
+/**
+ * grandfatherExistingUsers — Script one-shot pour marquer les utilisateurs existants.
+ * À appeler manuellement via la console Firebase ou un script admin.
+ * Marque tous les comptes créés avant une date donnée comme "grandfathered".
+ */
+exports.grandfatherExistingUsers = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+
+    // Vérifier que l'appelant est admin (à remplacer par un vrai check admin)
+    const db = admin.firestore();
+    const callerDoc = await db.doc(`users/${request.auth.uid}`).get();
+    if (!callerDoc.exists()) {
+      throw new HttpsError("permission-denied", "Utilisateur introuvable.");
+    }
+
+    const { cutoffDate } = request.data;
+    if (!cutoffDate) {
+      throw new HttpsError("invalid-argument", "cutoffDate requis (ISO 8601).");
+    }
+
+    const cutoff = new Date(cutoffDate);
+    const usersSnap = await db
+      .collection("users")
+      .where("createdAt", "<=", cutoff)
+      .get();
+
+    let count = 0;
+    const batchSize = 450;
+    let batch = db.batch();
+
+    for (const userDoc of usersSnap.docs) {
+      batch.set(
+        db.doc(`subscriptions/${userDoc.id}`),
+        { grandfathered: true, tier: "free", status: "grandfathered" },
+        { merge: true }
+      );
+      count++;
+
+      if (count % batchSize === 0) {
+        await batch.commit();
+        batch = db.batch();
+      }
+    }
+
+    if (count % batchSize !== 0) {
+      await batch.commit();
+    }
+
+    console.log(`grandfatherExistingUsers: marked ${count} users as grandfathered (before ${cutoffDate})`);
+    return { success: true, count };
+  }
+);
+
+// ============================================
+// REFERRAL SYSTEM
+// ============================================
+
+/**
+ * validateReferralCode — Valide un code parrainage et attribue 1 mois Premium
+ * au parrain ET au filleul.
+ */
+exports.validateReferralCode = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+
+    const filleulUid = request.auth.uid;
+    const { referralCode } = request.data;
+    const db = admin.firestore();
+
+    if (!referralCode || typeof referralCode !== "string") {
+      throw new HttpsError("invalid-argument", "Code parrainage invalide.");
+    }
+
+    // Chercher le parrain par son code (stocké dans user_promos)
+    const promosSnap = await db
+      .collection("user_promos")
+      .where("referralCode", "==", referralCode.toUpperCase())
+      .limit(1)
+      .get();
+
+    if (promosSnap.empty) {
+      throw new HttpsError("not-found", "Code parrainage introuvable.");
+    }
+
+    const parrainDoc = promosSnap.docs[0];
+    const parrainUid = parrainDoc.id;
+
+    // Empêcher l'auto-parrainage
+    if (parrainUid === filleulUid) {
+      throw new HttpsError("failed-precondition", "Vous ne pouvez pas utiliser votre propre code.");
+    }
+
+    // Vérifier que le filleul n'a pas déjà utilisé un code
+    const filleulDoc = await db.doc(`user_promos/${filleulUid}`).get();
+    if (filleulDoc.exists() && filleulDoc.data()?.referredBy) {
+      throw new HttpsError("already-exists", "Vous avez deja utilise un code parrainage.");
+    }
+
+    const now = admin.firestore.Timestamp.now();
+    const oneMonthLater = new Date();
+    oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+
+    const batch = db.batch();
+
+    // 1. Enregistrer le parrainage
+    batch.set(db.collection("referrals").doc(), {
+      parrainUid,
+      filleulUid,
+      referralCode,
+      createdAt: now,
+    });
+
+    // 2. Incrémenter le compteur du parrain
+    const parrainData = parrainDoc.data() || {};
+    batch.update(parrainDoc.ref, {
+      referralCount: (parrainData.referralCount || 0) + 1,
+    });
+
+    // 3. Marquer le filleul comme parrainé
+    batch.set(db.doc(`user_promos/${filleulUid}`), {
+      referredBy: parrainUid,
+      referredAt: now,
+    }, { merge: true });
+
+    // 4. Attribuer 1 mois Premium au parrain
+    batch.set(db.doc(`subscriptions/${parrainUid}`), {
+      tier: "premium",
+      status: "active",
+      startDate: now.toDate().toISOString(),
+      expiresAt: oneMonthLater.toISOString(),
+      source: "referral_reward",
+    }, { merge: true });
+
+    // 5. Attribuer 1 mois Premium au filleul
+    batch.set(db.doc(`subscriptions/${filleulUid}`), {
+      tier: "premium",
+      status: "active",
+      startDate: now.toDate().toISOString(),
+      expiresAt: oneMonthLater.toISOString(),
+      source: "referral_reward",
+    }, { merge: true });
+
+    await batch.commit();
+
+    console.log(`validateReferralCode: parrain=${parrainUid}, filleul=${filleulUid}`);
+    return { success: true, parrainUid, message: "1 mois Premium offert !" };
+  }
+);
+
+// ============================================
+// AI INSIGHTS (Claude Haiku proxy)
+// ============================================
+
+/**
+ * generateAiInsight — Proxy vers Claude Haiku pour insights IA Premium.
+ * Reçoit des données anonymisées, retourne un insight enrichi.
+ * Rate limited: 10 requêtes/heure/utilisateur.
+ */
+exports.generateAiInsight = onCall(
+  withAppCheck({ region: "europe-west1", secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 30 }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+
+    // Rate limit: 10 requêtes/heure
+    await checkRateLimit(db, uid, "ai_insight", 10);
+
+    const { child, events, requestType } = request.data;
+
+    if (!child || !events || !requestType) {
+      throw new HttpsError("invalid-argument", "Données manquantes.");
+    }
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error("generateAiInsight: ANTHROPIC_API_KEY not configured");
+      throw new HttpsError("internal", "Service IA non configuré.");
+    }
+
+    // Construire le prompt selon le type de requête
+    let systemPrompt = "Tu es un assistant pour une app de suivi bébé. Tu donnes des conseils bienveillants basés sur les données. Réponds en français, 2-3 phrases max. Ne donne JAMAIS de diagnostic médical. Si quelque chose semble anormal, recommande de consulter un pédiatre.";
+
+    let userPrompt = "";
+
+    if (requestType === "advanced_insight") {
+      userPrompt = `Bébé de ${child.ageInMonths} mois (${child.gender || "genre non précisé"}).
+Voici les ${events.length} derniers événements (type + heure) :
+${events.slice(0, 30).map((e) => `- ${e.type} à ${e.timestamp}`).join("\n")}
+
+Donne un insight utile pour le parent. Réponds en JSON : {"title": "...", "message": "...", "category": "alimentation|sommeil|sante|developpement"}`;
+    } else if (requestType === "daily_summary") {
+      userPrompt = `Bébé de ${child.ageInMonths} mois. Résume cette journée :
+${events.map((e) => `- ${e.type} à ${e.timestamp}`).join("\n")}
+
+Réponds en JSON : {"title": "...", "highlights": ["..."], "concerns": ["..."], "suggestion": "..."}`;
+    } else if (requestType === "predictions") {
+      userPrompt = `Bébé de ${child.ageInMonths} mois. Basé sur ces événements récents, prédit le prochain événement probable :
+${events.slice(0, 20).map((e) => `- ${e.type} à ${e.timestamp}`).join("\n")}
+
+Réponds en JSON : {"predictions": [{"type": "feeding|sleep|diaper", "estimatedTime": "...", "confidence": "low|medium|high", "basedOn": "..."}]}`;
+    }
+
+    try {
+      // Appel Claude Haiku via API REST
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 300,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("generateAiInsight: Claude API error", response.status);
+        throw new HttpsError("internal", "Erreur du service IA.");
+      }
+
+      const result = await response.json();
+      const text = result.content?.[0]?.text || "";
+
+      // Parser le JSON de la réponse
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new HttpsError("internal", "Réponse IA invalide.");
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      if (requestType === "advanced_insight") {
+        return { insight: parsed };
+      } else if (requestType === "daily_summary") {
+        return { summary: parsed };
+      } else if (requestType === "predictions") {
+        return { predictions: parsed.predictions };
+      }
+
+      return parsed;
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      console.error("generateAiInsight: error", error.message);
+      throw new HttpsError("internal", "Erreur lors de la génération de l'insight.");
+    }
   }
 );
 

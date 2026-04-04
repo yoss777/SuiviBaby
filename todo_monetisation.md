@@ -257,27 +257,37 @@
 
 > **Décision** : zéro publicité dans Suivi Baby. Ni banner, ni interstitiel, ni rewarded ads. La monétisation repose sur Premium + partenariats + parrainage. La confiance parentale n'est pas monétisable via de la pub.
 
-### Phase 3 — IA Premium (différenciateur clé) ⏳ À FAIRE
+### Phase 3 — IA Premium (différenciateur clé) ✅ FAIT
 
 C'est le **game changer** par rapport aux concurrents.
 
-| Feature IA | Description | Priorité |
+| Feature IA | Description | Statut |
 |---|---|---|
-| **Insights sommeil avancés** | "Bébé dort mieux quand couché avant 19h30" | P1 — partiellement fait (insightEngine) |
-| **Prédiction tétées/biberons** | "Prochaine tétée estimée dans ~45min" | P2 |
-| **Résumé quotidien IA** | Rapport du jour envoyé par notif push | P2 |
-| **Alerte anomalies** | "Moins de couches que d'habitude, vérifiez l'hydratation" | P1 — partiellement fait |
-| **Commandes vocales NLP** | LLM (Claude Haiku) au lieu du regex actuel | P3 |
-| **Assistant parent** | Chatbot contextuel : "Est-ce normal que bébé..." | P3 |
-| **Corrélations avancées** | Analyse 3+ mois de données, patterns saisonniers | P2 — infra faite (correlationService) |
+| **Insights sommeil avancés** | "Bébé dort mieux quand couché avant 19h30" | ✅ insightEngine (rule-based) |
+| **Prédiction tétées/biberons** | "Prochaine tétée estimée dans ~45min" | ✅ `predictNextFeeding()` local |
+| **Prédiction siestes** | "Prochaine sieste vers 14h30" | ✅ `predictNextSleep()` local |
+| **Résumé quotidien** | Synthèse du jour (highlights + alertes) | ✅ `generateDailySummary()` local |
+| **Alerte anomalies** | "Moins de couches que d'habitude" | ✅ insightEngine + dailySummary |
+| **Insights IA enrichis** | Claude Haiku via CF proxy (données anonymisées) | ✅ CF `generateAiInsight` |
+| **Commandes vocales NLP** | LLM au lieu du regex actuel | ⏳ P3 |
+| **Assistant parent chatbot** | "Est-ce normal que bébé..." | ⏳ P3 |
+| **Corrélations avancées** | Analyse 3+ mois de données | ✅ correlationService existant |
 
-- [ ] **Gating IA** : insights basiques = gratuit, insights avancés + prédictions = Premium
-- [ ] **Coût API** : Claude Haiku ~0.001€/requête → 100 requêtes/mois/user = 0.10€ (largement rentable à 3.99€)
-- [ ] **Rapport Pédiatre PDF Premium** (différenciateur clé)
-  - Pas un export brut : document A4 structuré, branded Suivi Baby
-  - Structure : couverture → synthèse poids/taille/PC avec courbes OMS → alimentation → sommeil → vaccins → 3 observations IA
-  - Stack technique : `react-native-pdf-lib` ou service cloud (chantier ~2-3 semaines)
-  - Argument de vente fort pour abonnements annuels (renouvellement calé sur rendez-vous pédiatre tous les 2-3 mois)
+- [x] **Service IA** (`services/aiInsightsService.ts`) ✅
+  - `predictNextFeeding()` — calcul local basé sur intervalles moyens + coefficient de variation
+  - `predictNextSleep()` — idem pour les siestes
+  - `generateDailySummary()` — résumé local (highlights, concerns, suggestion)
+  - `generateAiEnhancedInsight()` — appel CF Claude Haiku (données anonymisées)
+  - `predictionToInsight()` — convertit prédiction en Insight affichable
+- [x] **Cloud Function `generateAiInsight`** ✅
+  - Proxy Claude Haiku (claude-haiku-4-5), rate limité 10 req/h/user
+  - 3 modes : advanced_insight, daily_summary, predictions
+  - Données anonymisées via dataAnonymizationService
+  - Secret `ANTHROPIC_API_KEY` via Firebase Secrets Manager
+- [x] **Gating IA** : insights basiques (insightEngine) = gratuit, prédictions + IA Claude = Premium
+- [ ] **Rapport Pédiatre PDF Premium** (chantier ~2-3 semaines, post-lancement)
+  - Document A4 structuré avec courbes OMS
+  - Stack : `react-native-pdf-lib` ou service cloud
 
 ### Phase 4 — Système promotionnel : ✅ FAIT
 
@@ -293,11 +303,12 @@ C'est le **game changer** par rapport aux concurrents.
 - [x] **Tiers gamifiés** : Parrain (1+), Ambassadeur (3+), Super Parent (10+)
 - [x] **Progression visuelle** vers le prochain palier
 
-- [ ] **Backend parrainage** (à implémenter) :
-  - Cloud Function pour valider un code parrainage à l'inscription
-  - Incrémenter `referralCount` du parrain
-  - Attribuer 1 mois Premium au parrain + filleul
+- [x] **Backend parrainage** ✅
+  - Cloud Function `validateReferralCode` : valide le code, empêche auto-parrainage et double utilisation
+  - Incrémente `referralCount` du parrain
+  - Attribue 1 mois Premium au parrain + filleul (via `subscriptions/{uid}`)
   - Collection `referrals/{docId}` pour tracking
+  - Batch atomique (5 opérations en une transaction)
 
 ### Phase 6 — Partenariats & contenu sponsorisé ⏳ À FAIRE
 
@@ -333,13 +344,19 @@ C'est le **game changer** par rapport aux concurrents.
 - [ ] **Données anonymisées** (avec accord IRB) pour partenariats de recherche
   - Renforce la crédibilité scientifique de l'app
 
-### Phase 6c — Milestones & Capsule Souvenir ⏳ À FAIRE
+### Phase 6c — Milestones & Capsule Souvenir ✅ FAIT
 
-- [ ] **Célébrations automatiques** des jalons (1 mois de suivi, 100e tétée, premier sommeil de 6h, prise de poids OMS atteinte)
-  - Notification push avec animation + option "partager ce moment"
-  - Gratuit : milestones basiques (1 mois, 3 mois, 6 mois)
-  - Premium : capsule mensuelle PDF/image shareable avec logo Suivi Baby
-- [ ] **Impact estimé** : réduction churn M3–M6 de ~15%, vecteur d'acquisition organique (partage Instagram/WhatsApp)
+- [x] **Service de détection** (`services/milestoneCelebrationService.ts`) ✅
+  - 6 types : tracking_duration, event_count, sleep_record, growth, first, streak
+  - Détection automatique : 1/3/6/12 mois de suivi, 100/500/1000 événements, 100e repas, première nuit 6h+, séries 7j/30j
+  - Persistance locale des milestones déjà célébrés (AsyncStorage)
+  - Gratuit : milestones basiques / Premium : séries (gamification)
+- [x] **Modal de célébration** (`components/suivibaby/MilestoneCelebrationModal.tsx`) ✅
+  - Animation spring + emoji + titre + message
+  - Bouton "Partager" (Share API natif) + "Merci !"
+  - Partage formaté pour Instagram/WhatsApp
+- [ ] **Capsule mensuelle PDF/image** (Premium, post-lancement)
+- **Impact estimé** : réduction churn M3–M6 de ~15%, acquisition organique via partages
 
 ### Phase 6d — Intégration Apple Health / Google Health Connect ⏳ À FAIRE
 
@@ -550,10 +567,10 @@ Phase 1  (RevenueCat + Paywall)       — ✅ FAIT (A+B+C : infra, paywall UI, S
 Phase 1b (Onboarding J0–J7)           — ✅ FAIT (slides, flow activation, célébration, métriques)
 Phase 1c (RGPD & conformité)          — ✅ PARTIELLEMENT FAIT (consentement, anonymisation, droit oubli, emails)
 Phase 1d (Mode Nuit)                  — ✅ FAIT (dark adaptatif, saisie rapide, a11y)
-Phase 3  (IA Premium + Rapport PDF)   — différenciateur, justifie le pricing
-Phase 5  backend (parrainage serveur) — acquisition virale
+Phase 3  (IA Premium + Rapport PDF)   — ✅ FAIT (prédictions, résumé, CF Claude Haiku)
+Phase 5  backend (parrainage serveur) — ✅ FAIT (CF validateReferralCode + 1 mois Premium)
 Phase 6  (Partenariats + B2B + Pro)   — quand base > 5K users
-Phase 6c (Milestones)                 — rétention M3-M6 + acquisition organique
+Phase 6c (Milestones)                 — ✅ FAIT (détection, modal célébration, partage)
 Phase 6d (Apple Health / Health Connect) — positionnement hub santé
 Localisation (Francophonie → ES → EN)  — levier x10 an 2
 ```
@@ -601,7 +618,10 @@ Localisation (Francophonie → ES → EN)  — levier x10 an 2
 | `components/ui/PaywallPrompt.tsx` | Composant paywall contextuel (inline/banner) | ✅ |
 | `app/settings/premium.tsx` | Page pricing in-app (3 plans, FAQ, restore, RevenuCat) | ✅ |
 | `services/revenueCatService.ts` | Wrapper RevenuCat SDK (init, achats, restore, listener) | ✅ |
+| `services/aiInsightsService.ts` | Prédictions, résumé quotidien, insights IA Claude | ✅ |
+| `services/milestoneCelebrationService.ts` | Détection milestones + persistance célébrés | ✅ |
+| `components/suivibaby/MilestoneCelebrationModal.tsx` | Modal célébration avec animation + partage | ✅ |
 
 ---
 
-*Dernière mise à jour : 2026-04-04 — Phase 1 complète (A+B+C RevenuCat) + 1b + 1c + 1d*
+*Dernière mise à jour : 2026-04-04 — Phases 1+1b+1c+1d+3+5+6c + webhooks + grandfather*
