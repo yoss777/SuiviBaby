@@ -35,7 +35,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useThemePreference } from "@/contexts/ThemeContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { deleteAccountAndData } from "@/services/accountDeletionService";
+import { requestAccountDeletion, cancelAccountDeletion, getPendingDeletionDate } from "@/services/accountDeletionService";
 import {
   clearCredentials,
   enableBiometric,
@@ -83,9 +83,11 @@ export default function SettingsScreen() {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState("Biométrie");
+  const [pendingDeletionDate, setPendingDeletionDate] = useState<string | null>(null);
+  const [isCancellingDeletion, setIsCancellingDeletion] = useState(false);
   const navigation = useNavigation();
 
-  // Check biometric availability on mount
+  // Check biometric availability + pending deletion on mount
   useEffect(() => {
     (async () => {
       const available = await isBiometricAvailable();
@@ -99,6 +101,8 @@ export default function SettingsScreen() {
         setBiometricLabel(type);
       }
     })();
+
+    getPendingDeletionDate().then(setPendingDeletionDate).catch(() => {});
   }, []);
 
   // Header right: home shortcut (baby home if activeChild, explore otherwise)
@@ -546,6 +550,48 @@ export default function SettingsScreen() {
         {renderSection("Autres", otherSettings)}
         {renderSection("Zone dangereuse", dangerSettings)}
 
+        {pendingDeletionDate && (
+          <View style={[styles.deletionBanner, { backgroundColor: nc.errorBg, borderColor: nc.error }]}>
+            <Ionicons name="warning-outline" size={20} color={nc.error} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={[styles.deletionBannerText, { color: nc.error }]}>
+                Suppression programmee le {new Date(pendingDeletionDate).toLocaleDateString("fr-FR")}
+              </Text>
+              <Text style={[styles.deletionBannerSubtext, { color: nc.textMuted }]}>
+                Vos donnees seront definitivement supprimees a cette date.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.cancelDeletionButton, { borderColor: nc.error }]}
+              onPress={async () => {
+                setIsCancellingDeletion(true);
+                try {
+                  await cancelAccountDeletion();
+                  setPendingDeletionDate(null);
+                  setModalConfig({
+                    visible: true,
+                    title: "Annulation confirmee",
+                    message: "La suppression de votre compte a ete annulee.",
+                  });
+                } catch {
+                  setModalConfig({
+                    visible: true,
+                    title: "Erreur",
+                    message: "Impossible d'annuler la suppression.",
+                  });
+                } finally {
+                  setIsCancellingDeletion(false);
+                }
+              }}
+              disabled={isCancellingDeletion}
+            >
+              <Text style={{ color: nc.error, fontWeight: "600", fontSize: 13 }}>
+                {isCancellingDeletion ? "..." : "Annuler"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: nc.textMuted }]}>
             SuiviBaby © 2026
@@ -593,7 +639,7 @@ export default function SettingsScreen() {
               </Text>
             </View>
           ) : (
-            "Votre compte et vos donnees seront supprimés immédiatement."
+            "Votre compte sera programme pour suppression dans 30 jours. Vous pourrez annuler a tout moment depuis les parametres."
           )) as any
         }
         value={deletePassword}
@@ -624,17 +670,25 @@ export default function SettingsScreen() {
 
           try {
             setIsDeleting(true);
-            await deleteAccountAndData(deletePassword);
+            await requestAccountDeletion(deletePassword);
+
+            // Envoyer email de confirmation (fire & forget)
+            const { httpsCallable } = await import("firebase/functions");
+            const { functions } = await import("@/config/firebase");
+            const sendEmail = httpsCallable(functions, "sendDeletionRequestEmail");
+            sendEmail().catch(() => {});
+
+            const deletionDate = new Date();
+            deletionDate.setDate(deletionDate.getDate() + 30);
+            setPendingDeletionDate(deletionDate.toISOString());
+
             setShowDeletePasswordModal(false);
             setDeletePassword("");
-            // L'utilisateur Auth est supprimé côté serveur par la CF,
-            // signOut peut échouer — on navigue quand même.
-            try {
-              await signOut();
-            } catch (_) {
-              /* user already deleted */
-            }
-            router.replace("/(auth)/login");
+            setModalConfig({
+              visible: true,
+              title: "Suppression programmee",
+              message: "Votre compte sera supprime dans 30 jours. Un email de confirmation vous a ete envoye. Vous pouvez annuler a tout moment depuis les parametres.",
+            });
           } catch (error: any) {
             const code = error?.code || "";
             const message =
@@ -642,7 +696,7 @@ export default function SettingsScreen() {
                 ? "Mot de passe incorrect."
                 : code === "auth/requires-recent-login"
                   ? "Veuillez vous reconnecter puis réessayer."
-                  : "Impossible de supprimer le compte.";
+                  : "Impossible de programmer la suppression du compte.";
             setModalConfig({
               visible: true,
               title: "Erreur",
@@ -749,5 +803,29 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 12,
+  },
+  deletionBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  deletionBannerText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  deletionBannerSubtext: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  cancelDeletionButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginLeft: 8,
   },
 });

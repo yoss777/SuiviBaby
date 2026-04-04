@@ -8,6 +8,7 @@ import {
   TipsCarousel,
   type StatItem,
 } from "@/components/suivibaby/dashboard";
+import { FirstTrackGuide } from "@/components/suivibaby/FirstTrackGuide";
 import { GlobalFAB } from "@/components/suivibaby/GlobalFAB";
 import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -41,7 +42,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -566,6 +567,8 @@ function getEditRoute(event: any): string | null {
 export default function HomeDashboard() {
   const { activeChild, reminderPreferences } = useBaby();
   const { firebaseUser } = useAuth();
+  const { firstTrack } = useLocalSearchParams<{ firstTrack?: string }>();
+  const [showFirstTrackGuide, setShowFirstTrackGuide] = useState(firstTrack === "true");
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -2497,6 +2500,11 @@ export default function HomeDashboard() {
             </Animated.View>
           )}
         </View>
+
+        {/* Guide premier tracking (onboarding J0) */}
+        {showFirstTrackGuide && (
+          <FirstTrackGuide onDismiss={() => setShowFirstTrackGuide(false)} />
+        )}
 
         {/* Tips carousel — skeleton while loading (P1) */}
         {isDataLoaded && smartContent.isLoading && (

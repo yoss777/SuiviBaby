@@ -958,6 +958,206 @@ exports.deleteUserAccount = onCall(
 );
 
 // ============================================
+// ACCOUNT DELETION REQUEST EMAIL
+// ============================================
+
+/**
+ * sendDeletionRequestEmail — Envoie un email confirmant la demande de suppression.
+ * Appelé côté client après que l'utilisateur a programmé la suppression.
+ */
+exports.sendDeletionRequestEmail = onCall(
+  withAppCheck({ region: "europe-west1", secrets: ["RESEND_API_KEY"] }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+
+    const userDoc = await db.doc(`users/${uid}`).get();
+    const userData = userDoc.data();
+    if (!userData?.pendingDeletion) {
+      throw new HttpsError("failed-precondition", "Aucune suppression programmee.");
+    }
+
+    let email = "";
+    try {
+      const userRecord = await admin.auth().getUser(uid);
+      email = userRecord.email || "";
+    } catch {
+      throw new HttpsError("internal", "Impossible de recuperer l'email.");
+    }
+
+    if (!email) {
+      throw new HttpsError("failed-precondition", "Aucun email associe au compte.");
+    }
+
+    const deletionDate = new Date(userData.pendingDeletion.deletionDate).toLocaleDateString("fr-FR");
+
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      console.error("sendDeletionRequestEmail: RESEND_API_KEY not configured");
+      return { success: false };
+    }
+
+    const resend = new Resend(apiKey);
+    await resend.emails.send({
+      from: "Suivi Baby <noreply@suivibaby.com>",
+      to: email,
+      subject: "Demande de suppression de votre compte Suivi Baby",
+      html: `
+        <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #1a1a1a;">Suppression programmee</h2>
+          <p>Vous avez demande la suppression de votre compte Suivi Baby.</p>
+          <p>Votre compte et toutes vos donnees seront definitivement supprimes le <strong>${deletionDate}</strong>.</p>
+          <p>Si vous changez d'avis, vous pouvez annuler cette demande a tout moment depuis les <strong>Parametres</strong> de l'application.</p>
+          <p>Si vous n'etes pas a l'origine de cette demande, connectez-vous immediatement a l'application et annulez la suppression, puis changez votre mot de passe.</p>
+          <p style="color: #666; font-size: 12px; margin-top: 30px;">Cet email a ete envoye automatiquement par Suivi Baby. Conformite RGPD art. 17.</p>
+        </div>
+      `,
+    });
+
+    return { success: true };
+  }
+);
+
+// ============================================
+// SCHEDULED ACCOUNT DELETION (Grace period 30 days)
+// ============================================
+
+/**
+ * processScheduledDeletions — Exécutée toutes les 24h.
+ * Traite les comptes marqués `pendingDeletion` dont la date est dépassée.
+ * Appelle la même logique que deleteUserAccount pour chaque compte expiré.
+ */
+exports.processScheduledDeletions = onSchedule(
+  { schedule: "every 24 hours", region: "europe-west1", timeoutSeconds: 540, memory: "512MiB", secrets: ["RESEND_API_KEY"] },
+  async () => {
+    const db = admin.firestore();
+    const now = new Date().toISOString();
+
+    const snapshot = await db
+      .collection("users")
+      .where("pendingDeletion.deletionDate", "<=", now)
+      .limit(50)
+      .get();
+
+    if (snapshot.empty) {
+      console.log("processScheduledDeletions: no accounts to delete");
+      return;
+    }
+
+    console.log(`processScheduledDeletions: processing ${snapshot.size} accounts`);
+
+    for (const userDoc of snapshot.docs) {
+      const uid = userDoc.id;
+      try {
+        // Récupérer email pour cleanup invitations
+        let email = "";
+        try {
+          const userRecord = await admin.auth().getUser(uid);
+          email = (userRecord.email || "").toLowerCase();
+        } catch (e) {
+          console.warn(`processScheduledDeletions: could not fetch user record for ${uid}`, e.message);
+        }
+
+        // 1. Traiter les enfants
+        const accessSnapshot = await db
+          .collection("user_child_access")
+          .where("userId", "==", uid)
+          .get();
+
+        for (const accessDoc of accessSnapshot.docs) {
+          const { childId, role } = accessDoc.data();
+          if (!childId) continue;
+
+          const childAccessSnap = await db
+            .collection("children").doc(childId).collection("access")
+            .get();
+
+          if (childAccessSnap.size <= 1) {
+            await deleteChildDataBatched(db, childId);
+            await db.doc(`children/${childId}`).delete();
+          } else if (role === "owner") {
+            await transferOwnership(db, childId, uid, childAccessSnap);
+            await db.doc(`children/${childId}/access/${uid}`).delete();
+          } else {
+            await db.doc(`children/${childId}/access/${uid}`).delete();
+          }
+          await accessDoc.ref.delete();
+        }
+
+        // 2. Supprimer les données utilisateur
+        await Promise.all([
+          deleteDocsByFieldBatched(db, "events", "userId", uid),
+          deleteDocsByFieldBatched(db, "eventLikes", "userId", uid),
+          deleteDocsByFieldBatched(db, "eventComments", "userId", uid),
+          deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", uid),
+          deleteDocsByFieldBatched(db, "shareCodes", "createdBy", uid),
+          deleteDocsByFieldBatched(db, "device_tokens", "userId", uid),
+          deleteDocsByFieldBatched(db, "notification_history", "userId", uid),
+          deleteDocsByFieldBatched(db, "recap_history", "userId", uid),
+        ]);
+
+        // 3. Invitations par email
+        if (email) {
+          await Promise.all([
+            deleteDocsByFieldBatched(db, "shareInvitations", "inviterEmail", email),
+            deleteDocsByFieldBatched(db, "shareInvitations", "invitedEmail", email),
+          ]);
+        }
+
+        // 4. Documents uniques
+        const singleDocPaths = [
+          `users/${uid}`, `users_public/${uid}`, `user_preferences/${uid}`,
+          `rate_limits/${uid}`, `usage_limits/${uid}`,
+        ];
+        const batch = db.batch();
+        singleDocPaths.forEach((path) => batch.delete(db.doc(path)));
+        await batch.commit();
+
+        // 5. Supprimer Firebase Auth
+        try {
+          await admin.auth().deleteUser(uid);
+        } catch (e) {
+          console.error(`processScheduledDeletions: failed to delete auth user ${uid}`, e.message);
+        }
+
+        // 6. Envoyer email de confirmation de suppression
+        if (email) {
+          try {
+            const apiKey = process.env.RESEND_API_KEY;
+            if (apiKey) {
+              const resend = new Resend(apiKey);
+              await resend.emails.send({
+                from: "Suivi Baby <noreply@suivibaby.com>",
+                to: email,
+                subject: "Votre compte Suivi Baby a ete supprime",
+                html: `
+                  <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #1a1a1a;">Suppression confirmee</h2>
+                    <p>Votre compte Suivi Baby et toutes les donnees associees ont ete definitivement supprimes, conformement a votre demande.</p>
+                    <p>Si vous n'etes pas a l'origine de cette suppression, contactez-nous immediatement a <a href="mailto:privacy@suivibaby.com">privacy@suivibaby.com</a>.</p>
+                    <p style="color: #666; font-size: 12px; margin-top: 30px;">Cet email a ete envoye automatiquement par Suivi Baby. Conformite RGPD art. 17.</p>
+                  </div>
+                `,
+              });
+            }
+          } catch (emailErr) {
+            console.warn(`processScheduledDeletions: failed to send deletion email to ${email}`, emailErr.message);
+          }
+        }
+
+        console.log(`processScheduledDeletions: deleted uid=${uid}`);
+      } catch (e) {
+        console.error(`processScheduledDeletions: error processing uid=${uid}`, e.message);
+      }
+    }
+  }
+);
+
+// ============================================
 // REMINDER PUSH NOTIFICATIONS (Scheduled)
 // ============================================
 

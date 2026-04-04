@@ -119,8 +119,8 @@ function BootScreenContent() {
       let navigate: () => void;
 
       if (children.length === 0) {
-        console.log("[BOOT] Aucun enfant, redirection vers explore");
-        navigate = () => router.replace("/explore");
+        console.log("[BOOT] Aucun enfant, redirection vers add-baby (first-run)");
+        navigate = () => router.replace({ pathname: "/(drawer)/add-baby", params: { firstRun: "true" } } as any);
       } else if (children.length >= 1) {
         const targetChild = activeChild ?? children[0];
         if (!targetChild) {

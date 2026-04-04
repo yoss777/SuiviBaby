@@ -18,6 +18,8 @@ import {
   signInWithGoogle,
 } from "@/services/socialAuthService";
 import { createPatientUser } from "@/services/userService";
+import { trackOnboardingEvent } from "@/services/onboardingAnalytics";
+import { sauvegarderConsentementSante } from "@/services/userPreferencesService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
@@ -90,6 +92,7 @@ export default function LoginScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [hasConsented, setHasConsented] = useState(false);
+  const [hasHealthConsent, setHasHealthConsent] = useState(false);
   const [showConsentError, setShowConsentError] = useState(false);
   const navigationLocked = useRef(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
@@ -132,6 +135,8 @@ export default function LoginScreen() {
   const resetAllFields = useCallback(() => {
     setEmail("");
     setUserName("");
+    setHasConsented(false);
+    setHasHealthConsent(false);
     resetPasswordFields();
   }, [resetPasswordFields]);
 
@@ -269,7 +274,7 @@ export default function LoginScreen() {
   const handleAuth = useCallback(async () => {
     if (isCoolingDown) return;
 
-    if (!isLogin && !hasConsented) {
+    if (!isLogin && (!hasConsented || !hasHealthConsent)) {
       setShowConsentError(true);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setTimeout(() => setShowConsentError(false), 2000);
@@ -328,6 +333,11 @@ export default function LoginScreen() {
           email.trim(),
           userName.trim() || defaultUserName,
         );
+
+        // Sauvegarder le consentement données de santé (RGPD art. 9)
+        await sauvegarderConsentementSante(userCredential.user.uid);
+        trackOnboardingEvent("signup_completed");
+        trackOnboardingEvent("health_consent_granted");
 
         // Envoyer l'email de vérification
         sendEmailVerification(userCredential.user).catch(() => {});
@@ -388,7 +398,7 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  }, [isLogin, hasConsented, email, password, userName, confirmPassword, unmetRules, showModal, resetAllFields, isCoolingDown, failedAttempts]);
+  }, [isLogin, hasConsented, hasHealthConsent, email, password, userName, confirmPassword, unmetRules, showModal, resetAllFields, isCoolingDown, failedAttempts]);
 
   // Connexion biométrique (#1)
   const handleBiometricLogin = useCallback(async () => {
@@ -455,6 +465,12 @@ export default function LoginScreen() {
     setHasConsented(!hasConsented);
     setShowConsentError(false);
   }, [hasConsented]);
+
+  const handleToggleHealthConsent = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setHasHealthConsent(!hasHealthConsent);
+    setShowConsentError(false);
+  }, [hasHealthConsent]);
 
   return (
     <KeyboardAvoidingView
@@ -670,7 +686,7 @@ export default function LoginScreen() {
               { backgroundColor: nc.todayAccent, shadowColor: nc.todayAccent },
               (loading || isCoolingDown) && styles.mainButtonDisabled,
               !isLogin &&
-                !hasConsented &&
+                (!hasConsented || !hasHealthConsent) &&
                 showConsentError && { backgroundColor: nc.error },
             ]}
             onPress={handleAuth}
@@ -850,6 +866,55 @@ export default function LoginScreen() {
                 </Text>
               </TouchableOpacity>
               <Text style={[styles.legalText, { color: nc.textMuted }]}>.</Text>
+            </View>
+          )}
+
+          {/* Consentement données de santé (RGPD art. 9) */}
+          {!isLogin && (
+            <View
+              style={[
+                styles.legalContainer,
+                { marginTop: 8 },
+                showConsentError && !hasHealthConsent && [
+                  styles.legalErrorBorder,
+                  { backgroundColor: nc.errorBg, borderColor: nc.error },
+                ],
+              ]}
+            >
+              <TouchableOpacity
+                onPress={handleToggleHealthConsent}
+                style={styles.consentCheckbox}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: hasHealthConsent }}
+                accessibilityLabel="Consentir au traitement des données de santé de mon enfant"
+              >
+                <FontAwesome
+                  name={hasHealthConsent ? "check-square" : "square"}
+                  size={20}
+                  color={showConsentError && !hasHealthConsent ? nc.error : nc.todayAccent}
+                />
+              </TouchableOpacity>
+              <Text
+                style={[
+                  styles.legalText,
+                  { color: nc.textMuted, flex: 1 },
+                  showConsentError && !hasHealthConsent && { color: nc.error, fontWeight: "bold" },
+                ]}
+              >
+                J'autorise le traitement des{" "}
+                <Text style={{ fontWeight: "600" }}>
+                  donnees de sante
+                </Text>
+                {" "}de mon enfant (alimentation, sommeil, croissance) conformement au{" "}
+                <Text
+                  style={{ color: nc.todayAccent, textDecorationLine: "underline" }}
+                  onPress={() => router.push("/(auth)/privacy")}
+                >
+                  RGPD art. 9
+                </Text>
+                .
+              </Text>
             </View>
           )}
 

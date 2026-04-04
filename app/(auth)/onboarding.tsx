@@ -8,6 +8,7 @@ import {
   isBiometricAvailable,
 } from "@/services/biometricAuthService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import { trackOnboardingEvent } from "@/services/onboardingAnalytics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
@@ -30,22 +31,36 @@ const SLIDES = [
     icon: "baby-carriage" as const,
     title: "Bienvenue sur Suivi Baby",
     description:
-      "L'app qui vous accompagne au quotidien pour suivre l'alimentation, le sommeil et la croissance de votre bébé.",
+      "L'app qui vous accompagne au quotidien pour suivre l'alimentation, le sommeil et la croissance de votre bebe.",
     color: "#6366f1",
   },
   {
-    icon: "chart-line" as const,
-    title: "Suivi complet",
+    icon: "clock" as const,
+    title: "Saisie en 3 secondes",
     description:
-      "Biberons, tétées, couches, sommeil, croissance, activités... Tout est centralisé pour ne rien oublier.",
+      "Un biberon a 3h du matin ? Un tap suffit. Mode nuit automatique, commandes vocales, saisie rapide — pensee pour les parents fatigues.",
     color: "#22c55e",
   },
   {
-    icon: "cloud" as const,
-    title: "Sécurisé et synchronisé",
+    icon: "users" as const,
+    title: "Toute la famille connectee",
     description:
-      "Vos données sont chiffrées et synchronisées en temps réel. Partagez l'accès avec votre partenaire.",
+      "Partagez le suivi avec votre partenaire, la nounou ou les grands-parents. Chacun voit les evenements en temps reel.",
     color: "#f59e0b",
+  },
+  {
+    icon: "shield-halved" as const,
+    title: "Donnees securisees",
+    description:
+      "Chiffrement de bout en bout, zero publicite, conformite RGPD. Les donnees de votre bebe restent privees.",
+    color: "#ef4444",
+  },
+  {
+    icon: "wand-magic-sparkles" as const,
+    title: "Insights intelligents",
+    description:
+      "Decouvrez des tendances : \"Bebe dort mieux quand couche avant 19h30\". Courbes OMS, statistiques avancees et plus avec Premium.",
+    color: "#8b5cf6",
   },
 ];
 
@@ -78,6 +93,7 @@ export default function OnboardingScreen() {
 
   const finishOnboarding = useCallback(async () => {
     markOnboardingComplete();
+    trackOnboardingEvent("onboarding_completed");
     // Check if biometric is available to propose it
     const available = await isBiometricAvailable();
     if (available) {
@@ -113,8 +129,9 @@ export default function OnboardingScreen() {
   const handleSkip = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     markOnboardingComplete();
+    trackOnboardingEvent("onboarding_skipped", { slide: currentIndex });
     goToLogin();
-  }, [goToLogin]);
+  }, [goToLogin, currentIndex]);
 
   const renderItem = useCallback(
     ({ item }: { item: (typeof SLIDES)[number] }) => (

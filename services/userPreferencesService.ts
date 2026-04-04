@@ -8,12 +8,19 @@ const getUserId = () => {
   return user.uid;
 };
 
+export interface HealthDataConsent {
+  granted: boolean;
+  grantedAt: string; // ISO 8601
+  version: string; // version de la politique au moment du consentement
+}
+
 interface UserPreferences {
   hiddenChildrenIds: string[];
   lastActiveChildId?: string;
   notifications?: NotificationPreferences;
   theme?: ThemePreference;
   language?: LanguagePreference;
+  healthDataConsent?: HealthDataConsent;
 }
 
 export type ThemePreference = 'light' | 'dark' | 'auto';
@@ -218,6 +225,21 @@ export async function mettreAJourPreferenceLanguage(language: LanguagePreference
     console.error("Erreur lors de la mise à jour de la langue:", e);
     throw e;
   }
+}
+
+/**
+ * Sauvegarder le consentement données de santé (RGPD art. 9)
+ * Appelé à l'inscription — preuve horodatée du consentement explicite.
+ */
+export async function sauvegarderConsentementSante(uid: string) {
+  const docRef = doc(db, "user_preferences", uid);
+  const consent: HealthDataConsent = {
+    granted: true,
+    grantedAt: new Date().toISOString(),
+    version: "1.0", // incrémenter à chaque mise à jour de la politique de confidentialité
+  };
+
+  await setDoc(docRef, { healthDataConsent: consent, updatedAt: new Date() }, { merge: true });
 }
 
 /**

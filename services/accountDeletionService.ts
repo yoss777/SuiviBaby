@@ -1,15 +1,20 @@
-import { auth, functions } from "@/config/firebase";
+import { auth, db, functions } from "@/config/firebase";
 import {
   EmailAuthProvider,
   reauthenticateWithCredential,
 } from "firebase/auth";
+import { doc, getDoc, deleteField, updateDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 
+const GRACE_PERIOD_DAYS = 30;
+
 /**
- * Supprime le compte utilisateur et toutes ses données via Cloud Function.
- * La ré-authentification est requise côté client avant l'appel serveur.
+ * Demande la suppression du compte avec délai de grâce de 30 jours.
+ * Le compte est marqué `pendingDeletion` — la suppression effective est déléguée
+ * à une Cloud Function schedulée qui traite les comptes expirés.
+ * L'utilisateur peut annuler pendant le délai via `cancelAccountDeletion()`.
  */
-export async function deleteAccountAndData(password: string) {
+export async function requestAccountDeletion(password: string) {
   const user = auth.currentUser;
   if (!user || !user.email) {
     throw new Error("Utilisateur non authentifié.");
@@ -19,7 +24,59 @@ export async function deleteAccountAndData(password: string) {
   const credential = EmailAuthProvider.credential(user.email, password);
   await reauthenticateWithCredential(user, credential);
 
-  // Appel Cloud Function — supprime toutes les données + Auth user côté serveur
+  // Marquer le compte pour suppression différée
+  const scheduledAt = new Date();
+  const deletionDate = new Date(scheduledAt);
+  deletionDate.setDate(deletionDate.getDate() + GRACE_PERIOD_DAYS);
+
+  await updateDoc(doc(db, "users", user.uid), {
+    pendingDeletion: {
+      scheduledAt: scheduledAt.toISOString(),
+      deletionDate: deletionDate.toISOString(),
+    },
+  });
+}
+
+/**
+ * Annule une demande de suppression de compte en cours.
+ */
+export async function cancelAccountDeletion() {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("Utilisateur non authentifié.");
+  }
+
+  await updateDoc(doc(db, "users", user.uid), {
+    pendingDeletion: deleteField(),
+  });
+}
+
+/**
+ * Vérifie si le compte a une suppression programmée.
+ * Retourne la date de suppression ou null.
+ */
+export async function getPendingDeletionDate(): Promise<string | null> {
+  const user = auth.currentUser;
+  if (!user) return null;
+
+  const userDoc = await getDoc(doc(db, "users", user.uid));
+  const data = userDoc.data();
+  return data?.pendingDeletion?.deletionDate ?? null;
+}
+
+/**
+ * Suppression immédiate (fallback legacy / admin).
+ * Appelle directement la Cloud Function — supprime tout sans délai de grâce.
+ */
+export async function deleteAccountImmediately(password: string) {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error("Utilisateur non authentifié.");
+  }
+
+  const credential = EmailAuthProvider.credential(user.email, password);
+  await reauthenticateWithCredential(user, credential);
+
   const deleteAccount = httpsCallable<void, { success: boolean }>(
     functions,
     "deleteUserAccount"

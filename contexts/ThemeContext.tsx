@@ -10,10 +10,18 @@ import {
 } from '@/services/userPreferencesService';
 
 const THEME_STORAGE_KEY = '@samaye_theme_preference';
+const NIGHT_START_HOUR = 22;
+const NIGHT_END_HOUR = 7;
+
+function isNightTime(): boolean {
+  const hour = new Date().getHours();
+  return hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR;
+}
 
 interface ThemeContextValue {
   preference: ThemePreference;
   resolvedColorScheme: 'light' | 'dark';
+  isNightMode: boolean;
   isLoading: boolean;
   setPreference: (value: ThemePreference) => Promise<void>;
 }
@@ -73,9 +81,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     };
   }, [firebaseUser, localLoaded]);
 
+  const [nightMode, setNightMode] = useState(isNightTime);
+
+  // Re-check night mode every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNightMode(isNightTime());
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const resolvedColorScheme = useMemo(() => {
-    return preference === 'auto' ? systemScheme : preference;
-  }, [preference, systemScheme]);
+    if (preference === 'auto') {
+      // Force dark mode at night (22h-7h) even if system is light
+      return nightMode ? 'dark' : systemScheme;
+    }
+    return preference;
+  }, [preference, systemScheme, nightMode]);
 
   const setPreference = async (value: ThemePreference) => {
     if (value === preference) return;
@@ -103,6 +125,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       value={{
         preference,
         resolvedColorScheme,
+        isNightMode: nightMode,
         isLoading,
         setPreference,
       }}

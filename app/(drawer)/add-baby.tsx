@@ -5,9 +5,10 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useModal } from '@/contexts/ModalContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { trackOnboardingEvent } from "@/services/onboardingAnalytics";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { addDoc, collection } from 'firebase/firestore';
 import { createOwnerAccess } from '@/utils/permissions';
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -34,6 +35,8 @@ export default function AddBabyScreen() {
   const tint = Colors[colorScheme].tint;
   const { user } = useAuth();
   const { showAlert } = useModal();
+  const { firstRun } = useLocalSearchParams<{ firstRun?: string }>();
+  const isFirstRun = firstRun === "true";
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [gender, setGender] = useState<'male' | 'female' | ''>('');
@@ -251,16 +254,22 @@ export default function AddBabyScreen() {
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      showAlert(
-        'Succès',
-        `${name} a été ajouté avec succès !`,
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
-      );
+      if (isFirstRun) {
+        // Premier flow : rediriger vers le dashboard avec guide premier tracking
+        trackOnboardingEvent("first_baby_added");
+        router.replace({ pathname: "/(drawer)/baby", params: { firstTrack: "true" } } as any);
+      } else {
+        showAlert(
+          'Succès',
+          `${name} a été ajouté avec succès !`,
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+      }
 
       // Réinitialiser le formulaire
       setName('');
@@ -284,9 +293,23 @@ export default function AddBabyScreen() {
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
           <View style={dynamicStyles.header}>
             <FontAwesome name="baby" size={48} color={tint} />
-            <Text style={[dynamicStyles.subtitle, { marginTop: 20 }]}>
-              Renseignez les informations de votre enfant
-            </Text>
+            {isFirstRun ? (
+              <>
+                <Text style={[styles.welcomeTitle, { color: nc.textStrong, marginTop: 16 }]}>
+                  Felicitations !
+                </Text>
+                <Text style={[dynamicStyles.subtitle, { marginTop: 8 }]}>
+                  Votre compte est cree. Commencez par ajouter votre bebe pour demarrer le suivi.
+                </Text>
+                <View style={[styles.stepIndicator, { backgroundColor: tint + '15' }]}>
+                  <Text style={[styles.stepText, { color: tint }]}>Etape 1/2 — Ajouter votre bebe</Text>
+                </View>
+              </>
+            ) : (
+              <Text style={[dynamicStyles.subtitle, { marginTop: 20 }]}>
+                Renseignez les informations de votre enfant
+              </Text>
+            )}
           </View>
 
           {/* Formulaire */}
@@ -458,5 +481,20 @@ const styles = StyleSheet.create({
   genderContainer: {
     flexDirection: "row",
     gap: 12,
+  },
+  welcomeTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  stepIndicator: {
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  stepText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

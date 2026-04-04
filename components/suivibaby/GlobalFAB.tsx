@@ -3,6 +3,7 @@ import { QUICK_ADD_CATEGORIES } from "@/constants/dashboardConfig";
 import { Colors } from "@/constants/theme";
 import { useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useNightMode } from "@/hooks/useNightMode";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import * as Haptics from "expo-haptics";
@@ -172,15 +173,16 @@ export const GlobalFAB = () => {
   const colors = Colors[colorScheme];
   const nc = getNeutralColors(colorScheme);
   const insets = useSafeAreaInsets();
+  const { isNightMode, minButtonSize, animationsEnabled } = useNightMode();
   const [isOpen, setIsOpen] = useState(false);
   const rotation = useSharedValue(0);
   const pulseScale = useSharedValue(1);
   const backdropOpacity = useSharedValue(0);
 
-  // Subtle pulse animation when closed — 2 cycles only (not infinite)
+  // Subtle pulse animation when closed — skip in night mode (less visual noise)
   const hasPlayedPulse = useRef(false);
   useEffect(() => {
-    if (!isOpen && !hasPlayedPulse.current) {
+    if (!isOpen && !hasPlayedPulse.current && animationsEnabled) {
       hasPlayedPulse.current = true;
       pulseScale.value = withRepeat(
         withSequence(
@@ -195,7 +197,7 @@ export const GlobalFAB = () => {
     } else if (isOpen) {
       pulseScale.value = withTiming(1, { duration: 200 });
     }
-  }, [isOpen]);
+  }, [isOpen, animationsEnabled]);
 
   useEffect(() => {
     rotation.value = withSpring(isOpen ? 45 : 0, { damping: 12 });
@@ -295,7 +297,7 @@ export const GlobalFAB = () => {
       actionBusy.current = false;
     }, 400);
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(isNightMode ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
     setIsOpen(false);
     if ("isMore" in action) {
       openMoreSheet();
@@ -356,7 +358,7 @@ export const GlobalFAB = () => {
         {/* Main FAB */}
         <Pressable
           onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            Haptics.impactAsync(isNightMode ? Haptics.ImpactFeedbackStyle.Heavy : Haptics.ImpactFeedbackStyle.Medium);
             setIsOpen(!isOpen);
           }}
           accessibilityRole="button"
@@ -366,6 +368,7 @@ export const GlobalFAB = () => {
           style={({ pressed }) => [
             styles.mainFab,
             { backgroundColor: Colors[colorScheme].tint },
+            isNightMode && { width: minButtonSize + 12, height: minButtonSize + 12, borderRadius: (minButtonSize + 12) / 2 },
             pressed && styles.mainFabPressed,
           ]}
         >
