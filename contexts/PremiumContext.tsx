@@ -16,6 +16,14 @@ import React, {
 
 import { db } from "@/config/firebase";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  initRevenueCat,
+  loginRevenueCat,
+  logoutRevenueCat,
+  getTierFromCustomerInfo,
+  getStatusFromCustomerInfo,
+  addCustomerInfoListener,
+} from "@/services/revenueCatService";
 
 // ============================================
 // TYPES
@@ -140,7 +148,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [devOverride, setDevOverride] = useState<PremiumTier | null>(null);
 
-  // Load cache on mount
+  // Step 1: Load cache on mount (instant, no network)
   useEffect(() => {
     loadCache().then((cached) => {
       if (cached) {
@@ -148,48 +156,93 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
         setStatus(cached.status);
         setGrandfathered(cached.grandfathered);
       }
-      setIsLoading(false);
     });
+    // Init RevenuCat SDK (no user yet)
+    initRevenueCat().catch(() => {});
   }, []);
 
-  // Listen to Firestore subscription document
+  // Step 2: When user changes, sync with RevenuCat + Firestore fallback
   useEffect(() => {
     if (!firebaseUser?.uid) {
       setTier("free");
       setStatus("active");
       setGrandfathered(false);
       setIsLoading(false);
+      logoutRevenueCat().catch(() => {});
       return;
     }
 
+    let cancelled = false;
+
+    const syncFromRevenueCat = async () => {
+      try {
+        // Login to RevenuCat with Firebase UID
+        const customerInfo = await loginRevenueCat(firebaseUser.uid);
+        if (cancelled || !customerInfo) return;
+
+        const rcTier = getTierFromCustomerInfo(customerInfo);
+        const rcStatus = getStatusFromCustomerInfo(customerInfo);
+
+        setTier(rcTier);
+        setStatus(rcStatus);
+        saveCache({ tier: rcTier, status: rcStatus, grandfathered: false });
+        setIsLoading(false);
+      } catch {
+        // RevenuCat failed — fallback to Firestore
+        if (!cancelled) syncFromFirestore();
+      }
+    };
+
+    const syncFromFirestore = () => {
+      const docRef = doc(db, "subscriptions", firebaseUser.uid);
+      return onSnapshot(
+        docRef,
+        (snap) => {
+          if (cancelled) return;
+          if (snap.exists()) {
+            const data = snap.data() as SubscriptionData;
+            setTier(data.tier ?? "free");
+            setStatus(data.status ?? "active");
+            setGrandfathered(data.grandfathered ?? false);
+            saveCache({ tier: data.tier ?? "free", status: data.status ?? "active", grandfathered: data.grandfathered ?? false });
+          }
+          setIsLoading(false);
+        },
+        () => { if (!cancelled) setIsLoading(false); }
+      );
+    };
+
+    // RevenuCat real-time listener
+    const removeRCListener = addCustomerInfoListener((info) => {
+      if (cancelled) return;
+      const rcTier = getTierFromCustomerInfo(info);
+      const rcStatus = getStatusFromCustomerInfo(info);
+      setTier(rcTier);
+      setStatus(rcStatus);
+      saveCache({ tier: rcTier, status: rcStatus, grandfathered: false });
+    });
+
+    syncFromRevenueCat();
+
+    // Firestore listener for grandfathered status (not in RevenuCat)
     const docRef = doc(db, "subscriptions", firebaseUser.uid);
-    const unsubscribe = onSnapshot(
+    const unsubFirestore = onSnapshot(
       docRef,
       (snap) => {
+        if (cancelled) return;
         if (snap.exists()) {
           const data = snap.data() as SubscriptionData;
-          const newTier = data.tier ?? "free";
-          const newStatus = data.status ?? "active";
-          const newGrandfathered = data.grandfathered ?? false;
-
-          setTier(newTier);
-          setStatus(newStatus);
-          setGrandfathered(newGrandfathered);
-          saveCache({ tier: newTier, status: newStatus, grandfathered: newGrandfathered });
-        } else {
-          setTier("free");
-          setStatus("active");
-          saveCache({ tier: "free", status: "active", grandfathered: false });
+          if (data.grandfathered) setGrandfathered(true);
         }
-        setIsLoading(false);
       },
-      () => {
-        // On error, keep cached state
-        setIsLoading(false);
-      }
+      () => {}
     );
 
-    return unsubscribe;
+    return () => {
+      cancelled = true;
+      removeRCListener();
+      unsubFirestore();
+    };
   }, [firebaseUser?.uid]);
 
   const effectiveTier = devOverride ?? tier;

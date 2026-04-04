@@ -4,11 +4,18 @@
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { usePremium, type PremiumTier } from "@/contexts/PremiumContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import {
+  getOfferings,
+  purchasePackage,
+  restorePurchases,
+} from "@/services/revenueCatService";
+import { InfoModal } from "@/components/ui/InfoModal";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { PurchasesPackage } from "react-native-purchases";
 import {
   ScrollView,
   StyleSheet,
@@ -110,21 +117,90 @@ export default function PremiumScreen() {
   const { tier: currentTier, isPremium, isGrandfathered } = usePremium();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("annual");
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const [rcPackages, setRcPackages] = useState<Record<string, PurchasesPackage>>({});
+  const [purchasing, setPurchasing] = useState(false);
+  const [modalConfig, setModalConfig] = useState({ visible: false, title: "", message: "" });
+
+  // Charger les offerings RevenuCat (prix localisés)
+  useEffect(() => {
+    getOfferings().then((offerings) => {
+      const pkgs: Record<string, PurchasesPackage> = {};
+      if (offerings.default) {
+        for (const pkg of offerings.default.availablePackages) {
+          if (pkg.packageType === "MONTHLY") pkgs["premium_monthly"] = pkg;
+          else if (pkg.packageType === "ANNUAL") pkgs["premium_annual"] = pkg;
+          else if (pkg.packageType === "LIFETIME") pkgs["lifetime"] = pkg;
+        }
+      }
+      if (offerings.family) {
+        for (const pkg of offerings.family.availablePackages) {
+          if (pkg.packageType === "MONTHLY") pkgs["family_monthly"] = pkg;
+          else if (pkg.packageType === "ANNUAL") pkgs["family_annual"] = pkg;
+        }
+      }
+      setRcPackages(pkgs);
+    }).catch(() => {});
+  }, []);
 
   const handleSubscribe = useCallback(
-    (plan: PlanConfig) => {
+    async (plan: PlanConfig) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      // TODO: Connecter à RevenueCat quand les API keys seront prêtes
-      // Purchases.purchasePackage(package)
-      console.log(`[PREMIUM] Subscribe to ${plan.tier} (${billingCycle})`);
+
+      let pkgKey = "";
+      if (plan.tier === "premium") pkgKey = billingCycle === "monthly" ? "premium_monthly" : "premium_annual";
+      else if (plan.tier === "family") pkgKey = billingCycle === "monthly" ? "family_monthly" : "family_annual";
+      const pkg = rcPackages[pkgKey];
+
+      if (!pkg) {
+        setModalConfig({
+          visible: true,
+          title: "Indisponible",
+          message: "Ce plan n'est pas encore disponible. Reessayez plus tard.",
+        });
+        return;
+      }
+
+      setPurchasing(true);
+      try {
+        const result = await purchasePackage(pkg);
+        if (result.success) {
+          setModalConfig({
+            visible: true,
+            title: "Bienvenue dans SuiviBaby+ !",
+            message: "Votre abonnement est actif. Profitez de toutes les fonctionnalites Premium.",
+          });
+        }
+      } catch {
+        setModalConfig({
+          visible: true,
+          title: "Erreur",
+          message: "L'achat a echoue. Veuillez reessayer.",
+        });
+      } finally {
+        setPurchasing(false);
+      }
     },
-    [billingCycle]
+    [billingCycle, rcPackages]
   );
 
-  const handleRestore = useCallback(() => {
+  const handleRestore = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // TODO: Purchases.restorePurchases()
-    console.log("[PREMIUM] Restore purchases");
+    try {
+      const info = await restorePurchases();
+      if (info) {
+        setModalConfig({
+          visible: true,
+          title: "Achats restaures",
+          message: "Vos achats precedents ont ete restaures avec succes.",
+        });
+      }
+    } catch {
+      setModalConfig({
+        visible: true,
+        title: "Erreur",
+        message: "Impossible de restaurer les achats. Verifiez votre connexion.",
+      });
+    }
   }, []);
 
   return (
@@ -272,7 +348,7 @@ export default function PremiumScreen() {
                     isCurrentPlan && { opacity: 0.5 },
                   ]}
                   onPress={() => handleSubscribe(plan)}
-                  disabled={isCurrentPlan}
+                  disabled={isCurrentPlan || purchasing}
                 >
                   <Text style={[styles.subscribeButtonText, { color: nc.white }]}>
                     {isCurrentPlan ? "Plan actuel" : "Essai gratuit 14 jours"}
@@ -330,6 +406,15 @@ export default function PremiumScreen() {
           Le paiement est debite via votre compte App Store ou Google Play.
         </Text>
       </ScrollView>
+
+      <InfoModal
+        visible={modalConfig.visible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
+        onClose={() => setModalConfig({ visible: false, title: "", message: "" })}
+      />
     </SafeAreaView>
   );
 }

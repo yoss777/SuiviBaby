@@ -127,25 +127,38 @@
   - État `billing_issue` dans PremiumContext (prêt pour RevenuCat)
   - Le banner sera affiché quand le status passe en `billing_issue`
 
-#### Étape C — RevenueCat (quand API keys prêtes) ⏳ À FAIRE
+#### Étape C — RevenueCat SDK ✅ FAIT
 
-- [ ] **Intégrer `react-native-purchases`**
-  - SDK keys iOS + Android (placeholders en place)
-  - Produits : Premium 3.99€/mois, 29.99€/an, Famille 6.99€/mois, 44.99€/an, Lifetime 79.99€
-  - A/B testing prix natif, analytics revenus
+- [x] **`react-native-purchases` installé** (v9.15.1) ✅
+- [x] **`services/revenueCatService.ts`** ✅
+  - Init SDK avec clé publique test
+  - Login/logout avec Firebase UID
+  - getOfferings() → prix localisés par store
+  - purchasePackage() → flow natif Apple/Google
+  - restorePurchases() → obligatoire stores
+  - addCustomerInfoListener() → changements temps réel
+  - getTierFromCustomerInfo() / getStatusFromCustomerInfo()
+- [x] **PremiumContext connecté à RevenuCat** ✅
+  - Source primaire : RevenuCat SDK (listener temps réel)
+  - Fallback : Firestore `subscriptions/{userId}`
+  - Cache offline AsyncStorage (TTL 7j)
+  - Login RC au login Firebase, logout au signout
+- [x] **Page pricing connectée aux vrais achats** ✅
+  - Chargement offerings RC au mount (prix localisés)
+  - purchasePackage() sur le bouton "Essai gratuit"
+  - restorePurchases() sur "Restaurer mes achats"
+  - Modals succès/erreur
 
-- [ ] **Restore Purchases**
-  - `Purchases.restorePurchases()` dans page pricing + settings
-  - Edge cases : achat sur autre device, changement Apple ID
-
-- [ ] **Webhooks serveur**
+- [ ] **Webhooks serveur** (à implémenter quand en production)
   - Cloud Function pour recevoir les événements RevenueCat
   - Mettre à jour `subscriptions/{userId}` en temps réel
 
 - [ ] **Winback flow** (rétention des churners)
   - Notification push J+7 à J+14 après annulation
   - Offre réduite : 2,49€/mois pendant 3 mois
-  - Seasonal pricing : offres rentrée/Noël
+
+**RevenuCat Dashboard** : Entitlements `premium` + `family`, 5 produits, 2 offerings configurés.
+**Clé API** : `test_BHbHbhlPMXdgMEKwlhISZchIPkO` (Test Store — remplacer par clés prod iOS/Android au déploiement)
 
 ### Phase 1b — Onboarding "Moment Magie" J0–J7 (PRIORITÉ 1) ✅ FAIT
 
@@ -532,8 +545,8 @@ L'app est techniquement solide mais **personne ne s'occupe de l'acquisition**. S
 ## Ordre d'implémentation recommandé
 
 ```
-Phase 1  (RevenueCat + Paywall)       — ✅ Étapes A+B FAITES, Étape C (RevenuCat) en attente des API keys
-  └─ PremiumContext, gating, paywall UI, pricing page — tout prêt sauf branchement store
+Phase 1  (RevenueCat + Paywall)       — ✅ FAIT (A+B+C : infra, paywall UI, SDK branché)
+  └─ Reste : webhooks serveur + winback flow (post-lancement)
 Phase 1b (Onboarding J0–J7)           — ✅ FAIT (slides, flow activation, célébration, métriques)
 Phase 1c (RGPD & conformité)          — ✅ PARTIELLEMENT FAIT (consentement, anonymisation, droit oubli, emails)
 Phase 1d (Mode Nuit)                  — ✅ FAIT (dark adaptatif, saisie rapide, a11y)
@@ -586,8 +599,9 @@ Localisation (Francophonie → ES → EN)  — levier x10 an 2
 | `contexts/PremiumContext.tsx` | État premium global, cache offline, dev toggle | ✅ |
 | `services/premiumGatingService.ts` | Limites tier gratuit, compteurs, messages paywall | ✅ |
 | `components/ui/PaywallPrompt.tsx` | Composant paywall contextuel (inline/banner) | ✅ |
-| `app/settings/premium.tsx` | Page pricing in-app (3 plans, FAQ, restore) | ✅ |
+| `app/settings/premium.tsx` | Page pricing in-app (3 plans, FAQ, restore, RevenuCat) | ✅ |
+| `services/revenueCatService.ts` | Wrapper RevenuCat SDK (init, achats, restore, listener) | ✅ |
 
 ---
 
-*Dernière mise à jour : 2026-04-04 — Phases 1 (A+B) + 1b + 1c + 1d implémentées (Premium infra + Onboarding + RGPD + Mode Nuit)*
+*Dernière mise à jour : 2026-04-04 — Phase 1 complète (A+B+C RevenuCat) + 1b + 1c + 1d*
