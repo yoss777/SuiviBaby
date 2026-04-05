@@ -249,8 +249,13 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
             if (!childSnap.exists()) {
               childDataRef.current.delete(childId);
             } else {
-              const data = childSnap.data() as Omit<Child, 'id'>;
-              childDataRef.current.set(childId, { id: childId, ...data });
+              const data = childSnap.data() as Omit<Child, 'id'> & { deletedAt?: unknown };
+              // Skip soft-deleted children
+              if (data.deletedAt) {
+                childDataRef.current.delete(childId);
+              } else {
+                childDataRef.current.set(childId, { id: childId, ...data });
+              }
             }
 
             // Single call to recompute state

@@ -3,7 +3,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
 import {
   useCallback,
   useEffect,
@@ -92,6 +92,7 @@ export default function SettingsScreen() {
   );
   const [isCancellingDeletion, setIsCancellingDeletion] = useState(false);
   const [isOwnerOfAny, setIsOwnerOfAny] = useState(false);
+  const [pendingDeletionRequests, setPendingDeletionRequests] = useState(0);
   const navigation = useNavigation();
 
   // Check biometric availability + pending deletion on mount
@@ -139,6 +140,33 @@ export default function SettingsScreen() {
     })();
     return () => { mounted = false; };
   }, [user?.uid, children]);
+
+  // Listen for pending deletion requests where user is an owner
+  useEffect(() => {
+    if (!user?.uid) {
+      setPendingDeletionRequests(0);
+      return;
+    }
+
+    const q = query(
+      collection(db, "childDeletionRequests"),
+      where("ownerIds", "array-contains", user.uid)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const count = snapshot.docs.filter((d) => {
+          const status = d.data().status;
+          return status === "pending" || status === "refused";
+        }).length;
+        setPendingDeletionRequests(count);
+      },
+      () => setPendingDeletionRequests(0)
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   // Header right: home shortcut (baby home if activeChild, explore otherwise)
   useLayoutEffect(() => {
@@ -276,6 +304,22 @@ export default function SettingsScreen() {
             },
           ]
         : []),
+      ...(pendingDeletionRequests > 0
+        ? [
+            {
+              id: "deletion-requests",
+              icon: "alert-circle-outline" as keyof typeof Ionicons.glyphMap,
+              label: "Demandes de suppression",
+              description: `${pendingDeletionRequests} demande${pendingDeletionRequests > 1 ? "s" : ""} en attente`,
+              value: `${pendingDeletionRequests}`,
+              color: nc.error,
+              onPress: () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/settings/deletion-requests");
+              },
+            },
+          ]
+        : []),
       {
         id: "join-child",
         icon: "person-add-outline",
@@ -362,6 +406,8 @@ export default function SettingsScreen() {
       hiddenChildrenCount,
       hasHiddenChildren,
       isOwnerOfAny,
+      pendingDeletionRequests,
+      nc.error,
       router,
       themePreference,
       biometricAvailable,

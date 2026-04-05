@@ -10,6 +10,7 @@ const { hasRequiredChildAccess } = require("./accessControl");
 admin.initializeApp();
 
 const BATCH_LIMIT = 450;
+const CHILD_DELETION_RETENTION_DAYS = 30;
 const APP_CHECK_ENFORCED = process.env.APPCHECK_ENFORCE === "true";
 const expo = new Expo();
 
@@ -2026,3 +2027,412 @@ exports.sendWeeklyRecap = onSchedule(
     );
   }
 );
+
+// ============================================
+// CHILD DELETION — Soft-delete with multi-owner approval
+// ============================================
+
+/**
+ * Soft-delete interne : coupe l'accès, marque deletedAt, conserve les données pour rétention RGPD.
+ * Appelée par createDeletionRequest (owner unique) ou voteDeletionRequest (tous approuvés).
+ */
+async function softDeleteChild(db, childId, requestId, requestedBy) {
+  const now = admin.firestore.Timestamp.now();
+  const purgeAt = admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() + CHILD_DELETION_RETENTION_DAYS * 24 * 60 * 60 * 1000)
+  );
+
+  // 1. Collect all userIds with access before we delete access docs
+  const accessSnap = await db.collection("children").doc(childId).collection("access").get();
+  const userIds = new Set();
+  accessSnap.docs.forEach((doc) => userIds.add(doc.id));
+
+  const userChildAccessSnap = await db
+    .collection("user_child_access")
+    .where("childId", "==", childId)
+    .limit(500)
+    .get();
+  userChildAccessSnap.docs.forEach((doc) => {
+    const data = doc.data();
+    if (data.userId) userIds.add(data.userId);
+  });
+
+  // 2. Mark child as soft-deleted
+  await db.doc(`children/${childId}`).update({
+    deletedAt: now,
+    deletedBy: requestedBy,
+    deletionRequestId: requestId,
+  });
+
+  // 3. Update the deletion request
+  await db.doc(`childDeletionRequests/${requestId}`).update({
+    deletedAt: now,
+    purgeAt,
+  });
+
+  // 4. Delete all access subcollection docs
+  if (!accessSnap.empty) {
+    const batch = db.batch();
+    accessSnap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+  }
+
+  // 5. Delete user_child_access index entries
+  await deleteDocsByFieldBatched(db, "user_child_access", "childId", childId);
+
+  // 6. Clean user_preferences for all affected users
+  const userCleanups = Array.from(userIds).map((userId) =>
+    db.doc(`user_preferences/${userId}`).set(
+      {
+        hiddenChildrenIds: admin.firestore.FieldValue.arrayRemove(childId),
+      },
+      { merge: true }
+    ).catch(() => {}) // Ignore if prefs doc doesn't exist
+  );
+  await Promise.all(userCleanups);
+
+  // 7. Delete sharing-related data
+  await Promise.all([
+    deleteDocsByFieldBatched(db, "shareCodes", "childId", childId),
+    deleteDocsByFieldBatched(db, "shareInvitations", "childId", childId),
+    deleteDocsByFieldBatched(db, "babyAttachmentRequests", "childId", childId),
+  ]);
+
+  console.log(`softDeleteChild: childId=${childId}, requestId=${requestId}, usersCleared=${userIds.size}`);
+}
+
+/**
+ * createDeletionRequest — Owner demande la suppression d'un enfant.
+ * - Owner unique : approved immédiatement + soft-delete
+ * - Multi-owners : pending, vote de l'initiateur = approved
+ */
+exports.createDeletionRequest = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    monitorAppCheck(request, "createDeletionRequest");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+
+    const uid = request.auth.uid;
+    const { childId } = request.data;
+
+    if (!childId || typeof childId !== "string") {
+      throw new HttpsError("invalid-argument", "childId requis.");
+    }
+
+    const db = admin.firestore();
+
+    // Rate limit: 5 deletion requests per minute
+    await checkRateLimit(db, uid, "deletion", 5);
+
+    // Verify caller is owner
+    const callerAccess = await db.doc(`children/${childId}/access/${uid}`).get();
+    if (!callerAccess.exists || callerAccess.data().role !== "owner") {
+      throw new HttpsError("permission-denied", "Seul un propriétaire peut demander la suppression.");
+    }
+
+    // Check child exists and is not already soft-deleted
+    const childDoc = await db.doc(`children/${childId}`).get();
+    if (!childDoc.exists) {
+      throw new HttpsError("not-found", "Enfant introuvable.");
+    }
+    if (childDoc.data().deletedAt) {
+      throw new HttpsError("failed-precondition", "Cet enfant est déjà en cours de suppression.");
+    }
+
+    // Check no pending request exists for this child
+    const existingRequests = await db
+      .collection("childDeletionRequests")
+      .where("childId", "==", childId)
+      .where("status", "==", "pending")
+      .limit(1)
+      .get();
+    if (!existingRequests.empty) {
+      throw new HttpsError("already-exists", "Une demande de suppression est déjà en cours pour cet enfant.");
+    }
+
+    // Get all owners
+    const accessSnap = await db.collection("children").doc(childId).collection("access").get();
+    const owners = accessSnap.docs
+      .filter((doc) => doc.data().role === "owner")
+      .map((doc) => doc.id);
+
+    if (owners.length === 0) {
+      throw new HttpsError("failed-precondition", "Aucun propriétaire trouvé.");
+    }
+
+    const now = admin.firestore.Timestamp.now();
+    const childData = childDoc.data();
+
+    // Build ownerVotes: initiator = approved, others = pending
+    const ownerVotes = {};
+    for (const ownerId of owners) {
+      ownerVotes[ownerId] = {
+        vote: ownerId === uid ? "approved" : "pending",
+        ...(ownerId === uid ? { votedAt: now } : {}),
+      };
+    }
+
+    const requestDoc = {
+      childId,
+      childName: childData.name || "",
+      requestedBy: uid,
+      requestedByEmail: request.auth.token.email || "",
+      requestedAt: now,
+      status: owners.length === 1 ? "approved" : "pending",
+      ownerVotes,
+      ownerIds: owners, // Denormalized array for Firestore list queries (array-contains)
+      retentionDays: CHILD_DELETION_RETENTION_DAYS,
+      seenByUserIds: [],
+      ...(owners.length === 1 ? { approvedAt: now } : {}),
+    };
+
+    const requestRef = await db.collection("childDeletionRequests").add(requestDoc);
+
+    // If sole owner, execute soft-delete immediately
+    if (owners.length === 1) {
+      await softDeleteChild(db, childId, requestRef.id, uid);
+      return { status: "approved", requestId: requestRef.id };
+    }
+
+    return { status: "pending", requestId: requestRef.id, ownerCount: owners.length };
+  }
+);
+
+/**
+ * voteDeletionRequest — Un owner vote sur une demande de suppression.
+ * - refused : la demande passe en refused, plus de vote possible
+ * - approved : si tous ont approuvé, soft-delete
+ */
+exports.voteDeletionRequest = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    monitorAppCheck(request, "voteDeletionRequest");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+
+    const uid = request.auth.uid;
+    const { requestId, vote } = request.data;
+
+    if (!requestId || typeof requestId !== "string") {
+      throw new HttpsError("invalid-argument", "requestId requis.");
+    }
+    if (!["approved", "refused"].includes(vote)) {
+      throw new HttpsError("invalid-argument", "Vote doit être 'approved' ou 'refused'.");
+    }
+
+    const db = admin.firestore();
+    const requestRef = db.doc(`childDeletionRequests/${requestId}`);
+    const requestDoc = await requestRef.get();
+
+    if (!requestDoc.exists) {
+      throw new HttpsError("not-found", "Demande introuvable.");
+    }
+
+    const data = requestDoc.data();
+
+    if (data.status !== "pending") {
+      throw new HttpsError("failed-precondition", "Cette demande n'est plus en attente.");
+    }
+
+    // Verify caller is an owner in the votes
+    if (!data.ownerVotes || !data.ownerVotes[uid]) {
+      throw new HttpsError("permission-denied", "Vous n'êtes pas propriétaire de cet enfant.");
+    }
+
+    if (data.ownerVotes[uid].vote !== "pending") {
+      throw new HttpsError("failed-precondition", "Vous avez déjà voté.");
+    }
+
+    const now = admin.firestore.Timestamp.now();
+
+    if (vote === "refused") {
+      // One refusal stops everything
+      await requestRef.update({
+        status: "refused",
+        refusedBy: uid,
+        refusedByEmail: request.auth.token.email || "",
+        refusedAt: now,
+        [`ownerVotes.${uid}.vote`]: "refused",
+        [`ownerVotes.${uid}.votedAt`]: now,
+      });
+      return { status: "refused" };
+    }
+
+    // Vote approved
+    const updatedVotes = { ...data.ownerVotes };
+    updatedVotes[uid] = { vote: "approved", votedAt: now };
+
+    // Check if all owners have now approved
+    const allApproved = Object.values(updatedVotes).every((v) => v.vote === "approved");
+
+    if (allApproved) {
+      await requestRef.update({
+        status: "approved",
+        approvedAt: now,
+        [`ownerVotes.${uid}.vote`]: "approved",
+        [`ownerVotes.${uid}.votedAt`]: now,
+      });
+      await softDeleteChild(db, data.childId, requestId, data.requestedBy);
+      return { status: "approved" };
+    }
+
+    // Not all approved yet — just record this vote
+    await requestRef.update({
+      [`ownerVotes.${uid}.vote`]: "approved",
+      [`ownerVotes.${uid}.votedAt`]: now,
+    });
+
+    return { status: "pending" };
+  }
+);
+
+/**
+ * transferAndLeave — Owner transfère la propriété et quitte l'enfant.
+ */
+exports.transferAndLeave = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    monitorAppCheck(request, "transferAndLeave");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+
+    const uid = request.auth.uid;
+    const { childId, newOwnerId } = request.data;
+
+    if (!childId || typeof childId !== "string") {
+      throw new HttpsError("invalid-argument", "childId requis.");
+    }
+    if (!newOwnerId || typeof newOwnerId !== "string") {
+      throw new HttpsError("invalid-argument", "newOwnerId requis.");
+    }
+    if (newOwnerId === uid) {
+      throw new HttpsError("invalid-argument", "Vous ne pouvez pas vous transférer la propriété à vous-même.");
+    }
+
+    const db = admin.firestore();
+
+    // Verify caller is owner
+    const callerAccess = await db.doc(`children/${childId}/access/${uid}`).get();
+    if (!callerAccess.exists || callerAccess.data().role !== "owner") {
+      throw new HttpsError("permission-denied", "Seul un propriétaire peut transférer.");
+    }
+
+    // Verify new owner has existing access
+    const newOwnerAccess = await db.doc(`children/${childId}/access/${newOwnerId}`).get();
+    if (!newOwnerAccess.exists) {
+      throw new HttpsError("not-found", "Le nouveau propriétaire n'a pas accès à cet enfant.");
+    }
+
+    const now = admin.firestore.Timestamp.now();
+    const batch = db.batch();
+
+    // 1. Promote new owner
+    batch.update(db.doc(`children/${childId}/access/${newOwnerId}`), {
+      role: "owner",
+      canWriteEvents: true,
+      canWriteLikes: true,
+      canWriteComments: true,
+      grantedBy: uid,
+      grantedAt: now,
+    });
+
+    // 2. Update ownerId on child document
+    batch.update(db.doc(`children/${childId}`), {
+      ownerId: newOwnerId,
+    });
+
+    // 3. Delete former owner's access
+    batch.delete(db.doc(`children/${childId}/access/${uid}`));
+
+    await batch.commit();
+
+    // 4. Delete former owner's user_child_access entry
+    const userAccessSnap = await db
+      .collection("user_child_access")
+      .where("userId", "==", uid)
+      .where("childId", "==", childId)
+      .limit(1)
+      .get();
+    if (!userAccessSnap.empty) {
+      await userAccessSnap.docs[0].ref.delete();
+    }
+
+    // 5. Clean former owner's user_preferences
+    await db.doc(`user_preferences/${uid}`).set(
+      {
+        hiddenChildrenIds: admin.firestore.FieldValue.arrayRemove(childId),
+      },
+      { merge: true }
+    ).catch(() => {});
+
+    console.log(`transferAndLeave: childId=${childId}, from=${uid}, to=${newOwnerId}`);
+    return { success: true };
+  }
+);
+
+/**
+ * purgeDeletedChildren — Scheduled: supprime définitivement les enfants soft-deleted
+ * dont la période de rétention RGPD a expiré.
+ */
+exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
+  const db = admin.firestore();
+  const now = admin.firestore.Timestamp.now();
+
+  // Find all deletion requests where purgeAt <= now
+  const requestsSnap = await db
+    .collection("childDeletionRequests")
+    .where("status", "==", "approved")
+    .where("purgeAt", "<=", now)
+    .limit(50)
+    .get();
+
+  if (requestsSnap.empty) {
+    console.log("purgeDeletedChildren: nothing to purge");
+    return;
+  }
+
+  let purged = 0;
+
+  for (const requestDoc of requestsSnap.docs) {
+    const data = requestDoc.data();
+    const childId = data.childId;
+
+    try {
+      // Hard-delete all child data (reuse existing helper)
+      await deleteChildDataBatched(db, childId);
+
+      // Delete legacy collections not covered by deleteChildDataBatched
+      const legacyExtras = ["croissances", "sommeils"];
+      await Promise.all(
+        legacyExtras.map((coll) => deleteDocsByFieldBatched(db, coll, "childId", childId))
+      );
+
+      // Delete storage files
+      try {
+        const bucket = admin.storage().bucket();
+        const [files] = await bucket.getFiles({ prefix: `children/${childId}/` });
+        if (files.length > 0) {
+          await Promise.all(files.map((file) => file.delete().catch(() => null)));
+        }
+      } catch (storageErr) {
+        console.warn(`purgeDeletedChildren: storage cleanup failed for ${childId}:`, storageErr.message);
+      }
+
+      // Delete the child document itself
+      await db.doc(`children/${childId}`).delete();
+
+      // Delete the deletion request
+      await requestDoc.ref.delete();
+
+      purged++;
+    } catch (err) {
+      console.error(`purgeDeletedChildren: error purging childId=${childId}:`, err.message);
+    }
+  }
+
+  console.log(`purgeDeletedChildren: purged=${purged}/${requestsSnap.size}`);
+});

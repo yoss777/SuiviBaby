@@ -197,7 +197,7 @@ export default function ExportScreen() {
   const nc = getNeutralColors(colorScheme);
   const { showToast, showActionToast } = useToast();
   const { userName, email, user } = useAuth();
-  const { afterDelete } = useLocalSearchParams();
+  const { afterDelete, childId: preSelectChildId } = useLocalSearchParams<{ afterDelete?: string; childId?: string }>();
   const router = useRouter();
   const isAutoDeleteFlow = afterDelete === "1";
   const { children: visibleChildren, loading: childrenLoading } = useBaby();
@@ -325,7 +325,7 @@ export default function ExportScreen() {
                   (d: any) => ({ id: d.id, ...d.data() }) as EventComment,
                 ),
                 role,
-                selected: true,
+                selected: preSelectChildId ? child.id === preSelectChildId : true,
               };
             }),
           ),

@@ -96,11 +96,19 @@ service cloud.firestore {
 
     // Enfants - document principal
     match /children/{childId} {
+      // Helper: enfant non soft-deleted
+      function isNotDeleted() {
+        return !('deletedAt' in resource.data) || resource.data.deletedAt == null;
+      }
+
       // Lecture d'un document spécifique (get) : accès via access subcollection ou parentIds legacy
-      allow get: if hasAccess(childId) ||
+      // Bloqué si l'enfant est soft-deleted
+      allow get: if isNotDeleted() && (
+        hasAccess(childId) ||
         (isSignedIn() &&
          exists(/databases/$(database)/documents/children/$(childId)) &&
-         get(/databases/$(database)/documents/children/$(childId)).data.parentIds.hasAny([request.auth.uid]));
+         get(/databases/$(database)/documents/children/$(childId)).data.parentIds.hasAny([request.auth.uid]))
+      );
 
       // Liste (list) : désactivée — le pattern normal est user_child_access -> get children/{childId}
       // BabyContext utilise des listeners par document, pas de list query
@@ -110,17 +118,16 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         request.resource.data.ownerId == request.auth.uid;
 
-      // Modification : owner ou admin uniquement
-      allow update: if isOwner(childId) || isAdmin(childId) ||
+      // Modification : owner ou admin uniquement, bloqué si soft-deleted
+      allow update: if isNotDeleted() && (
+        isOwner(childId) || isAdmin(childId) ||
         (isSignedIn() &&
          exists(/databases/$(database)/documents/children/$(childId)) &&
-         get(/databases/$(database)/documents/children/$(childId)).data.ownerId == request.auth.uid);
+         get(/databases/$(database)/documents/children/$(childId)).data.ownerId == request.auth.uid)
+      );
 
-      // Suppression : uniquement le owner
-      allow delete: if isOwner(childId) ||
-        (isSignedIn() &&
-         exists(/databases/$(database)/documents/children/$(childId)) &&
-         get(/databases/$(database)/documents/children/$(childId)).data.ownerId == request.auth.uid);
+      // Suppression : uniquement via CF (purge RGPD) — plus de delete direct client
+      allow delete: if false;
 
       // Sous-collection access : gestion des permissions
       match /access/{uid} {
@@ -381,6 +388,25 @@ service cloud.firestore {
       allow read: if isSignedIn() &&
         resource.data.userId == request.auth.uid;
       allow write: if false;
+    }
+
+    // ============================================
+    // DEMANDES DE SUPPRESSION D'ENFANT
+    // ============================================
+
+    match /childDeletionRequests/{requestId} {
+      // Lecture : uniquement les owners concernés (présents dans ownerIds array)
+      // ownerIds est un array dénormalisé pour supporter les list queries (array-contains)
+      allow read: if isSignedIn() &&
+        request.auth.uid in resource.data.ownerIds;
+
+      // Update : uniquement pour ajouter son propre uid à seenByUserIds (dismiss notification)
+      allow update: if isSignedIn() &&
+        request.auth.uid in resource.data.ownerIds &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenByUserIds']);
+
+      // Création/Suppression : uniquement via Cloud Functions (serveur)
+      allow create, delete: if false;
     }
 
     // ============================================

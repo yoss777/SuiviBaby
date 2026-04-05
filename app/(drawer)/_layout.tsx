@@ -22,6 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { useBaby } from "@/contexts/BabyContext";
+import { DeletionRequestNotifier } from "@/components/suivibaby/DeletionRequestNotifier";
 
 // Contexte pour gérer le headerRight dynamiquement
 const HeaderRightContext = createContext<{
@@ -231,6 +232,7 @@ export default function DrawerLayout() {
               }}
             />
           </Drawer>
+          <DeletionRequestNotifier />
         </View>
       </HeaderLeftContext.Provider>
     </HeaderRightContext.Provider>
