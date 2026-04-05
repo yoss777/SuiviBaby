@@ -97,7 +97,7 @@ export function DeletionRequestNotifier() {
           try {
             const publicDoc = await getDoc(doc(db, "users_public", ownerId));
             names[ownerId] = publicDoc.exists()
-              ? publicDoc.data()?.displayName || ownerId.slice(0, 8) + "..."
+              ? publicDoc.data()?.userName || ownerId.slice(0, 8) + "..."
               : ownerId.slice(0, 8) + "...";
           } catch {
             names[ownerId] = ownerId.slice(0, 8) + "...";

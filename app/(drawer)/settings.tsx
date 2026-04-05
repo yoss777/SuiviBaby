@@ -158,7 +158,7 @@ export default function SettingsScreen() {
       (snapshot) => {
         const count = snapshot.docs.filter((d) => {
           const status = d.data().status;
-          return status === "pending" || status === "refused";
+          return status !== "cancelled";
         }).length;
         setPendingDeletionRequests(count);
       },
@@ -304,18 +304,23 @@ export default function SettingsScreen() {
             },
           ]
         : []),
-      ...(pendingDeletionRequests > 0
+      ...(isOwnerOfAny
         ? [
             {
               id: "deletion-requests",
-              icon: "alert-circle-outline" as keyof typeof Ionicons.glyphMap,
+              icon: (pendingDeletionRequests > 0 ? "alert-circle-outline" : "time-outline") as keyof typeof Ionicons.glyphMap,
               label: "Demandes de suppression",
-              description: `${pendingDeletionRequests} demande${pendingDeletionRequests > 1 ? "s" : ""} en attente`,
               value: `${pendingDeletionRequests}`,
-              color: nc.error,
+              description: pendingDeletionRequests > 0
+                ? "Consulter les demandes en cours"
+                : "Aucune demande en cours",
+              disabled: pendingDeletionRequests === 0,
+              ...(pendingDeletionRequests > 0 ? { color: nc.error } : {}),
               onPress: () => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/settings/deletion-requests");
+                if (pendingDeletionRequests > 0) {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push("/settings/deletion-requests");
+                }
               },
             },
           ]

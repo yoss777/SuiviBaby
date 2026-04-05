@@ -22,6 +22,10 @@ export interface TransferResult {
   success: boolean;
 }
 
+export interface CancelResult {
+  success: boolean;
+}
+
 // ============================================
 // CLOUD FUNCTION CALLS
 // ============================================
@@ -40,6 +44,11 @@ const transferAndLeaveCF = httpsCallable<
   { childId: string; newOwnerId: string },
   TransferResult
 >(functions, "transferAndLeave");
+
+const cancelChildDeletionCF = httpsCallable<
+  { requestId: string },
+  CancelResult
+>(functions, "cancelChildDeletion");
 
 // ============================================
 // PUBLIC API
@@ -76,5 +85,16 @@ export async function transferChildAndLeave(
   newOwnerId: string,
 ): Promise<TransferResult> {
   const result = await transferAndLeaveCF({ childId, newOwnerId });
+  return result.data;
+}
+
+/**
+ * Annule une suppression soft-delete pendant la période de rétention.
+ * Restaure l'accès pour le demandeur.
+ */
+export async function cancelChildDeletion(
+  requestId: string,
+): Promise<CancelResult> {
+  const result = await cancelChildDeletionCF({ requestId });
   return result.data;
 }

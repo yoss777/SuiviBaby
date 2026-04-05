@@ -11,6 +11,7 @@ admin.initializeApp();
 
 const BATCH_LIMIT = 450;
 const CHILD_DELETION_RETENTION_DAYS = 30;
+const DELETION_REQUEST_EXPIRY_DAYS = 7;
 const APP_CHECK_ENFORCED = process.env.APPCHECK_ENFORCE === "true";
 const expo = new Expo();
 
@@ -2042,18 +2043,22 @@ async function softDeleteChild(db, childId, requestId, requestedBy) {
     new Date(Date.now() + CHILD_DELETION_RETENTION_DAYS * 24 * 60 * 60 * 1000)
   );
 
-  // 1. Collect all userIds with access before we delete access docs
+  // 1. Collect all access docs before deletion (snapshot for restore on cancel)
   const accessSnap = await db.collection("children").doc(childId).collection("access").get();
   const userIds = new Set();
-  accessSnap.docs.forEach((doc) => userIds.add(doc.id));
+  const accessSnapshot = {};
+  accessSnap.docs.forEach((accessDoc) => {
+    userIds.add(accessDoc.id);
+    accessSnapshot[accessDoc.id] = accessDoc.data();
+  });
 
   const userChildAccessSnap = await db
     .collection("user_child_access")
     .where("childId", "==", childId)
     .limit(500)
     .get();
-  userChildAccessSnap.docs.forEach((doc) => {
-    const data = doc.data();
+  userChildAccessSnap.docs.forEach((accessDoc) => {
+    const data = accessDoc.data();
     if (data.userId) userIds.add(data.userId);
   });
 
@@ -2064,10 +2069,11 @@ async function softDeleteChild(db, childId, requestId, requestedBy) {
     deletionRequestId: requestId,
   });
 
-  // 3. Update the deletion request
+  // 3. Update the deletion request — store access snapshot for potential restore
   await db.doc(`childDeletionRequests/${requestId}`).update({
     deletedAt: now,
     purgeAt,
+    accessSnapshot, // { userId: { role, canWriteEvents, ... } } — used by cancelChildDeletion
   });
 
   // 4. Delete all access subcollection docs
@@ -2185,6 +2191,10 @@ exports.createDeletionRequest = onCall(
       ownerIds: owners, // Denormalized array for Firestore list queries (array-contains)
       retentionDays: CHILD_DELETION_RETENTION_DAYS,
       seenByUserIds: [],
+      // Expiration: pending requests auto-expire after DELETION_REQUEST_EXPIRY_DAYS
+      expiresAt: admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() + DELETION_REQUEST_EXPIRY_DAYS * 24 * 60 * 60 * 1000)
+      ),
       ...(owners.length === 1 ? { approvedAt: now } : {}),
     };
 
@@ -2375,14 +2385,150 @@ exports.transferAndLeave = onCall(
 );
 
 /**
- * purgeDeletedChildren — Scheduled: supprime définitivement les enfants soft-deleted
- * dont la période de rétention RGPD a expiré.
+ * cancelChildDeletion — Annule une suppression soft-delete pendant la période de rétention.
+ * Restaure l'accès pour le demandeur (les autres owners doivent être ré-invités).
+ */
+exports.cancelChildDeletion = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    monitorAppCheck(request, "cancelChildDeletion");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+
+    const uid = request.auth.uid;
+    const { requestId } = request.data;
+
+    if (!requestId || typeof requestId !== "string") {
+      throw new HttpsError("invalid-argument", "requestId requis.");
+    }
+
+    const db = admin.firestore();
+    const requestRef = db.doc(`childDeletionRequests/${requestId}`);
+    const requestDoc = await requestRef.get();
+
+    if (!requestDoc.exists) {
+      throw new HttpsError("not-found", "Demande introuvable.");
+    }
+
+    const data = requestDoc.data();
+
+    if (data.status !== "approved") {
+      throw new HttpsError("failed-precondition", "Seule une suppression approuvee peut etre annulee.");
+    }
+
+    // Only the requester (or any original owner) can cancel
+    if (!data.ownerIds.includes(uid)) {
+      throw new HttpsError("permission-denied", "Seul un proprietaire peut annuler la suppression.");
+    }
+
+    const childId = data.childId;
+    const childRef = db.doc(`children/${childId}`);
+    const childDoc = await childRef.get();
+
+    if (!childDoc.exists) {
+      throw new HttpsError("not-found", "Enfant deja supprime definitivement.");
+    }
+
+    const childData = childDoc.data();
+    if (!childData.deletedAt) {
+      throw new HttpsError("failed-precondition", "Cet enfant n'est pas en cours de suppression.");
+    }
+
+    const now = admin.firestore.Timestamp.now();
+
+    // Check retention period hasn't expired
+    if (data.purgeAt && data.purgeAt.toMillis() <= Date.now()) {
+      throw new HttpsError("failed-precondition", "La periode de retention a expire, la suppression ne peut plus etre annulee.");
+    }
+
+    const batch = db.batch();
+    const snapshot = data.accessSnapshot || {};
+    const allUserIds = Object.keys(snapshot);
+
+    // Fallback: if no snapshot, restore at least the owners
+    if (allUserIds.length === 0) {
+      (data.ownerIds || [uid]).forEach((id) => {
+        snapshot[id] = { role: "owner", canWriteEvents: true, canWriteLikes: true, canWriteComments: true };
+      });
+    }
+
+    // Determine ownerId for child doc (first owner found in snapshot)
+    const primaryOwner = Object.entries(snapshot).find(([, v]) => v.role === "owner");
+    const ownerId = primaryOwner ? primaryOwner[0] : uid;
+
+    // 1. Remove soft-delete markers from child document
+    batch.update(childRef, {
+      deletedAt: admin.firestore.FieldValue.delete(),
+      deletedBy: admin.firestore.FieldValue.delete(),
+      deletionRequestId: admin.firestore.FieldValue.delete(),
+      ownerId,
+    });
+
+    // 2. Restore access for ALL parents (owners, admins, contributors, viewers)
+    for (const [userId, accessData] of Object.entries(snapshot)) {
+      batch.set(db.doc(`children/${childId}/access/${userId}`), {
+        ...accessData,
+        userId,
+        grantedBy: uid,
+        grantedAt: now,
+      });
+
+      // 3. Restore user_child_access index
+      batch.set(db.doc(`user_child_access/${userId}_${childId}`), {
+        userId,
+        childId,
+      });
+    }
+
+    await batch.commit();
+
+    // 5. Mark deletion request as cancelled
+    await requestRef.update({
+      status: "cancelled",
+      cancelledBy: uid,
+      cancelledAt: now,
+    });
+
+    console.log(`cancelChildDeletion: childId=${childId}, cancelledBy=${uid}`);
+    return { success: true };
+  }
+);
+
+/**
+ * purgeDeletedChildren — Scheduled:
+ * 1. Expire pending deletion requests after DELETION_REQUEST_EXPIRY_DAYS
+ * 2. Hard-delete soft-deleted children after RGPD retention period
  */
 exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
   const db = admin.firestore();
   const now = admin.firestore.Timestamp.now();
 
-  // Find all deletion requests where purgeAt <= now
+  // --- Step 1: Expire pending requests ---
+  const expiredSnap = await db
+    .collection("childDeletionRequests")
+    .where("status", "==", "pending")
+    .where("expiresAt", "<=", now)
+    .limit(100)
+    .get();
+
+  let expired = 0;
+  for (const expiredDoc of expiredSnap.docs) {
+    try {
+      await expiredDoc.ref.update({
+        status: "expired",
+        expiredAt: now,
+      });
+      expired++;
+    } catch (err) {
+      console.error(`purgeDeletedChildren: error expiring requestId=${expiredDoc.id}:`, err.message);
+    }
+  }
+  if (expired > 0) {
+    console.log(`purgeDeletedChildren: expired=${expired} pending requests`);
+  }
+
+  // --- Step 2: Purge soft-deleted children past retention ---
   const requestsSnap = await db
     .collection("childDeletionRequests")
     .where("status", "==", "approved")

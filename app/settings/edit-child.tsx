@@ -110,32 +110,33 @@ export default function EditChildScreen() {
     (async () => {
       try {
         const childIds = await getAccessibleChildIds(user.uid);
-        const childDocs = await Promise.all(
-          childIds.map((id) => getDoc(doc(db, "children", id)))
-        );
-        if (!mounted) return;
-        const existingDocs = childDocs.filter((snap) => snap.exists());
-        const accessData = await Promise.all(
-          existingDocs.map(async (snap) => {
-            const accessSnap = await getDoc(doc(db, "children", snap.id, "access", user.uid));
-            const role = accessSnap.exists() ? accessSnap.data()?.role ?? null : null;
-            const allAccessSnap = await getDocs(collection(db, "children", snap.id, "access"));
-            return { role, totalParents: allAccessSnap.size };
+        // Load each child individually — soft-deleted children will throw permission-denied
+        const results: ChildWithOwnership[] = [];
+        await Promise.all(
+          childIds.map(async (id) => {
+            try {
+              const childSnap = await getDoc(doc(db, "children", id));
+              if (!childSnap.exists()) return;
+              const accessSnap = await getDoc(doc(db, "children", id, "access", user.uid));
+              const role = accessSnap.exists() ? accessSnap.data()?.role ?? null : null;
+              const allAccessSnap = await getDocs(collection(db, "children", id, "access"));
+              const data = childSnap.data();
+              results.push({
+                id,
+                name: data.name || "",
+                birthDate: data.birthDate || "",
+                gender: data.gender,
+                photoUri: data.photoUri,
+                isOwner: role === "owner",
+                hasOtherParents: allAccessSnap.size > 1,
+              });
+            } catch {
+              // Skip — likely soft-deleted (permission-denied) or orphaned
+            }
           })
         );
         if (!mounted) return;
-        const result: ChildWithOwnership[] = existingDocs.map((snap, i) => {
-          const data = snap.data();
-          return {
-            id: snap.id,
-            name: data.name || "",
-            birthDate: data.birthDate || "",
-            gender: data.gender,
-            photoUri: data.photoUri,
-            isOwner: accessData[i].role === "owner",
-            hasOtherParents: accessData[i].totalParents > 1,
-          };
-        });
+        const result = results;
         result.sort((a, b) => a.name.localeCompare(b.name));
         setAllChildren(result);
         hasInitialLoad.current = true;
@@ -272,7 +273,7 @@ export default function EditChildScreen() {
         let email: string | undefined;
         try {
           const publicDoc = await getDoc(doc(db, "users_public", accessDoc.id));
-          if (publicDoc.exists()) email = publicDoc.data()?.displayName || publicDoc.data()?.email;
+          if (publicDoc.exists()) email = publicDoc.data()?.userName || publicDoc.data()?.email;
         } catch { /* ignore */ }
         parents.push({ userId: accessDoc.id, role: data.role || "viewer", email });
       }

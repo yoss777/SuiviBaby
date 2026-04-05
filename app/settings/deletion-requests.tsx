@@ -1,5 +1,5 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { Ionicons } from "@expo/vector-icons";
+import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
 import {
@@ -30,7 +30,10 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { voteOnDeletionRequest } from "@/services/childDeletionService";
+import {
+  cancelChildDeletion,
+  voteOnDeletionRequest,
+} from "@/services/childDeletionService";
 
 // ============================================
 // TYPES
@@ -48,7 +51,7 @@ interface DeletionRequest {
   requestedBy: string;
   requestedByEmail: string;
   requestedAt: { seconds: number };
-  status: "pending" | "approved" | "refused";
+  status: "pending" | "approved" | "refused" | "expired" | "cancelled";
   ownerVotes: Record<string, OwnerVote>;
   refusedBy?: string;
   refusedByEmail?: string;
@@ -82,6 +85,12 @@ export default function DeletionRequestsScreen() {
     vote: "approved" | "refused";
     childName: string;
   } | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelConfirm, setCancelConfirm] = useState<{
+    visible: boolean;
+    requestId: string;
+    childName: string;
+  } | null>(null);
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     title: "",
@@ -107,7 +116,7 @@ export default function DeletionRequestsScreen() {
     // Query requests where user is an owner, filter status client-side
     const q = query(
       collection(db, "childDeletionRequests"),
-      where("ownerIds", "array-contains", user.uid)
+      where("ownerIds", "array-contains", user.uid),
     );
 
     const unsubscribe = onSnapshot(
@@ -118,13 +127,13 @@ export default function DeletionRequestsScreen() {
 
         for (const docSnap of snapshot.docs) {
           const data = docSnap.data() as Omit<DeletionRequest, "id">;
-          // Only show pending or refused
-          if (data.status !== "pending" && data.status !== "refused") continue;
+          // Show all except cancelled (terminated cleanly)
+          if (data.status === "cancelled") continue;
           results.push({ id: docSnap.id, ...data });
 
           // Collect all owner userIds for name resolution
           Object.keys(data.ownerVotes).forEach((id) =>
-            userIdsToResolve.add(id)
+            userIdsToResolve.add(id),
           );
           if (data.requestedBy) userIdsToResolve.add(data.requestedBy);
         }
@@ -138,16 +147,14 @@ export default function DeletionRequestsScreen() {
               return;
             }
             try {
-              const publicDoc = await getDoc(
-                doc(db, "users_public", userId)
-              );
+              const publicDoc = await getDoc(doc(db, "users_public", userId));
               names[userId] = publicDoc.exists()
-                ? publicDoc.data()?.displayName || userId.slice(0, 8) + "..."
+                ? publicDoc.data()?.userName || userId.slice(0, 8) + "..."
                 : userId.slice(0, 8) + "...";
             } catch {
               names[userId] = userId.slice(0, 8) + "...";
             }
-          })
+          }),
         );
 
         if (!isMountedRef.current) return;
@@ -169,7 +176,7 @@ export default function DeletionRequestsScreen() {
           setIsLoading(false);
           setIsRefreshing(false);
         }
-      }
+      },
     );
 
     return () => unsubscribe();
@@ -188,7 +195,7 @@ export default function DeletionRequestsScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setVoteConfirm({ visible: true, requestId, vote, childName });
     },
-    []
+    [],
   );
 
   const handleVoteConfirm = useCallback(async () => {
@@ -204,7 +211,7 @@ export default function DeletionRequestsScreen() {
       Haptics.notificationAsync(
         vote === "approved"
           ? Haptics.NotificationFeedbackType.Success
-          : Haptics.NotificationFeedbackType.Warning
+          : Haptics.NotificationFeedbackType.Warning,
       );
 
       if (result.status === "approved") {
@@ -226,6 +233,36 @@ export default function DeletionRequestsScreen() {
     }
   }, [voteConfirm, showToast]);
 
+  const handleCancelPress = useCallback(
+    (requestId: string, childName: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setCancelConfirm({ visible: true, requestId, childName });
+    },
+    [],
+  );
+
+  const handleCancelConfirm = useCallback(async () => {
+    if (!cancelConfirm) return;
+    const { requestId, childName } = cancelConfirm;
+    setCancelConfirm(null);
+    setIsCancelling(true);
+    try {
+      await cancelChildDeletion(requestId);
+      if (!isMountedRef.current) return;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(`Suppression de ${childName} annulee`);
+    } catch {
+      if (!isMountedRef.current) return;
+      setModalConfig({
+        visible: true,
+        title: "Erreur",
+        message: "Impossible d'annuler la suppression.",
+      });
+    } finally {
+      if (isMountedRef.current) setIsCancelling(false);
+    }
+  }, [cancelConfirm, showToast]);
+
   const formatDate = (timestamp: { seconds: number } | undefined) => {
     if (!timestamp) return "";
     return new Date(timestamp.seconds * 1000).toLocaleDateString("fr-FR", {
@@ -236,7 +273,7 @@ export default function DeletionRequestsScreen() {
   };
 
   const getVoteIcon = (
-    vote: string
+    vote: string,
   ): { name: keyof typeof Ionicons.glyphMap; color: string } => {
     switch (vote) {
       case "approved":
@@ -256,6 +293,8 @@ export default function DeletionRequestsScreen() {
         return "Approuvee";
       case "refused":
         return "Refusee";
+      case "expired":
+        return "Expiree";
       default:
         return status;
     }
@@ -269,6 +308,8 @@ export default function DeletionRequestsScreen() {
         return nc.success;
       case "refused":
         return nc.error;
+      case "expired":
+        return nc.textMuted;
       default:
         return nc.textMuted;
     }
@@ -353,8 +394,7 @@ export default function DeletionRequestsScreen() {
                         style={[
                           styles.statusBadge,
                           {
-                            backgroundColor:
-                              getStatusColor(req.status) + "20",
+                            backgroundColor: getStatusColor(req.status) + "20",
                           },
                         ]}
                       >
@@ -370,89 +410,69 @@ export default function DeletionRequestsScreen() {
                     </View>
 
                     {/* Meta */}
-                    <Text
-                      style={[styles.requestMeta, { color: nc.textMuted }]}
-                    >
-                      Demandee le {formatDate(req.requestedAt)} par{" "}
-                      {requesterName}
+                    <Text style={[styles.requestMeta, { color: nc.textMuted }]}>
+                      Demandée le {formatDate(req.requestedAt)}
+                    </Text>
+                    <Text style={[styles.requestMeta, { color: nc.textMuted }]}>
+                      par {requesterName}
                     </Text>
 
                     {/* Owner votes */}
                     <View style={styles.votesSection}>
                       <Text
-                        style={[
-                          styles.votesLabel,
-                          { color: nc.textLight },
-                        ]}
+                        style={[styles.votesLabel, { color: nc.textLight }]}
                       >
                         Votes des proprietaires :
                       </Text>
-                      {Object.entries(req.ownerVotes).map(
-                        ([ownerId, vote]) => {
-                          const icon = getVoteIcon(vote.vote);
-                          const name =
-                            ownerId === user?.uid
-                              ? "Vous"
-                              : ownerNames[ownerId] ||
-                                ownerId.slice(0, 8) + "...";
-                          const suffix =
-                            req.status === "refused" &&
-                            vote.vote === "pending"
-                              ? " (vote annule)"
-                              : "";
-                          return (
-                            <View key={ownerId} style={styles.voteRow}>
-                              <Ionicons
-                                name={icon.name}
-                                size={18}
-                                color={icon.color}
-                              />
-                              <Text
-                                style={[
-                                  styles.voteName,
-                                  { color: nc.textStrong },
-                                  vote.vote === "pending" &&
-                                    req.status === "refused" && {
-                                      color: nc.textMuted,
-                                    },
-                                ]}
-                              >
-                                {name}
-                                {suffix}
-                              </Text>
-                            </View>
-                          );
-                        }
-                      )}
+                      {Object.entries(req.ownerVotes).map(([ownerId, vote]) => {
+                        const icon = getVoteIcon(vote.vote);
+                        const name =
+                          ownerId === user?.uid
+                            ? "Vous"
+                            : ownerNames[ownerId] ||
+                              ownerId.slice(0, 8) + "...";
+                        const suffix =
+                          req.status === "refused" && vote.vote === "pending"
+                            ? " (vote annule)"
+                            : "";
+                        return (
+                          <View key={ownerId} style={styles.voteRow}>
+                            <Ionicons
+                              name={icon.name}
+                              size={18}
+                              color={icon.color}
+                            />
+                            <Text
+                              style={[
+                                styles.voteName,
+                                { color: nc.textStrong },
+                                vote.vote === "pending" &&
+                                  req.status === "refused" && {
+                                    color: nc.textMuted,
+                                  },
+                              ]}
+                            >
+                              {name}
+                              {suffix}
+                            </Text>
+                          </View>
+                        );
+                      })}
                     </View>
 
                     {/* Action buttons — only if user can vote */}
                     {canVote && (
                       <View style={styles.voteActions}>
                         <TouchableOpacity
-                          style={[
-                            styles.voteButton,
-                            { borderColor: nc.error },
-                          ]}
+                          style={[styles.voteButton, { borderColor: nc.error }]}
                           onPress={() =>
-                            handleVotePress(
-                              req.id,
-                              "refused",
-                              req.childName
-                            )
+                            handleVotePress(req.id, "refused", req.childName)
                           }
                           disabled={isVoting}
                         >
-                          <Ionicons
-                            name="close"
-                            size={18}
-                            color={nc.error}
-                          />
+                          <Ionicons name="close" size={18} color={nc.error} />
                           <Text
-                            style={[
-                              styles.voteButtonText,
-                              { color: nc.error },
-                            ]}
+                            style={[styles.voteButtonText, { color: nc.error }]}
                           >
                             Refuser
                           </Text>
@@ -466,11 +486,7 @@ export default function DeletionRequestsScreen() {
                             },
                           ]}
                           onPress={() =>
-                            handleVotePress(
-                              req.id,
-                              "approved",
-                              req.childName
-                            )
+                            handleVotePress(req.id, "approved", req.childName)
                           }
                           disabled={isVoting}
                         >
@@ -480,15 +496,38 @@ export default function DeletionRequestsScreen() {
                             color={nc.white}
                           />
                           <Text
-                            style={[
-                              styles.voteButtonText,
-                              { color: nc.white },
-                            ]}
+                            style={[styles.voteButtonText, { color: nc.white }]}
                           >
                             Approuver
                           </Text>
                         </TouchableOpacity>
                       </View>
+                    )}
+
+                    {/* Cancel button — only for approved (soft-deleted, within retention) */}
+                    {req.status === "approved" && (
+                      <TouchableOpacity
+                        style={[
+                          styles.cancelDeletionButton,
+                          { borderColor: nc.todayAccent },
+                        ]}
+                        onPress={() => handleCancelPress(req.id, req.childName)}
+                        disabled={isCancelling}
+                      >
+                        <Ionicons
+                          name="refresh"
+                          size={16}
+                          color={nc.todayAccent}
+                        />
+                        <Text
+                          style={[
+                            styles.cancelDeletionText,
+                            { color: nc.todayAccent },
+                          ]}
+                        >
+                          {isCancelling ? "..." : "Annuler la suppression"}
+                        </Text>
+                      </TouchableOpacity>
                     )}
                   </View>
                 );
@@ -523,6 +562,23 @@ export default function DeletionRequestsScreen() {
             confirmTextColor={nc.white}
             onConfirm={handleVoteConfirm}
             onCancel={() => setVoteConfirm(null)}
+          />
+        )}
+
+        {/* Cancel deletion confirmation */}
+        {cancelConfirm && (
+          <ConfirmModal
+            visible={cancelConfirm.visible}
+            title="Annuler la suppression ?"
+            message={`${cancelConfirm.childName} sera restaure et accessible a nouveau. Les autres proprietaires devront etre re-invites.`}
+            confirmText="Restaurer"
+            cancelText="Annuler"
+            backgroundColor={nc.backgroundCard}
+            textColor={nc.textStrong}
+            confirmButtonColor={nc.todayAccent}
+            confirmTextColor={nc.white}
+            onConfirm={handleCancelConfirm}
+            onCancel={() => setCancelConfirm(null)}
           />
         )}
 
@@ -640,6 +696,19 @@ const styles = StyleSheet.create({
   },
   voteButtonText: {
     fontSize: 15,
+    fontWeight: "700",
+  },
+  cancelDeletionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  cancelDeletionText: {
+    fontSize: 14,
     fontWeight: "700",
   },
 });

@@ -367,19 +367,24 @@ Logic:
 ## 6. Firestore Rules à modifier
 
 ```javascript
-// children/{childId} — bloquer si soft-deleted
+// children/{childId} — bloquer si soft-deleted (implémenté)
 match /children/{childId} {
-  allow read: if resource.data.deletedAt == null && ...existing rules...;
-  // Autoriser l'update pour le soft-delete (par CF admin uniquement)
+  function isNotDeleted() {
+    return !('deletedAt' in resource.data) || resource.data.deletedAt == null;
+  }
+  allow get: if isNotDeleted() && (hasAccess(childId) || ...);
+  allow update: if isNotDeleted() && (isOwner(childId) || isAdmin(childId) || ...);
+  allow delete: if false; // CF-only (purge RGPD)
 }
 
-// childDeletionRequests
+// childDeletionRequests — ownerIds array pour list queries (implémenté)
 match /childDeletionRequests/{requestId} {
   allow read: if isSignedIn() &&
-    request.auth.uid in resource.data.ownerVotes;
-  allow create: if false; // CF only
-  allow update: if false; // CF only
-  allow delete: if false; // CF only
+    request.auth.uid in resource.data.ownerIds;
+  allow update: if isSignedIn() &&
+    request.auth.uid in resource.data.ownerIds &&
+    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenByUserIds']);
+  allow create, delete: if false; // CF only
 }
 ```
 
@@ -387,48 +392,63 @@ match /childDeletionRequests/{requestId} {
 
 ## 7. Fichiers à créer/modifier
 
-### Nouveaux fichiers
+### Nouveaux fichiers (créés)
 | Fichier | Description |
 |---|---|
-| `app/settings/deletion-requests.tsx` | Screen des demandes pending |
-| `services/childDeletionService.ts` | Service client (appels CF) |
+| `app/settings/deletion-requests.tsx` | Screen des demandes pending/refused avec votes |
+| `services/childDeletionService.ts` | Service client (3 wrappers httpsCallable) |
+| `components/suivibaby/DeletionRequestNotifier.tsx` | Popup notification au lancement |
+| `plans/child-deletion-plan.md` | Ce fichier |
 
-### Fichiers à modifier
+### Fichiers modifiés
 | Fichier | Modification |
 |---|---|
-| `app/settings/edit-child.tsx` | Boutons Supprimer / Se retirer |
-| `app/(drawer)/settings.tsx` | Entrée "Demandes de suppression" avec badge |
-| `functions/index.js` | 4 nouvelles CF + modifier rules |
-| `firestore.rules` | Règles pour soft-delete + deletionRequests |
-| `firestore.indexes.json` | Index sur childDeletionRequests |
-| `contexts/BabyContext.tsx` | Ignorer les enfants avec deletedAt |
+| `app/settings/edit-child.tsx` | Inline edit (input+checkmark+back), Supprimer / Se retirer |
+| `app/settings/export.tsx` | Param `childId` pour pré-sélection single child |
+| `app/(drawer)/settings.tsx` | Entrée "Demandes de suppression" avec badge + listener |
+| `app/(drawer)/_layout.tsx` | Intégration DeletionRequestNotifier |
+| `functions/index.js` | 5 CF (create/vote/transfer/softDelete/purge) + constante rétention |
+| `firestore.rules` | Rules soft-delete children + childDeletionRequests |
+| `firestore.indexes.json` | 2 index sur childDeletionRequests |
+| `contexts/BabyContext.tsx` | Filtre deletedAt dans onSnapshot callback |
+| `eas.json` | credentialsSource remote pour production Android |
 
 ---
 
 ## 8. Ordre d'implémentation
 
-### Phase A — Fondations (backend)
-1. **A1** : Collection `childDeletionRequests` + Firestore rules + indexes
-2. **A2** : CF `softDeleteChild` (interne) — le cœur du soft-delete
-3. **A3** : CF `createDeletionRequest` (callable)
-4. **A4** : CF `voteDeletionRequest` (callable)
-5. **A5** : CF `transferAndLeave` (callable)
-6. **A6** : CF `purgeDeletedChildren` (scheduled)
-7. **A7** : Modifier `firestore.rules` pour bloquer read sur enfants soft-deleted
+### Phase A — Fondations (backend) ✅ TERMINÉE
+1. ✅ **A1** : Collection `childDeletionRequests` + Firestore rules + indexes
+2. ✅ **A2** : CF `softDeleteChild` (interne) — le cœur du soft-delete
+3. ✅ **A3** : CF `createDeletionRequest` (callable)
+4. ✅ **A4** : CF `voteDeletionRequest` (callable)
+5. ✅ **A5** : CF `transferAndLeave` (callable)
+6. ✅ **A6** : CF `purgeDeletedChildren` (scheduled)
+7. ✅ **A7** : Modifier `firestore.rules` pour bloquer read sur enfants soft-deleted
 
-### Phase B — Service client
-8. **B1** : `services/childDeletionService.ts` — wrapper httpsCallable
-9. **B2** : Modifier `BabyContext.tsx` — filtrer les enfants avec `deletedAt`
+### Phase B — Service client ✅ TERMINÉE
+8. ✅ **B1** : `services/childDeletionService.ts` — wrapper httpsCallable
+9. ✅ **B2** : Modifier `BabyContext.tsx` — filtrer les enfants avec `deletedAt`
 
-### Phase C — UI
-10. **C1** : Modifier `edit-child.tsx` — boutons Supprimer / Se retirer + modales
-11. **C2** : `deletion-requests.tsx` — screen des demandes pending
-12. **C3** : Modifier `settings.tsx` — entrée + badge demandes pending
-13. **C4** : Notification popup refus au lancement
+### Phase C — UI ✅ TERMINÉE
+10. ✅ **C1** : Modifier `edit-child.tsx` — inline edit (input + checkmark + back arrow), boutons Supprimer / Se retirer
+11. ✅ **C2** : `deletion-requests.tsx` — screen des demandes pending avec icônes de vote
+12. ✅ **C3** : Modifier `settings.tsx` — entrée + badge demandes pending + listener real-time
+13. ✅ **C4** : `DeletionRequestNotifier` — popup au lancement dans `_layout.tsx`
 
-### Phase D — Export pré-suppression
-14. **D1** : Modifier `export.tsx` pour accepter un `childId` unique en param
-15. **D2** : Intégrer le flow export dans la modale de suppression
+### Phase D — Export pré-suppression ✅ TERMINÉE
+14. ✅ **D1** : Modifier `export.tsx` pour accepter un `childId` unique en param (pré-sélection)
+15. ✅ **D2** : Intégrer le flow export dans la modale de suppression ("Exporter d'abord")
+
+### Déploiement
+- ✅ Commit `4e6b4a9` pushé sur main
+- ✅ `firebase deploy --only functions,firestore:rules,firestore:indexes` exécuté
+
+### Notes d'implémentation
+- `ownerIds: string[]` ajouté comme champ dénormalisé pour supporter les queries `array-contains` (Firestore ne peut pas filtrer sur des map keys dans les list queries)
+- Rules `childDeletionRequests` : lecture via `ownerIds`, update limité à `seenByUserIds` (dismiss notification)
+- Les listeners client gèrent silencieusement l'erreur `permission-denied` quand la collection est vide
+- `children/{childId}` : delete client interdit (`allow delete: if false`), seule la CF `purgeDeletedChildren` peut hard-delete
 
 ---
 

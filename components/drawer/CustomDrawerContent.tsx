@@ -306,7 +306,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
                   accessibilityRole="button"
                   accessibilityLabel={`Masquer ${child.name}`}
                 >
-                  <FontAwesome name="trash-alt" size={16} color={nc.error} />
+                  <FontAwesome name="eye-slash" size={16} color={nc.error} />
                 </TouchableOpacity>
               </View>
             </View>
