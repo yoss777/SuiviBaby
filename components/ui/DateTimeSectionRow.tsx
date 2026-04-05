@@ -57,6 +57,7 @@ interface DateTimeSectionRowProps {
 
   // Heure fin constraints
   heureFinMinimumDate?: Date;
+  heureFinMaximumDate?: Date;
 }
 
 // ============================================
@@ -104,6 +105,7 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
   showDuration = false,
   // Constraints
   heureFinMinimumDate,
+  heureFinMaximumDate,
 }: DateTimeSectionRowProps) {
   const nc = getNeutralColors(colorScheme);
 
@@ -310,6 +312,7 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
           onChange={handleHeureFinTimeChange}
           onPickerToggle={onPickerToggle}
           minimumDate={heureFinMinimumDate ?? heureDebut}
+          maximumDate={heureFinMaximumDate}
         />
       )}
 

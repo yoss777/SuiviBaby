@@ -117,6 +117,15 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
         hiddenChildrenIdsRef.current,
       ),
     );
+    // Filter hiddenChildrenIds to only keep IDs that exist in loaded children
+    // This removes orphaned IDs (deleted children or revoked access)
+    const validHiddenIds = hiddenChildrenIdsRef.current.filter(
+      (id) => childDataRef.current.has(id),
+    );
+    if (validHiddenIds.length !== hiddenChildrenIdsRef.current.length) {
+      hiddenChildrenIdsRef.current = validHiddenIds;
+      setHiddenChildrenIds(validHiddenIds);
+    }
   }, []);
 
   // Re-derive visible children when hiddenChildrenIds changes

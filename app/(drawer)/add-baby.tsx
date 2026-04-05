@@ -195,7 +195,13 @@ export default function AddBabyScreen() {
 
     // Vérifier que la date existe
     const date = new Date(year, month - 1, day);
-    return date.getDate() === day && date.getMonth() === month - 1;
+    if (date.getDate() !== day || date.getMonth() !== month - 1) return false;
+
+    // L'enfant doit être né : pas de date future
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    date.setHours(0, 0, 0, 0);
+    return date <= today;
   }, []);
 
   // Valider le formulaire
@@ -206,7 +212,19 @@ export default function AddBabyScreen() {
     }
 
     if (!isValidDate(birthDate)) {
-      showAlert('Erreur', 'Veuillez saisir une date de naissance valide (JJ/MM/AAAA)');
+      // Distinguish between invalid format and future date
+      const [day, month, year] = birthDate.split('/').map(Number);
+      const parsed = day && month && year ? new Date(year, month - 1, day) : null;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (parsed) parsed.setHours(0, 0, 0, 0);
+      const isFuture = parsed && parsed.getDate() === day && parsed.getMonth() === month - 1 && parsed > today;
+      showAlert(
+        'Erreur',
+        isFuture
+          ? 'La date de naissance ne peut pas être dans le futur. L\'enfant doit être né pour être ajouté.'
+          : 'Veuillez saisir une date de naissance valide (JJ/MM/AAAA)'
+      );
       return false;
     }
 

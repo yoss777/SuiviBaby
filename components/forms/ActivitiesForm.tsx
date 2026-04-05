@@ -195,6 +195,31 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
     editData?.heureFin ? toDate(editData.heureFin) : null,
   );
 
+  // Force heureFin to share the same calendar day as heureDebut (year/month/day)
+  const alignDateToDebut = (fin: Date, debut: Date): Date => {
+    const aligned = new Date(fin);
+    aligned.setFullYear(debut.getFullYear(), debut.getMonth(), debut.getDate());
+    return aligned;
+  };
+
+  // End of day for heureDebut (picker constraint)
+  const heureFinMaxDate = new Date(heureDebut);
+  heureFinMaxDate.setHours(23, 59, 0, 0);
+
+  // When heureFin changes, always align to same day as heureDebut
+  const handleHeureFinChange = (newFin: Date | null) => {
+    if (!newFin) { setHeureFin(null); return; }
+    setHeureFin(alignDateToDebut(newFin, heureDebut));
+  };
+
+  // When heureDebut changes, re-align heureFin to same day
+  const handleHeureDebutChange = (newDebut: Date) => {
+    setHeureDebut(newDebut);
+    if (heureFin) {
+      setHeureFin(alignDateToDebut(heureFin, newDebut));
+    }
+  };
+
   // Auto-compute duree from heureDebut/heureFin in chrono mode
   const chronoDuree =
     isChronoMode && heureFin
@@ -210,9 +235,21 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;
-    if (isChronoMode && !isOngoing && heureFin && heureFin <= heureDebut) {
-      showAlert("Erreur", "L'heure de fin doit être après l'heure de début.");
-      return;
+    // Ensure heureFin is on the same day and strictly after heureDebut
+    if (isChronoMode && !isOngoing && heureFin) {
+      const aligned = alignDateToDebut(heureFin, heureDebut);
+      if (aligned <= heureDebut) {
+        // Push picker to debut+5min and ask user to re-validate
+        const pushed = new Date(heureDebut.getTime() + 5 * 60000);
+        pushed.setFullYear(heureDebut.getFullYear(), heureDebut.getMonth(), heureDebut.getDate());
+        setHeureFin(pushed);
+        showAlert("Erreur", "L'heure de fin ne peut pas être antérieure à l'heure de début. Elle a été ajustée, veuillez vérifier et re-valider.");
+        return;
+      }
+      // Silently align date part if needed (keeps the hour)
+      if (aligned.getTime() !== heureFin.getTime()) {
+        setHeureFin(aligned);
+      }
     }
     try {
       setIsSubmitting(true);
@@ -399,8 +436,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           chronoLabel="Horaires"
           heureDebut={heureDebut}
           heureFin={heureFin}
-          onHeureDebutChange={setHeureDebut}
-          onHeureFinChange={setHeureFin}
+          onHeureDebutChange={handleHeureDebutChange}
+          onHeureFinChange={handleHeureFinChange}
           showStartDate
           showOngoingToggle
           isOngoing={isOngoing}
@@ -409,6 +446,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           ongoingActiveColors={chipActiveColors}
           showDuration
           heureFinMinimumDate={heureDebut}
+          heureFinMaximumDate={heureFinMaxDate}
           colorScheme={colorScheme}
           disabled={isSubmitting}
           onPickerToggle={onFormStepChange}

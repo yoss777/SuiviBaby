@@ -24,6 +24,7 @@ interface DateTimePickerRowProps {
   onChange: (date: Date) => void;
   onPickerToggle?: (visible: boolean) => void;
   minimumDate?: Date;
+  maximumDate?: Date;
   icon?: string; // FontAwesome5 icon name (optional, shown before label)
   valueStyle?: "normal" | "small"; // "small" for date display, "normal" for time
   accessibilityLabel?: string;
@@ -52,6 +53,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
   onChange,
   onPickerToggle,
   minimumDate,
+  maximumDate,
   icon,
   valueStyle = mode === "date" ? "small" : "normal",
   accessibilityLabel: a11yLabel,
@@ -177,6 +179,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
             display={isIOS ? "spinner" : "default"}
             themeVariant={colorScheme}
             minimumDate={minimumDate}
+            maximumDate={maximumDate}
             onChange={isIOS ? handleChangeIOS : handleChangeAndroid}
           />
         </View>

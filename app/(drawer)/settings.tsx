@@ -3,7 +3,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import {
   useCallback,
   useEffect,
@@ -35,7 +35,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useThemePreference } from "@/contexts/ThemeContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { requestAccountDeletion, cancelAccountDeletion, getPendingDeletionDate } from "@/services/accountDeletionService";
+import {
+  cancelAccountDeletion,
+  getPendingDeletionDate,
+  requestAccountDeletion,
+} from "@/services/accountDeletionService";
 import {
   clearCredentials,
   enableBiometric,
@@ -63,12 +67,12 @@ export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { user, signOut } = useAuth();
-  const { activeChild } = useBaby();
+  const { activeChild, children, hiddenChildrenIds } = useBaby();
   const { preference: themePreference } = useThemePreference();
   const router = useRouter();
   const { delete: deleteParam } = useLocalSearchParams();
-  const [hasHiddenChildren, setHasHiddenChildren] = useState(false);
-  const [hiddenChildrenCount, setHiddenChildrenCount] = useState(0);
+  const hiddenChildrenCount = hiddenChildrenIds.length;
+  const hasHiddenChildren = hiddenChildrenCount > 0;
   const [languagePreference, setLanguagePreference] = useState("fr");
   const [modalConfig, setModalConfig] = useState({
     visible: false,
@@ -83,8 +87,11 @@ export default function SettingsScreen() {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState("Biométrie");
-  const [pendingDeletionDate, setPendingDeletionDate] = useState<string | null>(null);
+  const [pendingDeletionDate, setPendingDeletionDate] = useState<string | null>(
+    null,
+  );
   const [isCancellingDeletion, setIsCancellingDeletion] = useState(false);
+  const [isOwnerOfAny, setIsOwnerOfAny] = useState(false);
   const navigation = useNavigation();
 
   // Check biometric availability + pending deletion on mount
@@ -102,8 +109,36 @@ export default function SettingsScreen() {
       }
     })();
 
-    getPendingDeletionDate().then(setPendingDeletionDate).catch(() => {});
+    getPendingDeletionDate()
+      .then(setPendingDeletionDate)
+      .catch(() => {});
   }, []);
+
+  // Check if user is owner of at least one child (via access sub-collection)
+  useEffect(() => {
+    if (!user?.uid || children.length === 0) {
+      setIsOwnerOfAny(false);
+      return;
+    }
+    let mounted = true;
+    (async () => {
+      try {
+        for (const child of children) {
+          const accessSnap = await getDoc(
+            doc(db, "children", child.id, "access", user.uid)
+          );
+          if (accessSnap.exists() && accessSnap.data()?.role === "owner") {
+            if (mounted) setIsOwnerOfAny(true);
+            return;
+          }
+        }
+        if (mounted) setIsOwnerOfAny(false);
+      } catch {
+        if (mounted) setIsOwnerOfAny(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [user?.uid, children]);
 
   // Header right: home shortcut (baby home if activeChild, explore otherwise)
   useLayoutEffect(() => {
@@ -140,8 +175,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (!user) {
-      setHasHiddenChildren(false);
-      setHiddenChildrenCount(0);
+      setLanguagePreference("fr");
       return;
     }
 
@@ -152,20 +186,13 @@ export default function SettingsScreen() {
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();
-          const hiddenIds = data.hiddenChildrenIds || [];
-          setHasHiddenChildren(hiddenIds.length > 0);
-          setHiddenChildrenCount(hiddenIds.length);
           setLanguagePreference(data.language || "fr");
         } else {
-          setHasHiddenChildren(false);
-          setHiddenChildrenCount(0);
           setLanguagePreference("fr");
         }
       },
       (error) => {
-        console.error("Erreur lors de l'écoute des enfants masqués:", error);
-        setHasHiddenChildren(false);
-        setHiddenChildrenCount(0);
+        console.error("Erreur lors de l'écoute des préférences:", error);
         setLanguagePreference("fr");
       },
     );
@@ -235,6 +262,20 @@ export default function SettingsScreen() {
           }
         },
       },
+      ...(isOwnerOfAny
+        ? [
+            {
+              id: "edit-child",
+              icon: "create-outline" as keyof typeof Ionicons.glyphMap,
+              label: "Profils enfants",
+              description: "Modifier le nom de vos enfants ou les supprimer",
+              onPress: () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/settings/edit-child");
+              },
+            },
+          ]
+        : []),
       {
         id: "join-child",
         icon: "person-add-outline",
@@ -320,6 +361,7 @@ export default function SettingsScreen() {
     [
       hiddenChildrenCount,
       hasHiddenChildren,
+      isOwnerOfAny,
       router,
       themePreference,
       biometricAvailable,
@@ -561,13 +603,21 @@ export default function SettingsScreen() {
         {renderSection("Zone dangereuse", dangerSettings)}
 
         {pendingDeletionDate && (
-          <View style={[styles.deletionBanner, { backgroundColor: nc.errorBg, borderColor: nc.error }]}>
+          <View
+            style={[
+              styles.deletionBanner,
+              { backgroundColor: nc.errorBg, borderColor: nc.error },
+            ]}
+          >
             <Ionicons name="warning-outline" size={20} color={nc.error} />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={[styles.deletionBannerText, { color: nc.error }]}>
-                Suppression programmee le {new Date(pendingDeletionDate).toLocaleDateString("fr-FR")}
+                Suppression programmee le{" "}
+                {new Date(pendingDeletionDate).toLocaleDateString("fr-FR")}
               </Text>
-              <Text style={[styles.deletionBannerSubtext, { color: nc.textMuted }]}>
+              <Text
+                style={[styles.deletionBannerSubtext, { color: nc.textMuted }]}
+              >
                 Vos donnees seront definitivement supprimees a cette date.
               </Text>
             </View>
@@ -595,7 +645,9 @@ export default function SettingsScreen() {
               }}
               disabled={isCancellingDeletion}
             >
-              <Text style={{ color: nc.error, fontWeight: "600", fontSize: 13 }}>
+              <Text
+                style={{ color: nc.error, fontWeight: "600", fontSize: 13 }}
+              >
                 {isCancellingDeletion ? "..." : "Annuler"}
               </Text>
             </TouchableOpacity>
@@ -685,7 +737,10 @@ export default function SettingsScreen() {
             // Envoyer email de confirmation (fire & forget)
             const { httpsCallable } = await import("firebase/functions");
             const { functions } = await import("@/config/firebase");
-            const sendEmail = httpsCallable(functions, "sendDeletionRequestEmail");
+            const sendEmail = httpsCallable(
+              functions,
+              "sendDeletionRequestEmail",
+            );
             sendEmail().catch(() => {});
 
             const deletionDate = new Date();
@@ -697,7 +752,8 @@ export default function SettingsScreen() {
             setModalConfig({
               visible: true,
               title: "Suppression programmee",
-              message: "Votre compte sera supprime dans 30 jours. Un email de confirmation vous a ete envoye. Vous pouvez annuler a tout moment depuis les parametres.",
+              message:
+                "Votre compte sera supprime dans 30 jours. Un email de confirmation vous a ete envoye. Vous pouvez annuler a tout moment depuis les parametres.",
             });
           } catch (error: any) {
             const code = error?.code || "";
