@@ -2581,4 +2581,29 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
   }
 
   console.log(`purgeDeletedChildren: purged=${purged}/${requestsSnap.size}`);
+
+  // --- Step 3: Cleanup stale requests (refused/expired/cancelled older than 30 days) ---
+  const staleThreshold = admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() - CHILD_DELETION_RETENTION_DAYS * 24 * 60 * 60 * 1000)
+  );
+  let cleaned = 0;
+  for (const status of ["refused", "expired", "cancelled"]) {
+    const staleSnap = await db
+      .collection("childDeletionRequests")
+      .where("status", "==", status)
+      .where("requestedAt", "<=", staleThreshold)
+      .limit(100)
+      .get();
+    for (const staleDoc of staleSnap.docs) {
+      try {
+        await staleDoc.ref.delete();
+        cleaned++;
+      } catch (err) {
+        console.error(`purgeDeletedChildren: error cleaning requestId=${staleDoc.id}:`, err.message);
+      }
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`purgeDeletedChildren: cleaned=${cleaned} stale requests`);
+  }
 });
