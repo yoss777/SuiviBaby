@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Sentry from "@sentry/react-native";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import BackgroundImage from "@/components/ui/BackgroundImage";
@@ -31,6 +32,11 @@ function BootScreenContent() {
   const [unauthDelayDone, setUnauthDelayDone] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);
+
+  // Sentry Performance: track startup time
+  const startupSpanRef = useRef(
+    Sentry.startInactiveSpan({ name: "app.boot", op: "app.start" }),
+  );
   // R1+R9: Splash minimum — shorter if cache exists (warm return)
   useEffect(() => {
     const hasCache = activeChild?.id ? !!getTodayEventsCache(activeChild.id) : false;
@@ -177,6 +183,7 @@ function BootScreenContent() {
 
       // Naviguer directement
       console.log("[BOOT] Navigation directe");
+      startupSpanRef.current?.end();
       navigate!();
     };
 

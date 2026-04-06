@@ -941,11 +941,22 @@ exports.deleteUserAccount = onCall(
       ]);
     }
 
-    // 5. Supprimer les documents uniques de l'utilisateur
+    // 5. Supprimer les collections par userId (données de suivi et promos)
+    await Promise.all([
+      deleteDocsByFieldBatched(db, "webhook_logs", "appUserId", uid),
+      deleteDocsByFieldBatched(db, "referrals", "parrainUid", uid),
+      deleteDocsByFieldBatched(db, "referrals", "filleulUid", uid),
+      deleteDocsByFieldBatched(db, "childDeletionRequests", "requestedBy", uid),
+    ]);
+
+    // 6. Supprimer les documents uniques de l'utilisateur
     const singleDocPaths = [
       `users/${uid}`,
       `users_public/${uid}`,
       `user_preferences/${uid}`,
+      `user_content/${uid}`,
+      `user_promos/${uid}`,
+      `subscriptions/${uid}`,
       `rate_limits/${uid}`,
       `usage_limits/${uid}`,
     ];
@@ -953,7 +964,7 @@ exports.deleteUserAccount = onCall(
     singleDocPaths.forEach((path) => batch.delete(db.doc(path)));
     await batch.commit();
 
-    // 6. Supprimer l'utilisateur Firebase Auth (DERNIER — irréversible)
+    // 7. Supprimer l'utilisateur Firebase Auth (DERNIER — irréversible)
     try {
       await admin.auth().deleteUser(uid);
     } catch (e) {
