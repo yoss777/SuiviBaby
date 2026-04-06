@@ -144,11 +144,15 @@ export default function OnboardingScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: (typeof SLIDES)[number] }) => (
-      <View style={[styles.slide, { width: SCREEN_WIDTH }]}>
+      <View
+        style={[styles.slide, { width: SCREEN_WIDTH }]}
+        accessible
+        accessibilityLabel={`${item.title}. ${item.description}`}
+      >
         <View
           style={[styles.iconCircle, { backgroundColor: item.color + "20" }]}
         >
-          <FontAwesome name={item.icon} size={60} color={item.color} />
+          <FontAwesome name={item.icon} size={60} color={item.color} accessibilityElementsHidden />
         </View>
         <Text style={[styles.slideTitle, { color: nc.textStrong }]}>
           {item.title}
@@ -271,7 +275,7 @@ const styles = StyleSheet.create({
     top: 60,
     right: 20,
     zIndex: 10,
-    padding: 8,
+    padding: 12,
   },
   skipText: {
     fontSize: 16,

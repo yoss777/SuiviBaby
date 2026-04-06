@@ -1028,5 +1028,5 @@ const styles = StyleSheet.create({
   },
   faqQuestion: { fontSize: 15, fontWeight: "600", flex: 1, paddingRight: 8 },
   faqAnswer: { fontSize: 14, lineHeight: 20, marginTop: 8 },
-  legal: { fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: 20 },
+  legal: { fontSize: 13, lineHeight: 18, textAlign: "center", marginTop: 20 },
 });
