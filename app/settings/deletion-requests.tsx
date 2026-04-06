@@ -58,12 +58,6 @@ interface DeletionRequest {
   seenByUserIds: string[];
 }
 
-interface OwnerDisplayInfo {
-  userId: string;
-  displayName: string;
-  vote: OwnerVote;
-}
-
 // ============================================
 // COMPONENT
 // ============================================
@@ -336,14 +330,14 @@ export default function DeletionRequestsScreen() {
           }
         >
           {isLoading ? (
-            <View style={styles.centered}>
+            <View style={styles.centered} accessibilityLabel="Chargement des demandes" accessibilityRole="progressbar">
               <ActivityIndicator
                 size="large"
                 color={Colors[colorScheme].tint}
               />
             </View>
           ) : requests.length === 0 ? (
-            <View style={styles.centered}>
+            <View style={styles.centered} accessible accessibilityRole="summary" accessibilityLabel="Aucune demande de suppression en cours">
               <Ionicons
                 name="checkmark-circle-outline"
                 size={48}
@@ -374,6 +368,9 @@ export default function DeletionRequestsScreen() {
                       styles.requestCard,
                       { backgroundColor: nc.backgroundCard },
                     ]}
+                    accessible
+                    accessibilityRole="summary"
+                    accessibilityLabel={`Demande de suppression de ${req.childName}, statut ${getStatusLabel(req.status)}, demandee par ${requesterName}`}
                   >
                     {/* Header */}
                     <View style={styles.requestHeader}>
@@ -435,8 +432,14 @@ export default function DeletionRequestsScreen() {
                           req.status === "refused" && vote.vote === "pending"
                             ? " (vote annule)"
                             : "";
+                        const voteLabel = vote.vote === "approved" ? "a approuve" : vote.vote === "refused" ? "a refuse" : "en attente";
                         return (
-                          <View key={ownerId} style={styles.voteRow}>
+                          <View
+                            key={ownerId}
+                            style={styles.voteRow}
+                            accessible
+                            accessibilityLabel={`${name}, ${voteLabel}${suffix}`}
+                          >
                             <Ionicons
                               name={icon.name}
                               size={18}
@@ -469,6 +472,9 @@ export default function DeletionRequestsScreen() {
                             handleVotePress(req.id, "refused", req.childName)
                           }
                           disabled={isVoting}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Refuser la suppression de ${req.childName}`}
+                          accessibilityState={{ disabled: isVoting }}
                         >
                           <Ionicons name="close" size={18} color={nc.error} />
                           <Text
@@ -489,6 +495,9 @@ export default function DeletionRequestsScreen() {
                             handleVotePress(req.id, "approved", req.childName)
                           }
                           disabled={isVoting}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Approuver la suppression de ${req.childName}`}
+                          accessibilityState={{ disabled: isVoting }}
                         >
                           <Ionicons
                             name="checkmark"
@@ -513,6 +522,9 @@ export default function DeletionRequestsScreen() {
                         ]}
                         onPress={() => handleCancelPress(req.id, req.childName)}
                         disabled={isCancelling}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Annuler la suppression de ${req.childName}`}
+                        accessibilityState={{ disabled: isCancelling }}
                       >
                         <Ionicons
                           name="refresh"

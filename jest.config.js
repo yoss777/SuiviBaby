@@ -7,6 +7,8 @@ module.exports = {
   testPathIgnorePatterns: [
     "<rootDir>/node_modules/",
     "<rootDir>/__tests__/setup.ts",
+    "<rootDir>/__tests__/firestore.rules.test.ts",
+    "<rootDir>/functions/",
   ],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",

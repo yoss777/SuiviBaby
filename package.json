@@ -10,6 +10,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
+    "test:rules": "firebase emulators:exec --only firestore 'npx jest __tests__/firestore.rules.test.ts --config jest.config.rules.js'",
+    "test:functions": "jest --rootDir functions --testMatch='**/__tests__/**/*.test.js'",
+    "test:all": "jest && jest --rootDir functions --testMatch='**/__tests__/**/*.test.js'",
     "test:coverage": "jest --coverage",
     "typecheck": "tsc --noEmit",
     "postinstall": "node ./scripts/patch-expo.js"
@@ -79,6 +82,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
+    "@firebase/rules-unit-testing": "^5.0.0",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.0.10",
