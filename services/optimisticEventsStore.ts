@@ -28,7 +28,7 @@ const entries = new Map<string, OptimisticEntry>();
 const subscribers = new Set<() => void>();
 let onFailureCallback: ((message: string) => void) | null = null;
 
-const STALE_THRESHOLD_MS = 20_000; // 20 seconds
+const STALE_THRESHOLD_MS = 60_000; // 60 seconds — handles CF cold starts without premature purge
 
 /**
  * Register a callback to be called when an optimistic operation fails.

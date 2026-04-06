@@ -23,8 +23,14 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
-      - name: Run tests
+      - name: Run app tests
         run: npm test -- --ci --coverage
+
+      - name: Install function dependencies
+        run: cd functions && npm ci
+
+      - name: Run CF tests
+        run: npm run test:functions -- --ci
 
       - name: Upload coverage
         if: always()
