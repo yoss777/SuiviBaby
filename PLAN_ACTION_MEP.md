@@ -306,7 +306,7 @@ Ils sont reportés au Sprint 3 (Phase 3.3) pour être faits avec le setup CI/CD 
 
 ---
 
-## PHASE 4 — MONÉTISATION & POLISH (Semaines 7-8, Sprint 4)
+## PHASE 4 — MONÉTISATION & POLISH (Semaines 7-8, Sprint 4) ✅ TERMINÉE (6 avril 2026)
 
 > Objectif : monétisation complète, accessibilité, polish UX.
 
