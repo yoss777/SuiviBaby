@@ -35,8 +35,16 @@ import { ensureFirebaseAppCheck } from "@/config/firebase";
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || "",
   enabled: !__DEV__,
-  tracesSampleRate: 0.1,
   environment: __DEV__ ? "development" : "production",
+  // Performance monitoring
+  tracesSampleRate: 0.2,
+  enableAutoSessionTracking: true,
+  sessionTrackingIntervalMillis: 30_000,
+  // Breadcrumbs pour contexte des erreurs
+  enableAutoPerformanceTracing: true,
+  attachStacktrace: true,
+  // Release tracking (auto-populated by expo plugin)
+  enableCaptureFailedRequests: true,
 });
 
 // Configurer le handler de notifications locales (rappels)

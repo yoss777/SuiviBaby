@@ -79,14 +79,57 @@
 > Seuil gratuit Firebase : 50K reads/jour, 20K writes/jour
 > Le seuil payant est atteint à environ **800-1400 DAU**
 
-## 6. Checklist de lancement monitoring
+## 6. Procédures de configuration (à faire AVANT le lancement)
 
-- [ ] Budget Google Cloud créé avec 3 seuils ($10/$25/$50)
-- [ ] Emails d'alerte configurés
-- [ ] Sentry alertes configurées (new issue, regression, crash-free)
-- [ ] Firebase Console vérifié (quotas, rules, indexes)
-- [ ] RevenueCat dashboard actif
+### 6.1 Budget Google Cloud (5 min)
+1. https://console.cloud.google.com/billing → projet `samaye-53723`
+2. Menu latéral → **Budgets & alerts** → **Create budget**
+3. Nom : `SuiviBaby Production`
+4. Scope : projet `samaye-53723`, tous services
+5. Budget amount : **$50/mois** (ajuster après 1er mois de données)
+6. Seuils : **50%** ($25), **90%** ($45), **100%** ($50), **150%** ($75)
+7. Notifications → cocher **Email to billing admins**
+8. Ajouter emails : `privacy@suivibaby.com` + email perso
+
+### 6.2 Alertes Sentry (10 min)
+1. https://tesfa-f9.sentry.io/projects/suivibaby/ → **Alerts** → **Create Alert**
+2. **Alerte 1 — New Issue** :
+   - When: A new issue is created
+   - Conditions: Environment = production
+   - Action: Send email + Slack (si configuré)
+3. **Alerte 2 — Issue Regression** :
+   - When: An issue changes state from resolved to unresolved
+   - Action: Send email
+4. **Alerte 3 — Crash-free rate** :
+   - Type: Metric Alert
+   - Metric: `session.crash_free_rate`
+   - Threshold: When below **99%** for 1 hour
+   - Action: Send email (CRITICAL)
+5. **Alerte 4 — Error spike** :
+   - Type: Metric Alert
+   - Metric: Number of errors
+   - Threshold: When above **50 errors** in 1 hour
+   - Action: Send email
+
+### 6.3 Firebase Console (5 min)
+1. https://console.firebase.google.com/project/samaye-53723/firestore/usage
+2. Vérifier que les quotas gratuits ne sont pas atteints
+3. Vérifier que tous les index sont déployés (Indexes tab)
+4. Vérifier que les rules sont à jour (Rules tab)
+
+### 6.4 RevenueCat (5 min)
+1. https://app.revenuecat.com/ → projet SuiviBaby
+2. Vérifier que le webhook est configuré et reçoit les events
+3. Activer les alertes email pour `BILLING_ISSUE` et `CANCELLATION`
+
+## 7. Checklist de lancement monitoring
+
+- [ ] 6.1 Budget Google Cloud créé avec 4 seuils
+- [ ] 6.2 Sentry : 4 alertes configurées
+- [ ] 6.3 Firebase Console vérifié (quotas, rules, indexes)
+- [ ] 6.4 RevenueCat dashboard actif + webhook vérifié
 - [ ] Baseline métriques documentée (reads, writes, users avant lancement)
+- [ ] Config Sentry app améliorée (sessions, perf, breadcrumbs) ✅ fait dans _layout.tsx
 
 ## 7. Runbook — Que faire en cas d'alerte
 
