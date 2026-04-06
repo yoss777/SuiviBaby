@@ -64,7 +64,10 @@ function monitorAppCheck(request, functionName) {
   if (request.app) {
     console.log(`[AppCheck] ${functionName}: VERIFIED (uid: ${request.auth?.uid})`);
   } else {
-    console.warn(`[AppCheck] ${functionName}: UNVERIFIED (uid: ${request.auth?.uid})`);
+    // En mode non-enforce, logger en warn pour pouvoir tracker le ratio
+    // avant d'activer l'enforcement. Vérifier dans Cloud Functions logs
+    // que 100% des requêtes sont VERIFIED avant de passer APPCHECK_ENFORCE=true.
+    console.warn(`[AppCheck] ${functionName}: UNVERIFIED (uid: ${request.auth?.uid}) — enforcement=${APP_CHECK_ENFORCED}`);
   }
 }
 
@@ -977,10 +980,15 @@ exports.revenueCatWebhook = onRequest(
       return;
     }
 
-    // Vérifier le secret
+    // Vérifier le secret — OBLIGATOIRE, rejeter si non configuré
     const secret = process.env.REVENUECAT_WEBHOOK_SECRET;
+    if (!secret) {
+      console.error("revenueCatWebhook: REVENUECAT_WEBHOOK_SECRET not configured");
+      res.status(500).send("Webhook not configured");
+      return;
+    }
     const authHeader = req.headers.authorization || "";
-    if (secret && authHeader !== `Bearer ${secret}`) {
+    if (authHeader !== `Bearer ${secret}`) {
       console.warn("revenueCatWebhook: invalid auth header");
       res.status(401).send("Unauthorized");
       return;

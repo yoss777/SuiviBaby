@@ -29,6 +29,9 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*-debug.log
+firestore-debug.log
+pglite-debug.log
 
 # macOS
 .DS_Store
@@ -51,3 +54,8 @@ ios/sentry.properties
 
 app-example
 .firebase/logs/vsce-debug.log
+keystores/
+
+# Seed/test data scripts (ne pas déployer en production)
+functions/seedUsers.js
+scripts/seedUsers.mjs

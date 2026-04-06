@@ -185,18 +185,21 @@ service cloud.firestore {
         request.resource.data.userId == resource.data.userId &&
         request.resource.data.childId == resource.data.childId;
 
-      // Suppression : owner/admin uniquement
-      allow delete: if canWriteEvents(resource.data.childId);
+      // Suppression : désactivée côté client — utiliser deleteEventCascade CF
+      // pour garantir la suppression atomique des likes/comments associés.
+      allow delete: if false;
     }
 
     // Likes sur les events
     match /eventLikes/{likeId} {
       // Get : vérifier accès à l'enfant
       allow get: if hasAccess(resource.data.childId);
-      // List : les queries filtrent par eventId ou childId.
-      // Firestore ne peut pas évaluer hasAccess() sur list sans childId dans le filtre,
-      // donc on autorise les list authentifiées avec limit raisonnable.
-      allow list: if isSignedIn() && request.query.limit <= 10000;
+      // List : exiger que la query filtre par childId pour empêcher les fuites cross-enfant.
+      // Le client DOIT inclure where('childId', '==', childId) dans ses queries.
+      allow list: if isSignedIn()
+        && request.query.limit <= 100
+        && resource.data.childId is string
+        && hasAccess(resource.data.childId);
 
       // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
       allow create: if canWriteLikes(request.resource.data.childId) &&
@@ -213,9 +216,12 @@ service cloud.firestore {
     match /eventComments/{commentId} {
       // Get : vérifier accès à l'enfant
       allow get: if hasAccess(resource.data.childId);
-      // List : les queries filtrent par eventId ou childId.
-      // Même logique que eventLikes ci-dessus.
-      allow list: if isSignedIn() && request.query.limit <= 10000;
+      // List : exiger que la query filtre par childId pour empêcher les fuites cross-enfant.
+      // Le client DOIT inclure where('childId', '==', childId) dans ses queries.
+      allow list: if isSignedIn()
+        && request.query.limit <= 100
+        && resource.data.childId is string
+        && hasAccess(resource.data.childId);
 
       // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
       allow create: if canWriteComments(request.resource.data.childId) &&
