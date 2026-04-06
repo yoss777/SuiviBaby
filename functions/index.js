@@ -486,6 +486,10 @@ exports.migrateUsersPublicRemoveEmail = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
     }
+    // Accès réservé aux administrateurs
+    if (!request.auth.token.admin) {
+      throw new HttpsError("permission-denied", "Accès réservé aux administrateurs.");
+    }
 
     const db = admin.firestore();
     let totalUpdated = 0;
@@ -1085,13 +1089,12 @@ exports.grandfatherExistingUsers = onCall(
       throw new HttpsError("unauthenticated", "Authentification requise.");
     }
 
-    // Vérifier que l'appelant est admin (à remplacer par un vrai check admin)
-    const db = admin.firestore();
-    const callerDoc = await db.doc(`users/${request.auth.uid}`).get();
-    if (!callerDoc.exists()) {
-      throw new HttpsError("permission-denied", "Utilisateur introuvable.");
+    // Vérifier que l'appelant est admin via custom claim Firebase
+    if (!request.auth.token.admin) {
+      throw new HttpsError("permission-denied", "Accès réservé aux administrateurs.");
     }
 
+    const db = admin.firestore();
     const { cutoffDate } = request.data;
     if (!cutoffDate) {
       throw new HttpsError("invalid-argument", "cutoffDate requis (ISO 8601).");
@@ -1146,8 +1149,10 @@ exports.validateReferralCode = onCall(
     }
 
     const filleulUid = request.auth.uid;
-    const { referralCode } = request.data;
     const db = admin.firestore();
+    await checkRateLimit(db, filleulUid, "referral", 5);
+
+    const { referralCode } = request.data;
 
     if (!referralCode || typeof referralCode !== "string") {
       throw new HttpsError("invalid-argument", "Code parrainage invalide.");
@@ -2232,6 +2237,9 @@ exports.voteDeletionRequest = onCall(
     }
 
     const uid = request.auth.uid;
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "deletion", 10);
+
     const { requestId, vote } = request.data;
 
     if (!requestId || typeof requestId !== "string") {
@@ -2241,7 +2249,6 @@ exports.voteDeletionRequest = onCall(
       throw new HttpsError("invalid-argument", "Vote doit être 'approved' ou 'refused'.");
     }
 
-    const db = admin.firestore();
     const requestRef = db.doc(`childDeletionRequests/${requestId}`);
     const requestDoc = await requestRef.get();
 
@@ -2332,6 +2339,7 @@ exports.transferAndLeave = onCall(
     }
 
     const db = admin.firestore();
+    await checkRateLimit(db, uid, "deletion", 10);
 
     // Verify caller is owner
     const callerAccess = await db.doc(`children/${childId}/access/${uid}`).get();
@@ -2412,6 +2420,8 @@ exports.cancelChildDeletion = onCall(
     }
 
     const db = admin.firestore();
+    await checkRateLimit(db, uid, "deletion", 10);
+
     const requestRef = db.doc(`childDeletionRequests/${requestId}`);
     const requestDoc = await requestRef.get();
 

@@ -101,29 +101,25 @@ service cloud.firestore {
         return !('deletedAt' in resource.data) || resource.data.deletedAt == null;
       }
 
-      // Lecture d'un document spécifique (get) : accès via access subcollection ou parentIds legacy
+      // Lecture d'un document spécifique (get) : accès via access subcollection uniquement
       // Bloqué si l'enfant est soft-deleted
-      allow get: if isNotDeleted() && (
-        hasAccess(childId) ||
-        (isSignedIn() &&
-         exists(/databases/$(database)/documents/children/$(childId)) &&
-         get(/databases/$(database)/documents/children/$(childId)).data.parentIds.hasAny([request.auth.uid]))
-      );
+      allow get: if isNotDeleted() && hasAccess(childId);
 
       // Liste (list) : désactivée — le pattern normal est user_child_access -> get children/{childId}
       // BabyContext utilise des listeners par document, pas de list query
       allow list: if false;
 
       // Création : l'utilisateur doit définir son propre UID comme ownerId
+      // et fournir les champs requis avec les bons types
       allow create: if isSignedIn() &&
-        request.resource.data.ownerId == request.auth.uid;
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.birthDate is timestamp;
 
       // Modification : owner ou admin uniquement, bloqué si soft-deleted
       allow update: if isNotDeleted() && (
-        isOwner(childId) || isAdmin(childId) ||
-        (isSignedIn() &&
-         exists(/databases/$(database)/documents/children/$(childId)) &&
-         get(/databases/$(database)/documents/children/$(childId)).data.ownerId == request.auth.uid)
+        isOwner(childId) || isAdmin(childId)
       );
 
       // Suppression : uniquement via CF (purge RGPD) — plus de delete direct client
@@ -148,10 +144,6 @@ service cloud.firestore {
         // 4. Invitation/ShareCode valide
         allow create, update: if (isOwner(childId) ||
           (uid == request.auth.uid && isChildOwner(childId) && request.resource.data.role == 'owner') ||
-          (uid == request.auth.uid &&
-           exists(/databases/$(database)/documents/children/$(childId)) &&
-           get(/databases/$(database)/documents/children/$(childId)).data.parentIds.hasAny([request.auth.uid]) &&
-           request.resource.data.grantedBy is string) ||
           (uid == request.auth.uid && isValidInvitation(childId) &&
             request.resource.data.grantedBy == invitationDoc(request.resource.data.invitationId).data.inviterId) ||
           (uid == request.auth.uid && isValidShareCode(childId) &&
@@ -181,9 +173,10 @@ service cloud.firestore {
 
       // Modification : owner/admin uniquement
       allow update: if canWriteEvents(resource.data.childId) &&
-        // Empêcher la modification du userId et childId
+        // Empêcher la modification du userId, childId et createdAt
         request.resource.data.userId == resource.data.userId &&
-        request.resource.data.childId == resource.data.childId;
+        request.resource.data.childId == resource.data.childId &&
+        request.resource.data.createdAt == resource.data.createdAt;
 
       // Suppression : désactivée côté client — utiliser deleteEventCascade CF
       // pour garantir la suppression atomique des likes/comments associés.
