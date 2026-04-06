@@ -233,7 +233,7 @@ Ils sont reportés au Sprint 3 (Phase 3.3) pour être faits avec le setup CI/CD 
 
 ---
 
-## PHASE 3 — QUALITÉ & DETTE TECHNIQUE (Semaines 5-6, Sprint 3)
+## PHASE 3 — QUALITÉ & DETTE TECHNIQUE (Semaines 5-6, Sprint 3) ✅ TERMINÉE (6 avril 2026)
 
 > Objectif : stabiliser le code, augmenter la confiance, supprimer le legacy.
 
