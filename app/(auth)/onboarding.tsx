@@ -275,7 +275,11 @@ const styles = StyleSheet.create({
     top: 60,
     right: 20,
     zIndex: 10,
-    padding: 12,
+    minWidth: 44,
+    minHeight: 44,
+    padding: 14,
+    justifyContent: "center",
+    alignItems: "center",
   },
   skipText: {
     fontSize: 16,
