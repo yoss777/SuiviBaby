@@ -210,7 +210,7 @@ export const GlobalFAB = () => {
   const rotation = useSharedValue(0);
   const pulseScale = useSharedValue(1);
   const backdropOpacity = useSharedValue(0);
-  const fabBottom = Math.max(insets.bottom, 16) + 16;
+  const fabBottom = Math.max(insets.bottom + 6, 24);
 
   // Subtle pulse animation when closed — skip in night mode (less visual noise)
   const hasPlayedPulse = useRef(false);
