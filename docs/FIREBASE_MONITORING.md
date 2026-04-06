@@ -1,0 +1,110 @@
+# Monitoring Firebase — SuiviBaby
+
+## 1. Alertes de budget (Google Cloud Billing)
+
+### Configuration
+1. Aller sur https://console.cloud.google.com/billing
+2. Sélectionner le projet `samaye-53723`
+3. Menu **Budgets & alerts**
+4. Créer un budget :
+   - Nom : `SuiviBaby Production`
+   - Montant : selon projection (voir section 5)
+   - Seuils d'alerte : **50%**, **90%**, **100%**, **150%**
+   - Destinataires : email(s) de l'équipe
+
+### Seuils recommandés pour le lancement
+| Seuil mensuel | Alerte | Action |
+|---------------|--------|--------|
+| $10/mois | Warning 50% ($5) | Vérifier Dashboard |
+| $25/mois | Warning 90% ($22.50) | Analyser les patterns de coûts |
+| $50/mois | Critical 100% ($50) | Investiguer immédiatement |
+
+## 2. Firebase Console — Métriques à surveiller
+
+### Firestore (https://console.firebase.google.com/project/samaye-53723/firestore/usage)
+- **Reads/day** : objectif < 50K/jour au lancement
+- **Writes/day** : objectif < 10K/jour
+- **Deletes/day** : < 1K
+- **Storage** : croissance prévisible (~1 KB/événement)
+
+### Cloud Functions (https://console.firebase.google.com/project/samaye-53723/functions/log)
+- **Invocations/day** : par fonction
+- **Errors/day** : objectif 0 en prod
+- **Execution time** : p50 < 500ms, p99 < 5s
+- **Cold starts** : surveiller si > 30% des invocations
+
+### Authentication (https://console.firebase.google.com/project/samaye-53723/authentication/users)
+- **Users actifs** : croissance, rétention
+- **Sign-in methods** : répartition email/Google/Apple
+
+## 3. Sentry — Erreurs applicatives
+
+### Dashboard
+- URL : https://tesfa-f9.sentry.io/projects/suivibaby/
+- Métriques clés : crash-free rate (cible > 99.5%), unresolved issues
+
+### Alertes Sentry à configurer
+1. **New issue** : notification immédiate (Slack/email)
+2. **Issue regression** : notification si un bug fermé réapparaît
+3. **Crash-free rate < 99%** : alerte critique
+
+## 4. RevenueCat — Métriques business
+
+### Dashboard
+- URL : https://app.revenuecat.com/
+- Métriques : MRR, active subscribers, trial conversion, churn rate
+
+### Alertes RevenueCat
+- Configurer webhooks → Cloud Function `revenueCatWebhook` (déjà fait)
+- Monitorer les events `BILLING_ISSUE` et `CANCELLATION`
+
+## 5. Projections de coûts Firestore
+
+### Par session utilisateur (estimation)
+| Opération | Reads | Writes |
+|-----------|-------|--------|
+| Ouverture app (boot) | ~10 | 1 |
+| Ajout événement | 3 | 2 |
+| Navigation tabs | ~5 | 0 |
+| Session typique (15 min) | ~30 | 5 |
+
+### Projection mensuelle
+| DAU | Reads/mois | Writes/mois | Coût estimé |
+|-----|-----------|------------|-------------|
+| 100 | 90K | 15K | Gratuit (quota) |
+| 1,000 | 900K | 150K | ~$5/mois |
+| 10,000 | 9M | 1.5M | ~$30/mois |
+| 50,000 | 45M | 7.5M | ~$150/mois |
+
+> Seuil gratuit Firebase : 50K reads/jour, 20K writes/jour
+> Le seuil payant est atteint à environ **800-1400 DAU**
+
+## 6. Checklist de lancement monitoring
+
+- [ ] Budget Google Cloud créé avec 3 seuils ($10/$25/$50)
+- [ ] Emails d'alerte configurés
+- [ ] Sentry alertes configurées (new issue, regression, crash-free)
+- [ ] Firebase Console vérifié (quotas, rules, indexes)
+- [ ] RevenueCat dashboard actif
+- [ ] Baseline métriques documentée (reads, writes, users avant lancement)
+
+## 7. Runbook — Que faire en cas d'alerte
+
+### Coûts Firestore élevés
+1. Vérifier Firebase Console → Usage tab
+2. Identifier la collection avec le plus de reads
+3. Vérifier les listeners Firestore actifs (BabyContext, socialService)
+4. Chercher les queries sans pagination
+5. Si urgent : activer le mode maintenance (feature flag)
+
+### Crash rate élevé
+1. Vérifier Sentry → Issues récentes
+2. Identifier le stacktrace et le device/OS
+3. Rollback si nécessaire (`eas update --rollback`)
+4. Hotfix et redéploiement
+
+### Cloud Function erreurs
+1. Firebase Console → Functions → Logs
+2. Filtrer par fonction et sévérité
+3. Vérifier rate limiting et quotas
+4. Redéployer si fix nécessaire (`firebase deploy --only functions:nomFonction`)
