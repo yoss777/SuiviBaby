@@ -509,17 +509,19 @@ export function ecouterEvenements(
         snapshot.metadata.fromCache &&
         snapshot.empty
       ) {
-        console.log(`[L:${lid}] BLOCKED waiting for server`);
+        // Premier snapshot vide du cache — on programme un fallback mais on
+        // appelle quand même le callback avec [] pour que useMergedOptimisticEvents
+        // puisse au moins montrer les events optimistic en attendant le serveur.
+        console.log(`[L:${lid}] CACHE_EMPTY waiting for server`);
         if (!fallbackTimer && !fallbackTriggered) {
           fallbackTimer = setTimeout(() => {
             console.log(`[L:${lid}] FALLBACK after ${waitForServerTimeoutMs}ms server=${hasReceivedServerSnapshot}`);
             if (!hasReceivedServerSnapshot) {
               fallbackTriggered = true;
-              callback(cachedEvents ?? []);
             }
           }, waitForServerTimeoutMs);
         }
-        return;
+        // Ne plus bloquer — passer les events (vides) pour que le merge optimistic fonctionne
       }
 
       console.log(`[L:${lid}] CB ${events.length} events`);

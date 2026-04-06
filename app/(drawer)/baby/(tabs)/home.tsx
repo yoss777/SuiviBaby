@@ -36,6 +36,7 @@ import { getPreferencesCache, getPermissionsCache } from "@/services/userPrefere
 import {
   buildTodayEventsData,
   getTodayEventsCache,
+  getTodayTypes,
 } from "@/services/todayEventsCache";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -706,12 +707,24 @@ export default function HomeDashboard() {
     );
   }, [loading]);
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
+    if (!activeChild?.id) return;
     setIsRefreshing(true);
-    setRefreshTick((prev) => prev + 1);
-    // The listener will fire and update data; give it a short minimum delay for UX
-    setTimeout(() => setIsRefreshing(false), 800);
-  }, []);
+    try {
+      // Fetch one-shot depuis le serveur sans recréer le listener
+      // Le listener existant continue de tourner et recevra les updates
+      const freshEvents = await obtenirEvenements(activeChild.id, {
+        type: getTodayTypes() as any,
+        depuis: (() => { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(0,0,0,0); return d; })(),
+        jusqu: (() => { const d = new Date(); d.setDate(d.getDate() + 1); return new Date(d.getTime() - 1); })(),
+      });
+      setFirestoreEvents(freshEvents);
+    } catch {
+      // Le listener existant garde les données en cache
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [activeChild?.id, setFirestoreEvents]);
 
   const openSheet = useCallback(
     (props: Parameters<typeof openSheetRaw>[0]) => {
@@ -2093,7 +2106,9 @@ export default function HomeDashboard() {
     return () => {
       unsubscribe();
     };
-  }, [activeChild?.id, currentDay, refreshTick, setFirestoreEvents]);
+    // Note: refreshTick retiré des deps — le refresh utilise un fetch one-shot
+    // (handleRefresh) au lieu de recréer le listener, ce qui évitait un flash vide.
+  }, [activeChild?.id, currentDay, setFirestoreEvents]);
 
   useEffect(() => {
     const todayData = buildTodayEventsData(mergedTodayEvents as any[]);
