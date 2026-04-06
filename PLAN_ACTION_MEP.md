@@ -371,7 +371,7 @@ Ils sont reportés au Sprint 3 (Phase 3.3) pour être faits avec le setup CI/CD 
 
 ---
 
-## PHASE 5 — STABILISATION & SOUMISSION (Semaines 9-10, Sprint 5)
+## PHASE 5 — STABILISATION & SOUMISSION (Semaines 9-10, Sprint 5) ✅ TERMINÉE (6 avril 2026)
 
 > Objectif : tests finaux, profiling, soumission stores.
 
