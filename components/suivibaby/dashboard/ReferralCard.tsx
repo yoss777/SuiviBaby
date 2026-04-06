@@ -39,7 +39,7 @@ export const ReferralCard = memo(function ReferralCard({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       await Share.share({
-        message: `Rejoins-moi sur Samaye pour suivre le développement de ton bébé ! Utilise mon code ${referralCode} pour obtenir 1 mois Premium offert. https://samaye.app/invite/${referralCode}`,
+        message: `Rejoins-moi sur Suivi Baby pour suivre le développement de ton bébé ! Utilise mon code ${referralCode} pour obtenir 1 mois Premium offert. https://suivibaby.com/invite/${referralCode}`,
       });
     } catch {
       // User cancelled

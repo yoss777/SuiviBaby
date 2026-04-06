@@ -165,11 +165,11 @@ function buildRecapHTML({ childName, weekLabel, stats, previousStats, unsubscrib
         ${sections.join("\n")}
       </div>
       <div class="cta">
-        <a href="samaye://baby/home">Ouvrir Samaye</a>
+        <a href="suivibaby://baby/home">Ouvrir Suivi Baby</a>
       </div>
       <div class="footer">
         <a href="${escapeHtml(unsubscribeUrl)}">Se désabonner des récaps</a>
-        <p>Samaye — Suivi bébé</p>
+        <p>Suivi Baby — Suivi bébé</p>
       </div>
     </div>
   </div>

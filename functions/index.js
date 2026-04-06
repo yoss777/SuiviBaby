@@ -2002,14 +2002,14 @@ exports.sendWeeklyRecap = onSchedule(
           weekLabel,
           stats,
           previousStats,
-          unsubscribeUrl: "samaye://settings/notifications",
+          unsubscribeUrl: "suivibaby://settings/notifications",
         });
 
         // Envoyer via Resend
         console.log(`sendWeeklyRecap: sending to ${userEmail} for ${childName} (hasActivity=${hasActivity})`);
         try {
           const sendResult = await resend.emails.send({
-            from: "Samaye <onboarding@resend.dev>",
+            from: "Suivi Baby <onboarding@resend.dev>",
             to: userEmail,
             subject: `Récap semaine — ${childName}`,
             html,

@@ -84,7 +84,7 @@ export const UpdateBanner = memo(function UpdateBanner({
       ]}
       accessibilityRole="alert"
       accessibilityLabel={`Nouvelle version ${latestVersion} disponible`}
-      accessibilityHint="Une mise à jour est disponible pour Samaye"
+      accessibilityHint="Une mise à jour est disponible pour Suivi Baby"
     >
       <View style={styles.content}>
         <View style={[styles.iconCircle, { backgroundColor: tint + "15" }]}>

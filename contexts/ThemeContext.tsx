@@ -9,7 +9,8 @@ import {
   ThemePreference,
 } from '@/services/userPreferencesService';
 
-const THEME_STORAGE_KEY = '@samaye_theme_preference';
+const THEME_STORAGE_KEY = '@suivibaby_theme_preference';
+const LEGACY_THEME_KEY = '@samaye_theme_preference';
 const NIGHT_START_HOUR = 22;
 const NIGHT_END_HOUR = 7;
 
@@ -41,9 +42,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (localLoadedRef.current) return;
     localLoadedRef.current = true;
     AsyncStorage.getItem(THEME_STORAGE_KEY)
-      .then((local) => {
+      .then(async (local) => {
         if (local && (local === 'light' || local === 'dark' || local === 'auto')) {
           setPreferenceState(local as ThemePreference);
+          return;
+        }
+        // Migration depuis l'ancienne clé Samaye
+        const legacy = await AsyncStorage.getItem(LEGACY_THEME_KEY);
+        if (legacy && (legacy === 'light' || legacy === 'dark' || legacy === 'auto')) {
+          setPreferenceState(legacy as ThemePreference);
+          await AsyncStorage.setItem(THEME_STORAGE_KEY, legacy);
+          await AsyncStorage.removeItem(LEGACY_THEME_KEY);
         }
       })
       .catch(() => {})

@@ -23,7 +23,8 @@ import {
   View,
 } from "react-native";
 
-const ONBOARDING_DONE_KEY = "@samaye_onboarding_done";
+const ONBOARDING_DONE_KEY = "@suivibaby_onboarding_done";
+const LEGACY_ONBOARDING_KEY = "@samaye_onboarding_done";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const SLIDES = [
@@ -67,7 +68,15 @@ const SLIDES = [
 export async function hasCompletedOnboarding(): Promise<boolean> {
   try {
     const value = await AsyncStorage.getItem(ONBOARDING_DONE_KEY);
-    return value === "true";
+    if (value === "true") return true;
+    // Migration depuis l'ancienne clé Samaye
+    const legacy = await AsyncStorage.getItem(LEGACY_ONBOARDING_KEY);
+    if (legacy === "true") {
+      await AsyncStorage.setItem(ONBOARDING_DONE_KEY, "true");
+      await AsyncStorage.removeItem(LEGACY_ONBOARDING_KEY);
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }

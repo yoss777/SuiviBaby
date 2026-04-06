@@ -46,7 +46,8 @@ import {
 } from "react-native";
 import { auth } from "../../config/firebase";
 
-const LAST_EMAIL_KEY = "@samaye_last_email";
+const LAST_EMAIL_KEY = "@suivibaby_last_email";
+const LEGACY_EMAIL_KEY = "@samaye_last_email";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Enable LayoutAnimation on Android
@@ -147,8 +148,15 @@ export default function LoginScreen() {
   // Charger le dernier email (#6), check biométrie (#1)
   // Note: onboarding check is handled by boot.tsx before reaching login
   useEffect(() => {
-    AsyncStorage.getItem(LAST_EMAIL_KEY).then((saved) => {
-      if (saved) setEmail(saved);
+    AsyncStorage.getItem(LAST_EMAIL_KEY).then(async (saved) => {
+      if (saved) { setEmail(saved); return; }
+      // Migration depuis l'ancienne clé Samaye
+      const legacy = await AsyncStorage.getItem(LEGACY_EMAIL_KEY);
+      if (legacy) {
+        setEmail(legacy);
+        await AsyncStorage.setItem(LAST_EMAIL_KEY, legacy);
+        await AsyncStorage.removeItem(LEGACY_EMAIL_KEY);
+      }
     }).catch(() => {});
 
     (async () => {

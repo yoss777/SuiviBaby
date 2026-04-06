@@ -138,7 +138,7 @@ function AppNavigation() {
     const handleUrl = (event: { url: string }) => {
       const url = event.url;
       // Gérer les URLs Firebase action (mode=resetPassword&oobCode=xxx)
-      // et les deep links samaye://reset-password?oobCode=xxx
+      // et les deep links suivibaby://reset-password?oobCode=xxx
       const oobCodeMatch = url.match(/[?&]oobCode=([^&]+)/);
       const modeMatch = url.match(/[?&]mode=([^&]+)/);
 

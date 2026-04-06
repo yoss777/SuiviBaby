@@ -739,7 +739,7 @@ export default function StatsScreen() {
           ${sommeilRows}
         </table>
 
-        <div class="footer">Généré par Samaye · ${dateStr}</div>
+        <div class="footer">Généré par Suivi Baby · ${dateStr}</div>
       </body>
       </html>
     `;
