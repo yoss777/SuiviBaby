@@ -7,7 +7,7 @@ import { useBaby, type Child } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { obtenirEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
+import { obtenirEvenementsDuJour } from "@/services/eventsService";
 import {
   acceptInvitation,
   cleanupAlreadyLinkedInvitations,
@@ -75,7 +75,7 @@ export default function JoinChildScreen() {
         setTimeout(resolve, 2000),
       );
       await Promise.race([
-        obtenirEvenementsDuJourHybrid(child.id).then((events) => {
+        obtenirEvenementsDuJour(child.id).then((events) => {
           setTodayEventsCache(child.id, buildTodayEventsData(events));
         }),
         preloadTimeout,

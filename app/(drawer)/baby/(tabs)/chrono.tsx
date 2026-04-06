@@ -19,10 +19,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
-import { ecouterEvenementsHybrid } from "@/migration/eventsHybridService";
-import type { Event, EventType } from "@/services/eventsService";
+import { ecouterEvenements, supprimerEvenement, type Event, type EventType } from "@/services/eventsService";
 import { MODERN_UI_DIAPER_EVENT_TYPES, MODERN_UI_EVENT_TYPES } from "@/services/eventTypeSupport";
-import { supprimerEvenement } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1671,7 +1669,7 @@ export default function ChronoScreen() {
     since.setDate(since.getDate() - (maxRange - 1));
     let loadingSet = false;
 
-    const unsubscribe = ecouterEvenementsHybrid(
+    const unsubscribe = ecouterEvenements(
       activeChild.id,
       (data) => {
         setFirestoreEvents(data);
@@ -1689,7 +1687,7 @@ export default function ChronoScreen() {
         }
       },
       {
-        types: ALL_EVENT_TYPES,
+        type: ALL_EVENT_TYPES,
         depuis: since,
         waitForServer: true,
       },

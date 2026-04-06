@@ -16,15 +16,11 @@ import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import {
   ajouterEvenementOptimistic,
   modifierEvenementOptimistic,
-  supprimerVaccin,
-  supprimerVitamine,
-} from "@/migration/eventsDoubleWriteService";
-import {
-  ecouterVaccinsHybrid as ecouterVaccins,
-  ecouterVitaminesHybrid as ecouterVitamines,
-  getNextEventDateBeforeHybrid,
-  hasMoreEventsBeforeHybrid,
-} from "@/migration/eventsHybridService";
+  ecouterEvenements,
+  getNextEventDateBefore,
+  hasMoreEventsBefore,
+  supprimerEvenement,
+} from "@/services/eventsService";
 import { normalizeQuery } from "@/utils/text";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
@@ -532,9 +528,9 @@ export default function ImmunizationsScreen() {
       }
     };
 
-    const unsubscribeVitamines = ecouterVitamines(
+    const unsubscribeVitamines = ecouterEvenements(
       activeChild.id,
-      (vitamines) => {
+      (vitamines: any[]) => {
         latestVitaminesRef.current = vitamines.map((v) => ({
           ...v,
           type: "vitamine" as ImmunoType,
@@ -542,12 +538,12 @@ export default function ImmunizationsScreen() {
         setVitaminesLoaded(true);
         mergeAndSortImmunos();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "vitamine", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
-    const unsubscribeVaccins = ecouterVaccins(
+    const unsubscribeVaccins = ecouterEvenements(
       activeChild.id,
-      (vaccins) => {
+      (vaccins: any[]) => {
         latestVaccinsRef.current = vaccins.map((v) => ({
           ...v,
           type: "vaccin" as ImmunoType,
@@ -555,7 +551,7 @@ export default function ImmunizationsScreen() {
         setVaccinsLoaded(true);
         mergeAndSortImmunos();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "vaccin", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
     );
 
     return () => {
@@ -593,7 +589,7 @@ export default function ImmunizationsScreen() {
     endOfToday.setHours(23, 59, 59, 999);
     const types = selectedType === "vitamine" ? "vitamine" : "vaccin";
 
-    getNextEventDateBeforeHybrid(activeChild.id, types, endOfToday)
+    getNextEventDateBefore(activeChild.id, types, endOfToday)
       .then((nextDate) => {
         if (cancelled) return;
         setDaysWindow(14);
@@ -638,7 +634,7 @@ export default function ImmunizationsScreen() {
       const beforeDate = new Date(startOfRange.getTime() - 1);
 
       const types = selectedType === "vitamine" ? "vitamine" : "vaccin";
-      const nextEventDate = await getNextEventDateBeforeHybrid(
+      const nextEventDate = await getNextEventDateBefore(
         activeChild.id,
         types,
         beforeDate,
@@ -737,7 +733,7 @@ export default function ImmunizationsScreen() {
 
     // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, types, beforeDate)
+    hasMoreEventsBefore(activeChild.id, types, beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -1134,9 +1130,9 @@ export default function ImmunizationsScreen() {
       setIsSubmitting(true);
       const isVitamine = editingImmuno.type === "vitamine";
       if (isVitamine) {
-        await supprimerVitamine(activeChild.id, editingImmuno.id);
+        await supprimerEvenement(activeChild.id, editingImmuno.id);
       } else {
-        await supprimerVaccin(activeChild.id, editingImmuno.id);
+        await supprimerEvenement(activeChild.id, editingImmuno.id);
       }
       if (isOffline) {
         showToast("Suppression en attente de synchronisation");

@@ -19,11 +19,11 @@ import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ecouterJalonsHybrid,
-  getNextEventDateBeforeHybrid,
-  hasMoreEventsBeforeHybrid,
-} from "@/migration/eventsHybridService";
-import { supprimerJalon } from "@/migration/eventsDoubleWriteService";
+  ecouterEvenements,
+  getNextEventDateBefore,
+  hasMoreEventsBefore,
+  supprimerJalon,
+} from "@/services/eventsService";
 import { JalonEvent } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -590,7 +590,7 @@ export default function MilestonesScreen() {
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
     let loadingSet = false;
 
-    const unsubscribe = ecouterJalonsHybrid(
+    const unsubscribe = ecouterEvenements(
       activeChild.id,
       (data) => {
         const evts = data as MilestoneEventWithId[];
@@ -608,7 +608,7 @@ export default function MilestonesScreen() {
           setIsLoadingMore(false);
         }
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "jalon", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
@@ -657,7 +657,7 @@ export default function MilestonesScreen() {
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
 
-    getNextEventDateBeforeHybrid(activeChild.id, ["jalon"], endOfToday)
+    getNextEventDateBefore(activeChild.id, ["jalon"], endOfToday)
       .then((nextDate) => {
         if (cancelled) return;
         setDaysWindow(14);
@@ -790,7 +790,7 @@ export default function MilestonesScreen() {
     const beforeDate = new Date(startOfRange.getTime() - 1);
 
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, ["jalon"], beforeDate)
+    hasMoreEventsBefore(activeChild.id, ["jalon"], beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -817,7 +817,7 @@ export default function MilestonesScreen() {
         startOfRange.setHours(0, 0, 0, 0);
         startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
         const beforeDate = new Date(startOfRange.getTime() - 1);
-        const nextEventDate = await getNextEventDateBeforeHybrid(
+        const nextEventDate = await getNextEventDateBefore(
           activeChild.id,
           ["jalon"],
           beforeDate

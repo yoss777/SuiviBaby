@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ajouterEvenementOptimistic } from "@/migration/eventsDoubleWriteService";
+import { ajouterEvenementOptimistic } from "@/services/eventsService";
 import { toggleLike } from "@/services/socialService";
 import { JalonEvent } from "@/services/eventsService";
 import { toDate } from "@/hooks/useMomentsData";

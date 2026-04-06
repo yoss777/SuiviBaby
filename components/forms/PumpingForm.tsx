@@ -8,8 +8,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
   modifierEvenementOptimistic,
-  supprimerPompage,
-} from "@/migration/eventsDoubleWriteService";
+  supprimerEvenement,
+} from "@/services/eventsService";
 
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
@@ -183,7 +183,7 @@ export function PumpingForm({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerPompage(activeChild.id, editData.id);
+          await supprimerEvenement(activeChild.id, editData.id);
           showToast("Session supprimée");
           onDelete?.();
         } catch (error) {

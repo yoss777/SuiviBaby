@@ -18,12 +18,12 @@ import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  ecouterActivitesHybrid,
-  getNextEventDateBeforeHybrid,
-  hasMoreEventsBeforeHybrid,
-} from "@/migration/eventsHybridService";
-import { supprimerActivite } from "@/migration/eventsDoubleWriteService";
-import { ActiviteEvent } from "@/services/eventsService";
+  ecouterEvenements,
+  getNextEventDateBefore,
+  hasMoreEventsBefore,
+  supprimerEvenement,
+  ActiviteEvent,
+} from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -578,7 +578,7 @@ export default function ActivitiesScreen() {
       setLoaded({ activites: true });
     };
 
-    const unsubscribe = ecouterActivitesHybrid(
+    const unsubscribe = ecouterEvenements(
       activeChild.id,
       (data) => {
         const evts = data as ActivityEventWithId[];
@@ -596,7 +596,7 @@ export default function ActivitiesScreen() {
           setIsLoadingMore(false);
         }
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "activite", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
@@ -644,7 +644,7 @@ export default function ActivitiesScreen() {
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
 
-    getNextEventDateBeforeHybrid(activeChild.id, ["activite"], endOfToday)
+    getNextEventDateBefore(activeChild.id, ["activite"], endOfToday)
       .then((nextDate) => {
         if (cancelled) return;
         setDaysWindow(14);
@@ -690,7 +690,7 @@ export default function ActivitiesScreen() {
     const beforeDate = new Date(startOfRange.getTime() - 1);
 
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, ["activite"], beforeDate)
+    hasMoreEventsBefore(activeChild.id, ["activite"], beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -838,7 +838,7 @@ export default function ActivitiesScreen() {
         startOfRange.setHours(0, 0, 0, 0);
         startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
         const beforeDate = new Date(startOfRange.getTime() - 1);
-        const nextEventDate = await getNextEventDateBeforeHybrid(
+        const nextEventDate = await getNextEventDateBefore(
           activeChild.id,
           ["activite"],
           beforeDate,
@@ -1054,7 +1054,7 @@ export default function ActivitiesScreen() {
       // onExpire — actually delete from Firestore
       async () => {
         try {
-          await supprimerActivite(childId, eventId);
+          await supprimerEvenement(childId, eventId);
         } catch {
           // Restore if delete fails
           setSoftDeletedIds((prev) => {
@@ -1063,9 +1063,9 @@ export default function ActivitiesScreen() {
             return next;
           });
           showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerActivite(childId, eventId).catch(() => {
+            supprimerEvenement(childId, eventId).catch(() => {
               showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerActivite(childId, eventId);
+                supprimerEvenement(childId, eventId);
               });
             });
           });
@@ -1108,7 +1108,7 @@ export default function ActivitiesScreen() {
       // onExpire — actually delete from Firestore
       async () => {
         try {
-          await Promise.all(ids.map((id) => supprimerActivite(childId, id)));
+          await Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
         } catch {
           // Restore if delete fails
           setSoftDeletedIds((prev) => {
@@ -1117,9 +1117,9 @@ export default function ActivitiesScreen() {
             return next;
           });
           showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            Promise.all(ids.map((id) => supprimerActivite(childId, id))).catch(() => {
+            Promise.all(ids.map((id) => supprimerEvenement(childId, id))).catch(() => {
               showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                Promise.all(ids.map((id) => supprimerActivite(childId, id)));
+                Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
               });
             });
           });

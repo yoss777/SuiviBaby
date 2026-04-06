@@ -11,10 +11,10 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
   modifierEvenementOptimistic,
-  supprimerActivite,
-} from "@/migration/eventsDoubleWriteService";
-import type { EventType } from "@/services/eventsService";
-import { obtenirEvenements } from "@/services/eventsService";
+  supprimerEvenement,
+  obtenirEvenements,
+  type EventType,
+} from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
@@ -365,7 +365,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerActivite(activeChild.id, editData.id);
+          await supprimerEvenement(activeChild.id, editData.id);
           showToast("Activité supprimée");
           onDelete?.();
         } catch (error) {

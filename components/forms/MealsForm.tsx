@@ -18,11 +18,10 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
   modifierEvenementOptimistic,
-  supprimerBiberon,
-  supprimerSolide,
-  supprimerTetee,
-} from "@/migration/eventsDoubleWriteService";
-import { BiberonEvent, SolideEvent } from "@/services/eventsService";
+  supprimerEvenement,
+  BiberonEvent,
+  SolideEvent,
+} from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -335,14 +334,12 @@ export function MealsForm({
       async () => {
         try {
           setIsSubmitting(true);
+          await supprimerEvenement(activeChild.id, editData.id);
           if (editData.type === "tetee") {
-            await supprimerTetee(activeChild.id, editData.id);
             showToast("Tétée supprimée");
           } else if (editData.type === "biberon") {
-            await supprimerBiberon(activeChild.id, editData.id);
             showToast("Biberon supprimé");
           } else if (editData.type === "solide") {
-            await supprimerSolide(activeChild.id, editData.id);
             showToast("Repas solide supprimé");
           }
           onDelete?.();

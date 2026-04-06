@@ -7,13 +7,7 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
-import {
-  ecouterBiberonsHybrid as ecouterBiberons,
-  ecouterPompagesHybrid as ecouterPompages,
-  ecouterSolidesHybrid as ecouterSolides,
-  ecouterSommeilsHybrid as ecouterSommeils,
-  ecouterTeteesHybrid as ecouterTetees,
-} from "@/migration/eventsHybridService";
+import { ecouterEvenements } from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
@@ -282,58 +276,58 @@ export default function StatsScreen() {
     latestFirestorePompagesRef.current = [];
     latestFirestoreSommeilsRef.current = [];
 
-    const unsubscribeTetees = ecouterTetees(
+    const unsubscribeTetees = ecouterEvenements(
       activeChild.id,
       (tetees) => {
         latestFirestoreTeteesRef.current = tetees;
         setTeteesLoaded(true);
         pushRepasFirestoreEvents();
       },
-      { waitForServer: true },
+      { type: "tetee", waitForServer: true },
       handleListenerError,
     );
 
-    const unsubscribeBiberons = ecouterBiberons(
+    const unsubscribeBiberons = ecouterEvenements(
       activeChild.id,
       (biberons) => {
         latestFirestoreBiberonsRef.current = biberons;
         setBiberonsLoaded(true);
         pushRepasFirestoreEvents();
       },
-      { waitForServer: true },
+      { type: "biberon", waitForServer: true },
       handleListenerError,
     );
 
-    const unsubscribeSolides = ecouterSolides(
+    const unsubscribeSolides = ecouterEvenements(
       activeChild.id,
       (solides) => {
         latestFirestoreSolidesRef.current = solides;
         setSolidesLoaded(true);
         pushRepasFirestoreEvents();
       },
-      { waitForServer: true },
+      { type: "solide", waitForServer: true },
       handleListenerError,
     );
 
-    const unsubscribePompages = ecouterPompages(
+    const unsubscribePompages = ecouterEvenements(
       activeChild.id,
       (data) => {
         latestFirestorePompagesRef.current = data;
         setPompagesLoaded(true);
         setPompagesFirestoreEvents(data);
       },
-      { waitForServer: true },
+      { type: "pompage", waitForServer: true },
       handleListenerError,
     );
 
-    const unsubscribeSommeils = ecouterSommeils(
+    const unsubscribeSommeils = ecouterEvenements(
       activeChild.id,
       (data) => {
         latestFirestoreSommeilsRef.current = data;
         setSommeilLoaded(true);
         setSommeilsFirestoreEvents(data);
       },
-      { waitForServer: true },
+      { type: "sommeil", waitForServer: true },
       handleListenerError,
     );
 

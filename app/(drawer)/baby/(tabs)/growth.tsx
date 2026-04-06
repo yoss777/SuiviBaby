@@ -16,11 +16,12 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
-  ecouterCroissancesHybrid,
-  getNextEventDateBeforeHybrid,
-  hasMoreEventsBeforeHybrid,
-} from "@/migration/eventsHybridService";
-import { CroissanceEvent, obtenirEvenements } from "@/services/eventsService";
+  ecouterEvenements,
+  getNextEventDateBefore,
+  hasMoreEventsBefore,
+  CroissanceEvent,
+  obtenirEvenements,
+} from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -45,7 +46,7 @@ import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { supprimerCroissance } from "@/migration/eventsDoubleWriteService";
+import { supprimerEvenement as supprimerCroissance } from "@/services/eventsService";
 import * as Haptics from "expo-haptics";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -559,7 +560,7 @@ export default function GrowthScreen() {
 
     let loadingSet = false;
 
-    const unsubscribe = ecouterCroissancesHybrid(
+    const unsubscribe = ecouterEvenements(
       activeChild.id,
       (data) => {
         setFirestoreEvents(data as GrowthEventWithId[]);
@@ -578,7 +579,7 @@ export default function GrowthScreen() {
           }
         }
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "croissance", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
@@ -626,7 +627,7 @@ export default function GrowthScreen() {
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
 
-    getNextEventDateBeforeHybrid(activeChild.id, "croissance", endOfToday)
+    getNextEventDateBefore(activeChild.id, "croissance", endOfToday)
       .then((nextDate) => {
         if (cancelled) return;
         setDaysWindow(14);
@@ -674,7 +675,7 @@ export default function GrowthScreen() {
     const beforeDate = new Date(startOfRange.getTime() - 1);
 
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, "croissance", beforeDate)
+    hasMoreEventsBefore(activeChild.id, "croissance", beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -847,7 +848,7 @@ export default function GrowthScreen() {
       startOfRange.setHours(0, 0, 0, 0);
       startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
       const beforeDate = new Date(startOfRange.getTime() - 1);
-      const nextEventDate = await getNextEventDateBeforeHybrid(
+      const nextEventDate = await getNextEventDateBefore(
         activeChild.id,
         "croissance",
         beforeDate,

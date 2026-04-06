@@ -14,7 +14,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
-import { ecouterCroissancesHybrid } from "@/migration/eventsHybridService";
+import { ecouterEvenements } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -70,7 +70,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { supprimerCroissance } from "@/migration/eventsDoubleWriteService";
+import { supprimerEvenement as supprimerCroissance } from "@/services/eventsService";
 import { useHeaderRight } from "../../_layout";
 
 // Enable LayoutAnimation on Android
@@ -1157,7 +1157,7 @@ export default function CroissanceScreen() {
 
     let loadingSet = false;
 
-    const unsubscribe = ecouterCroissancesHybrid(
+    const unsubscribe = ecouterEvenements(
       activeChild.id,
       (data) => {
         if (cancelled) return;
@@ -1174,7 +1174,7 @@ export default function CroissanceScreen() {
           setIsRefreshing(false);
         }
       },
-      { waitForServer: true },
+      { type: "croissance", waitForServer: true },
       handleListenerError,
     );
 

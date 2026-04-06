@@ -10,8 +10,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
   modifierEvenementOptimistic,
-  supprimerCroissance,
-} from "@/migration/eventsDoubleWriteService";
+  supprimerEvenement,
+} from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { useState } from "react";
 import {
@@ -151,7 +151,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerCroissance(activeChild.id, editData.id);
+          await supprimerEvenement(activeChild.id, editData.id);
           showToast("Mesure supprimée");
           onDelete?.();
         } catch (error) {

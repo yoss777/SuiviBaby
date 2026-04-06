@@ -17,22 +17,11 @@ import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
-  supprimerTemperature,
-  supprimerMedicament,
-  supprimerSymptome,
-  supprimerVaccin,
-  supprimerVitamine,
-} from "@/migration/eventsDoubleWriteService";
-import { supprimerEvenement } from "@/services/eventsService";
-import {
-  ecouterMedicamentsHybrid,
-  ecouterSymptomesHybrid,
-  ecouterTemperaturesHybrid,
-  ecouterVaccinsHybrid,
-  ecouterVitaminesHybrid,
-  getNextEventDateBeforeHybrid,
-  hasMoreEventsBeforeHybrid,
-} from "@/migration/eventsHybridService";
+  ecouterEvenements,
+  getNextEventDateBefore,
+  hasMoreEventsBefore,
+  supprimerEvenement,
+} from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
@@ -612,7 +601,7 @@ export default function SoinsScreen() {
       }
     };
 
-    const unsubscribeTemperatures = ecouterTemperaturesHybrid(
+    const unsubscribeTemperatures = ecouterEvenements(
       activeChild.id,
       (data) => {
         latestTemperaturesRef.current = data as HealthEvent[];
@@ -624,47 +613,47 @@ export default function SoinsScreen() {
         handleLoadMore();
         pushHealthFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "temperature", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
-    const unsubscribeMedicaments = ecouterMedicamentsHybrid(
+    const unsubscribeMedicaments = ecouterEvenements(
       activeChild.id,
       (data) => {
         latestMedicamentsRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, medicament: true }));
         pushHealthFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "medicament", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
-    const unsubscribeSymptomes = ecouterSymptomesHybrid(
+    const unsubscribeSymptomes = ecouterEvenements(
       activeChild.id,
       (data) => {
         latestSymptomesRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, symptome: true }));
         pushHealthFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "symptome", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
-    const unsubscribeVaccins = ecouterVaccinsHybrid(
+    const unsubscribeVaccins = ecouterEvenements(
       activeChild.id,
       (data) => {
         latestVaccinsRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, vaccin: true }));
         pushHealthFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "vaccin", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
-    const unsubscribeVitamines = ecouterVitaminesHybrid(
+    const unsubscribeVitamines = ecouterEvenements(
       activeChild.id,
       (data) => {
         latestVitaminesRef.current = data as HealthEvent[];
         setLoaded((prev) => ({ ...prev, vitamine: true }));
         pushHealthFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "vitamine", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
@@ -751,7 +740,7 @@ export default function SoinsScreen() {
     ];
 
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, types, beforeDate)
+    hasMoreEventsBefore(activeChild.id, types, beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -893,7 +882,7 @@ export default function SoinsScreen() {
           "vaccin",
           "vitamine",
         ];
-        const nextEventDate = await getNextEventDateBeforeHybrid(
+        const nextEventDate = await getNextEventDateBefore(
           activeChild.id,
           types,
           beforeDate,
@@ -1107,15 +1096,8 @@ export default function SoinsScreen() {
       },
       // onExpire — actually delete from Firestore
       async () => {
-        const supprimerMap: Record<HealthType, (childId: string, id: string) => Promise<void>> = {
-          temperature: supprimerTemperature,
-          medicament: supprimerMedicament,
-          symptome: supprimerSymptome,
-          vaccin: supprimerVaccin,
-          vitamine: supprimerVitamine,
-        };
         try {
-          await supprimerMap[eventType](childId, eventId);
+          await supprimerEvenement(childId, eventId);
         } catch {
           // Restore if delete fails
           setSoftDeletedIds((prev) => {
@@ -1124,9 +1106,9 @@ export default function SoinsScreen() {
             return next;
           });
           showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerMap[eventType](childId, eventId).catch(() => {
+            supprimerEvenement(childId, eventId).catch(() => {
               showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerMap[eventType](childId, eventId).catch(() => {
+                supprimerEvenement(childId, eventId).catch(() => {
                   showToast("Échec de la suppression");
                 });
               });

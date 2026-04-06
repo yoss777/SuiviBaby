@@ -11,9 +11,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
   modifierEvenementOptimistic,
-  supprimerMiction,
-  supprimerSelle,
-} from "@/migration/eventsDoubleWriteService";
+  supprimerEvenement,
+} from "@/services/eventsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { useState } from "react";
@@ -199,11 +198,10 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
+          await supprimerEvenement(activeChild.id, editData.id);
           if (editData.type === "miction") {
-            await supprimerMiction(activeChild.id, editData.id);
             showToast("Miction supprimée");
           } else {
-            await supprimerSelle(activeChild.id, editData.id);
             showToast("Selle supprimée");
           }
           onDelete?.();

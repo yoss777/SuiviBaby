@@ -8,7 +8,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { obtenirEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
+import { obtenirEvenementsDuJour } from "@/services/eventsService";
 import {
   acceptInvitation,
   cleanupAlreadyLinkedInvitations,
@@ -96,7 +96,7 @@ export function InvitationListener() {
         }
         const preloadTimeout = new Promise((resolve) => setTimeout(resolve, 2000));
         await Promise.race([
-          obtenirEvenementsDuJourHybrid(matchedChild.id).then((events) => {
+          obtenirEvenementsDuJour(matchedChild.id).then((events) => {
             setTodayEventsCache(matchedChild.id, buildTodayEventsData(events));
           }),
           preloadTimeout,

@@ -16,15 +16,15 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
-import { supprimerSommeil, supprimerBain, supprimerNettoyageNez } from "@/migration/eventsDoubleWriteService";
 import {
-  ecouterBainsHybrid,
-  ecouterNettoyageNezHybrid,
-  ecouterSommeilsHybrid,
-  getNextEventDateBeforeHybrid,
-  hasMoreEventsBeforeHybrid,
-} from "@/migration/eventsHybridService";
-import { BainEvent, NettoyageNezEvent, SommeilEvent, supprimerEvenement } from "@/services/eventsService";
+  ecouterEvenements,
+  getNextEventDateBefore,
+  hasMoreEventsBefore,
+  supprimerEvenement,
+  BainEvent,
+  NettoyageNezEvent,
+  SommeilEvent,
+} from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
@@ -559,7 +559,7 @@ export default function RoutinesScreen() {
       }
     };
 
-    const unsubscribeSommeils = ecouterSommeilsHybrid(
+    const unsubscribeSommeils = ecouterEvenements(
       activeChild.id,
       (data) => {
         latestSommeilsRef.current = data as RoutineEvent[];
@@ -571,29 +571,29 @@ export default function RoutinesScreen() {
         handleLoadMore();
         pushRoutineFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "sommeil", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubscribeBains = ecouterBainsHybrid(
+    const unsubscribeBains = ecouterEvenements(
       activeChild.id,
       (data) => {
         latestBainsRef.current = data as RoutineEvent[];
         setLoaded((prev) => ({ ...prev, bain: true }));
         pushRoutineFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "bain", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubscribeNez = ecouterNettoyageNezHybrid(
+    const unsubscribeNez = ecouterEvenements(
       activeChild.id,
       (data) => {
         latestNezRef.current = data as RoutineEvent[];
         setLoaded((prev) => ({ ...prev, nez: true }));
         pushRoutineFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "nettoyage_nez", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
@@ -670,7 +670,7 @@ export default function RoutinesScreen() {
     const beforeDate = new Date(startOfRange.getTime() - 1);
 
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, ["sommeil", "bain", "nettoyage_nez"], beforeDate)
+    hasMoreEventsBefore(activeChild.id, ["sommeil", "bain", "nettoyage_nez"], beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -841,7 +841,7 @@ export default function RoutinesScreen() {
 
       if (!auto || autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
         // Clic manuel ou auto épuisé : sauter directement au prochain événement
-        const nextEventDate = await getNextEventDateBeforeHybrid(
+        const nextEventDate = await getNextEventDateBefore(
           activeChild.id,
           ["sommeil", "bain", "nettoyage_nez"],
           beforeDate,
@@ -1002,13 +1002,7 @@ export default function RoutinesScreen() {
       // onExpire — actually delete from Firestore
       async () => {
         try {
-          if (eventType === "sommeil") {
-            await supprimerSommeil(childId, eventId);
-          } else if (eventType === "nettoyage_nez") {
-            await supprimerNettoyageNez(childId, eventId);
-          } else {
-            await supprimerBain(childId, eventId);
-          }
+          await supprimerEvenement(childId, eventId);
         } catch {
           // Restore if delete fails
           setSoftDeletedIds((prev) => {
@@ -1016,11 +1010,7 @@ export default function RoutinesScreen() {
             next.delete(eventId);
             return next;
           });
-          const retryDelete = eventType === "sommeil"
-            ? () => supprimerSommeil(childId, eventId)
-            : eventType === "nettoyage_nez"
-              ? () => supprimerNettoyageNez(childId, eventId)
-              : () => supprimerBain(childId, eventId);
+          const retryDelete = () => supprimerEvenement(childId, eventId);
           showActionToast("Erreur lors de la suppression", "Réessayer", () => {
             retryDelete().catch(() => {
               showActionToast("Erreur lors de la suppression", "Réessayer", () => {

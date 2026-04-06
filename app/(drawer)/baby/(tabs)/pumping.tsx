@@ -16,12 +16,12 @@ import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
-import { supprimerPompage } from "@/migration/eventsDoubleWriteService";
 import {
-  ecouterPompagesHybrid as ecouterPompages,
-  getNextEventDateBeforeHybrid,
-  hasMoreEventsBeforeHybrid,
-} from "@/migration/eventsHybridService";
+  ecouterEvenements,
+  getNextEventDateBefore,
+  hasMoreEventsBefore,
+  supprimerEvenement,
+} from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -511,7 +511,7 @@ export default function PumpingScreen() {
       setPompagesLoaded(true);
     };
 
-    const unsubscribe = ecouterPompages(
+    const unsubscribe = ecouterEvenements(
       activeChild.id,
       (data) => {
         setFirestoreEvents(data);
@@ -530,7 +530,7 @@ export default function PumpingScreen() {
           }
         }
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "pompage", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
@@ -577,7 +577,7 @@ export default function PumpingScreen() {
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
 
-    getNextEventDateBeforeHybrid(activeChild.id, "pompage", endOfToday)
+    getNextEventDateBefore(activeChild.id, "pompage", endOfToday)
       .then((nextDate) => {
         if (cancelled) return;
         setDaysWindow(14);
@@ -630,7 +630,7 @@ export default function PumpingScreen() {
 
       if (!auto || autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
         // Clic manuel ou auto qui a épuisé ses tentatives : sauter directement au prochain événement
-        const nextEventDate = await getNextEventDateBeforeHybrid(
+        const nextEventDate = await getNextEventDateBefore(
           activeChild.id,
           "pompage",
           beforeDate,
@@ -729,7 +729,7 @@ export default function PumpingScreen() {
 
     // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, "pompage", beforeDate)
+    hasMoreEventsBefore(activeChild.id, "pompage", beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -963,7 +963,7 @@ export default function PumpingScreen() {
       // onExpire — actually delete from Firestore
       async () => {
         try {
-          await supprimerPompage(childId, pompageId);
+          await supprimerEvenement(childId, pompageId);
         } catch {
           setSoftDeletedIds((prev) => {
             const next = new Set(prev);
@@ -971,9 +971,9 @@ export default function PumpingScreen() {
             return next;
           });
           showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerPompage(childId, pompageId).catch(() => {
+            supprimerEvenement(childId, pompageId).catch(() => {
               showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerPompage(childId, pompageId);
+                supprimerEvenement(childId, pompageId);
               });
             });
           });
@@ -1016,7 +1016,7 @@ export default function PumpingScreen() {
       // onExpire
       async () => {
         try {
-          await Promise.all(ids.map((id) => supprimerPompage(childId, id)));
+          await Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
         } catch {
           setSoftDeletedIds((prev) => {
             const next = new Set(prev);
@@ -1024,9 +1024,9 @@ export default function PumpingScreen() {
             return next;
           });
           showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            Promise.all(ids.map((id) => supprimerPompage(childId, id))).catch(() => {
+            Promise.all(ids.map((id) => supprimerEvenement(childId, id))).catch(() => {
               showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                Promise.all(ids.map((id) => supprimerPompage(childId, id)));
+                Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
               });
             });
           });

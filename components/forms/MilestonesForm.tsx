@@ -13,7 +13,7 @@ import {
   ajouterEvenementOptimistic,
   modifierEvenementOptimistic,
   supprimerJalon,
-} from "@/migration/eventsDoubleWriteService";
+} from "@/services/eventsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as FileSystem from "expo-file-system";

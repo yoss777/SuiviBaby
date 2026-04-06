@@ -3,7 +3,7 @@ import { obtenirPreferences, type ReminderPreferences } from '@/services/userPre
 import { collection, doc, limit, onSnapshot, query, setDoc, where } from 'firebase/firestore';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { obtenirEvenementsDuJourHybrid } from '@/migration/eventsHybridService';
+import { obtenirEvenementsDuJour } from '@/services/eventsService';
 import { buildTodayEventsData, getTodayEventsCache, setTodayEventsCache } from '@/services/todayEventsCache';
 
 export interface Child {
@@ -333,7 +333,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
 
       preloadInFlight.current.add(inFlightKey);
       try {
-        const events = await obtenirEvenementsDuJourHybrid(childId);
+        const events = await obtenirEvenementsDuJour(childId);
         if (cancelled) return;
         setTodayEventsCache(childId, buildTodayEventsData(events));
       } catch (error) {

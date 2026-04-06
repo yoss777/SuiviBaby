@@ -9,7 +9,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useMomentsNotification, NotificationType } from "@/contexts/MomentsNotificationContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
+import { ecouterEvenements } from "@/services/eventsService";
 import { JalonEvent } from "@/services/eventsService";
 import {
   ecouterInteractionsSociales,
@@ -632,7 +632,7 @@ export default function GalleryScreen() {
     if (!activeChild?.id) return;
 
     setLoadError(false);
-    const unsubscribe = ecouterJalonsHybrid(
+    const unsubscribe = ecouterEvenements(
       activeChild.id,
       (data) => {
         if (!isMountedRef.current) return;
@@ -640,7 +640,7 @@ export default function GalleryScreen() {
         setLoaded(true);
         setLoadError(false);
       },
-      { waitForServer: true },
+      { type: "jalon", waitForServer: true },
       (error) => {
         console.error("[Gallery] Erreur listener jalons:", error);
         if (!isMountedRef.current) return;

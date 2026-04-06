@@ -10,12 +10,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
   modifierEvenementOptimistic,
-  supprimerMedicament,
-  supprimerSymptome,
-  supprimerTemperature,
-  supprimerVaccin,
-  supprimerVitamine,
-} from "@/migration/eventsDoubleWriteService";
+  supprimerEvenement,
+} from "@/services/eventsService";
 import { normalizeQuery } from "@/utils/text";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -799,20 +795,16 @@ export function SoinsForm({
       async () => {
         try {
           setIsSubmitting(true);
+          await supprimerEvenement(activeChild.id, editData.id);
           if (editData.type === "temperature") {
-            await supprimerTemperature(activeChild.id, editData.id);
             showToast("Température supprimée");
           } else if (editData.type === "medicament") {
-            await supprimerMedicament(activeChild.id, editData.id);
             showToast("Médicament supprimé");
           } else if (editData.type === "symptome") {
-            await supprimerSymptome(activeChild.id, editData.id);
             showToast("Symptôme supprimé");
           } else if (editData.type === "vaccin") {
-            await supprimerVaccin(activeChild.id, editData.id);
             showToast("Vaccin supprimé");
           } else if (editData.type === "vitamine") {
-            await supprimerVitamine(activeChild.id, editData.id);
             showToast("Vitamine supprimée");
           }
           onDelete?.();

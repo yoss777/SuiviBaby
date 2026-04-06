@@ -23,13 +23,13 @@ import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
-  ecouterBiberonsHybrid as ecouterBiberons,
-  ecouterSolidesHybrid as ecouterSolides,
-  ecouterTeteesHybrid as ecouterTetees,
-  getNextEventDateBeforeHybrid,
-  hasMoreEventsBeforeHybrid,
-} from "@/migration/eventsHybridService";
-import { BiberonEvent, SolideEvent, supprimerEvenement } from "@/services/eventsService";
+  ecouterEvenements,
+  getNextEventDateBefore,
+  hasMoreEventsBefore,
+  BiberonEvent,
+  SolideEvent,
+  supprimerEvenement,
+} from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -608,9 +608,9 @@ export default function MealsScreen() {
       setSolidesLoaded(true);
     };
 
-    const unsubscribeTetees = ecouterTetees(
+    const unsubscribeTetees = ecouterEvenements(
       activeChild.id,
-      (tetees) => {
+      (tetees: any[]) => {
         latestTeteesRef.current = tetees;
         setTeteesLoaded(true);
         if (!refreshCleared) {
@@ -628,29 +628,29 @@ export default function MealsScreen() {
         }
         pushMealsFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "tetee", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubscribeBiberons = ecouterBiberons(
+    const unsubscribeBiberons = ecouterEvenements(
       activeChild.id,
-      (biberons) => {
+      (biberons: any[]) => {
         latestBiberonsRef.current = biberons;
         setBiberonsLoaded(true);
         pushMealsFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "biberon", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubscribeSolides = ecouterSolides(
+    const unsubscribeSolides = ecouterEvenements(
       activeChild.id,
-      (solides) => {
+      (solides: any[]) => {
         latestSolidesRef.current = solides;
         setSolidesLoaded(true);
         pushMealsFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "solide", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
@@ -735,7 +735,7 @@ export default function MealsScreen() {
         startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
         const beforeDate = new Date(startOfRange.getTime() - 1);
 
-        const nextEventDate = await getNextEventDateBeforeHybrid(
+        const nextEventDate = await getNextEventDateBefore(
           activeChild.id,
           ["tetee", "biberon", "solide"],
           beforeDate,
@@ -822,7 +822,7 @@ export default function MealsScreen() {
 
     // Recalculer hasMore uniquement quand la fenêtre change pour éviter les requêtes inutiles.
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(
+    hasMoreEventsBefore(
       activeChild.id,
       ["tetee", "biberon", "solide"],
       beforeDate,

@@ -1038,6 +1038,10 @@ export function ajouterEvenementOptimistic(
  * Modifie un événement avec affichage optimiste immédiat.
  * Le CF tourne en arrière-plan avec 2 retries.
  */
+/**
+ * Modifie un événement avec affichage optimiste immédiat.
+ * Le CF tourne en arrière-plan avec 2 retries.
+ */
 export function modifierEvenementOptimistic(
   childId: string,
   eventId: string,
@@ -1078,4 +1082,129 @@ export function modifierEvenementOptimistic(
       failOptimistic(eventId);
     }
   })();
+}
+
+// ============================================
+// DATE RANGE HELPERS (ex-migration convenience)
+// ============================================
+
+import { getTodayTypes } from "@/services/todayEventsCache";
+
+function getTodayRange() {
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const endOfDayInclusive = new Date(endOfDay.getTime() - 1);
+  return { startOfDay, endOfDayInclusive };
+}
+
+function getRecentRange() {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const endOfDayInclusive = new Date(endOfDay.getTime() - 1);
+  return { startOfYesterday, endOfDayInclusive };
+}
+
+/** Fetch today's events (all tracked types). */
+export async function obtenirEvenementsDuJour(childId: string) {
+  const { startOfDay, endOfDayInclusive } = getTodayRange();
+  const types = getTodayTypes() as EventType[];
+  return obtenirEvenements(childId, { type: types, depuis: startOfDay, jusqu: endOfDayInclusive });
+}
+
+/** Listen to recent events (yesterday+today, all tracked types). */
+export function ecouterEvenementsDuJour(
+  childId: string,
+  callback: (events: any[]) => void,
+  options?: { waitForServer?: boolean },
+  onError?: (error: Error) => void,
+): () => void {
+  const { startOfYesterday, endOfDayInclusive } = getRecentRange();
+  const types = getTodayTypes() as EventType[];
+  return ecouterEvenements(childId, callback, {
+    type: types, depuis: startOfYesterday, jusqu: endOfDayInclusive, waitForServer: options?.waitForServer,
+  }, onError);
+}
+
+/** Check if there are events before a given date. */
+export async function hasMoreEventsBefore(
+  childId: string,
+  types: EventType | EventType[],
+  beforeDate: Date,
+) {
+  const events = await obtenirEvenements(childId, { type: types, jusqu: beforeDate, limite: 1 });
+  return events.length > 0;
+}
+
+/** Get the date of the most recent event before a given date. */
+export async function getNextEventDateBefore(
+  childId: string,
+  types: EventType | EventType[],
+  beforeDate: Date,
+): Promise<Date | null> {
+  const events = await obtenirEvenements(childId, { type: types, jusqu: beforeDate, limite: 1 });
+  if (events.length === 0) return null;
+  const eventDate = events[0].date;
+  if (eventDate && typeof (eventDate as any).toDate === 'function') return (eventDate as any).toDate();
+  return eventDate instanceof Date ? eventDate : new Date(eventDate as any);
+}
+
+// ============================================
+// JALON PHOTO CLEANUP HELPERS
+// ============================================
+
+const FIREBASE_STORAGE_BUCKET = "samaye-53723.firebasestorage.app";
+
+export async function deletePhotoFromStorage(photoUrl: string): Promise<void> {
+  try {
+    const match = photoUrl.match(/\/o\/([^?]+)/);
+    if (!match) {
+      console.warn("[DELETE_PHOTO] URL non reconnue:", photoUrl);
+      return;
+    }
+    const encodedPath = match[1];
+    const filePath = decodeURIComponent(encodedPath);
+    console.log("[DELETE_PHOTO] Suppression de:", filePath);
+
+    const user = auth.currentUser;
+    if (!user) {
+      console.warn("[DELETE_PHOTO] Utilisateur non connecté");
+      return;
+    }
+    const token = await user.getIdToken();
+
+    const deleteUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodedPath}`;
+    const response = await fetch(deleteUrl, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (response.ok || response.status === 404) {
+      console.log("[DELETE_PHOTO] Photo supprimée avec succès");
+    } else {
+      console.error("[DELETE_PHOTO] Erreur:", response.status, await response.text());
+    }
+  } catch (error) {
+    console.error("[DELETE_PHOTO] Erreur:", error);
+  }
+}
+
+/** Supprime un jalon avec nettoyage des photos Firebase Storage. */
+export async function supprimerJalon(childId: string, id: string) {
+  try {
+    const event = await obtenirEvenement(childId, id);
+    if ((event as any)?.photos && Array.isArray((event as any).photos)) {
+      for (const photoUrl of (event as any).photos) {
+        if (photoUrl?.startsWith("https://firebasestorage.googleapis.com")) {
+          await deletePhotoFromStorage(photoUrl);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[SUPPRIMER_JALON] Erreur récupération événement:", error);
+  }
+  return supprimerEvenement(childId, id);
 }

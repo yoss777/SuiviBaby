@@ -7,7 +7,7 @@ import BackgroundImage from "@/components/ui/BackgroundImage";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
-import { obtenirEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
+import { obtenirEvenementsDuJour } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { setPreferencesCache, setPermissionsCache } from "@/services/userPreferencesCache";
 import { getUserChildAccess } from "@/utils/permissions";
@@ -60,7 +60,7 @@ function BootScreenContent() {
   // P17a: Extract prefetch as useCallback
   const prefetchToday = useCallback(async (childId: string) => {
     try {
-      const events = await obtenirEvenementsDuJourHybrid(childId);
+      const events = await obtenirEvenementsDuJour(childId);
       setTodayEventsCache(childId, buildTodayEventsData(events));
     } catch (error) {
       console.warn("[BOOT] Préchargement today échoué:", error);

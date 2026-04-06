@@ -30,8 +30,7 @@ import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
-import { ecouterEvenementsDuJourHybrid } from "@/migration/eventsHybridService";
-import { ajouterEvenementOptimistic, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
+import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { getPreferencesCache, getPermissionsCache } from "@/services/userPreferencesCache";
 import {
@@ -2060,7 +2059,7 @@ export default function HomeDashboard() {
 
     let loadingSet = false;
 
-    const unsubscribe = ecouterEvenementsDuJourHybrid(
+    const unsubscribe = ecouterEvenementsDuJour(
       activeChild.id,
       (events) => {
         setFirestoreEvents(events);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ecouterJalonsHybrid } from "@/migration/eventsHybridService";
+import { ecouterEvenements } from "@/services/eventsService";
 import {
   ecouterInteractionsSociales,
   getUserNames,
@@ -121,7 +121,7 @@ export function useMomentsData(
     setLoadError(false);
     let loadingSet = false;
 
-    const unsubscribe = ecouterJalonsHybrid(
+    const unsubscribe = ecouterEvenements(
       childId,
       (data) => {
         setFirestoreEvents(data as MilestoneEventWithId[]);
@@ -135,7 +135,7 @@ export function useMomentsData(
           refreshResolveRef.current = null;
         }
       },
-      { waitForServer: true, limite: 100 },
+      { type: "jalon", waitForServer: true, limite: 100 },
       () => {
         setLoaded(true);
         setLoadError(true);

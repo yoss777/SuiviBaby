@@ -23,16 +23,11 @@ import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
-  supprimerMiction,
-  supprimerSelle,
-} from "@/migration/eventsDoubleWriteService";
-import {
-  ecouterMictionsHybrid as ecouterMictions,
-  ecouterSellesHybrid as ecouterSelles,
-  getNextEventDateBeforeHybrid,
-  hasMoreEventsBeforeHybrid,
-} from "@/migration/eventsHybridService";
-import { supprimerEvenement } from "@/services/eventsService";
+  ecouterEvenements,
+  getNextEventDateBefore,
+  hasMoreEventsBefore,
+  supprimerEvenement,
+} from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
@@ -704,9 +699,9 @@ export default function DiapersScreen() {
       setSellesLoaded(true);
     };
 
-    const unsubscribeMictions = ecouterMictions(
+    const unsubscribeMictions = ecouterEvenements(
       activeChild.id,
-      (mictions) => {
+      (mictions: any[]) => {
         latestMictionsRef.current = mictions.map((m) => ({
           ...m,
           type: "miction" as DiapersType,
@@ -727,13 +722,13 @@ export default function DiapersScreen() {
         }
         pushDiapersFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "miction", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
-    const unsubscribeSelles = ecouterSelles(
+    const unsubscribeSelles = ecouterEvenements(
       activeChild.id,
-      (selles) => {
+      (selles: any[]) => {
         latestSellesRef.current = selles.map((s) => ({
           ...s,
           type: "selle" as DiapersType,
@@ -741,7 +736,7 @@ export default function DiapersScreen() {
         setSellesLoaded(true);
         pushDiapersFirestoreEvents();
       },
-      { waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
+      { type: "selle", waitForServer: true, depuis: startOfRange, jusqu: endOfRange },
       handleListenerError,
     );
 
@@ -822,7 +817,7 @@ export default function DiapersScreen() {
       const beforeDate = new Date(startOfRange.getTime() - 1);
 
       if (!auto || autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
-        const nextEventDate = await getNextEventDateBeforeHybrid(
+        const nextEventDate = await getNextEventDateBefore(
           activeChild.id,
           ["miction", "selle"],
           beforeDate
@@ -915,7 +910,7 @@ export default function DiapersScreen() {
     const beforeDate = new Date(startOfRange.getTime() - 1);
 
     setHasMore(true);
-    hasMoreEventsBeforeHybrid(activeChild.id, ["miction", "selle"], beforeDate)
+    hasMoreEventsBefore(activeChild.id, ["miction", "selle"], beforeDate)
       .then((result) => {
         if (!cancelled) setHasMore(result);
       })
@@ -1092,11 +1087,7 @@ export default function DiapersScreen() {
       // onExpire - actually delete from Firestore
       async () => {
         try {
-          if (type === "selle") {
-            await supprimerSelle(childId, id);
-          } else {
-            await supprimerMiction(childId, id);
-          }
+          await supprimerEvenement(childId, id);
         } catch {
           // Restore if delete fails
           setSoftDeletedIds((prev) => {
@@ -1105,10 +1096,9 @@ export default function DiapersScreen() {
             return next;
           });
           showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            const deleteFn = type === "selle" ? supprimerSelle : supprimerMiction;
-            deleteFn(childId, id).catch(() => {
+            supprimerEvenement(childId, id).catch(() => {
               showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                deleteFn(childId, id);
+                supprimerEvenement(childId, id);
               });
             });
           });

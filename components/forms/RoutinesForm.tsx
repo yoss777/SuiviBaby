@@ -10,11 +10,10 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
   modifierEvenementOptimistic,
-  supprimerBain,
-  supprimerNettoyageNez,
-  supprimerSommeil,
-} from "@/migration/eventsDoubleWriteService";
-import { EventType, obtenirEvenements } from "@/services/eventsService";
+  supprimerEvenement,
+  EventType,
+  obtenirEvenements,
+} from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { useState } from "react";
 import {
@@ -454,14 +453,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
+          await supprimerEvenement(activeChild.id, editData.id);
           if (editData.type === "nettoyage_nez") {
-            await supprimerNettoyageNez(activeChild.id, editData.id);
             showToast("Nettoyage nez supprimé");
           } else if (editData.type === "bain") {
-            await supprimerBain(activeChild.id, editData.id);
             showToast("Bain supprimé");
           } else {
-            await supprimerSommeil(activeChild.id, editData.id);
             showToast("Sommeil supprimé");
           }
           onDelete?.();
