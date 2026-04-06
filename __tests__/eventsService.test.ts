@@ -118,6 +118,31 @@ describe("eventsService", () => {
         }),
       );
     });
+
+    it("preserves null fields and strips undefined fields in update payloads", async () => {
+      mockCallable.mockResolvedValueOnce({ data: { success: true } });
+
+      await modifierEvenement("child1", "event123", {
+        type: "solide",
+        ingredients: null,
+        nomNouvelAliment: null,
+        allergenes: undefined,
+        aime: null,
+      } as any);
+
+      const payload = mockCallable.mock.calls[0][0];
+      expect(payload).toEqual(
+        expect.objectContaining({
+          childId: "child1",
+          eventId: "event123",
+          type: "solide",
+          ingredients: null,
+          nomNouvelAliment: null,
+          aime: null,
+        }),
+      );
+      expect(payload).not.toHaveProperty("allergenes");
+    });
   });
 
   describe("supprimerEvenement", () => {

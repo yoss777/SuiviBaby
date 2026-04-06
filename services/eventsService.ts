@@ -33,6 +33,12 @@ const getUserId = () => {
   return user.uid;
 };
 
+function stripUndefinedFields<T extends Record<string, unknown>>(data: T): T {
+  return Object.fromEntries(
+    Object.entries(data).filter(([, value]) => value !== undefined),
+  ) as T;
+}
+
 // ============================================
 // TYPES
 // ============================================
@@ -256,11 +262,15 @@ function buildCreatePayload(
   childId: string,
   data: Omit<Event, "id" | "childId" | "userId" | "createdAt"> | any,
 ) {
+  const cleanData = stripUndefinedFields(data);
+
   return {
-    ...data,
+    ...cleanData,
     childId,
     date:
-      data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
+      cleanData.date instanceof Date
+        ? Timestamp.fromDate(cleanData.date)
+        : cleanData.date,
   };
 }
 
@@ -269,14 +279,15 @@ function buildUpdatePayload(
   id: string,
   data: Partial<Event>,
 ) {
+  const cleanData = stripUndefinedFields(data as Record<string, unknown>);
   const payload = {
-    ...data,
+    ...cleanData,
     childId,
     eventId: id,
   };
 
-  if (data.date && data.date instanceof Date) {
-    (payload as any).date = Timestamp.fromDate(data.date);
+  if (cleanData.date && cleanData.date instanceof Date) {
+    (payload as any).date = Timestamp.fromDate(cleanData.date);
   }
 
   return payload;
@@ -1052,16 +1063,19 @@ export function modifierEvenementOptimistic(
   data: Partial<Event>,
   previousEvent: any,
 ): void {
+  const cleanData = stripUndefinedFields(
+    data as Record<string, unknown>,
+  ) as Partial<Event>;
   const updatedEvent = {
     ...previousEvent,
-    ...data,
+    ...cleanData,
     id: eventId,
     childId,
   };
 
   addOptimisticUpdate(eventId, childId, updatedEvent, previousEvent);
 
-  const payload = buildUpdatePayload(childId, eventId, data);
+  const payload = buildUpdatePayload(childId, eventId, cleanData);
 
   void (async () => {
     try {

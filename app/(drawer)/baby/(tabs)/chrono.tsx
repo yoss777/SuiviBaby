@@ -270,18 +270,32 @@ function buildDetails(event: Event) {
       const typeLabel = event.typeSolide ? typeLabels[event.typeSolide] : null;
       const line1Parts = [momentLabel, typeLabel, qtyLabel].filter(Boolean);
       const line1 = line1Parts.length > 0 ? line1Parts.join(" · ") : null;
-      const dishName = event.nomNouvelAliment || event.ingredients || "";
-      const line2 =
-        event.aime === undefined
-          ? dishName || null
-          : event.aime
-            ? dishName
-              ? `A aimé ce plat : ${dishName}`
-              : "A aimé ce plat"
-            : dishName
-              ? `N'a pas aimé ce plat : ${dishName}`
-              : "N'a pas aimé ce plat";
-      const parts = [line1, line2].filter(Boolean);
+      const ingredients =
+        typeof event.ingredients === "string" ? event.ingredients.trim() : "";
+      const newFood =
+        event.nouveauAliment && typeof event.nomNouvelAliment === "string"
+          ? event.nomNouvelAliment.trim()
+          : "";
+      const hasLike = typeof event.aime === "boolean";
+      const likeTarget = ingredients || newFood;
+      const likeSubject =
+        !ingredients && newFood ? "ce nouveau plat" : "ce plat";
+      const likeLabel =
+        hasLike
+          ? `${event.aime ? "A aimé" : "N'a pas aimé"} ${likeSubject}${
+              likeTarget ? ` : ${likeTarget}` : ""
+            }`
+          : null;
+      const parts = [
+        line1,
+        likeLabel,
+        ingredients && (!hasLike || likeTarget !== ingredients)
+          ? `Ingrédients : ${ingredients}`
+          : null,
+        newFood && (!hasLike || likeTarget !== newFood)
+          ? `Nouvel aliment : ${newFood}`
+          : null,
+      ].filter(Boolean);
       return parts.length > 0 ? parts.join("\n") : undefined;
     }
     case "tetee": {
@@ -1042,27 +1056,46 @@ const TimelineCard = React.memo(
     const solideLine1Parts = [solideMomentLabel, solideTypeLabel, solideQtyLabel].filter(Boolean);
     const solideLine2 = solideLine1Parts.length > 0 ? solideLine1Parts.join(" · ") : null;
 
-    const solideDishName = isSolide
-      ? event.nomNouvelAliment || event.ingredients || ""
-      : "";
-    const solideLikeLabel = isSolide
-      ? event.aime === undefined
-        ? solideDishName || null
-        : event.aime
-          ? solideDishName
-            ? `A aimé ce plat : ${solideDishName}`
-            : "A aimé ce plat"
-          : solideDishName
-            ? `N'a pas aimé ce plat : ${solideDishName}`
-            : "N'a pas aimé ce plat"
+    const solideIngredients =
+      isSolide && typeof event.ingredients === "string"
+        ? event.ingredients.trim()
+        : "";
+    const solideNewFood =
+      isSolide &&
+      event.nouveauAliment &&
+      typeof event.nomNouvelAliment === "string"
+        ? event.nomNouvelAliment.trim()
+        : "";
+    const hasSolideLike = isSolide && typeof event.aime === "boolean";
+    const solideIngredientsLabel = solideIngredients
+      ? `Ingrédients : ${solideIngredients}`
       : null;
-    const solideLikeColor = isSolide
-      ? event.aime === undefined
+    const solideNewFoodLabel = solideNewFood
+      ? `Nouvel aliment : ${solideNewFood}`
+      : null;
+    const solideLikeTarget = solideIngredients || solideNewFood;
+    const solideLikeSubject =
+      !solideIngredients && solideNewFood ? "ce nouveau plat" : "ce plat";
+    const solideLikeLabel = hasSolideLike
+      ? `${event.aime ? "A aimé" : "N'a pas aimé"} ${solideLikeSubject}${
+          solideLikeTarget ? ` : ${solideLikeTarget}` : ""
+        }`
+      : null;
+    const solideLikeColor = hasSolideLike
+      ? event.aime
         ? "#22c55e"
-        : event.aime
-          ? "#22c55e"
-          : "#ef4444"
+        : "#ef4444"
       : undefined;
+    const visibleSolideIngredientsLabel =
+      solideIngredientsLabel &&
+      (!hasSolideLike || solideLikeTarget !== solideIngredients)
+        ? solideIngredientsLabel
+        : null;
+    const visibleSolideNewFoodLabel =
+      solideNewFoodLabel &&
+      (!hasSolideLike || solideLikeTarget !== solideNewFood)
+        ? solideNewFoodLabel
+        : null;
 
     // Non-solide details
     const details = isSolide ? undefined : buildDetails(event);
@@ -1219,7 +1252,11 @@ const TimelineCard = React.memo(
                 : details}
             </Text>
           )}
-          {isSolide && (solideLine2 || solideLikeLabel) && (
+          {isSolide &&
+            (solideLine2 ||
+              visibleSolideIngredientsLabel ||
+              visibleSolideNewFoodLabel ||
+              solideLikeLabel) && (
             <View style={styles.solideDetails}>
               {solideLine2 && (
                 <Text
@@ -1239,6 +1276,26 @@ const TimelineCard = React.memo(
                   ]}
                 >
                   {solideLikeLabel}
+                </Text>
+              )}
+              {visibleSolideIngredientsLabel && (
+                <Text
+                  style={[
+                    styles.solideDetailsText,
+                    { color: secondaryTextColor },
+                  ]}
+                >
+                  {visibleSolideIngredientsLabel}
+                </Text>
+              )}
+              {visibleSolideNewFoodLabel && (
+                <Text
+                  style={[
+                    styles.solideDetailsText,
+                    { color: secondaryTextColor },
+                  ]}
+                >
+                  {visibleSolideNewFoodLabel}
                 </Text>
               )}
             </View>

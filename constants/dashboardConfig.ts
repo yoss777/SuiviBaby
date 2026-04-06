@@ -1,4 +1,5 @@
 import { eventColors } from "./eventColors";
+import type { FormSheetProps } from "@/contexts/SheetContext";
 
 // ============================================
 // EVENT CONFIGURATION
@@ -261,8 +262,23 @@ export interface QuickAddAction {
   label: string;
   icon: { type: "fa" | "mc"; name: string; color: string };
   route: string;
-  sheetParams: Record<string, string>;
+  sheetParams: QuickAddSheetParams;
 }
+
+type DistributiveOmit<T, K extends keyof any> = T extends unknown
+  ? Omit<T, K>
+  : never;
+
+export type QuickAddSheetParams = DistributiveOmit<
+  FormSheetProps,
+  | "ownerId"
+  | "onSuccess"
+  | "onDismiss"
+  | "onCancel"
+  | "editData"
+  | "promenadeEnCours"
+  | "sommeilEnCours"
+>;
 
 export interface QuickAddCategory {
   key: string;
@@ -285,6 +301,13 @@ export const QUICK_ADD_ACTIONS: QuickAddAction[] = [
     icon: { type: "mc", name: "baby-bottle", color: "#28a745" },
     route: "/baby/meals?tab=biberons&openModal=true&returnTo=home",
     sheetParams: { formType: "meals", mealType: "biberon" },
+  },
+  {
+    key: "solide",
+    label: "Repas solide",
+    icon: { type: "fa", name: "bowl-food", color: "#8BC34A" },
+    route: "/baby/meals?tab=solides&openModal=true&returnTo=home",
+    sheetParams: { formType: "meals", mealType: "solide" },
   },
   {
     key: "pompage",
@@ -365,7 +388,7 @@ export const QUICK_ADD_ACTIONS: QuickAddAction[] = [
   },
   {
     key: "activite",
-    label: "Activité",
+    label: "Éveil & activité",
     icon: { type: "fa", name: "baby", color: "#10b981" },
     route: "/baby/activities?openModal=true&returnTo=home",
     sheetParams: { formType: "activities", activiteType: "tummyTime" },
@@ -398,28 +421,51 @@ export const QUICK_ADD_CATEGORIES: QuickAddCategory[] = [
     key: "alimentation",
     label: "Alimentation",
     actions: QUICK_ADD_ACTIONS.filter((a) =>
-      ["tetee", "biberon", "pompage"].includes(a.key),
+      ["tetee", "biberon", "solide", "pompage"].includes(a.key),
     ),
   },
   {
-    key: "sante",
-    label: "Santé & Hygiène",
+    key: "change",
+    label: "Change",
     actions: QUICK_ADD_ACTIONS.filter((a) =>
-      ["miction", "selle", "vitamine", "vaccin", "temperature", "medicament", "symptome", "bain", "nettoyage_nez"].includes(a.key),
+      ["miction", "selle"].includes(a.key),
     ),
   },
   {
     key: "routine",
-    label: "Routine",
+    label: "Sommeil & Routine",
     actions: QUICK_ADD_ACTIONS.filter((a) =>
       ["sommeil", "activite"].includes(a.key),
+    ),
+  },
+  {
+    key: "soins",
+    label: "Soins",
+    actions: QUICK_ADD_ACTIONS.filter((a) =>
+      ["vitamine", "medicament", "temperature", "symptome", "vaccin"].includes(
+        a.key,
+      ),
+    ),
+  },
+  {
+    key: "hygiene",
+    label: "Hygiène",
+    actions: QUICK_ADD_ACTIONS.filter((a) =>
+      ["bain", "nettoyage_nez"].includes(a.key),
     ),
   },
   {
     key: "moments",
     label: "Moments",
     actions: QUICK_ADD_ACTIONS.filter((a) =>
-      ["jalon", "humeur", "growth"].includes(a.key),
+      ["jalon", "humeur"].includes(a.key),
+    ),
+  },
+  {
+    key: "mesures",
+    label: "Mesures",
+    actions: QUICK_ADD_ACTIONS.filter((a) =>
+      ["growth"].includes(a.key),
     ),
   },
 ];

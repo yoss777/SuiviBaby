@@ -9,13 +9,13 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
-  modifierEvenementOptimistic,
-  supprimerEvenement,
   EventType,
+  modifierEvenementOptimistic,
   obtenirEvenements,
+  supprimerEvenement,
 } from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -42,6 +42,7 @@ export type SleepLocation =
   | "cododo"
   | "poussette"
   | "voiture"
+  | "dans les bras"
   | "autre";
 export type SleepQuality = "paisible" | "agité" | "mauvais";
 export type NezMethode = "serum" | "mouche_bebe" | "coton" | "autre";
@@ -96,6 +97,7 @@ const LOCATION_OPTIONS: SleepLocation[] = [
   "cododo",
   "poussette",
   "voiture",
+  "dans les bras",
   "autre",
 ];
 
@@ -245,6 +247,28 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     editData?.type === "sommeil" ? (editData.note ?? "") : "",
   );
 
+  // Long press acceleration refs
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handlePressIn = useCallback((action: () => void) => {
+    action();
+    timeoutRef.current = setTimeout(() => {
+      intervalRef.current = setInterval(action, 100);
+    }, 400);
+  }, []);
+
+  const handlePressOut = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
   // ============================================
   // TYPE SELECTION
   // ============================================
@@ -312,7 +336,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       });
 
       if (editData && editData.type === "nettoyage_nez") {
-        modifierEvenementOptimistic(activeChild.id, editData.id, data, editData);
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData.id,
+          data,
+          editData,
+        );
         showSuccess("default", "Nettoyage nez modifié");
       } else {
         ajouterEvenementOptimistic(activeChild.id, data);
@@ -329,7 +358,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       });
 
       if (editData && editData.type === "bain") {
-        modifierEvenementOptimistic(activeChild.id, editData.id, data, editData);
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData.id,
+          data,
+          editData,
+        );
         showSuccess("bath", "Bain modifié");
       } else {
         ajouterEvenementOptimistic(activeChild.id, data);
@@ -337,11 +371,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       }
     } else {
       // Sommeil
-      if (
-        !isOngoing &&
-        heureFin &&
-        heureFin.getTime() < heureDebut.getTime()
-      ) {
+      if (!isOngoing && heureFin && heureFin.getTime() < heureDebut.getTime()) {
         showAlert(
           "Attention",
           "La date de fin ne peut pas être antérieure à la date de début.",
@@ -414,7 +444,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         const cleanedEditData = Object.fromEntries(
           Object.entries(editDataToSend).filter(([, v]) => v !== undefined),
         );
-        modifierEvenementOptimistic(activeChild.id, editData.id, cleanedEditData, editData);
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData.id,
+          cleanedEditData,
+          editData,
+        );
         showSuccess("sleep", "Sommeil modifié");
       } else {
         // For new entries, just remove undefined values
@@ -800,7 +835,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
-            onPress={() => setDureeBain((value) => Math.max(0, value - 5))}
+            onPressIn={() =>
+              handlePressIn(() =>
+                setDureeBain((value) => Math.max(0, value - 5)),
+              )
+            }
+            onPressOut={handlePressOut}
             disabled={isSubmitting}
             accessibilityLabel="Diminuer"
           >
@@ -823,7 +863,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
-            onPress={() => setDureeBain((value) => value + 5)}
+            onPressIn={() =>
+              handlePressIn(() => setDureeBain((value) => value + 5))
+            }
+            onPressOut={handlePressOut}
             disabled={isSubmitting}
             accessibilityLabel="Augmenter"
           >
@@ -842,7 +885,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
       <View style={styles.inputGroup}>
         <Text style={[styles.inputLabel, { color: nc.textLight }]}>
-          Température de l'eau (°C)
+          {`Température de l'eau (°C)`}
         </Text>
         <View style={styles.quantityPickerRow}>
           <TouchableOpacity
@@ -851,9 +894,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
-            onPress={() =>
-              setTemperatureEau((value) => Math.max(35, value - 0.5))
+            onPressIn={() =>
+              handlePressIn(() =>
+                setTemperatureEau((value) => Math.max(35, value - 0.5)),
+              )
             }
+            onPressOut={handlePressOut}
             disabled={isSubmitting}
             accessibilityLabel="Diminuer"
           >
@@ -876,9 +922,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
-            onPress={() =>
-              setTemperatureEau((value) => Math.min(40, value + 0.5))
+            onPressIn={() =>
+              handlePressIn(() =>
+                setTemperatureEau((value) => Math.min(40, value + 0.5)),
+              )
             }
+            onPressOut={handlePressOut}
             disabled={isSubmitting}
             accessibilityLabel="Augmenter"
           >
@@ -994,16 +1043,15 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
         {isEditing && (
           <TouchableOpacity
-            style={[
-              styles.deleteButton,
-              isSubmitting && styles.buttonDisabled,
-            ]}
+            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color={nc.error} />
-            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
+            <Text style={[styles.deleteText, { color: nc.error }]}>
+              Supprimer
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -1029,6 +1077,8 @@ const styles = StyleSheet.create({
   typeChip: {
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
@@ -1041,6 +1091,7 @@ const styles = StyleSheet.create({
   typeChipText: {
     fontSize: 12,
     fontWeight: "600",
+    textAlign: "center",
   },
   typeChipTextActive: {
     fontWeight: "700",
@@ -1083,6 +1134,8 @@ const styles = StyleSheet.create({
   chip: {
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
@@ -1092,6 +1145,7 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 12,
     fontWeight: "600",
+    textAlign: "center",
   },
   chipTextActive: {
     // color applied inline

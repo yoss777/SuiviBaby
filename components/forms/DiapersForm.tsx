@@ -225,7 +225,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       {!isEditing && (
         <>
           <Text style={[styles.inputLabel, { color: nc.textLight }]}>
-            Type d'excrétion
+            Type d&apos;excrétion
           </Text>
           <Text style={[styles.toggleSubtitle, { color: nc.textMuted }]}>
             Vous pouvez sélectionner les deux si nécessaire
@@ -298,7 +298,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       {includeMiction && (
         <>
           <Text style={[styles.inputLabel, { color: nc.textLight }]}>
-            Couleur de l'urine
+            Couleur de l&apos;urine
           </Text>
           <Text style={[styles.toggleSubtitle, { color: nc.textMuted }]}>
             Optionnel
@@ -565,6 +565,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "column",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     padding: 16,
     borderRadius: 12,
@@ -581,6 +582,7 @@ const styles = StyleSheet.create({
   typeText: {
     fontSize: 16,
     fontWeight: "500",
+    textAlign: "center",
   },
   typeTextActive: {
     color: "white",
@@ -603,6 +605,7 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
     minWidth: 70,
     alignItems: "center",
+    justifyContent: "center",
   },
   optionButtonSelle: {
     borderWidth: 2,
@@ -617,6 +620,7 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 14,
     fontWeight: "500",
+    textAlign: "center",
   },
   optionTextSelected: {
     color: "white",

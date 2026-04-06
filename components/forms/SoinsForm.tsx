@@ -163,6 +163,7 @@ const VACCINS_LIST = [
 ];
 
 const VITAMINES_LIST = ["Vitamine D", "Vitamine K", "Autre vitamine"];
+const MAX_GOUTTES_COUNT = 10;
 
 const MODE_TEMPERATURE: ModePrise[] = [
   "axillaire",
@@ -311,7 +312,7 @@ export function SoinsForm({
   const [gouttesCount, setGouttesCount] = useState(() => {
     if (editData?.dosage) {
       const match = editData.dosage.match(/(\d+)\s*gouttes?/i);
-      return match ? parseInt(match[1], 10) : 3;
+      return match ? Math.min(MAX_GOUTTES_COUNT, parseInt(match[1], 10)) : 3;
     }
     return 3;
   });
@@ -323,7 +324,7 @@ export function SoinsForm({
   const handlePressIn = useCallback((action: () => void) => {
     action();
     timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(action, 80);
+      intervalRef.current = setInterval(action, 100);
     }, 400);
   }, []);
 
@@ -626,10 +627,7 @@ export function SoinsForm({
         }
       } else {
         if (!includeTemperature && !includeSymptome) {
-          showAlert(
-            "Erreur",
-            "Sélectionnez au moins Température ou Symptôme.",
-          );
+          showAlert("Erreur", "Sélectionnez au moins Température ou Symptôme.");
           setIsSubmitting(false);
           return;
         }
@@ -753,7 +751,7 @@ export function SoinsForm({
       }
       const computedDosage =
         vitamineName === "Vitamine D" || vitamineName === "Vitamine K"
-          ? `${gouttesCount} gouttes`
+          ? `${gouttesCount} goutte${gouttesCount > 1 ? "s" : ""}`
           : vitamineDosage.trim() || undefined;
       if (isEditing) {
         modifierEvenementOptimistic(
@@ -1684,26 +1682,32 @@ export function SoinsForm({
                 <Text
                   style={[styles.quantityPickerValue, { color: nc.textStrong }]}
                 >
-                  {gouttesCount} gouttes
+                  {gouttesCount} goutte{gouttesCount > 1 ? "s" : ""}
                 </Text>
                 <TouchableOpacity
                   style={[
                     styles.quantityButton,
                     { backgroundColor: nc.backgroundPressed },
-                    isSubmitting && styles.quantityButtonDisabled,
+                    (isSubmitting || gouttesCount >= MAX_GOUTTES_COUNT) &&
+                      styles.quantityButtonDisabled,
                   ]}
                   onPressIn={() =>
-                    handlePressIn(() => setGouttesCount((value) => value + 1))
+                    handlePressIn(() =>
+                      setGouttesCount((value) =>
+                        Math.min(MAX_GOUTTES_COUNT, value + 1),
+                      ),
+                    )
                   }
                   onPressOut={handlePressOut}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || gouttesCount >= MAX_GOUTTES_COUNT}
                   accessibilityLabel="Augmenter les gouttes"
                 >
                   <Text
                     style={[
                       styles.quantityButtonText,
                       { color: nc.textStrong },
-                      isSubmitting && styles.quantityButtonTextDisabled,
+                      (isSubmitting || gouttesCount >= MAX_GOUTTES_COUNT) &&
+                        styles.quantityButtonTextDisabled,
                     ]}
                   >
                     +
@@ -1787,10 +1791,7 @@ export function SoinsForm({
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
             {isSubmitting ? (
-              <ActivityIndicator
-                size="small"
-                color={nc.white}
-              />
+              <ActivityIndicator size="small" color={nc.white} />
             ) : (
               <Text
                 style={[
@@ -1808,16 +1809,15 @@ export function SoinsForm({
 
         {isEditing && onDelete && (
           <TouchableOpacity
-            style={[
-              styles.deleteButton,
-              isSubmitting && styles.buttonDisabled,
-            ]}
+            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
             <FontAwesome5 name="trash" size={14} color={nc.error} />
-            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
+            <Text style={[styles.deleteText, { color: nc.error }]}>
+              Supprimer
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -1924,6 +1924,8 @@ const styles = StyleSheet.create({
   typeChip: {
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
@@ -1937,6 +1939,7 @@ const styles = StyleSheet.create({
   typeChipText: {
     fontSize: 12,
     fontWeight: "600",
+    textAlign: "center",
   },
   typeChipTextActive: {
     color: "#4c2c79",
@@ -1975,12 +1978,15 @@ const styles = StyleSheet.create({
   },
   templateChip: {
     borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
   templateChipText: {
     fontSize: 13,
     fontWeight: "600",
+    textAlign: "center",
   },
   // Input groups
   inputGroup: {
@@ -2026,6 +2032,8 @@ const styles = StyleSheet.create({
   chip: {
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
@@ -2036,6 +2044,7 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 12,
     fontWeight: "600",
+    textAlign: "center",
   },
   chipTextActive: {
     color: "#4c2c79",

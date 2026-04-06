@@ -845,18 +845,35 @@ export default function HomeDashboard() {
             : null;
           const line1Parts = [momentLabel, typeLabel, qtyLabel].filter(Boolean);
           const line1 = line1Parts.length > 0 ? line1Parts.join(" · ") : null;
-          const dishName = event.nomNouvelAliment || event.ingredients || "";
-          const line2 =
-            event.aime === undefined
-              ? dishName || null
-              : event.aime
-                ? dishName
-                  ? `A aimé ce plat : ${dishName}`
-                  : "A aimé ce plat"
-                : dishName
-                  ? `N'a pas aimé ce plat : ${dishName}`
-                  : "N'a pas aimé ce plat";
-          const parts = [line1, line2].filter(Boolean);
+          const ingredients =
+            typeof event.ingredients === "string"
+              ? event.ingredients.trim()
+              : "";
+          const newFood =
+            event.nouveauAliment &&
+            typeof event.nomNouvelAliment === "string"
+              ? event.nomNouvelAliment.trim()
+              : "";
+          const hasLike = typeof event.aime === "boolean";
+          const likeTarget = ingredients || newFood;
+          const likeSubject =
+            !ingredients && newFood ? "ce nouveau plat" : "ce plat";
+          const likeLabel =
+            hasLike
+              ? `${event.aime ? "A aimé" : "N'a pas aimé"} ${likeSubject}${
+                  likeTarget ? ` : ${likeTarget}` : ""
+                }`
+              : null;
+          const parts = [
+            line1,
+            likeLabel,
+            ingredients && (!hasLike || likeTarget !== ingredients)
+              ? `Ingrédients : ${ingredients}`
+              : null,
+            newFood && (!hasLike || likeTarget !== newFood)
+              ? `Nouvel aliment : ${newFood}`
+              : null,
+          ].filter(Boolean);
           return parts.length > 0 ? parts.join("\n") : undefined;
         }
         case "tetee": {

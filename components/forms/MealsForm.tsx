@@ -17,10 +17,10 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
-  modifierEvenementOptimistic,
-  supprimerEvenement,
   BiberonEvent,
+  modifierEvenementOptimistic,
   SolideEvent,
+  supprimerEvenement,
 } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -85,6 +85,8 @@ export interface MealsFormProps {
 // HELPERS
 // ============================================
 
+const MAX_BIBERON_ML = 300;
+
 function formatDuration(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -132,7 +134,9 @@ export function MealsForm({
   const [runningSide, setRunningSide] = useState<"left" | "right" | null>(null);
 
   // Biberon state
-  const [quantite, setQuantite] = useState<number>(editData?.quantite ?? 100);
+  const [quantite, setQuantite] = useState<number>(
+    Math.min(editData?.quantite ?? 100, MAX_BIBERON_ML),
+  );
   const [typeBiberon, setTypeBiberon] = useState<BiberonEvent["typeBiberon"]>(
     editData?.typeBiberon ?? "lait_maternel",
   );
@@ -148,9 +152,9 @@ export function MealsForm({
   const [quantiteSolide, setQuantiteSolide] = useState<SolideEvent["quantite"]>(
     editData?.quantiteSolide ?? "moyen",
   );
-  const hasDishName = Boolean(editData?.nomNouvelAliment?.trim());
+  const hasNewFoodName = Boolean(editData?.nomNouvelAliment?.trim());
   const [nouveauAliment, setNouveauAliment] = useState(
-    (editData?.nouveauAliment ?? false) && hasDishName,
+    (editData?.nouveauAliment ?? false) && hasNewFoodName,
   );
   const [nomNouvelAliment, setNomNouvelAliment] = useState(
     editData?.nomNouvelAliment ?? "",
@@ -161,13 +165,9 @@ export function MealsForm({
   const [reaction, setReaction] = useState<SolideEvent["reaction"]>(
     editData?.reaction ?? "aucune",
   );
-  const [aime, setAime] = useState<boolean | undefined>(editData?.aime);
-
-  useEffect(() => {
-    if (!nouveauAliment && nomNouvelAliment) {
-      setNomNouvelAliment("");
-    }
-  }, [nouveauAliment, nomNouvelAliment]);
+  const [aime, setAime] = useState<boolean | undefined>(
+    typeof editData?.aime === "boolean" ? editData.aime : undefined,
+  );
 
   // Long press acceleration refs
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -269,7 +269,12 @@ export function MealsForm({
       });
 
       if (isEditing && editData?.id) {
-        modifierEvenementOptimistic(activeChild.id, editData.id, dataToSave, editData);
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData.id,
+          dataToSave,
+          editData,
+        );
         showSuccess("meal", "Tétée modifiée");
       } else {
         ajouterEvenementOptimistic(activeChild.id, dataToSave);
@@ -284,36 +289,62 @@ export function MealsForm({
       });
 
       if (isEditing && editData?.id) {
-        modifierEvenementOptimistic(activeChild.id, editData.id, dataToSave, editData);
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData.id,
+          dataToSave,
+          editData,
+        );
         showSuccess("meal", "Biberon modifié");
       } else {
         ajouterEvenementOptimistic(activeChild.id, dataToSave);
         showSuccess("meal", "Biberon enregistré");
       }
     } else if (mealType === "solide") {
+      const trimmedIngredients = ingredients.trim();
+      const trimmedNomNouvelAliment = nomNouvelAliment.trim();
+
+      if (nouveauAliment && !trimmedNomNouvelAliment) {
+        showAlert("Erreur", "Indiquez le nouvel aliment introduit.");
+        setIsSubmitting(false);
+        return;
+      }
+
       const dataToSave = removeUndefined({
         type: mealType,
         typeSolide,
         momentRepas,
-        ingredients: ingredients.trim() || undefined,
+        ingredients:
+          trimmedIngredients || (isEditing ? null : undefined),
         quantite: quantiteSolide,
-        nouveauAliment: typeSolide === "autre" ? nouveauAliment : false,
-        nomNouvelAliment:
-          typeSolide === "autre" && nouveauAliment && nomNouvelAliment.trim()
-            ? nomNouvelAliment.trim()
-            : "",
-        allergenes:
-          typeSolide === "autre" && nouveauAliment && allergenes.length > 0
-            ? allergenes
+        nouveauAliment,
+        nomNouvelAliment: nouveauAliment
+          ? trimmedNomNouvelAliment
+          : isEditing
+            ? null
             : undefined,
-        reaction:
-          typeSolide === "autre" && nouveauAliment ? reaction : undefined,
+        allergenes:
+          nouveauAliment && allergenes.length > 0
+            ? allergenes
+            : isEditing
+              ? null
+              : undefined,
+        reaction: nouveauAliment
+          ? reaction
+          : isEditing
+            ? null
+            : undefined,
         aime: aime ?? (editData ? null : undefined),
         date: dateHeure,
       });
 
       if (isEditing && editData?.id) {
-        modifierEvenementOptimistic(activeChild.id, editData.id, dataToSave as any, editData);
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData.id,
+          dataToSave as any,
+          editData,
+        );
         showSuccess("meal", "Repas solide modifié");
       } else {
         ajouterEvenementOptimistic(activeChild.id, dataToSave);
@@ -519,11 +550,16 @@ export function MealsForm({
               style={[
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
+                quantite >= MAX_BIBERON_ML && styles.quantityButtonDisabled,
                 isSubmitting && styles.buttonDisabled,
               ]}
-              onPressIn={() => handlePressIn(() => setQuantite((q) => q + 5))}
+              onPressIn={() =>
+                handlePressIn(() =>
+                  setQuantite((q) => Math.min(MAX_BIBERON_ML, q + 5)),
+                )
+              }
               onPressOut={handlePressOut}
-              disabled={isSubmitting}
+              disabled={isSubmitting || quantite >= MAX_BIBERON_ML}
               accessibilityLabel="Augmenter la quantité"
             >
               <Text
@@ -922,148 +958,139 @@ export function MealsForm({
             multiline
           />
 
-          {/* Nouvel aliment (visible uniquement si type = autre) */}
-          {typeSolide === "autre" && (
-            <>
-              <View
+          {/* Nouvel aliment */}
+          <View
+            style={[
+              styles.nouveauAlimentRow,
+              nouveauAliment && styles.nouveauAlimentRowActive,
+            ]}
+          >
+            <View style={styles.nouveauAlimentLabel}>
+              <FontAwesome
+                name="star"
+                size={16}
+                color={nouveauAliment ? eventColors.meal.dark : nc.textMuted}
+              />
+              <Text
                 style={[
-                  styles.nouveauAlimentRow,
-                  nouveauAliment && styles.nouveauAlimentRowActive,
+                  styles.nouveauAlimentText,
+                  { color: nc.textLight },
+                  nouveauAliment && styles.nouveauAlimentTextActive,
                 ]}
               >
-                <View style={styles.nouveauAlimentLabel}>
-                  <FontAwesome
-                    name="star"
-                    size={16}
-                    color={
-                      nouveauAliment ? eventColors.meal.dark : nc.textMuted
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.nouveauAlimentText,
-                      { color: nc.textLight },
-                      nouveauAliment && styles.nouveauAlimentTextActive,
-                    ]}
-                  >
-                    Nouvel aliment ?
-                  </Text>
-                </View>
-                <Switch
-                  value={nouveauAliment}
-                  onValueChange={setNouveauAliment}
-                  disabled={isSubmitting}
-                  trackColor={{
-                    false: nc.border,
-                    true: `${eventColors.meal.dark}80`,
-                  }}
-                  thumbColor={
-                    nouveauAliment ? eventColors.meal.dark : nc.textMuted
-                  }
-                />
+                Nouvel aliment ?
+              </Text>
+            </View>
+            <Switch
+              value={nouveauAliment}
+              onValueChange={setNouveauAliment}
+              disabled={isSubmitting}
+              trackColor={{
+                false: nc.border,
+                true: `${eventColors.meal.dark}80`,
+              }}
+              thumbColor={nouveauAliment ? eventColors.meal.dark : nc.textMuted}
+            />
+          </View>
+
+          {nouveauAliment && (
+            <>
+              <TextInput
+                style={[
+                  styles.ingredientsInput,
+                  {
+                    backgroundColor: nc.background,
+                    borderColor: nc.border,
+                    color: nc.textStrong,
+                  },
+                  isSubmitting && styles.ingredientsInputDisabled,
+                ]}
+                placeholder="Nom de l'aliment (ex: avocat, fraise, poire...)"
+                placeholderTextColor={nc.textMuted}
+                value={nomNouvelAliment}
+                onChangeText={setNomNouvelAliment}
+                editable={!isSubmitting}
+              />
+
+              <Text style={[styles.categoryLabel, { color: nc.textLight }]}>
+                Allergènes potentiels
+              </Text>
+              <View style={styles.allergenesGrid}>
+                {ALLERGENES_OPTIONS.map((option) => {
+                  const isSelected = allergenes.includes(option.value);
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.allergeneChip,
+                        {
+                          backgroundColor: nc.backgroundPressed,
+                          borderColor: nc.border,
+                        },
+                        isSelected && styles.allergeneChipActive,
+                        isSubmitting && styles.chipDisabled,
+                      ]}
+                      onPress={() => {
+                        if (isSelected) {
+                          setAllergenes(
+                            allergenes.filter((a) => a !== option.value),
+                          );
+                        } else {
+                          setAllergenes([...allergenes, option.value]);
+                        }
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      <Text style={styles.allergeneEmoji}>{option.emoji}</Text>
+                      <Text
+                        style={[
+                          styles.allergeneText,
+                          { color: nc.textLight },
+                          isSelected && styles.allergeneTextActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
-              {nouveauAliment && (
-                <>
-                  <TextInput
+              <Text style={[styles.categoryLabel, { color: nc.textLight }]}>
+                Réaction observée
+              </Text>
+              <View style={styles.reactionRow}>
+                {REACTION_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
                     style={[
-                      styles.ingredientsInput,
+                      styles.reactionChip,
                       {
-                        backgroundColor: nc.background,
+                        backgroundColor: nc.backgroundPressed,
                         borderColor: nc.border,
-                        color: nc.textStrong,
                       },
+                      reaction === option.value && {
+                        backgroundColor: option.color,
+                        borderColor: option.color,
+                      },
+                      isSubmitting && styles.chipDisabled,
                     ]}
-                    placeholder="Nom de l'aliment (ex: avocat, fraise...)"
-                    placeholderTextColor={nc.textMuted}
-                    value={nomNouvelAliment}
-                    onChangeText={setNomNouvelAliment}
-                    editable={!isSubmitting}
-                  />
-
-                  <Text style={[styles.categoryLabel, { color: nc.textLight }]}>
-                    Allergènes potentiels
-                  </Text>
-                  <View style={styles.allergenesGrid}>
-                    {ALLERGENES_OPTIONS.map((option) => {
-                      const isSelected = allergenes.includes(option.value);
-                      return (
-                        <TouchableOpacity
-                          key={option.value}
-                          style={[
-                            styles.allergeneChip,
-                            {
-                              backgroundColor: nc.backgroundPressed,
-                              borderColor: nc.border,
-                            },
-                            isSelected && styles.allergeneChipActive,
-                            isSubmitting && styles.chipDisabled,
-                          ]}
-                          onPress={() => {
-                            if (isSelected) {
-                              setAllergenes(
-                                allergenes.filter((a) => a !== option.value),
-                              );
-                            } else {
-                              setAllergenes([...allergenes, option.value]);
-                            }
-                          }}
-                          disabled={isSubmitting}
-                        >
-                          <Text style={styles.allergeneEmoji}>
-                            {option.emoji}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.allergeneText,
-                              { color: nc.textLight },
-                              isSelected && styles.allergeneTextActive,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  <Text style={[styles.categoryLabel, { color: nc.textLight }]}>
-                    Réaction observée
-                  </Text>
-                  <View style={styles.reactionRow}>
-                    {REACTION_OPTIONS.map((option) => (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[
-                          styles.reactionChip,
-                          {
-                            backgroundColor: nc.backgroundPressed,
-                            borderColor: nc.border,
-                          },
-                          reaction === option.value && {
-                            backgroundColor: option.color,
-                            borderColor: option.color,
-                          },
-                          isSubmitting && styles.chipDisabled,
-                        ]}
-                        onPress={() => setReaction(option.value)}
-                        disabled={isSubmitting}
-                      >
-                        <Text
-                          style={[
-                            styles.reactionChipText,
-                            { color: nc.textLight },
-                            reaction === option.value &&
-                              styles.reactionChipTextActive,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
-              )}
+                    onPress={() => setReaction(option.value)}
+                    disabled={isSubmitting}
+                  >
+                    <Text
+                      style={[
+                        styles.reactionChipText,
+                        { color: nc.textLight },
+                        reaction === option.value &&
+                          styles.reactionChipTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </>
           )}
 
@@ -1164,10 +1191,7 @@ export function MealsForm({
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
             {isSubmitting ? (
-              <ActivityIndicator
-                size="small"
-                color={nc.white}
-              />
+              <ActivityIndicator size="small" color={nc.white} />
             ) : (
               <Text
                 style={[
@@ -1185,16 +1209,15 @@ export function MealsForm({
 
         {isEditing && onDelete && (
           <TouchableOpacity
-            style={[
-              styles.deleteButton,
-              isSubmitting && styles.buttonDisabled,
-            ]}
+            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color={nc.error} />
-            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
+            <Text style={[styles.deleteText, { color: nc.error }]}>
+              Supprimer
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -1242,6 +1265,7 @@ const styles = StyleSheet.create({
   typeChipText: {
     fontSize: 13,
     fontWeight: "600",
+    textAlign: "center",
   },
   typeChipTextActive: {
     color: "white",
@@ -1255,6 +1279,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   biberonTypeChip: {
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 16,
@@ -1268,6 +1294,7 @@ const styles = StyleSheet.create({
   biberonTypeChipText: {
     fontSize: 13,
     fontWeight: "500",
+    textAlign: "center",
   },
   biberonTypeChipTextActive: {
     color: "white",
@@ -1402,6 +1429,7 @@ const styles = StyleSheet.create({
   solideTypeChip: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -1416,6 +1444,7 @@ const styles = StyleSheet.create({
   solideTypeChipText: {
     fontSize: 13,
     fontWeight: "600",
+    textAlign: "center",
   },
   solideTypeChipTextActive: {
     color: "white",
@@ -1430,6 +1459,7 @@ const styles = StyleSheet.create({
   momentRepasChip: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -1444,6 +1474,7 @@ const styles = StyleSheet.create({
   momentRepasChipText: {
     fontSize: 12,
     fontWeight: "500",
+    textAlign: "center",
   },
   momentRepasChipTextActive: {
     color: "white",
@@ -1457,6 +1488,7 @@ const styles = StyleSheet.create({
   quantiteSolideChip: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 12,
@@ -1468,15 +1500,19 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   quantiteSolideChipText: {
+    width: "100%",
     fontSize: 14,
     fontWeight: "600",
+    textAlign: "center",
   },
   quantiteSolideChipTextActive: {
     color: "white",
   },
   quantiteSolideDesc: {
+    width: "100%",
     fontSize: 10,
     marginTop: 2,
+    textAlign: "center",
   },
   quantiteSolideDescActive: {
     color: "rgba(255,255,255,0.8)",
@@ -1559,6 +1595,7 @@ const styles = StyleSheet.create({
   reactionChip: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 10,
     paddingHorizontal: 8,
     borderRadius: 12,
@@ -1568,8 +1605,10 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   reactionChipText: {
+    width: "100%",
     fontSize: 12,
     fontWeight: "500",
+    textAlign: "center",
   },
   reactionChipTextActive: {
     color: "white",

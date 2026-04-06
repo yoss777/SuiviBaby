@@ -701,12 +701,15 @@ const styles = StyleSheet.create({
   typeChip: {
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   typeChipText: {
     fontSize: 12,
     fontWeight: "600",
+    textAlign: "center",
   },
   typeChipTextActive: {
     color: eventColors.jalon.dark,
@@ -730,6 +733,7 @@ const styles = StyleSheet.create({
   },
   moodChip: {
     alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 12,
@@ -746,6 +750,7 @@ const styles = StyleSheet.create({
   moodLabel: {
     fontSize: 11,
     fontWeight: "600",
+    textAlign: "center",
   },
   moodLabelActive: {
     color: eventColors.jalon.dark,

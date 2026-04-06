@@ -11,7 +11,12 @@ interface NightModeValues {
   minButtonSize: number;
   /** Taille de police augmentee la nuit */
   fontSize: { small: number; normal: number; large: number };
-  /** Desactiver les animations lourdes la nuit */
+  /** Conserve uniquement les animations decoratives. Les transitions fonctionnelles restent actives. */
+  animations: {
+    decorative: boolean;
+    functional: boolean;
+  };
+  /** @deprecated Utiliser animations.decorative. */
   animationsEnabled: boolean;
   /** Utiliser retour haptique au lieu de sons */
   preferHaptic: boolean;
@@ -29,6 +34,10 @@ export function useNightMode(): NightModeValues {
     fontSize: isNight
       ? { small: 14, normal: 17, large: 22 }
       : { small: 12, normal: 15, large: 20 },
+    animations: {
+      decorative: !isNight,
+      functional: true,
+    },
     animationsEnabled: !isNight,
     preferHaptic: isNight,
     hitSlop: isNight

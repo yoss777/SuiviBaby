@@ -1388,40 +1388,76 @@ export default function MealsScreen() {
                     {(meal as any).quantiteSolide ?? meal.quantite ?? ""}
                   </Text>
                 )}
-                {(meal.aime !== undefined || meal.nouveauAliment) && (
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    {meal.aime !== undefined && (
-                      <Text
-                        style={[
-                          styles.sessionDetailText,
-                          {
-                            color: meal.aime ? nc.successText : nc.errorText,
-                          },
-                        ]}
-                      >
-                        {(() => {
-                          const dishName =
-                            meal.nomNouvelAliment || meal.ingredients || "";
-                          if (meal.aime) {
-                            return dishName
-                              ? `A aimé ce plat : ${dishName}`
-                              : "A aimé son plat";
-                          }
-                          return dishName
-                            ? `N'a pas aimé ce plat : ${dishName}`
-                            : "N'a pas aimé le plat";
-                        })()}
-                      </Text>
-                    )}
-                  </View>
-                )}
+                {(() => {
+                  const ingredients =
+                    typeof meal.ingredients === "string"
+                      ? meal.ingredients.trim()
+                      : "";
+                  const newFood =
+                    meal.nouveauAliment &&
+                    typeof meal.nomNouvelAliment === "string"
+                      ? meal.nomNouvelAliment.trim()
+                      : "";
+                  const hasLike = typeof meal.aime === "boolean";
+                  const likeTarget = ingredients || newFood;
+                  const likeSubject =
+                    !ingredients && newFood ? "ce nouveau plat" : "ce plat";
+                  const hasSolideDetails = ingredients || newFood || hasLike;
+
+                  if (!hasSolideDetails) {
+                    return null;
+                  }
+
+                  return (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {hasLike && (
+                        <Text
+                          style={[
+                            styles.sessionDetailText,
+                            {
+                              color: meal.aime ? nc.successText : nc.errorText,
+                            },
+                          ]}
+                        >
+                          {`${
+                            meal.aime
+                              ? "A aimé"
+                              : "N'a pas aimé"
+                          } ${likeSubject}${
+                            likeTarget ? ` : ${likeTarget}` : ""
+                          }`}
+                        </Text>
+                      )}
+                      {ingredients && (!hasLike || likeTarget !== ingredients) && (
+                        <Text
+                          style={[
+                            styles.sessionDetailText,
+                            { color: nc.textLight },
+                          ]}
+                        >
+                          Ingrédients : {ingredients}
+                        </Text>
+                      )}
+                      {newFood && (!hasLike || likeTarget !== newFood) && (
+                        <Text
+                          style={[
+                            styles.sessionDetailText,
+                            { color: nc.textLight },
+                          ]}
+                        >
+                          Nouvel aliment : {newFood}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })()}
               </View>
             )}
           </View>

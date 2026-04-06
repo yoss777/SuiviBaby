@@ -17,7 +17,7 @@ import {
 } from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -228,6 +228,28 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           Math.round((heureFin.getTime() - heureDebut.getTime()) / 60000),
         )
       : duree;
+
+  // Long press acceleration refs
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handlePressIn = useCallback((action: () => void) => {
+    action();
+    timeoutRef.current = setTimeout(() => {
+      intervalRef.current = setInterval(action, 100);
+    }, 400);
+  }, []);
+
+  const handlePressOut = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
 
   // ============================================
   // HANDLERS
@@ -464,10 +486,13 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
-              onPress={() => {
+              onPressIn={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setDuree((value) => Math.max(0, value - 5));
+                handlePressIn(() =>
+                  setDuree((value) => Math.max(0, value - 5)),
+                );
               }}
+              onPressOut={handlePressOut}
               disabled={isSubmitting}
               accessibilityLabel="Diminuer la durée"
             >
@@ -492,10 +517,11 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
-              onPress={() => {
+              onPressIn={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setDuree((value) => value + 5);
+                handlePressIn(() => setDuree((value) => value + 5));
               }}
+              onPressOut={handlePressOut}
               disabled={isSubmitting}
               accessibilityLabel="Augmenter la durée"
             >
@@ -638,12 +664,15 @@ const styles = StyleSheet.create({
   typeChip: {
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   typeChipText: {
     fontSize: 12,
     fontWeight: "600",
+    textAlign: "center",
   },
   quantityPickerRow: {
     flexDirection: "row",

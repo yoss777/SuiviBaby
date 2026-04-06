@@ -307,6 +307,10 @@ const SOLIDE_QTY_LABELS: Record<string, string> = {
   peu: "Un peu", moyen: "Moyen", beaucoup: "Beaucoup",
 };
 
+function getTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 const EventRow = memo(function EventRow({
   event,
   index,
@@ -359,27 +363,41 @@ const EventRow = memo(function EventRow({
   const solideLine1Parts = [solideMomentLabel, solideTypeLabel, solideQtyLabel].filter(Boolean);
   const solideLine2 = solideLine1Parts.length > 0 ? solideLine1Parts.join(" · ") : null;
 
-  const solideDishName = isSolide
-    ? event.nomNouvelAliment || event.ingredients || ""
-    : "";
-  const solideLikeLabel = isSolide
-    ? event.aime === undefined
-      ? solideDishName || null
-      : event.aime
-        ? solideDishName
-          ? `A aimé ce plat : ${solideDishName}`
-          : "A aimé ce plat"
-        : solideDishName
-          ? `N'a pas aimé ce plat : ${solideDishName}`
-          : "N'a pas aimé ce plat"
+  const solideIngredients = isSolide ? getTrimmedString(event.ingredients) : "";
+  const solideNewFood =
+    isSolide && event.nouveauAliment
+      ? getTrimmedString(event.nomNouvelAliment)
+      : "";
+  const hasSolideLike = isSolide && typeof event.aime === "boolean";
+  const solideIngredientsLabel = solideIngredients
+    ? `Ingrédients : ${solideIngredients}`
     : null;
-  const solideLikeColor = isSolide
-    ? event.aime === undefined
+  const solideNewFoodLabel = solideNewFood
+    ? `Nouvel aliment : ${solideNewFood}`
+    : null;
+  const solideLikeTarget = solideIngredients || solideNewFood;
+  const solideLikeSubject =
+    !solideIngredients && solideNewFood ? "ce nouveau plat" : "ce plat";
+  const solideLikeLabel = hasSolideLike
+    ? `${event.aime ? "A aimé" : "N'a pas aimé"} ${solideLikeSubject}${
+        solideLikeTarget ? ` : ${solideLikeTarget}` : ""
+      }`
+    : null;
+  const solideLikeColor = hasSolideLike
+    ? event.aime
       ? nc.success
-      : event.aime
-        ? nc.success
-        : nc.error
+      : nc.error
     : undefined;
+  const visibleSolideIngredientsLabel =
+    solideIngredientsLabel &&
+    (!hasSolideLike || solideLikeTarget !== solideIngredients)
+      ? solideIngredientsLabel
+      : null;
+  const visibleSolideNewFoodLabel =
+    solideNewFoodLabel &&
+    (!hasSolideLike || solideLikeTarget !== solideNewFood)
+      ? solideNewFoodLabel
+      : null;
 
   const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
   const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !event.heureFin && event.heureDebut;
@@ -408,7 +426,14 @@ const EventRow = memo(function EventRow({
       ? `${formatDuration(elapsedMinutes)} · ${details}`
       : formatDuration(elapsedMinutes)
     : isSolide
-      ? [solideLine2, solideLikeLabel].filter(Boolean).join("\n")
+      ? [
+          solideLine2,
+          solideLikeLabel,
+          visibleSolideIngredientsLabel,
+          visibleSolideNewFoodLabel,
+        ]
+          .filter(Boolean)
+          .join("\n")
       : details;
 
   const canDelete = !!onEventDelete && !!event.id && !event.id?.startsWith?.('__optimistic_');
@@ -530,7 +555,11 @@ const EventRow = memo(function EventRow({
                   {displayDetails}
                 </Text>
               )}
-              {isSolide && (solideLine2 || solideLikeLabel) && (
+              {isSolide &&
+                (solideLine2 ||
+                  visibleSolideIngredientsLabel ||
+                  visibleSolideNewFoodLabel ||
+                  solideLikeLabel) && (
                 <View style={styles.solideDetails}>
                   {solideLine2 && (
                     <Text
@@ -550,6 +579,26 @@ const EventRow = memo(function EventRow({
                       ]}
                     >
                       {solideLikeLabel}
+                    </Text>
+                  )}
+                  {visibleSolideIngredientsLabel && (
+                    <Text
+                      style={[
+                        styles.solideDetailsText,
+                        { color: textColor },
+                      ]}
+                    >
+                      {visibleSolideIngredientsLabel}
+                    </Text>
+                  )}
+                  {visibleSolideNewFoodLabel && (
+                    <Text
+                      style={[
+                        styles.solideDetailsText,
+                        { color: textColor },
+                      ]}
+                    >
+                      {visibleSolideNewFoodLabel}
                     </Text>
                   )}
                 </View>

@@ -1,7 +1,12 @@
 import { getNeutralColors } from "@/constants/dashboardColors";
-import { QUICK_ADD_CATEGORIES } from "@/constants/dashboardConfig";
+import {
+  QUICK_ADD_ACTIONS,
+  QUICK_ADD_CATEGORIES,
+  type QuickAddAction,
+  type QuickAddSheetParams,
+} from "@/constants/dashboardConfig";
 import { Colors } from "@/constants/theme";
-import { useSheet } from "@/contexts/SheetContext";
+import { type FormSheetProps, useSheet } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useNightMode } from "@/hooks/useNightMode";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
@@ -9,7 +14,6 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -20,6 +24,7 @@ import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withRepeat,
   withSequence,
   withSpring,
@@ -27,47 +32,77 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const ACTIONS = [
-  // Position 3 (la plus proche - zone de pouce optimale)
-  {
-    key: "meal",
-    icon: { lib: "fa6" as const, name: "utensils" },
-    label: "Repas",
-    color: "#E8785A",
-    bgColor: "#FEF5F3",
-    formType: "meals" as const,
-    mealType: "tetee" as const,
-  },
-  // Position 2 (très accessible)
-  {
-    key: "diaper",
-    icon: { lib: "mci" as const, name: "human-baby-changing-table" },
-    label: "Couche",
-    color: "#17a2b8",
-    bgColor: "#d1ecf1",
-    formType: "diapers" as const,
-    diapersType: "miction" as const,
-  },
-  // Position 1 (action quotidienne fréquente)
-  {
-    key: "vitamine",
-    icon: { lib: "fa6" as const, name: "pills" },
-    label: "Vitamine",
-    color: "#E8A85A",
-    bgColor: "#FEF5E7",
-    formType: "soins" as const,
-    soinsType: "vitamine" as const,
-  },
-  // Position 0 (la plus éloignée - menu complet)
+const FAB_ACTION_KEYS = ["tetee", "miction", "vitamine"] as const;
+const MAIN_FAB_SIZE = 56;
+const ACTION_FAB_SIZE = 48;
+const ACTION_OFFSET_STEP = 76;
+const ACTION_LABEL_OFFSET = ACTION_FAB_SIZE + 10;
+
+type MoreAction = {
+  key: "more";
+  label: string;
+  icon: QuickAddAction["icon"];
+  isMore: true;
+};
+
+type FabAction = QuickAddAction | MoreAction;
+
+const getQuickAddAction = (key: (typeof FAB_ACTION_KEYS)[number]) => {
+  const action = QUICK_ADD_ACTIONS.find((item) => item.key === key);
+  if (!action) {
+    throw new Error(`Missing quick add action: ${key}`);
+  }
+  return action;
+};
+
+const ACTIONS: FabAction[] = [
+  ...FAB_ACTION_KEYS.map(getQuickAddAction),
   {
     key: "more",
-    icon: { lib: "fa6" as const, name: "ellipsis" },
     label: "Plus",
-    color: "#6B7280",
-    bgColor: "#F3F4F6",
-    isMore: true as const,
+    icon: { type: "fa", name: "ellipsis", color: "#6B7280" },
+    isMore: true,
   },
 ];
+
+const FAB_ACTION_COLORS: Record<
+  string,
+  { iconColor: string; backgroundColor: string }
+> = {
+  tetee: { iconColor: "#E8785A", backgroundColor: "#FEF5F3" },
+  miction: { iconColor: "#17a2b8", backgroundColor: "#d1ecf1" },
+  vitamine: { iconColor: "#E8A85A", backgroundColor: "#FEF5E7" },
+  more: { iconColor: "#6B7280", backgroundColor: "#F3F4F6" },
+};
+
+const FAB_ACTION_LABELS: Record<string, string> = {
+  tetee: "Repas",
+  miction: "Change",
+};
+
+const FAB_ACTION_ICONS: Record<string, QuickAddAction["icon"]> = {
+  tetee: { type: "fa", name: "utensils", color: "#E8785A" },
+  miction: {
+    type: "mc",
+    name: "human-baby-changing-table",
+    color: "#17a2b8",
+  },
+};
+
+const getFabActionColors = (action: FabAction) => {
+  return (
+    FAB_ACTION_COLORS[action.key] ?? {
+      iconColor: action.icon.color,
+      backgroundColor: "#F3F4F6",
+    }
+  );
+};
+
+const getFabActionLabel = (action: FabAction) =>
+  FAB_ACTION_LABELS[action.key] ?? action.label;
+
+const getFabActionIcon = (action: FabAction) =>
+  FAB_ACTION_ICONS[action.key] ?? action.icon;
 
 const ActionButton = ({
   action,
@@ -76,14 +111,20 @@ const ActionButton = ({
   onPress,
   labelTextColor,
   labelBackgroundColor,
+  actionBackgroundColor,
+  actionIconColor,
 }: {
-  action: (typeof ACTIONS)[0];
+  action: FabAction;
   index: number;
   isOpen: boolean;
   onPress: () => void;
   labelTextColor: string;
   labelBackgroundColor: string;
+  actionBackgroundColor: string;
+  actionIconColor: string;
 }) => {
+  const actionLabel = getFabActionLabel(action);
+  const actionIcon = getFabActionIcon(action);
   const offset = useSharedValue(0);
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.5);
@@ -91,9 +132,10 @@ const ActionButton = ({
   useEffect(() => {
     if (isOpen) {
       const delay = index * 50;
+      const targetOffset = (index + 1) * ACTION_OFFSET_STEP;
       offset.value = withDelay(
         delay,
-        withSpring((index + 1) * 76, { damping: 12 }),
+        withSpring(targetOffset, { damping: 12 }),
       );
       opacity.value = withDelay(delay, withTiming(1, { duration: 200 }));
       scale.value = withDelay(delay, withSpring(1, { damping: 10 }));
@@ -102,7 +144,7 @@ const ActionButton = ({
       opacity.value = withTiming(0, { duration: 150 });
       scale.value = withTiming(0.5, { duration: 150 });
     }
-  }, [isOpen]);
+  }, [index, isOpen, offset, opacity, scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     bottom: offset.value,
@@ -118,53 +160,43 @@ const ActionButton = ({
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={action.label}
+        accessibilityLabel={actionLabel}
         hitSlop={8}
         style={({ pressed }) => [
           styles.actionButton,
-          { backgroundColor: action.bgColor },
+          { backgroundColor: actionBackgroundColor },
           pressed && styles.actionButtonPressed,
         ]}
       >
-        {action.icon.lib === "fa6" ? (
+        {actionIcon.type === "fa" ? (
           <FontAwesome6
-            name={action.icon.name as any}
+            name={actionIcon.name as any}
             size={20}
-            color={action.color}
+            color={actionIconColor}
           />
         ) : (
           <MaterialCommunityIcons
-            name={action.icon.name as any}
+            name={actionIcon.name as any}
             size={20}
-            color={action.color}
+            color={actionIconColor}
           />
         )}
       </Pressable>
       <View
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
         style={[
           styles.actionLabelContainer,
           { backgroundColor: labelBackgroundColor },
         ]}
       >
-        <Pressable
-          onPress={onPress}
-          accessibilityRole="button"
-          accessibilityLabel={action.label}
-          hitSlop={8}
-        >
-          <Text style={[styles.actionLabel, { color: labelTextColor }]}>
-            {action.label}
-          </Text>
-        </Pressable>
+        <Text style={[styles.actionLabel, { color: labelTextColor }]}>
+          {actionLabel}
+        </Text>
       </View>
     </Animated.View>
   );
-};
-
-// Helper function for delayed animations
-const withDelay = (delay: number, animation: any) => {
-  "worklet";
-  return withSequence(withTiming(0, { duration: delay }), animation);
 };
 
 export const GlobalFAB = () => {
@@ -173,16 +205,21 @@ export const GlobalFAB = () => {
   const colors = Colors[colorScheme];
   const nc = getNeutralColors(colorScheme);
   const insets = useSafeAreaInsets();
-  const { isNightMode, minButtonSize, animationsEnabled } = useNightMode();
+  const { isNightMode, minButtonSize, animations } = useNightMode();
   const [isOpen, setIsOpen] = useState(false);
   const rotation = useSharedValue(0);
   const pulseScale = useSharedValue(1);
   const backdropOpacity = useSharedValue(0);
+  const fabBottom = Math.max(insets.bottom, 16) + 16;
 
   // Subtle pulse animation when closed — skip in night mode (less visual noise)
   const hasPlayedPulse = useRef(false);
   useEffect(() => {
-    if (!isOpen && !hasPlayedPulse.current && animationsEnabled) {
+    if (!animations.decorative) {
+      pulseScale.value = 1;
+      return;
+    }
+    if (!isOpen && !hasPlayedPulse.current) {
       hasPlayedPulse.current = true;
       pulseScale.value = withRepeat(
         withSequence(
@@ -197,12 +234,12 @@ export const GlobalFAB = () => {
     } else if (isOpen) {
       pulseScale.value = withTiming(1, { duration: 200 });
     }
-  }, [isOpen, animationsEnabled]);
+  }, [animations.decorative, isOpen, pulseScale]);
 
   useEffect(() => {
     rotation.value = withSpring(isOpen ? 45 : 0, { damping: 12 });
     backdropOpacity.value = withTiming(isOpen ? 1 : 0, { duration: 200 });
-  }, [isOpen]);
+  }, [backdropOpacity, isOpen, rotation]);
 
   const mainButtonStyle = useAnimatedStyle(() => ({
     transform: [
@@ -216,8 +253,12 @@ export const GlobalFAB = () => {
   }));
 
   const handleQuickAddPress = useCallback(
-    (sheetParams: Record<string, string>) => {
-      openSheet({ ownerId: "global-fab", ...sheetParams } as any);
+    (sheetParams: QuickAddSheetParams) => {
+      const sheetProps = {
+        ownerId: "global-fab",
+        ...sheetParams,
+      } as FormSheetProps;
+      openSheet(sheetProps);
     },
     [openSheet],
   );
@@ -290,37 +331,46 @@ export const GlobalFAB = () => {
   }, [colors, nc, handleQuickAddPress, openSheet]);
 
   const actionBusy = useRef(false);
-  const handleActionPress = (action: (typeof ACTIONS)[0]) => {
+  const actionBusyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (actionBusyTimeout.current) {
+        clearTimeout(actionBusyTimeout.current);
+      }
+    },
+    [],
+  );
+
+  const handleActionPress = useCallback((action: FabAction) => {
     if (actionBusy.current) return;
     actionBusy.current = true;
-    setTimeout(() => {
+    actionBusyTimeout.current = setTimeout(() => {
       actionBusy.current = false;
+      actionBusyTimeout.current = null;
     }, 400);
 
-    Haptics.impactAsync(isNightMode ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(
+      isNightMode
+        ? Haptics.ImpactFeedbackStyle.Medium
+        : Haptics.ImpactFeedbackStyle.Light,
+    );
     setIsOpen(false);
     if ("isMore" in action) {
       openMoreSheet();
-    } else if (action.formType === "meals") {
-      openSheet({
-        ownerId: "global-fab",
-        formType: "meals",
-        mealType: action.mealType,
-      });
-    } else if (action.formType === "diapers") {
-      openSheet({
-        ownerId: "global-fab",
-        formType: "diapers",
-        diapersType: action.diapersType,
-      });
-    } else if (action.formType === "soins") {
-      openSheet({
-        ownerId: "global-fab",
-        formType: "soins",
-        soinsType: action.soinsType,
-      });
+    } else {
+      handleQuickAddPress(action.sheetParams);
     }
-  };
+  }, [handleQuickAddPress, isNightMode, openMoreSheet]);
+
+  const handleMainPress = useCallback(() => {
+    Haptics.impactAsync(
+      isNightMode
+        ? Haptics.ImpactFeedbackStyle.Heavy
+        : Haptics.ImpactFeedbackStyle.Medium,
+    );
+    setIsOpen((current) => !current);
+  }, [isNightMode]);
 
   return (
     <>
@@ -339,28 +389,30 @@ export const GlobalFAB = () => {
       <View
         style={[
           styles.fabContainer,
-          { bottom: Platform.OS === "ios" ? insets.bottom : 32 },
+          { bottom: fabBottom },
         ]}
       >
         {/* Action buttons */}
-        {ACTIONS.map((action, index) => (
-          <ActionButton
-            key={action.key}
-            action={action}
-            index={index}
-            isOpen={isOpen}
-            onPress={() => handleActionPress(action)}
-            labelTextColor={colors.text}
-            labelBackgroundColor={colors.background}
-          />
-        ))}
+        {ACTIONS.map((action, index) => {
+          const actionColors = getFabActionColors(action);
+          return (
+            <ActionButton
+              key={action.key}
+              action={action}
+              index={index}
+              isOpen={isOpen}
+              onPress={() => handleActionPress(action)}
+              labelTextColor={colors.text}
+              labelBackgroundColor={colors.background}
+              actionBackgroundColor={actionColors.backgroundColor}
+              actionIconColor={actionColors.iconColor}
+            />
+          );
+        })}
 
         {/* Main FAB */}
         <Pressable
-          onPress={() => {
-            Haptics.impactAsync(isNightMode ? Haptics.ImpactFeedbackStyle.Heavy : Haptics.ImpactFeedbackStyle.Medium);
-            setIsOpen(!isOpen);
-          }}
+          onPress={handleMainPress}
           accessibilityRole="button"
           accessibilityLabel={
             isOpen ? "Fermer les actions rapides" : "Ouvrir les actions rapides"
@@ -368,7 +420,11 @@ export const GlobalFAB = () => {
           style={({ pressed }) => [
             styles.mainFab,
             { backgroundColor: Colors[colorScheme].tint },
-            isNightMode && { width: minButtonSize + 12, height: minButtonSize + 12, borderRadius: (minButtonSize + 12) / 2 },
+            isNightMode && {
+              width: Math.max(minButtonSize, MAIN_FAB_SIZE),
+              height: Math.max(minButtonSize, MAIN_FAB_SIZE),
+              borderRadius: Math.max(minButtonSize, MAIN_FAB_SIZE) / 2,
+            },
             pressed && styles.mainFabPressed,
           ]}
         >
@@ -407,9 +463,9 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   mainFab: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: MAIN_FAB_SIZE,
+    height: MAIN_FAB_SIZE,
+    borderRadius: MAIN_FAB_SIZE / 2,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
@@ -430,9 +486,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   actionButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: ACTION_FAB_SIZE,
+    height: ACTION_FAB_SIZE,
+    borderRadius: ACTION_FAB_SIZE / 2,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
@@ -446,7 +502,7 @@ const styles = StyleSheet.create({
   },
   actionLabelContainer: {
     position: "absolute",
-    right: 60,
+    right: ACTION_LABEL_OFFSET,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
