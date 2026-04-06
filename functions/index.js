@@ -1066,7 +1066,33 @@ exports.revenueCatWebhook = onRequest(
       lastEvent: eventType,
     };
 
-    await db.doc(`subscriptions/${appUserId}`).set(subscriptionData, { merge: true });
+    // Transaction pour éviter les race conditions (double webhook simultané)
+    await db.runTransaction(async (tx) => {
+      const subRef = db.doc(`subscriptions/${appUserId}`);
+      const existing = await tx.get(subRef);
+      const existingData = existing.exists ? existing.data() : {};
+
+      // Ne pas downgrader si l'event est plus ancien que le dernier traité
+      if (existingData.updatedAt && subscriptionData.updatedAt &&
+          existingData.updatedAt.toMillis && subscriptionData.updatedAt.toMillis &&
+          existingData.updatedAt.toMillis() > subscriptionData.updatedAt.toMillis()) {
+        console.log(`revenueCatWebhook: skipping stale event for ${appUserId}`);
+        return;
+      }
+
+      tx.set(subRef, subscriptionData, { merge: true });
+    });
+
+    // Log webhook pour debug et audit
+    await db.collection("webhook_logs").add({
+      source: "revenuecat",
+      appUserId,
+      eventType,
+      tier,
+      status,
+      productId,
+      processedAt: admin.firestore.Timestamp.now(),
+    });
 
     console.log(`revenueCatWebhook: uid=${appUserId}, type=${eventType}, tier=${tier}, status=${status}`);
     res.status(200).send("OK");
@@ -1255,6 +1281,31 @@ exports.generateAiInsight = onCall(
 
     // Rate limit: 10 requêtes/heure
     await checkRateLimit(db, uid, "ai_insight", 10);
+
+    // Premium check: FREE = 1/jour, PREMIUM/FAMILY = illimité
+    const subDoc = await db.doc(`subscriptions/${uid}`).get();
+    const tier = subDoc.exists ? (subDoc.data().tier || "free") : "free";
+    const status = subDoc.exists ? (subDoc.data().status || "expired") : "expired";
+    const isPremium = (tier === "premium" || tier === "family") && (status === "active" || status === "trial" || status === "grandfathered");
+
+    if (!isPremium) {
+      const usageRef = db.doc(`usage_limits/${uid}`);
+      const usageDoc = await usageRef.get();
+      const today = new Date().toISOString().split("T")[0];
+      const usageData = usageDoc.exists ? usageDoc.data() : {};
+      const dailyInsights = (usageData.lastInsightDate === today) ? (usageData.dailyInsights || 0) : 0;
+
+      const FREE_DAILY_INSIGHTS = 1;
+      if (dailyInsights >= FREE_DAILY_INSIGHTS) {
+        throw new HttpsError(
+          "resource-exhausted",
+          `Limite quotidienne atteinte (${FREE_DAILY_INSIGHTS} insight/jour). Passez en Premium pour un usage illimité.`
+        );
+      }
+
+      // Incrémenter le compteur
+      await usageRef.set({ lastInsightDate: today, dailyInsights: dailyInsights + 1 }, { merge: true });
+    }
 
     const { child, events, requestType } = request.data;
 
