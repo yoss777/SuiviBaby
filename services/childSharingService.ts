@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { getUserByEmail } from "./usersService";
 import { grantChildAccess, revokeChildAccess } from "@/utils/permissions";
+import { captureServiceError } from "@/utils/errorReporting";
 
 export interface ShareCode {
   code: string;
@@ -100,6 +101,7 @@ export async function createShareCode(
     throw new Error("Impossible de générer un code unique");
   } catch (error) {
     console.error("Erreur lors de la création du code de partage:", error);
+    captureServiceError(error, { service: "childSharing", operation: "createShareCode" });
     throw error;
   }
 }
@@ -167,6 +169,7 @@ export async function redeemShareCode(
     };
   } catch (error) {
     console.error("Erreur lors de l'utilisation du code:", error);
+    captureServiceError(error, { service: "childSharing", operation: "redeemShareCode" });
     throw error;
   }
 }
@@ -309,6 +312,7 @@ export async function createEmailInvitation(
     ]);
     if (!code || !expectedCodes.has(code)) {
       console.error("Erreur lors de la création de l'invitation:", error);
+      captureServiceError(error, { service: "childSharing", operation: "createEmailInvitation" });
     }
     throw error;
   }
@@ -356,6 +360,7 @@ export async function getPendingInvitations(): Promise<ShareInvitation[]> {
     return Array.from(invitesById.values());
   } catch (error) {
     console.error("Erreur lors de la récupération des invitations:", error);
+    captureServiceError(error, { service: "childSharing", operation: "getPendingInvitations" });
     return [];
   }
 }
@@ -411,6 +416,7 @@ export function listenToPendingInvitations(
     },
     (error) => {
       console.error("Erreur écoute invitations (email):", error);
+      captureServiceError(error, { service: "childSharing", operation: "listenToPendingInvitations.email" });
       callback([]);
     }
   );
@@ -426,6 +432,7 @@ export function listenToPendingInvitations(
     },
     (error) => {
       console.error("Erreur écoute invitations (uid):", error);
+      captureServiceError(error, { service: "childSharing", operation: "listenToPendingInvitations.uid" });
       callback([]);
     }
   );
@@ -589,6 +596,7 @@ export async function acceptInvitation(invitationId: string): Promise<void> {
     });
   } catch (error) {
     console.error("Erreur lors de l'acceptation de l'invitation:", error);
+    captureServiceError(error, { service: "childSharing", operation: "acceptInvitation" });
     throw error;
   }
 }
@@ -603,6 +611,7 @@ export async function rejectInvitation(invitationId: string): Promise<void> {
     });
   } catch (error) {
     console.error("Erreur lors du refus de l'invitation:", error);
+    captureServiceError(error, { service: "childSharing", operation: "rejectInvitation" });
     throw error;
   }
 }
@@ -637,6 +646,7 @@ export async function getActiveShareCode(
     return null;
   } catch (error) {
     console.error("Erreur lors de la récupération du code:", error);
+    captureServiceError(error, { service: "childSharing", operation: "getActiveShareCode" });
     return null;
   }
 }
@@ -723,6 +733,7 @@ export async function cleanupExpiredShareCodes(
     return deleted;
   } catch (error) {
     console.warn("Erreur lors du nettoyage des codes expirés:", error);
+    captureServiceError(error, { service: "childSharing", operation: "cleanupExpiredShareCodes" });
     return 0;
   }
 }
@@ -752,6 +763,7 @@ export async function removeParentAccess(
     await revokeChildAccess(childId, parentUid);
   } catch (error) {
     console.error("Erreur lors du retrait de l'accès:", error);
+    captureServiceError(error, { service: "childSharing", operation: "removeParentAccess" });
     throw error;
   }
 }

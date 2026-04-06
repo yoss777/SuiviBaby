@@ -14,6 +14,7 @@ import {
   where
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 
 const getUserId = () => {
   const user = auth.currentUser;
@@ -34,6 +35,7 @@ export async function ajouterVitamine(childId: string, data: any) {
     return ref;
   } catch (e) {
     console.error("Erreur lors de l'ajout :", e);
+    captureServiceError(e, { service: "vitamines", operation: "ajouterVitamine" });
     throw e;
   }
 }
@@ -51,6 +53,7 @@ export async function obtenirVitamine(childId: string, id: string) {
     }
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "vitamines", operation: "obtenirVitamine" });
     throw e;
   }
 }
@@ -70,6 +73,7 @@ export async function obtenirToutesLesVitamines(childId: string) {
     }));
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "vitamines", operation: "obtenirToutesLesVitamines" });
     throw e;
   }
 }
@@ -90,6 +94,7 @@ export async function obtenirVitaminesAvecLimite(childId: string, nombreLimit: n
     }));
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "vitamines", operation: "obtenirVitaminesAvecLimite" });
     throw e;
   }
 }
@@ -129,6 +134,7 @@ export async function modifierVitamine(childId: string, id: string, nouveausDonn
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification :", e);
+    captureServiceError(e, { service: "vitamines", operation: "modifierVitamine" });
     throw e;
   }
 }
@@ -147,6 +153,7 @@ export async function supprimerVitamine(childId: string, id: string) {
     return true;
   } catch (e) {
     console.error("Erreur lors de la suppression :", e);
+    captureServiceError(e, { service: "vitamines", operation: "supprimerVitamine" });
     throw e;
   }
 }

@@ -8,6 +8,7 @@ import Purchases, {
   type PurchasesPackage,
   LOG_LEVEL,
 } from "react-native-purchases";
+import { captureServiceError } from "@/utils/errorReporting";
 
 // ============================================
 // CONFIG
@@ -72,6 +73,7 @@ export function initRevenueCat(userId?: string): Promise<void> {
       isInitialized = true;
     } catch (error) {
       console.error("[RevenueCat] Init failed:", error);
+      captureServiceError(error, { service: "revenueCat", operation: "initRevenueCat" });
       initPromise = null;
     }
   })();
@@ -89,6 +91,7 @@ export async function loginRevenueCat(userId: string): Promise<CustomerInfo | nu
     return customerInfo;
   } catch (error) {
     console.error("[RevenueCat] Login failed:", error);
+    captureServiceError(error, { service: "revenueCat", operation: "loginRevenueCat" });
     return null;
   }
 }
@@ -102,6 +105,7 @@ export async function logoutRevenueCat(): Promise<void> {
     await Purchases.logOut();
   } catch (error) {
     console.error("[RevenueCat] Logout failed:", error);
+    captureServiceError(error, { service: "revenueCat", operation: "logoutRevenueCat" });
   }
 }
 
@@ -118,6 +122,7 @@ export async function getCustomerInfo(): Promise<CustomerInfo | null> {
     return await Purchases.getCustomerInfo();
   } catch (error) {
     console.error("[RevenueCat] getCustomerInfo failed:", error);
+    captureServiceError(error, { service: "revenueCat", operation: "getCustomerInfo" });
     return null;
   }
 }
@@ -203,6 +208,7 @@ export async function getOfferings(): Promise<{
     };
   } catch (error) {
     console.error("[RevenueCat] getOfferings failed:", error);
+    captureServiceError(error, { service: "revenueCat", operation: "getOfferings" });
     return { default: null, family: null };
   }
 }
@@ -223,6 +229,7 @@ export async function purchasePackage(
       return { success: false, customerInfo: null };
     }
     console.error("[RevenueCat] Purchase failed:", error);
+    captureServiceError(error, { service: "revenueCat", operation: "purchasePackage" });
     throw error;
   }
 }
@@ -236,6 +243,7 @@ export async function restorePurchases(): Promise<CustomerInfo | null> {
     return await Purchases.restorePurchases();
   } catch (error) {
     console.error("[RevenueCat] Restore failed:", error);
+    captureServiceError(error, { service: "revenueCat", operation: "restorePurchases" });
     throw error;
   }
 }

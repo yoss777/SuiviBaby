@@ -17,6 +17,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 
 const COLLECTION = "device_tokens";
 const PROJECT_ID = "0c759940-43b8-4cb3-9dc5-d0faa2eacf41";
@@ -86,6 +87,7 @@ export async function registerPushToken(userId: string): Promise<void> {
     );
   } catch (error) {
     console.error("Erreur registerPushToken:", error);
+    captureServiceError(error, { service: "pushToken", operation: "registerPushToken" });
   }
 }
 
@@ -104,6 +106,7 @@ export async function removePushTokens(userId: string): Promise<void> {
     await Promise.all(snapshot.docs.map((d) => deleteDoc(d.ref)));
   } catch (error) {
     console.error("Erreur removePushTokens:", error);
+    captureServiceError(error, { service: "pushToken", operation: "removePushTokens" });
   }
 }
 

@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 import { enqueueEvent, isOnline } from "./offlineQueueService";
 import {
   addOptimisticCreate,
@@ -349,6 +350,7 @@ export async function ajouterEvenementAvecId(
     await setDoc(docRef, eventData, { merge: true });
   } catch (e) {
     console.error("❌ Erreur lors de l'ajout avec ID :", e);
+    captureServiceError(e, { service: "events", operation: "ajouterEvenementAvecId" });
     throw e;
   }
 }
@@ -370,6 +372,7 @@ export async function obtenirEvenement(
     return null;
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "events", operation: "obtenirEvenement" });
     throw e;
   }
 }
@@ -419,6 +422,7 @@ export async function obtenirEvenements(
     })) as Event[];
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "events", operation: "obtenirEvenements" });
     throw e;
   }
 }
@@ -520,6 +524,7 @@ export function ecouterEvenements(
     },
     (error) => {
       console.error(`[L:${lid}] ERROR:`, error);
+      captureServiceError(error, { service: "events", operation: "ecouterEvenements" });
       onError?.(error);
     },
   );

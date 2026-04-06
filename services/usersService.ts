@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 
 // Interface pour le profil utilisateur
 interface UserProfile {
@@ -83,6 +84,7 @@ export async function creerOuMettreAJourProfil(data: {
     return true;
   } catch (e) {
     console.error("Erreur lors de la mise à jour du profil :", e);
+    captureServiceError(e, { service: "users", operation: "creerOuMettreAJourProfil" });
     throw e;
   }
 }
@@ -102,6 +104,7 @@ export async function obtenirProfil(): Promise<UserProfile | null> {
     }
   } catch (e) {
     console.error("Erreur lors de la récupération du profil :", e);
+    captureServiceError(e, { service: "users", operation: "obtenirProfil" });
     throw e;
   }
 }
@@ -142,6 +145,7 @@ export async function modifierNomUtilisateur(nouveauNom: string) {
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification du nom :", e);
+    captureServiceError(e, { service: "users", operation: "modifierNomUtilisateur" });
     throw e;
   }
 }
@@ -153,6 +157,7 @@ export async function obtenirNomUtilisateur(): Promise<string | null> {
     return profil?.userName || null;
   } catch (e) {
     console.error("Erreur lors de la récupération du nom d'utilisateur :", e);
+    captureServiceError(e, { service: "users", operation: "obtenirNomUtilisateur" });
     return null;
   }
 }

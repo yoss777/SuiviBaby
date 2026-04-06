@@ -16,6 +16,7 @@ import {
   where,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 import {
   CommentInfo,
   EventComment,
@@ -62,6 +63,7 @@ const getUserName = async (userId: string): Promise<string> => {
     }
   } catch (error) {
     console.error("Erreur lors de la récupération du nom:", error);
+    captureServiceError(error, { service: "social", operation: "getUserName" });
   }
 
   return "Utilisateur";
@@ -131,6 +133,7 @@ export const ajouterLike = async (
     return docRef.id;
   } catch (error) {
     console.error("[Like] Erreur ajout like:", error);
+    captureServiceError(error, { service: "social", operation: "ajouterLike" });
     throw error;
   }
 };
@@ -156,6 +159,7 @@ export const supprimerLike = async (eventId: string): Promise<void> => {
     await Promise.all(deletePromises);
   } catch (error) {
     console.error("[Like] Erreur suppression like:", error);
+    captureServiceError(error, { service: "social", operation: "supprimerLike" });
     throw error;
   }
 };
@@ -173,6 +177,7 @@ export const toggleLike = async (
     existingLike = await obtenirMonLike(eventId);
   } catch (error) {
     console.error("[Like] Erreur toggle (get):", error);
+    captureServiceError(error, { service: "social", operation: "toggleLike.get" });
     throw error;
   }
 
@@ -181,6 +186,7 @@ export const toggleLike = async (
       await supprimerLike(eventId);
     } catch (error) {
       console.error("[Like] Erreur toggle (delete):", error);
+      captureServiceError(error, { service: "social", operation: "toggleLike.delete" });
       throw error;
     }
     return false; // N'est plus liké
@@ -189,6 +195,7 @@ export const toggleLike = async (
       await ajouterLike(eventId, childId, userName);
     } catch (error) {
       console.error("[Like] Erreur toggle (add):", error);
+      captureServiceError(error, { service: "social", operation: "toggleLike.add" });
       throw error;
     }
     return true; // Est maintenant liké
@@ -215,6 +222,7 @@ export const obtenirMonLike = async (
     snapshot = await getDocs(q);
   } catch (error) {
     console.error("[Like] Erreur obtenirMonLike:", error);
+    captureServiceError(error, { service: "social", operation: "obtenirMonLike" });
     throw error;
   }
   if (snapshot.empty) return null;

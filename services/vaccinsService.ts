@@ -14,6 +14,7 @@ import {
   where
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 
 const getUserId = () => {
   const user = auth.currentUser;
@@ -34,6 +35,7 @@ export async function ajouterVaccin(childId: string, data: any) {
     return ref;
   } catch (e) {
     console.error("Erreur lors de l'ajout :", e);
+    captureServiceError(e, { service: "vaccins", operation: "ajouterVaccin" });
     throw e;
   }
 }
@@ -51,6 +53,7 @@ export async function obtenirVaccin(childId: string, id: string) {
     }
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "vaccins", operation: "obtenirVaccin" });
     throw e;
   }
 }
@@ -70,6 +73,7 @@ export async function obtenirToutesLesVaccins(childId: string) {
     }));
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "vaccins", operation: "obtenirToutesLesVaccins" });
     throw e;
   }
 }
@@ -90,6 +94,7 @@ export async function obtenirVaccinsAvecLimite(childId: string, nombreLimit: num
     }));
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "vaccins", operation: "obtenirVaccinsAvecLimite" });
     throw e;
   }
 }
@@ -129,6 +134,7 @@ export async function modifierVaccin(childId: string, id: string, nouveausDonnee
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification :", e);
+    captureServiceError(e, { service: "vaccins", operation: "modifierVaccin" });
     throw e;
   }
 }
@@ -147,6 +153,7 @@ export async function supprimerVaccin(childId: string, id: string) {
     return true;
   } catch (e) {
     console.error("Erreur lors de la suppression :", e);
+    captureServiceError(e, { service: "vaccins", operation: "supprimerVaccin" });
     throw e;
   }
 }

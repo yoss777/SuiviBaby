@@ -16,6 +16,7 @@ import {
   where,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 import type {
   MilestoneRef,
   MilestoneStatus,
@@ -58,6 +59,7 @@ export async function fetchTipsForAge(
       .slice(0, maxResults);
   } catch (e) {
     console.error("[smartContentService] fetchTipsForAge error:", e);
+    captureServiceError(e, { service: "smartContent", operation: "fetchTipsForAge" });
     return [];
   }
 }
@@ -87,6 +89,7 @@ export async function fetchTipsByCategory(
       .slice(0, maxResults);
   } catch (e) {
     console.error("[smartContentService] fetchTipsByCategory error:", e);
+    captureServiceError(e, { service: "smartContent", operation: "fetchTipsByCategory" });
     return [];
   }
 }
@@ -102,6 +105,7 @@ export async function fetchTipById(tipId: string): Promise<Tip | null> {
     return { id: docSnap.id, ...docSnap.data() } as Tip;
   } catch (e) {
     console.error("[smartContentService] fetchTipById error:", e);
+    captureServiceError(e, { service: "smartContent", operation: "fetchTipById" });
     return null;
   }
 }
@@ -127,6 +131,7 @@ export async function fetchAllMilestones(): Promise<MilestoneRef[]> {
       .sort((a, b) => a.order - b.order);
   } catch (e) {
     console.error("[smartContentService] fetchAllMilestones error:", e);
+    captureServiceError(e, { service: "smartContent", operation: "fetchAllMilestones" });
     return [];
   }
 }

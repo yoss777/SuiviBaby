@@ -1,4 +1,5 @@
 import { db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 import {
   collection,
   doc,
@@ -90,6 +91,7 @@ export async function searchBabyBySimId(simId: string): Promise<BabyData | null>
     return null;
   } catch (error) {
     console.error("Erreur lors de la recherche de l'enfant:", error);
+    captureServiceError(error, { service: "babyAttachment", operation: "searchBabyBySimId" });
     throw error;
   }
 }
@@ -140,6 +142,7 @@ export async function createAttachmentRequest(
     return docRef.id;
   } catch (error) {
     console.error("Erreur lors de la création de la demande:", error);
+    captureServiceError(error, { service: "babyAttachment", operation: "createAttachmentRequest" });
     throw error;
   }
 }
@@ -171,6 +174,7 @@ async function sendValidationEmail(
     // - Les informations de sécurité (qui a fait la demande, quand, etc.)
   } catch (error) {
     console.error("Erreur lors de l'envoi de l'email:", error);
+    captureServiceError(error, { service: "babyAttachment", operation: "sendValidationEmail" });
     throw error;
   }
 }
@@ -189,6 +193,7 @@ export async function validateAttachmentRequest(
     });
   } catch (error) {
     console.error("Erreur lors de la validation de la demande:", error);
+    captureServiceError(error, { service: "babyAttachment", operation: "validateAttachmentRequest" });
     throw error;
   }
 }
@@ -207,6 +212,7 @@ export async function rejectAttachmentRequest(
     });
   } catch (error) {
     console.error("Erreur lors du rejet de la demande:", error);
+    captureServiceError(error, { service: "babyAttachment", operation: "rejectAttachmentRequest" });
     throw error;
   }
 }
@@ -262,6 +268,7 @@ export async function getPendingRequests(
     return requests;
   } catch (error) {
     console.error("Erreur lors de la récupération des demandes:", error);
+    captureServiceError(error, { service: "babyAttachment", operation: "getPendingRequests" });
     throw error;
   }
 }

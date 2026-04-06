@@ -5,6 +5,7 @@
 
 import { functions } from "@/config/firebase";
 import { httpsCallable } from "firebase/functions";
+import { captureServiceError } from "@/utils/errorReporting";
 import { anonymizeChildData, anonymizeEvent, stripPII } from "@/services/dataAnonymizationService";
 import type { Baby } from "@/types/baby";
 import type { Insight, TipCategory } from "@/types/content";
@@ -276,6 +277,7 @@ export async function generateAiEnhancedInsight(
     };
   } catch (error) {
     console.warn("[AI Insights] Failed to generate AI insight:", error);
+    captureServiceError(error, { service: "aiInsights", operation: "generateAiEnhancedInsight" });
     return null;
   }
 }

@@ -2,6 +2,7 @@
 // Note: Garde le nom babyService pour compatibilité avec le code existant
 import { collection, doc, getDoc, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { captureServiceError } from "@/utils/errorReporting";
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Baby {
@@ -34,6 +35,7 @@ export const babyService = {
       })) as Baby[];
     } catch (error) {
       console.error('Erreur chargement enfants:', error);
+      captureServiceError(error, { service: "baby", operation: "getAll" });
       return [];
     }
   },
@@ -65,6 +67,7 @@ export const babyService = {
         .map((snap) => ({ id: snap.id, ...snap.data() })) as Baby[];
     } catch (error) {
       console.error('Erreur chargement enfants du parent:', error);
+      captureServiceError(error, { service: "baby", operation: "getByParentId" });
       return [];
     }
   },

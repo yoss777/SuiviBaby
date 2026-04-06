@@ -15,6 +15,7 @@ import {
   where,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 
 const getUserId = () => {
   const user = auth.currentUser;
@@ -35,6 +36,7 @@ export async function ajouterSommeil(childId: string, data: any) {
     return ref;
   } catch (e) {
     console.error("Erreur lors de l'ajout :", e);
+    captureServiceError(e, { service: "sommeil", operation: "ajouterSommeil" });
     throw e;
   }
 }
@@ -51,6 +53,7 @@ export async function obtenirSommeil(childId: string, id: string) {
     return null;
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "sommeil", operation: "obtenirSommeil" });
     throw e;
   }
 }
@@ -70,6 +73,7 @@ export async function obtenirTousLesSommeils(childId: string) {
     }));
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "sommeil", operation: "obtenirTousLesSommeils" });
     throw e;
   }
 }
@@ -93,6 +97,7 @@ export async function obtenirSommeilsAvecLimite(
     }));
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "sommeil", operation: "obtenirSommeilsAvecLimite" });
     throw e;
   }
 }
@@ -145,6 +150,7 @@ export async function modifierSommeil(
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification :", e);
+    captureServiceError(e, { service: "sommeil", operation: "modifierSommeil" });
     throw e;
   }
 }
@@ -163,6 +169,7 @@ export async function supprimerSommeil(childId: string, id: string) {
     return true;
   } catch (e) {
     console.error("Erreur lors de la suppression :", e);
+    captureServiceError(e, { service: "sommeil", operation: "supprimerSommeil" });
     throw e;
   }
 }

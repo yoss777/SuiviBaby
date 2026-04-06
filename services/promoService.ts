@@ -15,6 +15,7 @@ import {
   where,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 import type { Promotion, UserPromos } from "@/types/promo";
 import { DEFAULT_USER_PROMOS } from "@/types/promo";
 
@@ -62,6 +63,7 @@ export async function fetchActivePromos(
       .sort((a, b) => a.priority - b.priority);
   } catch (e) {
     console.error("[promoService] fetchActivePromos error:", e);
+    captureServiceError(e, { service: "promo", operation: "fetchActivePromos" });
     return [];
   }
 }
@@ -79,6 +81,7 @@ export async function fetchPromoById(
     return { id: docSnap.id, ...docSnap.data() } as Promotion;
   } catch (e) {
     console.error("[promoService] fetchPromoById error:", e);
+    captureServiceError(e, { service: "promo", operation: "fetchPromoById" });
     return null;
   }
 }
@@ -107,6 +110,7 @@ export async function getUserPromoState(): Promise<UserPromos> {
     return defaultState;
   } catch (e) {
     console.error("[promoService] getUserPromoState error:", e);
+    captureServiceError(e, { service: "promo", operation: "getUserPromoState" });
     return DEFAULT_USER_PROMOS;
   }
 }
@@ -136,6 +140,7 @@ export async function trackImpression(promoId: string): Promise<void> {
     }
   } catch (e) {
     console.error("[promoService] trackImpression error:", e);
+    captureServiceError(e, { service: "promo", operation: "trackImpression" });
   }
 }
 
@@ -152,6 +157,7 @@ export async function trackClick(promoId: string): Promise<void> {
     });
   } catch (e) {
     console.error("[promoService] trackClick error:", e);
+    captureServiceError(e, { service: "promo", operation: "trackClick" });
   }
 }
 
@@ -178,6 +184,7 @@ export async function dismissPromo(promoId: string): Promise<void> {
     }
   } catch (e) {
     console.error("[promoService] dismissPromo error:", e);
+    captureServiceError(e, { service: "promo", operation: "dismissPromo" });
   }
 }
 

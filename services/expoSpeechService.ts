@@ -5,6 +5,7 @@ import {
   ExpoSpeechRecognitionModule,
   addSpeechRecognitionListener,
 } from "expo-speech-recognition";
+import { captureServiceError } from "@/utils/errorReporting";
 
 export type TranscriptionMethod = 'expo' | 'manual';
 
@@ -23,6 +24,7 @@ class ExpoSpeechService {
       return state !== 'unavailable';
     } catch (error) {
       console.warn('Speech non disponible:', error);
+      captureServiceError(error, { service: "speech", operation: "isAvailable" });
       return false;
     }
   }
@@ -37,6 +39,7 @@ class ExpoSpeechService {
       return result.granted;
     } catch (error) {
       console.error('Erreur permissions:', error);
+      captureServiceError(error, { service: "speech", operation: "requestPermissions" });
       return false;
     }
   }
@@ -70,6 +73,7 @@ class ExpoSpeechService {
     if (callbacks.onError) {
       const listener = addSpeechRecognitionListener('error', (event) => {
         console.error('Speech error:', event);
+        captureServiceError(event, { service: "speech", operation: "onError" });
         this.isListening = false;
         callbacks.onError!(event.error);
       });
@@ -113,6 +117,7 @@ class ExpoSpeechService {
     } catch (error) {
       this.isListening = false;
       console.error('Erreur démarrage:', error);
+      captureServiceError(error, { service: "speech", operation: "startRecognition" });
       throw error;
     }
   }
@@ -133,6 +138,7 @@ class ExpoSpeechService {
       return this.transcription;
     } catch (error) {
       console.error('Erreur arrêt:', error);
+      captureServiceError(error, { service: "speech", operation: "stopRecognition" });
       return this.transcription;
     }
   }
@@ -147,6 +153,7 @@ class ExpoSpeechService {
       this.transcription = '';
     } catch (error) {
       console.error('Erreur annulation:', error);
+      captureServiceError(error, { service: "speech", operation: "cancelRecognition" });
     }
   }
 
@@ -171,6 +178,7 @@ class ExpoSpeechService {
       }
     } catch (error) {
       console.error('Erreur destroy:', error);
+      captureServiceError(error, { service: "speech", operation: "destroy" });
     }
   }
 

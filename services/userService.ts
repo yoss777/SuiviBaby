@@ -14,6 +14,7 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { captureServiceError } from "@/utils/errorReporting";
 import type {
   User,
   UserType,
@@ -365,6 +366,7 @@ export function subscribeToPendingValidationRequests(
     },
     (error) => {
       console.error('Error in validation requests listener:', error);
+      captureServiceError(error, { service: "user", operation: "subscribeToPendingValidationRequests" });
       if (onError) {
         onError(error);
       }

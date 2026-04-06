@@ -14,6 +14,7 @@ import {
   where
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 
 const getUserId = () => {
   const user = auth.currentUser;
@@ -34,6 +35,7 @@ export async function ajouterPompage(childId: string, data: any) {
     return ref;
   } catch (e) {
     console.error("Erreur lors de l'ajout :", e);
+    captureServiceError(e, { service: "pompages", operation: "ajouterPompage" });
     throw e;
   }
 }
@@ -51,6 +53,7 @@ export async function obtenirPompage(childId: string, id: string) {
     }
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "pompages", operation: "obtenirPompage" });
     throw e;
   }
 }
@@ -70,6 +73,7 @@ export async function obtenirTousLesPompages(childId: string) {
     }));
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "pompages", operation: "obtenirTousLesPompages" });
     throw e;
   }
 }
@@ -90,6 +94,7 @@ export async function obtenirPompagesAvecLimite(childId: string, nombreLimit: nu
     }));
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "pompages", operation: "obtenirPompagesAvecLimite" });
     throw e;
   }
 }
@@ -129,6 +134,7 @@ export async function modifierPompage(childId: string, id: string, nouveausDonne
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification :", e);
+    captureServiceError(e, { service: "pompages", operation: "modifierPompage" });
     throw e;
   }
 }
@@ -147,6 +153,7 @@ export async function supprimerPompage(childId: string, id: string) {
     return true;
   } catch (e) {
     console.error("Erreur lors de la suppression :", e);
+    captureServiceError(e, { service: "pompages", operation: "supprimerPompage" });
     throw e;
   }
 }

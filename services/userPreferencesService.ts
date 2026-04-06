@@ -1,6 +1,7 @@
 // services/userPreferencesService.ts
 import { arrayRemove, arrayUnion, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 
 const getUserId = () => {
   const user = auth.currentUser;
@@ -116,6 +117,7 @@ export async function obtenirPreferences(): Promise<UserPreferences> {
     }
   } catch (e) {
     console.error("Erreur lors de la récupération des préférences:", e);
+    captureServiceError(e, { service: "userPreferences", operation: "obtenirPreferences" });
     throw e;
   }
 }
@@ -167,6 +169,7 @@ export async function mettreAJourPreferencesNotifications(
     return true;
   } catch (e) {
     console.error("Erreur lors de la mise à jour des notifications:", e);
+    captureServiceError(e, { service: "userPreferences", operation: "mettreAJourPreferencesNotifications" });
     throw e;
   }
 }
@@ -195,6 +198,7 @@ export async function mettreAJourPreferenceTheme(theme: ThemePreference) {
     return true;
   } catch (e) {
     console.error("Erreur lors de la mise à jour du thème:", e);
+    captureServiceError(e, { service: "userPreferences", operation: "mettreAJourPreferenceTheme" });
     throw e;
   }
 }
@@ -223,6 +227,7 @@ export async function mettreAJourPreferenceLanguage(language: LanguagePreference
     return true;
   } catch (e) {
     console.error("Erreur lors de la mise à jour de la langue:", e);
+    captureServiceError(e, { service: "userPreferences", operation: "mettreAJourPreferenceLanguage" });
     throw e;
   }
 }
@@ -269,6 +274,7 @@ export async function masquerEnfant(childId: string) {
     return true;
   } catch (e) {
     console.error("Erreur lors du masquage de l'enfant:", e);
+    captureServiceError(e, { service: "userPreferences", operation: "masquerEnfant" });
     throw e;
   }
 }
@@ -290,6 +296,7 @@ export async function afficherEnfant(childId: string) {
     return true;
   } catch (e) {
     console.error("Erreur lors de l'affichage de l'enfant:", e);
+    captureServiceError(e, { service: "userPreferences", operation: "afficherEnfant" });
     throw e;
   }
 }

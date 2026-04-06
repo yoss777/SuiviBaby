@@ -13,6 +13,7 @@ import {
   where,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 
 const getUserId = () => {
   const user = auth.currentUser;
@@ -33,6 +34,7 @@ export async function ajouterCroissance(childId: string, data: any) {
     return ref;
   } catch (e) {
     console.error("Erreur lors de l'ajout :", e);
+    captureServiceError(e, { service: "croissance", operation: "ajouterCroissance" });
     throw e;
   }
 }
@@ -49,6 +51,7 @@ export async function obtenirCroissance(childId: string, id: string) {
     return null;
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "croissance", operation: "obtenirCroissance" });
     throw e;
   }
 }
@@ -68,6 +71,7 @@ export async function obtenirToutesLesCroissances(childId: string) {
     }));
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
+    captureServiceError(e, { service: "croissance", operation: "obtenirToutesLesCroissances" });
     throw e;
   }
 }
@@ -117,6 +121,7 @@ export async function modifierCroissance(
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification :", e);
+    captureServiceError(e, { service: "croissance", operation: "modifierCroissance" });
     throw e;
   }
 }
@@ -138,6 +143,7 @@ export async function supprimerCroissance(childId: string, id: string) {
     return true;
   } catch (e) {
     console.error("Erreur lors de la suppression :", e);
+    captureServiceError(e, { service: "croissance", operation: "supprimerCroissance" });
     throw e;
   }
 }

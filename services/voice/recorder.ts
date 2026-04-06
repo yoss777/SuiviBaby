@@ -2,6 +2,7 @@ import { functions } from "@/config/firebase";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
 import { httpsCallable } from "firebase/functions";
+import { captureServiceError } from "@/utils/errorReporting";
 
 let recording: Audio.Recording | null = null;
 
@@ -22,6 +23,7 @@ export async function requestPermissions(): Promise<boolean> {
     return status === "granted";
   } catch (error) {
     console.error("Erreur permissions audio:", error);
+    captureServiceError(error, { service: "voiceRecorder", operation: "requestPermissions" });
     return false;
   }
 }
@@ -51,6 +53,7 @@ export async function startRecording(): Promise<void> {
     console.log("Enregistrement démarré");
   } catch (error) {
     console.error("Erreur démarrage enregistrement:", error);
+    captureServiceError(error, { service: "voiceRecorder", operation: "startRecording" });
     throw error;
   }
 }
@@ -73,6 +76,7 @@ export async function stopRecording(): Promise<string | null> {
     return uri;
   } catch (error) {
     console.error("Erreur arrêt enregistrement:", error);
+    captureServiceError(error, { service: "voiceRecorder", operation: "stopRecording" });
     return null;
   }
 }

@@ -5,6 +5,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 import { db } from "../config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 
 export interface AppVersionInfo {
   latestVersion: string;
@@ -75,6 +76,7 @@ export async function checkForUpdate(): Promise<{
     };
   } catch (e) {
     console.error("[appUpdateService] checkForUpdate error:", e);
+    captureServiceError(e, { service: "appUpdate", operation: "checkForUpdate" });
     return null;
   }
 }
