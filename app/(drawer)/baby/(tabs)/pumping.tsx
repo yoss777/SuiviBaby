@@ -63,6 +63,12 @@ const toDate = (value: any): Date => {
   return new Date(value);
 };
 
+const getDateTime = (value: any): number => {
+  const date = toDate(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
+
 const formatSelectedDateLabel = (dateString: string) => {
   const [year, month, day] = dateString.split("-").map(Number);
   const date = new Date(year, month - 1, day);
@@ -857,7 +863,7 @@ export default function PumpingScreen() {
     const groups: { [key: string]: Pompage[] } = {};
 
     pompages.forEach((pompage) => {
-      const date = new Date(pompage.date?.seconds * 1000);
+      const date = toDate(pompage.date);
       const dateKey = `${date.getFullYear()}-${String(
         date.getMonth() + 1,
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -870,7 +876,6 @@ export default function PumpingScreen() {
 
     return Object.entries(groups)
       .map(([dateKey, pompages]) => {
-        const date = new Date(dateKey);
         const totalQuantityLeft = pompages.reduce(
           (sum, pompage) => sum + (pompage.quantiteGauche || 0),
           0,
@@ -881,7 +886,7 @@ export default function PumpingScreen() {
         );
         const totalQuantity = totalQuantityLeft + totalQuantityRight;
         const lastPompage = pompages.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+          getDateTime(current.date) > getDateTime(latest.date)
             ? current
             : latest,
         );
@@ -889,7 +894,7 @@ export default function PumpingScreen() {
         return {
           date: dateKey,
           pompages: pompages.sort(
-            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
+            (a, b) => getDateTime(b.date) - getDateTime(a.date),
           ),
           totalQuantityLeft,
           totalQuantityRight,
@@ -1097,7 +1102,7 @@ export default function PumpingScreen() {
   const renderPompageItem = useCallback((pompage: Pompage, isLatest: boolean = false, isFirstInList: boolean = false) => {
     const totalQty =
       (pompage.quantiteGauche || 0) + (pompage.quantiteDroite || 0);
-    const pompageTime = new Date(pompage.date?.seconds * 1000);
+    const pompageTime = toDate(pompage.date);
 
     return (
       <ReanimatedSwipeable

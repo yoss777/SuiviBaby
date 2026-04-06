@@ -19,7 +19,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as FileSystem from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Image,
   StyleSheet,
@@ -247,6 +247,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   const [dateHeure, setDateHeure] = useState<Date>(
     editData ? toDate(editData.date) : new Date(),
   );
+  const [dateHeureDirty, setDateHeureDirty] = useState(false);
   const [mood, setMood] = useState<1 | 2 | 3 | 4 | 5 | null>(
     editData?.humeur ?? null,
   );
@@ -291,6 +292,17 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       showAlert("Erreur", "Impossible d'ajouter la photo.");
     }
   }, [showAlert]);
+
+  const handleDateHeureChange = useCallback((nextDate: Date) => {
+    setDateHeure(nextDate);
+    setDateHeureDirty(true);
+  }, []);
+
+  useEffect(() => {
+    if (!editData?.id) return;
+    setDateHeure(toDate(editData.date));
+    setDateHeureDirty(false);
+  }, [editData?.id, editData?.date]);
 
   // ============================================
   // HANDLERS
@@ -337,7 +349,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
       const data = removeUndefined({
         type: "jalon" as const,
-        date: dateHeure,
+        date: !isEditing || dateHeureDirty ? dateHeure : undefined,
         typeJalon,
         titre: titreToSave,
         description: description.trim() ? description.trim() : undefined,
@@ -588,7 +600,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       {/* Date et Heure */}
       <DateTimeSectionRow
         value={dateHeure}
-        onChange={setDateHeure}
+        onChange={handleDateHeureChange}
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}

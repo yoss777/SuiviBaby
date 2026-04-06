@@ -17,7 +17,7 @@ import {
 } from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -181,6 +181,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const [dateHeure, setDateHeure] = useState<Date>(
     editData ? toDate(editData.date) : new Date(),
   );
+  const [dateHeureDirty, setDateHeureDirty] = useState(false);
 
   // Promenade always uses heureDebut/heureFin pickers (like sommeil)
   const isChronoMode = typeActivite === "promenade";
@@ -194,6 +195,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const [heureFin, setHeureFin] = useState<Date | null>(
     editData?.heureFin ? toDate(editData.heureFin) : null,
   );
+  const [chronoDirty, setChronoDirty] = useState(false);
 
   // Force heureFin to share the same calendar day as heureDebut (year/month/day)
   const alignDateToDebut = (fin: Date, debut: Date): Date => {
@@ -208,12 +210,14 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 
   // When heureFin changes, always align to same day as heureDebut
   const handleHeureFinChange = (newFin: Date | null) => {
+    setChronoDirty(true);
     if (!newFin) { setHeureFin(null); return; }
     setHeureFin(alignDateToDebut(newFin, heureDebut));
   };
 
   // When heureDebut changes, re-align heureFin to same day
   const handleHeureDebutChange = (newDebut: Date) => {
+    setChronoDirty(true);
     setHeureDebut(newDebut);
     if (heureFin) {
       setHeureFin(alignDateToDebut(heureFin, newDebut));
@@ -250,6 +254,38 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       intervalRef.current = null;
     }
   }, []);
+
+  const handleDateHeureChange = useCallback((nextDate: Date) => {
+    setDateHeure(nextDate);
+    setDateHeureDirty(true);
+  }, []);
+
+  const handleOngoingChange = useCallback((nextOngoing: boolean) => {
+    setIsOngoing(nextOngoing);
+    setChronoDirty(true);
+  }, []);
+
+  useEffect(() => {
+    if (!editData?.id) return;
+    setDateHeure(toDate(editData.date));
+    setDateHeureDirty(false);
+    setHeureDebut(
+      editData.heureDebut ? toDate(editData.heureDebut) : toDate(editData.date),
+    );
+    setHeureFin(editData.heureFin ? toDate(editData.heureFin) : null);
+    setIsOngoing(
+      editData.typeActivite === "promenade" &&
+        !!editData.heureDebut &&
+        !editData.heureFin,
+    );
+    setChronoDirty(false);
+  }, [
+    editData?.id,
+    editData?.date,
+    editData?.heureDebut,
+    editData?.heureFin,
+    editData?.typeActivite,
+  ]);
 
   // ============================================
   // HANDLERS
@@ -319,14 +355,15 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           : undefined;
 
       if (isChronoMode && editData) {
+        const shouldSendChronoDate = !isEditing || chronoDirty;
         // Edit mode: keep null values to trigger deleteField (iso modifierSommeil)
         const editPayload: Record<string, any> = {
           type: "activite" as const,
-          date: heureDebut,
+          date: shouldSendChronoDate ? heureDebut : undefined,
           typeActivite,
-          heureDebut,
-          heureFin: isOngoing ? null : fin,
-          duree: isOngoing ? null : computedDuree,
+          heureDebut: shouldSendChronoDate ? heureDebut : undefined,
+          heureFin: chronoDirty ? (isOngoing ? null : fin) : undefined,
+          duree: chronoDirty ? (isOngoing ? null : computedDuree) : undefined,
           description: description.trim() || undefined,
           note: description.trim() || undefined,
         };
@@ -354,7 +391,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         // Non-chrono activities
         const data = removeUndefined({
           type: "activite" as const,
-          date: dateHeure,
+          date: !isEditing || dateHeureDirty ? dateHeure : undefined,
           typeActivite,
           duree: duree || undefined,
           description: description.trim() || undefined,
@@ -463,7 +500,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           showStartDate
           showOngoingToggle
           isOngoing={isOngoing}
-          onOngoingChange={setIsOngoing}
+          onOngoingChange={handleOngoingChange}
           ongoingLabel="En cours"
           ongoingActiveColors={chipActiveColors}
           showDuration
@@ -561,7 +598,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       {!isChronoMode && (
         <DateTimeSectionRow
           value={dateHeure}
-          onChange={setDateHeure}
+          onChange={handleDateHeureChange}
           colorScheme={colorScheme}
           disabled={isSubmitting}
           onPickerToggle={onFormStepChange}

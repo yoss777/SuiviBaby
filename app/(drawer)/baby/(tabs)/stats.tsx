@@ -63,6 +63,16 @@ const TAB_CONFIG: {
   },
 ];
 
+const getDateTime = (value: any): number => {
+  if (!value) return 0;
+  if (value instanceof Timestamp) return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  if (typeof value.seconds === "number") return value.seconds * 1000;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
 export default function StatsScreen() {
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
@@ -74,7 +84,7 @@ export default function StatsScreen() {
   const sortRepasEvents = useCallback(
     (merged: any[]) =>
       [...merged].sort(
-        (a: any, b: any) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
+        (a: any, b: any) => getDateTime(b.date) - getDateTime(a.date),
       ),
     [],
   );

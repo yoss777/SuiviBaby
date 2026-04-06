@@ -87,6 +87,37 @@ export interface MealsFormProps {
 
 const MAX_BIBERON_ML = 300;
 
+function toDate(value: unknown): Date {
+  if (value instanceof Date) return value;
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+  ) {
+    return value.toDate();
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    "seconds" in value &&
+    typeof value.seconds === "number"
+  ) {
+    return new Date(value.seconds * 1000);
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    "_seconds" in value &&
+    typeof value._seconds === "number"
+  ) {
+    return new Date(value._seconds * 1000);
+  }
+
+  const parsed = new Date(value as string | number);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
 function formatDuration(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -121,8 +152,9 @@ export function MealsForm({
     editData?.type ?? initialType,
   );
   const [dateHeure, setDateHeure] = useState<Date>(
-    editData?.date ?? new Date(),
+    editData?.date ? toDate(editData.date) : new Date(),
   );
+  const [dateHeureDirty, setDateHeureDirty] = useState(false);
 
   // Tetee state
   const [leftSeconds, setLeftSeconds] = useState(
@@ -191,6 +223,17 @@ export function MealsForm({
     if (intervalRef.current) clearInterval(intervalRef.current);
   }, []);
 
+  const handleDateHeureChange = useCallback((nextDate: Date) => {
+    setDateHeure(nextDate);
+    setDateHeureDirty(true);
+  }, []);
+
+  useEffect(() => {
+    if (!editData?.id) return;
+    setDateHeure(toDate(editData.date));
+    setDateHeureDirty(false);
+  }, [editData?.id, editData?.date]);
+
   // ============================================
   // HANDLERS - Chronomètre tétée
   // ============================================
@@ -255,6 +298,8 @@ export function MealsForm({
 
     setIsSubmitting(true);
 
+    const dateToSave = !isEditing || dateHeureDirty ? dateHeure : undefined;
+
     if (mealType === "tetee") {
       const leftMinutes = Math.round(leftSeconds / 60);
       const rightMinutes = Math.round(rightSeconds / 60);
@@ -265,7 +310,7 @@ export function MealsForm({
         coteDroit: rightSeconds > 0,
         dureeGauche: leftMinutes > 0 ? leftMinutes : undefined,
         dureeDroite: rightMinutes > 0 ? rightMinutes : undefined,
-        date: dateHeure,
+        date: dateToSave,
       });
 
       if (isEditing && editData?.id) {
@@ -285,7 +330,7 @@ export function MealsForm({
         type: mealType,
         quantite,
         typeBiberon,
-        date: dateHeure,
+        date: dateToSave,
       });
 
       if (isEditing && editData?.id) {
@@ -335,7 +380,7 @@ export function MealsForm({
             ? null
             : undefined,
         aime: aime ?? (editData ? null : undefined),
-        date: dateHeure,
+        date: dateToSave,
       });
 
       if (isEditing && editData?.id) {
@@ -1156,7 +1201,7 @@ export function MealsForm({
       {/* DATE/TIME PICKER */}
       <DateTimeSectionRow
         value={dateHeure}
-        onChange={setDateHeure}
+        onChange={handleDateHeureChange}
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}

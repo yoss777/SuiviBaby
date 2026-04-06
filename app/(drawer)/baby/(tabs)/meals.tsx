@@ -74,6 +74,12 @@ const toDate = (value: any): Date => {
   return new Date(value);
 };
 
+const getDateTime = (value: any): number => {
+  const date = toDate(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
+
 const formatSelectedDateLabel = (dateString: string) => {
   const [year, month, day] = dateString.split("-").map(Number);
   const date = new Date(year, month - 1, day);
@@ -275,7 +281,7 @@ export default function MealsScreen() {
   const sortMergedMeals = useCallback(
     (merged: any[]) =>
       [...(merged as Meal[])].sort(
-        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
+        (a, b) => getDateTime(b.date) - getDateTime(a.date),
       ),
     [],
   );
@@ -960,7 +966,7 @@ export default function MealsScreen() {
     const groups: { [key: string]: Meal[] } = {};
 
     meals.forEach((meal) => {
-      const date = new Date(meal.date?.seconds * 1000);
+      const date = toDate(meal.date);
       const dateKey = `${date.getFullYear()}-${String(
         date.getMonth() + 1,
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -979,7 +985,7 @@ export default function MealsScreen() {
           return sum + (typeof q === "number" ? q : 0);
         }, 0);
         const lastMeal = meals.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+          getDateTime(current.date) > getDateTime(latest.date)
             ? current
             : latest,
         );
@@ -993,7 +999,7 @@ export default function MealsScreen() {
             year: "numeric",
           }),
           meals: meals.sort(
-            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
+            (a, b) => getDateTime(b.date) - getDateTime(a.date),
           ),
           totalQuantity,
           lastMeal,
@@ -1202,7 +1208,7 @@ export default function MealsScreen() {
   // ============================================
 
   const renderMealItem = useCallback((meal: Meal, isLatest: boolean = false, isFirstInList: boolean = false) => {
-    const mealTime = new Date(meal.date?.seconds * 1000);
+    const mealTime = toDate(meal.date);
     const isTetee = meal.type === "tetee";
     const isBiberon = meal.type === "biberon";
     const isSolide = meal.type === "solide";

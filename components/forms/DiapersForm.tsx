@@ -15,7 +15,7 @@ import {
 } from "@/services/eventsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
@@ -100,6 +100,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
   const [dateHeure, setDateHeure] = useState<Date>(
     editData ? toDate(editData.date) : new Date(),
   );
+  const [dateHeureDirty, setDateHeureDirty] = useState(false);
 
   // Miction attributes
   const [mictionCouleur, setMictionCouleur] = useState<MictionCouleur | null>(
@@ -117,6 +118,17 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
   // HANDLERS
   // ============================================
 
+  const handleDateHeureChange = useCallback((nextDate: Date) => {
+    setDateHeure(nextDate);
+    setDateHeureDirty(true);
+  }, []);
+
+  useEffect(() => {
+    if (!editData?.id) return;
+    setDateHeure(toDate(editData.date));
+    setDateHeureDirty(false);
+  }, [editData?.id, editData?.date]);
+
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
 
@@ -131,6 +143,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
 
     setIsSubmitting(true);
 
+    const dateToSave = !isEditing || dateHeureDirty ? dateHeure : undefined;
     let successMessage = "";
     if (editData) {
       // Edit mode: modify existing excretion
@@ -138,7 +151,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       if (isMiction) {
         const mictionData = removeUndefined({
           type: "miction" as const,
-          date: dateHeure,
+          date: dateToSave,
           couleur: mictionCouleur ?? undefined,
         });
         modifierEvenementOptimistic(activeChild.id, editData.id, mictionData, editData);
@@ -146,7 +159,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       } else {
         const selleData = removeUndefined({
           type: "selle" as const,
-          date: dateHeure,
+          date: dateToSave,
           consistance: selleConsistance ?? undefined,
           quantite: selleQuantite ?? undefined,
         });
@@ -158,7 +171,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       if (includeMiction) {
         const mictionData = removeUndefined({
           type: "miction" as const,
-          date: dateHeure,
+          date: dateToSave,
           couleur: mictionCouleur ?? undefined,
         });
         ajouterEvenementOptimistic(activeChild.id, mictionData);
@@ -166,7 +179,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       if (includeSelle) {
         const selleData = removeUndefined({
           type: "selle" as const,
-          date: dateHeure,
+          date: dateToSave,
           consistance: selleConsistance ?? undefined,
           quantite: selleQuantite ?? undefined,
         });
@@ -467,7 +480,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       {/* Date & Time */}
       <DateTimeSectionRow
         value={dateHeure}
-        onChange={setDateHeure}
+        onChange={handleDateHeureChange}
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}

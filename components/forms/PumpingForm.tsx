@@ -13,7 +13,7 @@ import {
 
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
@@ -81,6 +81,7 @@ export function PumpingForm({
     editData?.quantiteDroite ?? 100,
   );
   const [dateHeure, setDateHeure] = useState(editData?.date ?? new Date());
+  const [dateHeureDirty, setDateHeureDirty] = useState(false);
 
   // Refs for quantity memory
   const lastLeftQuantityRef = useRef(quantiteGauche);
@@ -107,6 +108,17 @@ export function PumpingForm({
       intervalRef.current = null;
     }
   }, []);
+
+  const handleDateHeureChange = useCallback((nextDate: Date) => {
+    setDateHeure(nextDate);
+    setDateHeureDirty(true);
+  }, []);
+
+  useEffect(() => {
+    if (!editData?.id) return;
+    setDateHeure(editData.date);
+    setDateHeureDirty(false);
+  }, [editData?.id, editData?.date]);
 
   // Toggle functions
   const toggleLeftBreast = () => {
@@ -154,11 +166,12 @@ export function PumpingForm({
     }
 
     setIsSubmitting(true);
+    const dateToSave = !isEditing || dateHeureDirty ? dateHeure : undefined;
     const data = {
       type: "pompage" as const,
       quantiteGauche: useLeftBreast ? quantiteGauche : 0,
       quantiteDroite: useRightBreast ? quantiteDroite : 0,
-      date: dateHeure,
+      date: dateToSave,
     };
 
     if (isEditing && editData) {
@@ -384,7 +397,7 @@ export function PumpingForm({
       {/* Date/Time */}
       <DateTimeSectionRow
         value={dateHeure}
-        onChange={setDateHeure}
+        onChange={handleDateHeureChange}
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}

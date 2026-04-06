@@ -7,12 +7,20 @@ import {
   View,
 } from "react-native";
 
+const toDate = (
+  value: Date | { seconds: number } | { toDate: () => Date },
+): Date => {
+  if (value instanceof Date) return value;
+  if ("toDate" in value) return value.toDate();
+  return new Date(value.seconds * 1000);
+};
+
 export interface MealCardProps {
   meal: {
     id: string;
     type?: "tetee" | "biberon";
     quantite?: number | null;
-    date: { seconds: number };
+    date: Date | { seconds: number } | { toDate: () => Date };
   };
   onEdit: () => void;
 }
@@ -37,7 +45,7 @@ export function MealCard({ meal, onEdit }: MealCardProps) {
   };
 
   const formatTime = () => {
-    const date = meal.date?.seconds ? new Date(meal.date.seconds * 1000) : new Date(meal.date as any);
+    const date = toDate(meal.date);
     return date.toLocaleTimeString("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",

@@ -15,7 +15,7 @@ import {
   supprimerEvenement,
 } from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -195,6 +195,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const [dateHeure, setDateHeure] = useState<Date>(
     editData && editData.type === "bain" ? toDate(editData.date) : new Date(),
   );
+  const [dateHeureDirty, setDateHeureDirty] = useState(false);
   const [dureeBain, setDureeBain] = useState<number>(
     (editData as any)?.duree ?? 10,
   );
@@ -212,6 +213,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       ? toDate(editData.date)
       : new Date(),
   );
+  const [dateNezDirty, setDateNezDirty] = useState(false);
   const [methodeNez, setMethodeNez] = useState<NezMethode | undefined>(
     editData?.methode ?? undefined,
   );
@@ -233,6 +235,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const [heureFin, setHeureFin] = useState<Date | null>(
     editData?.heureFin ? toDate(editData.heureFin) : null,
   );
+  const [chronoDirty, setChronoDirty] = useState(false);
   const [isOngoing, setIsOngoing] = useState<boolean>(
     editData ? !editData.heureFin : false,
   );
@@ -268,6 +271,59 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       intervalRef.current = null;
     }
   }, []);
+
+  const handleDateHeureChange = useCallback((nextDate: Date) => {
+    setDateHeure(nextDate);
+    setDateHeureDirty(true);
+  }, []);
+
+  const handleDateNezChange = useCallback((nextDate: Date) => {
+    setDateNez(nextDate);
+    setDateNezDirty(true);
+  }, []);
+
+  const handleHeureDebutChange = useCallback((nextDate: Date) => {
+    setHeureDebut(nextDate);
+    setChronoDirty(true);
+  }, []);
+
+  const handleHeureFinChange = useCallback((nextDate: Date | null) => {
+    setHeureFin(nextDate);
+    setChronoDirty(true);
+  }, []);
+
+  const handleOngoingChange = useCallback((nextOngoing: boolean) => {
+    setIsOngoing(nextOngoing);
+    setChronoDirty(true);
+  }, []);
+
+  useEffect(() => {
+    if (!editData?.id) return;
+    if (editData.type === "bain") {
+      setDateHeure(toDate(editData.date));
+      setDateHeureDirty(false);
+    }
+    if (editData.type === "nettoyage_nez") {
+      setDateNez(toDate(editData.date));
+      setDateNezDirty(false);
+    }
+    if (editData.type === "sommeil") {
+      setHeureDebut(
+        editData.heureDebut
+          ? toDate(editData.heureDebut)
+          : toDate(editData.date),
+      );
+      setHeureFin(editData.heureFin ? toDate(editData.heureFin) : null);
+      setIsOngoing(!editData.heureFin);
+      setChronoDirty(false);
+    }
+  }, [
+    editData?.id,
+    editData?.type,
+    editData?.date,
+    editData?.heureDebut,
+    editData?.heureFin,
+  ]);
 
   // ============================================
   // TYPE SELECTION
@@ -329,7 +385,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     if (sheetType === "nez") {
       const data = removeUndefined({
         type: "nettoyage_nez" as const,
-        date: dateNez,
+        date:
+          !isEditing || editData?.type !== "nettoyage_nez" || dateNezDirty
+            ? dateNez
+            : undefined,
         methode: methodeNez ?? undefined,
         resultat: resultatNez ?? undefined,
         note: noteNez.trim() ? noteNez.trim() : undefined,
@@ -350,7 +409,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     } else if (sheetType === "bain") {
       const data = removeUndefined({
         type: "bain" as const,
-        date: dateHeure,
+        date:
+          !isEditing || editData?.type !== "bain" || dateHeureDirty
+            ? dateHeure
+            : undefined,
         duree: dureeBain > 0 ? dureeBain : undefined,
         temperatureEau: temperatureEau > 0 ? temperatureEau : undefined,
         produits: produits.trim() ? produits.trim() : undefined,
@@ -428,13 +490,14 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           : undefined;
 
       if (editData && editData.type === "sommeil") {
+        const shouldSendChronoDate = chronoDirty;
         // For editing, we need to explicitly send null to delete fields
         const editDataToSend: any = {
           type: "sommeil" as const,
-          date: heureDebut,
-          heureDebut: heureDebut,
-          heureFin: isOngoing ? null : fin, // null will trigger deleteField() in service
-          duree: isOngoing ? null : duree, // null will trigger deleteField() in service
+          date: shouldSendChronoDate ? heureDebut : undefined,
+          heureDebut: shouldSendChronoDate ? heureDebut : undefined,
+          heureFin: chronoDirty ? (isOngoing ? null : fin) : undefined, // null will trigger deleteField() in service
+          duree: chronoDirty ? (isOngoing ? null : duree) : undefined, // null will trigger deleteField() in service
           isNap: sheetType === "nap",
           location: location ?? undefined,
           quality: quality ?? undefined,
@@ -670,15 +733,15 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         chronoLabel="Horaires"
         heureDebut={heureDebut}
         heureFin={heureFin}
-        onHeureDebutChange={setHeureDebut}
-        onHeureFinChange={setHeureFin}
+        onHeureDebutChange={handleHeureDebutChange}
+        onHeureFinChange={handleHeureFinChange}
         showStartDate
         startDateLabel="Date début"
         showEndDate
         endDateLabel="Date fin"
         showOngoingToggle
         isOngoing={isOngoing}
-        onOngoingChange={setIsOngoing}
+        onOngoingChange={handleOngoingChange}
         ongoingLabel="En cours"
         ongoingActiveColors={chipActiveColors}
         showDuration
@@ -810,7 +873,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
       <DateTimeSectionRow
         value={dateNez}
-        onChange={setDateNez}
+        onChange={handleDateNezChange}
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}
@@ -978,7 +1041,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
       <DateTimeSectionRow
         value={dateHeure}
-        onChange={setDateHeure}
+        onChange={handleDateHeureChange}
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}

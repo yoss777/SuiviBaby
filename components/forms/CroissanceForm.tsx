@@ -13,7 +13,7 @@ import {
   supprimerEvenement,
 } from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -95,6 +95,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
   const [dateHeure, setDateHeure] = useState<Date>(
     editData ? toDate(editData.date) : new Date(),
   );
+  const [dateHeureDirty, setDateHeureDirty] = useState(false);
   const [tailleCm, setTailleCm] = useState<string>(
     editData?.tailleCm?.toString() ?? "",
   );
@@ -107,6 +108,17 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
   // ============================================
   // HANDLERS
   // ============================================
+
+  const handleDateHeureChange = useCallback((nextDate: Date) => {
+    setDateHeure(nextDate);
+    setDateHeureDirty(true);
+  }, []);
+
+  useEffect(() => {
+    if (!editData?.id) return;
+    setDateHeure(toDate(editData.date));
+    setDateHeureDirty(false);
+  }, [editData?.id, editData?.date]);
 
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
@@ -122,9 +134,10 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
 
     setIsSubmitting(true);
 
+    const dateToSave = !isEditing || dateHeureDirty ? dateHeure : undefined;
     const data = removeUndefined({
       type: "croissance" as const,
-      date: dateHeure,
+      date: dateToSave,
       tailleCm: tailleValue,
       poidsKg: poidsValue,
       teteCm: teteValue,
@@ -230,7 +243,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
       {/* Date & Time */}
       <DateTimeSectionRow
         value={dateHeure}
-        onChange={setDateHeure}
+        onChange={handleDateHeureChange}
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}

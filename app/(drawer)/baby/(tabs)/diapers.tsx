@@ -70,6 +70,12 @@ const toDate = (value: any): Date => {
   return new Date(value);
 };
 
+const getDateTime = (value: any): number => {
+  const date = toDate(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
+
 const formatSelectedDateLabel = (dateString: string) => {
   const [year, month, day] = dateString.split("-").map(Number);
   const date = new Date(year, month - 1, day);
@@ -245,7 +251,7 @@ function groupExcretionsByDay(excretions: Excretion[]): ExcretionGroup[] {
   const groups: { [key: string]: Excretion[] } = {};
 
   excretions.forEach((excretion) => {
-    const date = new Date(excretion.date?.seconds * 1000);
+    const date = toDate(excretion.date);
     const dateKey = `${date.getFullYear()}-${String(
       date.getMonth() + 1
     ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -262,7 +268,7 @@ function groupExcretionsByDay(excretions: Excretion[]): ExcretionGroup[] {
       const mictionsCount = items.filter((e) => e.type === "miction").length;
       const sellesCount = items.filter((e) => e.type === "selle").length;
       const lastExcretion = items.reduce((latest, current) =>
-        (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+        getDateTime(current.date) > getDateTime(latest.date)
           ? current
           : latest
       );
@@ -276,7 +282,7 @@ function groupExcretionsByDay(excretions: Excretion[]): ExcretionGroup[] {
           year: "numeric",
         }),
         excretions: items.sort(
-          (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)
+          (a, b) => getDateTime(b.date) - getDateTime(a.date)
         ),
         mictionsCount,
         sellesCount,
@@ -334,7 +340,7 @@ export default function DiapersScreen() {
   const sortMergedExcretions = useCallback(
     (merged: any[]) =>
       [...(merged as Excretion[])].sort(
-        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
+        (a, b) => getDateTime(b.date) - getDateTime(a.date),
       ),
     [],
   );
@@ -1151,7 +1157,7 @@ export default function DiapersScreen() {
     (excretion: Excretion, isLast: boolean = false, isFirstInList: boolean = false) => {
       const typeLabel = getExcretionTypeLabel(excretion.type);
       const color = getExcretionColor(excretion.type);
-      const excretionTime = new Date(excretion.date?.seconds * 1000);
+      const excretionTime = toDate(excretion.date);
 
       const detailParts: string[] = [];
       if (excretion.type === "miction" && excretion.couleur) {

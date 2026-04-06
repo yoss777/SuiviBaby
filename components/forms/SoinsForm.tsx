@@ -14,7 +14,7 @@ import {
 } from "@/services/eventsService";
 import { normalizeQuery } from "@/utils/text";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -165,6 +165,13 @@ const VACCINS_LIST = [
 const VITAMINES_LIST = ["Vitamine D", "Vitamine K", "Autre vitamine"];
 const MAX_GOUTTES_COUNT = 10;
 
+const toDate = (value: any): Date => {
+  if (value?.seconds) return new Date(value.seconds * 1000);
+  if (value?.toDate) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date(value);
+};
+
 const MODE_TEMPERATURE: ModePrise[] = [
   "axillaire",
   "auriculaire",
@@ -237,8 +244,9 @@ export function SoinsForm({
 
   // Common state
   const [dateHeure, setDateHeure] = useState<Date>(
-    editData?.date ?? new Date(),
+    editData?.date ? toDate(editData.date) : new Date(),
   );
+  const [dateHeureDirty, setDateHeureDirty] = useState(false);
   const [note, setNote] = useState(editData?.note ?? "");
 
   // Temperature state
@@ -338,6 +346,17 @@ export function SoinsForm({
       intervalRef.current = null;
     }
   }, []);
+
+  const handleDateHeureChange = useCallback((nextDate: Date) => {
+    setDateHeure(nextDate);
+    setDateHeureDirty(true);
+  }, []);
+
+  useEffect(() => {
+    if (!editData?.id) return;
+    setDateHeure(toDate(editData.date));
+    setDateHeureDirty(false);
+  }, [editData?.id, editData?.date]);
 
   // Filtered lists for pickers
   const filteredVaccins = useMemo(
@@ -574,7 +593,7 @@ export function SoinsForm({
 
     setIsSubmitting(true);
     const common = {
-      date: dateHeure,
+      date: !isEditing || dateHeureDirty ? dateHeure : undefined,
       note: note.trim() ? note.trim() : undefined,
     };
 
@@ -1756,7 +1775,7 @@ export function SoinsForm({
       {/* Date/Time */}
       <DateTimeSectionRow
         value={dateHeure}
-        onChange={setDateHeure}
+        onChange={handleDateHeureChange}
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}

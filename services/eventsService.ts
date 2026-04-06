@@ -39,6 +39,28 @@ function stripUndefinedFields<T extends Record<string, unknown>>(data: T): T {
   ) as T;
 }
 
+function convertDateFields(value: unknown): unknown {
+  if (value == null) return value;
+  if (value instanceof Date) return Timestamp.fromDate(value);
+  if (
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) return value.map(convertDateFields);
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, current]) => [
+        key,
+        convertDateFields(current),
+      ]),
+    );
+  }
+  return value;
+}
+
 // ============================================
 // TYPES
 // ============================================
@@ -263,14 +285,11 @@ function buildCreatePayload(
   data: Omit<Event, "id" | "childId" | "userId" | "createdAt"> | any,
 ) {
   const cleanData = stripUndefinedFields(data);
+  const convertedData = convertDateFields(cleanData) as typeof cleanData;
 
   return {
-    ...cleanData,
+    ...convertedData,
     childId,
-    date:
-      cleanData.date instanceof Date
-        ? Timestamp.fromDate(cleanData.date)
-        : cleanData.date,
   };
 }
 
@@ -280,15 +299,12 @@ function buildUpdatePayload(
   data: Partial<Event>,
 ) {
   const cleanData = stripUndefinedFields(data as Record<string, unknown>);
+  const convertedData = convertDateFields(cleanData) as typeof cleanData;
   const payload = {
-    ...cleanData,
+    ...convertedData,
     childId,
     eventId: id,
   };
-
-  if (cleanData.date && cleanData.date instanceof Date) {
-    (payload as any).date = Timestamp.fromDate(cleanData.date);
-  }
 
   return payload;
 }
@@ -1007,7 +1023,7 @@ export function ajouterEvenementOptimistic(
   // Idempotency key: if the CF succeeds but the response is lost, retries
   // will send the same key — the CF deduplicates instead of creating a second event.
   const idempotencyKey = `${auth.currentUser?.uid}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-  const optimisticEvent = {
+  const optimisticEvent = convertDateFields({
     ...data,
     idempotencyKey,
     id: tempId,
@@ -1015,7 +1031,7 @@ export function ajouterEvenementOptimistic(
     date: data.date || new Date(),
     userId: auth.currentUser?.uid || '',
     createdAt: new Date(),
-  };
+  });
 
   addOptimisticCreate(childId, optimisticEvent, tempId);
 
@@ -1066,12 +1082,12 @@ export function modifierEvenementOptimistic(
   const cleanData = stripUndefinedFields(
     data as Record<string, unknown>,
   ) as Partial<Event>;
-  const updatedEvent = {
+  const updatedEvent = convertDateFields({
     ...previousEvent,
     ...cleanData,
     id: eventId,
     childId,
-  };
+  });
 
   addOptimisticUpdate(eventId, childId, updatedEvent, previousEvent);
 

@@ -60,6 +60,12 @@ const toDate = (value: any): Date => {
   return new Date(value);
 };
 
+const getDateTime = (value: any): number => {
+  const date = toDate(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
+
 // ============================================
 // TYPES
 // ============================================
@@ -514,7 +520,7 @@ export default function ImmunizationsScreen() {
         ...latestVitaminesRef.current,
         ...latestVaccinsRef.current,
       ].sort(
-        (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
+        (a, b) => getDateTime(b.date) - getDateTime(a.date),
       );
       setFirestoreEvents(merged);
       if (
@@ -860,7 +866,7 @@ export default function ImmunizationsScreen() {
     const groups: { [key: string]: Immuno[] } = {};
 
     immunos.forEach((immuno) => {
-      const date = new Date(immuno.date?.seconds * 1000);
+      const date = toDate(immuno.date);
       const dateKey = `${date.getFullYear()}-${String(
         date.getMonth() + 1,
       ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -879,7 +885,7 @@ export default function ImmunizationsScreen() {
         ).length;
         const vaccinsCount = immunos.filter((i) => i.type === "vaccin").length;
         const lastImmuno = immunos.reduce((latest, current) =>
-          (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+          getDateTime(current.date) > getDateTime(latest.date)
             ? current
             : latest,
         );
@@ -893,7 +899,7 @@ export default function ImmunizationsScreen() {
             year: "numeric",
           }),
           immunos: immunos.sort(
-            (a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0),
+            (a, b) => getDateTime(b.date) - getDateTime(a.date),
           ),
           vitaminesCount,
           vaccinsCount,
@@ -1615,7 +1621,7 @@ export default function ImmunizationsScreen() {
       const color = getImmunoColor(immuno.type);
       const name = getImmunoName(immuno);
       const typeLabel = getImmunoTypeLabel(immuno.type);
-      const immunoDate = new Date(immuno.date?.seconds * 1000);
+      const immunoDate = toDate(immuno.date);
       const immunoColorKey: "vitamine" | "vaccin" =
         immuno.type === "vitamine" ? "vitamine" : "vaccin";
       return (

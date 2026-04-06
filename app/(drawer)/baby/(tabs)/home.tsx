@@ -794,6 +794,15 @@ export default function HomeDashboard() {
     return new Date(value);
   }, []);
 
+  const getDateTime = useCallback(
+    (value: any) => {
+      const date = toDate(value);
+      const time = date.getTime();
+      return Number.isNaN(time) ? 0 : time;
+    },
+    [toDate],
+  );
+
   const formatTime = useCallback((date: Date) => {
     return date.toLocaleTimeString("fr-FR", {
       hour: "2-digit",
@@ -2181,9 +2190,7 @@ export default function HomeDashboard() {
     const filterToday = (items: any[]) =>
       items.filter((item) => {
         if (softDeletedIdsRef.current.has(item.id)) return false;
-        const itemDate = item.date?.seconds
-          ? new Date(item.date.seconds * 1000)
-          : new Date(item.date);
+        const itemDate = toDate(item.date);
         return itemDate >= startOfToday && itemDate < endOfToday;
       });
 
@@ -2226,7 +2233,7 @@ export default function HomeDashboard() {
     const lastSeins =
       seinsToday.length > 0
         ? seinsToday.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2240,7 +2247,7 @@ export default function HomeDashboard() {
     const lastBiberons =
       biberonsToday.length > 0
         ? biberonsToday.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2250,7 +2257,7 @@ export default function HomeDashboard() {
     const lastSolide =
       todaySolides.length > 0
         ? todaySolides.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2263,7 +2270,7 @@ export default function HomeDashboard() {
     const lastMealOverall =
       confirmedMeals.length > 0
         ? confirmedMeals.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2278,7 +2285,7 @@ export default function HomeDashboard() {
     const lastPompage =
       confirmedPompages.length > 0
         ? confirmedPompages.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2302,7 +2309,7 @@ export default function HomeDashboard() {
     const lastSommeil =
       todaySommeils.length > 0
         ? todaySommeils.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2313,7 +2320,7 @@ export default function HomeDashboard() {
     const lastMiction =
       confirmedMictions.length > 0
         ? confirmedMictions.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2323,7 +2330,7 @@ export default function HomeDashboard() {
     const lastSelle =
       confirmedSelles.length > 0
         ? confirmedSelles.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2338,7 +2345,7 @@ export default function HomeDashboard() {
     const lastMealAbsolute =
       allMealsAbsolute.length > 0
         ? allMealsAbsolute.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2347,7 +2354,7 @@ export default function HomeDashboard() {
     const lastMictionAbsolute =
       excludeOptimistic(data.mictions).length > 0
         ? excludeOptimistic(data.mictions).reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2356,7 +2363,7 @@ export default function HomeDashboard() {
     const lastSelleAbsolute =
       excludeOptimistic(data.selles).length > 0
         ? excludeOptimistic(data.selles).reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2366,7 +2373,7 @@ export default function HomeDashboard() {
     const lastVitamine =
       confirmedVitamines.length > 0
         ? confirmedVitamines.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2375,7 +2382,7 @@ export default function HomeDashboard() {
     const lastVaccin =
       todayVaccins.length > 0
         ? todayVaccins.reduce((latest, current) =>
-            (current.date?.seconds || 0) > (latest.date?.seconds || 0)
+            getDateTime(current.date) > getDateTime(latest.date)
               ? current
               : latest,
           )
@@ -2457,7 +2464,7 @@ export default function HomeDashboard() {
         lastTimestamp: getTimestamp(lastVaccin),
       },
     });
-  }, [data, toDate, softDeletedIds]);
+  }, [data, getDateTime, toDate, softDeletedIds]);
 
   // ============================================
   // HELPERS - UI
