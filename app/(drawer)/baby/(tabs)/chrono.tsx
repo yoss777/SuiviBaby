@@ -1730,8 +1730,7 @@ export default function ChronoScreen() {
     setSoftDeletedIds(new Set());
     setSelectedDate(null);
     setShowCalendar(false);
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   // Load preferences
   useEffect(() => {

@@ -706,8 +706,7 @@ export default function SoinsScreen() {
     latestSymptomesRef.current = [];
     latestVaccinsRef.current = [];
     latestVitaminesRef.current = [];
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!Object.values(loaded).every(Boolean)) {

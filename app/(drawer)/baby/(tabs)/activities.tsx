@@ -634,8 +634,7 @@ export default function ActivitiesScreen() {
     setExpandedDays(new Set());
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   // Jump to most recent event date at mount
   useEffect(() => {
@@ -1534,7 +1533,7 @@ export default function ActivitiesScreen() {
                   : "Aucune activité pour ce filtre"}
               </ThemedText>
               <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
-                Suivez les activités et le temps d'éveil
+                {"Suivez les activités et le temps d'éveil"}
               </ThemedText>
               {events.length === 0 && (
                 <Pressable

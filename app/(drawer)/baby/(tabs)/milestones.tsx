@@ -647,8 +647,7 @@ export default function MilestonesScreen() {
     setExpandedDays(new Set());
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   // Jump to most recent event date at mount
   useEffect(() => {

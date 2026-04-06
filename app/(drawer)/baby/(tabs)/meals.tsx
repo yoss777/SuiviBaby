@@ -694,8 +694,7 @@ export default function MealsScreen() {
     latestTeteesRef.current = [];
     latestBiberonsRef.current = [];
     latestSolidesRef.current = [];
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   const isMealsLoading = !(teteesLoaded && biberonsLoaded && solidesLoaded);
   const mealsLoaded = !isMealsLoading;

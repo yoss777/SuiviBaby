@@ -636,8 +636,7 @@ export default function RoutinesScreen() {
     latestSommeilsRef.current = [];
     latestBainsRef.current = [];
     latestNezRef.current = [];
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!Object.values(loaded).every(Boolean)) {

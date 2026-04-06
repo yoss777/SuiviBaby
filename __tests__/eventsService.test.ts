@@ -1,6 +1,12 @@
 import { httpsCallable } from "firebase/functions";
-import NetInfo from "@react-native-community/netinfo";
+import { onSnapshot } from "firebase/firestore";
 import * as offlineQueue from "@/services/offlineQueueService";
+import {
+  ajouterEvenement,
+  ecouterEvenements,
+  modifierEvenement,
+  supprimerEvenement,
+} from "@/services/eventsService";
 
 // Mock the offlineQueueService module
 jest.mock("@/services/offlineQueueService", () => ({
@@ -24,17 +30,27 @@ jest.mock("@/config/firebase", () => ({
 const mockCallable = jest.fn();
 (httpsCallable as jest.Mock).mockReturnValue(mockCallable);
 
-import {
-  ajouterEvenement,
-  modifierEvenement,
-  supprimerEvenement,
-} from "@/services/eventsService";
-
 beforeEach(() => {
   jest.clearAllMocks();
   (httpsCallable as jest.Mock).mockReturnValue(mockCallable);
   (offlineQueue.isOnline as jest.Mock).mockResolvedValue(true);
+  (onSnapshot as jest.Mock).mockReturnValue(jest.fn());
 });
+
+function snapshot(events: any[], fromCache: boolean) {
+  return {
+    metadata: { fromCache },
+    empty: events.length === 0,
+    size: events.length,
+    docs: events.map((event) => ({
+      id: event.id,
+      data: () => {
+        const { id, ...data } = event;
+        return data;
+      },
+    })),
+  };
+}
 
 describe("eventsService", () => {
   describe("ajouterEvenement", () => {
@@ -123,6 +139,94 @@ describe("eventsService", () => {
         childId: "child1",
         eventId: "event123",
       });
+    });
+  });
+
+  describe("ecouterEvenements", () => {
+    it("waits for the server snapshot before emitting cached data when waitForServer is enabled", () => {
+      const callback = jest.fn();
+
+      ecouterEvenements(
+        "child1",
+        callback,
+        { type: "activite", waitForServer: true },
+      );
+
+      const snapshotCallback = (onSnapshot as jest.Mock).mock.calls[0][2];
+      snapshotCallback(
+        snapshot(
+          [
+            {
+              id: "promenade1",
+              childId: "child1",
+              type: "activite",
+              typeActivite: "promenade",
+            },
+          ],
+          true,
+        ),
+      );
+
+      expect(callback).not.toHaveBeenCalled();
+
+      snapshotCallback(
+        snapshot(
+          [
+            {
+              id: "promenade1",
+              childId: "child1",
+              type: "activite",
+              typeActivite: "promenade",
+              heureFin: new Date("2026-03-28T12:45:00.000Z"),
+            },
+          ],
+          false,
+        ),
+      );
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith([
+        expect.objectContaining({
+          id: "promenade1",
+          heureFin: new Date("2026-03-28T12:45:00.000Z"),
+        }),
+      ]);
+    });
+
+    it("falls back to cached data if the server snapshot does not arrive", () => {
+      jest.useFakeTimers();
+      const callback = jest.fn();
+
+      ecouterEvenements(
+        "child1",
+        callback,
+        { type: "activite", waitForServer: true },
+      );
+
+      const snapshotCallback = (onSnapshot as jest.Mock).mock.calls[0][2];
+      snapshotCallback(
+        snapshot(
+          [
+            {
+              id: "cached1",
+              childId: "child1",
+              type: "activite",
+            },
+          ],
+          true,
+        ),
+      );
+
+      expect(callback).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(800);
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "cached1" }),
+      ]);
+
+      jest.useRealTimers();
     });
   });
 });

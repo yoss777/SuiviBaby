@@ -1207,8 +1207,7 @@ export default function CroissanceScreen() {
     setLoadError(false);
     setVisibleCount(PAGE_SIZE);
     setSelectedPointIndex(null);
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   useEffect(() => {
     setSelectedPointIndex(null);

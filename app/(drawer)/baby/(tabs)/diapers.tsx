@@ -777,8 +777,7 @@ export default function DiapersScreen() {
     pendingLoadMoreRef.current = 0;
     latestMictionsRef.current = [];
     latestSellesRef.current = [];
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   const isExcretionsLoading = !(mictionsLoaded && sellesLoaded);
 

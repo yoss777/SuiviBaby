@@ -567,8 +567,7 @@ export default function PumpingScreen() {
     setHasMore(true);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   // P7: Jump to most recent event date at mount
   useEffect(() => {

@@ -576,8 +576,7 @@ export default function ImmunizationsScreen() {
     pendingLoadMoreRef.current = 0;
     latestVitaminesRef.current = [];
     latestVaccinsRef.current = [];
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   const isImmunosLoading =
     selectedType === "vitamine" ? !vitaminesLoaded : !vaccinsLoaded;

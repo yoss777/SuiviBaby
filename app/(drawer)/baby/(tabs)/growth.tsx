@@ -618,8 +618,7 @@ export default function GrowthScreen() {
     setPrecedingEvent(null);
     loadMoreVersionRef.current = 0;
     pendingLoadMoreRef.current = 0;
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+  }, [activeChild?.id]);
 
   useEffect(() => {
     if (!activeChild?.id) return;

@@ -23,8 +23,11 @@ type UseMergedOptimisticEventsResult<T> = {
 export function mergeFirestoreSnapshots(current: any[], incoming: any[]): any[] {
   const mergedById = new Map<string, any>();
 
-  // Non-destructive refresh: keep the listener/current version for existing
-  // ids because one-shot reads can lag behind recent optimistic writes.
+  // Non-destructive refresh only. This is intentionally not an authoritative
+  // server merge: one-shot reads can lag behind recent optimistic writes, so
+  // current wins for matching ids. Deletions and concurrent server updates are
+  // reconciled by the real-time listener, which calls setFirestoreEvents
+  // without preserveExisting.
   for (const event of current) {
     if (event?.id) {
       mergedById.set(event.id, event);
