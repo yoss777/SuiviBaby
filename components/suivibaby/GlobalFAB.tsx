@@ -34,8 +34,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const FAB_ACTION_KEYS = ["tetee", "miction", "vitamine"] as const;
 const MAIN_FAB_SIZE = 56;
-const ACTION_FAB_SIZE = 48;
-const ACTION_OFFSET_STEP = 76;
+const ACTION_FAB_SIZE = 50;
+const MAIN_FAB_ICON_SIZE = 24;
+const ACTION_FAB_ICON_SIZE = 20;
+const ACTION_OFFSET_STEP = 80; // Distance between action buttons when expanded
 const ACTION_LABEL_OFFSET = ACTION_FAB_SIZE + 10;
 
 type MoreAction = {
@@ -171,13 +173,13 @@ const ActionButton = ({
         {actionIcon.type === "fa" ? (
           <FontAwesome6
             name={actionIcon.name as any}
-            size={20}
+            size={ACTION_FAB_ICON_SIZE}
             color={actionIconColor}
           />
         ) : (
           <MaterialCommunityIcons
             name={actionIcon.name as any}
-            size={20}
+            size={ACTION_FAB_ICON_SIZE}
             color={actionIconColor}
           />
         )}
@@ -342,26 +344,29 @@ export const GlobalFAB = () => {
     [],
   );
 
-  const handleActionPress = useCallback((action: FabAction) => {
-    if (actionBusy.current) return;
-    actionBusy.current = true;
-    actionBusyTimeout.current = setTimeout(() => {
-      actionBusy.current = false;
-      actionBusyTimeout.current = null;
-    }, 400);
+  const handleActionPress = useCallback(
+    (action: FabAction) => {
+      if (actionBusy.current) return;
+      actionBusy.current = true;
+      actionBusyTimeout.current = setTimeout(() => {
+        actionBusy.current = false;
+        actionBusyTimeout.current = null;
+      }, 400);
 
-    Haptics.impactAsync(
-      isNightMode
-        ? Haptics.ImpactFeedbackStyle.Medium
-        : Haptics.ImpactFeedbackStyle.Light,
-    );
-    setIsOpen(false);
-    if ("isMore" in action) {
-      openMoreSheet();
-    } else {
-      handleQuickAddPress(action.sheetParams);
-    }
-  }, [handleQuickAddPress, isNightMode, openMoreSheet]);
+      Haptics.impactAsync(
+        isNightMode
+          ? Haptics.ImpactFeedbackStyle.Medium
+          : Haptics.ImpactFeedbackStyle.Light,
+      );
+      setIsOpen(false);
+      if ("isMore" in action) {
+        openMoreSheet();
+      } else {
+        handleQuickAddPress(action.sheetParams);
+      }
+    },
+    [handleQuickAddPress, isNightMode, openMoreSheet],
+  );
 
   const handleMainPress = useCallback(() => {
     Haptics.impactAsync(
@@ -386,12 +391,7 @@ export const GlobalFAB = () => {
       </Animated.View>
 
       {/* FAB Container */}
-      <View
-        style={[
-          styles.fabContainer,
-          { bottom: fabBottom },
-        ]}
-      >
+      <View style={[styles.fabContainer, { bottom: fabBottom }]}>
         {/* Action buttons */}
         {ACTIONS.map((action, index) => {
           const actionColors = getFabActionColors(action);
@@ -431,7 +431,7 @@ export const GlobalFAB = () => {
           <Animated.View style={mainButtonStyle}>
             <FontAwesome6
               name="plus"
-              size={24}
+              size={MAIN_FAB_ICON_SIZE}
               color={
                 colorScheme === "dark"
                   ? Colors[colorScheme].background
