@@ -409,10 +409,14 @@ export async function obtenirEvenements(
       q = query(q, where("date", "<=", Timestamp.fromDate(options.jusqu)));
     }
 
-    // Ordre et limite (default 200 pour éviter les queries non bornées)
+    // Ordre et limite
     q = query(q, orderBy("date", "desc"));
-    const effectiveLimit = options?.limite ?? 200;
-    q = query(q, limit(effectiveLimit));
+    // Appliquer un limit uniquement si demandé explicitement.
+    // Les queries avec filtre date (depuis/jusqu) sont naturellement bornées.
+    // Les queries sans filtre date ET sans limite sont rares (export) et légitimes.
+    if (options?.limite) {
+      q = query(q, limit(options.limite));
+    }
 
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => ({
@@ -461,10 +465,9 @@ export function ecouterEvenements(
   }
 
   q = query(q, orderBy("date", "desc"));
-  // Default limit pour éviter de charger tous les événements d'un enfant
-  // (un bébé de 18 mois peut avoir 500+ événements)
-  const effectiveLimit = options?.limite ?? 200;
-  q = query(q, limit(effectiveLimit));
+  if (options?.limite) {
+    q = query(q, limit(options.limite));
+  }
 
   const waitForServerTimeoutMs = 800;
   let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
