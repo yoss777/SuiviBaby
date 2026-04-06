@@ -718,7 +718,7 @@ export default function HomeDashboard() {
         depuis: (() => { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(0,0,0,0); return d; })(),
         jusqu: (() => { const d = new Date(); d.setDate(d.getDate() + 1); return new Date(d.getTime() - 1); })(),
       });
-      setFirestoreEvents(freshEvents);
+      setFirestoreEvents(freshEvents, { preserveExisting: true });
     } catch {
       // Le listener existant garde les données en cache
     } finally {
@@ -2136,8 +2136,10 @@ export default function HomeDashboard() {
     const cached = getTodayEventsCache(activeChild.id);
     setData(cached ? { ...emptyData, ...cached } : emptyData);
     setSoftDeletedIds(new Set());
-    setFirestoreEvents([]);
-  }, [activeChild?.id, setFirestoreEvents]);
+    // Note: pas de setFirestoreEvents([]) ici — le hook useMergedOptimisticEvents
+    // se reset déjà quand childId change (useEffect interne ligne 106-123).
+    // Un reset explicite ici créait un état vide transitoire.
+  }, [activeChild?.id]);
 
   // ============================================
   // EFFECTS - STATS CALCULATION

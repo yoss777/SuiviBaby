@@ -18,6 +18,8 @@ export interface OptimisticEntry {
   status: OptimisticStatus;
   childId: string;
   createdAt: number;
+  confirmedAt?: number;
+  reconciledAt?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +107,7 @@ export function confirmOptimistic(tempIdOrEventId: string, realId?: string): voi
 
   if (entry) {
     entry.status = 'confirmed';
+    entry.confirmedAt = Date.now();
     if (realId) entry.realId = realId;
   }
 
@@ -113,13 +116,13 @@ export function confirmOptimistic(tempIdOrEventId: string, realId?: string): voi
   for (const e of entries.values()) {
     if (e.realId === tempIdOrEventId || (realId && e.realId === realId)) {
       e.status = 'confirmed';
+      e.confirmedAt = Date.now();
       if (realId) e.realId = realId;
     }
   }
 
-  // Notify so the merge can reconcile: replace tempId with realId and
-  // clean up confirmed entries. The fingerprint will detect the optimistic
-  // count change (1→0) and trigger setData to unblock edit/delete.
+  // Notify so the merge can keep the confirmed optimistic value visible with
+  // its real id until Firestore has returned the matching document.
   notify();
 }
 
@@ -242,12 +245,14 @@ export function mergeWithFirestoreEvents(
     // -- Updates --
     if (
       entry.operation === 'update' &&
-      (entry.status === 'pending' || entry.status === 'queued_offline')
+      (entry.status === 'pending' ||
+        entry.status === 'queued_offline' ||
+        (entry.status === 'confirmed' && !entry.reconciledAt))
     ) {
       const idx = merged.findIndex((e) => e.id === entry.realId);
       if (idx !== -1) {
         if (entryMatchesFirestore(entry.event, merged[idx])) {
-          entry.status = 'confirmed';
+          markReconciled(entry);
         } else {
           merged[idx] = { ...merged[idx], ...entry.event, id: entry.realId };
         }
@@ -260,7 +265,7 @@ export function mergeWithFirestoreEvents(
       if (firestoreMatch) {
         // Firestore already has the document – confirm silently.
         entry.realId = firestoreMatch.id;
-        entry.status = 'confirmed';
+        markReconciled(entry);
       } else if (entry.status === 'confirmed' && entry.realId) {
         // CF succeeded (realId set) but onSnapshot hasn't arrived yet.
         // Use realId so there's no duplicate when onSnapshot arrives.
@@ -287,6 +292,12 @@ export function mergeWithFirestoreEvents(
   });
 
   return merged;
+}
+
+function markReconciled(entry: OptimisticEntry): void {
+  entry.status = 'confirmed';
+  entry.confirmedAt ??= Date.now();
+  entry.reconciledAt = Date.now();
 }
 
 /**
@@ -404,7 +415,7 @@ function cleanupSilent(): void {
   const now = Date.now();
   for (const [key, entry] of entries) {
     if (
-      entry.status === 'confirmed' ||
+      (entry.status === 'confirmed' && entry.reconciledAt) ||
       (entry.status === 'pending' && now - entry.createdAt > STALE_THRESHOLD_MS)
     ) {
       entries.delete(key);
@@ -413,8 +424,8 @@ function cleanupSilent(): void {
 }
 
 /**
- * Remove confirmed entries and entries that have been pending for longer than
- * 20 seconds (the CF probably succeeded but reconciliation was missed).
+ * Remove reconciled confirmed entries and entries that have been pending for
+ * longer than STALE_THRESHOLD_MS.
  */
 export function cleanup(): void {
   const sizeBefore = entries.size;

@@ -13,9 +13,32 @@ type UseMergedOptimisticEventsParams<T> = {
 
 type UseMergedOptimisticEventsResult<T> = {
   mergedEvents: T[];
-  setFirestoreEvents: (events: any[]) => void;
+  setFirestoreEvents: (
+    events: any[],
+    options?: { preserveExisting?: boolean },
+  ) => void;
   refreshMerged: () => void;
 };
+
+export function mergeFirestoreSnapshots(current: any[], incoming: any[]): any[] {
+  const mergedById = new Map<string, any>();
+
+  // Non-destructive refresh: keep the listener/current version for existing
+  // ids because one-shot reads can lag behind recent optimistic writes.
+  for (const event of current) {
+    if (event?.id) {
+      mergedById.set(event.id, event);
+    }
+  }
+
+  for (const event of incoming) {
+    if (event?.id && !mergedById.has(event.id)) {
+      mergedById.set(event.id, event);
+    }
+  }
+
+  return [...mergedById.values()];
+}
 
 export function useMergedOptimisticEvents<T = any>({
   childId,
@@ -66,8 +89,10 @@ export function useMergedOptimisticEvents<T = any>({
   }, []);
 
   const setFirestoreEvents = useCallback(
-    (events: any[]) => {
-      latestFirestoreEventsRef.current = events;
+    (events: any[], options?: { preserveExisting?: boolean }) => {
+      latestFirestoreEventsRef.current = options?.preserveExisting
+        ? mergeFirestoreSnapshots(latestFirestoreEventsRef.current, events)
+        : events;
       scheduleMerge();
     },
     [scheduleMerge],
@@ -79,10 +104,13 @@ export function useMergedOptimisticEvents<T = any>({
   }, [scheduleMerge]);
 
   useEffect(() => {
+    // Reset à chaque changement de childId (y compris childA → childB)
+    // pour éviter de montrer les événements de l'ancien enfant.
+    latestFirestoreEventsRef.current = [];
+    lastFingerprintRef.current = "";
+    setMergedEvents([]);
+
     if (!childId) {
-      latestFirestoreEventsRef.current = [];
-      lastFingerprintRef.current = "";
-      setMergedEvents([]);
       return;
     }
 

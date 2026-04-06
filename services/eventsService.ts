@@ -16,6 +16,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
+import { getTodayTypes } from "@/services/todayEventsCache";
 import { enqueueEvent, isOnline } from "./offlineQueueService";
 import {
   addOptimisticCreate,
@@ -506,22 +507,20 @@ export function ecouterEvenements(
       if (
         options?.waitForServer &&
         !hasReceivedServerSnapshot &&
-        snapshot.metadata.fromCache &&
-        snapshot.empty
+        snapshot.metadata.fromCache
       ) {
-        // Premier snapshot vide du cache — on programme un fallback mais on
-        // appelle quand même le callback avec [] pour que useMergedOptimisticEvents
-        // puisse au moins montrer les events optimistic en attendant le serveur.
-        console.log(`[L:${lid}] CACHE_EMPTY waiting for server`);
+        console.log(`[L:${lid}] CACHE waiting for server`);
         if (!fallbackTimer && !fallbackTriggered) {
           fallbackTimer = setTimeout(() => {
             console.log(`[L:${lid}] FALLBACK after ${waitForServerTimeoutMs}ms server=${hasReceivedServerSnapshot}`);
             if (!hasReceivedServerSnapshot) {
               fallbackTriggered = true;
+              console.log(`[L:${lid}] CB ${cachedEvents?.length ?? 0} cached events`);
+              callback(cachedEvents ?? []);
             }
           }, waitForServerTimeoutMs);
         }
-        // Ne plus bloquer — passer les events (vides) pour que le merge optimistic fonctionne
+        return;
       }
 
       console.log(`[L:${lid}] CB ${events.length} events`);
@@ -1092,8 +1091,6 @@ export function modifierEvenementOptimistic(
 // ============================================
 // DATE RANGE HELPERS (ex-migration convenience)
 // ============================================
-
-import { getTodayTypes } from "@/services/todayEventsCache";
 
 function getTodayRange() {
   const now = new Date();
