@@ -28,15 +28,25 @@ jest.mock("firebase/firestore", () => ({
   collection: jest.fn(),
   doc: jest.fn(),
   getDoc: jest.fn(),
+  getDocFromServer: jest.fn(),
   getDocs: jest.fn(),
   setDoc: jest.fn(),
+  addDoc: jest.fn(),
+  updateDoc: jest.fn(),
+  deleteDoc: jest.fn(),
+  writeBatch: jest.fn(() => ({
+    set: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    commit: jest.fn(() => Promise.resolve()),
+  })),
   query: jest.fn(),
   where: jest.fn(),
   orderBy: jest.fn(),
   limit: jest.fn(),
   serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP"),
   Timestamp: {
-    now: jest.fn(() => ({ toDate: () => new Date() })),
+    now: jest.fn(() => ({ toDate: () => new Date(), seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 })),
     fromDate: jest.fn((date: Date) => ({ toDate: () => date, seconds: Math.floor(date.getTime() / 1000), nanoseconds: 0 })),
   },
   onSnapshot: jest.fn(),
@@ -88,4 +98,13 @@ jest.mock("@sentry/react-native", () => ({
   wrap: jest.fn((component: unknown) => component),
   captureException: jest.fn(),
   captureMessage: jest.fn(),
+  withScope: jest.fn((cb: (scope: unknown) => void) => cb({
+    setTag: jest.fn(),
+    setExtras: jest.fn(),
+  })),
+}));
+
+// Mock errorReporting utility
+jest.mock("@/utils/errorReporting", () => ({
+  captureServiceError: jest.fn(),
 }));
