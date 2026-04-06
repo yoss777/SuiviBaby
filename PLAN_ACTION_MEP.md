@@ -81,43 +81,37 @@ L'audit identifie **89 items actionnables** dont **15 CRITICAL**, **28 HIGH**, *
 
 ---
 
-## PHASE 1 — FONDATIONS SÉCURITÉ & QUALITÉ (Semaines 1-2, Sprint 1)
+## PHASE 1 — FONDATIONS SÉCURITÉ & QUALITÉ (Semaines 1-2, Sprint 1) — EN COURS
 
 > Objectif : corriger toutes les failles CRITICAL restantes et poser les bases tests.
 
-### 1.1 — Sécuriser les Cloud Functions
-- **Effort total :** 3j
+### 1.1 — Sécuriser les Cloud Functions ✅ (6 avril 2026)
+- **Commit :** `9987dab`
+- **Réalisé :**
+  - `grandfatherExistingUsers` : admin check via custom claim `request.auth.token.admin`
+  - `migrateUsersPublicRemoveEmail` : admin check via custom claim
+  - `validateReferralCode` : rate limit 5/min ajouté
+  - `voteDeletionRequest`, `transferAndLeave`, `cancelChildDeletion` : rate limit 10/min ajouté
+- **Notes :**
+  - `deleteEventCascade` avait déjà batch writes + rate limit 30/min — rien à faire
+  - `rejectInvitation()` n'existe pas dans le codebase — non applicable
 
-| Action | Fichier | Effort | Priorité |
-|--------|---------|--------|----------|
-| `deleteEventCascade` : utiliser batch write (atomicité) | `functions/index.js` | 0.5j | CRITICAL |
-| `grandfatherExistingUsers` : vrai admin check (custom claim `admin: true`) | `functions/index.js` | 0.5j | HIGH |
-| `validateReferralCode` : ajouter rate limiting | `functions/index.js` | 0.5j | HIGH |
-| `voteDeletionRequest`, `transferAndLeave`, `cancelChildDeletion` : rate limiting | `functions/index.js` | 0.5j | HIGH |
-| `migrateUsersPublicRemoveEmail` : vérification admin | `functions/index.js` | 0.5j | HIGH |
-| `rejectInvitation()` : vérifier que le caller est le destinataire | `functions/index.js` | 0.5j | MEDIUM |
+### 1.2 — Durcir les Firestore rules ✅ (6 avril 2026)
+- **Commit :** `9987dab`
+- **Réalisé :**
+  - `children` create : validation champs requis (`name` string non vide, `birthDate` timestamp)
+  - Events update : `createdAt` protégé contre mutation client
+  - Fallback legacy `parentIds.hasAny` supprimé dans `children` get, update et `access` create
+  - `children` get : accès uniquement via access subcollection (plus de fallback parentIds)
 
-### 1.2 — Durcir les Firestore rules
-- **Effort total :** 1j
+### 1.3 — Ajouter index Firestore manquants ✅ (6 avril 2026)
+- **Commit :** `9987dab`
+- **Réalisé :** 2 index ajoutés (les 2 autres existaient déjà) :
+  - Events : `userId` + `date` DESC (export données utilisateur RGPD)
+  - `user_child_access` : `userId` + `childId` (listing enfants par user)
+- **Note :** Les index `childId + date` et `childId + type + date` étaient déjà présents
 
-| Action | Effort |
-|--------|--------|
-| `children` create : valider champs requis (`name`, `birthDate`, types) | 0.25j |
-| Events update : protéger `createdAt` contre mutation client | 0.25j |
-| Supprimer fallback legacy `parentIds.hasAny` dans `children` get/update | 0.25j |
-| Limiter referral count par sponsor (max 5) | 0.25j |
-
-### 1.3 — Ajouter 4 index Firestore manquants
-- **Sévérité :** CRITICAL
-- **Fichier :** `firestore.indexes.json`
-- **Effort :** 0.5j
-- **Index à ajouter :**
-  1. Events : `childId` + `date` (range queries par période)
-  2. Events : `childId` + `type` + `date` (filtre multi-type)
-  3. Events : `userId` (export données utilisateur RGPD)
-  4. `user_child_access` : `userId` + `role` (listing enfants par rôle)
-
-### 1.4 — Tests prioritaires P0 (+15-20% coverage)
+### 1.4 — Tests prioritaires P0 (+15-20% coverage) — À FAIRE
 - **Effort total :** 5j
 
 | Suite de tests | Fichier cible | Tests | Effort |
@@ -129,22 +123,33 @@ L'audit identifie **89 items actionnables** dont **15 CRITICAL**, **28 HIGH**, *
 | Firestore rules | `firestore.rules` | 10 scénarios (via @firebase/rules-unit-testing) | 1j |
 | Cloud Functions (top 5) | `functions/index.js` | validateAndCreateEvent, deleteEventCascade, revenueCatWebhook, transcribeAudio, createDeletionRequest | 1j |
 
-### 1.5 — Sentry : capturer les erreurs services
-- **Effort :** 1j
-- **Action :** Remplacer `console.warn(error)` par `Sentry.captureException(error)` dans tous les catch blocks des 39 services
-- **Fichiers :** Tous les fichiers dans `services/`
-- **Validation :** Sentry dashboard reçoit les erreurs
+### 1.5 — Sentry : capturer les erreurs services ✅ (6 avril 2026)
+- **Commit :** `ba44371`
+- **Réalisé :**
+  - Créé `utils/errorReporting.ts` (captureServiceError avec tags service/operation)
+  - Intégré dans **21 services** (tous ceux ayant des console.error/warn en catch blocks)
+  - Services couverts : revenueCat, childSharing, social, events, speech, babyAttachment,
+    promo, smartContent, voiceRecorder, pushToken, baby, aiInsights, appUpdate, user,
+    userPreferences, users, sommeil, pompages, vitamines, vaccins, croissance
+  - Console.error/warn conservés pour debug dev, captureServiceError ajouté en complément
 
-### 1.6 — Corriger le branding Samaye → SuiviBaby
-- **Sévérité :** CRITICAL
-- **Effort :** 0.5j
-- **Fichiers :**
-  - `package.json` : `"name": "samaye"` → `"suivibaby"`
-  - `app.json` : `"slug": "Samaye"` → `"suivibaby"`
-  - `associatedDomains` : vérifier les deep links
-  - `onboarding.tsx` : AsyncStorage key `@samaye_onboarding_done` → `@suivibaby_onboarding_done` (+ migration de l'ancien key)
+### 1.6 — Corriger le branding Samaye → SuiviBaby ✅ (6 avril 2026)
+- **Commit :** `f6df88f`
+- **Réalisé (14 fichiers modifiés) :**
+  - `package.json` : name `samaye` → `suivibaby`
+  - `app.json` : slug `Samaye` → `suivibaby`
+  - Deep links : `samaye://` → `suivibaby://` (emails, promos, recap, settings)
+  - Emails : expéditeur "Samaye" → "Suivi Baby", footer, CTA
+  - Partage referral : message + URL `samaye.app` → `suivibaby.com`
+  - PDF export footer, UpdateBanner accessibilityHint, App Store URL
+  - Promo codes : SAMAYE15/20 → SUIVIBABY15/20, utm_source
+  - Tips seed data
+  - AsyncStorage keys : migration transparente de `@samaye_*` vers `@suivibaby_*`
+    (onboarding_done, last_email, theme_preference) avec fallback + cleanup
+  - **Conservé en l'état :** identifiants Firebase (`samaye-53723` — immuable côté projet),
+    clés SecureStore biometric (internes, pas user-facing), cache keys techniques
 
-**Critère de fin Sprint 1 :** 0 faille CRITICAL ouverte, coverage > 15%, Sentry actif, branding cohérent.
+**Critère de fin Sprint 1 :** ~~0 faille CRITICAL ouverte~~ ✅, ~~coverage > 15%~~ À FAIRE (1.4), ~~Sentry actif~~ ✅, ~~branding cohérent~~ ✅.
 
 ---
 
