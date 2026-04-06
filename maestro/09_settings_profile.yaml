@@ -1,0 +1,74 @@
+# 09 — Settings: profile, help, privacy screens
+# Validates: settings navigation to sub-screens
+# Prerequisite: user logged in
+appId: com.tesfa.suivibaby
+
+---
+
+- launchApp
+
+# Attendre le dashboard
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 15000
+
+# Ouvrir le drawer
+- swipe:
+    start: "0%,50%"
+    end: "80%,50%"
+    duration: 400
+
+# Naviguer vers Parametres
+- extendedWaitUntil:
+    visible: "Paramètres"
+    timeout: 5000
+- tapOn: "Paramètres"
+
+# Attendre l'ecran des parametres
+- extendedWaitUntil:
+    visible: "Compte"
+    timeout: 5000
+
+# --- Profil ---
+- tapOn: "Profil"
+- extendedWaitUntil:
+    visible: "Profil"
+    timeout: 5000
+# Revenir aux parametres
+- back
+
+# --- Aide & Support ---
+- extendedWaitUntil:
+    visible: "Aide & Support"
+    timeout: 5000
+
+# Scroller si necessaire pour trouver "Aide & Support"
+- scrollUntilVisible:
+    element: "Aide & Support"
+    direction: DOWN
+    timeout: 5000
+- tapOn: "Aide & Support"
+
+# Verifier que la page d'aide s'affiche
+- extendedWaitUntil:
+    visible: "Aide"
+    timeout: 5000
+# Revenir aux parametres
+- back
+
+# --- Confidentialite ---
+- extendedWaitUntil:
+    visible: "Confidentialité"
+    timeout: 5000
+- scrollUntilVisible:
+    element: "Confidentialité"
+    direction: DOWN
+    timeout: 5000
+- tapOn: "Confidentialité"
+
+# Verifier que la politique de confidentialite s'affiche
+- extendedWaitUntil:
+    visible: "Confidentialité"
+    timeout: 5000
+# Revenir aux parametres
+- back

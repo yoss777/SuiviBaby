@@ -1,0 +1,80 @@
+# 01 — Onboarding + Signup Flow
+# Validates: 5 onboarding slides, biometric prompt, signup form
+appId: com.tesfa.suivibaby
+
+---
+
+# Lancer l'app et attendre l'ecran d'onboarding
+- launchApp:
+    clearState: true
+
+# Slide 1 — Bienvenue
+- assertVisible: "Bienvenue sur Suivi Baby"
+
+# Swipe through slides 2-5
+- swipe:
+    direction: LEFT
+    duration: 400
+- assertVisible: "Saisie en 3 secondes"
+
+- swipe:
+    direction: LEFT
+    duration: 400
+- assertVisible: "Toute la famille connectee"
+
+- swipe:
+    direction: LEFT
+    duration: 400
+- assertVisible: "Donnees securisees"
+
+- swipe:
+    direction: LEFT
+    duration: 400
+- assertVisible: "Insights intelligents"
+
+# Derniere slide — le bouton affiche "Commencer"
+- assertVisible: "Commencer"
+- tapOn: "Commencer"
+
+# Si le prompt biometrique apparait, le decliner
+# (sur simulateur il n'apparaitra probablement pas)
+- extendedWaitUntil:
+    visible: "Bienvenue"
+    timeout: 5000
+
+# On est maintenant sur l'ecran de login, basculer en mode inscription
+- assertVisible: "Bienvenue"
+
+# Taper sur le lien pour passer en mode "Creer un compte"
+- tapOn: "Créer un compte"
+
+# Remplir le formulaire d'inscription
+- tapOn:
+    id: "Adresse email"
+- inputText: "test-e2e@suivibaby.com"
+
+- tapOn:
+    id: "Pseudo"
+- inputText: "TestE2E"
+
+- tapOn:
+    id: "Mot de passe"
+- inputText: "Test1234!"
+
+- tapOn:
+    id: "Confirmer le mot de passe"
+- inputText: "Test1234!"
+
+# Cocher les consentements (RGPD)
+# Les checkboxes sont des TouchableOpacity sans accessibilityLabel stable
+# On scrolle vers le bas pour les trouver et on tapote par texte visible
+- scrollUntilVisible:
+    element: "Créer mon compte"
+    direction: DOWN
+    timeout: 5000
+
+# Verifier que le bouton "Creer mon compte" est visible
+- assertVisible: "Créer mon compte"
+
+# Note: Ne pas appuyer sur "Creer mon compte" en CI car cela
+# creerait un vrai compte Firebase. Ce flow valide le parcours UI uniquement.

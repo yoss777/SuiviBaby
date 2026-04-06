@@ -1,0 +1,45 @@
+# 03 — Add a feeding event (Biberon)
+# Validates: FAB, event form, save, timeline display
+# Prerequisite: user logged in and on home screen
+appId: com.tesfa.suivibaby
+
+---
+
+- launchApp
+
+# Attendre le dashboard
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 15000
+
+# Ouvrir le FAB (bouton +)
+- tapOn:
+    id: "Ouvrir les actions rapides"
+
+# Taper sur "Repas" dans les actions rapides
+- tapOn: "Repas"
+
+# Le bottom sheet de saisie repas s'ouvre
+# Attendre que le formulaire soit visible
+- extendedWaitUntil:
+    visible: "Biberon"
+    timeout: 5000
+
+# Selectionner le type "Biberon"
+- tapOn: "Biberon"
+
+# Entrer la quantite (150 ml)
+- tapOn:
+    id: "Quantité (ml)"
+- inputText: "150"
+
+# Valider / enregistrer l'evenement
+- tapOn: "Enregistrer"
+
+# Attendre que le sheet se ferme et verifier que l'evenement apparait
+- extendedWaitUntil:
+    visible: "Biberon"
+    timeout: 5000
+
+# L'evenement doit apparaitre dans la liste des evenements recents
+- assertVisible: "150"

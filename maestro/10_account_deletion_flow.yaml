@@ -1,0 +1,73 @@
+# 10 — Account deletion flow (UI verification only)
+# Validates: deletion button, export modal, password modal
+# Does NOT actually delete the account
+# Prerequisite: user logged in
+appId: com.tesfa.suivibaby
+
+---
+
+- launchApp
+
+# Attendre le dashboard
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 15000
+
+# Ouvrir le drawer
+- swipe:
+    start: "0%,50%"
+    end: "80%,50%"
+    duration: 400
+
+# Naviguer vers Parametres
+- extendedWaitUntil:
+    visible: "Paramètres"
+    timeout: 5000
+- tapOn: "Paramètres"
+
+# Attendre l'ecran des parametres
+- extendedWaitUntil:
+    visible: "Compte"
+    timeout: 5000
+
+# Scroller jusqu'a "Supprimer le compte" dans la zone dangereuse
+- scrollUntilVisible:
+    element: "Supprimer le compte"
+    direction: DOWN
+    timeout: 5000
+
+# Taper sur "Supprimer le compte"
+- tapOn: "Supprimer le compte"
+
+# Verifier que le modal d'export apparait
+# Le modal demande "Exporter vos donnees ?"
+- extendedWaitUntil:
+    visible: "Exporter vos donnees ?"
+    timeout: 5000
+- assertVisible: "Exporter vos donnees ?"
+- assertVisible: "Exporter"
+
+# Taper "Supprimer" pour passer a l'etape suivante (sauter l'export)
+# Le bouton "Supprimer" est le cancelText du ConfirmModal
+- tapOn: "Supprimer"
+
+# Verifier que le modal de mot de passe apparait
+- extendedWaitUntil:
+    visible: "Confirmer la suppression"
+    timeout: 5000
+- assertVisible: "Confirmer la suppression"
+
+# Verifier le message explicatif
+- assertVisible: "Votre compte sera programme pour suppression dans 30 jours"
+
+# Verifier que le champ mot de passe et le bouton sont presents
+- assertVisible: "Supprimer"
+- assertVisible: "Annuler"
+
+# Annuler sans entrer de mot de passe — on ne supprime pas le compte
+- tapOn: "Annuler"
+
+# Verifier qu'on est de retour sur les parametres
+- extendedWaitUntil:
+    visible: "Compte"
+    timeout: 5000

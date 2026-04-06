@@ -1,0 +1,42 @@
+# 07 — Delete an event from the timeline (Journal/Chrono)
+# Validates: chrono tab, swipe-to-delete, confirmation, removal
+# Prerequisite: user logged in, at least one event exists
+appId: com.tesfa.suivibaby
+
+---
+
+- launchApp
+
+# Attendre le dashboard
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 15000
+
+# Naviguer vers l'onglet "Journal" (chrono/timeline)
+- tapOn: "Journal"
+
+# Attendre le chargement de la timeline
+- extendedWaitUntil:
+    visible: "Journal"
+    timeout: 8000
+
+# Swipe gauche sur le premier evenement pour reveler le bouton supprimer
+# Les evenements utilisent ReanimatedSwipeable
+- swipe:
+    start: "80%,30%"
+    end: "20%,30%"
+    duration: 400
+
+# Taper sur l'action de suppression (icone poubelle)
+- tapOn: "Supprimer"
+
+# Confirmer la suppression dans le modal de confirmation
+- extendedWaitUntil:
+    visible: "Confirmer"
+    timeout: 3000
+- tapOn: "Confirmer"
+
+# Attendre que l'evenement soit supprime (animation)
+- extendedWaitUntil:
+    notVisible: "Confirmer"
+    timeout: 5000

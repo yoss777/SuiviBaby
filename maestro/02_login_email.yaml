@@ -1,0 +1,37 @@
+# 02 — Login with email and password
+# Validates: login form, navigation to home dashboard
+appId: com.tesfa.suivibaby
+
+---
+
+# Lancer l'app (onboarding deja complete grace a AsyncStorage si enchaine)
+- launchApp
+
+# Attendre l'ecran de login
+- extendedWaitUntil:
+    visible: "Bienvenue"
+    timeout: 8000
+
+# Verifier que le mode connexion est actif (par defaut)
+- assertVisible: "Se connecter"
+
+# Remplir les champs de connexion
+- tapOn:
+    id: "Adresse email"
+- inputText: "${EMAIL}"
+
+- tapOn:
+    id: "Mot de passe"
+- inputText: "${PASSWORD}"
+
+# Appuyer sur le bouton de connexion
+- tapOn:
+    id: "Se connecter"
+
+# Attendre le chargement (Firebase auth peut prendre quelques secondes)
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 15000
+
+# Verifier qu'on est sur le dashboard (tab "Accueil" visible)
+- assertVisible: "Accueil"

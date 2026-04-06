@@ -1,0 +1,77 @@
+# 08 — Complete navigation test
+# Validates: all 5 tabs + drawer + settings navigation
+# Prerequisite: user logged in with at least one child
+appId: com.tesfa.suivibaby
+
+---
+
+- launchApp
+
+# Attendre le dashboard
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 15000
+
+# --- Tab 1: Accueil (deja visible) ---
+- assertVisible: "Accueil"
+
+# --- Tab 2: Croissance ---
+- tapOn: "Croissance"
+- extendedWaitUntil:
+    visible: "Croissance"
+    timeout: 5000
+
+# --- Tab 3: Moments ---
+- tapOn: "Moments"
+- extendedWaitUntil:
+    visible: "Moments"
+    timeout: 5000
+
+# --- Tab 4: Journal ---
+- tapOn: "Journal"
+- extendedWaitUntil:
+    visible: "Journal"
+    timeout: 5000
+
+# --- Tab 5: Plus ---
+- tapOn: "Plus"
+- extendedWaitUntil:
+    visible: "Plus"
+    timeout: 5000
+
+# Retour a l'accueil
+- tapOn: "Accueil"
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 5000
+
+# --- Drawer ---
+- swipe:
+    start: "0%,50%"
+    end: "80%,50%"
+    duration: 400
+
+# Verifier que le drawer affiche les infos utilisateur et les enfants
+- extendedWaitUntil:
+    visible: "SUIVI POUR"
+    timeout: 5000
+
+# Naviguer vers Parametres
+- tapOn: "Paramètres"
+- extendedWaitUntil:
+    visible: "Compte"
+    timeout: 5000
+
+# Verifier les sections de l'ecran Parametres
+- assertVisible: "Profil"
+- assertVisible: "SuiviBaby+"
+- assertVisible: "Notifications"
+
+# Retour au dashboard via le bouton home dans le header
+- tapOn:
+    id: "Retour à l'accueil"
+
+# Verifier qu'on est bien revenu sur le dashboard
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 5000

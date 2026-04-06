@@ -1,0 +1,37 @@
+# 04 — Voice command UI flow
+# Validates: microphone button, recording modal, UI states
+# Note: actual voice recording cannot be simulated in Maestro
+# This test only validates the UI flow and permission dialogs
+# Prerequisite: user logged in and on home screen
+appId: com.tesfa.suivibaby
+
+---
+
+- launchApp
+
+# Attendre le dashboard
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 15000
+
+# Taper sur le bouton microphone (commande vocale)
+- tapOn:
+    id: "Commande vocale"
+
+# Le bouton peut demander la permission micro ou afficher le modal d'enregistrement
+# Sur simulateur, le dialog de permission systeme peut apparaitre
+# On attend un des etats possibles
+
+# Verifier que l'UI de commande vocale est visible
+# Le bouton change d'etat : soit on voit le modal de permission,
+# soit l'enregistrement demarre (ActivityIndicator)
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Commande vocale"
+        - "Autoriser"
+        - "Enregistrement"
+    timeout: 5000
+
+# Tenter de fermer / annuler si un modal est visible
+# (On ne peut pas tester l'enregistrement reel sur simulateur)

@@ -1,0 +1,47 @@
+# 05 — Share child flow
+# Validates: drawer navigation, share screen, code generation
+# Prerequisite: user logged in, at least one child, user is owner
+appId: com.tesfa.suivibaby
+
+---
+
+- launchApp
+
+# Attendre le dashboard
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 15000
+
+# Ouvrir le drawer (hamburger menu ou swipe)
+- swipe:
+    start: "0%,50%"
+    end: "80%,50%"
+    duration: 400
+
+# Attendre que le drawer s'ouvre
+- extendedWaitUntil:
+    visible: "SUIVI POUR"
+    timeout: 5000
+
+# Taper sur le bouton de partage de l'enfant actif (icone share dans le drawer)
+# Le bouton a l'accessibilityLabel "Partager <nom_enfant>"
+# On utilise l'icone share-alt a cote du nom de l'enfant
+- tapOn:
+    id: "Partager.*"
+
+# Attendre l'ecran de partage
+- extendedWaitUntil:
+    visible: "Partager le suivi"
+    timeout: 8000
+
+# Verifier que l'ecran de partage est visible avec les options
+# Le code de partage (6 caracteres) s'affiche apres generation
+- assertVisible: "Générer un code"
+
+# Taper pour generer un code de partage
+- tapOn: "Générer un code"
+
+# Attendre que le code soit genere (appel Firebase)
+- extendedWaitUntil:
+    visible: "Partager le code via une autre application"
+    timeout: 10000

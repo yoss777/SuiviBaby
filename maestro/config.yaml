@@ -1,0 +1,5 @@
+# Maestro global configuration for SuiviBaby
+# https://maestro.mobile.dev/reference/configuration
+
+appId: com.tesfa.suivibaby
+name: SuiviBaby E2E Tests

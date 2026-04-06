@@ -1,0 +1,56 @@
+# 06 — Premium / pricing screen
+# Validates: plan display, billing toggle, restore purchases
+# Prerequisite: user logged in
+appId: com.tesfa.suivibaby
+
+---
+
+- launchApp
+
+# Attendre le dashboard
+- extendedWaitUntil:
+    visible: "Accueil"
+    timeout: 15000
+
+# Ouvrir le drawer
+- swipe:
+    start: "0%,50%"
+    end: "80%,50%"
+    duration: 400
+
+# Naviguer vers Parametres
+- extendedWaitUntil:
+    visible: "Paramètres"
+    timeout: 5000
+- tapOn: "Paramètres"
+
+# Attendre l'ecran des parametres
+- extendedWaitUntil:
+    visible: "Compte"
+    timeout: 5000
+
+# Taper sur "SuiviBaby+" (le label du setting premium)
+- tapOn: "SuiviBaby+"
+
+# Attendre l'ecran premium
+- extendedWaitUntil:
+    visible: "Gratuit"
+    timeout: 8000
+
+# Verifier que les 3 plans sont visibles
+- assertVisible: "Gratuit"
+- assertVisible: "Premium"
+- assertVisible: "Famille"
+
+# Verifier les prix
+- assertVisible: "3,99"
+
+# Scroller vers le bas pour voir le bouton "Restaurer mes achats"
+- scrollUntilVisible:
+    element: "Restaurer mes achats"
+    direction: DOWN
+    timeout: 5000
+
+# Verifier le bouton de restauration
+- assertVisible:
+    id: "Restaurer mes achats precedents"
