@@ -3,6 +3,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
+import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
 import {
   DiapersEditData,
@@ -1452,19 +1453,15 @@ export default function DiapersScreen() {
             <DateFilterBar
               selected={selectedDate ? ("past" as DateFilterValue) : (selectedFilter as DateFilterValue)}
               onSelect={handleFilterPress}
+              variant="soft"
+              activeAccentColor={eventColors.miction.dark}
             >
               {selectedDate && (
-                <Pressable
-                  style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                <SelectedDateChip
+                  label={formatSelectedDateLabel(selectedDate)}
+                  accentColor={eventColors.miction.dark}
                   onPress={clearSelectedDate}
-                  accessibilityRole="button"
-                  accessibilityLabel="Effacer la date selectionnee"
-                >
-                  <Text style={[styles.dateChipText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
-                    {formatSelectedDateLabel(selectedDate)}
-                  </Text>
-                  <Ionicons name="close" size={14} color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
-                </Pressable>
+                />
               )}
             </DateFilterBar>
           </View>

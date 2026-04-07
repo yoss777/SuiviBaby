@@ -5,6 +5,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
+import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -1408,19 +1409,15 @@ export default function ActivitiesScreen() {
             <DateFilterBar
               selected={selectedDate ? ("past" as DateFilterValue) : selectedFilter}
               onSelect={handleFilterPress}
+              variant="soft"
+              activeAccentColor={eventColors.activite.dark}
             >
               {selectedDate && (
-                <Pressable
-                  style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                <SelectedDateChip
+                  label={formatSelectedDateLabel(selectedDate)}
+                  accentColor={eventColors.activite.dark}
                   onPress={clearSelectedDate}
-                  accessibilityRole="button"
-                  accessibilityLabel="Effacer la date sélectionnée"
-                >
-                  <Text style={[styles.dateChipText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
-                    {formatSelectedDateLabel(selectedDate)}
-                  </Text>
-                  <Ionicons name="close" size={14} color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
-                </Pressable>
+                />
               )}
             </DateFilterBar>
             <View style={styles.quickActionsRow}>

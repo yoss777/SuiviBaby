@@ -1,4 +1,5 @@
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ALLERGENES_OPTIONS,
@@ -9,7 +10,6 @@ import {
   SOLIDE_TYPE_OPTIONS,
 } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
-import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -144,6 +144,7 @@ export function MealsForm({
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const accentColors = getAccentColors(eventColors.meal.dark, colorScheme);
 
   const isEditing = !!editData;
 
@@ -445,24 +446,33 @@ export function MealsForm({
         <TouchableOpacity
           style={[
             styles.typeChip,
-            { backgroundColor: nc.backgroundPressed },
-            mealType === "tetee" && styles.typeChipActive,
+            { backgroundColor: nc.background, borderColor: nc.border },
+            mealType === "tetee" && {
+              backgroundColor: accentColors.softBg,
+              borderColor: accentColors.softBorder,
+            },
             isSubmitting && styles.typeChipDisabled,
           ]}
           onPress={() => setMealType("tetee")}
           disabled={isSubmitting}
           accessibilityLabel="Type tétée"
+          accessibilityRole="button"
+          accessibilityState={{
+            selected: mealType === "tetee",
+            disabled: isSubmitting,
+          }}
         >
           <FontAwesome
             name="person-breastfeeding"
             size={16}
-            color={mealType === "tetee" ? "white" : nc.textLight}
+            color={mealType === "tetee" ? accentColors.softText : nc.textLight}
           />
           <Text
             style={[
               styles.typeChipText,
               { color: nc.textLight },
               mealType === "tetee" && styles.typeChipTextActive,
+              mealType === "tetee" && { color: accentColors.softText },
             ]}
           >
             Tétée
@@ -472,8 +482,11 @@ export function MealsForm({
         <TouchableOpacity
           style={[
             styles.typeChip,
-            { backgroundColor: nc.backgroundPressed },
-            mealType === "biberon" && styles.typeChipActive,
+            { backgroundColor: nc.background, borderColor: nc.border },
+            mealType === "biberon" && {
+              backgroundColor: accentColors.softBg,
+              borderColor: accentColors.softBorder,
+            },
             isSubmitting && styles.typeChipDisabled,
           ]}
           onPress={() => {
@@ -482,17 +495,23 @@ export function MealsForm({
           }}
           disabled={isSubmitting}
           accessibilityLabel="Type biberon"
+          accessibilityRole="button"
+          accessibilityState={{
+            selected: mealType === "biberon",
+            disabled: isSubmitting,
+          }}
         >
           <MaterialCommunityIcons
             name="baby-bottle"
             size={18}
-            color={mealType === "biberon" ? "white" : nc.textLight}
+            color={mealType === "biberon" ? accentColors.softText : nc.textLight}
           />
           <Text
             style={[
               styles.typeChipText,
               { color: nc.textLight },
               mealType === "biberon" && styles.typeChipTextActive,
+              mealType === "biberon" && { color: accentColors.softText },
             ]}
           >
             Biberon
@@ -502,8 +521,11 @@ export function MealsForm({
         <TouchableOpacity
           style={[
             styles.typeChip,
-            { backgroundColor: nc.backgroundPressed },
-            mealType === "solide" && styles.typeChipActive,
+            { backgroundColor: nc.background, borderColor: nc.border },
+            mealType === "solide" && {
+              backgroundColor: accentColors.softBg,
+              borderColor: accentColors.softBorder,
+            },
             isSubmitting && styles.typeChipDisabled,
           ]}
           onPress={() => {
@@ -512,17 +534,23 @@ export function MealsForm({
           }}
           disabled={isSubmitting}
           accessibilityLabel="Type solide"
+          accessibilityRole="button"
+          accessibilityState={{
+            selected: mealType === "solide",
+            disabled: isSubmitting,
+          }}
         >
           <FontAwesome
             name="bowl-food"
             size={16}
-            color={mealType === "solide" ? "white" : nc.textLight}
+            color={mealType === "solide" ? accentColors.softText : nc.textLight}
           />
           <Text
             style={[
               styles.typeChipText,
               { color: nc.textLight },
               mealType === "solide" && styles.typeChipTextActive,
+              mealType === "solide" && { color: accentColors.softText },
             ]}
           >
             Solide
@@ -542,13 +570,21 @@ export function MealsForm({
                 key={option.value}
                 style={[
                   styles.biberonTypeChip,
-                  { backgroundColor: nc.backgroundPressed },
-                  typeBiberon === option.value && styles.biberonTypeChipActive,
+                  { backgroundColor: nc.background, borderColor: nc.border },
+                  typeBiberon === option.value && {
+                    backgroundColor: accentColors.softBg,
+                    borderColor: accentColors.softBorder,
+                  },
                   isSubmitting && styles.chipDisabled,
                 ]}
                 onPress={() => setTypeBiberon(option.value)}
                 disabled={isSubmitting}
                 accessibilityLabel={`Type ${option.label}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  selected: typeBiberon === option.value,
+                  disabled: isSubmitting,
+                }}
                 hitSlop={8}
               >
                 <Text
@@ -557,6 +593,9 @@ export function MealsForm({
                     { color: nc.textLight },
                     typeBiberon === option.value &&
                       styles.biberonTypeChipTextActive,
+                    typeBiberon === option.value && {
+                      color: accentColors.softText,
+                    },
                   ]}
                 >
                   {option.label}
@@ -877,17 +916,30 @@ export function MealsForm({
                 key={option.value}
                 style={[
                   styles.solideTypeChip,
-                  { backgroundColor: nc.backgroundPressed },
-                  typeSolide === option.value && styles.solideTypeChipActive,
+                  { backgroundColor: nc.background, borderColor: nc.border },
+                  typeSolide === option.value && {
+                    backgroundColor: accentColors.softBg,
+                    borderColor: accentColors.softBorder,
+                  },
                   isSubmitting && styles.chipDisabled,
                 ]}
                 onPress={() => setTypeSolide(option.value)}
                 disabled={isSubmitting}
+                accessibilityLabel={`Type ${option.label}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  selected: typeSolide === option.value,
+                  disabled: isSubmitting,
+                }}
               >
                 <FontAwesome
                   name={option.icon as any}
                   size={14}
-                  color={typeSolide === option.value ? "white" : nc.textLight}
+                  color={
+                    typeSolide === option.value
+                      ? accentColors.softText
+                      : nc.textLight
+                  }
                 />
                 <Text
                   style={[
@@ -895,6 +947,9 @@ export function MealsForm({
                     { color: nc.textLight },
                     typeSolide === option.value &&
                       styles.solideTypeChipTextActive,
+                    typeSolide === option.value && {
+                      color: accentColors.softText,
+                    },
                   ]}
                 >
                   {option.label}
@@ -913,17 +968,30 @@ export function MealsForm({
                 key={option.value}
                 style={[
                   styles.momentRepasChip,
-                  { backgroundColor: nc.backgroundPressed },
-                  momentRepas === option.value && styles.momentRepasChipActive,
+                  { backgroundColor: nc.background, borderColor: nc.border },
+                  momentRepas === option.value && {
+                    backgroundColor: accentColors.softBg,
+                    borderColor: accentColors.softBorder,
+                  },
                   isSubmitting && styles.chipDisabled,
                 ]}
                 onPress={() => setMomentRepas(option.value)}
                 disabled={isSubmitting}
+                accessibilityLabel={`Moment ${option.label}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  selected: momentRepas === option.value,
+                  disabled: isSubmitting,
+                }}
               >
                 <FontAwesome
                   name={option.icon as any}
                   size={12}
-                  color={momentRepas === option.value ? "white" : nc.textLight}
+                  color={
+                    momentRepas === option.value
+                      ? accentColors.softText
+                      : nc.textLight
+                  }
                 />
                 <Text
                   style={[
@@ -931,6 +999,9 @@ export function MealsForm({
                     { color: nc.textLight },
                     momentRepas === option.value &&
                       styles.momentRepasChipTextActive,
+                    momentRepas === option.value && {
+                      color: accentColors.softText,
+                    },
                   ]}
                 >
                   {option.label}
@@ -949,13 +1020,21 @@ export function MealsForm({
                 key={option.value}
                 style={[
                   styles.quantiteSolideChip,
-                  { backgroundColor: nc.backgroundPressed },
-                  quantiteSolide === option.value &&
-                    styles.quantiteSolideChipActive,
+                  { backgroundColor: nc.background, borderColor: nc.border },
+                  quantiteSolide === option.value && {
+                    backgroundColor: accentColors.softBg,
+                    borderColor: accentColors.softBorder,
+                  },
                   isSubmitting && styles.chipDisabled,
                 ]}
                 onPress={() => setQuantiteSolide(option.value)}
                 disabled={isSubmitting}
+                accessibilityLabel={`Quantité ${option.label}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  selected: quantiteSolide === option.value,
+                  disabled: isSubmitting,
+                }}
               >
                 <Text
                   style={[
@@ -963,6 +1042,9 @@ export function MealsForm({
                     { color: nc.textStrong },
                     quantiteSolide === option.value &&
                       styles.quantiteSolideChipTextActive,
+                    quantiteSolide === option.value && {
+                      color: accentColors.softText,
+                    },
                   ]}
                 >
                   {option.label}
@@ -973,6 +1055,9 @@ export function MealsForm({
                     { color: nc.textMuted },
                     quantiteSolide === option.value &&
                       styles.quantiteSolideDescActive,
+                    quantiteSolide === option.value && {
+                      color: accentColors.softText,
+                    },
                   ]}
                 >
                   {option.description}
@@ -1085,6 +1170,12 @@ export function MealsForm({
                         }
                       }}
                       disabled={isSubmitting}
+                      accessibilityLabel={`Allergène ${option.label}`}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        selected: isSelected,
+                        disabled: isSubmitting,
+                      }}
                     >
                       <Text style={styles.allergeneEmoji}>{option.emoji}</Text>
                       <Text
@@ -1122,6 +1213,12 @@ export function MealsForm({
                     ]}
                     onPress={() => setReaction(option.value)}
                     disabled={isSubmitting}
+                    accessibilityLabel={`Réaction ${option.label}`}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      selected: reaction === option.value,
+                      disabled: isSubmitting,
+                    }}
                   >
                     <Text
                       style={[
@@ -1153,6 +1250,12 @@ export function MealsForm({
               ]}
               onPress={() => setAime(aime === true ? undefined : true)}
               disabled={isSubmitting}
+              accessibilityLabel="A aimé ce plat"
+              accessibilityRole="button"
+              accessibilityState={{
+                selected: aime === true,
+                disabled: isSubmitting,
+              }}
             >
               <FontAwesome
                 name="thumbs-up"
@@ -1178,6 +1281,12 @@ export function MealsForm({
               ]}
               onPress={() => setAime(aime === false ? undefined : false)}
               disabled={isSubmitting}
+              accessibilityLabel="N'a pas aimé ce plat"
+              accessibilityRole="button"
+              accessibilityState={{
+                selected: aime === false,
+                disabled: isSubmitting,
+              }}
             >
               <FontAwesome
                 name="thumbs-down"
@@ -1228,7 +1337,7 @@ export function MealsForm({
           <TouchableOpacity
             style={[
               styles.validateButton,
-              { backgroundColor: Colors[colorScheme].tint },
+              { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleSubmit}
@@ -1300,9 +1409,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 20,
-  },
-  typeChipActive: {
-    backgroundColor: eventColors.meal.dark,
+    borderWidth: 1,
   },
   typeChipDisabled: {
     opacity: 0.5,
@@ -1313,7 +1420,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   typeChipTextActive: {
-    color: "white",
+    fontWeight: "700",
   },
 
   // Biberon
@@ -1329,9 +1436,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 16,
-  },
-  biberonTypeChipActive: {
-    backgroundColor: eventColors.meal.dark,
+    borderWidth: 1,
   },
   biberonTypeChipDisabled: {
     opacity: 0.5,
@@ -1342,10 +1447,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   biberonTypeChipTextActive: {
-    color: "white",
+    fontWeight: "700",
   },
   chipTextActive: {
-    color: "white",
+    fontWeight: "700",
   },
   chipDisabled: {
     opacity: 0.5,
@@ -1479,9 +1584,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 20,
-  },
-  solideTypeChipActive: {
-    backgroundColor: eventColors.meal.dark,
+    borderWidth: 1,
   },
   solideTypeChipDisabled: {
     opacity: 0.5,
@@ -1492,7 +1595,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   solideTypeChipTextActive: {
-    color: "white",
+    fontWeight: "700",
   },
 
   momentRepasGrid: {
@@ -1509,9 +1612,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 16,
-  },
-  momentRepasChipActive: {
-    backgroundColor: eventColors.meal.dark,
+    borderWidth: 1,
   },
   momentRepasChipDisabled: {
     opacity: 0.5,
@@ -1522,7 +1623,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   momentRepasChipTextActive: {
-    color: "white",
+    fontWeight: "700",
   },
 
   quantiteSolideRow: {
@@ -1537,9 +1638,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 12,
-  },
-  quantiteSolideChipActive: {
-    backgroundColor: eventColors.meal.dark,
+    borderWidth: 1,
   },
   quantiteSolideChipDisabled: {
     opacity: 0.5,
@@ -1551,7 +1650,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   quantiteSolideChipTextActive: {
-    color: "white",
+    fontWeight: "700",
   },
   quantiteSolideDesc: {
     width: "100%",
@@ -1560,7 +1659,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   quantiteSolideDescActive: {
-    color: "rgba(255,255,255,0.8)",
+    fontWeight: "600",
   },
 
   ingredientsInput: {

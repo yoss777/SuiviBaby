@@ -9,6 +9,7 @@ import {
 } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
+import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -24,6 +25,8 @@ type DateFilterBarProps = PropsWithChildren<{
   activeButtonStyle?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   activeTextStyle?: StyleProp<TextStyle>;
+  variant?: "filled" | "soft";
+  activeAccentColor?: string;
 }>;
 
 export function DateFilterBar({
@@ -35,22 +38,55 @@ export function DateFilterBar({
   activeButtonStyle,
   textStyle,
   activeTextStyle,
+  variant = "filled",
+  activeAccentColor,
   children,
 }: DateFilterBarProps) {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const tintColor = Colors[colorScheme].tint;
+  const accentColors = getAccentColors(
+    activeAccentColor ?? tintColor,
+    colorScheme,
+  );
   // Active text must contrast with tint background (dark mode tint is white)
-  const activeTextColor = colorScheme === "dark" ? Colors[colorScheme].background : nc.white;
+  const activeTextColor =
+    colorScheme === "dark" ? Colors[colorScheme].background : nc.white;
 
   const mergedContainerStyle = [styles.container, containerStyle];
   const mergedContentStyle = [styles.content, contentContainerStyle];
-  const mergedButtonStyle = [styles.button, buttonStyle];
-  const mergedTextStyle = [styles.text, textStyle];
-  const mergedActiveTextStyle = [styles.textActive, { color: activeTextColor }, activeTextStyle];
-  const resolvedActiveButtonStyle = activeButtonStyle || {
-    backgroundColor: tintColor,
-  };
+  const mergedButtonStyle = [
+    styles.button,
+    variant === "soft" && {
+      backgroundColor: nc.background,
+      borderColor: nc.border,
+      borderWidth: 1,
+    },
+    buttonStyle,
+  ];
+  const mergedTextStyle = [
+    styles.text,
+    variant === "soft" && { color: nc.textLight },
+    textStyle,
+  ];
+  const resolvedActiveTextColor =
+    variant === "soft" ? accentColors.softText : activeTextColor;
+  const mergedActiveTextStyle = [
+    styles.textActive,
+    { color: resolvedActiveTextColor },
+    activeTextStyle,
+  ];
+  const resolvedActiveButtonStyle =
+    activeButtonStyle ||
+    (variant === "soft"
+      ? {
+          backgroundColor: accentColors.softBg,
+          borderColor: accentColors.softBorder,
+          borderWidth: 1,
+        }
+      : {
+          backgroundColor: tintColor,
+        });
   const isTodaySelected = selected === "today";
   const isPastSelected = selected === "past";
 
@@ -65,9 +101,10 @@ export function DateFilterBar({
         onPress={() => onSelect("today")}
         style={[
           mergedButtonStyle,
-          isTodaySelected &&
-            (activeButtonStyle || { backgroundColor: tintColor }),
+          isTodaySelected && resolvedActiveButtonStyle,
         ]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: isTodaySelected }}
       >
         <ThemedText
           style={[mergedTextStyle, isTodaySelected && mergedActiveTextStyle]}
@@ -79,6 +116,8 @@ export function DateFilterBar({
       <Pressable
         onPress={() => onSelect("past")}
         style={[mergedButtonStyle, isPastSelected && resolvedActiveButtonStyle]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: isPastSelected }}
       >
         <ThemedText
           style={[mergedTextStyle, isPastSelected && mergedActiveTextStyle]}

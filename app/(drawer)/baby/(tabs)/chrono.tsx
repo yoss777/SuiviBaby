@@ -1,6 +1,7 @@
 import { ThemedView } from "@/components/themed-view";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ACTIVITY_TYPE_LABELS,
@@ -2480,30 +2481,11 @@ export default function ChronoScreen() {
                     {/* P4: Date chip with clear button */}
                     {selectedDate && (
                       <View style={styles.dateChipRow}>
-                        <Pressable
-                          style={[
-                            styles.dateChip,
-                            { backgroundColor: colors.tint },
-                          ]}
+                        <SelectedDateChip
+                          label={formatSelectedDateLabel(selectedDate)}
+                          accentColor={colors.tint}
                           onPress={handleClearDate}
-                          accessibilityRole="button"
-                          accessibilityLabel="Effacer la date sélectionnée"
-                        >
-                          <Text
-                            style={[
-                              styles.dateChipText,
-                              {
-                                color:
-                                  colorScheme === "dark"
-                                    ? Colors[colorScheme].background
-                                    : "#fff",
-                              },
-                            ]}
-                          >
-                            {formatSelectedDateLabel(selectedDate)}
-                          </Text>
-                          <Ionicons name="close" size={14} color="#fff" />
-                        </Pressable>
+                        />
                       </View>
                     )}
                     {/* P4: Inline calendar picker */}

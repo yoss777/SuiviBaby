@@ -1,7 +1,8 @@
 // components/forms/RoutinesForm.tsx
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
-import { Colors } from "@/constants/theme";
+import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -163,11 +164,6 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
 
-  const isDark = colorScheme === "dark";
-  const chipActiveColors = isDark
-    ? { bg: "#6f42c1" + "30", border: "#b794f4", text: "#e9d8fd" }
-    : { bg: "#ede7f6", border: "#6f42c1", text: "#4c2c79" };
-
   const isEditing = !!editData;
   const isEditingBain = isEditing && editData.type === "bain";
   const isEditingSommeil = isEditing && editData.type === "sommeil";
@@ -190,6 +186,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const [sheetType, setSheetType] = useState<"nap" | "night" | "bain" | "nez">(
     getInitialSheetType(),
   );
+  const routineAccent =
+    sheetType === "bain"
+      ? eventColors.bain.dark
+      : sheetType === "nez"
+        ? eventColors.nettoyage_nez.dark
+        : eventColors.sommeil.dark;
+  const chipActiveColors = getAccentColors(routineAccent, colorScheme);
 
   // Bain state
   const [dateHeure, setDateHeure] = useState<Date>(
@@ -1084,7 +1087,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           <TouchableOpacity
             style={[
               styles.validateButton,
-              { backgroundColor: Colors[colorScheme].tint },
+              { backgroundColor: chipActiveColors.filledBg },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleSubmit}

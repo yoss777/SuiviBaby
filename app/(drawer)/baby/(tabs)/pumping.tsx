@@ -5,6 +5,7 @@ import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
+import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
@@ -1339,19 +1340,15 @@ export default function PumpingScreen() {
             <DateFilterBar
               selected={selectedDate ? "past" : selectedFilter ?? "today"}
               onSelect={handleFilterPress}
+              variant="soft"
+              activeAccentColor={eventColors.pumping.dark}
             >
               {selectedDate && (
-                <Pressable
-                  style={[styles.dateChip, { backgroundColor: Colors[colorScheme].tint }]}
+                <SelectedDateChip
+                  label={formatSelectedDateLabel(selectedDate)}
+                  accentColor={eventColors.pumping.dark}
                   onPress={clearSelectedDate}
-                  accessibilityRole="button"
-                  accessibilityLabel="Effacer la date sélectionnée"
-                >
-                  <Text style={[styles.dateChipText, { color: colorScheme === "dark" ? Colors[colorScheme].background : nc.white }]}>
-                    {formatSelectedDateLabel(selectedDate)}
-                  </Text>
-                  <Ionicons name="close" size={14} color={colorScheme === "dark" ? Colors[colorScheme].background : nc.white} />
-                </Pressable>
+                />
               )}
             </DateFilterBar>
           </View>

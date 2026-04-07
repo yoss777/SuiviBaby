@@ -1,7 +1,7 @@
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
-import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -234,6 +234,10 @@ export function SoinsForm({
   // Type selection state
   const [selectedType, setSelectedType] = useState<SoinsType>(
     editData?.type ?? initialType,
+  );
+  const accentColors = getAccentColors(
+    TYPE_CONFIG[selectedType].color,
+    colorScheme,
   );
   const [includeTemperature, setIncludeTemperature] = useState(
     editData?.type === "temperature" || initialType === "temperature",
@@ -906,7 +910,7 @@ export function SoinsForm({
                     styles.pickerItem,
                     { borderBottomColor: nc.backgroundPressed },
                     isSelected && {
-                      backgroundColor: Colors[colorScheme].tint + "20",
+                      backgroundColor: accentColors.softBg,
                     },
                   ]}
                   onPress={() => {
@@ -927,7 +931,7 @@ export function SoinsForm({
                   <FontAwesome5
                     name="syringe"
                     size={16}
-                    color={isSelected ? Colors[colorScheme].tint : nc.textLight}
+                    color={isSelected ? accentColors.softText : nc.textLight}
                     style={styles.pickerItemIcon}
                   />
                   <View style={styles.pickerItemTextWrap}>
@@ -955,7 +959,7 @@ export function SoinsForm({
                     <FontAwesome5
                       name="check"
                       size={16}
-                      color={Colors[colorScheme].tint}
+                      color={accentColors.softText}
                     />
                   )}
                 </TouchableOpacity>
@@ -1035,7 +1039,7 @@ export function SoinsForm({
                   styles.pickerItem,
                   { borderBottomColor: nc.backgroundPressed },
                   vitamineName === vitamine && {
-                    backgroundColor: Colors[colorScheme].tint + "20",
+                    backgroundColor: accentColors.softBg,
                   },
                 ]}
                 onPress={() => {
@@ -1054,7 +1058,7 @@ export function SoinsForm({
                   size={16}
                   color={
                     vitamineName === vitamine
-                      ? Colors[colorScheme].tint
+                      ? accentColors.softText
                       : nc.textLight
                   }
                   style={styles.pickerItemIcon}
@@ -1072,7 +1076,7 @@ export function SoinsForm({
                   <FontAwesome5
                     name="check"
                     size={16}
-                    color={Colors[colorScheme].tint}
+                    color={accentColors.softText}
                   />
                 )}
               </TouchableOpacity>
@@ -1114,18 +1118,30 @@ export function SoinsForm({
                 : includeSymptome
               : selectedType === type;
           const isDisabled = isEditing && !active;
+          const typeAccentColors = getAccentColors(
+            TYPE_CONFIG[type].color,
+            colorScheme,
+          );
           return (
             <TouchableOpacity
               key={type}
               style={[
                 styles.typeChip,
                 { borderColor: nc.border, backgroundColor: nc.background },
-                active && styles.typeChipActive,
+                active && {
+                  backgroundColor: typeAccentColors.softBg,
+                  borderColor: typeAccentColors.softBorder,
+                },
                 isDisabled && styles.typeChipDisabled,
               ]}
-              disabled={isDisabled}
+              disabled={isDisabled || isSubmitting}
               activeOpacity={1}
               accessibilityLabel={`Type ${TYPE_CONFIG[type].label}`}
+              accessibilityRole="button"
+              accessibilityState={{
+                selected: active,
+                disabled: isDisabled || isSubmitting,
+              }}
               hitSlop={8}
               onPress={() => {
                 if (isEditing) return;
@@ -1168,6 +1184,7 @@ export function SoinsForm({
                   styles.typeChipText,
                   { color: nc.textLight },
                   active && styles.typeChipTextActive,
+                  active && { color: typeAccentColors.softText },
                 ]}
               >
                 {TYPE_CONFIG[type].label}
@@ -1182,7 +1199,7 @@ export function SoinsForm({
         (includeTemperature || includeSymptome) &&
         includeTemperature !== includeSymptome && (
           <Text
-            style={[styles.toggleHint, { color: Colors[colorScheme].tint }]}
+            style={[styles.toggleHint, { color: accentColors.softText }]}
           >
             Vous pouvez sélectionner Température et Symptôme ensemble
           </Text>
@@ -1315,7 +1332,10 @@ export function SoinsForm({
                   style={[
                     styles.chip,
                     { borderColor: nc.border, backgroundColor: nc.background },
-                    temperatureMode === mode && styles.chipActive,
+                    temperatureMode === mode && {
+                      backgroundColor: accentColors.softBg,
+                      borderColor: accentColors.softBorder,
+                    },
                   ]}
                   onPress={() => setTemperatureMode(mode)}
                   accessibilityLabel={`Mode ${mode}`}
@@ -1326,6 +1346,9 @@ export function SoinsForm({
                       styles.chipText,
                       { color: nc.textLight },
                       temperatureMode === mode && styles.chipTextActive,
+                      temperatureMode === mode && {
+                        color: accentColors.softText,
+                      },
                     ]}
                   >
                     {mode}
@@ -1381,7 +1404,10 @@ export function SoinsForm({
                   style={[
                     styles.chip,
                     { borderColor: nc.border, backgroundColor: nc.background },
-                    medicamentVoie === voie && styles.chipActive,
+                    medicamentVoie === voie && {
+                      backgroundColor: accentColors.softBg,
+                      borderColor: accentColors.softBorder,
+                    },
                   ]}
                   onPress={() =>
                     setMedicamentVoie(
@@ -1396,6 +1422,9 @@ export function SoinsForm({
                       styles.chipText,
                       { color: nc.textLight },
                       medicamentVoie === voie && styles.chipTextActive,
+                      medicamentVoie === voie && {
+                        color: accentColors.softText,
+                      },
                     ]}
                   >
                     {voie}
@@ -1426,7 +1455,10 @@ export function SoinsForm({
                         borderColor: nc.border,
                         backgroundColor: nc.background,
                       },
-                      active && styles.chipActive,
+                      active && {
+                        backgroundColor: accentColors.softBg,
+                        borderColor: accentColors.softBorder,
+                      },
                     ]}
                     accessibilityLabel={`Symptôme ${symptome}`}
                     hitSlop={8}
@@ -1447,6 +1479,7 @@ export function SoinsForm({
                         styles.chipText,
                         { color: nc.textLight },
                         active && styles.chipTextActive,
+                        active && { color: accentColors.softText },
                       ]}
                     >
                       {symptome}
@@ -1484,7 +1517,10 @@ export function SoinsForm({
                   style={[
                     styles.chip,
                     { borderColor: nc.border, backgroundColor: nc.background },
-                    symptomeIntensite === item && styles.chipActive,
+                    symptomeIntensite === item && {
+                      backgroundColor: accentColors.softBg,
+                      borderColor: accentColors.softBorder,
+                    },
                   ]}
                   onPress={() =>
                     setSymptomeIntensite(
@@ -1505,6 +1541,9 @@ export function SoinsForm({
                       styles.chipText,
                       { color: nc.textLight },
                       symptomeIntensite === item && styles.chipTextActive,
+                      symptomeIntensite === item && {
+                        color: accentColors.softText,
+                      },
                       symptomes.length === 0 && styles.chipTextDisabled,
                     ]}
                   >
@@ -1802,7 +1841,7 @@ export function SoinsForm({
           <TouchableOpacity
             style={[
               styles.validateButton,
-              { backgroundColor: Colors[colorScheme].tint },
+              { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleSubmit}
@@ -1948,10 +1987,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  typeChipActive: {
-    backgroundColor: "#ede7f6",
-    borderColor: "#6f42c1",
-  },
   typeChipDisabled: {
     opacity: 0.4,
   },
@@ -1961,7 +1996,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   typeChipTextActive: {
-    color: "#4c2c79",
     fontWeight: "700",
   },
   toggleHint: {
@@ -2056,17 +2090,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  chipActive: {
-    borderColor: "#6f42c1",
-    backgroundColor: "#ede7f6",
-  },
   chipText: {
     fontSize: 12,
     fontWeight: "600",
     textAlign: "center",
   },
   chipTextActive: {
-    color: "#4c2c79",
+    fontWeight: "700",
   },
   chipTextDisabled: {
     opacity: 0.5,

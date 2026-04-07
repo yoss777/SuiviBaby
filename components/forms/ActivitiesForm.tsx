@@ -1,8 +1,8 @@
 // components/forms/ActivitiesForm.tsx
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
-import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -157,16 +157,11 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const isDark = colorScheme === "dark";
 
-  // Chip colors aligned with RoutinesForm pattern
-  const chipActiveColors = isDark
-    ? {
-        bg: eventColors.activite.dark + "30",
-        border: "#6EE7B7",
-        text: "#A7F3D0",
-      }
-    : { bg: "#ECFDF5", border: eventColors.activite.dark, text: "#065F46" };
+  const chipActiveColors = getAccentColors(
+    eventColors.activite.dark,
+    colorScheme,
+  );
 
   const isEditing = !!editData;
 
@@ -468,6 +463,11 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 }}
                 disabled={isSubmitting}
                 accessibilityLabel={config.label}
+                accessibilityRole="button"
+                accessibilityState={{
+                  selected: active,
+                  disabled: isSubmitting,
+                }}
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Text
@@ -626,7 +626,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           <TouchableOpacity
             style={[
               styles.validateButton,
-              { backgroundColor: Colors[colorScheme].tint },
+              { backgroundColor: chipActiveColors.filledBg },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleSubmit}

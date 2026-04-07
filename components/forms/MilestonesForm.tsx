@@ -1,9 +1,9 @@
 // components/forms/MilestonesForm.tsx
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { getAccentColors } from "@/components/ui/accentColors";
 import { auth } from "@/config/firebase";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
-import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -228,6 +228,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const accentColors = getAccentColors(eventColors.jalon.dark, colorScheme);
 
   const isEditing = !!editData;
 
@@ -417,13 +418,18 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
                 styles.typeChip,
                 { borderColor: nc.border, backgroundColor: nc.background },
                 active && {
-                  backgroundColor: nc.backgroundCard,
-                  borderColor: eventColors.jalon.dark,
+                  backgroundColor: accentColors.softBg,
+                  borderColor: accentColors.softBorder,
                 },
               ]}
               onPress={() => handleTypeChange(type)}
               disabled={isSubmitting}
               accessibilityLabel={`Type ${config.label}`}
+              accessibilityRole="button"
+              accessibilityState={{
+                selected: active,
+                disabled: isSubmitting,
+              }}
               hitSlop={8}
             >
               <Text
@@ -431,6 +437,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
                   styles.typeChipText,
                   { color: nc.textLight },
                   active && styles.typeChipTextActive,
+                  active && { color: accentColors.softText },
                 ]}
               >
                 {config.label}
@@ -501,11 +508,19 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
                   style={[
                     styles.moodChip,
                     { borderColor: nc.border, backgroundColor: nc.background },
-                    active && styles.moodChipActive,
+                    active && {
+                      backgroundColor: accentColors.softBg,
+                      borderColor: accentColors.softBorder,
+                    },
                   ]}
                   onPress={() => setMood(option.value)}
                   disabled={isSubmitting}
                   accessibilityLabel={`Humeur ${option.label}`}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    selected: active,
+                    disabled: isSubmitting,
+                  }}
                   hitSlop={8}
                 >
                   <Text style={styles.moodEmoji}>{option.emoji}</Text>
@@ -513,7 +528,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
                     style={[
                       styles.moodLabel,
                       { color: nc.textLight },
-                      active && styles.moodLabelActive,
+                      active && { color: accentColors.softText },
                     ]}
                   >
                     {option.label}
@@ -627,7 +642,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           <TouchableOpacity
             style={[
               styles.validateButton,
-              { backgroundColor: Colors[colorScheme].tint },
+              { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleSubmit}
@@ -724,7 +739,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   typeChipTextActive: {
-    color: eventColors.jalon.dark,
     fontWeight: "700",
   },
   chipSection: {
@@ -752,10 +766,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minWidth: 68,
   },
-  moodChipActive: {
-    borderColor: eventColors.jalon.dark,
-    backgroundColor: "#ede7f6",
-  },
   moodEmoji: {
     fontSize: 18,
   },
@@ -763,9 +773,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     textAlign: "center",
-  },
-  moodLabelActive: {
-    color: eventColors.jalon.dark,
   },
   photoPreviewContainer: {
     position: "relative" as const,

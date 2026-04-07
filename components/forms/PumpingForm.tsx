@@ -1,5 +1,6 @@
+import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
-import { Colors } from "@/constants/theme";
+import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -64,6 +65,10 @@ export function PumpingForm({
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const accentColors = getAccentColors(
+    eventColors.pumping.dark,
+    colorScheme,
+  );
 
   const isEditing = !!editData;
 
@@ -219,20 +224,25 @@ export function PumpingForm({
             styles.breastToggleButton,
             { borderColor: nc.border, backgroundColor: nc.background },
             useLeftBreast && {
-              backgroundColor: Colors[colorScheme].tint,
-              borderColor: Colors[colorScheme].tint,
+              backgroundColor: accentColors.softBg,
+              borderColor: accentColors.softBorder,
             },
           ]}
           onPress={toggleLeftBreast}
           disabled={isSubmitting}
           accessibilityLabel="Sein gauche"
+          accessibilityRole="button"
+          accessibilityState={{
+            selected: useLeftBreast,
+            disabled: isSubmitting,
+          }}
         >
           <Text
             style={[
               styles.breastToggleText,
               { color: nc.textLight },
               useLeftBreast && {
-                color: nc.white,
+                color: accentColors.softText,
               },
             ]}
           >
@@ -244,20 +254,25 @@ export function PumpingForm({
             styles.breastToggleButton,
             { borderColor: nc.border, backgroundColor: nc.background },
             useRightBreast && {
-              backgroundColor: Colors[colorScheme].tint,
-              borderColor: Colors[colorScheme].tint,
+              backgroundColor: accentColors.softBg,
+              borderColor: accentColors.softBorder,
             },
           ]}
           onPress={toggleRightBreast}
           disabled={isSubmitting}
           accessibilityLabel="Sein droit"
+          accessibilityRole="button"
+          accessibilityState={{
+            selected: useRightBreast,
+            disabled: isSubmitting,
+          }}
         >
           <Text
             style={[
               styles.breastToggleText,
               { color: nc.textLight },
               useRightBreast && {
-                color: nc.white,
+                color: accentColors.softText,
               },
             ]}
           >
@@ -423,7 +438,7 @@ export function PumpingForm({
           <TouchableOpacity
             style={[
               styles.validateButton,
-              { backgroundColor: Colors[colorScheme].tint },
+              { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleSubmit}

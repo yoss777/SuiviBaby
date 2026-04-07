@@ -1,8 +1,8 @@
 // components/forms/DiapersForm.tsx
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
-import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -97,6 +97,20 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
   const [includeSelle, setIncludeSelle] = useState<boolean>(
     editData ? editData.type === "selle" : initialType === "selle",
   );
+  const mictionAccentColors = getAccentColors(
+    eventColors.miction.dark,
+    colorScheme,
+  );
+  const selleAccentColors = getAccentColors(
+    eventColors.selle.dark,
+    colorScheme,
+  );
+  const accentColors = getAccentColors(
+    includeSelle && !includeMiction
+      ? eventColors.selle.dark
+      : eventColors.miction.dark,
+    colorScheme,
+  );
   const [dateHeure, setDateHeure] = useState<Date>(
     editData ? toDate(editData.date) : new Date(),
   );
@@ -154,7 +168,12 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           date: dateToSave,
           couleur: mictionCouleur ?? undefined,
         });
-        modifierEvenementOptimistic(activeChild.id, editData.id, mictionData, editData);
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData.id,
+          mictionData,
+          editData,
+        );
         successMessage = "Miction modifiée";
       } else {
         const selleData = removeUndefined({
@@ -163,7 +182,12 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           consistance: selleConsistance ?? undefined,
           quantite: selleQuantite ?? undefined,
         });
-        modifierEvenementOptimistic(activeChild.id, editData.id, selleData, editData);
+        modifierEvenementOptimistic(
+          activeChild.id,
+          editData.id,
+          selleData,
+          editData,
+        );
         successMessage = "Selle modifiée";
       }
     } else {
@@ -247,26 +271,39 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             <TouchableOpacity
               style={[
                 styles.typeButton,
-                { backgroundColor: nc.backgroundPressed },
-                includeMiction && styles.typeButtonActiveMiction,
+                { backgroundColor: nc.background, borderColor: nc.border },
+                includeMiction && {
+                  backgroundColor: mictionAccentColors.softBg,
+                  borderColor: mictionAccentColors.softBorder,
+                },
                 isSubmitting && styles.typeButtonDisabled,
               ]}
               onPress={() => setIncludeMiction((prev) => !prev)}
               disabled={isSubmitting}
               activeOpacity={0.7}
               accessibilityLabel="Miction"
+              accessibilityRole="button"
+              accessibilityState={{
+                selected: includeMiction,
+                disabled: isSubmitting,
+              }}
               hitSlop={8}
             >
               <FontAwesome5
                 name="water"
                 size={18}
-                color={includeMiction ? "white" : eventColors.miction.dark}
+                color={
+                  includeMiction
+                    ? mictionAccentColors.softText
+                    : eventColors.miction.dark
+                }
               />
               <Text
                 style={[
                   styles.typeText,
                   { color: nc.textLight },
                   includeMiction && styles.typeTextActive,
+                  includeMiction && { color: mictionAccentColors.softText },
                   isSubmitting && { color: nc.textMuted },
                 ]}
               >
@@ -277,26 +314,39 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             <TouchableOpacity
               style={[
                 styles.typeButton,
-                { backgroundColor: nc.backgroundPressed },
-                includeSelle && styles.typeButtonActiveSelle,
+                { backgroundColor: nc.background, borderColor: nc.border },
+                includeSelle && {
+                  backgroundColor: selleAccentColors.softBg,
+                  borderColor: selleAccentColors.softBorder,
+                },
                 isSubmitting && styles.typeButtonDisabled,
               ]}
               onPress={() => setIncludeSelle((prev) => !prev)}
               disabled={isSubmitting}
               activeOpacity={0.7}
               accessibilityLabel="Selle"
+              accessibilityRole="button"
+              accessibilityState={{
+                selected: includeSelle,
+                disabled: isSubmitting,
+              }}
               hitSlop={8}
             >
               <FontAwesome5
                 name="poop"
                 size={18}
-                color={includeSelle ? "white" : eventColors.selle.dark}
+                color={
+                  includeSelle
+                    ? selleAccentColors.softText
+                    : eventColors.selle.dark
+                }
               />
               <Text
                 style={[
                   styles.typeText,
                   { color: nc.textLight },
                   includeSelle && styles.typeTextActive,
+                  includeSelle && { color: selleAccentColors.softText },
                   isSubmitting && { color: nc.textMuted },
                 ]}
               >
@@ -333,12 +383,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   { backgroundColor: nc.background, borderColor: nc.border },
                   mictionCouleur === option.value && {
                     backgroundColor: option.color,
-                    borderColor: option.color,
-                    shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.15,
-                    shadowRadius: 3,
-                    elevation: 3,
+                    borderColor: mictionAccentColors.softBorder,
                   },
                   isSubmitting && styles.optionButtonDisabled,
                 ]}
@@ -350,6 +395,11 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 disabled={isSubmitting}
                 activeOpacity={0.7}
                 accessibilityLabel={option.label}
+                accessibilityRole="button"
+                accessibilityState={{
+                  selected: mictionCouleur === option.value,
+                  disabled: isSubmitting,
+                }}
               >
                 <Text
                   style={[
@@ -382,10 +432,10 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           <View style={styles.optionsRow}>
             {(
               [
-                { value: "liquide", label: "Liquide", icon: "tint" },
-                { value: "molle", label: "Molle", icon: "cloud" },
-                { value: "normale", label: "Normale", icon: "check-circle" },
-                { value: "dure", label: "Dure", icon: "circle" },
+                { value: "liquide", label: "Liquide" },
+                { value: "molle", label: "Molle" },
+                { value: "normale", label: "Normale" },
+                { value: "dure", label: "Dure" },
               ] as const
             ).map((option) => (
               <TouchableOpacity
@@ -394,8 +444,10 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   styles.optionButton,
                   styles.optionButtonSelle,
                   { backgroundColor: nc.background, borderColor: nc.border },
-                  selleConsistance === option.value &&
-                    styles.optionButtonSelectedSelle,
+                  selleConsistance === option.value && {
+                    backgroundColor: selleAccentColors.softBg,
+                    borderColor: selleAccentColors.softBorder,
+                  },
                   isSubmitting && styles.optionButtonDisabled,
                 ]}
                 onPress={() =>
@@ -406,21 +458,21 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 disabled={isSubmitting}
                 activeOpacity={0.7}
                 accessibilityLabel={option.label}
+                accessibilityRole="button"
+                accessibilityState={{
+                  selected: selleConsistance === option.value,
+                  disabled: isSubmitting,
+                }}
               >
-                <FontAwesome5
-                  name={option.icon}
-                  size={14}
-                  color={
-                    selleConsistance === option.value ? "white" : "#dc3545"
-                  }
-                  style={{ marginBottom: 4 }}
-                />
                 <Text
                   style={[
                     styles.optionText,
                     { color: nc.textStrong },
                     selleConsistance === option.value &&
                       styles.optionTextSelected,
+                    selleConsistance === option.value && {
+                      color: selleAccentColors.softText,
+                    },
                   ]}
                 >
                   {option.label}
@@ -449,8 +501,10 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   styles.optionButton,
                   styles.optionButtonSelle,
                   { backgroundColor: nc.background, borderColor: nc.border },
-                  selleQuantite === option.value &&
-                    styles.optionButtonSelectedSelle,
+                  selleQuantite === option.value && {
+                    backgroundColor: selleAccentColors.softBg,
+                    borderColor: selleAccentColors.softBorder,
+                  },
                   isSubmitting && styles.optionButtonDisabled,
                 ]}
                 onPress={() =>
@@ -461,12 +515,20 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 disabled={isSubmitting}
                 activeOpacity={0.7}
                 accessibilityLabel={option.label}
+                accessibilityRole="button"
+                accessibilityState={{
+                  selected: selleQuantite === option.value,
+                  disabled: isSubmitting,
+                }}
               >
                 <Text
                   style={[
                     styles.optionText,
                     { color: nc.textStrong },
                     selleQuantite === option.value && styles.optionTextSelected,
+                    selleQuantite === option.value && {
+                      color: selleAccentColors.softText,
+                    },
                   ]}
                 >
                   {option.label}
@@ -507,7 +569,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           <TouchableOpacity
             style={[
               styles.validateButton,
-              { backgroundColor: Colors[colorScheme].tint },
+              { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleSubmit}
@@ -529,16 +591,15 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
 
         {isEditing && (
           <TouchableOpacity
-            style={[
-              styles.deleteButton,
-              isSubmitting && styles.buttonDisabled,
-            ]}
+            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color={nc.error} />
-            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
+            <Text style={[styles.deleteText, { color: nc.error }]}>
+              Supprimer
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -570,35 +631,30 @@ const styles = StyleSheet.create({
   // Type Selection
   typeRow: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "center",
     marginBottom: 16,
-    gap: 12,
+    gap: 8,
   },
   typeButton: {
     flex: 1,
-    flexDirection: "column",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    padding: 16,
-    borderRadius: 12,
-  },
-  typeButtonActiveMiction: {
-    backgroundColor: eventColors.miction.dark,
-  },
-  typeButtonActiveSelle: {
-    backgroundColor: eventColors.selle.dark,
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
   },
   typeButtonDisabled: {
     opacity: 0.5,
   },
   typeText: {
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 13,
+    fontWeight: "600",
     textAlign: "center",
   },
   typeTextActive: {
-    color: "white",
     fontWeight: "bold",
   },
   // Options Row
@@ -611,21 +667,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   optionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
     borderColor: "transparent",
-    minWidth: 70,
+    minWidth: 64,
     alignItems: "center",
     justifyContent: "center",
   },
   optionButtonSelle: {
-    borderWidth: 2,
-  },
-  optionButtonSelectedSelle: {
-    backgroundColor: eventColors.selle.dark,
-    borderColor: eventColors.selle.dark,
+    borderWidth: 1,
   },
   optionButtonDisabled: {
     opacity: 0.5,
@@ -636,7 +688,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   optionTextSelected: {
-    color: "white",
     fontWeight: "600",
   },
   // Action buttons

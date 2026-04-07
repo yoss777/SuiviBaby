@@ -3,6 +3,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
+import { getAccentColors } from "@/components/ui/accentColors";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -204,6 +205,14 @@ export default function ImmunizationsScreen() {
   const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const vitamineAccentColors = getAccentColors(
+    eventColors.vitamine.dark,
+    colorScheme,
+  );
+  const vaccinAccentColors = getAccentColors(
+    eventColors.vaccin.dark,
+    colorScheme,
+  );
   const { openSheet, closeSheet, viewProps, isOpen } = useSheet();
   const headerOwnerId = useRef(
     `immunizations-${Math.random().toString(36).slice(2)}`,
@@ -1814,25 +1823,44 @@ export default function ImmunizationsScreen() {
             <DateFilterBar
               selected={selectedFilter as any}
               onSelect={handleFilterPress}
+              variant="soft"
+              activeAccentColor={
+                selectedType === "vitamine"
+                  ? eventColors.vitamine.dark
+                  : eventColors.vaccin.dark
+              }
             />
             {/* Switch Vitamines/Vaccins */}
-            <View style={styles.typeSwitchContainer}>
+            <View
+              style={[
+                styles.typeSwitchContainer,
+                {
+                  backgroundColor: nc.background,
+                  borderColor: nc.border,
+                },
+              ]}
+            >
               <TouchableOpacity
                 onPress={() => setSelectedType("vitamine")}
                 style={[
                   styles.typeSwitchButton,
                   styles.typeSwitchButtonLeft,
-                  selectedType === "vitamine" &&
-                    styles.typeSwitchButtonActiveVitamine,
+                  selectedType === "vitamine" && {
+                    backgroundColor: vitamineAccentColors.softBg,
+                    borderColor: vitamineAccentColors.softBorder,
+                  },
                 ]}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Afficher les vitamines"
+                accessibilityState={{ selected: selectedType === "vitamine" }}
               >
                 <FontAwesome
                   name="pills"
                   size={16}
                   color={
                     selectedType === "vitamine"
-                      ? "white"
+                      ? vitamineAccentColors.softText
                       : eventColors.vitamine.dark
                   }
                 />
@@ -1842,17 +1870,22 @@ export default function ImmunizationsScreen() {
                 style={[
                   styles.typeSwitchButton,
                   styles.typeSwitchButtonRight,
-                  selectedType === "vaccin" &&
-                    styles.typeSwitchButtonActiveVaccin,
+                  selectedType === "vaccin" && {
+                    backgroundColor: vaccinAccentColors.softBg,
+                    borderColor: vaccinAccentColors.softBorder,
+                  },
                 ]}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Afficher les vaccins"
+                accessibilityState={{ selected: selectedType === "vaccin" }}
               >
                 <FontAwesome
                   name="syringe"
                   size={16}
                   color={
                     selectedType === "vaccin"
-                      ? "white"
+                      ? vaccinAccentColors.softText
                       : eventColors.vaccin.dark
                   }
                 />
@@ -2338,9 +2371,7 @@ const styles = StyleSheet.create({
   // Type Switch
   typeSwitchContainer: {
     flexDirection: "row",
-    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#d7dbe0",
     borderRadius: 20,
     padding: 3,
     marginLeft: 8,
@@ -2352,6 +2383,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     minWidth: 44,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
   typeSwitchButtonLeft: {
     // borderTopRightRadius: 0,
@@ -2360,11 +2393,5 @@ const styles = StyleSheet.create({
   typeSwitchButtonRight: {
     // borderTopLeftRadius: 0,
     // borderBottomLeftRadius: 0,
-  },
-  typeSwitchButtonActiveVitamine: {
-    backgroundColor: eventColors.vitamine.dark,
-  },
-  typeSwitchButtonActiveVaccin: {
-    backgroundColor: eventColors.vaccin.dark,
   },
 });

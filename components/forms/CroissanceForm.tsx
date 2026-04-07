@@ -1,7 +1,8 @@
 // components/forms/CroissanceForm.tsx
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
-import { Colors } from "@/constants/theme";
+import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -88,6 +89,10 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const accentColors = getAccentColors(
+    eventColors.croissance.dark,
+    colorScheme,
+  );
 
   const isEditing = !!editData;
 
@@ -270,7 +275,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
           <TouchableOpacity
             style={[
               styles.validateButton,
-              { backgroundColor: Colors[colorScheme].tint },
+              { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
             ]}
             onPress={handleSubmit}

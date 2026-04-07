@@ -401,7 +401,7 @@ export const GlobalSheetManager = () => {
           ref={sheetRef}
           title={title}
           icon="seedling"
-          accentColor="#8BCF9B"
+          accentColor={eventColors.croissance.dark}
           showActions={false}
           enablePanDownToClose={!isInPicker}
           onSubmit={() => {}}
