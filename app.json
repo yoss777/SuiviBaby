@@ -2,7 +2,7 @@
   "expo": {
     "name": "Suivi Baby",
     "slug": "suivibaby",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "suivibaby",
@@ -18,7 +18,7 @@
         "NSSpeechRecognitionUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser la reconnaissance vocale pour les commandes vocales."
       },
       "bundleIdentifier": "com.tesfa.suivibaby",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "associatedDomains": [
         "applinks:samaye-53723.firebaseapp.com",
         "applinks:samaye-53723.web.app"
@@ -38,7 +38,7 @@
       "compileSdkVersion": 35,
       "targetSdkVersion": 35,
       "minSdkVersion": 21,
-      "versionCode": 1
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",

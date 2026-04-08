@@ -15,7 +15,8 @@
     "test:all": "jest && jest --rootDir functions --testMatch='**/__tests__/**/*.test.js'",
     "test:coverage": "jest --coverage",
     "typecheck": "tsc --noEmit",
-    "postinstall": "node ./scripts/patch-expo.js"
+    "postinstall": "node ./scripts/patch-expo.js",
+    "update-app-config": "node ./scripts/updateAppConfig.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
