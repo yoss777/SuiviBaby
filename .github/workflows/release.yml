@@ -100,7 +100,46 @@ jobs:
       - name: Submit to store (${{ matrix.platform }})
         run: eas submit --platform ${{ matrix.platform }} --latest --non-interactive
 
-  # Step 4: Deploy Cloud Functions (on tag push)
+  # Step 4: Sync Firestore app_config/latest_version (on tag push, after submit)
+  # Ensures the in-app update banner is triggered for users still on the
+  # previous version. Only runs after a successful store submit on a tag push.
+  sync-app-config:
+    name: Sync Firestore app_config
+    needs: submit
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required for git tag annotation lookup
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Extract release notes from tag annotation
+        id: notes
+        run: |
+          NOTES=$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}")
+          if [ -z "$NOTES" ]; then
+            NOTES=$(git log -1 --pretty=format:'%s')
+          fi
+          {
+            echo "notes<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update Firestore app_config/latest_version
+        run: npm run update-app-config
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.notes }}
+
+  # Step 5: Deploy Cloud Functions (on tag push)
   deploy-functions:
     name: Deploy Cloud Functions
     needs: quality
