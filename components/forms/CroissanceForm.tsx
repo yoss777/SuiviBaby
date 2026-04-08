@@ -123,7 +123,8 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
     if (!editData?.id) return;
     setDateHeure(toDate(editData.date));
     setDateHeureDirty(false);
-  }, [editData?.id, editData?.date]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editData?.id]);
 
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;

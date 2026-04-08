@@ -229,11 +229,15 @@ export function MealsForm({
     setDateHeureDirty(true);
   }, []);
 
+  // Reset uniquement au changement d'event (editData.id), pas à chaque render.
+  // Si on dépendait de editData.date, chaque re-render avec un nouvel objet
+  // Date/Timestamp ré-écraserait le choix utilisateur dans le picker.
   useEffect(() => {
     if (!editData?.id) return;
     setDateHeure(toDate(editData.date));
     setDateHeureDirty(false);
-  }, [editData?.id, editData?.date]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editData?.id]);
 
   // ============================================
   // HANDLERS - Chronomètre tétée

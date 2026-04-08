@@ -8,7 +8,7 @@ import BottomSheet, {
   BottomSheetBackdropProps,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
-import React, { forwardRef, useCallback, useMemo } from "react";
+import React, { forwardRef, useCallback, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FormScrollContext } from "./FormScrollContext";
 
 // ============================================
 // TYPES
@@ -70,9 +71,18 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
     const tintColor = Colors[colorScheme].tint;
     const nc = getNeutralColors(colorScheme);
     const insets = useSafeAreaInsets();
+    const scrollViewRef = useRef<any>(null);
     const snapPoints = useMemo(
       () => customSnapPoints || ["75%", "90%"],
       [customSnapPoints],
+    );
+    const formScrollContext = useMemo(
+      () => ({
+        scrollToEnd: () => {
+          scrollViewRef.current?.scrollToEnd?.({ animated: true });
+        },
+      }),
+      [],
     );
 
     const renderBackdrop = useCallback(
@@ -94,85 +104,92 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         index={-1}
         snapPoints={snapPoints}
         enablePanDownToClose={enablePanDownToClose}
+        enableContentPanningGesture={enablePanDownToClose}
+        enableHandlePanningGesture={enablePanDownToClose}
         enableOverDrag={enableOverDrag}
         backdropComponent={renderBackdrop}
         onClose={onClose}
         backgroundStyle={{ backgroundColor: nc.backgroundCard }}
         handleIndicatorStyle={{ backgroundColor: nc.textMuted }}
       >
-        <BottomSheetScrollView
-          style={styles.container}
-          contentContainerStyle={{ paddingBottom: Math.max(16, insets.bottom) }}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            {iconLib === "mci" ? (
-              <MaterialCommunityIcons name={icon as any} size={24} color={accentColor} />
-            ) : (
-              <FontAwesome name={icon} size={24} color={accentColor} />
-            )}
-            <Text style={[styles.title, { color: nc.textStrong }]}>{title}</Text>
-          </View>
-
-          {/* Contenu du formulaire */}
-          <View style={styles.content}>{children}</View>
-
-          {/* Boutons d'action */}
-          {showActions && (
-            <View
-              style={[
-                styles.buttonsContainer,
-                { paddingBottom: Math.max(16, insets.bottom) },
-              ]}
-            >
-              <View style={styles.primaryRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.cancelButton,
-                    { backgroundColor: nc.background, borderColor: nc.border },
-                    isSubmitting && styles.buttonDisabled,
-                  ]}
-                  onPress={onCancel}
-                  disabled={isSubmitting}
-                >
-                  <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.validateButton,
-                    { backgroundColor: tintColor },
-                    isSubmitting && styles.buttonDisabled,
-                  ]}
-                  onPress={onSubmit}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator size="small" color={nc.white} />
-                  ) : (
-                    <Text style={[styles.validateText, { color: nc.white }]}>
-                      {isEditing ? "Enregistrer" : "Ajouter"}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {isEditing && onDelete && (
-                <TouchableOpacity
-                  style={[
-                    styles.deleteOutlineButton,
-                    isSubmitting && styles.buttonDisabled,
-                  ]}
-                  onPress={onDelete}
-                  disabled={isSubmitting}
-                >
-                  <FontAwesome name="trash" size={14} color={nc.error} />
-                  <Text style={[styles.deleteOutlineText, { color: nc.error }]}>Supprimer</Text>
-                </TouchableOpacity>
+        <FormScrollContext.Provider value={formScrollContext}>
+          <BottomSheetScrollView
+            ref={scrollViewRef}
+            style={styles.container}
+            contentContainerStyle={{
+              paddingBottom: Math.max(16, insets.bottom),
+            }}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              {iconLib === "mci" ? (
+                <MaterialCommunityIcons name={icon as any} size={24} color={accentColor} />
+              ) : (
+                <FontAwesome name={icon} size={24} color={accentColor} />
               )}
+              <Text style={[styles.title, { color: nc.textStrong }]}>{title}</Text>
             </View>
-          )}
-        </BottomSheetScrollView>
+
+            {/* Contenu du formulaire */}
+            <View style={styles.content}>{children}</View>
+
+            {/* Boutons d'action */}
+            {showActions && (
+              <View
+                style={[
+                  styles.buttonsContainer,
+                  { paddingBottom: Math.max(16, insets.bottom) },
+                ]}
+              >
+                <View style={styles.primaryRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.cancelButton,
+                      { backgroundColor: nc.background, borderColor: nc.border },
+                      isSubmitting && styles.buttonDisabled,
+                    ]}
+                    onPress={onCancel}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.validateButton,
+                      { backgroundColor: tintColor },
+                      isSubmitting && styles.buttonDisabled,
+                    ]}
+                    onPress={onSubmit}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <ActivityIndicator size="small" color={nc.white} />
+                    ) : (
+                      <Text style={[styles.validateText, { color: nc.white }]}>
+                        {isEditing ? "Enregistrer" : "Ajouter"}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {isEditing && onDelete && (
+                  <TouchableOpacity
+                    style={[
+                      styles.deleteOutlineButton,
+                      isSubmitting && styles.buttonDisabled,
+                    ]}
+                    onPress={onDelete}
+                    disabled={isSubmitting}
+                  >
+                    <FontAwesome name="trash" size={14} color={nc.error} />
+                    <Text style={[styles.deleteOutlineText, { color: nc.error }]}>Supprimer</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </BottomSheetScrollView>
+        </FormScrollContext.Provider>
       </BottomSheet>
     );
   },

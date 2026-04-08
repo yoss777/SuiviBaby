@@ -260,6 +260,9 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
     setChronoDirty(true);
   }, []);
 
+  // Reset uniquement au changement d'event (editData.id), pas à chaque render.
+  // Si on dépendait des valeurs date/heureDebut/heureFin, chaque re-render
+  // avec un nouvel objet Date écraserait le choix utilisateur dans le picker.
   useEffect(() => {
     if (!editData?.id) return;
     setDateHeure(toDate(editData.date));
@@ -274,13 +277,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         !editData.heureFin,
     );
     setChronoDirty(false);
-  }, [
-    editData?.id,
-    editData?.date,
-    editData?.heureDebut,
-    editData?.heureFin,
-    editData?.typeActivite,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editData?.id]);
 
   // ============================================
   // HANDLERS

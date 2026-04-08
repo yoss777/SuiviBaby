@@ -360,7 +360,8 @@ export function SoinsForm({
     if (!editData?.id) return;
     setDateHeure(toDate(editData.date));
     setDateHeureDirty(false);
-  }, [editData?.id, editData?.date]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editData?.id]);
 
   // Filtered lists for pickers
   const filteredVaccins = useMemo(

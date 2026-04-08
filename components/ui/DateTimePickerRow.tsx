@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useFormScroll } from "./FormScrollContext";
 
 interface DateTimePickerRowProps {
   label: string;
@@ -44,6 +45,8 @@ const formatTime = (date: Date) =>
     minute: "2-digit",
   });
 
+const isSameDateTime = (a: Date, b: Date) => a.getTime() === b.getTime();
+
 export const DateTimePickerRow = memo(function DateTimePickerRow({
   label,
   value,
@@ -51,7 +54,6 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
   colorScheme,
   disabled = false,
   onChange,
-  onPickerToggle,
   minimumDate,
   maximumDate,
   icon,
@@ -60,47 +62,64 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
   accessibilityHint: a11yHint,
 }: DateTimePickerRowProps) {
   const nc = getNeutralColors(colorScheme);
+  const formScroll = useFormScroll();
   const [showPicker, setShowPicker] = useState(false);
-  // On iOS spinner, track pending value until user confirms
-  const pendingValueRef = useRef<Date>(value);
+  // On iOS spinner, keep a controlled temporary value until user confirms.
+  const [pendingValue, setPendingValue] = useState(value);
+  const pendingValueRef = useRef(value);
+  const openValueRef = useRef(value);
 
   const handleOpen = useCallback(() => {
     if (disabled) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    openValueRef.current = value;
     pendingValueRef.current = value;
+    setPendingValue(value);
     setShowPicker(true);
-    onPickerToggle?.(true);
-  }, [disabled, onPickerToggle, value]);
+    if (Platform.OS === "ios") {
+      setTimeout(() => {
+        formScroll?.scrollToEnd();
+      }, 80);
+    }
+  }, [disabled, formScroll, value]);
 
   // Android: onChange fires once on confirm, dismiss fires with no date
   const handleChangeAndroid = useCallback(
     (_: unknown, date?: Date) => {
       setShowPicker(false);
-      onPickerToggle?.(false);
       if (date) onChange(date);
     },
-    [onChange, onPickerToggle],
+    [onChange],
   );
 
-  // iOS spinner: onChange fires on every scroll tick — just track the value
+  // iOS spinner: onChange fires on every scroll tick. Update the form live
+  // so the displayed value cannot appear stuck behind the sheet re-render.
   const handleChangeIOS = useCallback(
     (_: unknown, date?: Date) => {
-      if (date) pendingValueRef.current = date;
+      if (!date) return;
+      pendingValueRef.current = date;
+      setPendingValue(date);
+      onChange(date);
     },
-    [],
+    [onChange],
   );
 
   const handleConfirmIOS = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowPicker(false);
-    onPickerToggle?.(false);
-    onChange(pendingValueRef.current);
-  }, [onChange, onPickerToggle]);
+    if (!isSameDateTime(pendingValueRef.current, value)) {
+      onChange(pendingValueRef.current);
+    }
+  }, [onChange, value]);
 
   const handleCancelIOS = useCallback(() => {
+    pendingValueRef.current = openValueRef.current;
+    setPendingValue(openValueRef.current);
     setShowPicker(false);
-    onPickerToggle?.(false);
-  }, [onPickerToggle]);
+    if (!isSameDateTime(openValueRef.current, value)) {
+      onChange(openValueRef.current);
+    }
+  }, [onChange, value]);
 
   const isIOS = Platform.OS === "ios";
 
@@ -147,7 +166,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
       </TouchableOpacity>
 
       {showPicker && (
-        <View>
+        <View style={isIOS ? styles.pickerContainer : undefined}>
           {isIOS && (
             <View style={[styles.pickerToolbar, { borderColor: nc.border }]}>
               <TouchableOpacity
@@ -173,7 +192,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
             </View>
           )}
           <DateTimePicker
-            value={isIOS ? pendingValueRef.current : value}
+            value={isIOS ? pendingValue : value}
             mode={mode}
             is24Hour={mode === "time"}
             display={isIOS ? "spinner" : "default"}
@@ -181,6 +200,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
             minimumDate={minimumDate}
             maximumDate={maximumDate}
             onChange={isIOS ? handleChangeIOS : handleChangeAndroid}
+            style={isIOS ? styles.pickerIOS : undefined}
           />
         </View>
       )}
@@ -212,6 +232,14 @@ const styles = StyleSheet.create({
   valueSmall: {
     fontSize: 15,
     fontWeight: "500",
+  },
+  pickerContainer: {
+    alignItems: "stretch",
+    width: "100%",
+  },
+  pickerIOS: {
+    alignSelf: "center",
+    width: "100%",
   },
   pickerToolbar: {
     flexDirection: "row",

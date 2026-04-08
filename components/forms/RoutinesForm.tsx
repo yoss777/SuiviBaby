@@ -300,6 +300,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     setChronoDirty(true);
   }, []);
 
+  // Reset uniquement au changement d'event (editData.id), pas à chaque render.
+  // Si on dépendait des valeurs date/heureDebut/heureFin, chaque re-render
+  // avec un nouvel objet Date écraserait le choix utilisateur dans le picker.
   useEffect(() => {
     if (!editData?.id) return;
     if (editData.type === "bain") {
@@ -320,13 +323,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       setIsOngoing(!editData.heureFin);
       setChronoDirty(false);
     }
-  }, [
-    editData?.id,
-    editData?.type,
-    editData?.date,
-    editData?.heureDebut,
-    editData?.heureFin,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editData?.id]);
 
   // ============================================
   // TYPE SELECTION

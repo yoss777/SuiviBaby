@@ -123,7 +123,8 @@ export function PumpingForm({
     if (!editData?.id) return;
     setDateHeure(editData.date);
     setDateHeureDirty(false);
-  }, [editData?.id, editData?.date]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editData?.id]);
 
   // Toggle functions
   const toggleLeftBreast = () => {
