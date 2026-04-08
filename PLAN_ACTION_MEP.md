@@ -540,6 +540,69 @@ Sprint 5 (S9-10)                                             │
 
 ---
 
+## PROCÉDURE DE RELEASE (checklist opérationnelle)
+
+> Checklist à dérouler **à chaque release** publiée sur les stores.
+> Le but : éviter qu'un user reste bloqué sur une vieille version sans bandeau de mise à jour (incident du 8 avril 2026).
+
+### Avant le tag
+
+1. **Bumper la version dans `app.json`** : `expo.version` (ex: `1.0.1` → `1.0.2`).
+2. **Bumper `expo.android.versionCode` et `expo.ios.buildNumber`** (incréments).
+3. **Mettre à jour `data/changelog.ts`** avec la nouvelle entrée (utilisée par `ChangelogModal`).
+4. **Vérifier les tests** : `npm test && npm run test:functions && npm run typecheck`.
+5. **Commit** les bumps avec message `chore(release): bump to vX.Y.Z`.
+
+### Création du tag
+
+6. **Tag annoté** avec les release notes (exploitées par le job `sync-app-config`) :
+   ```bash
+   git tag -a vX.Y.Z -m "Notes utilisateur visibles dans le bandeau et la modale"
+   git push origin vX.Y.Z
+   ```
+
+### Workflow auto déclenché par le tag
+
+Le job `sync-app-config` (cf. [.github/workflows/release.yml](.github/workflows/release.yml)) :
+- attend la fin du job `submit` (build + EAS Submit aux stores),
+- pousse `latestVersion` + `releaseNotes` dans Firestore `app_config/latest_version`,
+- déclenche le bandeau de mise à jour côté apps installées.
+
+### Fallback manuel (si workflow auto indisponible)
+
+Si tu publies un hotfix urgent sans passer par un tag, ou si le workflow CI a échoué :
+
+```bash
+# Depuis la racine du repo, après firebase login
+RELEASE_NOTES="Notes utilisateur" npm run update-app-config
+```
+
+Le script [scripts/updateAppConfig.mjs](scripts/updateAppConfig.mjs) :
+- lit `app.json.expo.version` comme source de vérité,
+- refuse une régression de version (sauf `FORCE_DOWNGRADE=true`),
+- patche idempotemment Firestore.
+
+### Vérifications post-release
+
+- [ ] **Stores** : la nouvelle version est bien live sur Play Store / App Store.
+- [ ] **Firestore** : `app_config/latest_version.latestVersion` = nouvelle version.
+- [ ] **App user-side** : sur un device avec ancienne version, le bandeau apparaît au prochain login OU au prochain foreground (recheck 6h max).
+- [ ] **Sentry** : aucune erreur `service: appUpdate, operation: managerVersionCheck` dans les premières heures.
+
+### En cas de rollback
+
+Si la nouvelle version est buggée et qu'il faut revenir en arrière côté Firestore :
+
+```bash
+# 1. Bumper app.json à la version cible (ex: rollback de 1.0.2 → 1.0.1)
+# 2. Forcer le downgrade
+FORCE_DOWNGRADE=true RELEASE_NOTES="Rollback hotfix" npm run update-app-config
+```
+
+Note : les users ayant déjà installé 1.0.2 ne seront PAS rétrogradés (les stores n'en sont pas capables sans rebuild). Le rollback Firestore évite seulement de faire pointer le bandeau vers une version cassée pour les nouveaux installs.
+
+---
+
 ## FICHIER DE RÉFÉRENCE
 
 Ce document est la **source de vérité** pour toutes les actions à mener avant la MEP de SuiviBaby v1.0.0.
