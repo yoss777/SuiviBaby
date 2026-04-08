@@ -13,13 +13,18 @@ import {
   markChangelogSeen,
 } from "@/services/smartContentService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
+import { captureServiceError } from "@/utils/errorReporting";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, type AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ChangelogModal } from "./ChangelogModal";
 import { UpdateBanner } from "./UpdateBanner";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 const UPDATE_DISMISS_KEY = "samaye_update_dismissed";
+// Min interval between two foreground rechecks — avoids hammering Firestore
+// when the app is brought to foreground multiple times in a short window.
+const RECHECK_THROTTLE_MS = 6 * 60 * 60 * 1000; // 6h
 
 export function AppUpdateManager() {
   const colorScheme = useColorScheme() ?? "light";
@@ -36,6 +41,11 @@ export function AppUpdateManager() {
   const [showChangelog, setShowChangelog] = useState(false);
   const [updatesEnabled, setUpdatesEnabled] = useState(true);
 
+  // Throttle + reentrancy guards for runVersionCheck (used by both initial
+  // useEffect and AppState foreground listener).
+  const lastVersionCheckRef = useRef<number>(0);
+  const isVersionCheckingRef = useRef<boolean>(false);
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -43,65 +53,102 @@ export function AppUpdateManager() {
     };
   }, []);
 
-  // Check for updates and changelog on auth change
+  // Version check (banner) — extracted so it can be triggered both on auth
+  // change AND on AppState foreground (with throttle). Does NOT touch the
+  // changelog flow to avoid extra Firestore reads on every foreground.
+  const runVersionCheck = useCallback(async () => {
+    if (isVersionCheckingRef.current) return;
+    isVersionCheckingRef.current = true;
+    try {
+      const prefs = await obtenirPreferencesNotifications();
+      if (!isMountedRef.current) return;
+      setUpdatesEnabled(prefs.updates);
+      if (!prefs.updates) return;
+
+      const updateInfo = await checkForUpdate();
+      if (!isMountedRef.current) return;
+
+      if (updateInfo?.updateAvailable) {
+        const dismissed = await AsyncStorage.getItem(UPDATE_DISMISS_KEY);
+        if (!isMountedRef.current) return;
+        if (
+          dismissed === updateInfo.latestVersion &&
+          !updateInfo.forceUpdate
+        ) {
+          // Already dismissed for this version, skip.
+          return;
+        }
+        setLatestVersion(updateInfo.latestVersion);
+        setStoreUrl(updateInfo.storeUrl);
+        setForceUpdate(updateInfo.forceUpdate);
+        setShowBanner(true);
+      }
+    } catch (e) {
+      captureServiceError(e, {
+        service: "appUpdate",
+        operation: "managerVersionCheck",
+      });
+    } finally {
+      lastVersionCheckRef.current = Date.now();
+      isVersionCheckingRef.current = false;
+    }
+  }, []);
+
+  // Changelog check — only relevant after a fresh install/update, so it runs
+  // once on auth change and is NOT re-triggered on foreground.
+  const runChangelogCheck = useCallback(async () => {
+    try {
+      const currentVersion = getCurrentVersion();
+      const userContent = await getUserContentState();
+      if (!isMountedRef.current) return;
+
+      const currentChangelog = CHANGELOG.find(
+        (entry) =>
+          entry.version === currentVersion &&
+          !userContent.seenChangelog.includes(entry.version),
+      );
+
+      if (currentChangelog) {
+        setShowChangelog(true);
+      }
+    } catch (e) {
+      captureServiceError(e, {
+        service: "appUpdate",
+        operation: "managerChangelogCheck",
+      });
+    }
+  }, []);
+
+  // Initial check on auth change — runs both flows.
+  useEffect(() => {
+    if (!firebaseUser) return;
+    runVersionCheck();
+    runChangelogCheck();
+  }, [firebaseUser, runVersionCheck, runChangelogCheck]);
+
+  // Foreground recheck — when the app comes back to active state, re-check
+  // for a new version (not changelog) if enough time has passed since the
+  // last check. Catches the case of long-lived sessions where the user never
+  // logs out and would otherwise miss new releases.
   useEffect(() => {
     if (!firebaseUser) return;
 
-    let mounted = true;
-
-    const check = async () => {
-      try {
-        // Load preferences
-        const prefs = await obtenirPreferencesNotifications();
-        if (!mounted) return;
-        setUpdatesEnabled(prefs.updates);
-
-        if (!prefs.updates) return;
-
-        // Check for new app version
-        const updateInfo = await checkForUpdate();
-        if (!mounted) return;
-
-        if (updateInfo?.updateAvailable) {
-          // Check if user already dismissed this version
-          const dismissed = await AsyncStorage.getItem(UPDATE_DISMISS_KEY);
-          if (dismissed === updateInfo.latestVersion && !updateInfo.forceUpdate) {
-            // Already dismissed, don't show again
-          } else {
-            setLatestVersion(updateInfo.latestVersion);
-            setStoreUrl(updateInfo.storeUrl);
-            setForceUpdate(updateInfo.forceUpdate);
-            setShowBanner(true);
-          }
-        }
-
-        // Check for unseen changelog
-        const currentVersion = getCurrentVersion();
-        const userContent = await getUserContentState();
-        if (!mounted) return;
-
-        const unseenChangelogs = CHANGELOG.filter(
-          (entry) => !userContent.seenChangelog.includes(entry.version),
-        );
-
-        // Only show changelog for current version (just updated)
-        const currentChangelog = unseenChangelogs.find(
-          (entry) => entry.version === currentVersion,
-        );
-
-        if (currentChangelog) {
-          setShowChangelog(true);
-        }
-      } catch {
-        // Silent failure
-      }
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState !== "active") return;
+      const elapsed = Date.now() - lastVersionCheckRef.current;
+      if (elapsed < RECHECK_THROTTLE_MS) return;
+      runVersionCheck();
     };
 
-    check();
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange,
+    );
+
     return () => {
-      mounted = false;
+      subscription.remove();
     };
-  }, [firebaseUser]);
+  }, [firebaseUser, runVersionCheck]);
 
   const handleDismissBanner = useCallback(async () => {
     setShowBanner(false);
