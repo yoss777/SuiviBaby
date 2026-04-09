@@ -98,10 +98,13 @@ export async function loginRevenueCat(userId: string): Promise<CustomerInfo | nu
 
 /**
  * Déconnecte l'utilisateur (retour à anonymous).
+ * No-op si l'utilisateur courant est déjà anonyme — sinon le SDK lève
+ * "LogOut was called but the current user is anonymous" qui pollue les logs.
  */
 export async function logoutRevenueCat(): Promise<void> {
   if (!isInitialized) return;
   try {
+    if (await Purchases.isAnonymous()) return;
     await Purchases.logOut();
   } catch (error) {
     console.error("[RevenueCat] Logout failed:", error);

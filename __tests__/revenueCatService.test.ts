@@ -6,6 +6,7 @@ const mockPurchases = {
   setLogLevel: jest.fn(),
   logIn: jest.fn(),
   logOut: jest.fn(),
+  isAnonymous: jest.fn(),
   getCustomerInfo: jest.fn(),
   getOfferings: jest.fn(),
   purchasePackage: jest.fn(),
@@ -142,16 +143,27 @@ describe("revenueCatService", () => {
       expect(mockPurchases.logOut).not.toHaveBeenCalled();
     });
 
-    it("should call Purchases.logOut when initialized", async () => {
+    it("should call Purchases.logOut when initialized and user is identified", async () => {
       await revenueCatService.initRevenueCat();
+      mockPurchases.isAnonymous.mockResolvedValueOnce(false);
 
       await revenueCatService.logoutRevenueCat();
 
       expect(mockPurchases.logOut).toHaveBeenCalledTimes(1);
     });
 
+    it("should skip logOut when current user is already anonymous", async () => {
+      await revenueCatService.initRevenueCat();
+      mockPurchases.isAnonymous.mockResolvedValueOnce(true);
+
+      await revenueCatService.logoutRevenueCat();
+
+      expect(mockPurchases.logOut).not.toHaveBeenCalled();
+    });
+
     it("should not throw on error", async () => {
       await revenueCatService.initRevenueCat();
+      mockPurchases.isAnonymous.mockResolvedValueOnce(false);
       mockPurchases.logOut.mockRejectedValueOnce(new Error("Logout failed"));
 
       await expect(
