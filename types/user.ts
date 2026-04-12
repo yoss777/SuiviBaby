@@ -106,6 +106,12 @@ export interface User {
     language: 'fr' | 'en';
     theme: 'light' | 'dark' | 'auto';
   };
+
+  // Suppression programmée du compte
+  pendingDeletion?: {
+    scheduledAt: string;
+    deletionDate: string;
+  };
 }
 
 /**

@@ -4,6 +4,7 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { hasPendingDeletion } from "@/services/accountDeletionService";
 import {
   clearCredentials,
   getBiometricType,
@@ -225,10 +226,18 @@ export default function LoginScreen() {
     if (
       authLoading ||
       !user ||
-      babyLoading ||
-      !childrenLoaded ||
       navigationLocked.current
     ) {
+      return;
+    }
+
+    if (hasPendingDeletion(user)) {
+      navigationLocked.current = true;
+      router.replace("/(auth)/pending-deletion");
+      return;
+    }
+
+    if (babyLoading || !childrenLoaded) {
       return;
     }
 

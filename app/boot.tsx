@@ -9,6 +9,7 @@ import BackgroundImage from "@/components/ui/BackgroundImage";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
+import { hasPendingDeletion } from "@/services/accountDeletionService";
 import { obtenirEvenementsDuJour } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { setPreferencesCache, setPermissionsCache } from "@/services/userPreferencesCache";
@@ -203,6 +204,14 @@ function BootScreenContent() {
           logBoot("Redirection login");
           router.replace("/(auth)/login");
         }
+        return;
+      }
+
+      if (hasPendingDeletion(user)) {
+        if (hasNavigatedRef.current) return;
+        hasNavigatedRef.current = true;
+        logBoot("Redirection pending deletion");
+        router.replace("/(auth)/pending-deletion");
         return;
       }
 

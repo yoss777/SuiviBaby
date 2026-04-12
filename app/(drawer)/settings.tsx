@@ -15,6 +15,7 @@ import {
 import {
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -37,7 +38,8 @@ import { useThemePreference } from "@/contexts/ThemeContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   cancelAccountDeletion,
-  getPendingDeletionDate,
+  formatPendingDeletionDate,
+  getPendingDeletionDateFromUser,
   requestAccountDeletion,
 } from "@/services/accountDeletionService";
 import {
@@ -55,6 +57,8 @@ interface SettingItem {
   description?: string;
   value?: string;
   tag?: string;
+  switchValue?: boolean;
+  onSwitchChange?: (value: boolean) => void;
   onPress: () => void;
   color?: string;
   disabled?: boolean;
@@ -66,7 +70,7 @@ interface SettingItem {
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshUser } = useAuth();
   const { activeChild, children, hiddenChildrenIds } = useBaby();
   const { preference: themePreference } = useThemePreference();
   const router = useRouter();
@@ -87,15 +91,13 @@ export default function SettingsScreen() {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState("Biométrie");
-  const [pendingDeletionDate, setPendingDeletionDate] = useState<string | null>(
-    null,
-  );
+  const [isBiometricUpdating, setIsBiometricUpdating] = useState(false);
   const [isCancellingDeletion, setIsCancellingDeletion] = useState(false);
   const [isOwnerOfAny, setIsOwnerOfAny] = useState(false);
   const [pendingDeletionRequests, setPendingDeletionRequests] = useState(0);
   const navigation = useNavigation();
 
-  // Check biometric availability + pending deletion on mount
+  // Check biometric availability on mount
   useEffect(() => {
     (async () => {
       const available = await isBiometricAvailable();
@@ -109,11 +111,13 @@ export default function SettingsScreen() {
         setBiometricLabel(type);
       }
     })();
-
-    getPendingDeletionDate()
-      .then(setPendingDeletionDate)
-      .catch(() => {});
   }, []);
+
+  const pendingDeletionDate = getPendingDeletionDateFromUser(user);
+  const formattedPendingDeletionDate = useMemo(
+    () => formatPendingDeletionDate(pendingDeletionDate),
+    [pendingDeletionDate],
+  );
 
   // Check if user is owner of at least one child (via access sub-collection)
   useEffect(() => {
@@ -235,6 +239,36 @@ export default function SettingsScreen() {
       router.setParams({ delete: undefined });
     }
   }, [deleteParam, router]);
+
+  const handleBiometricToggle = useCallback(
+    async (value: boolean) => {
+      if (isBiometricUpdating) return;
+
+      setIsBiometricUpdating(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      try {
+        if (value) {
+          await enableBiometric();
+          setBiometricEnabled(true);
+        } else {
+          await clearCredentials();
+          setBiometricEnabled(false);
+        }
+      } catch {
+        setModalConfig({
+          visible: true,
+          title: "Erreur",
+          message: value
+            ? `Impossible d'activer ${biometricLabel}.`
+            : `Impossible de désactiver ${biometricLabel}.`,
+        });
+      } finally {
+        setIsBiometricUpdating(false);
+      }
+    },
+    [biometricLabel, isBiometricUpdating],
+  );
 
   const accountSettings: SettingItem[] = useMemo(
     () => [
@@ -367,24 +401,18 @@ export default function SettingsScreen() {
                 ? "scan-outline"
                 : "finger-print-outline") as keyof typeof Ionicons.glyphMap,
               label: biometricLabel,
-              value: biometricEnabled ? "Activé" : "Désactivé",
               description: biometricEnabled
                 ? "Connexion rapide activée"
                 : "Activer la connexion rapide",
-              accessibilityLabel: `${biometricLabel}, ${biometricEnabled ? "activé" : "désactivé"}`,
-              accessibilityHint: biometricEnabled
-                ? `Appuyez pour désactiver ${biometricLabel}`
-                : `Appuyez pour activer ${biometricLabel}`,
-              onPress: async () => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                if (biometricEnabled) {
-                  await clearCredentials();
-                  setBiometricEnabled(false);
-                } else {
-                  await enableBiometric();
-                  setBiometricEnabled(true);
-                }
-              },
+              switchValue: biometricEnabled,
+              onSwitchChange: handleBiometricToggle,
+              showChevron: false,
+              onPress: () => handleBiometricToggle(!biometricEnabled),
+              disabled: isBiometricUpdating,
+              accessibilityLabel: biometricLabel,
+              accessibilityHint: isBiometricUpdating
+                ? "Mise à jour en cours"
+                : "Active ou désactive la connexion rapide",
             },
           ]
         : []),
@@ -418,6 +446,8 @@ export default function SettingsScreen() {
       biometricAvailable,
       biometricEnabled,
       biometricLabel,
+      handleBiometricToggle,
+      isBiometricUpdating,
     ],
   );
 
@@ -526,21 +556,34 @@ export default function SettingsScreen() {
     (item: SettingItem) => {
       const isDisabled = !!item.disabled;
       const showChevron = item.showChevron ?? !isDisabled;
+      const isSwitchItem = item.switchValue !== undefined;
+      const handlePress = isSwitchItem
+        ? () => item.onSwitchChange?.(!item.switchValue)
+        : item.onPress;
 
       return (
         <TouchableOpacity
           key={item.id}
           style={[styles.settingItem, { borderBottomColor: nc.borderLight }]}
-          onPress={item.onPress}
+          onPress={handlePress}
           activeOpacity={isDisabled ? 1 : 0.7}
           disabled={isDisabled}
-          accessibilityRole="button"
+          accessibilityRole={isSwitchItem ? "switch" : "button"}
           accessibilityLabel={
             item.accessibilityLabel ||
-            `${item.label}${item.value ? `, ${item.value}` : ""}`
+            `${item.label}${
+              isSwitchItem
+                ? `, ${item.switchValue ? "activé" : "désactivé"}`
+                : item.value
+                  ? `, ${item.value}`
+                  : ""
+            }`
           }
           accessibilityHint={item.accessibilityHint || item.description}
-          accessibilityState={{ disabled: isDisabled }}
+          accessibilityState={{
+            disabled: isDisabled,
+            ...(isSwitchItem ? { checked: item.switchValue } : {}),
+          }}
         >
           <View style={styles.settingItemLeft}>
             <View
@@ -585,39 +628,55 @@ export default function SettingsScreen() {
             </View>
           </View>
           <View style={styles.settingItemRight}>
-            {item.value ? (
-              <Text
-                style={[
-                  styles.settingValue,
-                  { color: nc.textMuted },
-                  isDisabled && { opacity: 0.35 },
-                ]}
-                numberOfLines={1}
-              >
-                {item.value}
-              </Text>
-            ) : null}
-            {item.tag ? (
-              <View
-                style={[
-                  styles.tag,
-                  { backgroundColor: nc.backgroundPressed },
-                  isDisabled && { opacity: 0.35 },
-                ]}
-              >
-                <Text style={[styles.tagText, { color: nc.textLight }]}>
-                  {item.tag}
-                </Text>
-              </View>
-            ) : null}
-            {showChevron ? (
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={nc.textMuted}
-                style={isDisabled && { opacity: 0.35 }}
+            {isSwitchItem ? (
+              <Switch
+                value={item.switchValue}
+                onValueChange={item.onSwitchChange}
+                trackColor={{
+                  false: nc.borderLight,
+                  true: Colors[colorScheme].tint,
+                }}
+                disabled={isDisabled}
+                pointerEvents="none"
+                accessible={false}
               />
-            ) : null}
+            ) : (
+              <>
+                {item.value ? (
+                  <Text
+                    style={[
+                      styles.settingValue,
+                      { color: nc.textMuted },
+                      isDisabled && { opacity: 0.35 },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {item.value}
+                  </Text>
+                ) : null}
+                {item.tag ? (
+                  <View
+                    style={[
+                      styles.tag,
+                      { backgroundColor: nc.backgroundPressed },
+                      isDisabled && { opacity: 0.35 },
+                    ]}
+                  >
+                    <Text style={[styles.tagText, { color: nc.textLight }]}>
+                      {item.tag}
+                    </Text>
+                  </View>
+                ) : null}
+                {showChevron ? (
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={nc.textMuted}
+                    style={isDisabled && { opacity: 0.35 }}
+                  />
+                ) : null}
+              </>
+            )}
           </View>
         </TouchableOpacity>
       );
@@ -664,7 +723,7 @@ export default function SettingsScreen() {
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={[styles.deletionBannerText, { color: nc.error }]}>
                 Suppression programmee le{" "}
-                {new Date(pendingDeletionDate).toLocaleDateString("fr-FR")}
+                {formattedPendingDeletionDate}
               </Text>
               <Text
                 style={[styles.deletionBannerSubtext, { color: nc.textMuted }]}
@@ -678,7 +737,7 @@ export default function SettingsScreen() {
                 setIsCancellingDeletion(true);
                 try {
                   await cancelAccountDeletion();
-                  setPendingDeletionDate(null);
+                  await refreshUser();
                   setModalConfig({
                     visible: true,
                     title: "Annulation confirmee",
@@ -781,9 +840,11 @@ export default function SettingsScreen() {
             return;
           }
 
+          let deletionScheduled = false;
           try {
             setIsDeleting(true);
             await requestAccountDeletion(deletePassword);
+            deletionScheduled = true;
 
             // Envoyer email de confirmation (fire & forget)
             const { httpsCallable } = await import("firebase/functions");
@@ -794,22 +855,17 @@ export default function SettingsScreen() {
             );
             sendEmail().catch(() => {});
 
-            const deletionDate = new Date();
-            deletionDate.setDate(deletionDate.getDate() + 30);
-            setPendingDeletionDate(deletionDate.toISOString());
+            await refreshUser();
 
             setShowDeletePasswordModal(false);
             setDeletePassword("");
-            setModalConfig({
-              visible: true,
-              title: "Suppression programmee",
-              message:
-                "Votre compte sera supprime dans 30 jours. Un email de confirmation vous a ete envoye. Vous pouvez annuler a tout moment depuis les parametres.",
-            });
+            await signOut();
+            router.replace("/(auth)/login");
           } catch (error: any) {
             const code = error?.code || "";
-            const message =
-              code === "auth/wrong-password"
+            const message = deletionScheduled
+              ? "Votre compte est bien programmé pour suppression, mais la déconnexion automatique a échoué. Déconnectez-vous manuellement."
+              : code === "auth/wrong-password"
                 ? "Mot de passe incorrect."
                 : code === "auth/requires-recent-login"
                   ? "Veuillez vous reconnecter puis réessayer."
