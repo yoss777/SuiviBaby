@@ -7,6 +7,8 @@ import { homedir } from "os";
 import { join } from "path";
 
 const PROJECT_ID = "samaye-53723";
+const appJson = JSON.parse(readFileSync(join(import.meta.dirname, "../app.json"), "utf-8"));
+const currentVersion = appJson.expo.version;
 const configPath = join(homedir(), ".config/configstore/firebase-tools.json");
 const config = JSON.parse(readFileSync(configPath, "utf-8"));
 const refreshToken = config.tokens?.refresh_token;
@@ -41,7 +43,7 @@ async function main() {
   const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/app_config/latest_version`;
 
   const fields = {
-    latestVersion: "1.0.9",
+    latestVersion: currentVersion,
     minVersion: "1.0.0",
     releaseNotes: "Smart Content System, Tips carousel, Milestone timeline",
     storeUrl: {
