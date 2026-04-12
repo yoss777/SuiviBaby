@@ -28,7 +28,7 @@ export default function TermsScreen() {
     {
       title: '1. Qui fournit le service',
       content:
-        'Le service est propose par SuiviBaby, [adresse complete], [pays]. Contact : support@suivibaby.com.',
+        'Le service est proposé par SuiviBaby (TESFA), 78 avenue des Champs-Élysées, 75008 Paris, France. Contact : contact@suivibaby.com.',
     },
 {
       title: '2. Avertissement médical important',

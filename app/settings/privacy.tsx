@@ -28,7 +28,7 @@ const sections = [
     {
       title: "1. Responsable du traitement",
       content:
-        "Le service SuiviBaby est opéré par [Votre Nom ou Nom de l'entreprise], situé à [Votre Adresse complète]. Pour toute question relative à la protection de vos données, vous pouvez nous contacter à l'adresse : privacy@suivibaby.com.",
+        "Le service SuiviBaby est opéré par TESFA, situé au 78 avenue des Champs-Élysées, 75008 Paris, France. Pour toute question relative à la protection de vos données, vous pouvez nous contacter à l'adresse : privacy@suivibaby.com.",
     },
     {
       title: "2. Nature des données collectées",
