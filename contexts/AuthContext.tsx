@@ -37,6 +37,7 @@ interface AuthContextType {
   email: string | null;
   userType: UserType | null;
   loading: boolean;
+  status: "loading" | "ready" | "degraded";
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -48,6 +49,7 @@ const AuthContext = createContext<AuthContextType>({
   email: null,
   userType: null,
   loading: true,
+  status: "loading",
   signOut: async () => {},
   refreshUser: async () => {},
 });
@@ -59,12 +61,15 @@ interface AuthState {
   email: string | null;
   userType: UserType | null;
   loading: boolean;
+  status: "loading" | "ready" | "degraded";
 }
 
 type AuthAction =
+  | { type: "SET_FIREBASE_USER"; payload: FirebaseUser }
   | { type: "SET_USER_DATA"; payload: { firebaseUser: FirebaseUser; user: User } }
   | { type: "CLEAR_USER" }
-  | { type: "SET_LOADING"; payload: boolean };
+  | { type: "SET_LOADING"; payload: boolean }
+  | { type: "SET_DEGRADED"; payload: FirebaseUser | null };
 
 const initialState: AuthState = {
   firebaseUser: null,
@@ -73,10 +78,18 @@ const initialState: AuthState = {
   email: null,
   userType: null,
   loading: true,
+  status: "loading",
 };
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
+    case "SET_FIREBASE_USER":
+      return {
+        ...state,
+        firebaseUser: action.payload,
+        loading: true,
+        status: "loading",
+      };
     case "SET_USER_DATA":
       return {
         ...state,
@@ -86,15 +99,29 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         email: action.payload.user.email || null,
         userType: action.payload.user.userType,
         loading: false,
+        status: "ready",
       };
     case "CLEAR_USER":
-      return { ...initialState, loading: false };
+      return { ...initialState, loading: false, status: "ready" };
     case "SET_LOADING":
-      return { ...state, loading: action.payload };
+      return {
+        ...state,
+        loading: action.payload,
+        status: action.payload ? "loading" : "ready",
+      };
+    case "SET_DEGRADED":
+      return {
+        ...state,
+        firebaseUser: action.payload,
+        loading: false,
+        status: "degraded",
+      };
     default:
       return state;
   }
 }
+
+const AUTH_LOADING_TIMEOUT_MS = 8000;
 
 export function AuthProvider({
   children: childrenProp,
@@ -108,6 +135,13 @@ export function AuthProvider({
   // Fonction pour charger les données utilisateur
   const loadUserData = useCallback(
     async (fbUser: FirebaseUser) => {
+      let hasTimedOut = false;
+      const timeoutId = setTimeout(() => {
+        if (!isMountedRef.current) return;
+        hasTimedOut = true;
+        dispatch({ type: "SET_DEGRADED", payload: fbUser });
+      }, AUTH_LOADING_TIMEOUT_MS);
+
       try {
         const appType =
           process.env.EXPO_PUBLIC_APP_TYPE === "professional"
@@ -199,6 +233,9 @@ export function AuthProvider({
         });
       } catch (error) {
         if (!isMountedRef.current) return;
+        if (hasTimedOut) {
+          return;
+        }
         console.error(
           "[AuthContext] loadUserData CATCH — error:",
           error,
@@ -209,6 +246,8 @@ export function AuthProvider({
           [{ text: "OK", onPress: async () => await firebaseSignOut(auth) }],
         );
         dispatch({ type: "SET_LOADING", payload: false });
+      } finally {
+        clearTimeout(timeoutId);
       }
     },
     [showAlert],
@@ -220,6 +259,7 @@ export function AuthProvider({
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!isMountedRef.current) return;
       if (fbUser) {
+        dispatch({ type: "SET_FIREBASE_USER", payload: fbUser });
         await loadUserData(fbUser);
         // Relancer l'auto-sync offline après login (stopAutoSync est appelé au signOut)
         startAutoSync();
@@ -257,6 +297,7 @@ export function AuthProvider({
 
   const refreshUser = useCallback(async () => {
     if (state.firebaseUser) {
+      dispatch({ type: "SET_FIREBASE_USER", payload: state.firebaseUser });
       await loadUserData(state.firebaseUser);
     }
   }, [state.firebaseUser, loadUserData]);
@@ -270,6 +311,7 @@ export function AuthProvider({
         email: state.email,
         userType: state.userType,
         loading: state.loading,
+        status: state.status,
         signOut,
         refreshUser,
       }}

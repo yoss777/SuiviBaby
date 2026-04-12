@@ -1,6 +1,7 @@
 import { db } from '@/config/firebase';
 import { obtenirPreferences, type ReminderPreferences } from '@/services/userPreferencesService';
 import { collection, doc, limit, onSnapshot, query, setDoc, where } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { obtenirEvenementsDuJour } from '@/services/eventsService';
@@ -23,6 +24,7 @@ interface BabyContextType {
   children: Child[];
   activeChild: Child | null;
   loading: boolean;
+  status: 'loading' | 'ready' | 'degraded';
   childrenLoaded: boolean;
   hiddenChildrenIds: string[];
   reminderPreferences: ReminderPreferences;
@@ -33,6 +35,52 @@ interface BabyContextType {
 }
 
 const BabyContext = createContext<BabyContextType | undefined>(undefined);
+const BABY_BOOT_CACHE_PREFIX = '@suivibaby_boot_children:';
+const INITIAL_CHILDREN_TIMEOUT_MS = 8000;
+
+interface CachedBabyState {
+  children: Child[];
+  activeChildId: string | null;
+  cachedAt: number;
+}
+
+function getBabyCacheKey(uid: string) {
+  return `${BABY_BOOT_CACHE_PREFIX}${uid}`;
+}
+
+async function loadCachedBabyState(uid: string): Promise<CachedBabyState | null> {
+  try {
+    const raw = await AsyncStorage.getItem(getBabyCacheKey(uid));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedBabyState;
+    if (!Array.isArray(parsed.children)) return null;
+    return {
+      children: parsed.children,
+      activeChildId: parsed.activeChildId ?? null,
+      cachedAt: parsed.cachedAt ?? Date.now(),
+    };
+  } catch (error) {
+    console.warn('[BabyContext] Impossible de lire le cache enfants:', error);
+    return null;
+  }
+}
+
+async function saveCachedBabyState(
+  uid: string,
+  payload: Omit<CachedBabyState, 'cachedAt'>,
+) {
+  try {
+    await AsyncStorage.setItem(
+      getBabyCacheKey(uid),
+      JSON.stringify({
+        ...payload,
+        cachedAt: Date.now(),
+      }),
+    );
+  } catch (error) {
+    console.warn('[BabyContext] Impossible d’écrire le cache enfants:', error);
+  }
+}
 
 /**
  * Compute visible & sorted children from raw data + hidden list.
@@ -80,16 +128,18 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   const [children, setChildren] = useState<Child[]>([]);
   const [activeChild, setActiveChildState] = useState<Child | null>(null);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'degraded'>('loading');
   const [childrenLoaded, setChildrenLoaded] = useState(false);
   const [hiddenChildrenIds, setHiddenChildrenIds] = useState<string[]>([]);
   const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences>(DEFAULT_REMINDERS);
   const lastActiveChildIdRef = useRef<string | null>(null);
   const lastActiveOverrideRef = useRef<string | null>(null);
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const preloadInFlight = useRef<Set<string>>(new Set());
   const childListenersRef = useRef<Map<string, () => void>>(new Map());
   const childDataRef = useRef<Map<string, Child>>(new Map());
   const currentChildIdsRef = useRef<Set<string>>(new Set());
+  const hasCachedBootstrapRef = useRef(false);
+  const hasResolvedInitialLiveDataRef = useRef(false);
   // Ref mirrors for hiddenChildrenIds — avoids putting state in listener useEffect deps
   const hiddenChildrenIdsRef = useRef<string[]>([]);
 
@@ -97,6 +147,52 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   useEffect(() => {
     hiddenChildrenIdsRef.current = hiddenChildrenIds;
   }, [hiddenChildrenIds]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!user?.uid) {
+      hasCachedBootstrapRef.current = false;
+      hasResolvedInitialLiveDataRef.current = false;
+      setStatus(authLoading ? 'loading' : 'ready');
+      return;
+    }
+
+    loadCachedBabyState(user.uid).then((cached) => {
+      if (cancelled || !cached) return;
+      if (hasResolvedInitialLiveDataRef.current) return;
+
+      hasCachedBootstrapRef.current = true;
+      childDataRef.current = new Map(cached.children.map((child) => [child.id, child]));
+      currentChildIdsRef.current = new Set(cached.children.map((child) => child.id));
+
+      if (cached.activeChildId) {
+        lastActiveOverrideRef.current = cached.activeChildId;
+      }
+
+      const hydratedChildren = computeVisibleChildren(
+        childDataRef.current,
+        hiddenChildrenIdsRef.current,
+      );
+      const hydratedActiveChild = pickActiveChild(
+        hydratedChildren,
+        null,
+        cached.activeChildId,
+        lastActiveChildIdRef.current,
+        hiddenChildrenIdsRef.current,
+      );
+
+      setChildren(hydratedChildren);
+      setActiveChildState(hydratedActiveChild);
+      setLoading(false);
+      setChildrenLoaded(true);
+      setStatus('degraded');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid, authLoading]);
 
   /**
    * Recompute visible children + active child from refs, then setState.
@@ -140,11 +236,9 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   useEffect(() => {
     if (!user?.uid) {
       setHiddenChildrenIds([]);
-      setPreferencesLoaded(true);
       return;
     }
 
-    setPreferencesLoaded(false);
     const userPrefsRef = doc(db, 'user_preferences', user.uid);
 
     const unsubscribe = onSnapshot(userPrefsRef, (snapshot) => {
@@ -180,7 +274,6 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
           lastActiveChildIdRef.current = null;
         }
       }
-      setPreferencesLoaded(true);
     }, (error) => {
       console.error('Erreur lors de l\'écoute des préférences:', error);
       obtenirPreferences().then(prefs => {
@@ -192,10 +285,8 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
           return newHiddenIds;
         });
         lastActiveChildIdRef.current = prefs.lastActiveChildId || null;
-        setPreferencesLoaded(true);
       }).catch(err => {
         console.error('Erreur lors du chargement des préférences:', err);
-        setPreferencesLoaded(true);
       });
     });
 
@@ -209,6 +300,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     if (authLoading) {
       setLoading(true);
       setChildrenLoaded(false);
+      setStatus('loading');
       return;
     }
 
@@ -217,12 +309,30 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       setActiveChildState(null);
       setLoading(false);
       setChildrenLoaded(false);
+      setStatus('ready');
+      hasCachedBootstrapRef.current = false;
+      hasResolvedInitialLiveDataRef.current = false;
+      childDataRef.current.clear();
+      currentChildIdsRef.current.clear();
       return;
     }
 
     console.log('[BabyContext] Chargement des enfants (access) pour user.uid:', user.uid);
-    setLoading(true);
-    setChildrenLoaded(false);
+    if (!hasCachedBootstrapRef.current) {
+      setLoading(true);
+      setChildrenLoaded(false);
+      setStatus('loading');
+    }
+
+    const childListeners = childListenersRef.current;
+
+    const initialLoadTimeout = setTimeout(() => {
+      if (hasCachedBootstrapRef.current) {
+        setLoading(false);
+        setChildrenLoaded(true);
+      }
+      setStatus('degraded');
+    }, INITIAL_CHILDREN_TIMEOUT_MS);
 
     const accessQuery = query(
       collection(db, 'user_child_access'),
@@ -239,9 +349,15 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       });
       currentChildIdsRef.current = currentChildIds;
 
+      childDataRef.current.forEach((_, childId) => {
+        if (!currentChildIds.has(childId)) {
+          childDataRef.current.delete(childId);
+        }
+      });
+
       // Add listeners for new children
       currentChildIds.forEach((childId) => {
-        if (childListenersRef.current.has(childId)) return;
+        if (childListeners.has(childId)) return;
 
         const unsub = onSnapshot(
           doc(db, 'children', childId),
@@ -262,34 +378,44 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
             syncState();
 
             if (childDataRef.current.size >= currentChildIdsRef.current.size) {
+              hasResolvedInitialLiveDataRef.current = true;
+              clearTimeout(initialLoadTimeout);
               setLoading(false);
               setChildrenLoaded(true);
+              setStatus('ready');
             }
           },
           (error) => {
             console.warn('[BabyContext] Erreur listener child (permission denied, orphan access?):', childId, error.message);
             // Remove this child from tracked data — the access doc is likely orphaned
             unsub();
-            childListenersRef.current.delete(childId);
+            childListeners.delete(childId);
             childDataRef.current.delete(childId);
             currentChildIdsRef.current.delete(childId);
             syncState();
             // Ensure loading resolves even if all children fail
             if (childDataRef.current.size >= currentChildIdsRef.current.size) {
+              hasResolvedInitialLiveDataRef.current = true;
+              clearTimeout(initialLoadTimeout);
               setLoading(false);
               setChildrenLoaded(true);
+              setStatus(
+                currentChildIdsRef.current.size === 0 || hasCachedBootstrapRef.current
+                  ? 'ready'
+                  : 'degraded',
+              );
             }
           }
         );
 
-        childListenersRef.current.set(childId, unsub);
+        childListeners.set(childId, unsub);
       });
 
       // Remove listeners for deleted children
-      childListenersRef.current.forEach((unsub, childId) => {
+      childListeners.forEach((unsub, childId) => {
         if (!currentChildIds.has(childId)) {
           unsub();
-          childListenersRef.current.delete(childId);
+          childListeners.delete(childId);
           childDataRef.current.delete(childId);
         }
       });
@@ -298,25 +424,50 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       syncState();
 
       if (currentChildIds.size === 0) {
+        hasResolvedInitialLiveDataRef.current = true;
+        clearTimeout(initialLoadTimeout);
         setLoading(false);
         setChildrenLoaded(true);
+        setStatus('ready');
       } else {
-        setLoading(true);
-        setChildrenLoaded(false);
+        if (hasCachedBootstrapRef.current) {
+          setLoading(false);
+          setChildrenLoaded(true);
+          setStatus('degraded');
+        } else {
+          setLoading(true);
+          setChildrenLoaded(false);
+          setStatus('loading');
+        }
       }
     }, (error) => {
       console.error('[BabyContext] Erreur lors de l\'écoute des accès:', error);
-      setLoading(false);
-      setChildrenLoaded(false);
+      clearTimeout(initialLoadTimeout);
+      if (hasCachedBootstrapRef.current) {
+        setLoading(false);
+        setChildrenLoaded(true);
+      }
+      setStatus('degraded');
     });
 
     return () => {
+      clearTimeout(initialLoadTimeout);
       unsubscribeAccess();
-      childListenersRef.current.forEach((unsub) => unsub());
-      childListenersRef.current.clear();
+      childListeners.forEach((unsub) => unsub());
+      childListeners.clear();
       childDataRef.current.clear();
+      currentChildIdsRef.current.clear();
     };
   }, [user, authLoading, syncState]);
+
+  useEffect(() => {
+    if (!user?.uid || status === 'loading') return;
+
+    saveCachedBabyState(user.uid, {
+      children,
+      activeChildId: activeChild?.id ?? null,
+    });
+  }, [user?.uid, children, activeChild?.id, status]);
 
   // Preload today's events for all children
   useEffect(() => {
@@ -410,6 +561,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     children,
     activeChild,
     loading,
+    status,
     childrenLoaded,
     hiddenChildrenIds,
     reminderPreferences,
@@ -417,7 +569,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     addChild,
     updateChild,
     deleteChild,
-  }), [children, activeChild, loading, childrenLoaded, hiddenChildrenIds, reminderPreferences, setActiveChild, addChild, updateChild, deleteChild]);
+  }), [children, activeChild, loading, status, childrenLoaded, hiddenChildrenIds, reminderPreferences, setActiveChild, addChild, updateChild, deleteChild]);
 
   return (
     <BabyContext.Provider value={value}>
