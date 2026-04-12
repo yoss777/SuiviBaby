@@ -2,7 +2,11 @@
 // Firebase event creation/modification/deletion from parsed voice commands.
 
 import VoiceCommandService from "@/services/voiceCommandService";
-import type { ParsedCommandResult } from "@/services/voiceCommandService";
+import {
+  commandTypeToEventType,
+  type EventIdentifier,
+  type ParsedCommandResult,
+} from "@/services/voiceCommandService";
 import {
   ajouterEvenementOptimistic,
   modifierEvenementOptimistic,
@@ -12,8 +16,6 @@ import {
   Event,
   EventType,
 } from "@/services/eventsService";
-import { commandTypeToEventType } from "@/services/voiceCommandService";
-import type { EventIdentifier } from "@/services/voiceCommandService";
 
 // ---------------------------------------------------------------------------
 // Modal feedback callback type
@@ -116,7 +118,7 @@ export async function executeDelete(
   childId: string,
   eventId: string,
   feedback: ModalFeedback,
-) {
+): Promise<boolean> {
   try {
     const deleteFn = type === "jalon" ? supprimerJalon : supprimerEvenement;
     if (deleteFn) {
@@ -125,11 +127,13 @@ export async function executeDelete(
         "Succès",
         `${type.charAt(0).toUpperCase() + type.slice(1)} supprimé avec succès`,
       );
+      return true;
     } else {
       feedback.showInfo(
         "Erreur",
         `La suppression du type "${type}" n'est pas encore implémentée`,
       );
+      return false;
     }
   } catch (error) {
     console.error("❌ Erreur suppression:", error);
@@ -137,6 +141,7 @@ export async function executeDelete(
       "Erreur",
       `Impossible de supprimer:\n${error instanceof Error ? error.message : "Erreur inconnue"}`,
     );
+    return false;
   }
 }
 
@@ -151,11 +156,11 @@ export async function executeModify(
   modifications: Partial<ParsedCommandResult>,
   previousEvent: Event | null,
   feedback: ModalFeedback,
-) {
+): Promise<boolean> {
   try {
     if (!previousEvent) {
       feedback.showInfo("Erreur", "Impossible de modifier sans l'événement courant");
-      return;
+      return false;
     }
 
     // Convertir les modifications au format Firebase
@@ -203,11 +208,13 @@ export async function executeModify(
         "Succès",
         `${type.charAt(0).toUpperCase() + type.slice(1)} modifié avec succès`,
       );
+      return true;
     } else {
       feedback.showInfo(
         "Erreur",
         `La modification du type "${type}" n'est pas encore implémentée`,
       );
+      return false;
     }
   } catch (error) {
     console.error("❌ Erreur modification:", error);
@@ -215,6 +222,7 @@ export async function executeModify(
       "Erreur",
       `Impossible de modifier:\n${error instanceof Error ? error.message : "Erreur inconnue"}`,
     );
+    return false;
   }
 }
 
@@ -229,7 +237,7 @@ export async function executeCommand(
   avecCouche?: boolean,
   excretionSelection?: { pipi: boolean; popo: boolean },
   targetEvent?: Event | null,
-) {
+): Promise<boolean> {
   try {
     const action = command.action || "add";
 
@@ -237,22 +245,21 @@ export async function executeCommand(
     if (action === "delete") {
       if (!targetEvent?.id) {
         feedback.showInfo("Erreur", "Aucun événement trouvé à supprimer");
-        return;
+        return false;
       }
 
-      await executeDelete(command.type, childId, targetEvent.id, feedback);
-      return;
+      return await executeDelete(command.type, childId, targetEvent.id, feedback);
     }
 
     // ==== MODIFICATION ====
     if (action === "modify") {
       if (!targetEvent?.id) {
         feedback.showInfo("Erreur", "Aucun événement trouvé à modifier");
-        return;
+        return false;
       }
 
       const modifications = command.modifications || {};
-      await executeModify(
+      return await executeModify(
         command.type,
         childId,
         targetEvent.id,
@@ -260,7 +267,6 @@ export async function executeCommand(
         targetEvent,
         feedback,
       );
-      return;
     }
 
     // ==== AJOUT (action === "add") ====
@@ -283,7 +289,7 @@ export async function executeCommand(
         };
         ajouterEvenementOptimistic(childId, dataTetee);
         feedback.showInfo("Succès", "Tétée ajoutée avec succès");
-        break;
+        return true;
 
       case "biberon":
         const dataBiberon = {
@@ -292,7 +298,7 @@ export async function executeCommand(
         };
         ajouterEvenementOptimistic(childId, dataBiberon);
         feedback.showInfo("Succès", "Biberon ajouté avec succès");
-        break;
+        return true;
 
       case "pompage":
         const dataPompage = {
@@ -301,7 +307,7 @@ export async function executeCommand(
         };
         ajouterEvenementOptimistic(childId, dataPompage);
         feedback.showInfo("Succès", "Pompage ajouté avec succès");
-        break;
+        return true;
 
       case "couche":
         const { type: _unusedType, ...dataCoucheBase } = data as {
@@ -335,10 +341,11 @@ export async function executeCommand(
         if (promesses.length > 0) {
           await Promise.all(promesses);
           feedback.showInfo("Succès", "Excrétion ajoutée avec succès");
+          return true;
         } else {
           feedback.showInfo("Info", "Aucune excrétion à ajouter.");
+          return false;
         }
-        break;
 
       case "miction":
         const { type: _unusedMictionType, ...dataMictionBase } = data as {
@@ -351,7 +358,7 @@ export async function executeCommand(
         };
         ajouterEvenementOptimistic(childId, dataMiction);
         feedback.showInfo("Succès", "Miction ajoutée avec succès");
-        break;
+        return true;
 
       case "selle":
         const { type: _unusedSelleType, ...dataSelleBase } = data as {
@@ -364,7 +371,7 @@ export async function executeCommand(
         };
         ajouterEvenementOptimistic(childId, dataSelle);
         feedback.showInfo("Succès", "Selle ajoutée avec succès");
-        break;
+        return true;
 
       case "vitamine":
         const dataVitamine = {
@@ -374,7 +381,7 @@ export async function executeCommand(
         };
         ajouterEvenementOptimistic(childId, dataVitamine);
         feedback.showInfo("Succès", "Vitamine ajoutée avec succès");
-        break;
+        return true;
 
       case "sommeil":
         // Si pas de durée -> sommeil "en cours" : vérifier qu'il n'y en a pas déjà un
@@ -391,7 +398,7 @@ export async function executeCommand(
               "Sommeil déjà en cours",
               "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
             );
-            break;
+            return false;
           }
         }
         ajouterEvenementOptimistic(childId, {
@@ -399,7 +406,7 @@ export async function executeCommand(
           type: "sommeil" as const,
         });
         feedback.showInfo("Succès", "Sommeil ajouté avec succès");
-        break;
+        return true;
 
       case "activite":
         ajouterEvenementOptimistic(childId, {
@@ -407,7 +414,7 @@ export async function executeCommand(
           type: "activite" as const,
         });
         feedback.showInfo("Succès", "Activité ajoutée avec succès");
-        break;
+        return true;
 
       case "jalon":
         ajouterEvenementOptimistic(childId, {
@@ -415,7 +422,7 @@ export async function executeCommand(
           type: "jalon" as const,
         });
         feedback.showInfo("Succès", "Jalon ajouté avec succès");
-        break;
+        return true;
 
       case "croissance":
         ajouterEvenementOptimistic(childId, {
@@ -423,7 +430,7 @@ export async function executeCommand(
           type: "croissance" as const,
         });
         feedback.showInfo("Succès", "Croissance ajoutée avec succès");
-        break;
+        return true;
 
       case "solide":
         ajouterEvenementOptimistic(childId, {
@@ -431,7 +438,7 @@ export async function executeCommand(
           type: "solide" as const,
         });
         feedback.showInfo("Succès", "Repas solide ajouté avec succès");
-        break;
+        return true;
 
       case "bain":
         ajouterEvenementOptimistic(childId, {
@@ -439,7 +446,7 @@ export async function executeCommand(
           type: "bain" as const,
         });
         feedback.showInfo("Succès", "Bain ajouté avec succès");
-        break;
+        return true;
 
       case "temperature":
         ajouterEvenementOptimistic(childId, {
@@ -447,7 +454,7 @@ export async function executeCommand(
           type: "temperature" as const,
         });
         feedback.showInfo("Succès", "Température ajoutée avec succès");
-        break;
+        return true;
 
       case "medicament":
         ajouterEvenementOptimistic(childId, {
@@ -455,7 +462,7 @@ export async function executeCommand(
           type: "medicament" as const,
         });
         feedback.showInfo("Succès", "Médicament ajouté avec succès");
-        break;
+        return true;
 
       case "symptome":
         ajouterEvenementOptimistic(childId, {
@@ -463,7 +470,7 @@ export async function executeCommand(
           type: "symptome" as const,
         });
         feedback.showInfo("Succès", "Symptôme ajouté avec succès");
-        break;
+        return true;
 
       case "vaccin":
         ajouterEvenementOptimistic(childId, {
@@ -471,10 +478,11 @@ export async function executeCommand(
           type: "vaccin" as const,
         });
         feedback.showInfo("Succès", "Vaccin ajouté avec succès");
-        break;
+        return true;
 
       default:
         feedback.showInfo("Info", `Le type "${command.type}" n'est pas encore implémenté`);
+        return false;
     }
   } catch (error) {
     console.error("❌ Erreur exécution commande:", error);
@@ -484,5 +492,6 @@ export async function executeCommand(
         error instanceof Error ? error.message : "Erreur inconnue"
       }`,
     );
+    return false;
   }
 }

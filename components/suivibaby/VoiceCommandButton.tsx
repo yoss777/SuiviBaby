@@ -8,7 +8,10 @@ import { useBaby } from '@/contexts/BabyContext';
 import { usePremium } from '@/contexts/PremiumContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useVoiceCommand } from '@/hooks/useVoiceCommand';
-import { incrementVoiceCommand } from '@/services/premiumGatingService';
+import {
+  getRemainingVoiceCommands,
+  incrementVoiceCommand,
+} from '@/services/premiumGatingService';
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -67,8 +70,8 @@ export function VoiceCommandButton({
 
   const checkVoiceLimit = async (): Promise<boolean> => {
     if (checkFeatureAccess("unlimited_voice")) return true;
-    const allowed = await incrementVoiceCommand();
-    if (!allowed) {
+    const remaining = await getRemainingVoiceCommands();
+    if (remaining <= 0) {
       setVoiceLimitReached(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return false;
@@ -344,8 +347,13 @@ export function VoiceCommandButton({
           const onConfirm = confirmModal.onConfirm;
           setConfirmModal({ visible: false, title: "", message: "", onConfirm: null });
           if (onConfirm) {
-            await onConfirm();
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            const didSucceed = await onConfirm();
+            if (didSucceed === true) {
+              if (!checkFeatureAccess("unlimited_voice")) {
+                await incrementVoiceCommand();
+              }
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
           }
           clearPendingCommand();
         }}

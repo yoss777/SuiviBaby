@@ -3,7 +3,6 @@
 // Preserves the exact same public API so consumers need zero changes.
 
 import { useRef, useState } from "react";
-import type { Event } from "@/services/eventsService";
 import type { ParsedCommandResult } from "@/services/voiceCommandService";
 import { useAudioRecorder } from "./useAudioRecorder";
 import {
@@ -17,6 +16,8 @@ import {
   executeCommand,
   type ModalFeedback,
 } from "./useVoiceEventCreator";
+
+type ConfirmHandlerResult = void | boolean | Promise<void | boolean>;
 
 export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   // --- Audio recorder ---
@@ -51,11 +52,10 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
     visible: false,
     title: "",
     message: "",
-    onConfirm: null as null | (() => void),
+    onConfirm: null as null | (() => ConfirmHandlerResult),
   });
   const [permissionModal, setPermissionModal] = useState(false);
   const [transcriptionErrorModal, setTranscriptionErrorModal] = useState(false);
-  const [foundEvent, setFoundEvent] = useState<Event | null>(null);
 
   // --- Feedback helper passed to event creator ---
   const feedback: ModalFeedback = {
@@ -114,6 +114,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         }
 
         setIsProcessing(false);
+        return successCount > 0;
       },
     });
   };
@@ -201,7 +202,6 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         }
 
         console.log("✅ Événement trouvé:", targetEvent.id);
-        setFoundEvent(targetEvent);
       }
 
       // Confirmation avant action
@@ -244,7 +244,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         title: confirmTitle,
         message: confirmMessage,
         onConfirm: async () => {
-          await executeCommand(
+          const success = await executeCommand(
             commandWithChildId,
             childId,
             feedback,
@@ -253,7 +253,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
             eventToTarget,
           );
           setIsProcessing(false);
-          setFoundEvent(null);
+          return success;
         },
       });
     } catch (error) {
@@ -348,6 +348,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           onConfirm: () => {
             setTestMode(true);
             startVoiceCommand();
+            return false;
           },
         });
         setIsProcessing(false);
@@ -430,7 +431,6 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
 
   const clearPendingCommand = () => {
     setPendingCommand(null);
-    setFoundEvent(null);
     setDiaperChoiceState(true);
     diaperChoiceRef.current = true;
     setExcretionSelectionState({ pipi: false, popo: false });

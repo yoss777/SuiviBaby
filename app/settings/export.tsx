@@ -37,7 +37,10 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePremium } from "@/contexts/PremiumContext";
-import { incrementPdfExport } from "@/services/premiumGatingService";
+import {
+  getRemainingPdfExports,
+  incrementPdfExport,
+} from "@/services/premiumGatingService";
 import { Event, EventType } from "@/services/eventsService";
 import { obtenirPreferences } from "@/services/userPreferencesService";
 import type { ChildRole } from "@/types/permissions";
@@ -382,7 +385,7 @@ export default function ExportScreen() {
             );
           }
         }
-      } catch (error) {
+      } catch {
         if (isMounted) {
           setModalConfig({
             visible: true,
@@ -400,7 +403,7 @@ export default function ExportScreen() {
     return () => {
       isMounted = false;
     };
-  }, [childrenLoading, visibleChildren, isAutoDeleteFlow, user?.uid]);
+  }, [childrenLoading, visibleChildren, isAutoDeleteFlow, preSelectChildId, user?.uid]);
 
   useEffect(() => {
     if (isContributorOnly) {
@@ -428,7 +431,7 @@ export default function ExportScreen() {
     }
   };
 
-  const serializeValue = (value: any): any => {
+  const serializeValue = useCallback((value: any): any => {
     if (value === null || value === undefined) return value;
     if (value instanceof Date) return value.toISOString();
     if (typeof value === "object") {
@@ -443,7 +446,7 @@ export default function ExportScreen() {
       );
     }
     return value;
-  };
+  }, []);
 
   const selectedChildren = useMemo(
     () => children.filter((item) => item.selected),
@@ -483,14 +486,6 @@ export default function ExportScreen() {
     () => Array.from(selectedInteractionTypes),
     [selectedInteractionTypes],
   );
-
-  useEffect(() => {
-    if (!isAutoDeleteFlow) return;
-    if (autoExportTriggered.current) return;
-    if (childrenLoading || isLoading || isExporting) return;
-    autoExportTriggered.current = true;
-    handleExport(true);
-  }, [isAutoDeleteFlow, childrenLoading, isLoading, isExporting]);
 
   useEffect(() => {
     if (!selectedCanExportEvents) {
@@ -579,7 +574,7 @@ export default function ExportScreen() {
     return counts;
   };
 
-  const buildSummary = () => {
+  const buildSummary = useCallback(() => {
     return selectedChildren.map((item) => {
       const counts = getCounts(item);
       const rows = [...eventTypes, ...INTERACTION_TYPES]
@@ -603,11 +598,10 @@ export default function ExportScreen() {
         rows,
       };
     });
-  };
+  }, [eventTypes, selectedChildren, selectedEventTypes, selectedInteractionTypes]);
 
   const renderSummarySlider = (summary: ExportSummary[]) => {
     const sliderWidth = Dimensions.get("window").width * 0.85 - 48;
-    const canNavigate = summary.length > 1;
 
     const goToIndex = (index: number) => {
       if (!summaryScrollRef.current) return;
@@ -747,7 +741,7 @@ export default function ExportScreen() {
   const { checkFeatureAccess } = usePremium();
   const [showPaywall, setShowPaywall] = useState(false);
 
-  const handleExport = async (force = false) => {
+  const handleExport = useCallback(async (force = false) => {
     if (Platform.OS === "web") {
       setModalConfig({
         visible: true,
@@ -758,15 +752,6 @@ export default function ExportScreen() {
       return;
     }
 
-    // Vérifier la limite d'exports pour les utilisateurs free
-    if (!checkFeatureAccess("unlimited_export")) {
-      const allowed = await incrementPdfExport();
-      if (!allowed) {
-        setShowPaywall(true);
-        return;
-      }
-    }
-
     if (!force && selectedChildren.length === 0) {
       setModalConfig({
         visible: true,
@@ -775,6 +760,14 @@ export default function ExportScreen() {
         mode: "text",
       });
       return;
+    }
+
+    if (!checkFeatureAccess("unlimited_export")) {
+      const remainingExports = await getRemainingPdfExports();
+      if (remainingExports <= 0) {
+        setShowPaywall(true);
+        return;
+      }
     }
 
     if (!force && !hasSelectedTypes) {
@@ -862,6 +855,10 @@ export default function ExportScreen() {
         await Sharing.shareAsync(fileUri);
       }
 
+      if (!checkFeatureAccess("unlimited_export")) {
+        await incrementPdfExport();
+      }
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Export terminé avec succès");
 
@@ -882,7 +879,7 @@ export default function ExportScreen() {
             }
           : undefined,
       });
-    } catch (error) {
+    } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showActionToast("Impossible d'exporter vos données.", "Réessayer", () => {
         handleExport();
@@ -896,7 +893,33 @@ export default function ExportScreen() {
     } finally {
       setIsExporting(false);
     }
-  };
+  }, [
+    checkFeatureAccess,
+    children,
+    email,
+    eventTypes,
+    hasSelectedTypes,
+    isAutoDeleteFlow,
+    preferences,
+    router,
+    selectedChildren,
+    selectedEventTypesArray,
+    selectedInteractionTypesArray,
+    serializeValue,
+    showActionToast,
+    showToast,
+    user?.email,
+    userName,
+    buildSummary,
+  ]);
+
+  useEffect(() => {
+    if (!isAutoDeleteFlow) return;
+    if (autoExportTriggered.current) return;
+    if (childrenLoading || isLoading || isExporting) return;
+    autoExportTriggered.current = true;
+    handleExport(true);
+  }, [isAutoDeleteFlow, childrenLoading, isLoading, isExporting, handleExport]);
 
   const renderFormatOption = (format: ExportFormat) => (
     <View
@@ -1252,7 +1275,7 @@ export default function ExportScreen() {
                       { color: nc.textStrong },
                     ]}
                   >
-                    Types d'evenements
+                    Types d&apos;evenements
                   </ThemedText>
                   <TouchableOpacity
                     onPress={toggleAllEventTypes}
@@ -1298,7 +1321,7 @@ export default function ExportScreen() {
                       { color: nc.textStrong },
                     ]}
                   >
-                    Types d'interactions
+                    Types d&apos;interactions
                   </ThemedText>
                   <TouchableOpacity
                     onPress={toggleAllInteractionTypes}
