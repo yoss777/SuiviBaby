@@ -1,7 +1,7 @@
 import React from "react";
 import { renderHook, act, waitFor } from "@testing-library/react-native";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
-import { getDoc, doc } from "firebase/firestore";
+import { getDoc } from "firebase/firestore";
 
 // Mock config/firebase
 jest.mock("@/config/firebase", () => ({
@@ -150,7 +150,7 @@ describe("AuthContext", () => {
     });
 
     it("should start auto-sync after login", async () => {
-      const { result } = renderHook(() => useAuth(), { wrapper });
+      renderHook(() => useAuth(), { wrapper });
 
       const authCallback = captureAuthCallback();
       await act(async () => {
@@ -187,7 +187,7 @@ describe("AuthContext", () => {
         data: () => null,
       });
 
-      const { result } = renderHook(() => useAuth(), { wrapper });
+      renderHook(() => useAuth(), { wrapper });
 
       const authCallback = captureAuthCallback();
       await act(async () => {
@@ -209,7 +209,7 @@ describe("AuthContext", () => {
         reason: "Accès réservé aux professionnels",
       });
 
-      const { result } = renderHook(() => useAuth(), { wrapper });
+      renderHook(() => useAuth(), { wrapper });
 
       const authCallback = captureAuthCallback();
       await act(async () => {
@@ -223,6 +223,34 @@ describe("AuthContext", () => {
           expect.any(Array),
         );
       });
+    });
+
+    it("should switch to degraded when user doc loading times out", async () => {
+      jest.useFakeTimers();
+      (getDoc as jest.Mock).mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      const authCallback = captureAuthCallback();
+
+      act(() => {
+        authCallback(mockFirebaseUser());
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(8000);
+      });
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+        expect(result.current.status).toBe("degraded");
+        expect(result.current.firebaseUser?.uid).toBe("test-uid");
+        expect(result.current.user).toBeNull();
+      });
+
+      jest.useRealTimers();
     });
   });
 

@@ -90,7 +90,7 @@ function BabyHeaderTitle() {
       </Pressable>
       <BabySwitcherModal
         visible={showSwitcher}
-        children={children}
+        childOptions={children}
         activeChild={activeChild}
         onSelect={(child) => {
           setActiveChild(child);
@@ -104,7 +104,8 @@ function BabyHeaderTitle() {
 
 export default function DrawerLayout() {
   const colorScheme = useColorScheme() ?? "light";
-  const { user, loading } = useAuth();
+  const { user, loading, status: authStatus } = useAuth();
+  const { status: babyStatus } = useBaby();
   const [headerRightState, setHeaderRightState] = useState<{
     component: React.ReactElement | null;
     ownerId?: string;
@@ -161,6 +162,8 @@ export default function DrawerLayout() {
 
   const isOffline =
     netInfo.isInternetReachable === false || netInfo.isConnected === false;
+  const showSyncBanner =
+    authStatus === "degraded" || babyStatus === "degraded";
 
   return (
     <HeaderRightContext.Provider value={{ setHeaderRight }}>
@@ -174,6 +177,32 @@ export default function DrawerLayout() {
           {isOffline && (
             <View style={[styles.offlineBanner, { paddingTop: insets.top, backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : "#fdecec" }]}>
               <Text style={[styles.offlineText, { color: colorScheme === "dark" ? "#fca5a5" : "#b42318" }]} accessibilityRole="alert">Hors ligne</Text>
+            </View>
+          )}
+          {showSyncBanner && (
+            <View
+              style={[
+                styles.syncBanner,
+                {
+                  paddingTop: isOffline ? 4 : insets.top + 4,
+                  backgroundColor:
+                    colorScheme === "dark"
+                      ? "rgba(56, 189, 248, 0.18)"
+                      : "#e0f2fe",
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.syncText,
+                  {
+                    color: colorScheme === "dark" ? "#7dd3fc" : "#075985",
+                  },
+                ]}
+                accessibilityRole="status"
+              >
+                Synchronisation en cours
+              </Text>
             </View>
           )}
           <Drawer
@@ -253,5 +282,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.6,
     textTransform: "uppercase",
+  },
+  syncBanner: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 8,
+  },
+  syncText: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
 });

@@ -17,7 +17,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 
 interface BabySwitcherModalProps {
   visible: boolean;
-  children: Child[];
+  childOptions: Child[];
   activeChild: Child | null;
   onSelect: (child: Child) => void;
   onClose: () => void;
@@ -50,7 +50,7 @@ function calculateAge(birthDate: string): string {
 
 export function BabySwitcherModal({
   visible,
-  children,
+  childOptions,
   activeChild,
   onSelect,
   onClose,
@@ -78,10 +78,10 @@ export function BabySwitcherModal({
           onPress={(e) => e.stopPropagation()}
         >
           <Text style={[styles.title, { color: nc.textStrong }]}>
-            Changer d'enfant
+            Changer d&apos;enfant
           </Text>
 
-          {children.map((child) => {
+          {childOptions.map((child) => {
             const isActive = child.id === activeChild?.id;
             const ageText = calculateAge(child.birthDate);
 

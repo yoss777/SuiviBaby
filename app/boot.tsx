@@ -24,7 +24,7 @@ import { hasCompletedOnboarding } from "./(auth)/onboarding";
 const BOOT_NETWORK_TIMEOUT_MS = 8000;
 
 function logBoot(...args: unknown[]) {
-  if (__DEV__) {
+  if (__DEV__ && process.env.NODE_ENV !== "test") {
     console.log("[BOOT]", ...args);
   }
 }

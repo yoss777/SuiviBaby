@@ -36,7 +36,14 @@ interface BabyContextType {
 
 const BabyContext = createContext<BabyContextType | undefined>(undefined);
 const BABY_BOOT_CACHE_PREFIX = '@suivibaby_boot_children:';
+const BABY_BOOT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const INITIAL_CHILDREN_TIMEOUT_MS = 8000;
+
+function logBaby(...args: unknown[]) {
+  if (__DEV__ && process.env.NODE_ENV !== 'test') {
+    console.log('[BabyContext]', ...args);
+  }
+}
 
 interface CachedBabyState {
   children: Child[];
@@ -54,10 +61,16 @@ async function loadCachedBabyState(uid: string): Promise<CachedBabyState | null>
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedBabyState;
     if (!Array.isArray(parsed.children)) return null;
+    if (
+      typeof parsed.cachedAt !== 'number' ||
+      Date.now() - parsed.cachedAt > BABY_BOOT_CACHE_TTL_MS
+    ) {
+      return null;
+    }
     return {
       children: parsed.children,
       activeChildId: parsed.activeChildId ?? null,
-      cachedAt: parsed.cachedAt ?? Date.now(),
+      cachedAt: parsed.cachedAt,
     };
   } catch (error) {
     console.warn('[BabyContext] Impossible de lire le cache enfants:', error);
@@ -244,7 +257,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     const unsubscribe = onSnapshot(userPrefsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        console.log('[BabyContext] Préférences chargées:', data.lastActiveChildId);
+        logBaby('Préférences chargées', data.lastActiveChildId);
         const newHiddenIds = data.hiddenChildrenIds || [];
         setHiddenChildrenIds((prev) => {
           if (prev.length === newHiddenIds.length && prev.every((id: string, i: number) => id === newHiddenIds[i])) {
@@ -317,7 +330,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       return;
     }
 
-    console.log('[BabyContext] Chargement des enfants (access) pour user.uid:', user.uid);
+    logBaby('Chargement des enfants (access)', user.uid);
     if (!hasCachedBootstrapRef.current) {
       setLoading(true);
       setChildrenLoaded(false);
