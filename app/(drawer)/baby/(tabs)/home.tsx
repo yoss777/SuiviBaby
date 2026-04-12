@@ -48,8 +48,10 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
+  BackHandler,
   Easing,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -611,6 +613,7 @@ export default function HomeDashboard() {
     : permissions.role === "owner" || permissions.role === "admin";
 
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
+  const lastBackPressRef = useRef(0);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
@@ -786,6 +789,46 @@ export default function HomeDashboard() {
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "android") {
+        return undefined;
+      }
+
+      const handleBackPress = () => {
+        if (showMilestonesModal) {
+          setShowMilestonesModal(false);
+          return true;
+        }
+
+        if (deleteConfirm.visible) {
+          cancelDelete();
+          return true;
+        }
+
+        const now = Date.now();
+        if (now - lastBackPressRef.current < 2000) {
+          BackHandler.exitApp();
+          return true;
+        }
+
+        lastBackPressRef.current = now;
+        showToast("Appuyez encore une fois pour fermer");
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        handleBackPress,
+      );
+
+      return () => {
+        subscription.remove();
+        lastBackPressRef.current = 0;
+      };
+    }, [cancelDelete, deleteConfirm.visible, showMilestonesModal, showToast]),
+  );
 
   const toDate = useCallback((value: any) => {
     if (value?.seconds) return new Date(value.seconds * 1000);
