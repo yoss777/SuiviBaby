@@ -3,6 +3,7 @@
 // Preserves the exact same public API so consumers need zero changes.
 
 import { useRef, useState } from "react";
+import type { Event as AppEvent } from "@/services/eventsService";
 import type { ParsedCommandResult } from "@/services/voiceCommandService";
 import { useAudioRecorder } from "./useAudioRecorder";
 import {
@@ -181,7 +182,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       }
 
       // Pour modification/suppression, rechercher l'événement cible
-      let targetEvent: Event | null = null;
+      let targetEvent: AppEvent | null = null;
       if ((action === "modify" || action === "delete") && commandWithChildId.eventIdentifier) {
         console.log("🔍 Recherche de l'événement cible...");
         targetEvent = await findEventByIdentifier(commandWithChildId.eventIdentifier, childId);

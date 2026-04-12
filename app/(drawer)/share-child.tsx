@@ -371,6 +371,15 @@ export default function ShareChildScreen() {
           `Cet enfant est déjà lié au destinataire ${email}.`,
           [{ text: "" }],
         );
+      } else if (error?.code === "sharing-limit") {
+        showAlert(
+          "Limite de partage atteinte",
+          "Le plan gratuit permet 2 co-parents maximum. Passez à Famille pour inviter plus de personnes.",
+          [
+            { text: "Plus tard", style: "cancel" },
+            { text: "Voir Premium", onPress: () => router.push("/settings/premium") },
+          ],
+        );
       } else {
         showAlert(
           "Erreur",
@@ -381,7 +390,7 @@ export default function ShareChildScreen() {
       setIsLoadingInvite(false);
       isSendingInviteRef.current = false;
     }
-  }, [childId, childName, inviteEmail, isLoadingInvite, showAlert, user?.uid]);
+  }, [childId, childName, inviteEmail, isLoadingInvite, router, showAlert, user?.uid]);
 
   if (isLoadingChild) {
     return (
@@ -491,8 +500,8 @@ export default function ShareChildScreen() {
                   </View>
 
                   <Text style={dynamicStyles.codeHelper}>
-                    L'autre parent devra aller dans "Ajouter un enfant" puis
-                    "J'ai un code"
+                    L&apos;autre parent devra aller dans &quot;Ajouter un enfant&quot; puis
+                    &quot;J&apos;ai un code&quot;
                   </Text>
                 </View>
               ) : (
@@ -575,15 +584,15 @@ export default function ShareChildScreen() {
                         color={nc.white}
                       />
                       <Text style={dynamicStyles.inviteButtonText}>
-                        Envoyer l'invitation
+                        Envoyer l&apos;invitation
                       </Text>
                     </>
                   )}
                 </TouchableOpacity>
 
                 <Text style={dynamicStyles.inviteHelper}>
-                  L'autre parent recevra une notification dans l'app et pourra
-                  accepter l'invitation
+                  L&apos;autre parent recevra une notification dans l&apos;app et pourra
+                  accepter l&apos;invitation
                 </Text>
               </View>
             </View>
@@ -596,8 +605,8 @@ export default function ShareChildScreen() {
             >
               <FontAwesome name="shield-alt" size={20} color={nc.todayAccent} />
               <Text style={dynamicStyles.infoText}>
-                Les deux parents auront un acces complet au suivi de l'enfant.
-                Vous pourrez retirer l'acces à tout moment depuis les
+                Les deux parents auront un acces complet au suivi de l&apos;enfant.
+                Vous pourrez retirer l&apos;acces à tout moment depuis les
                 paramètres.
               </Text>
             </View>

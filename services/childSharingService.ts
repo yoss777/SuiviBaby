@@ -1,12 +1,10 @@
 // services/childSharingService.ts
 import { auth, db } from "@/config/firebase";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
   getDoc,
-  getDocFromServer,
   getDocs,
   limit,
   onSnapshot,
@@ -18,9 +16,9 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { getUserByEmail } from "./usersService";
 import { grantChildAccess, revokeChildAccess } from "@/utils/permissions";
 import { captureServiceError } from "@/utils/errorReporting";
+import { createShareInvitationCF } from "@/services/premiumUsageService";
 
 export interface ShareCode {
   code: string;
@@ -205,114 +203,41 @@ export async function createEmailInvitation(
 
     const invitedEmailLower = invitedEmail.trim().toLowerCase();
 
-    // Étape 1: Vérifier que l'utilisateur ne s'invite pas lui-même
-    if (invitedEmailLower === user.email.toLowerCase()) {
-      const error: Error & { code?: string } = new Error(
-        "Vous ne pouvez pas vous inviter vous-même",
-      );
-      error.code = "self-invite";
-      throw error;
-    }
-
-    // Étape 2: Trouver l'id de l'utilisateur invité basé sur son email
-    console.log("[Invitation] Étape 2: recherche email", invitedEmailLower);
-    const invitedUserDoc = await getUserByEmail(invitedEmailLower);
-    console.log("[Invitation] Étape 2 OK, invitedUser:", invitedUserDoc?.id ?? "non trouvé");
-    if (!invitedUserDoc) {
-      const error: Error & { code?: string } = new Error(
-        "Aucun utilisateur trouvé avec cet email. Veuillez demander au destinataire de créer un compte d'abord.",
-      );
-      error.code = "no-user";
-      throw error;
-    }
-
-    const invitedUserId = invitedUserDoc?.id;
-
-    // Étape 3: Récupérer les parentIds de l'enfant
-    console.log("[Invitation] Étape 3: lecture child", childId);
-    const childDoc = await getDocFromServer(doc(db, "children", childId));
-    console.log("[Invitation] Étape 3 OK, exists:", childDoc.exists());
-    if (!childDoc.exists()) {
-      throw new Error("Enfant introuvable");
-    }
-
-    // Étape 4: Vérifier si l'utilisateur invité est déjà parent de l'enfant
-    if (invitedUserId) {
-      console.log("[Invitation] Étape 4: lecture access pour invité", invitedUserId);
-      const accessDoc = await getDoc(
-        doc(db, "children", childId, "access", invitedUserId)
-      );
-      console.log("[Invitation] Étape 4 OK, accessExists:", accessDoc.exists());
-      if (accessDoc.exists()) {
-      const error: Error & { code?: string; email?: string } = new Error(
-        "Cet enfant est déjà lié à ce destinataire.",
-      );
-      error.code = "already-linked";
-      error.email = invitedEmail;
-      throw error;
-      }
-    }
-
-    // Étape 5: Vérifier s'il n'y a pas déjà une invitation en cours
-    console.log("[Invitation] Étape 5: vérif invitations existantes");
-    const pendingInvitesQuery = query(
-      collection(db, "shareInvitations"),
-      where("childId", "==", childId),
-      where("invitedEmail", "==", invitedEmailLower),
-      where("inviterId", "==", user.uid),
-      where("status", "==", "pending"),
-      limit(1),
-    );
-    const existingInvites = await getDocs(pendingInvitesQuery);
-    console.log("[Invitation] Étape 5 OK, existing:", existingInvites.size);
-
-    // Étape 6: Blocage si invitation déjà en cours
-    if (!existingInvites.empty) {
-      const error: Error & { code?: string } = new Error(
-        "Une invitation est déjà en attente pour cet email",
-      );
-      error.code = "already-pending";
-      throw error;
-    }
-
-    // Étape 7: Créer l'invitation
-    const invitationData: Omit<ShareInvitation, "id"> = {
+    const result = await createShareInvitationCF({
       childId,
       childName,
-      inviterId: user.uid,
-      inviterEmail: user.email,
       invitedEmail: invitedEmailLower,
-      invitedUserId,
-      status: "pending",
-      createdAt: Timestamp.now(),
-    };
-    console.log("[Invitation] payload", {
-      childId,
-      inviterId: user.uid,
-      invitedEmail: invitedEmailLower,
-      invitedUserId,
     });
 
-    const docRef = await addDoc(
-      collection(db, "shareInvitations"),
-      invitationData,
-    );
-
-    // TODO: Envoyer un email de notification (via Cloud Function)
-    console.log(`Invitation créée pour ${invitedEmail}`);
-
-    return docRef.id;
+    return result.data.id;
   } catch (error) {
-    const code = (error as { code?: string } | null)?.code;
+    const rawCode = (error as { code?: string } | null)?.code;
+    const reason = (error as { details?: { reason?: string } } | null)?.details?.reason;
+    let code = rawCode;
+
+    if (reason === "self-invite") code = "self-invite";
+    if (reason === "no-user") code = "no-user";
+    if (reason === "already-pending") code = "already-pending";
+    if (reason === "already-linked") code = "already-linked";
+    if (reason === "sharing-limit") code = "sharing-limit";
+
+    if (code === "already-linked") {
+      (error as Error & { email?: string }).email = invitedEmail;
+    }
+
     const expectedCodes = new Set([
       "self-invite",
       "no-user",
       "already-linked",
       "already-pending",
+      "sharing-limit",
     ]);
     if (!code || !expectedCodes.has(code)) {
       console.error("Erreur lors de la création de l'invitation:", error);
       captureServiceError(error, { service: "childSharing", operation: "createEmailInvitation" });
+    }
+    if (code) {
+      (error as Error & { code?: string }).code = code;
     }
     throw error;
   }

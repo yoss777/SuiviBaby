@@ -9,9 +9,9 @@ import { usePremium } from '@/contexts/PremiumContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useVoiceCommand } from '@/hooks/useVoiceCommand';
 import {
-  getRemainingVoiceCommands,
-  incrementVoiceCommand,
-} from '@/services/premiumGatingService';
+  consumeVoiceQuota,
+  getVoiceUsageStatus,
+} from '@/services/premiumUsageService';
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -70,8 +70,8 @@ export function VoiceCommandButton({
 
   const checkVoiceLimit = async (): Promise<boolean> => {
     if (checkFeatureAccess("unlimited_voice")) return true;
-    const remaining = await getRemainingVoiceCommands();
-    if (remaining <= 0) {
+    const quota = await getVoiceUsageStatus();
+    if (!quota.allowed || (quota.remaining ?? 0) <= 0) {
       setVoiceLimitReached(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return false;
@@ -350,7 +350,7 @@ export function VoiceCommandButton({
             const didSucceed = await onConfirm();
             if (didSucceed === true) {
               if (!checkFeatureAccess("unlimited_voice")) {
-                await incrementVoiceCommand();
+                await consumeVoiceQuota();
               }
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }

@@ -1,4 +1,4 @@
-const { mockFirestore, mockGet, mockAdd, mockQueryChain } = require("./setup");
+const { mockFirestore, mockGet, mockAdd, mockQueryChain, mockRunTransaction } = require("./setup");
 const fns = require("../index");
 const auth = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, admin: false } }, data, app: true });
 const adm = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, admin: true } }, data, app: true });
@@ -6,7 +6,7 @@ const doc = (data) => ({ exists: true, data: () => data, id: "id", ref: { id: "i
 const no = () => ({ exists: false, data: () => null, id: "id" });
 const snap = (ds = []) => ({ docs: ds.map((d, i) => ({ id: d.id || `d${i}`, data: () => d.data || d, ref: { id: d.id || `d${i}` } })), empty: !ds.length, size: ds.length });
 const access = () => { mockFirestore.doc.mockImplementation((p) => { if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() }; if (p?.includes("access")) return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) }; return { get: jest.fn().mockResolvedValue(no()), delete: jest.fn() }; }); };
-beforeEach(() => { jest.clearAllMocks(); mockGet.mockResolvedValue(no()); mockAdd.mockResolvedValue({ id: "new" }); mockQueryChain.get.mockResolvedValue(snap()); mockQueryChain.where.mockReturnThis(); mockQueryChain.limit.mockReturnThis(); });
+beforeEach(() => { jest.clearAllMocks(); mockGet.mockResolvedValue(no()); mockAdd.mockResolvedValue({ id: "new" }); mockQueryChain.get.mockResolvedValue(snap()); mockQueryChain.where.mockReturnThis(); mockQueryChain.limit.mockReturnThis(); mockRunTransaction.mockImplementation(async (fn) => fn({ get: jest.fn(async (ref) => ref.get()), set: jest.fn(), update: jest.fn(), delete: jest.fn() })); });
 
 describe("validateAndCreateEvent", () => {
   it("rejects unauthenticated", async () => { await expect(fns.validateAndCreateEvent({ auth: null, data: {} })).rejects.toThrow("Authentification"); });
@@ -49,4 +49,66 @@ describe("validateReferralCode", () => {
   it("rejects empty code", async () => { mockFirestore.doc.mockReturnValue({ get: jest.fn().mockResolvedValue(no()), set: jest.fn() }); await expect(fns.validateReferralCode(auth("u1", { referralCode: "" }))).rejects.toThrow("invalide"); });
   it("rejects not found", async () => { mockFirestore.doc.mockReturnValue({ get: jest.fn().mockResolvedValue(no()), set: jest.fn() }); mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) }); await expect(fns.validateReferralCode(auth("u1", { referralCode: "ABC" }))).rejects.toThrow("introuvable"); });
   it("rejects self-referral", async () => { mockFirestore.doc.mockReturnValue({ get: jest.fn().mockResolvedValue(no()), set: jest.fn() }); mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap([{ id: "u1" }])) }); await expect(fns.validateReferralCode(auth("u1", { referralCode: "ABC" }))).rejects.toThrow("propre code"); });
+});
+
+describe("usage quota functions", () => {
+  it("returns free voice quota status", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      if (p === "usage_limits/u1") return { get: jest.fn().mockResolvedValue(doc({ voiceCommandDate: new Date().toISOString().split("T")[0], voiceCommandCount: 1 })) };
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+
+    await expect(fns.getUsageQuotaStatus(auth("u1", { feature: "voice" }))).resolves.toMatchObject({
+      feature: "voice",
+      allowed: true,
+      isUnlimited: false,
+      used: 1,
+      limit: 3,
+      remaining: 2,
+    });
+  });
+
+  it("consumes export quota for free users", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      if (p === "usage_limits/u1") return { get: jest.fn().mockResolvedValue(doc({ pdfExportCount: 0 })) };
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+
+    await expect(fns.consumeUsageQuota(auth("u1", { feature: "export" }))).resolves.toMatchObject({
+      feature: "export",
+      allowed: true,
+      isUnlimited: false,
+      used: 1,
+      limit: 1,
+      remaining: 0,
+    });
+  });
+});
+
+describe("createShareInvitation", () => {
+  it("rejects when free sharing limit is reached", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      if (p === "children/c1/access/u1") return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
+      if (p === "children/c1") return { get: jest.fn().mockResolvedValue(doc({ name: "Bebe" })) };
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name === "children/c1/access") {
+        return { get: jest.fn().mockResolvedValue(snap([{ id: "owner", data: { role: "owner" } }, { id: "p1", data: { role: "admin" } }, { id: "p2", data: { role: "viewer" } }])) };
+      }
+      if (name === "shareInvitations") {
+        return { where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+      }
+      if (name === "users") {
+        return { where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap([{ id: "invited" }])) };
+      }
+      return { add: jest.fn().mockResolvedValue({ id: "new" }), where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+    });
+
+    await expect(fns.createShareInvitation(auth("u1", { childId: "c1", childName: "Bebe", invitedEmail: "target@example.com" }))).rejects.toThrow("2 co-parents maximum");
+  });
 });

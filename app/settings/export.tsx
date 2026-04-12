@@ -38,9 +38,9 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePremium } from "@/contexts/PremiumContext";
 import {
-  getRemainingPdfExports,
-  incrementPdfExport,
-} from "@/services/premiumGatingService";
+  consumeExportQuota,
+  getExportUsageStatus,
+} from "@/services/premiumUsageService";
 import { Event, EventType } from "@/services/eventsService";
 import { obtenirPreferences } from "@/services/userPreferencesService";
 import type { ChildRole } from "@/types/permissions";
@@ -763,8 +763,8 @@ export default function ExportScreen() {
     }
 
     if (!checkFeatureAccess("unlimited_export")) {
-      const remainingExports = await getRemainingPdfExports();
-      if (remainingExports <= 0) {
+      const exportQuota = await getExportUsageStatus();
+      if (!exportQuota.allowed || (exportQuota.remaining ?? 0) <= 0) {
         setShowPaywall(true);
         return;
       }
@@ -856,7 +856,7 @@ export default function ExportScreen() {
       }
 
       if (!checkFeatureAccess("unlimited_export")) {
-        await incrementPdfExport();
+        await consumeExportQuota();
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

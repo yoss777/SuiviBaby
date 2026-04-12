@@ -1,4 +1,5 @@
 const admin = require("firebase-admin");
+const { Buffer } = require("node:buffer");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
@@ -14,6 +15,9 @@ const CHILD_DELETION_RETENTION_DAYS = 30;
 const DELETION_REQUEST_EXPIRY_DAYS = 7;
 const APP_CHECK_ENFORCED = process.env.APPCHECK_ENFORCE === "true";
 const expo = new Expo();
+const FREE_DAILY_VOICE_LIMIT = 3;
+const FREE_TOTAL_PDF_EXPORTS = 1;
+const FREE_MAX_SHARED_USERS = 2;
 
 // ============================================
 // SHARED HELPERS
@@ -141,6 +145,146 @@ async function deleteChildDataBatched(db, childId) {
   await deleteDocsByFieldBatched(db, "user_child_access", "childId", childId);
 }
 
+async function getSubscriptionState(db, uid) {
+  const snap = await db.doc(`subscriptions/${uid}`).get();
+  const data = snap.exists ? snap.data() : {};
+
+  return {
+    tier: data.tier || "free",
+    status: data.status || "active",
+    grandfathered: data.grandfathered === true || data.status === "grandfathered",
+  };
+}
+
+function hasUnlimitedFeature(subscriptionState, feature) {
+  if (!subscriptionState) return false;
+
+  if (subscriptionState.grandfathered) {
+    return true;
+  }
+
+  const isPaidTier =
+    subscriptionState.tier === "premium" || subscriptionState.tier === "family";
+  const isActiveStatus =
+    subscriptionState.status === "active" || subscriptionState.status === "trial";
+
+  if (!isPaidTier || !isActiveStatus) {
+    return false;
+  }
+
+  if (feature === "sharing") {
+    return subscriptionState.tier === "family" || subscriptionState.tier === "premium";
+  }
+
+  return true;
+}
+
+async function getVoiceQuotaStatus(db, uid) {
+  const subscriptionState = await getSubscriptionState(db, uid);
+
+  if (hasUnlimitedFeature(subscriptionState, "voice")) {
+    return {
+      feature: "voice",
+      allowed: true,
+      isUnlimited: true,
+      used: 0,
+      limit: null,
+      remaining: null,
+      resetDate: null,
+    };
+  }
+
+  const usageRef = db.doc(`usage_limits/${uid}`);
+  const usageDoc = await usageRef.get();
+  const usageData = usageDoc.exists ? usageDoc.data() : {};
+  const today = new Date().toISOString().split("T")[0];
+  const used =
+    usageData.voiceCommandDate === today ? usageData.voiceCommandCount || 0 : 0;
+
+  return {
+    feature: "voice",
+    allowed: used < FREE_DAILY_VOICE_LIMIT,
+    isUnlimited: false,
+    used,
+    limit: FREE_DAILY_VOICE_LIMIT,
+    remaining: Math.max(0, FREE_DAILY_VOICE_LIMIT - used),
+    resetDate: today,
+  };
+}
+
+async function getExportQuotaStatus(db, uid) {
+  const subscriptionState = await getSubscriptionState(db, uid);
+
+  if (hasUnlimitedFeature(subscriptionState, "export")) {
+    return {
+      feature: "export",
+      allowed: true,
+      isUnlimited: true,
+      used: 0,
+      limit: null,
+      remaining: null,
+      resetDate: null,
+    };
+  }
+
+  const usageRef = db.doc(`usage_limits/${uid}`);
+  const usageDoc = await usageRef.get();
+  const usageData = usageDoc.exists ? usageDoc.data() : {};
+  const used = usageData.pdfExportCount || 0;
+
+  return {
+    feature: "export",
+    allowed: used < FREE_TOTAL_PDF_EXPORTS,
+    isUnlimited: false,
+    used,
+    limit: FREE_TOTAL_PDF_EXPORTS,
+    remaining: Math.max(0, FREE_TOTAL_PDF_EXPORTS - used),
+    resetDate: null,
+  };
+}
+
+async function getSharingQuotaStatus(db, uid, childId) {
+  const subscriptionState = await getSubscriptionState(db, uid);
+
+  if (hasUnlimitedFeature(subscriptionState, "sharing")) {
+    return {
+      feature: "sharing",
+      allowed: true,
+      isUnlimited: true,
+      used: 0,
+      limit: null,
+      remaining: null,
+      resetDate: null,
+    };
+  }
+
+  const [childAccessSnapshot, pendingInvitesSnapshot] = await Promise.all([
+    db.collection(`children/${childId}/access`).get(),
+    db
+      .collection("shareInvitations")
+      .where("childId", "==", childId)
+      .where("status", "==", "pending")
+      .get(),
+  ]);
+
+  const linkedCoparents = childAccessSnapshot.docs.filter((docSnap) => {
+    const accessData = docSnap.data();
+    return accessData.role !== "owner";
+  }).length;
+  const pendingInvites = pendingInvitesSnapshot.size;
+  const used = linkedCoparents + pendingInvites;
+
+  return {
+    feature: "sharing",
+    allowed: used < FREE_MAX_SHARED_USERS,
+    isUnlimited: false,
+    used,
+    limit: FREE_MAX_SHARED_USERS,
+    remaining: Math.max(0, FREE_MAX_SHARED_USERS - used),
+    resetDate: null,
+  };
+}
+
 /**
  * Transfère la propriété d'un enfant au meilleur candidat.
  */
@@ -213,7 +357,8 @@ exports.cleanupExpiredShareCodes = onSchedule("every 24 hours", async () => {
  * transcribeAudio — Proxy sécurisé pour AssemblyAI
  * - Auth obligatoire
  * - Rate limiting : max 10 requêtes/min/user
- * - Quota par tier : FREE = 5/jour, PREMIUM = illimité
+ * - Pas de quota business ici : le quota voix est consommé après succès
+ *   via consumeUsageQuota("voice"), pas au niveau transcription.
  */
 exports.transcribeAudio = onCall(
   withAppCheck({
@@ -260,32 +405,8 @@ exports.transcribeAudio = onCall(
     // 2. Rate limiting — max 10 requêtes/min/user
     await checkRateLimit(db, uid, "transcribe", 10);
 
-    // 3. Quota check — FREE = 5 transcriptions/jour
-    const usageRef = db.doc(`usage_limits/${uid}`);
-    const usageDoc = await usageRef.get();
-    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-
-    let tier = "free";
-    let dailyCount = 0;
-
-    if (usageDoc.exists) {
-      const usageData = usageDoc.data();
-      tier = usageData.tier || "free";
-      if (usageData.lastDate === today) {
-        dailyCount = usageData.dailyTranscriptions || 0;
-      }
-    }
-
-    const FREE_DAILY_LIMIT = 5;
-    if (tier === "free" && dailyCount >= FREE_DAILY_LIMIT) {
-      throw new HttpsError(
-        "resource-exhausted",
-        `Limite quotidienne atteinte (${FREE_DAILY_LIMIT} transcriptions/jour). Passez en Premium pour un usage illimité.`
-      );
-    }
-
     try {
-      // 4. Upload audio to AssemblyAI
+      // 3. Upload audio to AssemblyAI
       const audioBuffer = Buffer.from(audioBase64, "base64");
 
       const uploadResponse = await fetch(
@@ -308,7 +429,7 @@ exports.transcribeAudio = onCall(
       const uploadData = await uploadResponse.json();
       const uploadUrl = uploadData.upload_url;
 
-      // 5. Create transcription
+      // 4. Create transcription
       const transcriptResponse = await fetch(
         "https://api.assemblyai.com/v2/transcript",
         {
@@ -336,7 +457,7 @@ exports.transcribeAudio = onCall(
       const transcript = await transcriptResponse.json();
       const transcriptId = transcript.id;
 
-      // 6. Poll for completion (max 60s)
+      // 5. Poll for completion (max 60s)
       let result = transcript;
       const maxPolls = 60;
       let polls = 0;
@@ -368,17 +489,6 @@ exports.transcribeAudio = onCall(
         throw new HttpsError("deadline-exceeded", "Transcription timeout.");
       }
 
-      // 7. Update usage counter
-      await usageRef.set(
-        {
-          tier,
-          dailyTranscriptions: dailyCount + 1,
-          lastDate: today,
-          lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
       return { text: result.text || "" };
     } catch (error) {
       // Re-throw HttpsError as-is
@@ -391,6 +501,252 @@ exports.transcribeAudio = onCall(
         "Erreur lors de la transcription audio."
       );
     }
+  }
+);
+
+exports.getUsageQuotaStatus = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    monitorAppCheck(request, "getUsageQuotaStatus");
+
+    const uid = request.auth.uid;
+    const { feature, childId } = request.data || {};
+    const db = admin.firestore();
+
+    if (!["voice", "export", "sharing"].includes(feature)) {
+      throw new HttpsError("invalid-argument", "Feature invalide.");
+    }
+
+    if (feature === "voice") {
+      return await getVoiceQuotaStatus(db, uid);
+    }
+
+    if (feature === "export") {
+      return await getExportQuotaStatus(db, uid);
+    }
+
+    if (!childId || typeof childId !== "string") {
+      throw new HttpsError("invalid-argument", "childId est requis.");
+    }
+
+    const accessDoc = await db.doc(`children/${childId}/access/${uid}`).get();
+    if (!accessDoc.exists || !hasRequiredChildAccess(accessDoc.data(), ["owner", "admin"])) {
+      throw new HttpsError("permission-denied", "Accès insuffisant à cet enfant.");
+    }
+
+    return await getSharingQuotaStatus(db, uid, childId);
+  }
+);
+
+exports.consumeUsageQuota = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    monitorAppCheck(request, "consumeUsageQuota");
+
+    const uid = request.auth.uid;
+    const { feature } = request.data || {};
+    const db = admin.firestore();
+
+    if (!["voice", "export"].includes(feature)) {
+      throw new HttpsError("invalid-argument", "Feature invalide.");
+    }
+
+    const subscriptionState = await getSubscriptionState(db, uid);
+    if (hasUnlimitedFeature(subscriptionState, feature)) {
+      return {
+        feature,
+        allowed: true,
+        isUnlimited: true,
+        used: 0,
+        limit: null,
+        remaining: null,
+        resetDate: null,
+      };
+    }
+
+    const usageRef = db.doc(`usage_limits/${uid}`);
+    return await db.runTransaction(async (tx) => {
+      const usageDoc = await tx.get(usageRef);
+      const usageData = usageDoc.exists ? usageDoc.data() : {};
+
+      if (feature === "voice") {
+        const today = new Date().toISOString().split("T")[0];
+        const used =
+          usageData.voiceCommandDate === today ? usageData.voiceCommandCount || 0 : 0;
+
+        if (used >= FREE_DAILY_VOICE_LIMIT) {
+          throw new HttpsError(
+            "resource-exhausted",
+            `Limite quotidienne atteinte (${FREE_DAILY_VOICE_LIMIT} commandes vocales/jour). Passez en Premium pour un usage illimité.`
+          );
+        }
+
+        tx.set(
+          usageRef,
+          {
+            voiceCommandDate: today,
+            voiceCommandCount: used + 1,
+            lastVoiceCommandAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        return {
+          feature: "voice",
+          allowed: true,
+          isUnlimited: false,
+          used: used + 1,
+          limit: FREE_DAILY_VOICE_LIMIT,
+          remaining: Math.max(0, FREE_DAILY_VOICE_LIMIT - (used + 1)),
+          resetDate: today,
+        };
+      }
+
+      const used = usageData.pdfExportCount || 0;
+      if (used >= FREE_TOTAL_PDF_EXPORTS) {
+        throw new HttpsError(
+          "resource-exhausted",
+          "Votre export gratuit a déjà été utilisé. Passez en Premium pour des exports illimités."
+        );
+      }
+
+      tx.set(
+        usageRef,
+        {
+          pdfExportCount: used + 1,
+          lastPdfExportAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return {
+        feature: "export",
+        allowed: true,
+        isUnlimited: false,
+        used: used + 1,
+        limit: FREE_TOTAL_PDF_EXPORTS,
+        remaining: Math.max(0, FREE_TOTAL_PDF_EXPORTS - (used + 1)),
+        resetDate: null,
+      };
+    });
+  }
+);
+
+exports.createShareInvitation = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    monitorAppCheck(request, "createShareInvitation");
+
+    const uid = request.auth.uid;
+    const inviterEmail = request.auth.token?.email;
+    const { childId, childName, invitedEmail } = request.data || {};
+    const db = admin.firestore();
+
+    if (!childId || typeof childId !== "string") {
+      throw new HttpsError("invalid-argument", "childId est requis.");
+    }
+    if (!invitedEmail || typeof invitedEmail !== "string") {
+      throw new HttpsError("invalid-argument", "invitedEmail est requis.");
+    }
+    if (!inviterEmail) {
+      throw new HttpsError("failed-precondition", "Email utilisateur introuvable.");
+    }
+
+    const invitedEmailLower = invitedEmail.trim().toLowerCase();
+    if (invitedEmailLower === inviterEmail.toLowerCase()) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Vous ne pouvez pas vous inviter vous-même.",
+        { reason: "self-invite" }
+      );
+    }
+
+    const accessDoc = await db.doc(`children/${childId}/access/${uid}`).get();
+    if (!accessDoc.exists || !hasRequiredChildAccess(accessDoc.data(), ["owner", "admin"])) {
+      throw new HttpsError(
+        "permission-denied",
+        "Accès insuffisant à cet enfant.",
+        { reason: "insufficient-access" }
+      );
+    }
+
+    const childDoc = await db.doc(`children/${childId}`).get();
+    if (!childDoc.exists) {
+      throw new HttpsError("not-found", "Enfant introuvable.", { reason: "child-not-found" });
+    }
+
+    const sharingQuota = await getSharingQuotaStatus(db, uid, childId);
+    if (!sharingQuota.isUnlimited && sharingQuota.remaining <= 0) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "Le plan gratuit permet 2 co-parents maximum. Passez en Famille pour inviter plus de personnes.",
+        { reason: "sharing-limit" }
+      );
+    }
+
+    const invitedUserSnap = await db
+      .collection("users")
+      .where("email", "==", invitedEmailLower)
+      .limit(1)
+      .get();
+
+    if (invitedUserSnap.empty) {
+      throw new HttpsError(
+        "not-found",
+        "Aucun utilisateur trouvé avec cet email. Veuillez demander au destinataire de créer un compte d'abord.",
+        { reason: "no-user" }
+      );
+    }
+
+    const invitedUserDoc = invitedUserSnap.docs[0];
+    const invitedUserId = invitedUserDoc.id;
+    const targetAccessDoc = await db.doc(`children/${childId}/access/${invitedUserId}`).get();
+    if (targetAccessDoc.exists) {
+      throw new HttpsError(
+        "already-exists",
+        "Cet enfant est déjà lié à ce destinataire.",
+        { reason: "already-linked" }
+      );
+    }
+
+    const existingInvites = await db
+      .collection("shareInvitations")
+      .where("childId", "==", childId)
+      .where("invitedEmail", "==", invitedEmailLower)
+      .where("inviterId", "==", uid)
+      .where("status", "==", "pending")
+      .limit(1)
+      .get();
+
+    if (!existingInvites.empty) {
+      throw new HttpsError(
+        "already-exists",
+        "Une invitation est déjà en attente pour cet email.",
+        { reason: "already-pending" }
+      );
+    }
+
+    const invitationRef = await db.collection("shareInvitations").add({
+      childId,
+      childName: childName || childDoc.data()?.name || "",
+      inviterId: uid,
+      inviterEmail,
+      invitedEmail: invitedEmailLower,
+      invitedUserId,
+      status: "pending",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return { id: invitationRef.id };
   }
 );
 

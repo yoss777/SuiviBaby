@@ -199,7 +199,7 @@ export default function DrawerLayout() {
                     color: colorScheme === "dark" ? "#7dd3fc" : "#075985",
                   },
                 ]}
-                accessibilityRole="status"
+                accessibilityLabel="Synchronisation en cours"
               >
                 Synchronisation en cours
               </Text>
