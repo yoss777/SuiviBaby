@@ -2427,7 +2427,7 @@ exports.sendWeeklyRecap = onSchedule(
         console.log(`sendWeeklyRecap: sending to ${userEmail} for ${childName} (hasActivity=${hasActivity})`);
         try {
           const sendResult = await resend.emails.send({
-            from: "Suivi Baby <onboarding@resend.dev>",
+            from: "Suivi Baby <noreply@suivibaby.com>",
             to: userEmail,
             subject: `Récap semaine — ${childName}`,
             html,
