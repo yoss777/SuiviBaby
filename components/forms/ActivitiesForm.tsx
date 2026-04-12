@@ -1,5 +1,6 @@
 // components/forms/ActivitiesForm.tsx
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
@@ -697,17 +698,13 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   typeChip: {
-    borderRadius: 999,
+    ...PRIMARY_TYPE_CHIP,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
   },
   typeChipText: {
-    fontSize: 12,
-    fontWeight: "600",
-    textAlign: "center",
+    ...PRIMARY_TYPE_CHIP_TEXT,
   },
   quantityPickerRow: {
     flexDirection: "row",
