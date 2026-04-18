@@ -40,7 +40,14 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const nc = getNeutralColors(colorScheme);
   const chartColors = getChartColors(colorScheme);
   const { width } = useWindowDimensions();
-  const { activeChild, children, childrenLoaded, setActiveChild } = useBaby();
+  const {
+    activeChild,
+    children,
+    childrenLoaded,
+    setActiveChild,
+    hideChildOptimistically,
+    unhideChildOptimistically,
+  } = useBaby();
   const { signOut, user, userName, email, firebaseUser } = useAuth();
   const { showToast } = useToast();
   const isMountedRef = useRef(true);
@@ -176,9 +183,23 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const confirmHideChild = useCallback(async () => {
     if (!childToHide) return;
 
+    const nextVisibleChild = children.find(
+      (child) => child.id !== childToHide.id,
+    );
+
     try {
       // P8b: Haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      hideChildOptimistically(childToHide.id);
+
+      if (activeChild?.id === childToHide.id) {
+        if (nextVisibleChild) {
+          setActiveChild(nextVisibleChild);
+        } else if (pathname.includes("/baby")) {
+          router.replace("/explore");
+        }
+      }
+
       await masquerEnfant(childToHide.id);
       if (!isMountedRef.current) return;
       setShowHideModal(false);
@@ -187,12 +208,23 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
       showToast(`${childToHide.name} masqué`);
     } catch (error) {
       if (!isMountedRef.current) return;
+      unhideChildOptimistically(childToHide.id);
       setErrorModal({
         visible: true,
         message: "Impossible de masquer l'enfant.",
       });
     }
-  }, [childToHide, showToast]);
+  }, [
+    activeChild?.id,
+    childToHide,
+    children,
+    hideChildOptimistically,
+    pathname,
+    router,
+    setActiveChild,
+    showToast,
+    unhideChildOptimistically,
+  ]);
 
   return (
     <DrawerContentScrollView

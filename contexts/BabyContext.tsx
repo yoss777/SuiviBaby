@@ -29,6 +29,8 @@ interface BabyContextType {
   hiddenChildrenIds: string[];
   reminderPreferences: ReminderPreferences;
   setActiveChild: (child: Child) => void;
+  hideChildOptimistically: (childId: string) => void;
+  unhideChildOptimistically: (childId: string) => void;
   addChild: (child: Child) => void;
   updateChild: (id: string, child: Partial<Child>) => void;
   deleteChild: (id: string) => void;
@@ -236,6 +238,40 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       setHiddenChildrenIds(validHiddenIds);
     }
   }, []);
+
+  const hideChildOptimistically = useCallback((childId: string) => {
+    const nextHiddenIds = hiddenChildrenIdsRef.current.includes(childId)
+      ? hiddenChildrenIdsRef.current
+      : [...hiddenChildrenIdsRef.current, childId];
+
+    hiddenChildrenIdsRef.current = nextHiddenIds;
+    setHiddenChildrenIds((prev) => {
+      if (
+        prev.length === nextHiddenIds.length &&
+        prev.every((id, index) => id === nextHiddenIds[index])
+      ) {
+        return prev;
+      }
+      return nextHiddenIds;
+    });
+    syncState();
+  }, [syncState]);
+
+  const unhideChildOptimistically = useCallback((childId: string) => {
+    const nextHiddenIds = hiddenChildrenIdsRef.current.filter((id) => id !== childId);
+
+    hiddenChildrenIdsRef.current = nextHiddenIds;
+    setHiddenChildrenIds((prev) => {
+      if (
+        prev.length === nextHiddenIds.length &&
+        prev.every((id, index) => id === nextHiddenIds[index])
+      ) {
+        return prev;
+      }
+      return nextHiddenIds;
+    });
+    syncState();
+  }, [syncState]);
 
   // Re-derive visible children when hiddenChildrenIds changes
   // (without tearing down Firestore listeners)
@@ -579,10 +615,12 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     hiddenChildrenIds,
     reminderPreferences,
     setActiveChild,
+    hideChildOptimistically,
+    unhideChildOptimistically,
     addChild,
     updateChild,
     deleteChild,
-  }), [children, activeChild, loading, status, childrenLoaded, hiddenChildrenIds, reminderPreferences, setActiveChild, addChild, updateChild, deleteChild]);
+  }), [children, activeChild, loading, status, childrenLoaded, hiddenChildrenIds, reminderPreferences, setActiveChild, hideChildOptimistically, unhideChildOptimistically, addChild, updateChild, deleteChild]);
 
   return (
     <BabyContext.Provider value={value}>

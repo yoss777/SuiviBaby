@@ -1,6 +1,6 @@
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { Stack } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { Stack, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -34,6 +34,7 @@ interface HiddenPhotoItem {
 }
 
 export default function HiddenPhotosScreen() {
+  const router = useRouter();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const tint = Colors[colorScheme].tint;
@@ -43,6 +44,7 @@ export default function HiddenPhotosScreen() {
   const [items, setItems] = useState<HiddenPhotoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [unhiding, setUnhiding] = useState<Set<string>>(new Set());
+  const hadVisibleItemsRef = useRef(false);
 
   const loadHiddenPhotos = useCallback(async (hiddenIds: string[]) => {
     try {
@@ -120,6 +122,26 @@ export default function HiddenPhotosScreen() {
 
     return () => unsubscribe();
   }, [user?.uid, loadHiddenPhotos]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (items.length > 0) {
+      hadVisibleItemsRef.current = true;
+      return;
+    }
+
+    if (!hadVisibleItemsRef.current) {
+      return;
+    }
+
+    hadVisibleItemsRef.current = false;
+    const timeoutId = setTimeout(() => {
+      router.back();
+    }, 600);
+
+    return () => clearTimeout(timeoutId);
+  }, [items.length, loading, router]);
 
   const handleUnhide = useCallback(
     async (eventId: string) => {

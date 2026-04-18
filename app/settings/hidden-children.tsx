@@ -1,12 +1,12 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { Stack } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Stack, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  FlatList,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -32,6 +32,7 @@ import { getAccessibleChildIds } from "@/utils/permissions";
 const { width } = Dimensions.get("window");
 
 export default function HiddenChildrenScreen() {
+  const router = useRouter();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const tint = Colors[colorScheme].tint;
@@ -45,6 +46,7 @@ export default function HiddenChildrenScreen() {
     id: string;
     name: string;
   } | null>(null);
+  const hadVisibleChildrenRef = useRef(false);
 
   // P22: Use onSnapshot listener on user preferences doc for real-time updates
   useEffect(() => {
@@ -100,6 +102,26 @@ export default function HiddenChildrenScreen() {
 
     return () => unsubscribe();
   }, [user]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (hiddenChildren.length > 0) {
+      hadVisibleChildrenRef.current = true;
+      return;
+    }
+
+    if (!hadVisibleChildrenRef.current) {
+      return;
+    }
+
+    hadVisibleChildrenRef.current = false;
+    const timeoutId = setTimeout(() => {
+      router.back();
+    }, 600);
+
+    return () => clearTimeout(timeoutId);
+  }, [hiddenChildren.length, loading, router]);
 
   // P17a: Memoize calculateAge function
   const calculateAge = useCallback((birthDate: string) => {
@@ -185,125 +207,122 @@ export default function HiddenChildrenScreen() {
             headerTitleStyle: { color: nc.textStrong },
           }}
         />
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {loading ? (
-            <View
-              style={styles.loadingContainer}
-              accessible={true}
-              accessibilityRole="progressbar"
-              accessibilityLabel="Chargement des enfants masqués"
+        {loading ? (
+          <View
+            style={styles.center}
+            accessible={true}
+            accessibilityRole="progressbar"
+            accessibilityLabel="Chargement des enfants masqués"
+          >
+            <ActivityIndicator
+              size="large"
+              color={tint}
+            />
+          </View>
+        ) : hiddenChildren.length === 0 ? (
+          <View
+            style={styles.center}
+            accessible={true}
+            accessibilityRole="summary"
+            accessibilityLabel="Aucun enfant masqué. Vous pouvez masquer un enfant de votre liste de suivi depuis le menu principal."
+          >
+            <FontAwesome
+              name="eye-slash"
+              size={40}
+              color={nc.textMuted}
+            />
+            <Text
+              style={[styles.emptyTitle, { color: nc.textStrong }]}
             >
-              <ActivityIndicator
-                size="large"
-                color={tint}
-              />
-              <Text
-                style={[
-                  styles.loadingText,
-                  { color: nc.textMuted },
-                ]}
-              >
-                Chargement...
-              </Text>
-            </View>
-          ) : hiddenChildren.length === 0 ? (
-            <View
-              style={styles.emptyContainer}
-              accessible={true}
-              accessibilityRole="summary"
-              accessibilityLabel="Aucun enfant masqué. Vous pouvez masquer un enfant de votre liste de suivi depuis le menu principal."
+              Aucun enfant masqué
+            </Text>
+            <Text
+              style={[
+                styles.emptyDescription,
+                { color: nc.textMuted },
+              ]}
             >
-              <FontAwesome
-                name="eye-slash"
-                size={48}
-                color={nc.textMuted}
-              />
-              <Text
-                style={[styles.emptyTitle, { color: nc.textStrong }]}
-              >
-                Aucun enfant masqué
-              </Text>
-              <Text
-                style={[
-                  styles.emptyDescription,
-                  { color: nc.textMuted },
-                ]}
-              >
-                Vous pouvez masquer un enfant de votre liste de suivi depuis le
-                menu principal.
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.childrenList}>
-              <Text
-                style={[
-                  styles.infoText,
-                  { color: nc.textMuted },
-                ]}
-              >
-                Ces enfants sont masqués de votre liste de suivi. Vous pouvez
-                les restaurer à tout moment.
-              </Text>
-              {hiddenChildren.map((child) => {
-                const ageText = ageMap[child.id] ?? "";
-                return (
+              Les enfants que vous masquez depuis le menu principal apparaîtront ici.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={hiddenChildren}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item: child }) => {
+              const ageText = ageMap[child.id] ?? "";
+
+              return (
+                <View
+                  style={[
+                    styles.card,
+                    {
+                      backgroundColor: nc.backgroundCard,
+                      borderColor: nc.borderLight,
+                    },
+                  ]}
+                >
                   <View
-                    key={child.id}
-                    style={styles.childItemContainer}
+                    style={styles.summaryContent}
+                    accessible={true}
+                    accessibilityRole="summary"
+                    accessibilityLabel={`${child.name}, ${ageText}, né le ${child.birthDate}`}
                   >
                     <View
-                      style={[styles.childCard, { backgroundColor: nc.backgroundCard }]}
-                      accessible={true}
-                      accessibilityRole="summary"
-                      accessibilityLabel={`${child.name}, ${ageText}, né le ${child.birthDate}`}
+                      style={[
+                        styles.childAvatar,
+                        { backgroundColor: nc.backgroundPressed },
+                      ]}
+                      accessible={false}
                     >
-                      <View
-                        style={[styles.childAvatar, { backgroundColor: nc.borderLight }]}
-                        accessible={false}
-                      >
-                        <Text style={styles.childAvatarEmoji}>
-                          {child.gender === "male" ? "👶" : "👧"}
-                        </Text>
-                      </View>
-                      <View style={styles.childDetails}>
-                        <Text
-                          style={[
-                            styles.childName,
-                            { color: nc.textStrong },
-                          ]}
-                        >
-                          {child.name}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.childAge,
-                            { color: nc.textMuted },
-                          ]}
-                        >
-                          {ageText} • {child.birthDate}
-                        </Text>
-                      </View>
+                      <Text style={styles.childAvatarEmoji}>
+                        {child.gender === "male" ? "👶" : "👧"}
+                      </Text>
                     </View>
-                    <TouchableOpacity
-                      style={styles.restoreButton}
-                      onPress={() => handleRestoreChild(child.id, child.name)}
-                      activeOpacity={0.7}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Restaurer ${child.name}, ${ageText}`}
-                      accessibilityHint="Restaure cet enfant dans votre liste de suivi"
-                    >
-                      <FontAwesome name="eye" size={20} color={nc.success} />
-                    </TouchableOpacity>
+                    <View style={styles.info}>
+                      <Text
+                        style={[
+                          styles.childName,
+                          { color: nc.textStrong },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {child.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.childMeta,
+                          { color: nc.textMuted },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {ageText} • {child.birthDate}
+                      </Text>
+                    </View>
                   </View>
-                );
-              })}
-            </View>
-          )}
-        </ScrollView>
+                  <TouchableOpacity
+                    style={[
+                      styles.restoreButton,
+                      { borderColor: tint },
+                    ]}
+                    onPress={() => handleRestoreChild(child.id, child.name)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Restaurer ${child.name}, ${ageText}`}
+                    accessibilityHint="Restaure cet enfant dans votre liste de suivi"
+                  >
+                    <FontAwesome name="eye" size={16} color={tint} />
+                  </TouchableOpacity>
+                </View>
+              );
+            }}
+            contentContainerStyle={styles.list}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            accessibilityRole="list"
+            accessibilityLabel={`${hiddenChildren.length} enfant${hiddenChildren.length > 1 ? "s" : ""} masqué${hiddenChildren.length > 1 ? "s" : ""}`}
+          />
+        )}
 
         {/* Modal de confirmation pour restaurer un enfant */}
         <Modal
@@ -376,89 +395,71 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 16,
-  },
-  loadingContainer: {
+  center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 60,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 60,
-    paddingHorizontal: 40,
+    gap: 12,
+    padding: 32,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 8,
   },
   emptyDescription: {
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,
   },
-  childrenList: {
-    paddingHorizontal: 16,
+  list: {
+    padding: 16,
   },
-  infoText: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 16,
-    paddingHorizontal: 4,
+  separator: {
+    height: 10,
   },
-  childItemContainer: {
+  card: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
-    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    gap: 12,
   },
-  childCard: {
+  summaryContent: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 12,
     gap: 12,
   },
   childAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: undefined as unknown as string, // set dynamically
+    width: 56,
+    height: 56,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
   },
   childAvatarEmoji: {
-    fontSize: 20,
+    fontSize: 24,
   },
-  childDetails: {
+  info: {
     flex: 1,
+    gap: 2,
   },
   childName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
-    marginBottom: 4,
   },
-  childAge: {
+  childMeta: {
     fontSize: 13,
   },
   restoreButton: {
-    minWidth: 44,
-    minHeight: 44,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1.5,
     justifyContent: "center" as const,
     alignItems: "center" as const,
-    padding: 4,
   },
   modalOverlay: {
     flex: 1,

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useNavigation } from "@react-navigation/native";
+import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
@@ -79,6 +80,7 @@ export default function SettingsScreen() {
   const { delete: deleteParam } = useLocalSearchParams();
   const hiddenChildrenCount = hiddenChildrenIds.length;
   const hasHiddenChildren = hiddenChildrenCount > 0;
+  const appVersion = Constants.expoConfig?.version ?? "inconnue";
   const [languagePreference, setLanguagePreference] = useState("fr");
   const [modalConfig, setModalConfig] = useState({
     visible: false,
@@ -307,113 +309,6 @@ export default function SettingsScreen() {
           router.push("/settings/premium");
         },
       },
-    ],
-    [router],
-  );
-
-  const appSettings: SettingItem[] = useMemo(
-    () => [
-      {
-        id: "hidden-children",
-        icon: "eye-off-outline",
-        label: "Enfants masqués",
-        value: `${hiddenChildrenCount}`,
-        description: hasHiddenChildren
-          ? "Gérer les enfants masqués"
-          : "Aucun enfant masqué",
-        disabled: !hasHiddenChildren,
-        onPress: () => {
-          if (hasHiddenChildren) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/settings/hidden-children");
-          }
-        },
-      },
-      {
-        id: "hidden-photos",
-        icon: "eye-off-outline",
-        label: "Photos masquées",
-        value: `${hiddenPhotoIds.size}`,
-        description: hiddenPhotoIds.size > 0
-          ? "Gérer les photos masquées"
-          : "Aucune photo masquée",
-        disabled: hiddenPhotoIds.size === 0,
-        onPress: () => {
-          if (hiddenPhotoIds.size > 0) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/settings/hidden-photos");
-          }
-        },
-      },
-      ...(isOwnerOfAny
-        ? [
-            {
-              id: "edit-child",
-              icon: "create-outline" as keyof typeof Ionicons.glyphMap,
-              label: "Profils enfants",
-              description: "Modifier le nom de vos enfants ou les supprimer",
-              onPress: () => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/settings/edit-child");
-              },
-            },
-          ]
-        : []),
-      ...(isOwnerOfAny
-        ? [
-            {
-              id: "deletion-requests",
-              icon: (pendingDeletionRequests > 0 ? "alert-circle-outline" : "time-outline") as keyof typeof Ionicons.glyphMap,
-              label: "Demandes de suppression",
-              value: `${pendingDeletionRequests}`,
-              description: pendingDeletionRequests > 0
-                ? "Consulter les demandes en cours"
-                : "Aucune demande en cours",
-              disabled: pendingDeletionRequests === 0,
-              ...(pendingDeletionRequests > 0 ? { color: nc.error } : {}),
-              onPress: () => {
-                if (pendingDeletionRequests > 0) {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push("/settings/deletion-requests");
-                }
-              },
-            },
-          ]
-        : []),
-      {
-        id: "join-child",
-        icon: "person-add-outline",
-        label: "Ajouter un enfant",
-        description: "Entrer un code ou accepter une invitation",
-        onPress: () => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/join-child");
-        },
-      },
-      {
-        id: "notifications",
-        icon: "notifications-outline",
-        label: "Notifications",
-        description: "Gérer les notifications",
-        onPress: () => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/notifications");
-        },
-      },
-      {
-        id: "theme",
-        icon: "moon-outline",
-        label: "Thème",
-        value:
-          themePreference === "auto"
-            ? "Automatique"
-            : themePreference === "dark"
-              ? "Sombre"
-              : "Clair",
-        onPress: () => {
-          router.push("/settings/theme");
-        },
-      },
       ...(biometricAvailable
         ? [
             {
@@ -437,34 +332,9 @@ export default function SettingsScreen() {
             },
           ]
         : []),
-      // {
-      //   id: 'language',
-      //   icon: 'language-outline',
-      //   label: 'Langue',
-      //   value:
-      //     {
-      //       fr: 'Français',
-      //       en: 'English',
-      //       es: 'Español',
-      //       de: 'Deutsch',
-      //       it: 'Italiano',
-      //       pt: 'Português',
-      //       ar: 'العربية',
-      //     }[languagePreference] || languagePreference.toUpperCase(),
-      //   onPress: () => {
-      //     router.push('/settings/language');
-      //   },
-      // },
     ],
     [
-      hiddenChildrenCount,
-      hasHiddenChildren,
-      hiddenPhotoIds.size,
-      isOwnerOfAny,
-      pendingDeletionRequests,
-      nc.error,
       router,
-      themePreference,
       biometricAvailable,
       biometricEnabled,
       biometricLabel,
@@ -473,18 +343,116 @@ export default function SettingsScreen() {
     ],
   );
 
-  const dataSettings: SettingItem[] = useMemo(
+  const familySettings: SettingItem[] = useMemo(
     () => [
-      // {
-      //   id: 'migration',
-      //   icon: 'rocket-outline',
-      //   label: 'Migration des données',
-      //   description: 'Gérer la migration vers la nouvelle structure',
-      //   color: Colors.light.primary,
-      //   onPress: () => {
-      //     router.push('/settings/migration');
-      //   },
-      // },
+      ...(isOwnerOfAny
+        ? [
+            {
+              id: "edit-child",
+              icon: "create-outline" as keyof typeof Ionicons.glyphMap,
+              label: "Profils enfants",
+              description: "Modifier le nom de vos enfants ou les supprimer",
+              onPress: () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/settings/edit-child");
+              },
+            },
+          ]
+        : []),
+      {
+        id: "join-child",
+        icon: "person-add-outline",
+        label: "Ajouter un enfant",
+        description: "Entrer un code ou accepter une invitation",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/settings/join-child");
+        },
+      },
+      ...(isOwnerOfAny && pendingDeletionRequests > 0
+        ? [
+            {
+              id: "deletion-requests",
+              icon: "alert-circle-outline" as keyof typeof Ionicons.glyphMap,
+              label: "Demandes de suppression",
+              value: `${pendingDeletionRequests}`,
+              description: "Consulter les demandes en cours",
+              color: nc.error,
+              onPress: () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/settings/deletion-requests");
+              },
+            },
+          ]
+        : []),
+      ...(hasHiddenChildren
+        ? [
+            {
+              id: "hidden-children",
+              icon: "eye-off-outline",
+              label: "Enfants masqués",
+              value: `${hiddenChildrenCount}`,
+              description: "Gérer les enfants masqués",
+              onPress: () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/settings/hidden-children");
+              },
+            },
+          ]
+        : []),
+      ...(hiddenPhotoIds.size > 0
+        ? [
+            {
+              id: "hidden-photos",
+              icon: "eye-off-outline",
+              label: "Photos masquées",
+              value: `${hiddenPhotoIds.size}`,
+              description: "Gérer les photos masquées",
+              onPress: () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/settings/hidden-photos");
+              },
+            },
+          ]
+        : []),
+    ],
+    [
+      isOwnerOfAny,
+      pendingDeletionRequests,
+      nc.error,
+      hasHiddenChildren,
+      hiddenChildrenCount,
+      hiddenPhotoIds.size,
+      router,
+    ],
+  );
+
+  const preferencesSettings: SettingItem[] = useMemo(
+    () => [
+      {
+        id: "notifications",
+        icon: "notifications-outline",
+        label: "Notifications",
+        description: "Gérer les notifications",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/settings/notifications");
+        },
+      },
+      {
+        id: "theme",
+        icon: "moon-outline",
+        label: "Thème",
+        value:
+          themePreference === "auto"
+            ? "Automatique"
+            : themePreference === "dark"
+            ? "Sombre"
+              : "Clair",
+        onPress: () => {
+          router.push("/settings/theme");
+        },
+      },
       {
         id: "export",
         icon: "cloud-download-outline",
@@ -495,20 +463,11 @@ export default function SettingsScreen() {
           router.push("/settings/export");
         },
       },
-      // {
-      //   id: 'backup',
-      //   icon: 'cloud-upload-outline',
-      //   label: 'Sauvegarde',
-      //   description: 'Sauvegarder vos données',
-      //   onPress: () => {
-      //     router.push('/settings/backup');
-      //   },
-      // },
     ],
-    [router],
+    [router, themePreference],
   );
 
-  const otherSettings: SettingItem[] = useMemo(
+  const informationSettings: SettingItem[] = useMemo(
     () => [
       {
         id: "privacy",
@@ -530,21 +489,6 @@ export default function SettingsScreen() {
         },
       },
       {
-        id: "about",
-        icon: "information-circle-outline",
-        label: "À propos",
-        value: "Version 1.0.0",
-        onPress: () => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          setModalConfig({
-            visible: true,
-            title: "SuiviBaby",
-            message:
-              "Version 1.0.0\n\nSystème de suivi d'événements bébé pour les parents.",
-          });
-        },
-      },
-      {
         id: "help",
         icon: "help-circle-outline",
         label: "Aide & Support",
@@ -553,8 +497,23 @@ export default function SettingsScreen() {
           router.push("/settings/help");
         },
       },
+      {
+        id: "about",
+        icon: "information-circle-outline",
+        label: "À propos",
+        value: `Version ${appVersion}`,
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setModalConfig({
+            visible: true,
+            title: "SuiviBaby",
+            message:
+              `Version ${appVersion}\n\nSystème de suivi d'événements bébé pour les parents.`,
+          });
+        },
+      },
     ],
-    [router],
+    [appVersion, router],
   );
 
   const dangerSettings: SettingItem[] = useMemo(
@@ -732,10 +691,9 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {renderSection("Compte", accountSettings)}
-        {renderSection("Application", appSettings)}
-        {renderSection("Données", dataSettings)}
-        {renderSection("Autres", otherSettings)}
-        {renderSection("Zone dangereuse", dangerSettings)}
+        {renderSection("Famille", familySettings)}
+        {renderSection("Préférences", preferencesSettings)}
+        {renderSection("Informations", informationSettings)}
 
         {pendingDeletionDate && (
           <View
@@ -798,6 +756,8 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {renderSection("Zone dangereuse", dangerSettings)}
 
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: nc.textMuted }]}>
