@@ -8,7 +8,7 @@ import BottomSheet, {
   BottomSheetBackdropProps,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
-import React, { forwardRef, useCallback, useMemo, useRef } from "react";
+import React, { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -72,6 +72,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
     const nc = getNeutralColors(colorScheme);
     const insets = useSafeAreaInsets();
     const scrollViewRef = useRef<any>(null);
+    const [scrollEnabled, setScrollEnabled] = useState(true);
     const snapPoints = useMemo(
       () => customSnapPoints || ["75%", "90%"],
       [customSnapPoints],
@@ -81,6 +82,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         scrollToEnd: () => {
           scrollViewRef.current?.scrollToEnd?.({ animated: true });
         },
+        setScrollEnabled,
       }),
       [],
     );
@@ -115,6 +117,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         <FormScrollContext.Provider value={formScrollContext}>
           <BottomSheetScrollView
             ref={scrollViewRef}
+            scrollEnabled={scrollEnabled}
             style={styles.container}
             contentContainerStyle={{
               paddingBottom: Math.max(16, insets.bottom),

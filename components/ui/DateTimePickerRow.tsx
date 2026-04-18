@@ -5,9 +5,11 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
-import React, { memo, useCallback, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
+  Modal,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -76,12 +78,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
     pendingValueRef.current = value;
     setPendingValue(value);
     setShowPicker(true);
-    if (Platform.OS === "ios") {
-      setTimeout(() => {
-        formScroll?.scrollToEnd();
-      }, 80);
-    }
-  }, [disabled, formScroll, value]);
+  }, [disabled, value]);
 
   // Android: onChange fires once on confirm, dismiss fires with no date
   const handleChangeAndroid = useCallback(
@@ -121,8 +118,28 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
     }
   }, [onChange, value]);
 
-  const isIOS = Platform.OS === "ios";
+  useEffect(() => {
+    if (Platform.OS === "ios") {
+      formScroll?.setScrollEnabled(!showPicker);
 
+      if (showPicker) {
+        const timer = setTimeout(() => {
+          formScroll?.scrollToEnd();
+        }, 80);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [formScroll, showPicker]);
+
+  useEffect(() => {
+    return () => {
+      if (Platform.OS === "ios") {
+        formScroll?.setScrollEnabled(true);
+      }
+    };
+  }, [formScroll]);
+
+  const isIOS = Platform.OS === "ios";
   const displayValue =
     mode === "date" ? formatDate(value) : formatTime(value);
 
@@ -165,44 +182,75 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
         </Text>
       </TouchableOpacity>
 
-      {showPicker && (
-        <View style={isIOS ? styles.pickerContainer : undefined}>
-          {isIOS && (
-            <View style={[styles.pickerToolbar, { borderColor: nc.border }]}>
-              <TouchableOpacity
-                onPress={handleCancelIOS}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel="Annuler"
-              >
-                <Text style={[styles.toolbarButton, { color: nc.textMuted }]}>
-                  Annuler
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleConfirmIOS}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel="Valider"
-              >
-                <Text style={[styles.toolbarButton, styles.toolbarConfirm, { color: Colors[colorScheme].tint }]}>
-                  OK
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+      {showPicker && !isIOS && (
+        <View style={styles.pickerContainer}>
           <DateTimePicker
-            value={isIOS ? pendingValue : value}
+            value={value}
             mode={mode}
             is24Hour={mode === "time"}
-            display={isIOS ? "spinner" : "default"}
+            display="default"
             themeVariant={colorScheme}
             minimumDate={minimumDate}
             maximumDate={maximumDate}
-            onChange={isIOS ? handleChangeIOS : handleChangeAndroid}
-            style={isIOS ? styles.pickerIOS : undefined}
+            onChange={handleChangeAndroid}
           />
         </View>
+      )}
+
+      {isIOS && (
+        <Modal
+          visible={showPicker}
+          transparent
+          animationType="fade"
+          onRequestClose={handleCancelIOS}
+        >
+          <Pressable style={styles.iosModalOverlay} onPress={handleCancelIOS}>
+            <Pressable
+              style={[styles.iosModalCard, { backgroundColor: nc.backgroundCard }]}
+              onPress={(event) => event.stopPropagation()}
+            >
+              <View style={[styles.pickerToolbar, { borderColor: nc.border }]}>
+                <TouchableOpacity
+                  onPress={handleCancelIOS}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Annuler"
+                >
+                  <Text style={[styles.toolbarButton, { color: nc.textMuted }]}>
+                    Annuler
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleConfirmIOS}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Valider"
+                >
+                  <Text
+                    style={[
+                      styles.toolbarButton,
+                      styles.toolbarConfirm,
+                      { color: Colors[colorScheme].tint },
+                    ]}
+                  >
+                    OK
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={pendingValue}
+                mode={mode}
+                is24Hour={mode === "time"}
+                display="spinner"
+                themeVariant={colorScheme}
+                minimumDate={minimumDate}
+                maximumDate={maximumDate}
+                onChange={handleChangeIOS}
+                style={styles.pickerIOS}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
       )}
     </>
   );
@@ -236,6 +284,17 @@ const styles = StyleSheet.create({
   pickerContainer: {
     alignItems: "stretch",
     width: "100%",
+  },
+  iosModalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  iosModalCard: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: "hidden",
+    paddingBottom: 20,
   },
   pickerIOS: {
     alignSelf: "center",

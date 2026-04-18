@@ -198,7 +198,7 @@ export const GlobalSheetManager = () => {
           icon="pump-medical"
           accentColor={eventColors.pumping.dark}
           showActions={false}
-          enablePanDownToClose={true}
+          enablePanDownToClose={!isInPicker}
           onSubmit={() => {}}
           onCancel={closeSheet}
           onClose={closeSheet}
@@ -209,6 +209,7 @@ export const GlobalSheetManager = () => {
             onCancel={closeSheet}
             isSubmitting={isSubmitting}
             setIsSubmitting={setIsSubmitting}
+            onFormStepChange={handleFormStepChange}
             editData={editData}
             onDelete={closeSheet}
           />
