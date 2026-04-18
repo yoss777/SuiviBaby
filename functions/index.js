@@ -2,6 +2,7 @@ const admin = require("firebase-admin");
 const { Buffer } = require("node:buffer");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const functions = require("firebase-functions");
 
 const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
@@ -747,6 +748,269 @@ exports.createShareInvitation = onCall(
     });
 
     return { id: invitationRef.id };
+  }
+);
+
+// ============================================
+// CONTENT REPORT NOTIFICATION
+// ============================================
+
+/**
+ * onReportCreated — Firestore trigger on reports/{reportId}
+ * Sends an email notification to the SuiviBaby team when a user
+ * submits a content report (e.g. sensitive child photo).
+ */
+exports.onReportCreated = functions
+  .region("europe-west1")
+  .runWith({ secrets: ["RESEND_API_KEY"] })
+  .firestore.document("reports/{reportId}")
+  .onCreate(async (snapshot, context) => {
+    const data = snapshot.data();
+    const reportId = context.params.reportId;
+
+    const reasonLabels = {
+      intimate_child_nudity: "Nudité intime d'un enfant",
+      sensitive_child_photo: "Photo sensible d'un enfant",
+      privacy: "Problème de confidentialité",
+      other: "Autre",
+    };
+
+    const reasonLabel = reasonLabels[data.reason] || data.reason;
+
+    // Look up reporter email for context
+    let reporterEmail = "inconnu";
+    try {
+      const userRecord = await admin.auth().getUser(data.reporterUserId);
+      reporterEmail = userRecord.email || "inconnu";
+    } catch {
+      // User may have been deleted
+    }
+
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      console.error("onReportCreated: RESEND_API_KEY not configured");
+      return;
+    }
+
+    const resend = new Resend(apiKey);
+
+    const html = `
+      <h2>Nouveau signalement de contenu</h2>
+      <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;">
+        <tr><td style="padding:6px 12px;font-weight:bold;">Report ID</td><td style="padding:6px 12px;">${reportId}</td></tr>
+        <tr><td style="padding:6px 12px;font-weight:bold;">Motif</td><td style="padding:6px 12px;">${reasonLabel}</td></tr>
+        <tr><td style="padding:6px 12px;font-weight:bold;">Reporter</td><td style="padding:6px 12px;">${reporterEmail} (${data.reporterUserId})</td></tr>
+        <tr><td style="padding:6px 12px;font-weight:bold;">Enfant (childId)</td><td style="padding:6px 12px;">${data.childId}</td></tr>
+        ${data.eventId ? `<tr><td style="padding:6px 12px;font-weight:bold;">Event ID</td><td style="padding:6px 12px;">${data.eventId}</td></tr>` : ""}
+        ${data.photoPath ? `<tr><td style="padding:6px 12px;font-weight:bold;">Photo path</td><td style="padding:6px 12px;">${data.photoPath}</td></tr>` : ""}
+        ${data.message ? `<tr><td style="padding:6px 12px;font-weight:bold;">Message</td><td style="padding:6px 12px;">${data.message}</td></tr>` : ""}
+      </table>
+      <p style="margin-top:16px;font-size:13px;color:#6b7280;">
+        Consultez la collection <code>reports/${reportId}</code> dans la console Firebase pour traiter ce signalement.
+      </p>
+    `;
+
+    const db = admin.firestore();
+
+    // 1. Send email to operator
+    try {
+      await resend.emails.send({
+        from: "Suivi Baby <noreply@suivibaby.com>",
+        to: "contact@suivibaby.com",
+        subject: `[Signalement] ${reasonLabel} — SuiviBaby`,
+        html,
+      });
+      console.log(`onReportCreated: email sent for report ${reportId}`);
+    } catch (error) {
+      console.error("onReportCreated: failed to send email", error);
+    }
+
+    // 2. Hide photo for reporter (add to user_hidden_photos)
+    try {
+      if (data.eventId) {
+        await db.doc(`user_hidden_photos/${data.reporterUserId}`).set(
+          { hiddenEventIds: admin.firestore.FieldValue.arrayUnion(data.eventId) },
+          { merge: true },
+        );
+      }
+    } catch (error) {
+      console.error("onReportCreated: failed to hide for reporter", error);
+    }
+
+    // 3. Auto-hide globally for intimate_child_nudity
+    if (data.reason === "intimate_child_nudity" && data.eventId) {
+      try {
+        await db.doc(`events/${data.eventId}`).update({
+          reported: true,
+        });
+        console.log(`onReportCreated: event ${data.eventId} marked as reported (intimate_child_nudity)`);
+      } catch (error) {
+        console.error("onReportCreated: failed to mark event as reported", error);
+      }
+    }
+
+    // 4. Notify photo author via push
+    try {
+      if (data.eventId) {
+        const eventSnap = await db.doc(`events/${data.eventId}`).get();
+        const eventData = eventSnap.exists ? eventSnap.data() : null;
+        const authorId = eventData?.userId;
+
+        if (authorId && authorId !== data.reporterUserId) {
+          const tokenSnap = await db.collection("device_tokens")
+            .where("userId", "==", authorId)
+            .get();
+
+          const tokens = tokenSnap.docs
+            .map((d) => d.data().token)
+            .filter(Boolean)
+            .filter((t) => expo.isExpoPushToken(t));
+
+          if (tokens.length > 0) {
+            const messages = tokens.map((token) => ({
+              to: token,
+              sound: "default",
+              title: "Photo signalée",
+              body: "Une photo que vous avez ajoutée a été signalée et est en cours d'examen.",
+              data: { type: "photo_reported", eventId: data.eventId },
+            }));
+            const chunks = expo.chunkPushNotifications(messages);
+            for (const chunk of chunks) {
+              await expo.sendPushNotificationsAsync(chunk).catch(() => {});
+            }
+            console.log(`onReportCreated: push sent to author ${authorId}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("onReportCreated: failed to notify author", error);
+    }
+  });
+
+// ============================================
+// REPORT RESOLUTION (admin-only)
+// ============================================
+
+exports.resolveReport = onCall(
+  withAppCheck({ region: "europe-west1", secrets: ["RESEND_API_KEY"] }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    monitorAppCheck(request, "resolveReport");
+
+    const uid = request.auth.uid;
+    const { reportId, action, adminNote } = request.data || {};
+    const db = admin.firestore();
+
+    // Verify admin custom claim
+    const userRecord = await admin.auth().getUser(uid);
+    if (!userRecord.customClaims?.admin) {
+      throw new HttpsError("permission-denied", "Réservé aux administrateurs.");
+    }
+
+    if (!reportId || typeof reportId !== "string") {
+      throw new HttpsError("invalid-argument", "reportId est requis.");
+    }
+    if (!["dismiss", "remove_photo", "remove_event"].includes(action)) {
+      throw new HttpsError("invalid-argument", "Action invalide. Attendu: dismiss, remove_photo, remove_event.");
+    }
+
+    const reportRef = db.doc(`reports/${reportId}`);
+    const reportSnap = await reportRef.get();
+    if (!reportSnap.exists) {
+      throw new HttpsError("not-found", "Signalement introuvable.");
+    }
+    const reportData = reportSnap.data();
+
+    if (reportData.status === "resolved") {
+      throw new HttpsError("already-exists", "Ce signalement a déjà été traité.");
+    }
+
+    // Execute action
+    if (action === "remove_photo" && reportData.photoPath) {
+      try {
+        await admin.storage().bucket().file(reportData.photoPath).delete();
+        console.log(`resolveReport: deleted photo ${reportData.photoPath}`);
+      } catch (error) {
+        console.warn(`resolveReport: could not delete photo ${reportData.photoPath}`, error.message);
+      }
+      // Remove photo from event
+      if (reportData.eventId) {
+        try {
+          const eventRef = db.doc(`events/${reportData.eventId}`);
+          const eventSnap = await eventRef.get();
+          if (eventSnap.exists) {
+            const photos = (eventSnap.data().photos || []).filter((p) => p !== reportData.photoPath);
+            await eventRef.update({ photos, reported: admin.firestore.FieldValue.delete() });
+          }
+        } catch (error) {
+          console.warn(`resolveReport: could not update event`, error.message);
+        }
+      }
+    }
+
+    if (action === "remove_event" && reportData.eventId) {
+      try {
+        // Use deleteEventCascade logic inline (delete event + likes + comments)
+        await deleteDocsByFieldBatched(db, "eventLikes", "eventId", reportData.eventId);
+        await deleteDocsByFieldBatched(db, "eventComments", "eventId", reportData.eventId);
+        await db.doc(`events/${reportData.eventId}`).delete();
+        console.log(`resolveReport: deleted event ${reportData.eventId} + cascade`);
+      } catch (error) {
+        console.warn(`resolveReport: could not delete event cascade`, error.message);
+      }
+    }
+
+    if (action === "dismiss" && reportData.eventId) {
+      // Restore event if it was auto-hidden
+      try {
+        await db.doc(`events/${reportData.eventId}`).update({
+          reported: admin.firestore.FieldValue.delete(),
+        });
+      } catch (error) {
+        console.warn(`resolveReport: could not restore event`, error.message);
+      }
+    }
+
+    // Mark report as resolved
+    await reportRef.update({
+      status: "resolved",
+      resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+      resolvedBy: uid,
+      action,
+      adminNote: adminNote || null,
+    });
+
+    // Notify reporter
+    const apiKey = process.env.RESEND_API_KEY;
+    if (apiKey) {
+      try {
+        let reporterEmail = null;
+        const reporterRecord = await admin.auth().getUser(reportData.reporterUserId);
+        reporterEmail = reporterRecord.email;
+
+        if (reporterEmail) {
+          const resend = new Resend(apiKey);
+          const isRemoved = action === "remove_photo" || action === "remove_event";
+          await resend.emails.send({
+            from: "Suivi Baby <noreply@suivibaby.com>",
+            to: reporterEmail,
+            subject: isRemoved
+              ? "Contenu retiré suite à votre signalement — SuiviBaby"
+              : "Résultat de votre signalement — SuiviBaby",
+            html: isRemoved
+              ? `<p>Bonjour,</p><p>Le contenu que vous avez signalé a été examiné et retiré. Merci de contribuer à la sécurité des enfants sur SuiviBaby.</p><p>L'équipe SuiviBaby</p>`
+              : `<p>Bonjour,</p><p>Merci pour votre signalement. Après examen, le contenu ne contrevient pas à nos règles d'utilisation.</p><p>L'équipe SuiviBaby</p>`,
+          });
+        }
+      } catch (error) {
+        console.warn("resolveReport: could not notify reporter", error.message);
+      }
+    }
+
+    console.log(`resolveReport: report ${reportId} resolved with action=${action} by ${uid}`);
+    return { success: true, action };
   }
 );
 
