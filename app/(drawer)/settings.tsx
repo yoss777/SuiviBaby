@@ -497,23 +497,8 @@ export default function SettingsScreen() {
           router.push("/settings/help");
         },
       },
-      {
-        id: "about",
-        icon: "information-circle-outline",
-        label: "À propos",
-        value: `Version ${appVersion}`,
-        onPress: () => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          setModalConfig({
-            visible: true,
-            title: "SuiviBaby",
-            message:
-              `Version ${appVersion}\n\nSystème de suivi d'événements bébé pour les parents.`,
-          });
-        },
-      },
     ],
-    [appVersion, router],
+    [router],
   );
 
   const dangerSettings: SettingItem[] = useMemo(
@@ -761,7 +746,10 @@ export default function SettingsScreen() {
 
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: nc.textMuted }]}>
-            SuiviBaby © 2026
+            SuiviBaby © 2026 TESFA
+          </Text>
+          <Text style={[styles.footerSubtext, { color: nc.textMuted }]}>
+            Version {appVersion}
           </Text>
         </View>
       </ScrollView>
@@ -971,6 +959,10 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 12,
+  },
+  footerSubtext: {
+    fontSize: 12,
+    marginTop: 4,
   },
   deletionBanner: {
     flexDirection: "row",
