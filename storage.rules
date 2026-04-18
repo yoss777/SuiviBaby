@@ -1,0 +1,55 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function accessDoc(childId) {
+      return firestore.get(
+        /databases/(default)/documents/children/$(childId)/access/$(request.auth.uid)
+      );
+    }
+
+    function hasAccess(childId) {
+      return isSignedIn() &&
+        firestore.exists(
+          /databases/(default)/documents/children/$(childId)/access/$(request.auth.uid)
+        );
+    }
+
+    function canWriteChildMedia(childId) {
+      let access = accessDoc(childId).data;
+      return hasAccess(childId) && (
+        access.role in ['owner', 'admin'] ||
+        ('canWriteEvents' in access && access.canWriteEvents == true)
+      );
+    }
+
+    function isImageUpload() {
+      return request.resource != null &&
+        request.resource.contentType != null &&
+        request.resource.contentType.matches('image/.*');
+    }
+
+    function isWithinSizeLimit() {
+      return request.resource != null &&
+        request.resource.size <= 5 * 1024 * 1024;
+    }
+
+    match /children/{childId}/jalons/{fileName} {
+      allow read: if hasAccess(childId);
+
+      // Les fichiers de jalons sont immuables: nouvel upload ou suppression.
+      allow create: if canWriteChildMedia(childId) &&
+        isImageUpload() &&
+        isWithinSizeLimit();
+      allow update: if false;
+      allow delete: if canWriteChildMedia(childId);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -4,7 +4,7 @@ import { initializeApp } from "firebase/app";
 import { getReactNativePersistence, indexedDBLocalPersistence, initializeAuth } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
-import { getStorage } from "firebase/storage";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ensureFirebaseAppCheck as ensureAppCheckForApp } from "./appCheck";
@@ -43,6 +43,12 @@ if (emulatorHost) {
   connectFirestoreEmulator(db, host, Number(port));
 }
 export const storage = getStorage(app);
+
+const storageEmulatorHost = process.env.EXPO_PUBLIC_STORAGE_EMULATOR_HOST;
+if (storageEmulatorHost) {
+  const [sHost, sPort] = storageEmulatorHost.split(":");
+  connectStorageEmulator(storage, sHost, Number(sPort));
+}
 
 // Cloud Functions (region europe-west1 pour la latence EU)
 export const functions = getFunctions(app, "europe-west1");
