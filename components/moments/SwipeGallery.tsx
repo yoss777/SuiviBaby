@@ -260,13 +260,9 @@ export const SwipeGallery = ({
   const lastTapTimeRef = useRef<number>(0);
   const DOUBLE_TAP_DELAY = 300;
 
-  // Track if initial position has been set
-  const initialPositionSetRef = useRef(false);
-
   // Reset when gallery closes
   useEffect(() => {
     if (!visible) {
-      initialPositionSetRef.current = false;
       setCommentsVisible(false);
       setCommentsPhotoId(null);
       setActionSheetVisible(false);
@@ -287,30 +283,30 @@ export const SwipeGallery = ({
     return onAddPhoto ? 1 : 0;
   }, [initialIndex, photos, sortedPhotos, onAddPhoto]);
 
-  // Scroll to initial position when gallery opens
+  // Reposition only when opening from a different requested photo.
+  // If the gallery is temporarily closed for edit/cancel on the same photo,
+  // we keep the current page to avoid a visual reset.
   useEffect(() => {
-    if (
-      visible &&
-      !initialPositionSetRef.current &&
-      initialIndex >= 0 &&
-      photos.length > 0
-    ) {
+    if (!visible || initialIndex < 0 || photos.length === 0) {
+      return;
+    }
+
+    if (currentIndex !== computedInitialPage) {
       setCurrentIndex(computedInitialPage);
-      initialPositionSetRef.current = true;
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         flatListRef.current?.scrollToIndex({
           index: computedInitialPage,
           animated: false,
         });
-      }, 50);
-
-      // Mark initial photo as seen
-      const item = galleryItems[computedInitialPage];
-      if (item?.type === 'photo' && onMarkSeen && newEventIds.has(item.photo.id)) {
-        onMarkSeen(item.photo.id);
-      }
+      });
     }
-  }, [visible, initialIndex, photos, computedInitialPage, galleryItems, onMarkSeen, newEventIds]);
+
+    // Mark requested photo as seen when opening.
+    const item = galleryItems[computedInitialPage];
+    if (item?.type === "photo" && onMarkSeen && newEventIds.has(item.photo.id)) {
+      onMarkSeen(item.photo.id);
+    }
+  }, [visible, initialIndex, photos, computedInitialPage, currentIndex, galleryItems, onMarkSeen, newEventIds]);
 
   // Stable refs for viewable items callback
   const onMarkSeenRef = useRef(onMarkSeen);

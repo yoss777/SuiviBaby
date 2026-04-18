@@ -1,8 +1,9 @@
 import { getAuthenticatedPhotoSource, isStoragePathPhotoRef } from "@/utils/photoStorage";
+import { Image as ExpoImage, ImageProps as ExpoImageProps, ImageSource } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
-import { Image, ImageProps, ImageSourcePropType, View } from "react-native";
+import { View } from "react-native";
 
-type PhotoImageProps = Omit<ImageProps, "source"> & {
+type PhotoImageProps = Omit<ExpoImageProps, "source"> & {
   photoRef?: string | null;
 };
 
@@ -10,10 +11,10 @@ const RESOLVED_SOURCE_CACHE_TTL_MS = 50 * 60 * 1000;
 
 const resolvedSourceCache = new Map<
   string,
-  { source: ImageSourcePropType; cachedAt: number }
+  { source: ImageSource; cachedAt: number }
 >();
 
-function getCachedSource(photoRef: string): ImageSourcePropType | null {
+function getCachedSource(photoRef: string): ImageSource | null {
   const cached = resolvedSourceCache.get(photoRef);
   if (!cached) return null;
 
@@ -31,15 +32,15 @@ export function PhotoImage({
   onError,
   ...props
 }: PhotoImageProps) {
-  const immediateSource = useMemo<ImageSourcePropType | null>(() => {
+  const immediateSource = useMemo<ImageSource | null>(() => {
     if (!photoRef) return null;
     if (isStoragePathPhotoRef(photoRef)) {
       return getCachedSource(photoRef);
     }
-    return { uri: photoRef };
+    return { uri: photoRef, cacheKey: photoRef };
   }, [photoRef]);
 
-  const [source, setSource] = useState<ImageSourcePropType | null>(
+  const [source, setSource] = useState<ImageSource | null>(
     immediateSource,
   );
 
@@ -49,6 +50,12 @@ export function PhotoImage({
     setSource(immediateSource);
 
     if (!photoRef || !isStoragePathPhotoRef(photoRef)) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (immediateSource) {
       return () => {
         cancelled = true;
       };
@@ -86,9 +93,11 @@ export function PhotoImage({
   }
 
   return (
-    <Image
+    <ExpoImage
       {...props}
       source={source}
+      cachePolicy="memory-disk"
+      priority="high"
       style={style}
       onError={onError}
     />

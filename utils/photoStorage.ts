@@ -79,11 +79,15 @@ async function getCurrentUserIdToken(): Promise<string | null> {
 
 export async function getAuthenticatedPhotoSource(
   photoRef: string,
-): Promise<{ uri: string; headers?: Record<string, string> } | null> {
+): Promise<{
+  uri: string;
+  headers?: Record<string, string>;
+  cacheKey?: string;
+} | null> {
   if (!photoRef) return null;
 
   if (!isStoragePathPhotoRef(photoRef)) {
-    return { uri: photoRef };
+    return { uri: photoRef, cacheKey: photoRef };
   }
 
   const token = await getCurrentUserIdToken();
@@ -91,6 +95,7 @@ export async function getAuthenticatedPhotoSource(
 
   return {
     uri: buildStorageMediaUrl(photoRef),
+    cacheKey: photoRef,
     headers: {
       Authorization: `Bearer ${token}`,
     },
