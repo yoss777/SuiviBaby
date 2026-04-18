@@ -5,10 +5,12 @@ import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
+import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useMomentsNotification, NotificationType } from "@/contexts/MomentsNotificationContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useHiddenPhotos } from "@/hooks/useHiddenPhotos";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ecouterEvenements } from "@/services/eventsService";
 import { JalonEvent } from "@/services/eventsService";
@@ -447,7 +449,9 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
 export default function GalleryScreen() {
   const { activeChild } = useBaby();
   const { userName, firebaseUser } = useAuth();
+  const { showAlert } = useModal();
   const { showToast } = useToast();
+  const hiddenPhotoIds = useHiddenPhotos();
   const { newEventIds, newEventTypes, markEventAsSeen, markMomentsAsSeen } = useMomentsNotification();
   const { openSheet, closeSheet, isOpen } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
@@ -581,11 +585,15 @@ export default function GalleryScreen() {
   // Ne PAS appeler markMomentsAsSeen à la sortie — les badges restent
   // jusqu'à ce que l'utilisateur tape sur chaque photo (markEventAsSeen)
 
-  // Extract photos from events
+  // Extract photos from events (filter hidden + reported)
   const allPhotoMilestones = useMemo(() => {
     const photos: PhotoMilestone[] = [];
 
     events.forEach((event) => {
+      // Skip hidden photos (hide-for-me) and globally reported photos
+      if (hiddenPhotoIds.has(event.id)) return;
+      if ((event as any).reported === true) return;
+
       const eventDate = toDate(event.date);
       if (event.photos && event.photos.length > 0) {
         const photoTitre =
@@ -606,7 +614,7 @@ export default function GalleryScreen() {
     });
 
     return photos.sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [events]);
+  }, [events, hiddenPhotoIds]);
 
   // Group photos by month
   const groupedPhotos = useMemo(() => {

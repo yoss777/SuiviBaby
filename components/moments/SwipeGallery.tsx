@@ -1,4 +1,8 @@
 import { PhotoImage } from "@/components/ui/PhotoImage";
+import { ReportModal } from "@/components/moments/ReportModal";
+import { submitContentReport } from "@/services/contentReportService";
+import type { ContentReportReason } from "@/services/contentReportService";
+import { hidePhoto } from "@/services/hiddenPhotosService";
 import { eventColors } from "@/constants/eventColors";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
@@ -330,16 +334,15 @@ export const SwipeGallery = ({
     itemVisiblePercentThreshold: 50,
   }).current;
 
-  // Edit current photo
+  // Edit current photo — do NOT close gallery so user returns to it on cancel
   const handleEdit = useCallback(() => {
     const item = galleryItems[currentIndex];
     if (item.type === "photo" && onEdit) {
       const offset = onAddPhoto ? 1 : 0;
       const photoIndex = currentIndex - offset;
-      onClose();
       onEdit(item.photo.id, photoIndex);
     }
-  }, [currentIndex, galleryItems, onClose, onEdit, onAddPhoto]);
+  }, [currentIndex, galleryItems, onEdit, onAddPhoto]);
 
   // Handle add photo
   const handleAddPhoto = useCallback(() => {
@@ -490,6 +493,51 @@ export const SwipeGallery = ({
       showLocalToast(result.message);
     },
     [onDownload, showLocalToast],
+  );
+
+  // Report & hide state
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  const reportTargetRef = useRef<{ photoId: string; uri: string } | null>(null);
+
+  const openActionSheet = useCallback((photoId: string, uri: string) => {
+    reportTargetRef.current = { photoId, uri };
+    setActionSheetVisible(true);
+  }, []);
+
+  const handleHideForMe = useCallback(async () => {
+    const target = reportTargetRef.current;
+    if (!target) return;
+    setActionSheetVisible(false);
+    try {
+      await hidePhoto(target.photoId);
+      showLocalToast("Photo masquée");
+    } catch {
+      showLocalToast("Impossible de masquer la photo");
+    }
+  }, [showLocalToast]);
+
+  const handleOpenReport = useCallback(() => {
+    setActionSheetVisible(false);
+    setReportModalVisible(true);
+  }, []);
+
+  const handleReportSubmit = useCallback(
+    async (reason: ContentReportReason, message?: string) => {
+      const target = reportTargetRef.current;
+      if (!target) return;
+      await submitContentReport({
+        childId,
+        eventId: target.photoId,
+        photoRef: target.uri,
+        reason,
+        message,
+      });
+      // Also hide for the reporter
+      await hidePhoto(target.photoId).catch(() => {});
+      showLocalToast("Signalement envoyé");
+    },
+    [childId, showLocalToast],
   );
 
   // Get photo info (with optimistic updates merged)
@@ -775,6 +823,22 @@ export const SwipeGallery = ({
                         pressed && styles.headerButtonPressed,
                       ]}
                       onPress={() =>
+                        openActionSheet(
+                          currentItem.photo.id,
+                          currentItem.photo.uri,
+                        )
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel="Options photo"
+                    >
+                      <FontAwesome6 name="ellipsis-vertical" size={16} color="#fff" />
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.headerButton,
+                        pressed && styles.headerButtonPressed,
+                      ]}
+                      onPress={() =>
                         handleDownload(
                           currentItem.photo.id,
                           currentItem.photo.uri,
@@ -905,6 +969,64 @@ export const SwipeGallery = ({
           </Animated.View>
         </GestureDetector>
       </GestureHandlerRootView>
+      {/* Action Sheet — Hide / Report / Cancel */}
+      <Modal
+        visible={actionSheetVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActionSheetVisible(false)}
+      >
+        <Pressable
+          style={actionSheetStyles.overlay}
+          onPress={() => setActionSheetVisible(false)}
+        >
+          <View style={actionSheetStyles.sheet}>
+            <Pressable
+              style={({ pressed }) => [
+                actionSheetStyles.option,
+                pressed && actionSheetStyles.optionPressed,
+              ]}
+              onPress={handleHideForMe}
+            >
+              <FontAwesome6 name="eye-slash" size={16} color="#4b5563" />
+              <Text style={actionSheetStyles.optionText}>
+                Masquer cette photo pour moi
+              </Text>
+            </Pressable>
+            <View style={actionSheetStyles.separator} />
+            <Pressable
+              style={({ pressed }) => [
+                actionSheetStyles.option,
+                pressed && actionSheetStyles.optionPressed,
+              ]}
+              onPress={handleOpenReport}
+            >
+              <FontAwesome6 name="flag" size={16} color="#dc2626" />
+              <Text style={[actionSheetStyles.optionText, { color: "#dc2626" }]}>
+                Signaler un contenu sensible
+              </Text>
+            </Pressable>
+            <View style={actionSheetStyles.separatorLarge} />
+            <Pressable
+              style={({ pressed }) => [
+                actionSheetStyles.option,
+                pressed && actionSheetStyles.optionPressed,
+              ]}
+              onPress={() => setActionSheetVisible(false)}
+            >
+              <Text style={[actionSheetStyles.optionText, actionSheetStyles.cancelText]}>
+                Annuler
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+      {/* Report Modal */}
+      <ReportModal
+        visible={reportModalVisible}
+        onSubmit={handleReportSubmit}
+        onClose={() => setReportModalVisible(false)}
+      />
     </Modal>
   );
 };
@@ -1183,5 +1305,50 @@ const styles = StyleSheet.create({
   verticalHintText: {
     fontSize: 11,
     color: "rgba(255, 255, 255, 0.4)",
+  },
+});
+
+const actionSheetStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+    padding: 12,
+  },
+  sheet: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  optionPressed: {
+    backgroundColor: "#f3f4f6",
+  },
+  optionText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#1f2937",
+  },
+  cancelText: {
+    textAlign: "center",
+    flex: 1,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#f3f4f6",
+    marginHorizontal: 16,
+  },
+  separatorLarge: {
+    height: 6,
+    backgroundColor: "#f3f4f6",
   },
 });

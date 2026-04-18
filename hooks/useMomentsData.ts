@@ -60,6 +60,7 @@ const isToday = (date: Date) => {
 export function useMomentsData(
   childId: string | undefined,
   firebaseUid: string | undefined,
+  hiddenPhotoIds?: Set<string>,
 ) {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -187,6 +188,10 @@ export function useMomentsData(
     const photos: PhotoMilestone[] = [];
 
     events.forEach((event) => {
+      // Skip hidden photos (hide-for-me) and globally reported photos
+      if (hiddenPhotoIds?.has(event.id)) return;
+      if ((event as any).reported === true) return;
+
       if (event.photos && event.photos.length > 0) {
         const photoTitre =
           event.typeJalon === "photo" && event.description
@@ -213,7 +218,7 @@ export function useMomentsData(
       allPhotoMilestones: sortedPhotos,
       displayedPhotoMilestones: sortedPhotos.slice(0, 3),
     };
-  }, [events]);
+  }, [events, hiddenPhotoIds]);
 
   // Today's mood for hero card
   const todayMood = useMemo(() => {

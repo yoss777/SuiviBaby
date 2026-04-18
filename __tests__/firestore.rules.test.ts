@@ -489,7 +489,89 @@ describe("events collection", () => {
 });
 
 // ===========================================================================
-// 4. EVENT LIKES / EVENT COMMENTS
+// 4. CONTENT REPORTS
+// ===========================================================================
+
+describe("reports collection", () => {
+  beforeEach(async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", CHILD_ID), {
+        name: "Baby",
+        birthDate: now,
+        ownerId: ALICE_UID,
+      });
+      await setDoc(doc(db, "children", CHILD_ID, "access", ALICE_UID), {
+        userId: ALICE_UID,
+        role: "owner",
+        grantedBy: ALICE_UID,
+      });
+      await setDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
+        userId: BOB_UID,
+        role: "viewer",
+        grantedBy: ALICE_UID,
+      });
+      await setDoc(doc(db, "reports", "report1"), {
+        reporterUserId: BOB_UID,
+        childId: CHILD_ID,
+        eventId: "event1",
+        photoPath: `children/${CHILD_ID}/jalons/test.jpg`,
+        reason: "sensitive_child_photo",
+        status: "open",
+        createdAt: now,
+      });
+    });
+  });
+
+  test("authorized user can create a report for accessible child content", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertSucceeds(
+      setDoc(doc(db, "reports", "report2"), {
+        reporterUserId: BOB_UID,
+        childId: CHILD_ID,
+        eventId: "event2",
+        photoPath: `children/${CHILD_ID}/jalons/test2.jpg`,
+        reason: "sensitive_child_photo",
+        status: "open",
+        createdAt: serverTimestamp(),
+      })
+    );
+  });
+
+  test("user without access cannot create a report", async () => {
+    const db = authedFirestore(CHARLIE_UID);
+    await assertFails(
+      setDoc(doc(db, "reports", "report2"), {
+        reporterUserId: CHARLIE_UID,
+        childId: CHILD_ID,
+        reason: "privacy",
+        status: "open",
+        createdAt: serverTimestamp(),
+      })
+    );
+  });
+
+  test("reporter can read own report", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertSucceeds(getDoc(doc(db, "reports", "report1")));
+  });
+
+  test("another user cannot read someone else's report", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(getDoc(doc(db, "reports", "report1")));
+  });
+
+  test("report cannot be updated client-side", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertFails(
+      updateDoc(doc(db, "reports", "report1"), {
+        status: "resolved",
+      })
+    );
+  });
+});
+
+// ===========================================================================
+// 5. EVENT LIKES / EVENT COMMENTS
 // ===========================================================================
 
 describe("eventLikes collection", () => {
@@ -549,6 +631,19 @@ describe("eventLikes collection", () => {
           collection(db, "eventLikes"),
           where("childId", "==", CHILD_ID),
           limit(10)
+        )
+      )
+    );
+  });
+
+  test("user with access can list likes with a larger client-side limit", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, "eventLikes"),
+          where("childId", "==", CHILD_ID),
+          limit(500)
         )
       )
     );
@@ -616,6 +711,19 @@ describe("eventComments collection", () => {
           collection(db, "eventComments"),
           where("childId", "==", CHILD_ID),
           limit(10)
+        )
+      )
+    );
+  });
+
+  test("user with access can list comments with a larger client-side limit", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, "eventComments"),
+          where("childId", "==", CHILD_ID),
+          limit(500)
         )
       )
     );

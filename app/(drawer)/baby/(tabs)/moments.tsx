@@ -18,6 +18,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useMomentsData, formatTime } from "@/hooks/useMomentsData";
+import { useHiddenPhotos } from "@/hooks/useHiddenPhotos";
 import { useMomentsActions } from "@/hooks/useMomentsActions";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
@@ -61,6 +62,8 @@ export default function MomentsScreen() {
   const canManageContent =
     permissions.role === "owner" || permissions.role === "admin";
 
+  const hiddenPhotoIds = useHiddenPhotos();
+
   // Data hook
   const {
     events,
@@ -77,7 +80,7 @@ export default function MomentsScreen() {
     refreshToday,
     handleRefresh,
     refocus,
-  } = useMomentsData(activeChild?.id, firebaseUser?.uid);
+  } = useMomentsData(activeChild?.id, firebaseUser?.uid, hiddenPhotoIds);
 
   const handleSheetSuccess = useCallback(() => {
     refreshToday();

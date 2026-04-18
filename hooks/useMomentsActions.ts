@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useModal } from "@/contexts/ModalContext";
 import { ajouterEvenementOptimistic } from "@/services/eventsService";
 import { toggleLike } from "@/services/socialService";
 import { JalonEvent } from "@/services/eventsService";
@@ -34,6 +35,7 @@ export function useMomentsActions({
   onSuccess,
   canManageContent,
 }: UseMomentsActionsParams) {
+  const { showAlert } = useModal();
   const [isMoodSaving, setIsMoodSaving] = useState(false);
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [galleryVisible, setGalleryVisible] = useState(false);

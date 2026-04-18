@@ -187,10 +187,9 @@ service cloud.firestore {
     match /eventLikes/{likeId} {
       // Get : vérifier accès à l'enfant
       allow get: if hasAccess(resource.data.childId);
-      // List : exiger que la query filtre par childId pour empêcher les fuites cross-enfant.
-      // Le client DOIT inclure where('childId', '==', childId) dans ses queries.
+      // List : accès autorisé uniquement aux documents rattachés à un enfant accessible.
+      // Le client doit continuer à filtrer par childId/eventId pour rester performant.
       allow list: if isSignedIn()
-        && request.query.limit <= 100
         && resource.data.childId is string
         && hasAccess(resource.data.childId);
 
@@ -209,10 +208,9 @@ service cloud.firestore {
     match /eventComments/{commentId} {
       // Get : vérifier accès à l'enfant
       allow get: if hasAccess(resource.data.childId);
-      // List : exiger que la query filtre par childId pour empêcher les fuites cross-enfant.
-      // Le client DOIT inclure where('childId', '==', childId) dans ses queries.
+      // List : accès autorisé uniquement aux documents rattachés à un enfant accessible.
+      // Le client doit continuer à filtrer par childId/eventId pour rester performant.
       allow list: if isSignedIn()
-        && request.query.limit <= 100
         && resource.data.childId is string
         && hasAccess(resource.data.childId);
 
@@ -229,6 +227,46 @@ service cloud.firestore {
       allow delete: if (hasAccess(resource.data.childId) &&
         resource.data.userId == request.auth.uid) ||
         canWriteEvents(resource.data.childId);
+    }
+
+    match /reports/{reportId} {
+      allow get: if isSignedIn() && resource.data.reporterUserId == request.auth.uid;
+      allow list: if isSignedIn() &&
+        request.query.limit <= 100 &&
+        resource.data.reporterUserId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+        hasAccess(request.resource.data.childId) &&
+        request.resource.data.reporterUserId == request.auth.uid &&
+        request.resource.data.childId is string &&
+        request.resource.data.reason in ['intimate_child_nudity', 'sensitive_child_photo', 'privacy', 'other'] &&
+        request.resource.data.status == 'open' &&
+        request.resource.data.createdAt is timestamp &&
+        (
+          !('eventId' in request.resource.data) ||
+          request.resource.data.eventId == null ||
+          request.resource.data.eventId is string
+        ) &&
+        (
+          !('photoPath' in request.resource.data) ||
+          request.resource.data.photoPath == null ||
+          request.resource.data.photoPath is string
+        ) &&
+        (
+          !('message' in request.resource.data) ||
+          request.resource.data.message == null ||
+          request.resource.data.message is string
+        );
+
+      allow update, delete: if false;
+    }
+
+    // ============================================
+    // USER HIDDEN PHOTOS — per-user photo masking
+    // ============================================
+
+    match /user_hidden_photos/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
 
     // ============================================
