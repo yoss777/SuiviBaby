@@ -31,7 +31,6 @@ import {
   getBackgroundTint,
   getNeutralColors,
 } from "@/constants/dashboardColors";
-import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useThemePreference } from "@/contexts/ThemeContext";
@@ -71,6 +70,7 @@ interface SettingItem {
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const accent = nc.todayAccent;
   const { user, signOut, refreshUser } = useAuth();
   const { activeChild, children, hiddenChildrenIds } = useBaby();
   const hiddenPhotoIds = useHiddenPhotos();
@@ -177,6 +177,9 @@ export default function SettingsScreen() {
   // Header right: home shortcut (baby home if activeChild, explore otherwise)
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerStyle: { backgroundColor: nc.background },
+      headerTintColor: nc.textStrong,
+      headerTitleStyle: { color: nc.textStrong },
       headerRight: () => (
         <TouchableOpacity
           onPress={() => {
@@ -200,12 +203,12 @@ export default function SettingsScreen() {
           <FontAwesome
             name="house"
             size={20}
-            color={Colors[colorScheme].tint}
+            color={accent}
           />
         </TouchableOpacity>
       ),
     });
-  }, [activeChild, colorScheme, navigation, router]);
+  }, [accent, activeChild, navigation, nc.background, nc.textStrong, router]);
 
   useEffect(() => {
     if (!user) {
@@ -298,7 +301,7 @@ export default function SettingsScreen() {
         id: "premium",
         icon: "diamond-outline",
         label: "SuiviBaby+",
-        description: "Gerer votre abonnement",
+        description: "Gérer votre abonnement",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           router.push("/settings/premium");
@@ -610,7 +613,7 @@ export default function SettingsScreen() {
                 styles.iconContainer,
                 {
                   backgroundColor: getBackgroundTint(
-                    item.color || Colors[colorScheme].tint,
+                    item.color || accent,
                     0.08,
                   ),
                 },
@@ -620,7 +623,7 @@ export default function SettingsScreen() {
               <Ionicons
                 name={item.icon}
                 size={22}
-                color={item.color || Colors[colorScheme].tint}
+                color={item.color || accent}
               />
             </View>
             <View style={styles.settingTextContainer}>
@@ -653,7 +656,7 @@ export default function SettingsScreen() {
                 onValueChange={item.onSwitchChange}
                 trackColor={{
                   false: nc.borderLight,
-                  true: Colors[colorScheme].tint,
+                  true: accent,
                 }}
                 disabled={isDisabled}
                 pointerEvents="none"
@@ -700,12 +703,15 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       );
     },
-    [nc, colorScheme],
+    [accent, nc],
   );
 
   const renderSection = (title: string, items: SettingItem[]) => (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: nc.textMuted }]}>
+      <Text
+        style={[styles.sectionTitle, { color: nc.textMuted }]}
+        accessibilityRole="header"
+      >
         {title}
       </Text>
       <View
@@ -727,7 +733,7 @@ export default function SettingsScreen() {
       >
         {renderSection("Compte", accountSettings)}
         {renderSection("Application", appSettings)}
-        {renderSection("Donnees", dataSettings)}
+        {renderSection("Données", dataSettings)}
         {renderSection("Autres", otherSettings)}
         {renderSection("Zone dangereuse", dangerSettings)}
 
@@ -737,17 +743,20 @@ export default function SettingsScreen() {
               styles.deletionBanner,
               { backgroundColor: nc.errorBg, borderColor: nc.error },
             ]}
+            accessible={true}
+            accessibilityRole="summary"
+            accessibilityLabel={`Suppression programmée le ${formattedPendingDeletionDate}. Vos données seront définitivement supprimées à cette date.`}
           >
             <Ionicons name="warning-outline" size={20} color={nc.error} />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={[styles.deletionBannerText, { color: nc.error }]}>
-                Suppression programmee le{" "}
+                Suppression programmée le{" "}
                 {formattedPendingDeletionDate}
               </Text>
               <Text
                 style={[styles.deletionBannerSubtext, { color: nc.textMuted }]}
               >
-                Vos donnees seront definitivement supprimees a cette date.
+                Vos données seront définitivement supprimées à cette date.
               </Text>
             </View>
             <TouchableOpacity
@@ -759,8 +768,8 @@ export default function SettingsScreen() {
                   await refreshUser();
                   setModalConfig({
                     visible: true,
-                    title: "Annulation confirmee",
-                    message: "La suppression de votre compte a ete annulee.",
+                    title: "Annulation confirmée",
+                    message: "La suppression de votre compte a été annulée.",
                   });
                 } catch {
                   setModalConfig({
@@ -773,6 +782,13 @@ export default function SettingsScreen() {
                 }
               }}
               disabled={isCancellingDeletion}
+              accessibilityRole="button"
+              accessibilityLabel="Annuler la suppression programmée du compte"
+              accessibilityHint="Supprime la demande de suppression en cours"
+              accessibilityState={{
+                disabled: isCancellingDeletion,
+                busy: isCancellingDeletion,
+              }}
             >
               <Text
                 style={{ color: nc.error, fontWeight: "600", fontSize: 13 }}
@@ -799,13 +815,13 @@ export default function SettingsScreen() {
       />
       <ConfirmModal
         visible={showDeleteExportModal}
-        title="Exporter vos donnees ?"
-        message="Pour garder une copie, exportez vos donnees avant la suppression."
+        title="Exporter vos données ?"
+        message="Pour garder une copie, exportez vos données avant la suppression."
         confirmText="Exporter"
         cancelText="Supprimer"
         backgroundColor={nc.backgroundCard}
         textColor={nc.textStrong}
-        confirmButtonColor={Colors.light.tint}
+        confirmButtonColor={accent}
         confirmTextColor={colorScheme === "dark" ? nc.white : nc.backgroundCard}
         allowBackdropDismiss
         onDismiss={() => setShowDeleteExportModal(false)}

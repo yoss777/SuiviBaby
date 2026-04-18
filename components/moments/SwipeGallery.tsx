@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
+  InteractionManager,
   Modal,
   Pressable,
   StyleSheet,
@@ -268,6 +269,8 @@ export const SwipeGallery = ({
       initialPositionSetRef.current = false;
       setCommentsVisible(false);
       setCommentsPhotoId(null);
+      setActionSheetVisible(false);
+      setReportModalVisible(false);
     }
   }, [visible]);
 
@@ -334,15 +337,18 @@ export const SwipeGallery = ({
     itemVisiblePercentThreshold: 50,
   }).current;
 
-  // Edit current photo — do NOT close gallery so user returns to it on cancel
+  // Edit current photo after closing the gallery modal to avoid stacking issues.
   const handleEdit = useCallback(() => {
     const item = galleryItems[currentIndex];
     if (item.type === "photo" && onEdit) {
       const offset = onAddPhoto ? 1 : 0;
       const photoIndex = currentIndex - offset;
-      onEdit(item.photo.id, photoIndex);
+      onClose();
+      InteractionManager.runAfterInteractions(() => {
+        onEdit(item.photo.id, photoIndex);
+      });
     }
-  }, [currentIndex, galleryItems, onEdit, onAddPhoto]);
+  }, [currentIndex, galleryItems, onClose, onEdit, onAddPhoto]);
 
   // Handle add photo
   const handleAddPhoto = useCallback(() => {
@@ -761,8 +767,6 @@ export const SwipeGallery = ({
     },
     [],
   );
-
-  if (!visible) return null;
 
   const currentItem = galleryItems[currentIndex] ?? galleryItems[0];
 
