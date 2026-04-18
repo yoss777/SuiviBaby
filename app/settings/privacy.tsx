@@ -33,7 +33,7 @@ const sections = [
     {
       title: "2. Nature des données collectées",
       content:
-        "Compte : Adresse email, pseudonyme. Données de l'enfant (catégories particulières de données) : Prénom, date de naissance, sexe, et journal de bord de l'enfant (alimentation, sommeil, hygiène, santé, mesures de croissance). Ces données sont traitées uniquement pour vous fournir les fonctionnalités de suivi de l'application.",
+        "Compte : Adresse email, pseudonyme. Données de l'enfant (catégories particulières de données) : Prénom, date de naissance, sexe, journal de bord de l'enfant (alimentation, sommeil, hygiène, santé, mesures de croissance) et photos ajoutées dans les jalons ou souvenirs. Ces données sont traitées uniquement pour vous fournir les fonctionnalités de suivi de l'application.",
     },
     {
       title: "3. Base légale et Consentement aux données de santé",
@@ -56,7 +56,12 @@ const sections = [
         "Nous ne vendons, n'échangeons ni ne louons vos données personnelles. Elles sont chiffrées en transit (protocole TLS) et au repos (chiffrement AES-256). Seuls les services techniques de notre sous-traitant Google Firebase et les personnes que vous autorisez explicitement via les fonctions de partage de l'application ont accès aux données.",
     },
     {
-      title: "7. Vos droits (RGPD)",
+      title: "7. Signalements et contenu sensible",
+      content:
+        "Lorsqu'un utilisateur signale un contenu dans l'application, nous pouvons traiter les informations liées au signalement, comme l'identifiant de l'événement, le chemin du fichier, l'identifiant du compte à l'origine du signalement, le motif et la date du signalement. Ces données sont utilisées uniquement pour examiner le contenu signalé, protéger la confidentialité des enfants et faire respecter les règles d'utilisation de SuiviBaby.",
+    },
+    {
+      title: "8. Vos droits (RGPD)",
       content:
         "Conformément à la réglementation, vous disposez des droits d'accès, de rectification, de suppression, de portabilité et de limitation du traitement de vos données. Pour exercer ces droits, contactez-nous à privacy@suivibaby.com. Vous avez également le droit d'introduire une réclamation auprès de la CNIL (www.cnil.fr).",
     },
@@ -117,7 +122,7 @@ const sections = [
                 { color: nc.textMuted },
               ]}
             >
-              Dernière mise à jour : 1er janvier 2026
+              Dernière mise à jour : 18 avril 2026
             </Text>
           </View>
 

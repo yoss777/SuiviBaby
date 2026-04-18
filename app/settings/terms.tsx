@@ -60,23 +60,33 @@ export default function TermsScreen() {
       content:
         'Nous nous efforcons de maintenir le service disponible, mais ne garantissons pas une disponibilite continue (maintenance, incidents, dependances techniques).',
     },
-{
-      title: '8. Suppression du compte',
+    {
+      title: '8. Photos et contenu sensible',
+      content:
+        "Les photos ajoutées dans SuiviBaby sont destinées à un usage privé dans le suivi de l'enfant. Vous ne devez pas utiliser le service pour partager des photos montrant les parties intimes d'un enfant, une couche ouverte avec exposition intime, ou un contenu corporel graphique sensible en dehors du cadre strictement privé des adultes autorisés.",
+    },
+    {
+      title: '9. Signalement de contenu',
+      content:
+        "Un mécanisme de signalement peut être mis à disposition dans l'application pour signaler une photo sensible, un problème de confidentialité ou un contenu inadapté. Vous pouvez aussi nous contacter à contact@suivibaby.com.",
+    },
+    {
+      title: '10. Suppression du compte',
       content:
         'L\'utilisateur peut supprimer son compte via les paramètres de l\'application. Cette action est irréversible et entraîne la suppression immédiate de toutes les données de suivi associées.',
     },
     {
-      title: '9. Limitation de responsabilité',
+      title: '11. Limitation de responsabilité',
       content:
         'SuiviBaby décline toute responsabilité en cas de perte de données ou d\'interprétation erronée des graphiques de suivi par l\'utilisateur. Le service est fourni "en l\'état".',
     },
     {
-      title: '10. Modifications',
+      title: '12. Modifications',
       content:
         'Nous pouvons modifier ces conditions. En cas de changement important, vous serez informe via l\'application ou par email.',
     },
     {
-      title: '11. Droit applicable',
+      title: '13. Droit applicable',
       content:
         'Ces conditions sont regies par le droit francais. Tout litige releve de la competence des tribunaux de Paris.',
     },
@@ -117,7 +127,7 @@ export default function TermsScreen() {
               Conditions d'utilisation
             </ThemedText>
             <Text style={[styles.headerDate, { color: nc.textMuted }]}>
-              Dernière mise à jour : 1er janvier 2026
+              Dernière mise à jour : 18 avril 2026
             </Text>
           </View>
 

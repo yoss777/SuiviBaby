@@ -49,6 +49,7 @@ import {
   isBiometricAvailable,
   isBiometricEnabled,
 } from "@/services/biometricAuthService";
+import { useHiddenPhotos } from "@/hooks/useHiddenPhotos";
 
 interface SettingItem {
   id: string;
@@ -72,6 +73,7 @@ export default function SettingsScreen() {
   const nc = getNeutralColors(colorScheme);
   const { user, signOut, refreshUser } = useAuth();
   const { activeChild, children, hiddenChildrenIds } = useBaby();
+  const hiddenPhotoIds = useHiddenPhotos();
   const { preference: themePreference } = useThemePreference();
   const router = useRouter();
   const { delete: deleteParam } = useLocalSearchParams();
@@ -324,6 +326,22 @@ export default function SettingsScreen() {
           }
         },
       },
+      {
+        id: "hidden-photos",
+        icon: "eye-off-outline",
+        label: "Photos masquées",
+        value: `${hiddenPhotoIds.size}`,
+        description: hiddenPhotoIds.size > 0
+          ? "Gérer les photos masquées"
+          : "Aucune photo masquée",
+        disabled: hiddenPhotoIds.size === 0,
+        onPress: () => {
+          if (hiddenPhotoIds.size > 0) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push("/settings/hidden-photos");
+          }
+        },
+      },
       ...(isOwnerOfAny
         ? [
             {
@@ -438,6 +456,7 @@ export default function SettingsScreen() {
     [
       hiddenChildrenCount,
       hasHiddenChildren,
+      hiddenPhotoIds.size,
       isOwnerOfAny,
       pendingDeletionRequests,
       nc.error,

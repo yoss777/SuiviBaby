@@ -1,5 +1,5 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { Stack, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -34,7 +34,7 @@ const { width } = Dimensions.get("window");
 export default function HiddenChildrenScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const router = useRouter();
+  const tint = Colors[colorScheme].tint;
   const { showAlert } = useModal();
   const { user } = useAuth();
   const { showToast, showActionToast } = useToast();
@@ -180,6 +180,9 @@ export default function HiddenChildrenScreen() {
           options={{
             title: "Enfants masqués",
             headerBackTitle: "Retour",
+            headerStyle: { backgroundColor: nc.background },
+            headerTintColor: nc.textStrong,
+            headerTitleStyle: { color: nc.textStrong },
           }}
         />
         <ScrollView
@@ -187,10 +190,15 @@ export default function HiddenChildrenScreen() {
           showsVerticalScrollIndicator={false}
         >
           {loading ? (
-            <View style={styles.loadingContainer}>
+            <View
+              style={styles.loadingContainer}
+              accessible={true}
+              accessibilityRole="progressbar"
+              accessibilityLabel="Chargement des enfants masqués"
+            >
               <ActivityIndicator
                 size="large"
-                color={Colors[colorScheme].tint}
+                color={tint}
               />
               <Text
                 style={[
@@ -202,7 +210,12 @@ export default function HiddenChildrenScreen() {
               </Text>
             </View>
           ) : hiddenChildren.length === 0 ? (
-            <View style={styles.emptyContainer}>
+            <View
+              style={styles.emptyContainer}
+              accessible={true}
+              accessibilityRole="summary"
+              accessibilityLabel="Aucun enfant masqué. Vous pouvez masquer un enfant de votre liste de suivi depuis le menu principal."
+            >
               <FontAwesome
                 name="eye-slash"
                 size={48}
@@ -240,12 +253,17 @@ export default function HiddenChildrenScreen() {
                   <View
                     key={child.id}
                     style={styles.childItemContainer}
-                    accessible={true}
-                    accessibilityRole="summary"
-                    accessibilityLabel={`${child.name}, ${ageText}, né le ${child.birthDate}`}
                   >
-                    <View style={[styles.childCard, { backgroundColor: nc.backgroundCard }]}>
-                      <View style={[styles.childAvatar, { backgroundColor: nc.borderLight }]}>
+                    <View
+                      style={[styles.childCard, { backgroundColor: nc.backgroundCard }]}
+                      accessible={true}
+                      accessibilityRole="summary"
+                      accessibilityLabel={`${child.name}, ${ageText}, né le ${child.birthDate}`}
+                    >
+                      <View
+                        style={[styles.childAvatar, { backgroundColor: nc.borderLight }]}
+                        accessible={false}
+                      >
                         <Text style={styles.childAvatarEmoji}>
                           {child.gender === "male" ? "👶" : "👧"}
                         </Text>
@@ -275,7 +293,8 @@ export default function HiddenChildrenScreen() {
                       activeOpacity={0.7}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                       accessibilityRole="button"
-                      accessibilityLabel={`Restaurer ${child.name}`}
+                      accessibilityLabel={`Restaurer ${child.name}, ${ageText}`}
+                      accessibilityHint="Restaure cet enfant dans votre liste de suivi"
                     >
                       <FontAwesome name="eye" size={20} color={nc.success} />
                     </TouchableOpacity>
@@ -327,6 +346,8 @@ export default function HiddenChildrenScreen() {
                   style={[styles.modalButton, styles.cancelButton, { backgroundColor: nc.borderLight }]}
                   onPress={() => setShowRestoreModal(false)}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Annuler la restauration"
                 >
                   <Text style={[styles.cancelButtonText, { color: nc.textMuted }]}>Annuler</Text>
                 </TouchableOpacity>
@@ -334,6 +355,8 @@ export default function HiddenChildrenScreen() {
                   style={[styles.modalButton, styles.confirmButton, { backgroundColor: nc.success }]}
                   onPress={confirmRestoreChild}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Confirmer la restauration de ${childToRestore?.name ?? "cet enfant"}`}
                 >
                   <Text style={[styles.confirmButtonText, { color: nc.white }]}>Restaurer</Text>
                 </TouchableOpacity>

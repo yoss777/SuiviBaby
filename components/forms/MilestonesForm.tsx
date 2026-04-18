@@ -548,6 +548,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       {/* Photo */}
       <View style={styles.inputGroup}>
         <Text style={[styles.inputLabel, { color: nc.textLight }]}>Photo</Text>
+        <Text style={[styles.photoPolicyHint, { color: nc.textMuted }]}>
+          Gardez les photos dans un cadre privé entre adultes autorisés. Ne partagez pas d'image montrant les parties intimes de l'enfant ou un contenu corporel sensible.
+        </Text>
         {photoUri ? (
           <View style={styles.photoPreviewContainer}>
             <PhotoImage
@@ -704,6 +707,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  photoPolicyHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 8,
   },
   input: {
     borderWidth: 1,
