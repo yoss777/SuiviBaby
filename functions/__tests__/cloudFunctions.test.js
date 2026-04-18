@@ -1,4 +1,4 @@
-const { mockFirestore, mockGet, mockAdd, mockQueryChain, mockRunTransaction } = require("./setup");
+const { mockFirestore, mockDocRef, mockGet, mockAdd, mockQueryChain, mockRunTransaction } = require("./setup");
 const fns = require("../index");
 const auth = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, admin: false } }, data, app: true });
 const adm = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, admin: true } }, data, app: true });
@@ -20,6 +20,57 @@ describe("validateAndCreateEvent", () => {
   it("rejects bain temp>45", async () => { access(); await expect(fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "bain", temperatureEau: 50 }))).rejects.toThrow("45°C"); });
   it("creates valid event", async () => { access(); mockFirestore.collection.mockReturnValue({ add: jest.fn().mockResolvedValue({ id: "e1" }), where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) }); expect(await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "biberon", quantite: 150 }))).toEqual({ id: "e1" }); });
   it("deduplicates idempotencyKey", async () => { access(); mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap([{ id: "dup" }])) }); expect(await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "biberon", quantite: 100, idempotencyKey: "k" }))).toEqual({ id: "dup" }); });
+  it("converts heureDebut and heureFin on create", async () => {
+    access();
+    const add = jest.fn().mockResolvedValue({ id: "e1" });
+    mockFirestore.collection.mockReturnValue({
+      add,
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue(snap()),
+    });
+
+    await fns.validateAndCreateEvent(auth("u1", {
+      childId: "c1",
+      type: "sommeil",
+      isNap: true,
+      date: { seconds: 1710000000, nanoseconds: 0 },
+      heureDebut: { seconds: 1710000000, nanoseconds: 0 },
+      heureFin: { seconds: 1710003600, nanoseconds: 0 },
+    }));
+
+    expect(add).toHaveBeenCalledWith(expect.objectContaining({
+      date: expect.objectContaining({ seconds: 1710000000 }),
+      heureDebut: expect.objectContaining({ seconds: 1710000000 }),
+      heureFin: expect.objectContaining({ seconds: 1710003600 }),
+    }));
+  });
+});
+
+describe("validateAndUpdateEvent", () => {
+  it("converts heureFin on update", async () => {
+    access();
+    mockDocRef.update.mockResolvedValue(undefined);
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p?.includes("access")) return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
+      return {
+        get: jest.fn().mockResolvedValue(doc({ childId: "c1", type: "sommeil" })),
+        update: mockDocRef.update,
+        delete: jest.fn(),
+      };
+    });
+
+    await fns.validateAndUpdateEvent(auth("u1", {
+      childId: "c1",
+      eventId: "e1",
+      heureFin: { seconds: 1710003600, nanoseconds: 0 },
+    }));
+
+    expect(mockDocRef.update).toHaveBeenCalledWith(expect.objectContaining({
+      heureFin: expect.objectContaining({ seconds: 1710003600 }),
+    }));
+  });
 });
 
 describe("deleteEventCascade", () => {

@@ -16,6 +16,7 @@ import {
   obtenirEvenements,
   type EventType,
 } from "@/services/eventsService";
+import { toDate } from "@/utils/date";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -130,12 +131,17 @@ const TYPE_CONFIG: Record<
 // HELPERS
 // ============================================
 
-const toDate = (value: any): Date => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-};
+function shouldForceChronoDirty(
+  editData?: ActivitiesEditData | null,
+  promenadeEnCours?: { id: string } | null,
+): boolean {
+  return !!(
+    editData?.typeActivite === "promenade" &&
+    editData.heureFin &&
+    promenadeEnCours &&
+    editData.id === promenadeEnCours.id
+  );
+}
 
 // ============================================
 // COMPONENT
@@ -191,7 +197,9 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const [heureFin, setHeureFin] = useState<Date | null>(
     editData?.heureFin ? toDate(editData.heureFin) : null,
   );
-  const [chronoDirty, setChronoDirty] = useState(false);
+  const [chronoDirty, setChronoDirty] = useState(() =>
+    shouldForceChronoDirty(editData, promenadeEnCours),
+  );
 
   // Force heureFin to share the same calendar day as heureDebut (year/month/day)
   const alignDateToDebut = (fin: Date, debut: Date): Date => {
@@ -277,7 +285,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         !!editData.heureDebut &&
         !editData.heureFin,
     );
-    setChronoDirty(false);
+    setChronoDirty(shouldForceChronoDirty(editData, promenadeEnCours));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editData?.id]);
 

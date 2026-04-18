@@ -770,6 +770,9 @@ function toFirestoreTimestamp(dateValue) {
   if (!dateValue || dateValue instanceof admin.firestore.Timestamp) {
     return dateValue;
   }
+  if (dateValue instanceof Date) {
+    return admin.firestore.Timestamp.fromDate(dateValue);
+  }
   // Format httpsCallable client: {seconds, nanoseconds}
   if (typeof dateValue.seconds === "number") {
     return new admin.firestore.Timestamp(dateValue.seconds, dateValue.nanoseconds || 0);
@@ -783,6 +786,26 @@ function toFirestoreTimestamp(dateValue) {
     return admin.firestore.Timestamp.fromDate(new Date(dateValue));
   }
   return dateValue;
+}
+
+const EVENT_DATE_FIELDS = new Set([
+  "date",
+  "heureDebut",
+  "heureFin",
+  "createdAt",
+  "updatedAt",
+  "migratedAt",
+]);
+
+function convertEventDateFields(data) {
+  const converted = { ...data };
+
+  for (const [key, value] of Object.entries(converted)) {
+    if (!EVENT_DATE_FIELDS.has(key)) continue;
+    converted[key] = toFirestoreTimestamp(value);
+  }
+
+  return converted;
 }
 
 // ============================================
@@ -1059,7 +1082,8 @@ exports.validateAndCreateEvent = onCall(
 
     // Idempotency: if the client sends an idempotencyKey, check whether an
     // event with that key already exists to prevent duplicates on retry.
-    const { idempotencyKey, ...cleanEventData } = eventData;
+    const { idempotencyKey, ...rawEventData } = eventData;
+    const cleanEventData = convertEventDateFields(rawEventData);
     if (idempotencyKey && typeof idempotencyKey === "string") {
       const existing = await db
         .collection("events")
@@ -1083,11 +1107,6 @@ exports.validateAndCreateEvent = onCall(
     // Persist the idempotency key so future retries can detect the duplicate.
     if (idempotencyKey) {
       serverData.idempotencyKey = idempotencyKey;
-    }
-
-    // Convertir date en Firestore Timestamp
-    if (cleanEventData.date) {
-      serverData.date = toFirestoreTimestamp(cleanEventData.date);
     }
 
     const ref = await db.collection("events").add(serverData);
@@ -1140,16 +1159,14 @@ exports.validateAndUpdateEvent = onCall(
     delete updateData.childId;
 
     // Gérer les champs null comme des suppressions de champ
-    const cleanData = { ...updateData, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+    const cleanData = convertEventDateFields({
+      ...updateData,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
     for (const [key, value] of Object.entries(cleanData)) {
       if (value === null) {
         cleanData[key] = admin.firestore.FieldValue.delete();
       }
-    }
-
-    // Convertir date en Firestore Timestamp
-    if (cleanData.date) {
-      cleanData.date = toFirestoreTimestamp(cleanData.date);
     }
 
     await eventRef.update(cleanData);

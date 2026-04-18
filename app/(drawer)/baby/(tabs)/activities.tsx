@@ -32,6 +32,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isValidDate, toDate } from "@/utils/date";
 import {
   Animated,
   BackHandler,
@@ -132,7 +133,9 @@ const formatDateKey = (date: Date) =>
   ).padStart(2, "0")}`;
 
 const formatTime = (date: Date) =>
-  date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  isValidDate(date)
+    ? date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+    : "--:--";
 
 const formatDuration = (minutes?: number) => {
   if (!minutes || minutes <= 0) return "0 min";
@@ -140,13 +143,6 @@ const formatDuration = (minutes?: number) => {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
-};
-
-const toDate = (value: any) => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
 };
 
 const formatSelectedDateLabel = (dateString: string) => {
@@ -335,7 +331,11 @@ export default function ActivitiesScreen() {
   // Detect ongoing promenade (iso sommeilEnCours in routines.tsx)
   const promenadeEnCours = useMemo(() => {
     return events.find(
-      (item: any) => item.typeActivite === "promenade" && item.heureDebut && !item.heureFin,
+      (item: any) =>
+        item.typeActivite === "promenade" &&
+        item.heureDebut &&
+        !item.heureFin &&
+        isValidDate(toDate(item.heureDebut)),
     ) as (ActivityEventWithId & { heureDebut: any }) | undefined;
   }, [events]);
 
@@ -350,6 +350,7 @@ export default function ActivitiesScreen() {
   const elapsedPromenadeMinutes = useMemo(() => {
     if (!promenadeEnCours?.heureDebut) return 0;
     const start = toDate(promenadeEnCours.heureDebut);
+    if (!isValidDate(start)) return 0;
     return Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
   }, [promenadeEnCours, now]);
 

@@ -16,6 +16,7 @@ import {
   obtenirEvenements,
   supprimerEvenement,
 } from "@/services/eventsService";
+import { toDate } from "@/utils/date";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -123,12 +124,17 @@ const RESULTAT_NEZ_OPTIONS: { value: NezResultat; label: string }[] = [
 // HELPERS
 // ============================================
 
-const toDate = (value: any): Date => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-};
+function shouldForceChronoDirty(
+  editData?: RoutinesEditData | null,
+  sommeilEnCours?: { id: string } | null,
+): boolean {
+  return !!(
+    editData?.type === "sommeil" &&
+    editData.heureFin &&
+    sommeilEnCours &&
+    editData.id === sommeilEnCours.id
+  );
+}
 
 const formatTime = (date: Date) =>
   date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -239,7 +245,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const [heureFin, setHeureFin] = useState<Date | null>(
     editData?.heureFin ? toDate(editData.heureFin) : null,
   );
-  const [chronoDirty, setChronoDirty] = useState(false);
+  const [chronoDirty, setChronoDirty] = useState(() =>
+    shouldForceChronoDirty(editData, sommeilEnCours),
+  );
   const [isOngoing, setIsOngoing] = useState<boolean>(
     editData ? !editData.heureFin : false,
   );
@@ -322,7 +330,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       );
       setHeureFin(editData.heureFin ? toDate(editData.heureFin) : null);
       setIsOngoing(!editData.heureFin);
-      setChronoDirty(false);
+      setChronoDirty(shouldForceChronoDirty(editData, sommeilEnCours));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editData?.id]);

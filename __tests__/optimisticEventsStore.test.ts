@@ -205,6 +205,49 @@ describe("optimisticEventsStore", () => {
     expect(afterSnapshot[0].duree).toBe(45);
   });
 
+  it("does not keep stale untouched time fields from the optimistic previous event", () => {
+    const childId = "child-1";
+    const eventId = "event-stale-time";
+    const start = new Date("2026-03-28T08:00:00.000Z");
+    const end = new Date("2026-03-28T09:00:00.000Z");
+    const previousEvent = {
+      id: eventId,
+      type: "sommeil",
+      childId,
+      date: new Date("2026-03-28T07:00:00.000Z"),
+      heureDebut: new Date("2026-03-28T07:00:00.000Z"),
+    };
+    const optimisticPatch = {
+      id: eventId,
+      type: "sommeil",
+      childId,
+      heureFin: end,
+      duree: 60,
+    };
+    const firestoreEvent = {
+      id: eventId,
+      type: "sommeil",
+      childId,
+      date: { seconds: Math.floor(start.getTime() / 1000), nanoseconds: 0 },
+      heureDebut: { seconds: Math.floor(start.getTime() / 1000), nanoseconds: 0 },
+      heureFin: { seconds: Math.floor(end.getTime() / 1000), nanoseconds: 0 },
+      duree: 60,
+    };
+
+    addOptimisticUpdate(eventId, childId, optimisticPatch, previousEvent);
+    confirmOptimistic(eventId);
+
+    const merged = mergeWithFirestoreEvents([firestoreEvent], childId);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].date).toEqual(firestoreEvent.date);
+    expect(merged[0].heureDebut).toEqual(firestoreEvent.heureDebut);
+    expect(merged[0].heureFin).toEqual(firestoreEvent.heureFin);
+
+    const nextMerge = mergeWithFirestoreEvents([firestoreEvent], childId);
+    expect(nextMerge).toHaveLength(1);
+    expect(nextMerge[0].date).toEqual(firestoreEvent.date);
+  });
+
   it("changes the fingerprint when an older item outside the old 30-item window is edited", () => {
     const baseEvents: any[] = Array.from({ length: 35 }, (_, index) => ({
       id: `event-${index}`,

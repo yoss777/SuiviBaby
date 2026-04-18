@@ -59,6 +59,7 @@ import {
   RoutinesEditData,
   SleepMode,
 } from "@/components/forms/RoutinesForm";
+import { isValidDate, toDate } from "@/utils/date";
 
 // Enable LayoutAnimation on Android
 if (
@@ -230,7 +231,9 @@ const formatDateKey = (date: Date) =>
   ).padStart(2, "0")}`;
 
 const formatTime = (date: Date) =>
-  date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  isValidDate(date)
+    ? date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+    : "--:--";
 
 const formatDuration = (minutes?: number) => {
   if (!minutes || minutes <= 0) return "0 min";
@@ -238,13 +241,6 @@ const formatDuration = (minutes?: number) => {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
-};
-
-const toDate = (value: any) => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
 };
 
 // ============================================
@@ -724,7 +720,11 @@ export default function RoutinesScreen() {
 
   const sommeilEnCours = useMemo(() => {
     return events.find(
-      (item) => item.type === "sommeil" && !item.heureFin && item.heureDebut,
+      (item) =>
+        item.type === "sommeil" &&
+        !item.heureFin &&
+        item.heureDebut &&
+        isValidDate(toDate(item.heureDebut)),
     ) as (SommeilEvent & { id: string }) | undefined;
   }, [events]);
 
@@ -741,6 +741,7 @@ export default function RoutinesScreen() {
   const elapsedMinutes = useMemo(() => {
     if (!sommeilEnCours?.heureDebut) return 0;
     const start = toDate(sommeilEnCours.heureDebut);
+    if (!isValidDate(start)) return 0;
     return Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
   }, [sommeilEnCours, now]);
 
@@ -1172,7 +1173,11 @@ export default function RoutinesScreen() {
   // STOP ONGOING SLEEP
   // ============================================
   const handleStopSleep = useCallback(() => {
-    if (!activeChild?.id || !sommeilEnCours) return;
+    if (!activeChild?.id || !sommeilEnCours?.id) return;
+    if (sommeilEnCours.id.startsWith('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     const start = toDate(sommeilEnCours.heureDebut);
 
     // Open form with heureFin pre-filled — don't modify base until user confirms
@@ -1195,7 +1200,7 @@ export default function RoutinesScreen() {
       },
       sommeilEnCours: { id: sommeilEnCours.id },
     });
-  }, [activeChild?.id, sommeilEnCours, openSheet]);
+  }, [activeChild?.id, sommeilEnCours, openSheet, showToast]);
 
   // ============================================
   // RENDER HELPERS

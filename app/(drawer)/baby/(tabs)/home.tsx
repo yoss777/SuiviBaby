@@ -30,6 +30,7 @@ import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
+import { isValidDate, toDate as parseDate } from "@/utils/date";
 import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { getPreferencesCache, getPermissionsCache } from "@/services/userPreferencesCache";
@@ -831,10 +832,7 @@ export default function HomeDashboard() {
   );
 
   const toDate = useCallback((value: any) => {
-    if (value?.seconds) return new Date(value.seconds * 1000);
-    if (value?.toDate) return value.toDate();
-    if (value instanceof Date) return value;
-    return new Date(value);
+    return parseDate(value);
   }, []);
 
   const getDateTime = useCallback(
@@ -847,6 +845,7 @@ export default function HomeDashboard() {
   );
 
   const formatTime = useCallback((date: Date) => {
+    if (!isValidDate(date)) return "--:--";
     return date.toLocaleTimeString("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",
@@ -1293,16 +1292,30 @@ export default function HomeDashboard() {
     [activeChild?.id, showToast],
   );
   const sommeilEnCours = useMemo(() => {
-    return data.sommeils.find((item) => !softDeletedIds.has(item.id) && !item.heureFin && item.heureDebut);
-  }, [data.sommeils, softDeletedIds]);
+    return data.sommeils.find((item) => {
+      if (softDeletedIds.has(item.id) || item.heureFin || !item.heureDebut) {
+        return false;
+      }
+      return isValidDate(toDate(item.heureDebut));
+    });
+  }, [data.sommeils, softDeletedIds, toDate]);
 
   // Promenade en cours detection (same pattern as sommeil)
   const promenadeEnCours = useMemo(() => {
     return data.activites.find(
-      (item: any) =>
-        !softDeletedIds.has(item.id) && item.typeActivite === "promenade" && item.heureDebut && !item.heureFin,
+      (item: any) => {
+        if (
+          softDeletedIds.has(item.id) ||
+          item.typeActivite !== "promenade" ||
+          !item.heureDebut ||
+          item.heureFin
+        ) {
+          return false;
+        }
+        return isValidDate(toDate(item.heureDebut));
+      },
     );
-  }, [data.activites, softDeletedIds]);
+  }, [data.activites, softDeletedIds, toDate]);
 
   const handleEventEdit = useEventEditHandler(
     openSheet,
@@ -1325,6 +1338,7 @@ export default function HomeDashboard() {
   const elapsedSleepMinutes = useMemo(() => {
     if (!sommeilEnCours?.heureDebut) return 0;
     const start = toDate(sommeilEnCours.heureDebut);
+    if (!isValidDate(start)) return 0;
     return Math.max(
       0,
       Math.round((currentTime.getTime() - start.getTime()) / 60000),
@@ -1334,6 +1348,7 @@ export default function HomeDashboard() {
   const elapsedPromenadeMinutes = useMemo(() => {
     if (!promenadeEnCours?.heureDebut) return 0;
     const start = toDate(promenadeEnCours.heureDebut);
+    if (!isValidDate(start)) return 0;
     return Math.max(
       0,
       Math.round((currentTime.getTime() - start.getTime()) / 60000),

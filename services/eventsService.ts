@@ -1083,7 +1083,6 @@ export function modifierEvenementOptimistic(
     data as Record<string, unknown>,
   ) as Partial<Event>;
   const updatedEvent = convertDateFields({
-    ...previousEvent,
     ...cleanData,
     id: eventId,
     childId,

@@ -21,6 +21,7 @@ import {
   View,
 } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import { isValidDate } from "@/utils/date";
 
 // ============================================
 // TYPES
@@ -348,6 +349,11 @@ const EventRow = memo(function EventRow({
       : null;
 
   const date = toDate(event.date);
+  const startDate = event.heureDebut ? toDate(event.heureDebut) : null;
+  const endDate = event.heureFin ? toDate(event.heureFin) : null;
+  const hasValidDate = isValidDate(date);
+  const hasValidStartDate = isValidDate(startDate);
+  const hasValidEndDate = isValidDate(endDate);
   const isSolide = event.type === "solide";
   const details = buildDetails(event);
 
@@ -399,23 +405,26 @@ const EventRow = memo(function EventRow({
       ? solideNewFoodLabel
       : null;
 
-  const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
-  const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !event.heureFin && event.heureDebut;
+  const isOngoingSleep = isSleep && !event.heureFin && hasValidStartDate;
+  const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !event.heureFin && hasValidStartDate;
   const isOngoing = isOngoingSleep || isOngoingPromenade;
-  const hasStartEnd = (isSleep || (event.type === "activite" && event.typeActivite === "promenade")) && !!event.heureDebut;
+  const hasStartEnd = (isSleep || (event.type === "activite" && event.typeActivite === "promenade")) && hasValidStartDate;
   const elapsedMinutes = isOngoing
     ? Math.max(
         0,
         Math.round(
-          (currentTime.getTime() - toDate(event.heureDebut).getTime()) /
+          (currentTime.getTime() - startDate.getTime()) /
             60000,
         ),
       )
     : 0;
 
-  const currentDayLabel = getDayLabel(date);
+  const currentDayLabel = hasValidDate ? getDayLabel(date) : "Date inconnue";
   const prevDayLabel = prevEvent
-    ? getDayLabel(toDate(prevEvent.date))
+    ? (() => {
+        const prevDate = toDate(prevEvent.date);
+        return isValidDate(prevDate) ? getDayLabel(prevDate) : "Date inconnue";
+      })()
     : null;
   const showDaySeparator =
     currentDayLabel !== "Aujourd'hui" &&
@@ -492,11 +501,17 @@ const EventRow = memo(function EventRow({
               <TimeDisplay
                 isSleep={isSleep}
                 hasStartEnd={hasStartEnd}
-                hasEndTime={!!event.heureFin}
-                startTime={hasStartEnd && event.heureDebut ? formatTime(toDate(event.heureDebut)) : formatTime(date)}
+                hasEndTime={hasValidEndDate}
+                startTime={
+                  hasValidStartDate
+                    ? formatTime(startDate)
+                    : hasValidDate
+                      ? formatTime(date)
+                      : "--:--"
+                }
                 endTime={
-                  event.heureFin
-                    ? formatTime(toDate(event.heureFin))
+                  hasValidEndDate
+                    ? formatTime(endDate)
                     : undefined
                 }
                 ongoingColor={isOngoingPromenade ? eventColors.activite.dark : eventColors.sommeil.dark}

@@ -22,6 +22,7 @@ import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { ecouterEvenements, supprimerEvenement, type Event, type EventType } from "@/services/eventsService";
 import { MODERN_UI_DIAPER_EVENT_TYPES, MODERN_UI_EVENT_TYPES } from "@/services/eventTypeSupport";
+import { isValidDate, toDate } from "@/utils/date";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -178,12 +179,6 @@ const LIST_PADDING_TOP = 8;
 // UTILITY FUNCTIONS
 // ============================================
 
-function toDate(value: any): Date {
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-}
-
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -193,6 +188,7 @@ function dayKey(date: Date) {
 }
 
 function formatTime(date: Date) {
+  if (!isValidDate(date)) return "--:--";
   return date.toLocaleTimeString("fr-FR", {
     hour: "2-digit",
     minute: "2-digit",
@@ -200,6 +196,7 @@ function formatTime(date: Date) {
 }
 
 function formatDayLabel(date: Date) {
+  if (!isValidDate(date)) return "Date inconnue";
   const today = startOfDay(new Date()).getTime();
   const target = startOfDay(date).getTime();
   const dayMs = 24 * 60 * 60 * 1000;
@@ -1138,16 +1135,21 @@ const TimelineCard = React.memo(
           : "moon"
         : null;
 
+    const startDate = event.heureDebut ? toDate(event.heureDebut) : null;
+    const endDate = event.heureFin ? toDate(event.heureFin) : null;
+    const hasValidStartDate = isValidDate(startDate);
+    const hasValidEndDate = isValidDate(endDate);
+
     // Calculate elapsed time for ongoing sleep or promenade
-    const isOngoingSleep = isSleep && !event.heureFin && event.heureDebut;
-    const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !event.heureFin && event.heureDebut;
+    const isOngoingSleep = isSleep && !event.heureFin && hasValidStartDate;
+    const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !event.heureFin && hasValidStartDate;
     const isOngoing = isOngoingSleep || isOngoingPromenade;
-    const hasStartEnd = (isSleep || (event.type === "activite" && event.typeActivite === "promenade")) && !!event.heureDebut;
+    const hasStartEnd = (isSleep || (event.type === "activite" && event.typeActivite === "promenade")) && hasValidStartDate;
     const elapsedMinutes = isOngoing
       ? Math.max(
           0,
           Math.round(
-            (currentTime.getTime() - toDate(event.heureDebut).getTime()) /
+            (currentTime.getTime() - startDate.getTime()) /
               60000,
           ),
         )
@@ -1166,12 +1168,12 @@ const TimelineCard = React.memo(
           />
         </View>
         <View style={styles.cardTimeLeft}>
-          {hasStartEnd && event.heureFin ? (
+          {hasStartEnd && hasValidEndDate ? (
             <>
               <Text
                 style={[styles.cardTimeText, { color: secondaryTextColor }]}
               >
-                {event.heureDebut ? formatTime(toDate(event.heureDebut)) : formatTime(date)}
+                {hasValidStartDate ? formatTime(startDate) : formatTime(date)}
               </Text>
               <Text
                 style={[styles.cardTimeArrow, { color: secondaryTextColor }]}
@@ -1184,15 +1186,15 @@ const TimelineCard = React.memo(
                   { color: secondaryTextColor },
                 ]}
               >
-                {formatTime(toDate(event.heureFin))}
+                {formatTime(endDate)}
               </Text>
             </>
-          ) : hasStartEnd && !event.heureFin ? (
+          ) : hasStartEnd && !hasValidEndDate ? (
             <>
               <Text
                 style={[styles.cardTimeText, { color: secondaryTextColor }]}
               >
-                {event.heureDebut ? formatTime(toDate(event.heureDebut)) : formatTime(date)}
+                {hasValidStartDate ? formatTime(startDate) : formatTime(date)}
               </Text>
               <Text
                 style={[styles.cardTimeArrow, { color: secondaryTextColor }]}
