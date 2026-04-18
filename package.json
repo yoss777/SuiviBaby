@@ -10,7 +10,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
-    "test:rules": "firebase emulators:exec --only firestore 'npx jest __tests__/firestore.rules.test.ts --config jest.config.rules.js'",
+    "test:rules": "firebase emulators:exec --only firestore,storage 'npx jest __tests__/firestore.rules.test.ts __tests__/storage.rules.test.ts --runInBand --config jest.config.rules.js'",
     "test:functions": "jest --rootDir functions --testMatch='**/__tests__/**/*.test.js'",
     "test:all": "jest && jest --rootDir functions --testMatch='**/__tests__/**/*.test.js'",
     "test:coverage": "jest --coverage",

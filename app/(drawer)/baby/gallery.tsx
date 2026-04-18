@@ -1,4 +1,5 @@
 import { SwipeGallery } from "@/components/moments";
+import { PhotoImage } from "@/components/ui/PhotoImage";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
@@ -11,6 +12,7 @@ import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ecouterEvenements } from "@/services/eventsService";
 import { JalonEvent } from "@/services/eventsService";
+import { getAuthenticatedPhotoSource } from "@/utils/photoStorage";
 import {
   ecouterInteractionsSociales,
   getUserNames,
@@ -31,7 +33,6 @@ import {
   Dimensions,
   Animated as RNAnimated,
   FlatList,
-  Image,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -398,8 +399,8 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
           <FontAwesome6 name="image" size={20} color={nc.textMuted} />
         </View>
       ) : (
-        <Image
-          source={{ uri: photo.photo }}
+        <PhotoImage
+          photoRef={photo.photo}
           style={styles.thumbImage}
           resizeMode="cover"
           onError={() => setImageError(true)}
@@ -790,7 +791,16 @@ export default function GalleryScreen() {
         const filename = `moment_${photoId}_${Date.now()}.jpg`;
         const localUri = FileSystem.cacheDirectory + filename;
 
-        const downloadResult = await FileSystem.downloadAsync(uri, localUri);
+        const source = await getAuthenticatedPhotoSource(uri);
+        if (!source) {
+          const result = { success: false, message: "Photo indisponible" };
+          showToast(result.message);
+          return result;
+        }
+
+        const downloadResult = await FileSystem.downloadAsync(source.uri, localUri, {
+          headers: source.headers,
+        });
 
         if (downloadResult.status === 200) {
           await MediaLibrary.createAssetAsync(downloadResult.uri);

@@ -1,4 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
+import { PhotoImage } from "@/components/ui/PhotoImage";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
@@ -39,7 +40,6 @@ import React, {
 import {
   Animated,
   AppState,
-  Image,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -1240,8 +1240,8 @@ const TimelineCard = React.memo(
               </Text>
             </View>
             {isJalon && event.photos?.[0] ? (
-              <Image
-                source={{ uri: event.photos[0] }}
+              <PhotoImage
+                photoRef={event.photos[0]}
                 style={[styles.cardThumb, { backgroundColor: secondaryTextColor + "20" }]}
               />
             ) : null}

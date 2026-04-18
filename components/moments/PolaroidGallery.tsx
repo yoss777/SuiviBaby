@@ -1,11 +1,11 @@
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { NotificationType } from "@/contexts/MomentsNotificationContext";
+import { PhotoImage } from "@/components/ui/PhotoImage";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dimensions,
-  Image,
   ImageErrorEventData,
   NativeSyntheticEvent,
   Pressable,
@@ -184,7 +184,7 @@ const PolaroidCard = ({
               <FontAwesome6 name="image" size={24} color={nc.textMuted} />
             </View>
           ) : (
-            <Image source={{ uri: photo.photo }} style={styles.polaroidImage} onError={handleImageError} />
+            <PhotoImage photoRef={photo.photo} style={styles.polaroidImage} onError={handleImageError} />
           )}
 
           {/* Social overlay */}

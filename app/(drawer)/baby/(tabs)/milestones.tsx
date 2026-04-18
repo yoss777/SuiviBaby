@@ -7,6 +7,7 @@ import {
   JalonType,
   MilestonesEditData,
 } from "@/components/forms/MilestonesForm";
+import { PhotoImage } from "@/components/ui/PhotoImage";
 import { ThemedText } from "@/components/themed-text";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -37,7 +38,6 @@ import {
   Animated,
   BackHandler,
   FlatList,
-  Image,
   InteractionManager,
   LayoutAnimation,
   Platform,
@@ -1098,8 +1098,8 @@ export default function MilestonesScreen() {
               ) : null}
             </View>
             {event.photos?.[0] ? (
-              <Image
-                source={{ uri: event.photos[0] }}
+              <PhotoImage
+                photoRef={event.photos[0]}
                 style={[styles.sessionPhoto, { backgroundColor: nc.backgroundPressed }]}
               />
             ) : null}

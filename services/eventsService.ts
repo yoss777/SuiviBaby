@@ -16,6 +16,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
+import { FIREBASE_STORAGE_BUCKET, extractStoragePath } from "@/utils/photoStorage";
 import { getTodayTypes } from "@/services/todayEventsCache";
 import { enqueueEvent, isOnline } from "./offlineQueueService";
 import {
@@ -250,7 +251,7 @@ export interface JalonEvent extends BaseEvent {
   typeJalon: "dent" | "pas" | "sourire" | "mot" | "humeur" | "photo" | "autre";
   titre?: string;
   description?: string;
-  photos?: string[]; // URLs
+  photos?: string[]; // Legacy URLs or Storage paths
   humeur?: 1 | 2 | 3 | 4 | 5;
 }
 
@@ -1187,17 +1188,14 @@ export async function getNextEventDateBefore(
 // JALON PHOTO CLEANUP HELPERS
 // ============================================
 
-const FIREBASE_STORAGE_BUCKET = "samaye-53723.firebasestorage.app";
-
-export async function deletePhotoFromStorage(photoUrl: string): Promise<void> {
+export async function deletePhotoFromStorage(photoRef: string): Promise<void> {
   try {
-    const match = photoUrl.match(/\/o\/([^?]+)/);
-    if (!match) {
-      console.warn("[DELETE_PHOTO] URL non reconnue:", photoUrl);
+    const filePath = extractStoragePath(photoRef);
+    if (!filePath) {
+      console.warn("[DELETE_PHOTO] Référence photo non reconnue:", photoRef);
       return;
     }
-    const encodedPath = match[1];
-    const filePath = decodeURIComponent(encodedPath);
+    const encodedPath = encodeURIComponent(filePath);
     console.log("[DELETE_PHOTO] Suppression de:", filePath);
 
     const user = auth.currentUser;
@@ -1228,9 +1226,9 @@ export async function supprimerJalon(childId: string, id: string) {
   try {
     const event = await obtenirEvenement(childId, id);
     if ((event as any)?.photos && Array.isArray((event as any).photos)) {
-      for (const photoUrl of (event as any).photos) {
-        if (photoUrl?.startsWith("https://firebasestorage.googleapis.com")) {
-          await deletePhotoFromStorage(photoUrl);
+      for (const photoRef of (event as any).photos) {
+        if (photoRef) {
+          await deletePhotoFromStorage(photoRef);
         }
       }
     }

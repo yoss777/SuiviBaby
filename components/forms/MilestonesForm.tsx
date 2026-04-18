@@ -1,5 +1,6 @@
 // components/forms/MilestonesForm.tsx
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { PhotoImage } from "@/components/ui/PhotoImage";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { auth } from "@/config/firebase";
@@ -15,6 +16,7 @@ import {
   modifierEvenementOptimistic,
   supprimerJalon,
 } from "@/services/eventsService";
+import { isLocalPhotoUri } from "@/utils/photoStorage";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as FileSystem from "expo-file-system";
@@ -22,7 +24,6 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Image,
   StyleSheet,
   Text,
   TextInput,
@@ -198,11 +199,13 @@ const uploadMilestonePhoto = async (
 
     onProgress?.(80);
 
-    const responseData = JSON.parse(response.body);
-    const downloadURL = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodeURIComponent(responseData.name)}?alt=media&token=${responseData.downloadTokens}`;
+    const responseData = JSON.parse(response.body) as { name?: string };
+    if (responseData.name && responseData.name !== filePath) {
+      console.warn("[UPLOAD] Chemin Storage inattendu:", responseData.name);
+    }
 
     onProgress?.(100);
-    return downloadURL;
+    return filePath;
   } catch (error) {
     console.error("[UPLOAD] Erreur:", error);
     throw error;
@@ -332,17 +335,17 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
     try {
       setIsSubmitting(true);
-      let photoUrls: string[] | undefined = photoUri ? [photoUri] : undefined;
+      let photoRefs: string[] | undefined = photoUri ? [photoUri] : undefined;
 
-      if (photoUri && !photoUri.startsWith("http")) {
+      if (photoUri && isLocalPhotoUri(photoUri)) {
         setPhotoUploading(true);
         setUploadProgress(0);
-        const uploadedUrl = await uploadMilestonePhoto(
+        const uploadedPath = await uploadMilestonePhoto(
           activeChild.id,
           photoUri,
           (progress) => setUploadProgress(Math.round(progress)),
         );
-        photoUrls = [uploadedUrl];
+        photoRefs = [uploadedPath];
       }
 
       const titreToSave =
@@ -358,7 +361,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
         description: description.trim() ? description.trim() : undefined,
         note: note.trim() ? note.trim() : undefined,
         humeur: mood ?? undefined,
-        photos: photoUrls,
+        photos: photoRefs,
       });
 
       if (editData) {
@@ -547,8 +550,8 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
         <Text style={[styles.inputLabel, { color: nc.textLight }]}>Photo</Text>
         {photoUri ? (
           <View style={styles.photoPreviewContainer}>
-            <Image
-              source={{ uri: photoUri }}
+            <PhotoImage
+              photoRef={photoUri}
               style={[styles.photoPreview, { backgroundColor: nc.background }]}
             />
             <TouchableOpacity

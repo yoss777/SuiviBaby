@@ -1,3 +1,4 @@
+import { PhotoImage } from "@/components/ui/PhotoImage";
 import { eventColors } from "@/constants/eventColors";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
@@ -5,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
-  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -583,8 +583,8 @@ export const SwipeGallery = ({
                 style={styles.card}
                 onPress={() => handleImageTap(item.photo.id)}
               >
-                <Image
-                  source={{ uri: item.photo.uri }}
+                <PhotoImage
+                  photoRef={item.photo.uri}
                   style={styles.cardImage}
                   resizeMode="contain"
                   fadeDuration={0}

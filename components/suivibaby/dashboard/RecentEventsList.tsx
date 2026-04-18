@@ -1,4 +1,5 @@
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { PhotoImage } from "@/components/ui/PhotoImage";
 import {
   ACTIVITY_TYPE_LABELS,
   EVENT_CONFIG,
@@ -13,7 +14,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { memo, useCallback, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -550,8 +550,8 @@ const EventRow = memo(function EventRow({
                   {displayLabel}
                 </Text>
                 {isJalon && event.photos?.[0] && (
-                  <Image
-                    source={{ uri: event.photos[0] }}
+                  <PhotoImage
+                    photoRef={event.photos[0]}
                     style={[
                       styles.recentThumb,
                       { backgroundColor: nc.backgroundPressed },

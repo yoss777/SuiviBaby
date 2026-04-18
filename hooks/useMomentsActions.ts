@@ -3,6 +3,7 @@ import { ajouterEvenementOptimistic } from "@/services/eventsService";
 import { toggleLike } from "@/services/socialService";
 import { JalonEvent } from "@/services/eventsService";
 import { toDate } from "@/hooks/useMomentsData";
+import { getAuthenticatedPhotoSource } from "@/utils/photoStorage";
 import type { AnySheetProps } from "@/contexts/SheetContext";
 import type { JalonType, MilestonesEditData } from "@/components/forms/MilestonesForm";
 import * as FileSystem from "expo-file-system";
@@ -170,7 +171,17 @@ export function useMomentsActions({
 
         const filename = `moment_${photoId}_${Date.now()}.jpg`;
         const localUri = FileSystem.cacheDirectory + filename;
-        const downloadResult = await FileSystem.downloadAsync(uri, localUri);
+        const source = await getAuthenticatedPhotoSource(uri);
+        if (!source) {
+          return {
+            success: false,
+            message: "Photo indisponible",
+          };
+        }
+
+        const downloadResult = await FileSystem.downloadAsync(source.uri, localUri, {
+          headers: source.headers,
+        });
 
         if (downloadResult.status === 200) {
           await MediaLibrary.createAssetAsync(downloadResult.uri);
