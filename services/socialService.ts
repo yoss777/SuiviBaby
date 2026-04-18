@@ -535,40 +535,49 @@ export const obtenirCommentCountsBatch = async (
  */
 export const ecouterCommentaires = (
   eventId: string,
+  childId: string,
   onUpdate: (info: CommentInfo) => void
 ): (() => void) => {
   let version = 0;
 
   const q = query(
     collection(db, "eventComments"),
+    where("childId", "==", childId),
     where("eventId", "==", eventId),
     orderBy("createdAt", "asc"),
     limit(500)
   );
 
-  return onSnapshot(q, (snapshot) => {
-    const currentVersion = ++version;
-    const comments = snapshot.docs.map(
-      (d) => ({ id: d.id, ...d.data() }) as EventComment
-    );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const currentVersion = ++version;
+      const comments = snapshot.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as EventComment
+      );
 
-    const userIds = [...new Set(comments.map((c) => c.userId))];
-    if (userIds.length === 0) {
-      onUpdate({ count: comments.length, comments });
-      return;
-    }
+      const userIds = [...new Set(comments.map((c) => c.userId))];
+      if (userIds.length === 0) {
+        onUpdate({ count: comments.length, comments });
+        return;
+      }
 
-    getUserNames(userIds).then((names) => {
-      if (currentVersion !== version) return; // Discard stale result
-      comments.forEach((comment) => {
-        const resolvedName = names.get(comment.userId);
-        if (resolvedName) {
-          comment.userName = resolvedName;
-        }
+      getUserNames(userIds).then((names) => {
+        if (currentVersion !== version) return; // Discard stale result
+        comments.forEach((comment) => {
+          const resolvedName = names.get(comment.userId);
+          if (resolvedName) {
+            comment.userName = resolvedName;
+          }
+        });
+        onUpdate({ count: comments.length, comments });
       });
-      onUpdate({ count: comments.length, comments });
-    });
-  });
+    },
+    (error) => {
+      console.warn("[SOCIAL] Listener commentaires impossible:", error);
+      onUpdate({ count: 0, comments: [] });
+    }
+  );
 };
 
 // ============================================

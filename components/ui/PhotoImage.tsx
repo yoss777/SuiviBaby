@@ -5,6 +5,8 @@ import { View } from "react-native";
 
 type PhotoImageProps = Omit<ExpoImageProps, "source"> & {
   photoRef?: string | null;
+  resizeMode?: ExpoImageProps["contentFit"];
+  fadeDuration?: number;
 };
 
 const RESOLVED_SOURCE_CACHE_TTL_MS = 50 * 60 * 1000;
@@ -30,6 +32,8 @@ export function PhotoImage({
   photoRef,
   style,
   onError,
+  resizeMode,
+  fadeDuration,
   ...props
 }: PhotoImageProps) {
   const immediateSource = useMemo<ImageSource | null>(() => {
@@ -98,6 +102,8 @@ export function PhotoImage({
       source={source}
       cachePolicy="memory-disk"
       priority="high"
+      contentFit={props.contentFit ?? resizeMode}
+      transition={props.transition ?? fadeDuration}
       style={style}
       onError={onError}
     />

@@ -113,19 +113,22 @@ const CommentContentText = ({
 const CommentItem = ({
   comment,
   isOwnComment,
-  isReply,
+  depth,
   onDelete,
   onReply,
   nc,
 }: {
   comment: EventComment;
   isOwnComment: boolean;
-  isReply: boolean;
+  depth: number;
   onDelete: (id: string) => void;
   onReply: (comment: EventComment) => void;
   nc: ReturnType<typeof getNeutralColors>;
 }) => {
   const [showDelete, setShowDelete] = useState(false);
+  const isReply = depth > 0;
+  const clampedDepth = Math.min(depth, 3);
+  const replyIndent = clampedDepth * 20;
   const avatarLetter = isOwnComment
     ? "M"
     : comment.userName.charAt(0).toUpperCase();
@@ -134,7 +137,7 @@ const CommentItem = ({
     <Pressable
       onLongPress={() => isOwnComment && setShowDelete(true)}
       onPress={() => setShowDelete(false)}
-      style={[styles.commentItem, isReply && styles.replyItem]}
+      style={[styles.commentItem, isReply && { paddingLeft: replyIndent }]}
     >
       <View
         style={[
@@ -213,25 +216,46 @@ const CommentItem = ({
 // Build threaded comment list: parent comments with their replies grouped below
 const buildThreadedComments = (
   comments: EventComment[],
-): { comment: EventComment; isReply: boolean }[] => {
-  const result: { comment: EventComment; isReply: boolean }[] = [];
-  const parentComments = comments.filter((c) => !c.replyToId);
+): { comment: EventComment; depth: number }[] => {
+  const result: { comment: EventComment; depth: number }[] = [];
+  const commentsById = new Map<string, EventComment>();
   const repliesByParent = new Map<string, EventComment[]>();
+  const rootComments: EventComment[] = [];
 
   comments.forEach((c) => {
-    if (c.replyToId) {
-      const list = repliesByParent.get(c.replyToId) || [];
-      list.push(c);
-      repliesByParent.set(c.replyToId, list);
+    if (c.id) {
+      commentsById.set(c.id, c);
     }
   });
 
-  parentComments.forEach((parent) => {
-    result.push({ comment: parent, isReply: false });
-    const replies = repliesByParent.get(parent.id!) || [];
+  comments.forEach((c) => {
+    if (c.replyToId && commentsById.has(c.replyToId)) {
+      const list = repliesByParent.get(c.replyToId) || [];
+      list.push(c);
+      repliesByParent.set(c.replyToId, list);
+    } else {
+      rootComments.push(c);
+    }
+  });
+
+  const appendBranch = (comment: EventComment, depth: number, ancestry: Set<string>) => {
+    result.push({ comment, depth });
+
+    if (!comment.id || ancestry.has(comment.id)) {
+      return;
+    }
+
+    const nextAncestry = new Set(ancestry);
+    nextAncestry.add(comment.id);
+
+    const replies = repliesByParent.get(comment.id) || [];
     replies.forEach((reply) => {
-      result.push({ comment: reply, isReply: true });
+      appendBranch(reply, depth + 1, nextAncestry);
     });
+  };
+
+  rootComments.forEach((rootComment) => {
+    appendBranch(rootComment, 0, new Set());
   });
 
   return result;
@@ -430,13 +454,13 @@ export const CommentsBottomSheet = ({
     if (!visible || !eventId) return;
 
     setIsLoading(true);
-    const unsubscribe = ecouterCommentaires(eventId, (info) => {
+    const unsubscribe = ecouterCommentaires(eventId, childId, (info) => {
       setCommentInfo(info);
       setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [visible, eventId]);
+  }, [visible, eventId, childId]);
 
   const handleClose = useCallback(() => {
     Keyboard.dismiss();
@@ -543,11 +567,11 @@ export const CommentsBottomSheet = ({
   );
 
   const renderComment = useCallback(
-    ({ item }: { item: { comment: EventComment; isReply: boolean } }) => (
+    ({ item }: { item: { comment: EventComment; depth: number } }) => (
       <CommentItem
         comment={item.comment}
         isOwnComment={item.comment.userId === currentUserId}
-        isReply={item.isReply}
+        depth={item.depth}
         onDelete={handleDeleteComment}
         onReply={handleReply}
         nc={nc}
@@ -808,10 +832,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingVertical: 12,
     alignItems: "flex-start",
-  },
-  replyItem: {
-    paddingLeft: 32,
-    paddingVertical: 8,
   },
   commentAvatar: {
     width: 36,

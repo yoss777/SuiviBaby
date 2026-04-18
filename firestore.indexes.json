@@ -93,6 +93,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "childId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "eventComments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "eventId",
           "order": "ASCENDING"
         },

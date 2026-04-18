@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated as RNAnimated,
   Dimensions,
   FlatList,
   InteractionManager,
@@ -238,6 +239,8 @@ export const SwipeGallery = ({
 
   // Current index in the gallery
   const [currentIndex, setCurrentIndex] = useState(onAddPhoto ? 1 : 0);
+  const wasVisibleRef = useRef(false);
+  const lastRequestedPhotoIdRef = useRef<string | null>(null);
 
   // Comments bottom sheet state
   const [commentsVisible, setCommentsVisible] = useState(false);
@@ -266,9 +269,12 @@ export const SwipeGallery = ({
       setCommentsVisible(false);
       setCommentsPhotoId(null);
       setActionSheetVisible(false);
+      setIsActionSheetMounted(false);
       setReportModalVisible(false);
+      actionSheetTranslateY.setValue(32);
+      actionSheetBackdropOpacity.setValue(0);
     }
-  }, [visible]);
+  }, [actionSheetBackdropOpacity, actionSheetTranslateY, visible]);
 
   // Calculate initial page index
   const computedInitialPage = useMemo(() => {
@@ -288,10 +294,17 @@ export const SwipeGallery = ({
   // we keep the current page to avoid a visual reset.
   useEffect(() => {
     if (!visible || initialIndex < 0 || photos.length === 0) {
+      if (!visible) {
+        wasVisibleRef.current = false;
+      }
       return;
     }
 
-    if (currentIndex !== computedInitialPage) {
+    const requestedPhotoId = photos[initialIndex]?.id ?? null;
+    const shouldReposition =
+      !wasVisibleRef.current || lastRequestedPhotoIdRef.current !== requestedPhotoId;
+
+    if (shouldReposition) {
       setCurrentIndex(computedInitialPage);
       requestAnimationFrame(() => {
         flatListRef.current?.scrollToIndex({
@@ -301,12 +314,15 @@ export const SwipeGallery = ({
       });
     }
 
+    wasVisibleRef.current = true;
+    lastRequestedPhotoIdRef.current = requestedPhotoId;
+
     // Mark requested photo as seen when opening.
     const item = galleryItems[computedInitialPage];
     if (item?.type === "photo" && onMarkSeen && newEventIds.has(item.photo.id)) {
       onMarkSeen(item.photo.id);
     }
-  }, [visible, initialIndex, photos, computedInitialPage, currentIndex, galleryItems, onMarkSeen, newEventIds]);
+  }, [visible, initialIndex, photos, computedInitialPage, galleryItems, onMarkSeen, newEventIds]);
 
   // Stable refs for viewable items callback
   const onMarkSeenRef = useRef(onMarkSeen);
@@ -500,29 +516,100 @@ export const SwipeGallery = ({
   // Report & hide state
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  const [isActionSheetMounted, setIsActionSheetMounted] = useState(false);
   const reportTargetRef = useRef<{ photoId: string; uri: string } | null>(null);
+  const actionSheetTranslateY = useRef(new RNAnimated.Value(32)).current;
+  const actionSheetBackdropOpacity = useRef(new RNAnimated.Value(0)).current;
+
+  useEffect(() => {
+    if (actionSheetVisible) {
+      setIsActionSheetMounted(true);
+      actionSheetTranslateY.setValue(32);
+      actionSheetBackdropOpacity.setValue(0);
+
+      RNAnimated.parallel([
+        RNAnimated.spring(actionSheetTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 11,
+        }),
+        RNAnimated.timing(actionSheetBackdropOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      return;
+    }
+
+    if (!isActionSheetMounted) {
+      return;
+    }
+
+    RNAnimated.parallel([
+      RNAnimated.timing(actionSheetTranslateY, {
+        toValue: 32,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+      RNAnimated.timing(actionSheetBackdropOpacity, {
+        toValue: 0,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        setIsActionSheetMounted(false);
+      }
+    });
+  }, [
+    actionSheetBackdropOpacity,
+    actionSheetTranslateY,
+    actionSheetVisible,
+    isActionSheetMounted,
+  ]);
+
+  const closeActionSheet = useCallback(() => {
+    setActionSheetVisible(false);
+  }, []);
 
   const openActionSheet = useCallback((photoId: string, uri: string) => {
     reportTargetRef.current = { photoId, uri };
     setActionSheetVisible(true);
   }, []);
 
+  const handleEditFromActionSheet = useCallback(() => {
+    closeActionSheet();
+    // Let the sheet close before we transition to the edit form.
+    InteractionManager.runAfterInteractions(() => {
+      handleEdit();
+    });
+  }, [closeActionSheet, handleEdit]);
+
+  const handleDownloadFromActionSheet = useCallback(() => {
+    const target = reportTargetRef.current;
+    if (!target) return;
+    closeActionSheet();
+    void handleDownload(target.photoId, target.uri);
+  }, [closeActionSheet, handleDownload]);
+
   const handleHideForMe = useCallback(async () => {
     const target = reportTargetRef.current;
     if (!target) return;
-    setActionSheetVisible(false);
+    closeActionSheet();
     try {
       await hidePhoto(target.photoId);
       showLocalToast("Photo masquée");
     } catch {
       showLocalToast("Impossible de masquer la photo");
     }
-  }, [showLocalToast]);
+  }, [closeActionSheet, showLocalToast]);
 
   const handleOpenReport = useCallback(() => {
-    setActionSheetVisible(false);
+    closeActionSheet();
     setReportModalVisible(true);
-  }, []);
+  }, [closeActionSheet]);
 
   const handleReportSubmit = useCallback(
     async (reason: ContentReportReason, message?: string) => {
@@ -765,6 +852,12 @@ export const SwipeGallery = ({
   );
 
   const currentItem = galleryItems[currentIndex] ?? galleryItems[0];
+  const shouldRenderGalleryLayer =
+    visible || isActionSheetMounted || reportModalVisible;
+
+  if (!shouldRenderGalleryLayer) {
+    return null;
+  }
 
   return (
     <Modal
@@ -804,19 +897,6 @@ export const SwipeGallery = ({
 
                 {currentItem.type === "photo" ? (
                   <View style={styles.headerActions}>
-                    {onEdit && (
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.headerButton,
-                          pressed && styles.headerButtonPressed,
-                        ]}
-                        onPress={handleEdit}
-                        accessibilityRole="button"
-                        accessibilityLabel="Modifier la photo"
-                      >
-                        <FontAwesome6 name="pen" size={16} color="#fff" />
-                      </Pressable>
-                    )}
                     <Pressable
                       style={({ pressed }) => [
                         styles.headerButton,
@@ -832,22 +912,6 @@ export const SwipeGallery = ({
                       accessibilityLabel="Options photo"
                     >
                       <FontAwesome6 name="ellipsis-vertical" size={16} color="#fff" />
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.headerButton,
-                        pressed && styles.headerButtonPressed,
-                      ]}
-                      onPress={() =>
-                        handleDownload(
-                          currentItem.photo.id,
-                          currentItem.photo.uri,
-                        )
-                      }
-                      accessibilityRole="button"
-                      accessibilityLabel="Télécharger la photo"
-                    >
-                      <FontAwesome6 name="download" size={16} color="#fff" />
                     </Pressable>
                   </View>
                 ) : (
@@ -969,61 +1033,126 @@ export const SwipeGallery = ({
           </Animated.View>
         </GestureDetector>
       </GestureHandlerRootView>
-      {/* Action Sheet — Hide / Report / Cancel */}
+      {/* Action Sheet — Photo actions */}
       <Modal
-        visible={actionSheetVisible}
+        visible={visible && isActionSheetMounted}
         transparent
-        animationType="fade"
-        onRequestClose={() => setActionSheetVisible(false)}
+        animationType="none"
+        onRequestClose={closeActionSheet}
       >
-        <Pressable
+        <View
           style={actionSheetStyles.overlay}
-          onPress={() => setActionSheetVisible(false)}
         >
-          <View style={actionSheetStyles.sheet}>
+          <RNAnimated.View
+            style={[
+              actionSheetStyles.backdrop,
+              { opacity: actionSheetBackdropOpacity },
+            ]}
+          >
             <Pressable
-              style={({ pressed }) => [
-                actionSheetStyles.option,
-                pressed && actionSheetStyles.optionPressed,
+              style={StyleSheet.absoluteFill}
+              onPress={closeActionSheet}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer les options photo"
+            />
+          </RNAnimated.View>
+
+          <RNAnimated.View
+            style={[
+              actionSheetStyles.sheetContainer,
+              { transform: [{ translateY: actionSheetTranslateY }] },
+            ]}
+          >
+            <View
+              style={[
+                actionSheetStyles.sheet,
+                { paddingBottom: Math.max(insets.bottom, 12) },
               ]}
-              onPress={handleHideForMe}
             >
-              <FontAwesome6 name="eye-slash" size={16} color="#4b5563" />
-              <Text style={actionSheetStyles.optionText}>
-                Masquer cette photo pour moi
-              </Text>
-            </Pressable>
-            <View style={actionSheetStyles.separator} />
-            <Pressable
-              style={({ pressed }) => [
-                actionSheetStyles.option,
-                pressed && actionSheetStyles.optionPressed,
-              ]}
-              onPress={handleOpenReport}
-            >
-              <FontAwesome6 name="flag" size={16} color="#dc2626" />
-              <Text style={[actionSheetStyles.optionText, { color: "#dc2626" }]}>
-                Signaler un contenu sensible
-              </Text>
-            </Pressable>
-            <View style={actionSheetStyles.separatorLarge} />
-            <Pressable
-              style={({ pressed }) => [
-                actionSheetStyles.option,
-                pressed && actionSheetStyles.optionPressed,
-              ]}
-              onPress={() => setActionSheetVisible(false)}
-            >
-              <Text style={[actionSheetStyles.optionText, actionSheetStyles.cancelText]}>
-                Annuler
-              </Text>
-            </Pressable>
-          </View>
-        </Pressable>
+              <View style={actionSheetStyles.handleContainer}>
+                <View style={actionSheetStyles.handle} />
+              </View>
+              <View style={actionSheetStyles.header}>
+                <Text style={actionSheetStyles.headerTitle}>Options photo</Text>
+              </View>
+              {onEdit && (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [
+                      actionSheetStyles.option,
+                      pressed && actionSheetStyles.optionPressed,
+                    ]}
+                    onPress={handleEditFromActionSheet}
+                  >
+                    <FontAwesome6 name="pen" size={16} color="#1f2937" />
+                    <Text style={actionSheetStyles.optionText}>
+                      Modifier
+                    </Text>
+                  </Pressable>
+                  <View style={actionSheetStyles.separator} />
+                </>
+              )}
+              {onDownload && (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [
+                      actionSheetStyles.option,
+                      pressed && actionSheetStyles.optionPressed,
+                    ]}
+                    onPress={handleDownloadFromActionSheet}
+                  >
+                    <FontAwesome6 name="download" size={16} color="#1f2937" />
+                    <Text style={actionSheetStyles.optionText}>
+                      Télécharger
+                    </Text>
+                  </Pressable>
+                  <View style={actionSheetStyles.separator} />
+                </>
+              )}
+              <Pressable
+                style={({ pressed }) => [
+                  actionSheetStyles.option,
+                  pressed && actionSheetStyles.optionPressed,
+                ]}
+                onPress={handleHideForMe}
+              >
+                <FontAwesome6 name="eye-slash" size={16} color="#4b5563" />
+                <Text style={actionSheetStyles.optionText}>
+                  Masquer cette photo pour moi
+                </Text>
+              </Pressable>
+              <View style={actionSheetStyles.separator} />
+              <Pressable
+                style={({ pressed }) => [
+                  actionSheetStyles.option,
+                  pressed && actionSheetStyles.optionPressed,
+                ]}
+                onPress={handleOpenReport}
+              >
+                <FontAwesome6 name="flag" size={16} color="#dc2626" />
+                <Text style={[actionSheetStyles.optionText, { color: "#dc2626" }]}>
+                  Signaler un contenu sensible
+                </Text>
+              </Pressable>
+              <View style={actionSheetStyles.separatorLarge} />
+              <Pressable
+                style={({ pressed }) => [
+                  actionSheetStyles.option,
+                  pressed && actionSheetStyles.optionPressed,
+                ]}
+                onPress={closeActionSheet}
+              >
+                <Text style={[actionSheetStyles.optionText, actionSheetStyles.cancelText]}>
+                  Annuler
+                </Text>
+              </Pressable>
+            </View>
+          </RNAnimated.View>
+        </View>
       </Modal>
       {/* Report Modal */}
       <ReportModal
-        visible={reportModalVisible}
+        visible={visible && reportModalVisible}
         onSubmit={handleReportSubmit}
         onClose={() => setReportModalVisible(false)}
       />
@@ -1047,9 +1176,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     alignItems: "center",
     justifyContent: "center",
@@ -1072,9 +1201,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     alignItems: "center",
     justifyContent: "center",
@@ -1311,15 +1440,43 @@ const styles = StyleSheet.create({
 const actionSheetStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "flex-end",
-    padding: 12,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  sheetContainer: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: "hidden",
+    minHeight: 220,
   },
   sheet: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: 8,
+  },
+  handleContainer: {
+    alignItems: "center",
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#d1d5db",
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
   },
   option: {
     flexDirection: "row",
