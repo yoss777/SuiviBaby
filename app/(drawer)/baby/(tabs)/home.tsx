@@ -25,12 +25,15 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
+import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
 import { isValidDate, toDate as parseDate } from "@/utils/date";
+import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { getPreferencesCache, getPermissionsCache } from "@/services/userPreferencesCache";
@@ -730,6 +733,29 @@ export default function HomeDashboard() {
     }
   }, [activeChild?.id, setFirestoreEvents]);
 
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      const depuis = new Date();
+      depuis.setDate(depuis.getDate() - 1);
+      depuis.setHours(0, 0, 0, 0);
+      const jusqu = new Date();
+      jusqu.setDate(jusqu.getDate() + 1);
+      jusqu.setHours(0, 0, 0, 0);
+      const jusquInclusive = new Date(jusqu.getTime() - 1);
+      return obtenirEvenements(activeChild.id, {
+        type: getTodayTypes() as any,
+        depuis,
+        jusqu: jusquInclusive,
+        source: "server",
+      });
+    },
+    apply: (freshEvents) => {
+      setFirestoreEvents(freshEvents);
+    },
+  });
+
   const openSheet = useCallback(
     (props: Parameters<typeof openSheetRaw>[0]) => {
       openSheetRaw({
@@ -968,10 +994,10 @@ export default function HomeDashboard() {
             event.duree ??
             (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
 
-          const locationLabel =
-            event.location === "autre" && event.note
-              ? event.note
-              : event.location;
+          const locationLabel = formatSleepLocationWithNote(
+            event.location,
+            event.note,
+          );
           const parts = [
             end ? formatDuration(duration) : null, // Only show duration if sleep is finished
             locationLabel,
@@ -1743,7 +1769,24 @@ export default function HomeDashboard() {
     [activeChild?.id, sommeilEnCours, showToast],
   );
 
+  const stopTimedEventWithUndo = useStopTimedEventWithUndo<any>({
+    childId: activeChild?.id,
+    getSuccessLabel: (event, { isUnderOneMinute }) => {
+      const shortSuffix = isUnderOneMinute ? " (moins d'1 min)" : "";
+      if (event.type === "sommeil") {
+        return `${event.isNap ? "Sieste terminée" : "Nuit terminée"}${shortSuffix}`;
+      }
+      return `Promenade terminée${shortSuffix}`;
+    },
+  });
+
+  // Tap direct — écrit heureFin/duree immédiatement, sans passer par la sheet.
+  // Toast Annuler (5 s) : rouvre l'event via 2ᵉ écriture (heureFin/duree → null).
   const handleStopSleep = useCallback(() => {
+    stopTimedEventWithUndo(sommeilEnCours);
+  }, [sommeilEnCours, stopTimedEventWithUndo]);
+
+  const handleEditSleepInSheet = useCallback(() => {
     if (!activeChild?.id || !sommeilEnCours?.id) return;
     if (sommeilEnCours.id.startsWith('__optimistic_')) {
       showToast('Enregistrement en cours...');
@@ -1751,7 +1794,6 @@ export default function HomeDashboard() {
     }
     const start = toDate(sommeilEnCours.heureDebut);
 
-    // Open the form with heureFin pre-filled so it's ready to terminate
     openSheet({
       ownerId: headerOwnerId.current,
       formType: "routines",
@@ -1762,7 +1804,6 @@ export default function HomeDashboard() {
         type: "sommeil",
         date: start,
         heureDebut: start,
-        heureFin: new Date(),
         isNap: sommeilEnCours.isNap,
         location: sommeilEnCours.location,
         quality: sommeilEnCours.quality,
@@ -1785,6 +1826,10 @@ export default function HomeDashboard() {
   }, [activeChild?.id, promenadeEnCours, showToast]);
 
   const handleStopPromenade = useCallback(() => {
+    stopTimedEventWithUndo(promenadeEnCours);
+  }, [promenadeEnCours, stopTimedEventWithUndo]);
+
+  const handleEditPromenadeInSheet = useCallback(() => {
     if (!activeChild?.id || !promenadeEnCours?.id) return;
     if (promenadeEnCours.id.startsWith('__optimistic_')) {
       showToast('Enregistrement en cours...');
@@ -1801,12 +1846,7 @@ export default function HomeDashboard() {
         typeActivite: "promenade",
         date: start,
         heureDebut: start,
-        heureFin: new Date(),
-        duree: Math.max(
-          1,
-          Math.round((Date.now() - start.getTime()) / 60000),
-        ),
-        description: promenadeEnCours.description,
+        description: promenadeEnCours.description ?? promenadeEnCours.note,
       },
       promenadeEnCours,
     });
@@ -1845,7 +1885,6 @@ export default function HomeDashboard() {
 
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === "active") {
-        // On app foreground, update time and check day change
         const now = new Date();
         setCurrentTime(now);
         const newDay = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
@@ -2711,6 +2750,7 @@ export default function HomeDashboard() {
                   }
                   onStartSleep={handleStartSleep}
                   onStopSleep={handleStopSleep}
+                  onEditSleep={handleEditSleepInSheet}
                   showStopButton={canManageContent}
                   colorScheme={colorScheme}
                   sharedPulseAnim={sharedPulseAnim}
@@ -2733,6 +2773,7 @@ export default function HomeDashboard() {
                   }
                   onStart={handleStartPromenade}
                   onStop={handleStopPromenade}
+                  onEdit={handleEditPromenadeInSheet}
                   showStopButton={canManageContent}
                   colorScheme={colorScheme}
                   sharedPulseAnim={sharedPulseAnim}

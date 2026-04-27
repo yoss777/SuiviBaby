@@ -15,12 +15,15 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
+import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   ecouterEvenements,
   getNextEventDateBefore,
   hasMoreEventsBefore,
+  obtenirEvenements,
   supprimerEvenement,
   BainEvent,
   NettoyageNezEvent,
@@ -60,6 +63,7 @@ import {
   SleepMode,
 } from "@/components/forms/RoutinesForm";
 import { isValidDate, toDate } from "@/utils/date";
+import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 
 // Enable LayoutAnimation on Android
 if (
@@ -519,6 +523,30 @@ export default function RoutinesScreen() {
       ...latestNezRef.current,
     ]);
   }, [setFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      return obtenirEvenements(activeChild.id, {
+        type: ["sommeil", "bain", "nettoyage_nez"],
+        depuis: startOfRange,
+        jusqu: endOfRange,
+        source: "server",
+      });
+    },
+    apply: (freshEvents) => {
+      latestSommeilsRef.current = freshEvents.filter((event) => event.type === "sommeil") as RoutineEvent[];
+      latestBainsRef.current = freshEvents.filter((event) => event.type === "bain") as RoutineEvent[];
+      latestNezRef.current = freshEvents.filter((event) => event.type === "nettoyage_nez") as RoutineEvent[];
+      pushRoutineFirestoreEvents();
+    },
+  });
 
   // ============================================
   // DATA LISTENERS
@@ -1172,7 +1200,17 @@ export default function RoutinesScreen() {
   // ============================================
   // STOP ONGOING SLEEP
   // ============================================
+  const stopTimedSleepWithUndo = useStopTimedEventWithUndo<SommeilEvent & { id: string }>({
+    childId: activeChild?.id,
+    getSuccessLabel: (event, { isUnderOneMinute }) =>
+      `${event.isNap ? "Sieste terminée" : "Nuit terminée"}${isUnderOneMinute ? " (moins d'1 min)" : ""}`,
+  });
+
   const handleStopSleep = useCallback(() => {
+    stopTimedSleepWithUndo(sommeilEnCours);
+  }, [sommeilEnCours, stopTimedSleepWithUndo]);
+
+  const handleEditSleepInSheet = useCallback(() => {
     if (!activeChild?.id || !sommeilEnCours?.id) return;
     if (sommeilEnCours.id.startsWith('__optimistic_')) {
       showToast('Enregistrement en cours...');
@@ -1180,8 +1218,6 @@ export default function RoutinesScreen() {
     }
     const start = toDate(sommeilEnCours.heureDebut);
 
-    // Open form with heureFin pre-filled — don't modify base until user confirms
-    // (iso home.tsx handleStopSleep pattern)
     openSheet({
       ownerId: sheetOwnerId,
       formType: "routines",
@@ -1192,7 +1228,6 @@ export default function RoutinesScreen() {
         type: "sommeil",
         date: start,
         heureDebut: start,
-        heureFin: new Date(),
         isNap: sommeilEnCours.isNap,
         location: sommeilEnCours.location,
         quality: sommeilEnCours.quality,
@@ -1216,7 +1251,7 @@ export default function RoutinesScreen() {
         (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
       const parts = [
         formatDuration(duration),
-        event.location,
+        formatSleepLocationWithNote(event.location, event.note),
         event.quality,
       ].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;
@@ -1272,7 +1307,7 @@ export default function RoutinesScreen() {
     const isSleep = event.type === "sommeil";
     const sleepEnd = isSleep && event.heureFin ? toDate(event.heureFin) : null;
     const sleepMeta = isSleep
-      ? [event.location, event.quality].filter(Boolean)
+      ? [formatSleepLocationWithNote(event.location, event.note), event.quality].filter(Boolean)
       : [];
     const sleepIsOngoing = isSleep && !sleepEnd;
     const sleepDuration =
@@ -1684,6 +1719,7 @@ export default function RoutinesScreen() {
               startTime={formatTime(toDate(sommeilEnCours.heureDebut))}
               onStartSleep={() => {}}
               onStopSleep={handleStopSleep}
+              onEditSleep={handleEditSleepInSheet}
               colorScheme={colorScheme}
             />
           </View>

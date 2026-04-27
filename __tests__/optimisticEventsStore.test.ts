@@ -4,10 +4,12 @@ import {
   buildEventFingerprint,
   confirmOptimistic,
   failOptimistic,
+  getOptimisticEntries,
   markOptimisticQueued,
   mergeWithFirestoreEvents,
   resetOptimisticStoreForTests,
   setOnFailure,
+  updateOptimisticCreate,
 } from "@/services/optimisticEventsStore";
 
 describe("optimisticEventsStore", () => {
@@ -50,6 +52,41 @@ describe("optimisticEventsStore", () => {
     const nextMerge = mergeWithFirestoreEvents([firestoreEvent], childId);
     expect(nextMerge).toHaveLength(1);
     expect(nextMerge[0].id).toBe("real-create-1");
+  });
+
+  it("updates a pending optimistic create locally", () => {
+    const childId = "child-1";
+    const tempId = "__optimistic_sleep_create";
+    const start = new Date("2026-03-28T08:00:00.000Z");
+    const end = new Date("2026-03-28T08:05:00.000Z");
+
+    addOptimisticCreate(
+      childId,
+      {
+        type: "sommeil",
+        childId,
+        date: start,
+        heureDebut: start,
+        isNap: true,
+      },
+      tempId,
+    );
+
+    const updated = updateOptimisticCreate(tempId, {
+      heureFin: end,
+      duree: 5,
+    });
+
+    expect(updated).toBe(true);
+    const merged = mergeWithFirestoreEvents([], childId);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual(
+      expect.objectContaining({
+        id: tempId,
+        heureFin: end,
+        duree: 5,
+      }),
+    );
   });
 
   it("keeps a queued offline update visible until Firestore catches up", () => {
@@ -203,6 +240,52 @@ describe("optimisticEventsStore", () => {
     );
     expect(afterSnapshot).toHaveLength(1);
     expect(afterSnapshot[0].duree).toBe(45);
+  });
+
+  it("confirms only the targeted update operation when two updates share the same event id", () => {
+    const childId = "child-1";
+    const eventId = "event-double-update";
+    const previousEvent = {
+      id: eventId,
+      type: "sommeil",
+      childId,
+      date: new Date("2026-03-28T08:00:00.000Z"),
+      heureDebut: new Date("2026-03-28T08:00:00.000Z"),
+    };
+    const firstUpdate = {
+      ...previousEvent,
+      heureFin: new Date("2026-03-28T08:30:00.000Z"),
+      duree: 30,
+    };
+    const secondUpdate = {
+      id: eventId,
+      childId,
+      heureFin: null,
+      duree: null,
+    };
+
+    const firstOperationId = addOptimisticUpdate(
+      eventId,
+      childId,
+      firstUpdate,
+      previousEvent,
+    );
+    const secondOperationId = addOptimisticUpdate(
+      eventId,
+      childId,
+      secondUpdate,
+      firstUpdate,
+    );
+
+    confirmOptimistic(firstOperationId);
+
+    const entries = getOptimisticEntries(childId);
+    expect(entries.find((entry) => entry.tempId === firstOperationId)?.status).toBe(
+      "confirmed",
+    );
+    expect(entries.find((entry) => entry.tempId === secondOperationId)?.status).toBe(
+      "pending",
+    );
   });
 
   it("does not keep stale untouched time fields from the optimistic previous event", () => {

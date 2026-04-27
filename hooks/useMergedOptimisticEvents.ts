@@ -17,7 +17,20 @@ type UseMergedOptimisticEventsResult<T> = {
     events: any[],
     options?: { preserveExisting?: boolean },
   ) => void;
+  /**
+   * Force une re-fusion locale (firestore events + optimistic store) et
+   * reset le fingerprint pour garantir une re-émission vers React.
+   *
+   * ⚠️ NE DÉCLENCHE AUCUN REFETCH FIRESTORE. Si la donnée en mémoire est
+   * obsolète (listener endormi, cache stale après background prolongé),
+   * appelez `obtenirEvenements(...)` puis `setFirestoreEvents(fresh)`
+   * pour un vrai refresh serveur. Voir home.tsx `handleAppStateChange`.
+   *
+   * Alias exposé : `recomputeMerged`.
+   */
   refreshMerged: () => void;
+  /** Alias honnête de `refreshMerged` — même fonction, nom non trompeur. */
+  recomputeMerged: () => void;
 };
 
 export function mergeFirestoreSnapshots(current: any[], incoming: any[]): any[] {
@@ -101,6 +114,9 @@ export function useMergedOptimisticEvents<T = any>({
     [scheduleMerge],
   );
 
+  // Re-fusion locale uniquement. N'appelle PAS Firestore — ne corrige pas un
+  // cache stale. Pour un vrai refresh serveur, refetch via obtenirEvenements
+  // puis appeler setFirestoreEvents(fresh).
   const refreshMerged = useCallback(() => {
     lastFingerprintRef.current = "";
     scheduleMerge();
@@ -132,5 +148,6 @@ export function useMergedOptimisticEvents<T = any>({
     mergedEvents,
     setFirestoreEvents,
     refreshMerged,
+    recomputeMerged: refreshMerged,
   };
 }

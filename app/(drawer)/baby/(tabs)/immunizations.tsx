@@ -13,6 +13,7 @@ import { useModal } from "@/contexts/ModalContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import {
   ajouterEvenementOptimistic,
@@ -20,6 +21,7 @@ import {
   ecouterEvenements,
   getNextEventDateBefore,
   hasMoreEventsBefore,
+  obtenirEvenements,
   supprimerEvenement,
 } from "@/services/eventsService";
 import { normalizeQuery } from "@/utils/text";
@@ -283,6 +285,13 @@ export default function ImmunizationsScreen() {
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
+  const pushImmunoFirestoreEvents = useCallback(() => {
+    const merged = [
+      ...latestVitaminesRef.current,
+      ...latestVaccinsRef.current,
+    ].sort((a, b) => getDateTime(b.date) - getDateTime(a.date));
+    setFirestoreEvents(merged);
+  }, [setFirestoreEvents]);
 
   // ============================================
   // EFFECTS - HEADER
@@ -525,13 +534,7 @@ export default function ImmunizationsScreen() {
     startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
 
     const mergeAndSortImmunos = () => {
-      const merged = [
-        ...latestVitaminesRef.current,
-        ...latestVaccinsRef.current,
-      ].sort(
-        (a, b) => getDateTime(b.date) - getDateTime(a.date),
-      );
-      setFirestoreEvents(merged);
+      pushImmunoFirestoreEvents();
       if (
         pendingLoadMoreRef.current > 0 &&
         versionAtSubscribe === loadMoreVersionRef.current
@@ -573,7 +576,34 @@ export default function ImmunizationsScreen() {
       unsubscribeVitamines();
       unsubscribeVaccins();
     };
-  }, [activeChild?.id, daysWindow, rangeEndDate, setFirestoreEvents]);
+  }, [activeChild?.id, daysWindow, rangeEndDate, pushImmunoFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      return obtenirEvenements(activeChild.id, {
+        type: ["vitamine", "vaccin"],
+        depuis: startOfRange,
+        jusqu: endOfRange,
+        source: "server",
+      });
+    },
+    apply: (freshEvents) => {
+      latestVitaminesRef.current = freshEvents
+        .filter((event) => event.type === "vitamine")
+        .map((event) => ({ ...event, type: "vitamine" as ImmunoType })) as Immuno[];
+      latestVaccinsRef.current = freshEvents
+        .filter((event) => event.type === "vaccin")
+        .map((event) => ({ ...event, type: "vaccin" as ImmunoType })) as Immuno[];
+      pushImmunoFirestoreEvents();
+    },
+  });
 
   useEffect(() => {
     if (!activeChild?.id) return;

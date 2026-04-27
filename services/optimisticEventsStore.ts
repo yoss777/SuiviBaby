@@ -73,6 +73,19 @@ export function addOptimisticCreate(childId: string, event: any, tempId: string)
   notify();
 }
 
+export function updateOptimisticCreate(tempId: string, patch: any): boolean {
+  const entry = entries.get(tempId);
+  if (!entry || entry.operation !== 'create') return false;
+
+  entry.event = {
+    ...entry.event,
+    ...patch,
+    id: tempId,
+  };
+  notify();
+  return true;
+}
+
 /**
  * Register an optimistic update. The `eventId` is the real Firestore id of the
  * event being updated.
@@ -82,7 +95,7 @@ export function addOptimisticUpdate(
   childId: string,
   newEvent: any,
   previousEvent: any,
-): void {
+): string {
   const tempId = generateTempId();
   entries.set(tempId, {
     tempId,
@@ -95,6 +108,7 @@ export function addOptimisticUpdate(
     createdAt: Date.now(),
   });
   notify();
+  return tempId;
 }
 
 /**
@@ -109,10 +123,11 @@ export function confirmOptimistic(tempIdOrEventId: string, realId?: string): voi
     entry.status = 'confirmed';
     entry.confirmedAt = Date.now();
     if (realId) entry.realId = realId;
+    notify();
+    return;
   }
 
-  // Also confirm ALL entries matching by realId (handles rapid edits to the
-  // same event where multiple optimistic entries share the same realId).
+  // Legacy fallback: older call sites passed the Firestore event id for updates.
   for (const e of entries.values()) {
     if (e.realId === tempIdOrEventId || (realId && e.realId === realId)) {
       e.status = 'confirmed';

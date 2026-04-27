@@ -10,9 +10,10 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useMomentsNotification, NotificationType } from "@/contexts/MomentsNotificationContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useHiddenPhotos } from "@/hooks/useHiddenPhotos";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { ecouterEvenements } from "@/services/eventsService";
+import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
 import { JalonEvent } from "@/services/eventsService";
 import { getAuthenticatedPhotoSource } from "@/utils/photoStorage";
 import {
@@ -660,6 +661,23 @@ export default function GalleryScreen() {
 
     return () => unsubscribe();
   }, [activeChild?.id, retryCount]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      return obtenirEvenements(activeChild.id, {
+        type: "jalon",
+        source: "server",
+      }) as Promise<MilestoneEventWithId[]>;
+    },
+    apply: (freshEvents) => {
+      if (!isMountedRef.current) return;
+      setEvents(freshEvents);
+      setLoaded(true);
+      setLoadError(false);
+    },
+  });
 
   // Stable keys for dependency tracking
   const photoIdsKey = useMemo(

@@ -13,8 +13,9 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
-import { ecouterEvenements } from "@/services/eventsService";
+import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -1183,6 +1184,26 @@ export default function CroissanceScreen() {
       unsubscribe();
     };
   }, [activeChild?.id, refreshTick, setFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      return obtenirEvenements(activeChild.id, {
+        type: "croissance",
+        source: "server",
+      }) as Promise<CroissanceEntry[]>;
+    },
+    apply: (freshEvents) => {
+      const normalized = freshEvents
+        .map((entry) => ({
+          ...entry,
+          type: "croissance" as const,
+        }))
+        .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+      setFirestoreEvents(normalized as CroissanceEntry[]);
+    },
+  });
 
   useEffect(() => {
     setSoftDeletedIds((prev) => {

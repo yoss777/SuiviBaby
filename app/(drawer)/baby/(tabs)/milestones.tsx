@@ -17,6 +17,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -24,6 +25,7 @@ import {
   ecouterEvenements,
   getNextEventDateBefore,
   hasMoreEventsBefore,
+  obtenirEvenements,
   supprimerJalon,
 } from "@/services/eventsService";
 import { JalonEvent } from "@/services/eventsService";
@@ -617,6 +619,27 @@ export default function MilestonesScreen() {
       unsubscribe();
     };
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey, setFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      return obtenirEvenements(activeChild.id, {
+        type: "jalon",
+        depuis: startOfRange,
+        jusqu: endOfRange,
+        source: "server",
+      }) as Promise<MilestoneEventWithId[]>;
+    },
+    apply: (freshEvents) => {
+      setFirestoreEvents(freshEvents);
+    },
+  });
 
   useEffect(() => {
     setSoftDeletedIds((prev) => {

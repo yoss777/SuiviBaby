@@ -15,13 +15,16 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
+import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterEvenements,
   getNextEventDateBefore,
   hasMoreEventsBefore,
+  obtenirEvenements,
   supprimerEvenement,
   ActiviteEvent,
 } from "@/services/eventsService";
@@ -607,6 +610,27 @@ export default function ActivitiesScreen() {
     };
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey, setFirestoreEvents]);
 
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      return obtenirEvenements(activeChild.id, {
+        type: "activite",
+        depuis: startOfRange,
+        jusqu: endOfRange,
+        source: "server",
+      }) as Promise<ActivityEventWithId[]>;
+    },
+    apply: (freshEvents) => {
+      setFirestoreEvents(freshEvents);
+    },
+  });
+
   useEffect(() => {
     setSoftDeletedIds((prev) => {
       if (prev.size === 0) return prev;
@@ -1134,13 +1158,24 @@ export default function ActivitiesScreen() {
     setBatchDeleteConfirm({ visible: false, ids: [] });
   }, []);
 
-  // Stop ongoing promenade (iso handleStopSleep in routines.tsx)
+  const stopTimedPromenadeWithUndo = useStopTimedEventWithUndo<ActivityEventWithId>({
+    childId: activeChild?.id,
+    getSuccessLabel: (_event, { isUnderOneMinute }) =>
+      `Promenade terminée${isUnderOneMinute ? " (moins d'1 min)" : ""}`,
+  });
+
   const handleStopPromenade = useCallback(() => {
+    stopTimedPromenadeWithUndo(promenadeEnCours);
+  }, [promenadeEnCours, stopTimedPromenadeWithUndo]);
+
+  const handleEditPromenadeInSheet = useCallback(() => {
     if (!activeChild?.id || !promenadeEnCours) return;
+    if (promenadeEnCours.id.startsWith('__optimistic_')) {
+      showToast('Enregistrement en cours...');
+      return;
+    }
     const start = toDate(promenadeEnCours.heureDebut);
 
-    // Open form with heureFin pre-filled — don't modify base until user confirms
-    // (iso home.tsx handleStopPromenade pattern)
     openSheet({
       ownerId: sheetOwnerId,
       formType: "activities",
@@ -1150,13 +1185,11 @@ export default function ActivitiesScreen() {
         typeActivite: "promenade",
         date: start,
         heureDebut: start,
-        heureFin: new Date(),
-        duree: Math.max(1, Math.round((Date.now() - start.getTime()) / 60000)),
-        description: (promenadeEnCours as any).description,
+        description: (promenadeEnCours as any).description ?? (promenadeEnCours as any).note,
       },
       promenadeEnCours: { id: promenadeEnCours.id },
     });
-  }, [activeChild?.id, promenadeEnCours, openSheet]);
+  }, [activeChild?.id, promenadeEnCours, openSheet, showToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -1494,6 +1527,7 @@ export default function ActivitiesScreen() {
                 openAddModal("promenade");
               }}
               onStop={handleStopPromenade}
+              onEdit={handleEditPromenadeInSheet}
               colorScheme={colorScheme}
             />
           </View>

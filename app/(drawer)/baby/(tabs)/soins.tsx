@@ -15,12 +15,14 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   ecouterEvenements,
   getNextEventDateBefore,
   hasMoreEventsBefore,
+  obtenirEvenements,
   supprimerEvenement,
 } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
@@ -564,6 +566,32 @@ export default function SoinsScreen() {
       ...latestVitaminesRef.current,
     ]);
   }, [setFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      return obtenirEvenements(activeChild.id, {
+        type: ["temperature", "medicament", "symptome", "vaccin", "vitamine"],
+        depuis: startOfRange,
+        jusqu: endOfRange,
+        source: "server",
+      });
+    },
+    apply: (freshEvents) => {
+      latestTemperaturesRef.current = freshEvents.filter((event) => event.type === "temperature") as HealthEvent[];
+      latestMedicamentsRef.current = freshEvents.filter((event) => event.type === "medicament") as HealthEvent[];
+      latestSymptomesRef.current = freshEvents.filter((event) => event.type === "symptome") as HealthEvent[];
+      latestVaccinsRef.current = freshEvents.filter((event) => event.type === "vaccin") as HealthEvent[];
+      latestVitaminesRef.current = freshEvents.filter((event) => event.type === "vitamine") as HealthEvent[];
+      pushHealthFirestoreEvents();
+    },
+  });
 
   // ============================================
   // DATA LISTENERS

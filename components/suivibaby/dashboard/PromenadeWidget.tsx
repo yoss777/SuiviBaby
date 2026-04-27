@@ -21,6 +21,8 @@ export interface PromenadeWidgetProps {
   startTime?: string;
   onStart: () => void;
   onStop: () => void;
+  /** Bouton crayon → ouvre la sheet d'édition (ajuster heureFin/note avant écriture). */
+  onEdit?: () => void;
   showStopButton?: boolean;
   colorScheme?: "light" | "dark";
   sharedPulseAnim?: Animated.Value;
@@ -40,6 +42,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
   startTime,
   onStart,
   onStop,
+  onEdit,
   showStopButton = true,
   colorScheme = "light",
   sharedPulseAnim,
@@ -52,6 +55,10 @@ export const PromenadeWidget = memo(function PromenadeWidget({
   const ownPulseAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = sharedPulseAnim ?? ownPulseAnim;
   const busy = useRef(false);
+
+  useEffect(() => {
+    busy.current = false;
+  }, [isActive]);
 
   useEffect(() => {
     if (sharedPulseAnim) return;
@@ -95,6 +102,15 @@ export const PromenadeWidget = memo(function PromenadeWidget({
     setTimeout(() => { busy.current = false; }, 600);
   }, [onStop]);
 
+  const handleEdit = useCallback(() => {
+    if (busy.current) return;
+    if (!onEdit) return;
+    busy.current = true;
+    setTimeout(() => { busy.current = false; }, 600);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onEdit();
+  }, [onEdit]);
+
   // Unified container — same structure in both states
   return (
     <Animated.View
@@ -112,13 +128,12 @@ export const PromenadeWidget = memo(function PromenadeWidget({
           transform: [{ scale: pulseAnim }],
         },
       ]}
-      accessibilityRole={isActive ? "timer" : "button"}
+      accessibilityRole={isActive ? "timer" : undefined}
       accessibilityLabel={
         isActive
           ? `Promenade en cours depuis ${formatDuration(elapsedMinutes)}`
           : "Démarrer une promenade"
       }
-      accessibilityHint={isActive ? undefined : "Lance le chrono de promenade"}
     >
       {/* Header row */}
       <View style={styles.headerRow}>
@@ -162,16 +177,35 @@ export const PromenadeWidget = memo(function PromenadeWidget({
             </Text>
           )}
           {showStopButton && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: accentColor }]}
-              onPress={handleStop}
-              accessibilityRole="button"
-              accessibilityLabel="Terminer la promenade"
-            >
-              <Text style={[styles.actionButtonText, { color: nc.backgroundCard }]}>
-                Terminer
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: accentColor }]}
+                onPress={handleStop}
+                accessibilityRole="button"
+                accessibilityLabel="Terminer la promenade"
+              >
+                <Text style={[styles.actionButtonText, { color: nc.backgroundCard }]}>
+                  Terminer
+                </Text>
+              </TouchableOpacity>
+              {onEdit && (
+                <TouchableOpacity
+                  style={[
+                    styles.editButton,
+                    {
+                      backgroundColor: colorScheme === "dark" ? `${accentColor}15` : bgColor,
+                      borderColor: `${accentColor}40`,
+                    },
+                  ]}
+                  onPress={handleEdit}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajuster la promenade avant d'enregistrer"
+                >
+                  <FontAwesome name="pen-to-square" size={15} color={accentColor} />
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </>
       )}
@@ -213,7 +247,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   actionButton: {
-    marginTop: 10,
+    flex: 1,
     minHeight: 44,
     paddingVertical: 10,
     borderRadius: 12,
@@ -222,5 +256,19 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontWeight: "700",
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+  },
+  editButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

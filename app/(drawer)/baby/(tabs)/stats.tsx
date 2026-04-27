@@ -6,8 +6,9 @@ import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
-import { ecouterEvenements } from "@/services/eventsService";
+import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
@@ -275,6 +276,27 @@ export default function StatsScreen() {
       ...latestFirestoreSolidesRef.current,
     ]);
   }, [setRepasFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      return obtenirEvenements(activeChild.id, {
+        type: ["tetee", "biberon", "solide", "pompage", "sommeil"],
+        source: "server",
+      });
+    },
+    apply: (freshEvents) => {
+      latestFirestoreTeteesRef.current = freshEvents.filter((event) => event.type === "tetee");
+      latestFirestoreBiberonsRef.current = freshEvents.filter((event) => event.type === "biberon");
+      latestFirestoreSolidesRef.current = freshEvents.filter((event) => event.type === "solide");
+      latestFirestorePompagesRef.current = freshEvents.filter((event) => event.type === "pompage");
+      latestFirestoreSommeilsRef.current = freshEvents.filter((event) => event.type === "sommeil");
+      pushRepasFirestoreEvents();
+      setPompagesFirestoreEvents(latestFirestorePompagesRef.current);
+      setSommeilsFirestoreEvents(latestFirestoreSommeilsRef.current);
+    },
+  });
 
   useEffect(() => {
     if (!activeChild?.id) return;

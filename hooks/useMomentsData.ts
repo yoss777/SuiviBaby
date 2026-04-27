@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ecouterEvenements } from "@/services/eventsService";
+import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
 import {
   ecouterInteractionsSociales,
   getUserNames,
 } from "@/services/socialService";
 import { JalonEvent } from "@/services/eventsService";
 import { LikeInfo } from "@/types/social";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 
 // ============================================
@@ -151,6 +152,21 @@ export function useMomentsData(
       unsubscribe();
     };
   }, [childId, refreshTick, setFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!childId,
+    refresh: async () => {
+      if (!childId) return [];
+      return obtenirEvenements(childId, {
+        type: "jalon",
+        limite: 100,
+        source: "server",
+      }) as Promise<MilestoneEventWithId[]>;
+    },
+    apply: (freshEvents) => {
+      setFirestoreEvents(freshEvents);
+    },
+  });
 
   // Re-merge callback for tab focus — frozen tabs miss state updates.
   // The consumer screen should call this from its own useFocusEffect.

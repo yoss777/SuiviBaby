@@ -71,6 +71,32 @@ describe("validateAndUpdateEvent", () => {
       heureFin: expect.objectContaining({ seconds: 1710003600 }),
     }));
   });
+
+  it("converts null fields to Firestore deletes on update", async () => {
+    access();
+    mockDocRef.update.mockResolvedValue(undefined);
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p?.includes("access")) return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
+      return {
+        get: jest.fn().mockResolvedValue(doc({ childId: "c1", type: "sommeil" })),
+        update: mockDocRef.update,
+        delete: jest.fn(),
+      };
+    });
+
+    await fns.validateAndUpdateEvent(auth("u1", {
+      childId: "c1",
+      eventId: "e1",
+      heureFin: null,
+      duree: null,
+    }));
+
+    expect(mockDocRef.update).toHaveBeenCalledWith(expect.objectContaining({
+      heureFin: "DEL",
+      duree: "DEL",
+    }));
+  });
 });
 
 describe("deleteEventCascade", () => {

@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   limit,
   onSnapshot,
   orderBy,
@@ -26,6 +27,7 @@ import {
   failOptimistic,
   generateTempId,
   markOptimisticQueued,
+  updateOptimisticCreate,
 } from "./optimisticEventsStore";
 
 const getUserId = () => {
@@ -33,6 +35,11 @@ const getUserId = () => {
   if (!user) throw new Error("Utilisateur non connecté");
   return user.uid;
 };
+
+const pendingOptimisticCreateUpdates = new Map<
+  string,
+  { childId: string; data: Partial<Event>; previousEvent: any }
+>();
 
 function stripUndefinedFields<T extends Record<string, unknown>>(data: T): T {
   return Object.fromEntries(
@@ -416,6 +423,7 @@ export async function obtenirEvenements(
     limite?: number;
     depuis?: Date;
     jusqu?: Date;
+    source?: "default" | "server";
   },
 ): Promise<Event[]> {
   try {
@@ -447,7 +455,8 @@ export async function obtenirEvenements(
       q = query(q, limit(options.limite));
     }
 
-    const snapshot = await getDocs(q);
+    const snapshot =
+      options?.source === "server" ? await getDocsFromServer(q) : await getDocs(q);
     return snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -1049,6 +1058,16 @@ export function ajouterEvenementOptimistic(
 
       const realId = await withRetry(() => callCreateEventCF(payload));
       confirmOptimistic(tempId, realId);
+      const pendingUpdate = pendingOptimisticCreateUpdates.get(tempId);
+      if (pendingUpdate) {
+        pendingOptimisticCreateUpdates.delete(tempId);
+        modifierEvenementOptimistic(
+          pendingUpdate.childId,
+          realId,
+          pendingUpdate.data,
+          { ...pendingUpdate.previousEvent, id: realId },
+        );
+      }
     } catch (error) {
       if (isNetworkError(error)) {
         try {
@@ -1059,6 +1078,7 @@ export function ajouterEvenementOptimistic(
         }
         return;
       }
+      pendingOptimisticCreateUpdates.delete(tempId);
       failOptimistic(tempId);
     }
   })();
@@ -1079,7 +1099,7 @@ export function modifierEvenementOptimistic(
   eventId: string,
   data: Partial<Event>,
   previousEvent: any,
-): void {
+): string {
   const cleanData = stripUndefinedFields(
     data as Record<string, unknown>,
   ) as Partial<Event>;
@@ -1089,7 +1109,24 @@ export function modifierEvenementOptimistic(
     childId,
   });
 
-  addOptimisticUpdate(eventId, childId, updatedEvent, previousEvent);
+  if (eventId.startsWith("__optimistic_")) {
+    const updated = updateOptimisticCreate(eventId, updatedEvent);
+    if (updated) {
+      pendingOptimisticCreateUpdates.set(eventId, {
+        childId,
+        data: cleanData,
+        previousEvent,
+      });
+    }
+    return eventId;
+  }
+
+  const operationId = addOptimisticUpdate(
+    eventId,
+    childId,
+    updatedEvent,
+    previousEvent,
+  );
 
   const payload = buildUpdatePayload(childId, eventId, cleanData);
 
@@ -1097,25 +1134,27 @@ export function modifierEvenementOptimistic(
     try {
       if (!(await isOnline())) {
         await enqueueEvent('update', payload as Record<string, unknown>);
-        markOptimisticQueued(eventId);
-        return;
+        markOptimisticQueued(operationId);
+        return operationId;
       }
 
       await withRetry(() => callUpdateEventCF(payload as Record<string, unknown>));
-      confirmOptimistic(eventId);
+      confirmOptimistic(operationId);
     } catch (error) {
       if (isNetworkError(error)) {
         try {
           await enqueueEvent('update', payload as Record<string, unknown>);
-          markOptimisticQueued(eventId);
+          markOptimisticQueued(operationId);
         } catch {
           // enqueue failed — keep optimistic entry visible as last resort
         }
-        return;
+        return operationId;
       }
-      failOptimistic(eventId);
+      failOptimistic(operationId);
     }
   })();
+
+  return operationId;
 }
 
 // ============================================

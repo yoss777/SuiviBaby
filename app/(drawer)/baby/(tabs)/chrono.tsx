@@ -20,10 +20,12 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
-import { ecouterEvenements, supprimerEvenement, type Event, type EventType } from "@/services/eventsService";
+import { ecouterEvenements, obtenirEvenements, supprimerEvenement, type Event, type EventType } from "@/services/eventsService";
 import { MODERN_UI_DIAPER_EVENT_TYPES, MODERN_UI_EVENT_TYPES } from "@/services/eventTypeSupport";
 import { isValidDate, toDate } from "@/utils/date";
+import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -333,7 +335,7 @@ function buildDetails(event: Event) {
 
       const parts = [
         end ? formatDuration(duration) : null,
-        event.location,
+        formatSleepLocationWithNote(event.location, event.note),
         event.quality,
       ].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;
@@ -1135,14 +1137,15 @@ const TimelineCard = React.memo(
           : "moon"
         : null;
 
-    const startDate = event.heureDebut ? toDate(event.heureDebut) : null;
-    const endDate = event.heureFin ? toDate(event.heureFin) : null;
+    const timedEvent = event as any;
+    const startDate = timedEvent.heureDebut ? toDate(timedEvent.heureDebut) : null;
+    const endDate = timedEvent.heureFin ? toDate(timedEvent.heureFin) : null;
     const hasValidStartDate = isValidDate(startDate);
     const hasValidEndDate = isValidDate(endDate);
 
     // Calculate elapsed time for ongoing sleep or promenade
-    const isOngoingSleep = isSleep && !event.heureFin && hasValidStartDate;
-    const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !event.heureFin && hasValidStartDate;
+    const isOngoingSleep = isSleep && !timedEvent.heureFin && hasValidStartDate;
+    const isOngoingPromenade = event.type === "activite" && event.typeActivite === "promenade" && !timedEvent.heureFin && hasValidStartDate;
     const isOngoing = isOngoingSleep || isOngoingPromenade;
     const hasStartEnd = (isSleep || (event.type === "activite" && event.typeActivite === "promenade")) && hasValidStartDate;
     const elapsedMinutes = isOngoing
@@ -1303,7 +1306,9 @@ const TimelineCard = React.memo(
               )}
             </View>
           )}
-          {event.type !== "activite" && event.note && (
+          {event.type !== "activite" &&
+            event.note &&
+            !(event.type === "sommeil" && event.location) && (
             <View style={[styles.noteContainer, { borderColor }]}>
               <FontAwesome
                 name="message"
@@ -1758,6 +1763,23 @@ export default function ChronoScreen() {
       unsubscribe();
     };
   }, [activeChild?.id, maxRange, currentDay, refreshTick, setFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      const since = startOfDay(new Date());
+      since.setDate(since.getDate() - (maxRange - 1));
+      return obtenirEvenements(activeChild.id, {
+        type: ALL_EVENT_TYPES,
+        depuis: since,
+        source: "server",
+      }) as Promise<Event[]>;
+    },
+    apply: (freshEvents) => {
+      setFirestoreEvents(freshEvents);
+    },
+  });
 
   useEffect(() => {
     setSoftDeletedIds((prev) => {

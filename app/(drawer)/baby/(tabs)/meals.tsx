@@ -21,6 +21,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
@@ -28,6 +29,7 @@ import {
   getNextEventDateBefore,
   hasMoreEventsBefore,
   BiberonEvent,
+  obtenirEvenements,
   SolideEvent,
   supprimerEvenement,
 } from "@/services/eventsService";
@@ -588,6 +590,30 @@ export default function MealsScreen() {
       ...latestSolidesRef.current,
     ]);
   }, [setFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      return obtenirEvenements(activeChild.id, {
+        type: ["tetee", "biberon", "solide"],
+        depuis: startOfRange,
+        jusqu: endOfRange,
+        source: "server",
+      });
+    },
+    apply: (freshEvents) => {
+      latestTeteesRef.current = freshEvents.filter((event) => event.type === "tetee") as Meal[];
+      latestBiberonsRef.current = freshEvents.filter((event) => event.type === "biberon") as Meal[];
+      latestSolidesRef.current = freshEvents.filter((event) => event.type === "solide") as Meal[];
+      pushMealsFirestoreEvents();
+    },
+  });
 
   // ============================================
   // EFFECTS - DATA LISTENERS

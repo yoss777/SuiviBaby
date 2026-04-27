@@ -14,6 +14,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
@@ -588,6 +589,27 @@ export default function GrowthScreen() {
       unsubscribe();
     };
   }, [activeChild?.id, daysWindow, rangeEndDate, refreshKey, setFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      return obtenirEvenements(activeChild.id, {
+        type: "croissance",
+        depuis: startOfRange,
+        jusqu: endOfRange,
+        source: "server",
+      }) as Promise<GrowthEventWithId[]>;
+    },
+    apply: (freshEvents) => {
+      setFirestoreEvents(freshEvents);
+    },
+  });
 
   useEffect(() => {
     setSoftDeletedIds((prev) => {

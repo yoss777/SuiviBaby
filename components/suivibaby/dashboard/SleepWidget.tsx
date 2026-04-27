@@ -21,6 +21,8 @@ export interface SleepWidgetProps {
   startTime?: string;
   onStartSleep: (isNap: boolean) => void;
   onStopSleep: () => void;
+  /** Bouton crayon → ouvre la sheet d'édition (ajuster heureFin/note avant écriture). */
+  onEditSleep?: () => void;
   showStopButton?: boolean;
   colorScheme?: "light" | "dark";
   sharedPulseAnim?: Animated.Value;
@@ -41,6 +43,7 @@ export const SleepWidget = memo(function SleepWidget({
   startTime,
   onStartSleep,
   onStopSleep,
+  onEditSleep,
   showStopButton = true,
   colorScheme = "light",
   sharedPulseAnim,
@@ -61,6 +64,10 @@ export const SleepWidget = memo(function SleepWidget({
   const preferNight = hour >= 20 || hour < 6;
   const busy = useRef(false);
 
+  useEffect(() => {
+    busy.current = false;
+  }, [isActive]);
+
   const handleStart = useCallback(
     (isNapValue: boolean) => {
       if (busy.current) return;
@@ -79,6 +86,15 @@ export const SleepWidget = memo(function SleepWidget({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onStopSleep();
   }, [onStopSleep]);
+
+  const handleEdit = useCallback(() => {
+    if (busy.current) return;
+    if (!onEditSleep) return;
+    busy.current = true;
+    setTimeout(() => { busy.current = false; }, 600);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onEditSleep();
+  }, [onEditSleep]);
 
   // Pulse animation for active sleep
   const ownPulseAnim = useRef(new Animated.Value(1)).current;
@@ -127,7 +143,7 @@ export const SleepWidget = memo(function SleepWidget({
           transform: [{ scale: pulseAnim }],
         },
       ]}
-      accessibilityRole={isActive ? "timer" : "none"}
+      accessibilityRole={isActive ? "timer" : undefined}
       accessibilityLabel={
         isActive
           ? `${isNap ? "Sieste" : "Nuit"} en cours depuis ${formatDuration(elapsedMinutes)}`
@@ -170,16 +186,39 @@ export const SleepWidget = memo(function SleepWidget({
       {/* Action buttons */}
       {isActive ? (
         showStopButton && (
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: sleepColors.primary }]}
-            onPress={handleStop}
-            accessibilityRole="button"
-            accessibilityLabel="Terminer le sommeil"
-          >
-            <Text style={[styles.actionButtonText, { color: nc.backgroundCard }]}>
-              Terminer
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: sleepColors.primary }]}
+              onPress={handleStop}
+              accessibilityRole="button"
+              accessibilityLabel="Terminer le sommeil"
+            >
+              <Text style={[styles.actionButtonText, { color: nc.backgroundCard }]}>
+                Terminer
+              </Text>
+            </TouchableOpacity>
+            {onEditSleep && (
+              <TouchableOpacity
+                style={[
+                  styles.editButton,
+                  {
+                    backgroundColor: sleepColors.buttonSecondaryBg,
+                    borderColor: `${sleepColors.primary}40`,
+                  },
+                ]}
+                onPress={handleEdit}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Ajuster le sommeil avant d'enregistrer"
+              >
+                <FontAwesome
+                  name="pen-to-square"
+                  size={15}
+                  color={sleepColors.primary}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
         )
       ) : (
         <View style={styles.buttonsRow}>
@@ -291,7 +330,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   actionButton: {
-    marginTop: 10,
+    flex: 1,
     minHeight: 44,
     paddingVertical: 10,
     borderRadius: 12,
@@ -300,5 +339,19 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontWeight: "700",
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+  },
+  editButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

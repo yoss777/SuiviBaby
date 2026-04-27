@@ -21,12 +21,14 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
 import {
   ecouterEvenements,
   getNextEventDateBefore,
   hasMoreEventsBefore,
+  obtenirEvenements,
   supprimerEvenement,
 } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
@@ -681,6 +683,33 @@ export default function DiapersScreen() {
       ...latestSellesRef.current,
     ]);
   }, [setFirestoreEvents]);
+
+  useForegroundServerRefresh({
+    enabled: !!activeChild?.id,
+    refresh: async () => {
+      if (!activeChild?.id) return [];
+      const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
+      endOfRange.setHours(23, 59, 59, 999);
+      const startOfRange = new Date(endOfRange);
+      startOfRange.setHours(0, 0, 0, 0);
+      startOfRange.setDate(startOfRange.getDate() - (daysWindow - 1));
+      return obtenirEvenements(activeChild.id, {
+        type: ["miction", "selle"],
+        depuis: startOfRange,
+        jusqu: endOfRange,
+        source: "server",
+      });
+    },
+    apply: (freshEvents) => {
+      latestMictionsRef.current = freshEvents
+        .filter((event) => event.type === "miction")
+        .map((event) => ({ ...event, type: "miction" as DiapersType })) as Excretion[];
+      latestSellesRef.current = freshEvents
+        .filter((event) => event.type === "selle")
+        .map((event) => ({ ...event, type: "selle" as DiapersType })) as Excretion[];
+      pushDiapersFirestoreEvents();
+    },
+  });
 
   // ============================================
   // EFFECTS - DATA LISTENERS
