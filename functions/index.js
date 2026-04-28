@@ -1609,23 +1609,50 @@ exports.deleteUserAccount = onCall(
     const uid = request.auth.uid;
     const db = admin.firestore();
 
-    // Rate limit: 1 suppression/min max
+    // T4 — This entry point is reserved for platform admins. The user-facing
+    // path is the soft-delete workflow (requestAccountDeletion + 30-day
+    // pendingDeletion + processScheduledDeletions cron). A direct callable
+    // bypassing the grace period was abusable: a malicious client could wipe
+    // an account instantly with no recovery window. Enforce admin claim.
+    let callerRecord;
+    try {
+      callerRecord = await admin.auth().getUser(uid);
+    } catch (e) {
+      throw new HttpsError("internal", "Impossible de vérifier l'identité.");
+    }
+    if (!callerRecord.customClaims?.admin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Suppression immédiate réservée aux administrateurs. Utilisez la suppression programmée (30 jours) côté application."
+      );
+    }
+
+    // Optional payload override: admin can target a specific uid.
+    const targetUid = request.data?.uid || uid;
+    if (targetUid !== uid) {
+      // Audit log: admin acting on another account.
+      console.log(
+        `deleteUserAccount: admin ${uid} deleting account ${targetUid}`
+      );
+    }
+
+    // Rate limit on the admin caller (not the target).
     await checkRateLimit(db, uid, "delete", 1);
 
     // Récupérer l'email pour cleanup des invitations
     let email = "";
     try {
-      const userRecord = await admin.auth().getUser(uid);
+      const userRecord = await admin.auth().getUser(targetUid);
       email = (userRecord.email || "").toLowerCase();
     } catch (e) {
       // User may already be partially deleted, continue
-      console.warn(`deleteUserAccount: could not fetch user record for ${uid}`, e.message);
+      console.warn(`deleteUserAccount: could not fetch user record for ${targetUid}`, e.message);
     }
 
     // 1. Récupérer tous les enfants auxquels l'utilisateur a accès
     const accessSnapshot = await db
       .collection("user_child_access")
-      .where("userId", "==", uid)
+      .where("userId", "==", targetUid)
       .get();
 
     // 2. Traiter chaque enfant
@@ -1643,11 +1670,11 @@ exports.deleteUserAccount = onCall(
         await db.doc(`children/${childId}`).delete();
       } else if (role === "owner") {
         // Owner avec co-parents → transférer la propriété
-        await transferOwnership(db, childId, uid, childAccessSnap);
-        await db.doc(`children/${childId}/access/${uid}`).delete();
+        await transferOwnership(db, childId, targetUid, childAccessSnap);
+        await db.doc(`children/${childId}/access/${targetUid}`).delete();
       } else {
         // Non-owner → supprimer l'accès uniquement
-        await db.doc(`children/${childId}/access/${uid}`).delete();
+        await db.doc(`children/${childId}/access/${targetUid}`).delete();
       }
 
       // Supprimer l'entrée d'index
@@ -1656,14 +1683,14 @@ exports.deleteUserAccount = onCall(
 
     // 3. Supprimer les données créées par l'utilisateur (par userId)
     await Promise.all([
-      deleteDocsByFieldBatched(db, "events", "userId", uid),
-      deleteDocsByFieldBatched(db, "eventLikes", "userId", uid),
-      deleteDocsByFieldBatched(db, "eventComments", "userId", uid),
-      deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", uid),
-      deleteDocsByFieldBatched(db, "shareCodes", "createdBy", uid),
-      deleteDocsByFieldBatched(db, "device_tokens", "userId", uid),
-      deleteDocsByFieldBatched(db, "notification_history", "userId", uid),
-      deleteDocsByFieldBatched(db, "recap_history", "userId", uid),
+      deleteDocsByFieldBatched(db, "events", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "eventLikes", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "eventComments", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "shareCodes", "createdBy", targetUid),
+      deleteDocsByFieldBatched(db, "device_tokens", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "notification_history", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "recap_history", "userId", targetUid),
     ]);
 
     // 4. Supprimer les invitations par email
@@ -1676,22 +1703,22 @@ exports.deleteUserAccount = onCall(
 
     // 5. Supprimer les collections par userId (données de suivi et promos)
     await Promise.all([
-      deleteDocsByFieldBatched(db, "webhook_logs", "appUserId", uid),
-      deleteDocsByFieldBatched(db, "referrals", "parrainUid", uid),
-      deleteDocsByFieldBatched(db, "referrals", "filleulUid", uid),
-      deleteDocsByFieldBatched(db, "childDeletionRequests", "requestedBy", uid),
+      deleteDocsByFieldBatched(db, "webhook_logs", "appUserId", targetUid),
+      deleteDocsByFieldBatched(db, "referrals", "parrainUid", targetUid),
+      deleteDocsByFieldBatched(db, "referrals", "filleulUid", targetUid),
+      deleteDocsByFieldBatched(db, "childDeletionRequests", "requestedBy", targetUid),
     ]);
 
     // 6. Supprimer les documents uniques de l'utilisateur
     const singleDocPaths = [
-      `users/${uid}`,
-      `users_public/${uid}`,
-      `user_preferences/${uid}`,
-      `user_content/${uid}`,
-      `user_promos/${uid}`,
-      `subscriptions/${uid}`,
-      `rate_limits/${uid}`,
-      `usage_limits/${uid}`,
+      `users/${targetUid}`,
+      `users_public/${targetUid}`,
+      `user_preferences/${targetUid}`,
+      `user_content/${targetUid}`,
+      `user_promos/${targetUid}`,
+      `subscriptions/${targetUid}`,
+      `rate_limits/${targetUid}`,
+      `usage_limits/${targetUid}`,
     ];
     const batch = db.batch();
     singleDocPaths.forEach((path) => batch.delete(db.doc(path)));
@@ -1699,13 +1726,13 @@ exports.deleteUserAccount = onCall(
 
     // 7. Supprimer l'utilisateur Firebase Auth (DERNIER — irréversible)
     try {
-      await admin.auth().deleteUser(uid);
+      await admin.auth().deleteUser(targetUid);
     } catch (e) {
-      console.error(`deleteUserAccount: failed to delete auth user ${uid}`, e.message);
+      console.error(`deleteUserAccount: failed to delete auth user ${targetUid}`, e.message);
       // Data is already cleaned up, auth deletion failure is non-critical
     }
 
-    console.log(`deleteUserAccount: completed for uid=${uid}`);
+    console.log(`deleteUserAccount: completed for uid=${targetUid} (admin=${uid})`);
     return { success: true };
   }
 );

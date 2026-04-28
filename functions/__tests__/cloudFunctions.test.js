@@ -487,6 +487,50 @@ describe("handleReportCreated (T3 — graduated photo moderation)", () => {
   });
 });
 
+describe("deleteUserAccount (T4 — admin-only direct path)", () => {
+  const admin = require("firebase-admin");
+
+  function setAdminClaim(callerHasAdminClaim) {
+    admin.auth.mockReturnValue({
+      getUser: jest.fn(async (uid) => ({
+        uid,
+        email: `${uid}@t.com`,
+        customClaims: callerHasAdminClaim ? { admin: true } : {},
+      })),
+      deleteUser: jest.fn(),
+    });
+  }
+
+  beforeEach(() => {
+    mockFirestore.collection.mockImplementation(() => ({
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue(snap()),
+    }));
+  });
+
+  it("rejects callers without the admin custom claim", async () => {
+    setAdminClaim(false);
+    await expect(
+      fns.deleteUserAccount(auth("u1", {}))
+    ).rejects.toThrow("administrateurs");
+  });
+
+  it("allows platform admin to proceed (caller's own account)", async () => {
+    setAdminClaim(true);
+    // Provide a minimally-mocked firestore so the deletion path completes.
+    mockFirestore.doc.mockImplementation(() => ({
+      get: jest.fn().mockResolvedValue(no()),
+      delete: jest.fn(),
+      set: jest.fn(),
+    }));
+    await expect(
+      fns.deleteUserAccount(auth("admin1", {}))
+    ).resolves.toEqual({ success: true });
+  });
+});
+
 describe("createShareInvitation", () => {
   it("rejects when free sharing limit is reached", async () => {
     mockFirestore.doc.mockImplementation((p) => {

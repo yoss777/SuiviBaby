@@ -1,11 +1,10 @@
-import { auth, db, functions } from "@/config/firebase";
+import { auth, db } from "@/config/firebase";
 import type { User } from "@/types/user";
 import {
   EmailAuthProvider,
   reauthenticateWithCredential,
 } from "firebase/auth";
 import { doc, getDoc, deleteField, updateDoc } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
 
 const GRACE_PERIOD_DAYS = 30;
 
@@ -105,23 +104,3 @@ export async function getPendingDeletionDate(): Promise<string | null> {
   return data?.pendingDeletion?.deletionDate ?? null;
 }
 
-/**
- * Suppression immédiate (fallback legacy / admin).
- * Appelle directement la Cloud Function — supprime tout sans délai de grâce.
- */
-export async function deleteAccountImmediately(password: string) {
-  const user = auth.currentUser;
-  if (!user || !user.email) {
-    throw new Error("Utilisateur non authentifié.");
-  }
-
-  const credential = EmailAuthProvider.credential(user.email, password);
-  await reauthenticateWithCredential(user, credential);
-
-  const deleteAccount = httpsCallable<void, { success: boolean }>(
-    functions,
-    "deleteUserAccount"
-  );
-
-  await deleteAccount();
-}
