@@ -947,6 +947,23 @@ exports.resolveReport = onCall(
     }
     const reportData = reportSnap.data();
 
+    // Defense in depth: even with the admin custom claim, the caller must
+    // have explicit owner/admin access on the targeted child. Prevents a
+    // compromised or rogue platform admin from acting on arbitrary children.
+    if (!reportData.childId) {
+      throw new HttpsError("failed-precondition", "Signalement sans childId.");
+    }
+    const accessSnap = await db
+      .doc(`children/${reportData.childId}/access/${uid}`)
+      .get();
+    const accessRole = accessSnap.exists ? accessSnap.data()?.role : null;
+    if (!accessRole || !["owner", "admin"].includes(accessRole)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Vous n'avez pas accès à cet enfant."
+      );
+    }
+
     if (reportData.status === "resolved") {
       throw new HttpsError("already-exists", "Ce signalement a déjà été traité.");
     }

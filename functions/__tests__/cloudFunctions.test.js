@@ -251,6 +251,86 @@ describe("usage quota functions", () => {
   });
 });
 
+describe("resolveReport (T2 — child ownership check)", () => {
+  const admin = require("firebase-admin");
+
+  function setupAdminAuth({ callerHasAdminClaim }) {
+    admin.auth.mockReturnValue({
+      getUser: jest.fn(async (uid) => {
+        if (uid === "admin1") {
+          return { uid, customClaims: callerHasAdminClaim ? { admin: true } : {} };
+        }
+        // reporter lookup — return a benign record without email
+        return { uid, customClaims: {} };
+      }),
+      deleteUser: jest.fn(),
+    });
+  }
+
+  function setupFirestore({ accessRoleForCaller }) {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "reports/r1") {
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            childId: "c1",
+            eventId: "e1",
+            reporterUserId: "u_reporter",
+            status: "pending",
+          })),
+          update: jest.fn(),
+        };
+      }
+      if (p === "children/c1/access/admin1") {
+        return {
+          get: jest.fn().mockResolvedValue(
+            accessRoleForCaller
+              ? doc({ role: accessRoleForCaller })
+              : no()
+          ),
+        };
+      }
+      if (p === "events/e1") {
+        return { get: jest.fn().mockResolvedValue(no()), update: jest.fn() };
+      }
+      return { get: jest.fn().mockResolvedValue(no()), update: jest.fn() };
+    });
+  }
+
+  it("rejects callers without the admin custom claim", async () => {
+    setupAdminAuth({ callerHasAdminClaim: false });
+    setupFirestore({ accessRoleForCaller: "owner" });
+    await expect(
+      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
+    ).rejects.toThrow("administrateurs");
+  });
+
+  it("rejects platform admin without owner/admin role on the targeted child", async () => {
+    setupAdminAuth({ callerHasAdminClaim: true });
+    setupFirestore({ accessRoleForCaller: null });
+    await expect(
+      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
+    ).rejects.toThrow("accès à cet enfant");
+  });
+
+  it("rejects platform admin who is only a viewer on the child", async () => {
+    setupAdminAuth({ callerHasAdminClaim: true });
+    setupFirestore({ accessRoleForCaller: "viewer" });
+    await expect(
+      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
+    ).rejects.toThrow("accès à cet enfant");
+  });
+
+  it("allows platform admin who is also an owner on the child", async () => {
+    setupAdminAuth({ callerHasAdminClaim: true });
+    setupFirestore({ accessRoleForCaller: "owner" });
+    // RESEND key absent → notification path skipped, action still resolves
+    delete process.env.RESEND_API_KEY;
+    await expect(
+      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
+    ).resolves.toMatchObject({ success: true, action: "dismiss" });
+  });
+});
+
 describe("createShareInvitation", () => {
   it("rejects when free sharing limit is reached", async () => {
     mockFirestore.doc.mockImplementation((p) => {
