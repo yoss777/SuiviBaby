@@ -251,7 +251,7 @@ describe("usage quota functions", () => {
   });
 });
 
-describe("resolveReport (T2 — child ownership check)", () => {
+describe("resolveReport (T2 — admin claim + audit log)", () => {
   const admin = require("firebase-admin");
 
   function setupAdminAuth({ callerHasAdminClaim }) {
@@ -260,14 +260,13 @@ describe("resolveReport (T2 — child ownership check)", () => {
         if (uid === "admin1") {
           return { uid, customClaims: callerHasAdminClaim ? { admin: true } : {} };
         }
-        // reporter lookup — return a benign record without email
         return { uid, customClaims: {} };
       }),
       deleteUser: jest.fn(),
     });
   }
 
-  function setupFirestore({ accessRoleForCaller }) {
+  function setupFirestore() {
     mockFirestore.doc.mockImplementation((p) => {
       if (p === "reports/r1") {
         return {
@@ -280,15 +279,6 @@ describe("resolveReport (T2 — child ownership check)", () => {
           update: jest.fn(),
         };
       }
-      if (p === "children/c1/access/admin1") {
-        return {
-          get: jest.fn().mockResolvedValue(
-            accessRoleForCaller
-              ? doc({ role: accessRoleForCaller })
-              : no()
-          ),
-        };
-      }
       if (p === "events/e1") {
         return { get: jest.fn().mockResolvedValue(no()), update: jest.fn() };
       }
@@ -298,36 +288,44 @@ describe("resolveReport (T2 — child ownership check)", () => {
 
   it("rejects callers without the admin custom claim", async () => {
     setupAdminAuth({ callerHasAdminClaim: false });
-    setupFirestore({ accessRoleForCaller: "owner" });
+    setupFirestore();
     await expect(
       fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
     ).rejects.toThrow("administrateurs");
   });
 
-  it("rejects platform admin without owner/admin role on the targeted child", async () => {
+  it("allows a platform admin to resolve the report regardless of child access", async () => {
     setupAdminAuth({ callerHasAdminClaim: true });
-    setupFirestore({ accessRoleForCaller: null });
-    await expect(
-      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
-    ).rejects.toThrow("accès à cet enfant");
-  });
-
-  it("rejects platform admin who is only a viewer on the child", async () => {
-    setupAdminAuth({ callerHasAdminClaim: true });
-    setupFirestore({ accessRoleForCaller: "viewer" });
-    await expect(
-      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
-    ).rejects.toThrow("accès à cet enfant");
-  });
-
-  it("allows platform admin who is also an owner on the child", async () => {
-    setupAdminAuth({ callerHasAdminClaim: true });
-    setupFirestore({ accessRoleForCaller: "owner" });
-    // RESEND key absent → notification path skipped, action still resolves
+    setupFirestore();
     delete process.env.RESEND_API_KEY;
     await expect(
       fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
     ).resolves.toMatchObject({ success: true, action: "dismiss" });
+  });
+
+  it("writes an entry to adminAuditLog for every resolved report", async () => {
+    setupAdminAuth({ callerHasAdminClaim: true });
+    setupFirestore();
+    const auditAdd = jest.fn().mockResolvedValue({ id: "audit1" });
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name === "adminAuditLog") {
+        return { add: auditAdd };
+      }
+      return { add: jest.fn(), where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+    });
+    delete process.env.RESEND_API_KEY;
+    await fns.resolveReport(auth("admin1", { reportId: "r1", action: "remove_photo", adminNote: "test" }));
+    expect(auditAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "resolveReport",
+        adminUid: "admin1",
+        reportId: "r1",
+        childId: "c1",
+        eventId: "e1",
+        action: "remove_photo",
+        adminNote: "test",
+      })
+    );
   });
 });
 
@@ -484,6 +482,21 @@ describe("handleReportCreated (T3 — graduated photo moderation)", () => {
       ctx()
     );
     expect(eventUpdate).not.toHaveBeenCalledWith({ reported: true });
+  });
+
+  it("still applies moderation effects when RESEND_API_KEY is missing", async () => {
+    delete process.env.RESEND_API_KEY;
+    const { eventUpdate } = setupBaseFirestore({ reporterRole: "owner" });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "intimate_child_nudity",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).toHaveBeenCalledWith({ reported: true });
   });
 });
 

@@ -807,14 +807,14 @@ async function handleReportCreated(snapshot, context) {
     }
 
     const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      console.error("onReportCreated: RESEND_API_KEY not configured");
-      return;
-    }
+    const db = admin.firestore();
 
-    const resend = new Resend(apiKey);
-
-    const html = `
+    // 1. Send email to operator (best-effort — never blocks the
+    // moderation effects below; if RESEND_API_KEY is missing we still
+    // hide for the reporter and apply the auto-hide rules).
+    if (apiKey) {
+      const resend = new Resend(apiKey);
+      const html = `
       <h2>Nouveau signalement de contenu</h2>
       <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;">
         <tr><td style="padding:6px 12px;font-weight:bold;">Report ID</td><td style="padding:6px 12px;">${reportId}</td></tr>
@@ -828,21 +828,22 @@ async function handleReportCreated(snapshot, context) {
       <p style="margin-top:16px;font-size:13px;color:#6b7280;">
         Consultez la collection <code>reports/${reportId}</code> dans la console Firebase pour traiter ce signalement.
       </p>
-    `;
-
-    const db = admin.firestore();
-
-    // 1. Send email to operator
-    try {
-      await resend.emails.send({
-        from: "Suivi Baby <noreply@suivibaby.com>",
-        to: "contact@suivibaby.com",
-        subject: `[Signalement] ${reasonLabel} — SuiviBaby`,
-        html,
-      });
-      console.log(`onReportCreated: email sent for report ${reportId}`);
-    } catch (error) {
-      console.error("onReportCreated: failed to send email", error);
+      `;
+      try {
+        await resend.emails.send({
+          from: "Suivi Baby <noreply@suivibaby.com>",
+          to: "contact@suivibaby.com",
+          subject: `[Signalement] ${reasonLabel} — SuiviBaby`,
+          html,
+        });
+        console.log(`onReportCreated: email sent for report ${reportId}`);
+      } catch (error) {
+        console.error("onReportCreated: failed to send email", error);
+      }
+    } else {
+      console.warn(
+        `onReportCreated: RESEND_API_KEY not configured — skipping ops email for report ${reportId} (moderation effects still applied)`
+      );
     }
 
     // 2. Hide photo for reporter (add to user_hidden_photos)
@@ -1002,25 +1003,27 @@ exports.resolveReport = onCall(
     }
     const reportData = reportSnap.data();
 
-    // Defense in depth: even with the admin custom claim, the caller must
-    // have explicit owner/admin access on the targeted child. Prevents a
-    // compromised or rogue platform admin from acting on arbitrary children.
-    if (!reportData.childId) {
-      throw new HttpsError("failed-precondition", "Signalement sans childId.");
-    }
-    const accessSnap = await db
-      .doc(`children/${reportData.childId}/access/${uid}`)
-      .get();
-    const accessRole = accessSnap.exists ? accessSnap.data()?.role : null;
-    if (!accessRole || !["owner", "admin"].includes(accessRole)) {
-      throw new HttpsError(
-        "permission-denied",
-        "Vous n'avez pas accès à cet enfant."
-      );
-    }
-
     if (reportData.status === "resolved") {
       throw new HttpsError("already-exists", "Ce signalement a déjà été traité.");
+    }
+
+    // Audit-log every admin action — the admin custom claim grants the
+    // ability to act on any report, so the safeguard against rogue admins
+    // is detection (this log) rather than prevention.
+    try {
+      await db.collection("adminAuditLog").add({
+        type: "resolveReport",
+        adminUid: uid,
+        reportId,
+        childId: reportData.childId || null,
+        eventId: reportData.eventId || null,
+        action,
+        adminNote: adminNote || null,
+        at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      // Audit log failure must not block the moderation action itself.
+      console.error("resolveReport: failed to write audit log", e.message);
     }
 
     // Execute action

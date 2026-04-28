@@ -17,6 +17,10 @@ try {
 // authentication factor against Firebase.
 const BIO_ENABLED_KEY = "suivibaby_bio_enabled_v2";
 const BIO_USER_ID_KEY = "suivibaby_bio_uid_v2";
+// Intent flag set during onboarding (before any login). Consumed by the
+// login screen on first successful sign-in to call enableBiometric() with
+// the real uid.
+const BIO_OPT_IN_PENDING_KEY = "suivibaby_bio_opt_in_pending_v2";
 
 // v1 — legacy keys that stored email + plaintext password. Purged on first
 // launch after upgrading; never read again.
@@ -105,6 +109,33 @@ export async function enableBiometric(userId: string): Promise<void> {
   if (!SecureStore || !userId) return;
   await SecureStore.setItemAsync(BIO_USER_ID_KEY, userId);
   await SecureStore.setItemAsync(BIO_ENABLED_KEY, "true");
+}
+
+/**
+ * Record the user's intent to enable biometric, before any uid is known
+ * (e.g. during onboarding, before sign-in). The login screen consumes
+ * this flag on the first successful sign-in and calls enableBiometric()
+ * with the real uid.
+ */
+export async function setBiometricOptInPending(): Promise<void> {
+  if (!SecureStore) return;
+  await SecureStore.setItemAsync(BIO_OPT_IN_PENDING_KEY, "true");
+}
+
+/**
+ * Read-and-clear the pending opt-in flag. Returns true exactly once after
+ * a setBiometricOptInPending() call.
+ */
+export async function consumeBiometricOptInPending(): Promise<boolean> {
+  if (!SecureStore) return false;
+  try {
+    const value = await SecureStore.getItemAsync(BIO_OPT_IN_PENDING_KEY);
+    if (value !== "true") return false;
+    await SecureStore.deleteItemAsync(BIO_OPT_IN_PENDING_KEY);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function disableBiometric(): Promise<void> {

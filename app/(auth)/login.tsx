@@ -6,6 +6,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { hasPendingDeletion } from "@/services/accountDeletionService";
 import {
+  consumeBiometricOptInPending,
   enableBiometric,
   getBiometricType,
   isBiometricAvailable,
@@ -184,6 +185,8 @@ export default function LoginScreen() {
     try {
       const user = await signInWithGoogle();
       if (!user) return; // User cancelled
+      const optIn = await consumeBiometricOptInPending();
+      if (optIn && user.uid) enableBiometric(user.uid).catch(() => {});
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
       const code = error?.code || "";
@@ -198,7 +201,9 @@ export default function LoginScreen() {
   const handleAppleSignIn = useCallback(async () => {
     setSocialLoading(true);
     try {
-      await signInWithApple();
+      const user = await signInWithApple();
+      const optIn = await consumeBiometricOptInPending();
+      if (optIn && user?.uid) enableBiometric(user.uid).catch(() => {});
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
       const code = error?.code || "";
@@ -332,8 +337,15 @@ export default function LoginScreen() {
         AsyncStorage.setItem(LAST_EMAIL_KEY, email.trim()).catch(() => {});
         // Biometric: ne stocke plus le mot de passe — juste l'uid attendu.
         // La session Firebase persiste séparément (refresh token AsyncStorage).
-        if (biometricEnabled && credential.user?.uid) {
-          enableBiometric(credential.user.uid).catch(() => {});
+        // Cas 1 : déjà activée (resignin après changement uid) — réécrit l'uid.
+        // Cas 2 : intention posée pendant l'onboarding — on l'active maintenant.
+        if (credential.user?.uid) {
+          const uid = credential.user.uid;
+          const optInPending = await consumeBiometricOptInPending();
+          if (biometricEnabled || optInPending) {
+            enableBiometric(uid).catch(() => {});
+            if (optInPending) setBiometricEnabled(true);
+          }
         }
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
@@ -357,6 +369,12 @@ export default function LoginScreen() {
 
         // Envoyer l'email de vérification
         sendEmailVerification(userCredential.user).catch(() => {});
+
+        // Activer biométrie si l'utilisateur l'a demandé pendant l'onboarding.
+        const signupOptIn = await consumeBiometricOptInPending();
+        if (signupOptIn && userCredential.user.uid) {
+          enableBiometric(userCredential.user.uid).catch(() => {});
+        }
 
         // Sauvegarder l'email pour pré-remplissage
         AsyncStorage.setItem(LAST_EMAIL_KEY, email.trim()).catch(() => {});
