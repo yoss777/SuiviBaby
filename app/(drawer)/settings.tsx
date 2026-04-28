@@ -43,7 +43,7 @@ import {
   requestAccountDeletion,
 } from "@/services/accountDeletionService";
 import {
-  clearCredentials,
+  disableBiometric,
   enableBiometric,
   getBiometricType,
   isBiometricAvailable,
@@ -256,10 +256,13 @@ export default function SettingsScreen() {
 
       try {
         if (value) {
-          await enableBiometric();
+          if (!user?.uid) {
+            throw new Error("Utilisateur non authentifié");
+          }
+          await enableBiometric(user.uid);
           setBiometricEnabled(true);
         } else {
-          await clearCredentials();
+          await disableBiometric();
           setBiometricEnabled(false);
         }
       } catch {
@@ -274,7 +277,7 @@ export default function SettingsScreen() {
         setIsBiometricUpdating(false);
       }
     },
-    [biometricLabel, isBiometricUpdating],
+    [biometricLabel, isBiometricUpdating, user?.uid],
   );
 
   const accountSettings: SettingItem[] = useMemo(

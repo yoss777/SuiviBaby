@@ -6,6 +6,7 @@ import { registerPushToken, removePushTokens } from "@/services/pushTokenService
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
 import { signOutGoogle } from "@/services/socialAuthService";
+import { purgeLegacyBiometricCredentials } from "@/services/biometricAuthService";
 import { clearPreferencesCache, clearPermissionsCache } from "@/services/userPreferencesCache";
 import {
   canUserAccessApp,
@@ -255,6 +256,10 @@ export function AuthProvider({
 
   useEffect(() => {
     isMountedRef.current = true;
+
+    // T6 — One-shot purge of pre-v2 biometric secrets (email + password
+    // stored in plaintext). Fire-and-forget; idempotent after first run.
+    purgeLegacyBiometricCredentials().catch(() => {});
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!isMountedRef.current) return;

@@ -11,9 +11,43 @@ try {
   // Native modules not available (Expo Go or missing native rebuild)
 }
 
-const BIOMETRIC_EMAIL_KEY = "samaye_bio_email";
-const BIOMETRIC_PASSWORD_KEY = "samaye_bio_password";
-const BIOMETRIC_ENABLED_KEY = "samaye_bio_enabled";
+// v2 — passwordless biometric. We store only the user id we expect to find
+// in auth.currentUser; the Firebase RN persistence layer keeps the session
+// alive separately. The biometric prompt is a presence check, not an
+// authentication factor against Firebase.
+const BIO_ENABLED_KEY = "suivibaby_bio_enabled_v2";
+const BIO_USER_ID_KEY = "suivibaby_bio_uid_v2";
+
+// v1 — legacy keys that stored email + plaintext password. Purged on first
+// launch after upgrading; never read again.
+const LEGACY_KEYS = [
+  "samaye_bio_email",
+  "samaye_bio_password",
+  "samaye_bio_enabled",
+];
+const LEGACY_PURGE_DONE_KEY = "suivibaby_bio_v1_purged";
+
+/**
+ * One-shot purge of v1 biometric secrets (email + plaintext password).
+ * Safe to call repeatedly — short-circuits after the first successful run.
+ */
+export async function purgeLegacyBiometricCredentials(): Promise<void> {
+  if (!SecureStore) return;
+  try {
+    const done = await SecureStore.getItemAsync(LEGACY_PURGE_DONE_KEY);
+    if (done === "true") return;
+    for (const key of LEGACY_KEYS) {
+      try {
+        await SecureStore.deleteItemAsync(key);
+      } catch {
+        // best-effort
+      }
+    }
+    await SecureStore.setItemAsync(LEGACY_PURGE_DONE_KEY, "true");
+  } catch {
+    // non-fatal
+  }
+}
 
 export async function isBiometricAvailable(): Promise<boolean> {
   if (!LocalAuthentication) return false;
@@ -56,55 +90,57 @@ export async function getBiometricType(): Promise<string> {
 export async function isBiometricEnabled(): Promise<boolean> {
   if (!SecureStore) return false;
   try {
-    const enabled = await SecureStore.getItemAsync(BIOMETRIC_ENABLED_KEY);
+    const enabled = await SecureStore.getItemAsync(BIO_ENABLED_KEY);
     return enabled === "true";
   } catch {
     return false;
   }
 }
 
-export async function saveCredentials(
-  email: string,
-  password: string,
-): Promise<void> {
-  if (!SecureStore) return;
-  await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, email);
-  await SecureStore.setItemAsync(BIOMETRIC_PASSWORD_KEY, password);
-  await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, "true");
+/**
+ * Enable biometric unlock for a given user id. Stores no credentials —
+ * just the flag and the expected uid.
+ */
+export async function enableBiometric(userId: string): Promise<void> {
+  if (!SecureStore || !userId) return;
+  await SecureStore.setItemAsync(BIO_USER_ID_KEY, userId);
+  await SecureStore.setItemAsync(BIO_ENABLED_KEY, "true");
 }
 
-export async function getCredentials(): Promise<{
-  email: string;
-  password: string;
-} | null> {
+export async function disableBiometric(): Promise<void> {
+  if (!SecureStore) return;
+  try {
+    await SecureStore.deleteItemAsync(BIO_USER_ID_KEY);
+  } catch {}
+  try {
+    await SecureStore.deleteItemAsync(BIO_ENABLED_KEY);
+  } catch {}
+}
+
+export async function getBiometricUserId(): Promise<string | null> {
+  if (!SecureStore) return null;
+  try {
+    return await SecureStore.getItemAsync(BIO_USER_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Prompt the biometric sensor. Returns the expected uid on success, or
+ * null if biometric is disabled, the prompt failed, or no uid is stored.
+ * Callers must verify auth.currentUser?.uid matches before granting access.
+ */
+export async function unlockWithBiometric(): Promise<string | null> {
   if (!LocalAuthentication || !SecureStore) return null;
+  const expectedUid = await getBiometricUserId();
+  if (!expectedUid) return null;
+
   const result = await LocalAuthentication.authenticateAsync({
     promptMessage: "Connectez-vous avec la biométrie",
     cancelLabel: "Annuler",
     disableDeviceFallback: false,
   });
-
   if (!result.success) return null;
-
-  const email = await SecureStore.getItemAsync(BIOMETRIC_EMAIL_KEY);
-  const password = await SecureStore.getItemAsync(BIOMETRIC_PASSWORD_KEY);
-
-  if (!email || !password) return null;
-  return { email, password };
-}
-
-/**
- * Enable biometric preference without saving credentials yet.
- * Credentials will be saved on next successful login.
- */
-export async function enableBiometric(): Promise<void> {
-  if (!SecureStore) return;
-  await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, "true");
-}
-
-export async function clearCredentials(): Promise<void> {
-  if (!SecureStore) return;
-  await SecureStore.deleteItemAsync(BIOMETRIC_EMAIL_KEY);
-  await SecureStore.deleteItemAsync(BIOMETRIC_PASSWORD_KEY);
-  await SecureStore.deleteItemAsync(BIOMETRIC_ENABLED_KEY);
+  return expectedUid;
 }

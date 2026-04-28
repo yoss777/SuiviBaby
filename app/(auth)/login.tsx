@@ -6,12 +6,11 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { hasPendingDeletion } from "@/services/accountDeletionService";
 import {
-  clearCredentials,
+  enableBiometric,
   getBiometricType,
-  getCredentials,
   isBiometricAvailable,
   isBiometricEnabled,
-  saveCredentials,
+  unlockWithBiometric,
 } from "@/services/biometricAuthService";
 import {
   isAppleSignInAvailable,
@@ -327,14 +326,14 @@ export default function LoginScreen() {
 
     try {
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
+        const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
         setFailedAttempts(0);
         // Sauvegarder l'email pour pré-remplissage (#6 Remember me)
         AsyncStorage.setItem(LAST_EMAIL_KEY, email.trim()).catch(() => {});
-        // Si biometric activé (via onboarding) mais pas de credentials sauvés,
-        // les sauvegarder maintenant après login réussi
-        if (biometricEnabled) {
-          saveCredentials(email.trim(), password).catch(() => {});
+        // Biometric: ne stocke plus le mot de passe — juste l'uid attendu.
+        // La session Firebase persiste séparément (refresh token AsyncStorage).
+        if (biometricEnabled && credential.user?.uid) {
+          enableBiometric(credential.user.uid).catch(() => {});
         }
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
@@ -417,26 +416,26 @@ export default function LoginScreen() {
     }
   }, [isLogin, hasConsented, hasHealthConsent, email, password, userName, confirmPassword, unmetRules, showModal, resetAllFields, isCoolingDown, failedAttempts]);
 
-  // Connexion biométrique (#1)
+  // Déverrouillage biométrique : la session Firebase doit déjà exister
+  // (auth.currentUser non-null). Si l'utilisateur a sign-out explicitement
+  // ou si la session a expiré, il doit retaper son mot de passe.
   const handleBiometricLogin = useCallback(async () => {
     try {
-      const creds = await getCredentials();
-      if (!creds) return;
-      setLoading(true);
-      await signInWithEmailAndPassword(auth, creds.email, creds.password);
-      setFailedAttempts(0);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error: any) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      if (error.code === "auth/wrong-password" || error.code === "auth/user-not-found" || error.code === "auth/invalid-credential") {
-        await clearCredentials();
-        setBiometricEnabled(false);
-        showModal("Erreur", "Identifiants expirés. Veuillez vous reconnecter manuellement.");
-      } else {
-        showModal("Erreur", "Une erreur est survenue. Veuillez réessayer.");
+      const expectedUid = await unlockWithBiometric();
+      if (!expectedUid) return;
+      const currentUid = auth.currentUser?.uid;
+      if (!currentUid || currentUid !== expectedUid) {
+        showModal(
+          "Session expirée",
+          "Veuillez vous reconnecter avec votre mot de passe pour réactiver la connexion rapide.",
+        );
+        return;
       }
-    } finally {
-      setLoading(false);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // boot.tsx / authContext redirigent automatiquement quand currentUser est là
+    } catch {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showModal("Erreur", "Une erreur est survenue. Veuillez réessayer.");
     }
   }, [showModal]);
 
