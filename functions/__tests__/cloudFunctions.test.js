@@ -129,6 +129,18 @@ describe("validateReferralCode", () => {
 });
 
 describe("usage quota functions", () => {
+  const originalAssemblyKey = process.env.ASSEMBLYAI_API_KEY;
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    if (originalAssemblyKey === undefined) {
+      delete process.env.ASSEMBLYAI_API_KEY;
+    } else {
+      process.env.ASSEMBLYAI_API_KEY = originalAssemblyKey;
+    }
+    global.fetch = originalFetch;
+  });
+
   it("returns free voice quota status", async () => {
     mockFirestore.doc.mockImplementation((p) => {
       if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
@@ -144,6 +156,81 @@ describe("usage quota functions", () => {
       limit: 3,
       remaining: 2,
     });
+  });
+
+  it("rejects transcribeAudio before provider call when voice quota is exhausted", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    global.fetch = jest.fn();
+
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      if (p === "usage_limits/u1") {
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            voiceCommandDate: new Date().toISOString().split("T")[0],
+            voiceCommandCount: 3,
+          })),
+        };
+      }
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+
+    await expect(
+      fns.transcribeAudio(auth("u1", { audioBase64: Buffer.from("audio").toString("base64") }))
+    ).rejects.toThrow("Limite quotidienne atteinte");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("reserves voice quota inside transcribeAudio before returning transcript", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    const txSet = jest.fn();
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn(async (ref) => ref.get()),
+        set: txSet,
+        update: jest.fn(),
+        delete: jest.fn(),
+      })
+    );
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ upload_url: "https://upload.test/audio" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ id: "tx1", status: "processing" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ status: "completed", text: "ajoute une sieste" }),
+      });
+
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      if (p === "usage_limits/u1") {
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            voiceCommandDate: new Date().toISOString().split("T")[0],
+            voiceCommandCount: 1,
+          })),
+        };
+      }
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+
+    await expect(
+      fns.transcribeAudio(auth("u1", { audioBase64: Buffer.from("audio").toString("base64") }))
+    ).resolves.toEqual({ text: "ajoute une sieste" });
+    expect(txSet).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ voiceCommandCount: 2, lastVoiceCommandAt: "TS" }),
+      { merge: true }
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(3);
   });
 
   it("consumes export quota for free users", async () => {

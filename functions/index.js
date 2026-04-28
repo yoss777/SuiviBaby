@@ -213,6 +213,58 @@ async function getVoiceQuotaStatus(db, uid) {
   };
 }
 
+async function reserveVoiceQuota(db, uid) {
+  const subscriptionState = await getSubscriptionState(db, uid);
+
+  if (hasUnlimitedFeature(subscriptionState, "voice")) {
+    return {
+      feature: "voice",
+      allowed: true,
+      isUnlimited: true,
+      used: 0,
+      limit: null,
+      remaining: null,
+      resetDate: null,
+    };
+  }
+
+  const usageRef = db.doc(`usage_limits/${uid}`);
+  return await db.runTransaction(async (tx) => {
+    const usageDoc = await tx.get(usageRef);
+    const usageData = usageDoc.exists ? usageDoc.data() : {};
+    const today = new Date().toISOString().split("T")[0];
+    const used =
+      usageData.voiceCommandDate === today ? usageData.voiceCommandCount || 0 : 0;
+
+    if (used >= FREE_DAILY_VOICE_LIMIT) {
+      throw new HttpsError(
+        "resource-exhausted",
+        `Limite quotidienne atteinte (${FREE_DAILY_VOICE_LIMIT} commandes vocales/jour). Passez en Premium pour un usage illimité.`
+      );
+    }
+
+    tx.set(
+      usageRef,
+      {
+        voiceCommandDate: today,
+        voiceCommandCount: used + 1,
+        lastVoiceCommandAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return {
+      feature: "voice",
+      allowed: true,
+      isUnlimited: false,
+      used: used + 1,
+      limit: FREE_DAILY_VOICE_LIMIT,
+      remaining: Math.max(0, FREE_DAILY_VOICE_LIMIT - (used + 1)),
+      resetDate: today,
+    };
+  });
+}
+
 async function getExportQuotaStatus(db, uid) {
   const subscriptionState = await getSubscriptionState(db, uid);
 
@@ -358,8 +410,7 @@ exports.cleanupExpiredShareCodes = onSchedule("every 24 hours", async () => {
  * transcribeAudio — Proxy sécurisé pour AssemblyAI
  * - Auth obligatoire
  * - Rate limiting : max 10 requêtes/min/user
- * - Pas de quota business ici : le quota voix est consommé après succès
- *   via consumeUsageQuota("voice"), pas au niveau transcription.
+ * - Quota voix consommé côté serveur avant l'appel fournisseur coûteux
  */
 exports.transcribeAudio = onCall(
   withAppCheck({
@@ -405,9 +456,11 @@ exports.transcribeAudio = onCall(
 
     // 2. Rate limiting — max 10 requêtes/min/user
     await checkRateLimit(db, uid, "transcribe", 10);
+    // 3. Business quota — enforced server-side, client checks are UX only.
+    await reserveVoiceQuota(db, uid);
 
     try {
-      // 3. Upload audio to AssemblyAI
+      // 4. Upload audio to AssemblyAI
       const audioBuffer = Buffer.from(audioBase64, "base64");
 
       const uploadResponse = await fetch(
@@ -430,7 +483,7 @@ exports.transcribeAudio = onCall(
       const uploadData = await uploadResponse.json();
       const uploadUrl = uploadData.upload_url;
 
-      // 4. Create transcription
+      // 5. Create transcription
       const transcriptResponse = await fetch(
         "https://api.assemblyai.com/v2/transcript",
         {
@@ -458,7 +511,7 @@ exports.transcribeAudio = onCall(
       const transcript = await transcriptResponse.json();
       const transcriptId = transcript.id;
 
-      // 5. Poll for completion (max 60s)
+      // 6. Poll for completion (max 60s)
       let result = transcript;
       const maxPolls = 60;
       let polls = 0;
@@ -558,6 +611,10 @@ exports.consumeUsageQuota = onCall(
       throw new HttpsError("invalid-argument", "Feature invalide.");
     }
 
+    if (feature === "voice") {
+      return await reserveVoiceQuota(db, uid);
+    }
+
     const subscriptionState = await getSubscriptionState(db, uid);
     if (hasUnlimitedFeature(subscriptionState, feature)) {
       return {
@@ -575,39 +632,6 @@ exports.consumeUsageQuota = onCall(
     return await db.runTransaction(async (tx) => {
       const usageDoc = await tx.get(usageRef);
       const usageData = usageDoc.exists ? usageDoc.data() : {};
-
-      if (feature === "voice") {
-        const today = new Date().toISOString().split("T")[0];
-        const used =
-          usageData.voiceCommandDate === today ? usageData.voiceCommandCount || 0 : 0;
-
-        if (used >= FREE_DAILY_VOICE_LIMIT) {
-          throw new HttpsError(
-            "resource-exhausted",
-            `Limite quotidienne atteinte (${FREE_DAILY_VOICE_LIMIT} commandes vocales/jour). Passez en Premium pour un usage illimité.`
-          );
-        }
-
-        tx.set(
-          usageRef,
-          {
-            voiceCommandDate: today,
-            voiceCommandCount: used + 1,
-            lastVoiceCommandAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        return {
-          feature: "voice",
-          allowed: true,
-          isUnlimited: false,
-          used: used + 1,
-          limit: FREE_DAILY_VOICE_LIMIT,
-          remaining: Math.max(0, FREE_DAILY_VOICE_LIMIT - (used + 1)),
-          resetDate: today,
-        };
-      }
 
       const used = usageData.pdfExportCount || 0;
       if (used >= FREE_TOTAL_PDF_EXPORTS) {
