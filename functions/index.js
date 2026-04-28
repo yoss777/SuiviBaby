@@ -784,11 +784,7 @@ exports.createShareInvitation = onCall(
  * Sends an email notification to the SuiviBaby team when a user
  * submits a content report (e.g. sensitive child photo).
  */
-exports.onReportCreated = functions
-  .region("europe-west1")
-  .runWith({ secrets: ["RESEND_API_KEY"] })
-  .firestore.document("reports/{reportId}")
-  .onCreate(async (snapshot, context) => {
+async function handleReportCreated(snapshot, context) {
     const data = snapshot.data();
     const reportId = context.params.reportId;
 
@@ -861,15 +857,67 @@ exports.onReportCreated = functions
       console.error("onReportCreated: failed to hide for reporter", error);
     }
 
-    // 3. Auto-hide globally for intimate_child_nudity
-    if (data.reason === "intimate_child_nudity" && data.eventId) {
+    // 3. Graduated global hide (T3):
+    //    - immediate if reporter is an owner on the targeted child
+    //    - otherwise wait for >= 2 distinct reporters on the same event,
+    //      OR an explicit admin decision via resolveReport.
+    //    Auto-hide on a single non-owner report was abusable (a coparent
+    //    or viewer could mark a legitimate photo as nudity and have it
+    //    hidden globally with no recourse).
+    const isHidableReason =
+      data.reason === "intimate_child_nudity" ||
+      data.reason === "sensitive_child_photo";
+
+    if (data.eventId && isHidableReason) {
       try {
-        await db.doc(`events/${data.eventId}`).update({
-          reported: true,
-        });
-        console.log(`onReportCreated: event ${data.eventId} marked as reported (intimate_child_nudity)`);
+        let shouldHide = false;
+        let hideReason = "";
+
+        if (data.childId) {
+          const reporterAccessSnap = await db
+            .doc(`children/${data.childId}/access/${data.reporterUserId}`)
+            .get();
+          const reporterRole = reporterAccessSnap.exists
+            ? reporterAccessSnap.data()?.role
+            : null;
+          if (reporterRole === "owner") {
+            shouldHide = true;
+            hideReason = "owner-report";
+          }
+        }
+
+        if (!shouldHide) {
+          const peerReports = await db
+            .collection("reports")
+            .where("eventId", "==", data.eventId)
+            .where("reason", "in", [
+              "intimate_child_nudity",
+              "sensitive_child_photo",
+            ])
+            .get();
+          const distinctReporters = new Set(
+            peerReports.docs
+              .map((d) => d.data()?.reporterUserId)
+              .filter(Boolean)
+          );
+          if (distinctReporters.size >= 2) {
+            shouldHide = true;
+            hideReason = "two-reporter-threshold";
+          }
+        }
+
+        if (shouldHide) {
+          await db.doc(`events/${data.eventId}`).update({ reported: true });
+          console.log(
+            `onReportCreated: event ${data.eventId} hidden globally (${hideReason})`
+          );
+        } else {
+          console.log(
+            `onReportCreated: event ${data.eventId} flagged but not hidden — awaiting moderation`
+          );
+        }
       } catch (error) {
-        console.error("onReportCreated: failed to mark event as reported", error);
+        console.error("onReportCreated: failed to evaluate auto-hide", error);
       }
     }
 
@@ -909,7 +957,14 @@ exports.onReportCreated = functions
     } catch (error) {
       console.error("onReportCreated: failed to notify author", error);
     }
-  });
+  }
+
+exports.handleReportCreated = handleReportCreated;
+exports.onReportCreated = functions
+  .region("europe-west1")
+  .runWith({ secrets: ["RESEND_API_KEY"] })
+  .firestore.document("reports/{reportId}")
+  .onCreate(handleReportCreated);
 
 // ============================================
 // REPORT RESOLUTION (admin-only)

@@ -331,6 +331,162 @@ describe("resolveReport (T2 — child ownership check)", () => {
   });
 });
 
+describe("handleReportCreated (T3 — graduated photo moderation)", () => {
+  const admin = require("firebase-admin");
+
+  function reportSnapshot(data) {
+    return { data: () => data, id: "r1" };
+  }
+  function ctx(reportId = "r1") {
+    return { params: { reportId } };
+  }
+
+  beforeEach(() => {
+    // Without an API key the trigger returns early before reaching the
+    // auto-hide logic — set a dummy key so we exercise the full flow.
+    process.env.RESEND_API_KEY = "test-key";
+    admin.auth.mockReturnValue({
+      getUser: jest.fn(async (uid) => ({ uid, email: `${uid}@t.com` })),
+      deleteUser: jest.fn(),
+    });
+  });
+
+  afterAll(() => {
+    delete process.env.RESEND_API_KEY;
+  });
+
+  function setupBaseFirestore({ reporterRole, peerReports = [] }) {
+    const eventUpdate = jest.fn();
+    const hideForReporter = jest.fn();
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "user_hidden_photos/u_reporter") {
+        return { set: hideForReporter };
+      }
+      if (p === "children/c1/access/u_reporter") {
+        return {
+          get: jest.fn().mockResolvedValue(
+            reporterRole
+              ? doc({ role: reporterRole })
+              : no()
+          ),
+        };
+      }
+      if (p === "events/e1") {
+        return {
+          get: jest.fn().mockResolvedValue(no()),
+          update: eventUpdate,
+        };
+      }
+      return { get: jest.fn().mockResolvedValue(no()), update: jest.fn() };
+    });
+
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name === "reports") {
+        return {
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(snap(peerReports)),
+        };
+      }
+      return {
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(snap()),
+      };
+    });
+
+    return { eventUpdate };
+  }
+
+  it("does not hide globally when a single non-owner reports", async () => {
+    const { eventUpdate } = setupBaseFirestore({
+      reporterRole: "viewer",
+      peerReports: [
+        { data: { reporterUserId: "u_reporter", reason: "intimate_child_nudity" } },
+      ],
+    });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "intimate_child_nudity",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).not.toHaveBeenCalledWith({ reported: true });
+  });
+
+  it("hides globally immediately when the reporter is an owner", async () => {
+    const { eventUpdate } = setupBaseFirestore({
+      reporterRole: "owner",
+      peerReports: [],
+    });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "intimate_child_nudity",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).toHaveBeenCalledWith({ reported: true });
+  });
+
+  it("hides globally once two distinct non-owner reporters flag the same event", async () => {
+    const { eventUpdate } = setupBaseFirestore({
+      reporterRole: "viewer",
+      peerReports: [
+        { data: { reporterUserId: "u_reporter", reason: "intimate_child_nudity" } },
+        { data: { reporterUserId: "u_other", reason: "sensitive_child_photo" } },
+      ],
+    });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "intimate_child_nudity",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).toHaveBeenCalledWith({ reported: true });
+  });
+
+  it("counts only distinct reporters (same user reporting twice does not hide)", async () => {
+    const { eventUpdate } = setupBaseFirestore({
+      reporterRole: "contributor",
+      peerReports: [
+        { data: { reporterUserId: "u_reporter", reason: "intimate_child_nudity" } },
+        { data: { reporterUserId: "u_reporter", reason: "sensitive_child_photo" } },
+      ],
+    });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "intimate_child_nudity",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).not.toHaveBeenCalledWith({ reported: true });
+  });
+
+  it("does not run the auto-hide path for non-photo reasons", async () => {
+    const { eventUpdate } = setupBaseFirestore({ reporterRole: "owner" });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "privacy",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).not.toHaveBeenCalledWith({ reported: true });
+  });
+});
+
 describe("createShareInvitation", () => {
   it("rejects when free sharing limit is reached", async () => {
     mockFirestore.doc.mockImplementation((p) => {
