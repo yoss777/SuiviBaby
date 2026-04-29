@@ -66,6 +66,7 @@ import {
 } from "react-native";
 import { useHeaderRight } from "../../_layout";
 import { HomeSkeleton } from "./home/HomeSkeleton";
+import { HomeSmartContent } from "./home/HomeSmartContent";
 
 // ============================================
 // SKELETON LOADING (P1)
@@ -2384,67 +2385,25 @@ export default function HomeDashboard() {
           )}
         </View>
 
-        {/* Smart Content: Insights + Tips + Milestones */}
+        {/* Smart Content: Insights + Correlations + Milestones */}
         {isDataLoaded && !smartContent.isLoading && (
-          <View style={{ paddingHorizontal: 20, gap: 12, marginBottom: 12 }}>
-            {/* Data-driven insights */}
-            {hasAnyTodayData && smartContent.insights
-              .filter((ins) => !dismissedInsightIds.has(ins.id))
-              .map((insight, i) => (
-              <StaggeredCard
-                key={insight.id}
-              >
-                <InsightCard
-                  insight={insight}
-                  onDismiss={handleDismissInsight}
-                  onLearnMore={(ins) => {
-                    if (ins.relatedTipId) {
-                      openSheetRaw({
-                        ownerId: activeChild?.id ?? "",
-                        formType: "content" as const,
-                        tipId: ins.relatedTipId,
-                      });
-                    }
-                  }}
-                  colorScheme={colorScheme}
-                />
-              </StaggeredCard>
-            ))}
-
-            {/* Cross-data correlations */}
-            {hasAnyTodayData && smartContent.correlations
-              .filter((corr) => !dismissedInsightIds.has(corr.id))
-              .map((corr, i) => (
-              <StaggeredCard key={corr.id}>
-                <InsightCard insight={corr} onDismiss={handleDismissInsight} colorScheme={colorScheme} />
-              </StaggeredCard>
-            ))}
-
-            {/* Upcoming milestones */}
-            {smartContent.upcomingMilestones.length > 0 && (
-              <StaggeredCard>
-                <MilestoneTimelineCard
-                  milestones={smartContent.upcomingMilestones}
-                  ageWeeks={
-                    activeChild?.birthDate
-                      ? Math.floor(
-                          (Date.now() -
-                            new Date(
-                              activeChild.birthDate
-                                .split("/")
-                                .reverse()
-                                .join("-"),
-                            ).getTime()) /
-                            (7 * 24 * 60 * 60 * 1000),
-                        )
-                      : 0
-                  }
-                  onViewAll={() => setShowMilestonesModal(true)}
-                  colorScheme={colorScheme}
-                />
-              </StaggeredCard>
-            )}
-          </View>
+          <HomeSmartContent
+            smartContent={smartContent}
+            dismissedInsightIds={dismissedInsightIds}
+            hasAnyTodayData={hasAnyTodayData}
+            activeChildBirthDate={activeChild?.birthDate}
+            onOpenInsightTip={(tipId) =>
+              openSheetRaw({
+                ownerId: activeChild?.id ?? "",
+                formType: "content" as const,
+                tipId,
+              })
+            }
+            onDismissInsight={handleDismissInsight}
+            onShowMilestonesModal={() => setShowMilestonesModal(true)}
+            colorScheme={colorScheme}
+            StaggeredCard={StaggeredCard}
+          />
         )}
 
         {/* Chronologie récente */}
