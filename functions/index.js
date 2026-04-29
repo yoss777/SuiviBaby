@@ -2,7 +2,7 @@ const admin = require("firebase-admin");
 const { Buffer } = require("node:buffer");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
-const functions = require("firebase-functions");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 
 const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
@@ -961,11 +961,14 @@ async function handleReportCreated(snapshot, context) {
   }
 
 exports.handleReportCreated = handleReportCreated;
-exports.onReportCreated = functions
-  .region("europe-west1")
-  .runWith({ secrets: ["RESEND_API_KEY"] })
-  .firestore.document("reports/{reportId}")
-  .onCreate(handleReportCreated);
+exports.onReportCreated = onDocumentCreated(
+  {
+    document: "reports/{reportId}",
+    region: "europe-west1",
+    secrets: ["RESEND_API_KEY"],
+  },
+  (event) => handleReportCreated(event.data, { params: event.params })
+);
 
 // ============================================
 // REPORT RESOLUTION (admin-only)
