@@ -3,6 +3,15 @@
 // Principe : ne jamais envoyer de données identifiantes (noms, dates de naissance exactes, emails, UIDs)
 
 import type { Baby } from "@/types/baby";
+import { toDate as toJsDate } from "@/utils/date";
+
+/**
+ * Event timestamps reach this service in several wire shapes (Firestore
+ * Timestamp, httpsCallable {seconds, nanoseconds}, Date, ISO string,
+ * millis number). Treat them as `unknown` and let `toJsDate` from
+ * `utils/date.ts` normalise — it accepts every observed shape.
+ */
+type EventTimestamp = unknown;
 
 interface AnonymizedChildData {
   ageInMonths: number;
@@ -24,7 +33,7 @@ interface AnonymizedEventData {
  */
 export function anonymizeChildData(child: Baby): AnonymizedChildData {
   const now = new Date();
-  const birthDate = child.birthDate?.toDate?.() ?? new Date(child.birthDate as any);
+  const birthDate = toJsDate(child.birthDate);
   const ageInMonths = Math.floor(
     (now.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44)
   );
@@ -44,14 +53,14 @@ export function anonymizeChildData(child: Baby): AnonymizedChildData {
  */
 export function anonymizeEvent(event: {
   type: string;
-  timestamp: any;
+  timestamp: EventTimestamp;
   details?: Record<string, unknown>;
   childId?: string;
   userId?: string;
   note?: string;
 }): AnonymizedEventData {
   const { childId, userId, note, ...rest } = event;
-  const ts = event.timestamp?.toDate?.() ?? new Date(event.timestamp);
+  const ts = toJsDate(event.timestamp);
 
   return {
     type: rest.type,

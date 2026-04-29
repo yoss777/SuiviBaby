@@ -22,7 +22,7 @@ const getUserId = () => {
   return user.uid;
 };
 
-export async function ajouterVitamine(childId: string, data: any) {
+export async function ajouterVitamine(childId: string, data: Record<string, unknown>) {
   try {
     const userId = getUserId();
     const ref = await addDoc(collection(db, "vitamines"), {
@@ -99,7 +99,10 @@ export async function obtenirVitaminesAvecLimite(childId: string, nombreLimit: n
   }
 }
 
-export function ecouterVitamines(childId: string, callback: (docs: any[]) => void) {
+export function ecouterVitamines(
+  childId: string,
+  callback: (docs: Array<{ id: string } & Record<string, unknown>>) => void,
+) {
   const q = query(
     collection(db, "vitamines"),
     where("childId", "==", childId),
@@ -117,7 +120,11 @@ export function ecouterVitamines(childId: string, callback: (docs: any[]) => voi
   return unsubscribe;
 }
 
-export async function modifierVitamine(childId: string, id: string, nouveausDonnees: any) {
+export async function modifierVitamine(
+  childId: string,
+  id: string,
+  nouveausDonnees: Record<string, unknown>,
+) {
   try {
     const docRef = doc(db, "vitamines", id);
     const docSnap = await getDoc(docRef);
