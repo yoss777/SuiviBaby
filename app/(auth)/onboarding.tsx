@@ -254,8 +254,8 @@ export default function OnboardingScreen() {
       </TouchableOpacity>
       <InfoModal
         visible={showBiometricPrompt}
-        title={`Activer ${biometricType} ?`}
-        message={`Connectez-vous plus rapidement avec ${biometricType}. Vous pourrez modifier ce choix dans les réglages.`}
+        title={`Verrouiller l'app avec ${biometricType} ?`}
+        message={`À chaque ouverture de l'app, ${biometricType} sera demandé pour accéder à vos données. Si vous vous déconnectez, vous devrez retaper votre mot de passe pour réactiver le verrou. Modifiable dans les réglages.`}
         backgroundColor={nc.backgroundCard}
         textColor={nc.textStrong}
         confirmText="Activer"

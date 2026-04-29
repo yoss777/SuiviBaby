@@ -321,8 +321,8 @@ export default function SettingsScreen() {
                 : "finger-print-outline") as keyof typeof Ionicons.glyphMap,
               label: biometricLabel,
               description: biometricEnabled
-                ? "Connexion rapide activée"
-                : "Activer la connexion rapide",
+                ? "Verrou actif à l'ouverture de l'app"
+                : "Verrouiller l'app avec ce capteur",
               switchValue: biometricEnabled,
               onSwitchChange: handleBiometricToggle,
               showChevron: false,
@@ -331,7 +331,7 @@ export default function SettingsScreen() {
               accessibilityLabel: biometricLabel,
               accessibilityHint: isBiometricUpdating
                 ? "Mise à jour en cours"
-                : "Active ou désactive la connexion rapide",
+                : "Active ou désactive le verrou biométrique de l'app",
             },
           ]
         : []),

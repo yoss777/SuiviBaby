@@ -8,10 +8,8 @@ import { hasPendingDeletion } from "@/services/accountDeletionService";
 import {
   consumeBiometricOptInPending,
   enableBiometric,
-  getBiometricType,
   isBiometricAvailable,
   isBiometricEnabled,
-  unlockWithBiometric,
 } from "@/services/biometricAuthService";
 import {
   isAppleSignInAvailable,
@@ -102,9 +100,7 @@ export default function LoginScreen() {
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const [emailTouched, setEmailTouched] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
-  const [biometricType, setBiometricType] = useState("Biométrie");
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -162,16 +158,12 @@ export default function LoginScreen() {
 
     (async () => {
       try {
-        const available = await isBiometricAvailable();
-        setBiometricAvailable(available);
-        if (available) {
+        if (await isBiometricAvailable()) {
           const enabled = await isBiometricEnabled();
           setBiometricEnabled(enabled);
-          const type = await getBiometricType();
-          setBiometricType(type);
         }
       } catch {
-        setBiometricAvailable(false);
+        // ignored — biometric is optional
       }
 
       // Check Apple Sign-In availability
@@ -433,29 +425,6 @@ export default function LoginScreen() {
       setLoading(false);
     }
   }, [isLogin, hasConsented, hasHealthConsent, email, password, userName, confirmPassword, unmetRules, showModal, resetAllFields, isCoolingDown, failedAttempts]);
-
-  // Déverrouillage biométrique : la session Firebase doit déjà exister
-  // (auth.currentUser non-null). Si l'utilisateur a sign-out explicitement
-  // ou si la session a expiré, il doit retaper son mot de passe.
-  const handleBiometricLogin = useCallback(async () => {
-    try {
-      const expectedUid = await unlockWithBiometric();
-      if (!expectedUid) return;
-      const currentUid = auth.currentUser?.uid;
-      if (!currentUid || currentUid !== expectedUid) {
-        showModal(
-          "Session expirée",
-          "Veuillez vous reconnecter avec votre mot de passe pour réactiver la connexion rapide.",
-        );
-        return;
-      }
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // boot.tsx / authContext redirigent automatiquement quand currentUser est là
-    } catch {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showModal("Erreur", "Une erreur est survenue. Veuillez réessayer.");
-    }
-  }, [showModal]);
 
 
   const handleEmailChange = useCallback((text: string) => {
@@ -746,26 +715,6 @@ export default function LoginScreen() {
               </>
             )}
           </TouchableOpacity>
-
-          {/* Bouton biométrique (#1) */}
-          {isLogin && biometricAvailable && biometricEnabled && (
-            <TouchableOpacity
-              style={[styles.biometricButton, { borderColor: nc.todayAccent }]}
-              onPress={handleBiometricLogin}
-              disabled={loading}
-              accessibilityRole="button"
-              accessibilityLabel={`Se connecter avec ${biometricType}`}
-            >
-              <FontAwesome
-                name={biometricType === "Face ID" ? "face-smile" : "fingerprint"}
-                size={22}
-                color={nc.todayAccent}
-              />
-              <Text style={[styles.biometricButtonText, { color: nc.todayAccent }]}>
-                Se connecter avec {biometricType}
-              </Text>
-            </TouchableOpacity>
-          )}
 
           {/* Séparateur social */}
           <View style={styles.dividerRow}>

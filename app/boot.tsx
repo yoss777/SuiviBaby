@@ -10,6 +10,10 @@ import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { hasPendingDeletion } from "@/services/accountDeletionService";
+import {
+  isBiometricEnabled,
+  unlockWithBiometric,
+} from "@/services/biometricAuthService";
 import { obtenirEvenementsDuJour } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { setPreferencesCache, setPermissionsCache } from "@/services/userPreferencesCache";
@@ -37,6 +41,7 @@ function BootScreenContent() {
     loading: authLoading,
     status: authStatus,
     refreshUser,
+    signOut,
   } = useAuth();
   const {
     children,
@@ -52,6 +57,10 @@ function BootScreenContent() {
   const [bootRetryKey, setBootRetryKey] = useState(0);
   const [bootStalled, setBootStalled] = useState(false);
   const [stallPhase, setStallPhase] = useState<"auth" | "children" | null>(null);
+  const [biometricCheck, setBiometricCheck] = useState<
+    "pending" | "running" | "passed" | "failed"
+  >("pending");
+  const biometricCheckStartedRef = useRef(false);
   const hasNavigatedRef = useRef(false);
   const bootResourceKeyRef = useRef<string | null>(null);
   const bootResourcePromiseRef = useRef<Promise<void> | null>(null);
@@ -215,6 +224,46 @@ function BootScreenContent() {
         return;
       }
 
+      // Étape 2.5 : verrou biométrique. Si l'utilisateur a activé le verrou,
+      // on prompte avant tout chargement enfants. Échec → signOut + login.
+      if (biometricCheck === "pending" && !biometricCheckStartedRef.current) {
+        biometricCheckStartedRef.current = true;
+        const enabled = await isBiometricEnabled();
+        if (!enabled) {
+          setBiometricCheck("passed");
+        } else {
+          setBiometricCheck("running");
+          try {
+            const expectedUid = await unlockWithBiometric();
+            if (expectedUid && expectedUid === firebaseUser?.uid) {
+              setBiometricCheck("passed");
+            } else {
+              setBiometricCheck("failed");
+            }
+          } catch {
+            setBiometricCheck("failed");
+          }
+        }
+        return;
+      }
+
+      if (biometricCheck === "running") {
+        return;
+      }
+
+      if (biometricCheck === "failed") {
+        if (hasNavigatedRef.current) return;
+        hasNavigatedRef.current = true;
+        logBoot("Verrou biométrique refusé — signOut puis login");
+        try {
+          await signOut();
+        } catch {
+          // ignored — on route quand même vers login
+        }
+        router.replace("/(auth)/login");
+        return;
+      }
+
       // Étape 3 : Attendre que les enfants soient chargés
       // IMPORTANT : babyLoading doit être false ET on doit avoir vérifié les enfants
       if (babyLoading) {
@@ -296,6 +345,8 @@ function BootScreenContent() {
     setActiveChild,
     prefetchBootResources,
     bootStalled,
+    biometricCheck,
+    signOut,
   ]);
 
   const hasAuthDegradedSession =
