@@ -27,6 +27,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
+import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
 import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
@@ -51,7 +52,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
-  AppState,
   BackHandler,
   Easing,
   Modal,
@@ -596,12 +596,9 @@ export default function HomeDashboard() {
     vaccins: { count: 0 },
   });
 
-  const [currentTime, setCurrentTime] = useState(new Date());
-  // Track current day to detect day changes (for listener refresh)
-  const [currentDay, setCurrentDay] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-  });
+  // Minute-by-minute wall clock + day rollover detection. Foreground
+  // transitions snap back to real time. See hooks/useMinuteTick.ts.
+  const { currentTime, currentDay } = useMinuteTick();
   const hasInitialCache = !!initialCache;
   const [loading, setLoading] = useState({
     tetees: !hasInitialCache,
@@ -1777,60 +1774,8 @@ export default function HomeDashboard() {
   }, [activeChild?.id, promenadeEnCours, toDate, openSheet, showToast]);
 
   // ============================================
-  // EFFECTS - TIMER
+  // EFFECTS
   // ============================================
-
-  // Timer intelligent qui écoute les changements d'état de l'app
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(now);
-      // Check if day changed to refresh the listener
-      const newDay = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-      setCurrentDay((prev) => (prev !== newDay ? newDay : prev));
-      scheduleNextUpdate();
-    };
-
-    const scheduleNextUpdate = () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-
-      const now = new Date();
-      const millisecondsUntilNextMinute =
-        (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-
-      timer = setTimeout(() => {
-        updateTime();
-      }, millisecondsUntilNextMinute);
-    };
-
-    const handleAppStateChange = (nextAppState: string) => {
-      if (nextAppState === "active") {
-        const now = new Date();
-        setCurrentTime(now);
-        const newDay = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-        setCurrentDay((prev) => (prev !== newDay ? newDay : prev));
-        scheduleNextUpdate();
-      }
-    };
-
-    const subscription = AppState.addEventListener(
-      "change",
-      handleAppStateChange,
-    );
-
-    updateTime();
-
-    return () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-      subscription?.remove();
-    };
-  }, []);
 
   useEffect(() => {
     if (!activeChild?.id) return;
