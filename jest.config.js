@@ -13,4 +13,14 @@ module.exports = {
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
   },
+  // Coverage floors — set just below the 2026-04-29 baseline (62/57/62/64)
+  // so a regression fails CI without locking us in. Raise as the suite grows.
+  coverageThreshold: {
+    global: {
+      statements: 55,
+      branches: 50,
+      functions: 55,
+      lines: 55,
+    },
+  },
 };
