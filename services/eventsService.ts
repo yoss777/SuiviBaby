@@ -770,56 +770,10 @@ export async function ajouterVitamine(
 /**
  * Statistiques pour les dernières 24h
  */
-export async function obtenirStats24h(childId: string) {
-  const hier = new Date();
-  hier.setHours(hier.getHours() - 24);
-
-  const events = await obtenirEvenements(childId, { depuis: hier });
-
-  const stats = {
-    biberons: { count: 0, totalMl: 0 },
-    tetees: { count: 0, totalMinutes: 0 },
-    mictions: { count: 0 },
-    selles: { count: 0 },
-    couches: { count: 0 },
-    sommeil: { count: 0, totalMinutes: 0 },
-    bains: { count: 0 },
-  };
-
-  events.forEach((event) => {
-    switch (event.type) {
-      case "biberon":
-        stats.biberons.count++;
-        stats.biberons.totalMl += (event as BiberonEvent).quantite;
-        break;
-      case "tetee":
-        stats.tetees.count++;
-        const tetee = event as TeteeEvent;
-        stats.tetees.totalMinutes +=
-          (tetee.dureeGauche || 0) + (tetee.dureeDroite || 0);
-        break;
-      case "miction":
-        stats.mictions.count++;
-        break;
-      case "selle":
-        stats.selles.count++;
-        break;
-      case "couche":
-        // Legacy raw diaper-change stats are still counted for historical data.
-        stats.couches.count++;
-        break;
-      case "sommeil":
-        stats.sommeil.count++;
-        stats.sommeil.totalMinutes += (event as SommeilEvent).duree || 0;
-        break;
-      case "bain":
-        stats.bains.count++;
-        break;
-    }
-  });
-
-  return stats;
-}
+// 24h aggregation lives in services/events/stats.ts. Re-export so the
+// existing public API remains stable.
+export { obtenirStats24h } from "./events/stats";
+export type { Stats24h } from "./events/stats";
 
 // ============================================
 // OPTIMISTIC UI WRAPPERS
