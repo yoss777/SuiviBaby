@@ -17,7 +17,6 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
-import { FIREBASE_STORAGE_BUCKET, extractStoragePath } from "@/utils/photoStorage";
 import { getTodayTypes } from "@/services/todayEventsCache";
 import { enqueueEvent, isOnline } from "./offlineQueueService";
 import {
@@ -1017,56 +1016,8 @@ export async function getNextEventDateBefore(
   return eventDate instanceof Date ? eventDate : new Date(eventDate as any);
 }
 
-// ============================================
-// JALON PHOTO CLEANUP HELPERS
-// ============================================
-
-export async function deletePhotoFromStorage(photoRef: string): Promise<void> {
-  try {
-    const filePath = extractStoragePath(photoRef);
-    if (!filePath) {
-      console.warn("[DELETE_PHOTO] Référence photo non reconnue:", photoRef);
-      return;
-    }
-    const encodedPath = encodeURIComponent(filePath);
-    console.log("[DELETE_PHOTO] Suppression de:", filePath);
-
-    const user = auth.currentUser;
-    if (!user) {
-      console.warn("[DELETE_PHOTO] Utilisateur non connecté");
-      return;
-    }
-    const token = await user.getIdToken();
-
-    const deleteUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodedPath}`;
-    const response = await fetch(deleteUrl, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (response.ok || response.status === 404) {
-      console.log("[DELETE_PHOTO] Photo supprimée avec succès");
-    } else {
-      console.error("[DELETE_PHOTO] Erreur:", response.status, await response.text());
-    }
-  } catch (error) {
-    console.error("[DELETE_PHOTO] Erreur:", error);
-  }
-}
-
-/** Supprime un jalon avec nettoyage des photos Firebase Storage. */
-export async function supprimerJalon(childId: string, id: string) {
-  try {
-    const event = await obtenirEvenement(childId, id);
-    if ((event as any)?.photos && Array.isArray((event as any).photos)) {
-      for (const photoRef of (event as any).photos) {
-        if (photoRef) {
-          await deletePhotoFromStorage(photoRef);
-        }
-      }
-    }
-  } catch (error) {
-    console.error("[SUPPRIMER_JALON] Erreur récupération événement:", error);
-  }
-  return supprimerEvenement(childId, id);
-}
+// Photo / jalon cleanup helpers live in services/events/photoCleanup.ts.
+export {
+  deletePhotoFromStorage,
+  supprimerJalon,
+} from "./events/photoCleanup";
