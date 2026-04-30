@@ -47,6 +47,7 @@ jest.mock("firebase-admin", () => {
 });
 jest.mock("firebase-functions/v2/https", () => ({ onCall: jest.fn((o, h) => typeof o === "function" ? o : h), onRequest: jest.fn((o, h) => h), HttpsError: class extends Error { constructor(c, m) { super(m); this.code = c; } } }));
 jest.mock("firebase-functions/v2/scheduler", () => ({ onSchedule: jest.fn((o, h) => h) }));
+jest.mock("firebase-functions/v2/firestore", () => ({ onDocumentCreated: jest.fn((o, h) => h) }));
 jest.mock("expo-server-sdk", () => ({ Expo: jest.fn(() => ({ sendPushNotificationsAsync: jest.fn(() => Promise.resolve([])), chunkPushNotifications: jest.fn((m) => [m]), isExpoPushToken: jest.fn(() => true) })) }));
 jest.mock("resend", () => ({ Resend: jest.fn(() => ({ emails: { send: jest.fn(() => Promise.resolve({ id: "eid" })) } })) }));
 jest.mock("../emailTemplates", () => ({ buildRecapHTML: jest.fn(() => "<html></html>") }));

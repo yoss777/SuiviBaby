@@ -2,7 +2,7 @@
   "name": "suivibaby-functions",
   "private": true,
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "scripts": {
@@ -12,7 +12,7 @@
   "dependencies": {
     "expo-server-sdk": "^6.1.0",
     "firebase-admin": "^12.7.0",
-    "firebase-functions": "^4.9.0",
+    "firebase-functions": "^5.1.1",
     "resend": "^6.9.3"
   },
   "devDependencies": {

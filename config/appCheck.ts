@@ -1,3 +1,15 @@
+// App Check setup notes
+// ─────────────────────
+// We rely on two SDKs side-by-side, on purpose:
+//   - firebase/app-check (web): ReCaptchaV3Provider for the web build
+//   - @react-native-firebase/app-check (native): the only path on iOS /
+//     Android that can do real App Attest / Play Integrity attestation.
+//     The JS Firebase SDK does not implement native attestation on RN.
+// The native package is loaded via dynamic import below, gated by
+// nativeAppCheckConfigured (= GoogleService-Info.plist + google-services.json
+// present at build time). app.config.js registers the matching Expo plugins.
+// Keep @react-native-firebase pinned to a major that ships with Expo SDK 53;
+// bump it together with the SDK upgrade, never on its own.
 import Constants from "expo-constants";
 import {
   CustomProvider,
