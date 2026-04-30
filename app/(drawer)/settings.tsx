@@ -43,7 +43,7 @@ import {
   requestAccountDeletion,
 } from "@/services/accountDeletionService";
 import {
-  clearCredentials,
+  disableBiometric,
   enableBiometric,
   getBiometricType,
   isBiometricAvailable,
@@ -256,10 +256,13 @@ export default function SettingsScreen() {
 
       try {
         if (value) {
-          await enableBiometric();
+          if (!user?.uid) {
+            throw new Error("Utilisateur non authentifié");
+          }
+          await enableBiometric(user.uid);
           setBiometricEnabled(true);
         } else {
-          await clearCredentials();
+          await disableBiometric();
           setBiometricEnabled(false);
         }
       } catch {
@@ -274,7 +277,7 @@ export default function SettingsScreen() {
         setIsBiometricUpdating(false);
       }
     },
-    [biometricLabel, isBiometricUpdating],
+    [biometricLabel, isBiometricUpdating, user?.uid],
   );
 
   const accountSettings: SettingItem[] = useMemo(
@@ -318,8 +321,8 @@ export default function SettingsScreen() {
                 : "finger-print-outline") as keyof typeof Ionicons.glyphMap,
               label: biometricLabel,
               description: biometricEnabled
-                ? "Connexion rapide activée"
-                : "Activer la connexion rapide",
+                ? "Verrou actif à l'ouverture de l'app"
+                : "Verrouiller l'app avec ce capteur",
               switchValue: biometricEnabled,
               onSwitchChange: handleBiometricToggle,
               showChevron: false,
@@ -328,7 +331,7 @@ export default function SettingsScreen() {
               accessibilityLabel: biometricLabel,
               accessibilityHint: isBiometricUpdating
                 ? "Mise à jour en cours"
-                : "Active ou désactive la connexion rapide",
+                : "Active ou désactive le verrou biométrique de l'app",
             },
           ]
         : []),

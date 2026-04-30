@@ -213,6 +213,58 @@ async function getVoiceQuotaStatus(db, uid) {
   };
 }
 
+async function reserveVoiceQuota(db, uid) {
+  const subscriptionState = await getSubscriptionState(db, uid);
+
+  if (hasUnlimitedFeature(subscriptionState, "voice")) {
+    return {
+      feature: "voice",
+      allowed: true,
+      isUnlimited: true,
+      used: 0,
+      limit: null,
+      remaining: null,
+      resetDate: null,
+    };
+  }
+
+  const usageRef = db.doc(`usage_limits/${uid}`);
+  return await db.runTransaction(async (tx) => {
+    const usageDoc = await tx.get(usageRef);
+    const usageData = usageDoc.exists ? usageDoc.data() : {};
+    const today = new Date().toISOString().split("T")[0];
+    const used =
+      usageData.voiceCommandDate === today ? usageData.voiceCommandCount || 0 : 0;
+
+    if (used >= FREE_DAILY_VOICE_LIMIT) {
+      throw new HttpsError(
+        "resource-exhausted",
+        `Limite quotidienne atteinte (${FREE_DAILY_VOICE_LIMIT} commandes vocales/jour). Passez en Premium pour un usage illimité.`
+      );
+    }
+
+    tx.set(
+      usageRef,
+      {
+        voiceCommandDate: today,
+        voiceCommandCount: used + 1,
+        lastVoiceCommandAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return {
+      feature: "voice",
+      allowed: true,
+      isUnlimited: false,
+      used: used + 1,
+      limit: FREE_DAILY_VOICE_LIMIT,
+      remaining: Math.max(0, FREE_DAILY_VOICE_LIMIT - (used + 1)),
+      resetDate: today,
+    };
+  });
+}
+
 async function getExportQuotaStatus(db, uid) {
   const subscriptionState = await getSubscriptionState(db, uid);
 
@@ -358,8 +410,7 @@ exports.cleanupExpiredShareCodes = onSchedule("every 24 hours", async () => {
  * transcribeAudio — Proxy sécurisé pour AssemblyAI
  * - Auth obligatoire
  * - Rate limiting : max 10 requêtes/min/user
- * - Pas de quota business ici : le quota voix est consommé après succès
- *   via consumeUsageQuota("voice"), pas au niveau transcription.
+ * - Quota voix consommé côté serveur avant l'appel fournisseur coûteux
  */
 exports.transcribeAudio = onCall(
   withAppCheck({
@@ -405,9 +456,11 @@ exports.transcribeAudio = onCall(
 
     // 2. Rate limiting — max 10 requêtes/min/user
     await checkRateLimit(db, uid, "transcribe", 10);
+    // 3. Business quota — enforced server-side, client checks are UX only.
+    await reserveVoiceQuota(db, uid);
 
     try {
-      // 3. Upload audio to AssemblyAI
+      // 4. Upload audio to AssemblyAI
       const audioBuffer = Buffer.from(audioBase64, "base64");
 
       const uploadResponse = await fetch(
@@ -430,7 +483,7 @@ exports.transcribeAudio = onCall(
       const uploadData = await uploadResponse.json();
       const uploadUrl = uploadData.upload_url;
 
-      // 4. Create transcription
+      // 5. Create transcription
       const transcriptResponse = await fetch(
         "https://api.assemblyai.com/v2/transcript",
         {
@@ -458,7 +511,7 @@ exports.transcribeAudio = onCall(
       const transcript = await transcriptResponse.json();
       const transcriptId = transcript.id;
 
-      // 5. Poll for completion (max 60s)
+      // 6. Poll for completion (max 60s)
       let result = transcript;
       const maxPolls = 60;
       let polls = 0;
@@ -558,6 +611,10 @@ exports.consumeUsageQuota = onCall(
       throw new HttpsError("invalid-argument", "Feature invalide.");
     }
 
+    if (feature === "voice") {
+      return await reserveVoiceQuota(db, uid);
+    }
+
     const subscriptionState = await getSubscriptionState(db, uid);
     if (hasUnlimitedFeature(subscriptionState, feature)) {
       return {
@@ -575,39 +632,6 @@ exports.consumeUsageQuota = onCall(
     return await db.runTransaction(async (tx) => {
       const usageDoc = await tx.get(usageRef);
       const usageData = usageDoc.exists ? usageDoc.data() : {};
-
-      if (feature === "voice") {
-        const today = new Date().toISOString().split("T")[0];
-        const used =
-          usageData.voiceCommandDate === today ? usageData.voiceCommandCount || 0 : 0;
-
-        if (used >= FREE_DAILY_VOICE_LIMIT) {
-          throw new HttpsError(
-            "resource-exhausted",
-            `Limite quotidienne atteinte (${FREE_DAILY_VOICE_LIMIT} commandes vocales/jour). Passez en Premium pour un usage illimité.`
-          );
-        }
-
-        tx.set(
-          usageRef,
-          {
-            voiceCommandDate: today,
-            voiceCommandCount: used + 1,
-            lastVoiceCommandAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        return {
-          feature: "voice",
-          allowed: true,
-          isUnlimited: false,
-          used: used + 1,
-          limit: FREE_DAILY_VOICE_LIMIT,
-          remaining: Math.max(0, FREE_DAILY_VOICE_LIMIT - (used + 1)),
-          resetDate: today,
-        };
-      }
 
       const used = usageData.pdfExportCount || 0;
       if (used >= FREE_TOTAL_PDF_EXPORTS) {
@@ -760,11 +784,7 @@ exports.createShareInvitation = onCall(
  * Sends an email notification to the SuiviBaby team when a user
  * submits a content report (e.g. sensitive child photo).
  */
-exports.onReportCreated = functions
-  .region("europe-west1")
-  .runWith({ secrets: ["RESEND_API_KEY"] })
-  .firestore.document("reports/{reportId}")
-  .onCreate(async (snapshot, context) => {
+async function handleReportCreated(snapshot, context) {
     const data = snapshot.data();
     const reportId = context.params.reportId;
 
@@ -787,14 +807,14 @@ exports.onReportCreated = functions
     }
 
     const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      console.error("onReportCreated: RESEND_API_KEY not configured");
-      return;
-    }
+    const db = admin.firestore();
 
-    const resend = new Resend(apiKey);
-
-    const html = `
+    // 1. Send email to operator (best-effort — never blocks the
+    // moderation effects below; if RESEND_API_KEY is missing we still
+    // hide for the reporter and apply the auto-hide rules).
+    if (apiKey) {
+      const resend = new Resend(apiKey);
+      const html = `
       <h2>Nouveau signalement de contenu</h2>
       <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;">
         <tr><td style="padding:6px 12px;font-weight:bold;">Report ID</td><td style="padding:6px 12px;">${reportId}</td></tr>
@@ -808,21 +828,22 @@ exports.onReportCreated = functions
       <p style="margin-top:16px;font-size:13px;color:#6b7280;">
         Consultez la collection <code>reports/${reportId}</code> dans la console Firebase pour traiter ce signalement.
       </p>
-    `;
-
-    const db = admin.firestore();
-
-    // 1. Send email to operator
-    try {
-      await resend.emails.send({
-        from: "Suivi Baby <noreply@suivibaby.com>",
-        to: "contact@suivibaby.com",
-        subject: `[Signalement] ${reasonLabel} — SuiviBaby`,
-        html,
-      });
-      console.log(`onReportCreated: email sent for report ${reportId}`);
-    } catch (error) {
-      console.error("onReportCreated: failed to send email", error);
+      `;
+      try {
+        await resend.emails.send({
+          from: "Suivi Baby <noreply@suivibaby.com>",
+          to: "contact@suivibaby.com",
+          subject: `[Signalement] ${reasonLabel} — SuiviBaby`,
+          html,
+        });
+        console.log(`onReportCreated: email sent for report ${reportId}`);
+      } catch (error) {
+        console.error("onReportCreated: failed to send email", error);
+      }
+    } else {
+      console.warn(
+        `onReportCreated: RESEND_API_KEY not configured — skipping ops email for report ${reportId} (moderation effects still applied)`
+      );
     }
 
     // 2. Hide photo for reporter (add to user_hidden_photos)
@@ -837,15 +858,67 @@ exports.onReportCreated = functions
       console.error("onReportCreated: failed to hide for reporter", error);
     }
 
-    // 3. Auto-hide globally for intimate_child_nudity
-    if (data.reason === "intimate_child_nudity" && data.eventId) {
+    // 3. Graduated global hide (T3):
+    //    - immediate if reporter is an owner on the targeted child
+    //    - otherwise wait for >= 2 distinct reporters on the same event,
+    //      OR an explicit admin decision via resolveReport.
+    //    Auto-hide on a single non-owner report was abusable (a coparent
+    //    or viewer could mark a legitimate photo as nudity and have it
+    //    hidden globally with no recourse).
+    const isHidableReason =
+      data.reason === "intimate_child_nudity" ||
+      data.reason === "sensitive_child_photo";
+
+    if (data.eventId && isHidableReason) {
       try {
-        await db.doc(`events/${data.eventId}`).update({
-          reported: true,
-        });
-        console.log(`onReportCreated: event ${data.eventId} marked as reported (intimate_child_nudity)`);
+        let shouldHide = false;
+        let hideReason = "";
+
+        if (data.childId) {
+          const reporterAccessSnap = await db
+            .doc(`children/${data.childId}/access/${data.reporterUserId}`)
+            .get();
+          const reporterRole = reporterAccessSnap.exists
+            ? reporterAccessSnap.data()?.role
+            : null;
+          if (reporterRole === "owner") {
+            shouldHide = true;
+            hideReason = "owner-report";
+          }
+        }
+
+        if (!shouldHide) {
+          const peerReports = await db
+            .collection("reports")
+            .where("eventId", "==", data.eventId)
+            .where("reason", "in", [
+              "intimate_child_nudity",
+              "sensitive_child_photo",
+            ])
+            .get();
+          const distinctReporters = new Set(
+            peerReports.docs
+              .map((d) => d.data()?.reporterUserId)
+              .filter(Boolean)
+          );
+          if (distinctReporters.size >= 2) {
+            shouldHide = true;
+            hideReason = "two-reporter-threshold";
+          }
+        }
+
+        if (shouldHide) {
+          await db.doc(`events/${data.eventId}`).update({ reported: true });
+          console.log(
+            `onReportCreated: event ${data.eventId} hidden globally (${hideReason})`
+          );
+        } else {
+          console.log(
+            `onReportCreated: event ${data.eventId} flagged but not hidden — awaiting moderation`
+          );
+        }
       } catch (error) {
-        console.error("onReportCreated: failed to mark event as reported", error);
+        console.error("onReportCreated: failed to evaluate auto-hide", error);
       }
     }
 
@@ -885,7 +958,14 @@ exports.onReportCreated = functions
     } catch (error) {
       console.error("onReportCreated: failed to notify author", error);
     }
-  });
+  }
+
+exports.handleReportCreated = handleReportCreated;
+exports.onReportCreated = functions
+  .region("europe-west1")
+  .runWith({ secrets: ["RESEND_API_KEY"] })
+  .firestore.document("reports/{reportId}")
+  .onCreate(handleReportCreated);
 
 // ============================================
 // REPORT RESOLUTION (admin-only)
@@ -925,6 +1005,25 @@ exports.resolveReport = onCall(
 
     if (reportData.status === "resolved") {
       throw new HttpsError("already-exists", "Ce signalement a déjà été traité.");
+    }
+
+    // Audit-log every admin action — the admin custom claim grants the
+    // ability to act on any report, so the safeguard against rogue admins
+    // is detection (this log) rather than prevention.
+    try {
+      await db.collection("adminAuditLog").add({
+        type: "resolveReport",
+        adminUid: uid,
+        reportId,
+        childId: reportData.childId || null,
+        eventId: reportData.eventId || null,
+        action,
+        adminNote: adminNote || null,
+        at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      // Audit log failure must not block the moderation action itself.
+      console.error("resolveReport: failed to write audit log", e.message);
     }
 
     // Execute action
@@ -1513,23 +1612,50 @@ exports.deleteUserAccount = onCall(
     const uid = request.auth.uid;
     const db = admin.firestore();
 
-    // Rate limit: 1 suppression/min max
+    // T4 — This entry point is reserved for platform admins. The user-facing
+    // path is the soft-delete workflow (requestAccountDeletion + 30-day
+    // pendingDeletion + processScheduledDeletions cron). A direct callable
+    // bypassing the grace period was abusable: a malicious client could wipe
+    // an account instantly with no recovery window. Enforce admin claim.
+    let callerRecord;
+    try {
+      callerRecord = await admin.auth().getUser(uid);
+    } catch (e) {
+      throw new HttpsError("internal", "Impossible de vérifier l'identité.");
+    }
+    if (!callerRecord.customClaims?.admin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Suppression immédiate réservée aux administrateurs. Utilisez la suppression programmée (30 jours) côté application."
+      );
+    }
+
+    // Optional payload override: admin can target a specific uid.
+    const targetUid = request.data?.uid || uid;
+    if (targetUid !== uid) {
+      // Audit log: admin acting on another account.
+      console.log(
+        `deleteUserAccount: admin ${uid} deleting account ${targetUid}`
+      );
+    }
+
+    // Rate limit on the admin caller (not the target).
     await checkRateLimit(db, uid, "delete", 1);
 
     // Récupérer l'email pour cleanup des invitations
     let email = "";
     try {
-      const userRecord = await admin.auth().getUser(uid);
+      const userRecord = await admin.auth().getUser(targetUid);
       email = (userRecord.email || "").toLowerCase();
     } catch (e) {
       // User may already be partially deleted, continue
-      console.warn(`deleteUserAccount: could not fetch user record for ${uid}`, e.message);
+      console.warn(`deleteUserAccount: could not fetch user record for ${targetUid}`, e.message);
     }
 
     // 1. Récupérer tous les enfants auxquels l'utilisateur a accès
     const accessSnapshot = await db
       .collection("user_child_access")
-      .where("userId", "==", uid)
+      .where("userId", "==", targetUid)
       .get();
 
     // 2. Traiter chaque enfant
@@ -1547,11 +1673,11 @@ exports.deleteUserAccount = onCall(
         await db.doc(`children/${childId}`).delete();
       } else if (role === "owner") {
         // Owner avec co-parents → transférer la propriété
-        await transferOwnership(db, childId, uid, childAccessSnap);
-        await db.doc(`children/${childId}/access/${uid}`).delete();
+        await transferOwnership(db, childId, targetUid, childAccessSnap);
+        await db.doc(`children/${childId}/access/${targetUid}`).delete();
       } else {
         // Non-owner → supprimer l'accès uniquement
-        await db.doc(`children/${childId}/access/${uid}`).delete();
+        await db.doc(`children/${childId}/access/${targetUid}`).delete();
       }
 
       // Supprimer l'entrée d'index
@@ -1560,14 +1686,14 @@ exports.deleteUserAccount = onCall(
 
     // 3. Supprimer les données créées par l'utilisateur (par userId)
     await Promise.all([
-      deleteDocsByFieldBatched(db, "events", "userId", uid),
-      deleteDocsByFieldBatched(db, "eventLikes", "userId", uid),
-      deleteDocsByFieldBatched(db, "eventComments", "userId", uid),
-      deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", uid),
-      deleteDocsByFieldBatched(db, "shareCodes", "createdBy", uid),
-      deleteDocsByFieldBatched(db, "device_tokens", "userId", uid),
-      deleteDocsByFieldBatched(db, "notification_history", "userId", uid),
-      deleteDocsByFieldBatched(db, "recap_history", "userId", uid),
+      deleteDocsByFieldBatched(db, "events", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "eventLikes", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "eventComments", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "shareCodes", "createdBy", targetUid),
+      deleteDocsByFieldBatched(db, "device_tokens", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "notification_history", "userId", targetUid),
+      deleteDocsByFieldBatched(db, "recap_history", "userId", targetUid),
     ]);
 
     // 4. Supprimer les invitations par email
@@ -1580,22 +1706,22 @@ exports.deleteUserAccount = onCall(
 
     // 5. Supprimer les collections par userId (données de suivi et promos)
     await Promise.all([
-      deleteDocsByFieldBatched(db, "webhook_logs", "appUserId", uid),
-      deleteDocsByFieldBatched(db, "referrals", "parrainUid", uid),
-      deleteDocsByFieldBatched(db, "referrals", "filleulUid", uid),
-      deleteDocsByFieldBatched(db, "childDeletionRequests", "requestedBy", uid),
+      deleteDocsByFieldBatched(db, "webhook_logs", "appUserId", targetUid),
+      deleteDocsByFieldBatched(db, "referrals", "parrainUid", targetUid),
+      deleteDocsByFieldBatched(db, "referrals", "filleulUid", targetUid),
+      deleteDocsByFieldBatched(db, "childDeletionRequests", "requestedBy", targetUid),
     ]);
 
     // 6. Supprimer les documents uniques de l'utilisateur
     const singleDocPaths = [
-      `users/${uid}`,
-      `users_public/${uid}`,
-      `user_preferences/${uid}`,
-      `user_content/${uid}`,
-      `user_promos/${uid}`,
-      `subscriptions/${uid}`,
-      `rate_limits/${uid}`,
-      `usage_limits/${uid}`,
+      `users/${targetUid}`,
+      `users_public/${targetUid}`,
+      `user_preferences/${targetUid}`,
+      `user_content/${targetUid}`,
+      `user_promos/${targetUid}`,
+      `subscriptions/${targetUid}`,
+      `rate_limits/${targetUid}`,
+      `usage_limits/${targetUid}`,
     ];
     const batch = db.batch();
     singleDocPaths.forEach((path) => batch.delete(db.doc(path)));
@@ -1603,13 +1729,13 @@ exports.deleteUserAccount = onCall(
 
     // 7. Supprimer l'utilisateur Firebase Auth (DERNIER — irréversible)
     try {
-      await admin.auth().deleteUser(uid);
+      await admin.auth().deleteUser(targetUid);
     } catch (e) {
-      console.error(`deleteUserAccount: failed to delete auth user ${uid}`, e.message);
+      console.error(`deleteUserAccount: failed to delete auth user ${targetUid}`, e.message);
       // Data is already cleaned up, auth deletion failure is non-critical
     }
 
-    console.log(`deleteUserAccount: completed for uid=${uid}`);
+    console.log(`deleteUserAccount: completed for uid=${targetUid} (admin=${uid})`);
     return { success: true };
   }
 );

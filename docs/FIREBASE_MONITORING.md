@@ -151,3 +151,75 @@
 2. Filtrer par fonction et sévérité
 3. Vérifier rate limiting et quotas
 4. Redéployer si fix nécessaire (`firebase deploy --only functions:nomFonction`)
+
+## 8. App Check enforcement (T1 — Sprint 1)
+
+### Contexte
+Les Cloud Functions wrappées par `withAppCheck()` participent à App Check.
+L'enforcement est piloté par la variable d'env `APPCHECK_ENFORCE`. Tant
+qu'elle vaut `false` (défaut), les requêtes sans token App Check sont
+acceptées mais loguées en `UNVERIFIED`. Quand elle vaut `true`, les CFs
+rejettent en 401 toute requête sans token valide.
+
+### Procédure d'activation
+
+**Préreq strict** : tous les builds en prod (≥ 1.0.3) doivent avoir
+l'attestation native App Check active (cf. `config/appCheck.ts`). Sans
+cela, l'activation bloque les clients légitimes.
+
+1. **Audit logs (au moins 7 j)**
+   ```bash
+   ./scripts/auditAppCheck.sh 7d
+   ```
+   Le script doit retourner `STATUS: READY`. Si `NOT READY` : investiguer
+   les CFs > 0.5 % UNVERIFIED avant d'activer.
+
+2. **Activation progressive** — d'abord sur CFs critiques (impact coût) :
+   ```bash
+   # Définir la variable d'env pour le déploiement
+   firebase functions:config:set appcheck.enforce=true
+   # OU via .env.production avec APPCHECK_ENFORCE=true
+   firebase deploy --only \
+     functions:transcribeAudio,functions:revenueCatWebhook,functions:consumeUsageQuota
+   ```
+
+3. **Monitoring 24 h** sur Sentry + Cloud Logs :
+   - Aucun pic d'erreurs `unauthenticated` côté client
+   - Aucun pic d'erreurs `App Check token invalid` côté CF
+
+4. **Étendre à toutes les CFs** :
+   ```bash
+   firebase deploy --only functions
+   ```
+
+5. **Re-audit J+7** après l'extension complète :
+   ```bash
+   ./scripts/auditAppCheck.sh 7d
+   ```
+   Doit montrer 100 % VERIFIED.
+
+### Rollback (5 min)
+
+Si on observe un pic d'erreurs côté client après activation :
+```bash
+firebase functions:config:unset appcheck.enforce
+firebase deploy --only functions
+```
+
+Tant que Firebase n'a pas hard-deprecated les builds non-attestés, la
+bascule reste possible dans les deux sens.
+
+### CFs concernées
+
+Toutes les CFs `onCall` du fichier `functions/index.js` qui passent par
+`withAppCheck(...)`. Le webhook RevenuCat (`onRequest`) reste protégé
+indépendamment par son secret Bearer — App Check ne couvre pas ce cas
+par design (les webhooks viennent de fournisseurs externes).
+
+### Audit script
+
+`scripts/auditAppCheck.sh` :
+- requête `gcloud logging` sur la fenêtre demandée
+- agrège VERIFIED / UNVERIFIED par CF
+- exit non-zero si une CF dépasse le seuil de 0,5 %
+- utilisable en CI pour pré-vérifier toute bascule

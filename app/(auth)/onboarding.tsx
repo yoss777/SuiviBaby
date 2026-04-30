@@ -3,9 +3,9 @@ import { InfoModal } from "@/components/ui/InfoModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-  enableBiometric,
   getBiometricType,
   isBiometricAvailable,
+  setBiometricOptInPending,
 } from "@/services/biometricAuthService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { trackOnboardingEvent } from "@/services/onboardingAnalytics";
@@ -116,7 +116,9 @@ export default function OnboardingScreen() {
 
   const handleAcceptBiometric = useCallback(async () => {
     setShowBiometricPrompt(false);
-    await enableBiometric();
+    // No uid available yet — record the intent. The login screen will
+    // call enableBiometric(uid) after the first successful sign-in.
+    await setBiometricOptInPending();
     goToLogin();
   }, [goToLogin]);
 
@@ -252,8 +254,8 @@ export default function OnboardingScreen() {
       </TouchableOpacity>
       <InfoModal
         visible={showBiometricPrompt}
-        title={`Activer ${biometricType} ?`}
-        message={`Connectez-vous plus rapidement avec ${biometricType}. Vous pourrez modifier ce choix dans les réglages.`}
+        title={`Verrouiller l'app avec ${biometricType} ?`}
+        message={`À chaque ouverture de l'app, ${biometricType} sera demandé pour accéder à vos données. Si vous vous déconnectez, vous devrez retaper votre mot de passe pour réactiver le verrou. Modifiable dans les réglages.`}
         backgroundColor={nc.backgroundCard}
         textColor={nc.textStrong}
         confirmText="Activer"

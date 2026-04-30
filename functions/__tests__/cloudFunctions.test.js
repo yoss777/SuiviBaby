@@ -129,6 +129,18 @@ describe("validateReferralCode", () => {
 });
 
 describe("usage quota functions", () => {
+  const originalAssemblyKey = process.env.ASSEMBLYAI_API_KEY;
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    if (originalAssemblyKey === undefined) {
+      delete process.env.ASSEMBLYAI_API_KEY;
+    } else {
+      process.env.ASSEMBLYAI_API_KEY = originalAssemblyKey;
+    }
+    global.fetch = originalFetch;
+  });
+
   it("returns free voice quota status", async () => {
     mockFirestore.doc.mockImplementation((p) => {
       if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
@@ -146,6 +158,81 @@ describe("usage quota functions", () => {
     });
   });
 
+  it("rejects transcribeAudio before provider call when voice quota is exhausted", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    global.fetch = jest.fn();
+
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      if (p === "usage_limits/u1") {
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            voiceCommandDate: new Date().toISOString().split("T")[0],
+            voiceCommandCount: 3,
+          })),
+        };
+      }
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+
+    await expect(
+      fns.transcribeAudio(auth("u1", { audioBase64: Buffer.from("audio").toString("base64") }))
+    ).rejects.toThrow("Limite quotidienne atteinte");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("reserves voice quota inside transcribeAudio before returning transcript", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    const txSet = jest.fn();
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn(async (ref) => ref.get()),
+        set: txSet,
+        update: jest.fn(),
+        delete: jest.fn(),
+      })
+    );
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ upload_url: "https://upload.test/audio" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ id: "tx1", status: "processing" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ status: "completed", text: "ajoute une sieste" }),
+      });
+
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      if (p === "usage_limits/u1") {
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            voiceCommandDate: new Date().toISOString().split("T")[0],
+            voiceCommandCount: 1,
+          })),
+        };
+      }
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+
+    await expect(
+      fns.transcribeAudio(auth("u1", { audioBase64: Buffer.from("audio").toString("base64") }))
+    ).resolves.toEqual({ text: "ajoute une sieste" });
+    expect(txSet).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ voiceCommandCount: 2, lastVoiceCommandAt: "TS" }),
+      { merge: true }
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+  });
+
   it("consumes export quota for free users", async () => {
     mockFirestore.doc.mockImplementation((p) => {
       if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
@@ -161,6 +248,299 @@ describe("usage quota functions", () => {
       limit: 1,
       remaining: 0,
     });
+  });
+});
+
+describe("resolveReport (T2 — admin claim + audit log)", () => {
+  const admin = require("firebase-admin");
+
+  function setupAdminAuth({ callerHasAdminClaim }) {
+    admin.auth.mockReturnValue({
+      getUser: jest.fn(async (uid) => {
+        if (uid === "admin1") {
+          return { uid, customClaims: callerHasAdminClaim ? { admin: true } : {} };
+        }
+        return { uid, customClaims: {} };
+      }),
+      deleteUser: jest.fn(),
+    });
+  }
+
+  function setupFirestore() {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "reports/r1") {
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            childId: "c1",
+            eventId: "e1",
+            reporterUserId: "u_reporter",
+            status: "pending",
+          })),
+          update: jest.fn(),
+        };
+      }
+      if (p === "events/e1") {
+        return { get: jest.fn().mockResolvedValue(no()), update: jest.fn() };
+      }
+      return { get: jest.fn().mockResolvedValue(no()), update: jest.fn() };
+    });
+  }
+
+  it("rejects callers without the admin custom claim", async () => {
+    setupAdminAuth({ callerHasAdminClaim: false });
+    setupFirestore();
+    await expect(
+      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
+    ).rejects.toThrow("administrateurs");
+  });
+
+  it("allows a platform admin to resolve the report regardless of child access", async () => {
+    setupAdminAuth({ callerHasAdminClaim: true });
+    setupFirestore();
+    delete process.env.RESEND_API_KEY;
+    await expect(
+      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
+    ).resolves.toMatchObject({ success: true, action: "dismiss" });
+  });
+
+  it("writes an entry to adminAuditLog for every resolved report", async () => {
+    setupAdminAuth({ callerHasAdminClaim: true });
+    setupFirestore();
+    const auditAdd = jest.fn().mockResolvedValue({ id: "audit1" });
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name === "adminAuditLog") {
+        return { add: auditAdd };
+      }
+      return { add: jest.fn(), where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+    });
+    delete process.env.RESEND_API_KEY;
+    await fns.resolveReport(auth("admin1", { reportId: "r1", action: "remove_photo", adminNote: "test" }));
+    expect(auditAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "resolveReport",
+        adminUid: "admin1",
+        reportId: "r1",
+        childId: "c1",
+        eventId: "e1",
+        action: "remove_photo",
+        adminNote: "test",
+      })
+    );
+  });
+});
+
+describe("handleReportCreated (T3 — graduated photo moderation)", () => {
+  const admin = require("firebase-admin");
+
+  function reportSnapshot(data) {
+    return { data: () => data, id: "r1" };
+  }
+  function ctx(reportId = "r1") {
+    return { params: { reportId } };
+  }
+
+  beforeEach(() => {
+    // Without an API key the trigger returns early before reaching the
+    // auto-hide logic — set a dummy key so we exercise the full flow.
+    process.env.RESEND_API_KEY = "test-key";
+    admin.auth.mockReturnValue({
+      getUser: jest.fn(async (uid) => ({ uid, email: `${uid}@t.com` })),
+      deleteUser: jest.fn(),
+    });
+  });
+
+  afterAll(() => {
+    delete process.env.RESEND_API_KEY;
+  });
+
+  function setupBaseFirestore({ reporterRole, peerReports = [] }) {
+    const eventUpdate = jest.fn();
+    const hideForReporter = jest.fn();
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "user_hidden_photos/u_reporter") {
+        return { set: hideForReporter };
+      }
+      if (p === "children/c1/access/u_reporter") {
+        return {
+          get: jest.fn().mockResolvedValue(
+            reporterRole
+              ? doc({ role: reporterRole })
+              : no()
+          ),
+        };
+      }
+      if (p === "events/e1") {
+        return {
+          get: jest.fn().mockResolvedValue(no()),
+          update: eventUpdate,
+        };
+      }
+      return { get: jest.fn().mockResolvedValue(no()), update: jest.fn() };
+    });
+
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name === "reports") {
+        return {
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(snap(peerReports)),
+        };
+      }
+      return {
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(snap()),
+      };
+    });
+
+    return { eventUpdate };
+  }
+
+  it("does not hide globally when a single non-owner reports", async () => {
+    const { eventUpdate } = setupBaseFirestore({
+      reporterRole: "viewer",
+      peerReports: [
+        { data: { reporterUserId: "u_reporter", reason: "intimate_child_nudity" } },
+      ],
+    });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "intimate_child_nudity",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).not.toHaveBeenCalledWith({ reported: true });
+  });
+
+  it("hides globally immediately when the reporter is an owner", async () => {
+    const { eventUpdate } = setupBaseFirestore({
+      reporterRole: "owner",
+      peerReports: [],
+    });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "intimate_child_nudity",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).toHaveBeenCalledWith({ reported: true });
+  });
+
+  it("hides globally once two distinct non-owner reporters flag the same event", async () => {
+    const { eventUpdate } = setupBaseFirestore({
+      reporterRole: "viewer",
+      peerReports: [
+        { data: { reporterUserId: "u_reporter", reason: "intimate_child_nudity" } },
+        { data: { reporterUserId: "u_other", reason: "sensitive_child_photo" } },
+      ],
+    });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "intimate_child_nudity",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).toHaveBeenCalledWith({ reported: true });
+  });
+
+  it("counts only distinct reporters (same user reporting twice does not hide)", async () => {
+    const { eventUpdate } = setupBaseFirestore({
+      reporterRole: "contributor",
+      peerReports: [
+        { data: { reporterUserId: "u_reporter", reason: "intimate_child_nudity" } },
+        { data: { reporterUserId: "u_reporter", reason: "sensitive_child_photo" } },
+      ],
+    });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "intimate_child_nudity",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).not.toHaveBeenCalledWith({ reported: true });
+  });
+
+  it("does not run the auto-hide path for non-photo reasons", async () => {
+    const { eventUpdate } = setupBaseFirestore({ reporterRole: "owner" });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "privacy",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).not.toHaveBeenCalledWith({ reported: true });
+  });
+
+  it("still applies moderation effects when RESEND_API_KEY is missing", async () => {
+    delete process.env.RESEND_API_KEY;
+    const { eventUpdate } = setupBaseFirestore({ reporterRole: "owner" });
+    await fns.handleReportCreated(
+      reportSnapshot({
+        reason: "intimate_child_nudity",
+        eventId: "e1",
+        childId: "c1",
+        reporterUserId: "u_reporter",
+      }),
+      ctx()
+    );
+    expect(eventUpdate).toHaveBeenCalledWith({ reported: true });
+  });
+});
+
+describe("deleteUserAccount (T4 — admin-only direct path)", () => {
+  const admin = require("firebase-admin");
+
+  function setAdminClaim(callerHasAdminClaim) {
+    admin.auth.mockReturnValue({
+      getUser: jest.fn(async (uid) => ({
+        uid,
+        email: `${uid}@t.com`,
+        customClaims: callerHasAdminClaim ? { admin: true } : {},
+      })),
+      deleteUser: jest.fn(),
+    });
+  }
+
+  beforeEach(() => {
+    mockFirestore.collection.mockImplementation(() => ({
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue(snap()),
+    }));
+  });
+
+  it("rejects callers without the admin custom claim", async () => {
+    setAdminClaim(false);
+    await expect(
+      fns.deleteUserAccount(auth("u1", {}))
+    ).rejects.toThrow("administrateurs");
+  });
+
+  it("allows platform admin to proceed (caller's own account)", async () => {
+    setAdminClaim(true);
+    // Provide a minimally-mocked firestore so the deletion path completes.
+    mockFirestore.doc.mockImplementation(() => ({
+      get: jest.fn().mockResolvedValue(no()),
+      delete: jest.fn(),
+      set: jest.fn(),
+    }));
+    await expect(
+      fns.deleteUserAccount(auth("admin1", {}))
+    ).resolves.toEqual({ success: true });
   });
 });
 

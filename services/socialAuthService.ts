@@ -154,16 +154,16 @@ export async function signOutGoogle(): Promise<void> {
 }
 
 /**
- * Generate a random nonce string.
+ * Generate a cryptographically secure random nonce string.
+ * Requires expo-crypto (loaded lazily on iOS for Apple Sign-In).
  */
 function generateNonce(length: number): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "";
-  const bytes = new Uint8Array(length);
-  // Use Math.random fallback — crypto.getRandomValues may not be available
-  for (let i = 0; i < length; i++) {
-    bytes[i] = Math.floor(Math.random() * 256);
+  if (!Crypto?.getRandomBytes) {
+    throw new Error("expo-crypto unavailable — cannot generate secure nonce");
   }
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes: Uint8Array = Crypto.getRandomBytes(length);
+  let result = "";
   for (let i = 0; i < length; i++) {
     result += chars[bytes[i] % chars.length];
   }

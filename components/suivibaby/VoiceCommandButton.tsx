@@ -8,10 +8,7 @@ import { useBaby } from '@/contexts/BabyContext';
 import { usePremium } from '@/contexts/PremiumContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useVoiceCommand } from '@/hooks/useVoiceCommand';
-import {
-  consumeVoiceQuota,
-  getVoiceUsageStatus,
-} from '@/services/premiumUsageService';
+import { getVoiceUsageStatus } from '@/services/premiumUsageService';
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -349,9 +346,6 @@ export function VoiceCommandButton({
           if (onConfirm) {
             const didSucceed = await onConfirm();
             if (didSucceed === true) {
-              if (!checkFeatureAccess("unlimited_voice")) {
-                await consumeVoiceQuota();
-              }
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
           }
