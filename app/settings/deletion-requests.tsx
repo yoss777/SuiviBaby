@@ -6,6 +6,7 @@ import {
   collection,
   doc,
   getDoc,
+  limit,
   onSnapshot,
   query,
   where,
@@ -107,10 +108,14 @@ export default function DeletionRequestsScreen() {
 
     setIsLoading(true);
 
-    // Query requests where user is an owner, filter status client-side
+    // Query requests where user is an owner, filter status client-side.
+    // S4-T3: cap at 50 — a single user is never an owner on enough children
+    // for this to clip real data, and the listener doc-read cost on the
+    // settings tab was unbounded before.
     const q = query(
       collection(db, "childDeletionRequests"),
       where("ownerIds", "array-contains", user.uid),
+      limit(50),
     );
 
     const unsubscribe = onSnapshot(

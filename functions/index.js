@@ -418,6 +418,10 @@ exports.transcribeAudio = onCall(
     memory: "512MiB",
     timeoutSeconds: 120,
     secrets: ["ASSEMBLYAI_API_KEY"],
+    // S4-T4: keep one instance warm + allow batching so voice commands
+    // don't pay a 3-8s cold start on Node 22. ~5€/month at current volume.
+    concurrency: 30,
+    minInstances: 1,
   }),
   async (request) => {
     // 1. Auth check
@@ -543,6 +547,31 @@ exports.transcribeAudio = onCall(
         throw new HttpsError("deadline-exceeded", "Transcription timeout.");
       }
 
+      // 7. Tell AssemblyAI to drop the upload + transcript (S4-T5).
+      //    Best-effort: a failure here is non-fatal — the transcript was
+      //    already delivered to the caller and there is no user value in
+      //    aborting the response. We just want to limit how long sensitive
+      //    audio of a child sits on AssemblyAI's side.
+      try {
+        const cleanup = fetch(
+          `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
+          { method: "DELETE", headers: { authorization: apiKey } }
+        );
+        if (cleanup && typeof cleanup.catch === "function") {
+          cleanup.catch((cleanupErr) => {
+            console.warn(
+              `transcribeAudio: AssemblyAI delete failed for ${transcriptId}:`,
+              cleanupErr?.message ?? cleanupErr
+            );
+          });
+        }
+      } catch (cleanupErr) {
+        console.warn(
+          `transcribeAudio: AssemblyAI delete sync error for ${transcriptId}:`,
+          cleanupErr?.message ?? cleanupErr
+        );
+      }
+
       return { text: result.text || "" };
     } catch (error) {
       // Re-throw HttpsError as-is
@@ -559,7 +588,7 @@ exports.transcribeAudio = onCall(
 );
 
 exports.getUsageQuotaStatus = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -596,7 +625,7 @@ exports.getUsageQuotaStatus = onCall(
 );
 
 exports.consumeUsageQuota = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -1416,7 +1445,7 @@ function validateEventData(type, data) {
  * validateAndCreateEvent — Création d'événement avec validation serveur
  */
 exports.validateAndCreateEvent = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -1484,7 +1513,7 @@ exports.validateAndCreateEvent = onCall(
  * validateAndUpdateEvent — Modification d'événement avec validation serveur
  */
 exports.validateAndUpdateEvent = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
