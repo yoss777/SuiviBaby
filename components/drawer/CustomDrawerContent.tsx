@@ -143,7 +143,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
       );
       router.replace("/explore");
     }
-  }, [children.length, childrenLoaded, pathname]);
+  }, [children.length, childrenLoaded, pathname, router]);
 
   // Calculate baby's age in years and months
   const calculateAge = useCallback((birthDate: string) => {

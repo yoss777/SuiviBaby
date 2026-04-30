@@ -63,5 +63,3 @@ if (functionsEmulatorHost) {
 export function ensureFirebaseAppCheck() {
   return ensureAppCheckForApp(app);
 }
-
-void ensureFirebaseAppCheck();

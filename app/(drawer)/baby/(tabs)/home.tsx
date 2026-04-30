@@ -25,14 +25,17 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useEventEditHandler } from "@/hooks/useEventEditHandler";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
+import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
 import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
 import { isValidDate, toDate as parseDate } from "@/utils/date";
+import { buildEventDetails, getDayLabel } from "@/utils/eventDisplay";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
@@ -51,100 +54,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
-  AppState,
   BackHandler,
   Easing,
   Modal,
   Platform,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useHeaderRight } from "../../_layout";
+import { HomeSkeleton } from "./home/HomeSkeleton";
+import { HomeSmartContent } from "./home/HomeSmartContent";
+import { homeStyles as styles } from "./home/styles";
 
 // ============================================
 // SKELETON LOADING (P1)
 // ============================================
-
-function HomeSkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
-  const nc = getNeutralColors(colorScheme);
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(shimmerAnim, {
-        toValue: 1,
-        duration: 1200,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [shimmerAnim]);
-
-  const shimmerTranslate = shimmerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-200, 200],
-  });
-  const shimmerBg = colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
-
-  const Block = ({
-    width,
-    height,
-  }: {
-    width: number | string;
-    height: number;
-  }) => (
-    <View
-      style={{
-        width: width as number,
-        height,
-        backgroundColor: nc.borderLight,
-        borderRadius: 8,
-        overflow: "hidden",
-        marginBottom: 10,
-      }}
-    >
-      <Animated.View
-        style={{
-          position: "absolute",
-          top: 0,
-          bottom: 0,
-          width: 120,
-          backgroundColor: shimmerBg,
-          transform: [{ translateX: shimmerTranslate }],
-        }}
-      />
-    </View>
-  );
-
-  return (
-    <View
-      style={{
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: nc.background,
-      }}
-    >
-      <View style={{ width: "100%", padding: 20 }}>
-        <Block width="60%" height={24} />
-        <Block width="40%" height={14} />
-        <View style={{ height: 16 }} />
-        <Block width="100%" height={80} />
-        <View style={{ height: 12 }} />
-        <Block width="100%" height={80} />
-        <View style={{ height: 12 }} />
-        <Block width="100%" height={60} />
-        <View style={{ height: 12 }} />
-        <Block width="100%" height={60} />
-      </View>
-    </View>
-  );
-}
 
 // Instant render — no stagger animation (utilitaire dashboard, pas de delay)
 function StaggeredCard({ children }: { index?: number; visible?: boolean; children: React.ReactNode }) {
@@ -157,14 +84,6 @@ function StaggeredCard({ children }: { index?: number; visible?: boolean; childr
 
 const RECENT_EVENTS_CUTOFF_HOURS = 24;
 const RECENT_EVENTS_MAX = 7;
-
-const BIBERON_TYPE_LABELS: Record<string, string> = {
-  lait_maternel: "Lait maternel",
-  lait_infantile: "Lait infantile",
-  eau: "Eau",
-  jus: "Jus",
-  autre: "Autre",
-};
 
 // ============================================
 // TYPES
@@ -247,324 +166,6 @@ interface TodayStats {
   vaccins: { count: number; lastTime?: string; lastTimestamp?: number };
 }
 
-// ============================================
-// HOOKS
-// ============================================
-
-function useEventEditHandler(
-  openSheet: (props: any) => void,
-  toDate: (value: any) => Date,
-  headerOwnerId: React.MutableRefObject<string>,
-  sommeilEnCours: any,
-  promenadeEnCours: any,
-  showToast?: (msg: string) => void,
-) {
-  return useCallback(
-    (event: any) => {
-      if (event.id?.startsWith?.('__optimistic_')) {
-        showToast?.('Enregistrement en cours...');
-        return;
-      }
-      if (!event.id) {
-        const route = getEditRoute(event);
-        if (route) router.push(route as any);
-        return;
-      }
-
-      const handlers: Record<string, () => void> = {
-        temperature: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "soins",
-            soinsType: "temperature",
-            editData: {
-              id: event.id,
-              type: "temperature",
-              date: toDate(event.date),
-              valeur: event.valeur,
-              modePrise: event.modePrise,
-              note: event.note,
-            },
-          }),
-        medicament: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "soins",
-            soinsType: "medicament",
-            editData: {
-              id: event.id,
-              type: "medicament",
-              date: toDate(event.date),
-              nomMedicament: event.nomMedicament,
-              dosage: event.dosage,
-              voie: event.voie,
-              note: event.note,
-            },
-          }),
-        symptome: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "soins",
-            soinsType: "symptome",
-            editData: {
-              id: event.id,
-              type: "symptome",
-              date: toDate(event.date),
-              symptomes: event.symptomes,
-              intensite: event.intensite,
-              note: event.note,
-            },
-          }),
-        vaccin: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "soins",
-            soinsType: "vaccin",
-            editData: {
-              id: event.id,
-              type: "vaccin",
-              date: toDate(event.date),
-              nomVaccin: event.nomVaccin || event.lib || "",
-              dosage: event.dosage || "",
-              note: event.note,
-            },
-          }),
-        vitamine: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "soins",
-            soinsType: "vitamine",
-            editData: {
-              id: event.id,
-              type: "vitamine",
-              date: toDate(event.date),
-              nomVitamine: event.nomVitamine || "Vitamine D",
-              dosage: event.dosage,
-              note: event.note,
-            },
-          }),
-        tetee: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "meals",
-            mealType: "tetee",
-            editData: {
-              id: event.id,
-              type: "tetee",
-              date: toDate(event.date),
-              dureeGauche: event.dureeGauche,
-              dureeDroite: event.dureeDroite,
-            },
-          }),
-        biberon: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "meals",
-            mealType: "biberon",
-            editData: {
-              id: event.id,
-              type: "biberon",
-              date: toDate(event.date),
-              quantite: event.quantite,
-              typeBiberon: event.typeBiberon,
-            },
-          }),
-        solide: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "meals",
-            mealType: "solide",
-            editData: {
-              id: event.id,
-              type: "solide",
-              date: toDate(event.date),
-              typeSolide: event.typeSolide,
-              momentRepas: event.momentRepas,
-              ingredients: event.ingredients,
-              quantiteSolide: event.quantite,
-              nouveauAliment: event.nouveauAliment,
-              nomNouvelAliment: event.nomNouvelAliment,
-              allergenes: event.allergenes,
-              reaction: event.reaction,
-              aime: event.aime,
-            },
-          }),
-        pompage: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "pumping",
-            editData: {
-              id: event.id,
-              date: toDate(event.date),
-              quantiteGauche: event.quantiteGauche,
-              quantiteDroite: event.quantiteDroite,
-              duree: event.duree,
-              note: event.note,
-            },
-          }),
-        activite: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "activities",
-            activiteType: event.typeActivite ?? "tummyTime",
-            editData: {
-              id: event.id,
-              typeActivite: event.typeActivite ?? "tummyTime",
-              duree: event.duree,
-              description: event.description ?? event.note,
-              date: toDate(event.date),
-              heureDebut: event.heureDebut ? toDate(event.heureDebut) : undefined,
-              heureFin: event.heureFin ? toDate(event.heureFin) : undefined,
-            },
-            promenadeEnCours: promenadeEnCours ?? null,
-          }),
-        jalon: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "milestones",
-            jalonType: event.typeJalon ?? "photo",
-            editData: {
-              id: event.id,
-              typeJalon: event.typeJalon ?? "photo",
-              titre: event.titre,
-              description: event.description,
-              note: event.note,
-              humeur: event.humeur,
-              photos: event.photos,
-              date: toDate(event.date),
-            },
-          }),
-        miction: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "diapers",
-            diapersType: "miction",
-            editData: {
-              id: event.id,
-              type: "miction",
-              date: toDate(event.date),
-              couleur: event.couleur,
-            },
-          }),
-        selle: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "diapers",
-            diapersType: "selle",
-            editData: {
-              id: event.id,
-              type: "selle",
-              date: toDate(event.date),
-              consistance: event.consistance,
-              quantite: event.quantite,
-            },
-          }),
-        sommeil: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "routines",
-            routineType: "sommeil",
-            sleepMode: event.isNap ? "nap" : "night",
-            editData: {
-              id: event.id,
-              type: "sommeil",
-              date: toDate(event.heureDebut),
-              heureDebut: toDate(event.heureDebut),
-              heureFin: event.heureFin ? toDate(event.heureFin) : undefined,
-              isNap: event.isNap,
-              location: event.location,
-              quality: event.quality,
-              note: event.note,
-            },
-            sommeilEnCours,
-          }),
-        bain: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "routines",
-            routineType: "bain",
-            editData: {
-              id: event.id,
-              type: "bain",
-              date: toDate(event.date),
-              duree: event.duree,
-              temperatureEau: event.temperature,
-              note: event.note,
-            },
-          }),
-        nettoyage_nez: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "routines",
-            routineType: "nettoyage_nez",
-            editData: {
-              id: event.id,
-              type: "nettoyage_nez",
-              date: toDate(event.date),
-              methode: event.methode,
-              resultat: event.resultat,
-              note: event.note,
-            },
-          }),
-        croissance: () =>
-          openSheet({
-            ownerId: headerOwnerId.current,
-            formType: "croissance",
-            editData: {
-              id: event.id,
-              date: toDate(event.date),
-              tailleCm: event.tailleCm,
-              poidsKg: event.poidsKg,
-              teteCm: event.teteCm,
-            },
-          }),
-      };
-
-      const handler = handlers[event.type];
-      if (handler) {
-        handler();
-      } else {
-        const route = getEditRoute(event);
-        if (route) router.push(route as any);
-      }
-    },
-    [openSheet, toDate, headerOwnerId, sommeilEnCours, promenadeEnCours],
-  );
-}
-
-function getEditRoute(event: any): string | null {
-  if (!event.id) return null;
-  const id = encodeURIComponent(event.id);
-  switch (event.type) {
-    case "tetee":
-      return `/baby/meals?tab=seins&editId=${id}&returnTo=home`;
-    case "biberon":
-      return `/baby/meals?tab=biberons&editId=${id}&returnTo=home`;
-    case "pompage":
-      return `/baby/pumping?editId=${id}&returnTo=home`;
-    case "sommeil":
-      return `/baby/routines?editId=${id}&returnTo=home`;
-    case "bain":
-    case "nettoyage_nez":
-      return `/baby/routines?editId=${id}&returnTo=home`;
-    case "temperature":
-    case "medicament":
-    case "symptome":
-    case "vaccin":
-    case "vitamine":
-      return `/baby/soins?editId=${id}&returnTo=home`;
-    case "miction":
-      return `/baby/diapers?tab=mictions&editId=${id}&returnTo=home`;
-    case "selle":
-      return `/baby/diapers?tab=selles&editId=${id}&returnTo=home`;
-    case "activite":
-      return `/baby/activities?editId=${id}&returnTo=home`;
-    case "jalon":
-      return `/baby/milestones?editId=${id}&returnTo=home`;
-    default:
-      return null;
-  }
-}
 
 // ============================================
 // COMPONENT
@@ -672,12 +273,9 @@ export default function HomeDashboard() {
     vaccins: { count: 0 },
   });
 
-  const [currentTime, setCurrentTime] = useState(new Date());
-  // Track current day to detect day changes (for listener refresh)
-  const [currentDay, setCurrentDay] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-  });
+  // Minute-by-minute wall clock + day rollover detection. Foreground
+  // transitions snap back to real time. See hooks/useMinuteTick.ts.
+  const { currentTime, currentDay } = useMinuteTick();
   const hasInitialCache = !!initialCache;
   const [loading, setLoading] = useState({
     tetees: !hasInitialCache,
@@ -887,214 +485,10 @@ export default function HomeDashboard() {
   }, []);
 
   const buildDetails = useCallback(
-    (event: any) => {
-      switch (event.type) {
-        case "biberon": {
-          const typeLabel = event.typeBiberon
-            ? BIBERON_TYPE_LABELS[event.typeBiberon]
-            : null;
-          const quantity = event.quantite ? `${event.quantite} ml` : null;
-          const parts = [typeLabel, quantity].filter(Boolean);
-          return parts.length > 0 ? parts.join(" · ") : undefined;
-        }
-        case "solide": {
-          const typeLabels: Record<string, string> = {
-            puree: "Purée",
-            compote: "Compote",
-            cereales: "Céréales",
-            yaourt: "Yaourt",
-            morceaux: "Morceaux",
-            autre: "Autre",
-          };
-          const qtyLabels: Record<string, string> = {
-            peu: "Un peu",
-            moyen: "Moyen",
-            beaucoup: "Beaucoup",
-          };
-          const momentLabel = event.momentRepas
-            ? MOMENT_REPAS_LABELS[event.momentRepas]
-            : null;
-          const qtyLabel = event.quantite
-            ? `Qté : ${qtyLabels[event.quantite]}`
-            : null;
-          const typeLabel = event.typeSolide
-            ? typeLabels[event.typeSolide]
-            : null;
-          const line1Parts = [momentLabel, typeLabel, qtyLabel].filter(Boolean);
-          const line1 = line1Parts.length > 0 ? line1Parts.join(" · ") : null;
-          const ingredients =
-            typeof event.ingredients === "string"
-              ? event.ingredients.trim()
-              : "";
-          const newFood =
-            event.nouveauAliment &&
-            typeof event.nomNouvelAliment === "string"
-              ? event.nomNouvelAliment.trim()
-              : "";
-          const hasLike = typeof event.aime === "boolean";
-          const likeTarget = ingredients || newFood;
-          const likeSubject =
-            !ingredients && newFood ? "ce nouveau plat" : "ce plat";
-          const likeLabel =
-            hasLike
-              ? `${event.aime ? "A aimé" : "N'a pas aimé"} ${likeSubject}${
-                  likeTarget ? ` : ${likeTarget}` : ""
-                }`
-              : null;
-          const parts = [
-            line1,
-            likeLabel,
-            ingredients && (!hasLike || likeTarget !== ingredients)
-              ? `Ingrédients : ${ingredients}`
-              : null,
-            newFood && (!hasLike || likeTarget !== newFood)
-              ? `Nouvel aliment : ${newFood}`
-              : null,
-          ].filter(Boolean);
-          return parts.length > 0 ? parts.join("\n") : undefined;
-        }
-        case "tetee": {
-          const left = event.dureeGauche ? `G ${event.dureeGauche} min` : null;
-          const right = event.dureeDroite ? `D ${event.dureeDroite} min` : null;
-          const parts = [left, right].filter(Boolean);
-          return parts.length > 0 ? parts.join(" • ") : undefined;
-        }
-        case "pompage": {
-          const left = event.quantiteGauche
-            ? `G ${event.quantiteGauche} ml`
-            : null;
-          const right = event.quantiteDroite
-            ? `D ${event.quantiteDroite} ml`
-            : null;
-          const parts = [left, right].filter(Boolean);
-          return parts.length > 0 ? parts.join(" • ") : undefined;
-        }
-        case "croissance": {
-          const parts = [
-            event.poidsKg ? `${event.poidsKg} kg` : null,
-            event.tailleCm ? `${event.tailleCm} cm` : null,
-            event.teteCm ? `PC ${event.teteCm} cm` : null,
-          ].filter(Boolean);
-          return parts.length > 0 ? parts.join(" · ") : undefined;
-        }
-        case "miction":
-          return event.volume ? `${event.volume} ml` : event.couleur;
-        case "selle":
-          return event.consistance || event.couleur;
-        case "vitamine": {
-          const name = event.nomVitamine || "Vitamine";
-          return event.dosage ? `${name} · ${event.dosage}` : name;
-        }
-        case "sommeil": {
-          const start = event.heureDebut
-            ? toDate(event.heureDebut)
-            : toDate(event.date);
-          const end = event.heureFin ? toDate(event.heureFin) : null;
-          const duration =
-            event.duree ??
-            (end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0);
-
-          const locationLabel = formatSleepLocationWithNote(
-            event.location,
-            event.note,
-          );
-          const parts = [
-            end ? formatDuration(duration) : null, // Only show duration if sleep is finished
-            locationLabel,
-            event.quality,
-          ].filter(Boolean);
-          return parts.length > 0 ? parts.join(" · ") : undefined;
-        }
-        case "bain": {
-          const parts = [
-            event.duree ? `${event.duree} min` : null,
-            event.temperatureEau ? `${event.temperatureEau}°C` : null,
-          ].filter(Boolean);
-          return parts.length > 0 ? parts.join(" · ") : undefined;
-        }
-        case "nettoyage_nez": {
-          const methodeLabels: Record<string, string> = {
-            serum: "Sérum",
-            mouche_bebe: "Mouche-bébé",
-            coton: "Coton",
-            autre: "Autre",
-          };
-          const resultatLabels: Record<string, string> = {
-            efficace: "Efficace",
-            mucus_clair: "Clair",
-            mucus_epais: "Épais",
-            mucus_colore: "Coloré",
-          };
-          const parts = [
-            event.methode ? methodeLabels[event.methode] : null,
-            event.resultat ? resultatLabels[event.resultat] : null,
-          ].filter(Boolean);
-          return parts.length > 0 ? parts.join(" · ") : undefined;
-        }
-        case "temperature": {
-          const value =
-            typeof event.valeur === "number" ? `${event.valeur}°C` : undefined;
-          const parts = [value, event.modePrise].filter(Boolean);
-          return parts.length > 0 ? parts.join(" · ") : undefined;
-        }
-        case "medicament": {
-          const name = event.nomMedicament || "Médicament";
-          return event.dosage ? `${name} · ${event.dosage}` : name;
-        }
-        case "symptome": {
-          const list = Array.isArray(event.symptomes)
-            ? event.symptomes.join(", ")
-            : undefined;
-          const parts = [list, event.intensite].filter(Boolean);
-          return parts.length > 0 ? parts.join(" · ") : undefined;
-        }
-        case "vaccin":
-          const name = event.nomVaccin || "Vaccin";
-          return event.dosage ? `${name} · ${event.dosage}` : name;
-        case "activite": {
-          const isOther = event.typeActivite === "autre";
-          const parts = [
-            event.duree ? formatDuration(event.duree) : null,
-            isOther ? null : event.description,
-          ].filter(Boolean);
-          return parts.length > 0 ? parts.join(" · ") : undefined;
-        }
-        case "jalon": {
-          if (event.typeJalon === "humeur") {
-            return typeof event.humeur === "number"
-              ? MOOD_EMOJIS[event.humeur]
-              : undefined;
-          }
-          return event.description || undefined;
-        }
-        default:
-          return undefined;
-      }
-    },
-    [formatDuration, toDate],
+    (event: any) => buildEventDetails(event, { toDate, formatDuration }),
+    [toDate, formatDuration],
   );
 
-  const getDayLabel = useCallback((date: Date) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    const eventDay = new Date(date);
-    eventDay.setHours(0, 0, 0, 0);
-
-    if (eventDay.getTime() === today.getTime()) {
-      return "Aujourd'hui";
-    }
-    if (eventDay.getTime() === yesterday.getTime()) {
-      return "Hier";
-    }
-    return date.toLocaleDateString("fr-FR", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-    });
-  }, []);
 
   const handleViewAllPress = useCallback(() => {
     router.push("/baby/chrono" as any);
@@ -1853,60 +1247,8 @@ export default function HomeDashboard() {
   }, [activeChild?.id, promenadeEnCours, toDate, openSheet, showToast]);
 
   // ============================================
-  // EFFECTS - TIMER
+  // EFFECTS
   // ============================================
-
-  // Timer intelligent qui écoute les changements d'état de l'app
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(now);
-      // Check if day changed to refresh the listener
-      const newDay = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-      setCurrentDay((prev) => (prev !== newDay ? newDay : prev));
-      scheduleNextUpdate();
-    };
-
-    const scheduleNextUpdate = () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-
-      const now = new Date();
-      const millisecondsUntilNextMinute =
-        (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-
-      timer = setTimeout(() => {
-        updateTime();
-      }, millisecondsUntilNextMinute);
-    };
-
-    const handleAppStateChange = (nextAppState: string) => {
-      if (nextAppState === "active") {
-        const now = new Date();
-        setCurrentTime(now);
-        const newDay = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-        setCurrentDay((prev) => (prev !== newDay ? newDay : prev));
-        scheduleNextUpdate();
-      }
-    };
-
-    const subscription = AppState.addEventListener(
-      "change",
-      handleAppStateChange,
-    );
-
-    updateTime();
-
-    return () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-      subscription?.remove();
-    };
-  }, []);
 
   useEffect(() => {
     if (!activeChild?.id) return;
@@ -2832,67 +2174,25 @@ export default function HomeDashboard() {
           )}
         </View>
 
-        {/* Smart Content: Insights + Tips + Milestones */}
+        {/* Smart Content: Insights + Correlations + Milestones */}
         {isDataLoaded && !smartContent.isLoading && (
-          <View style={{ paddingHorizontal: 20, gap: 12, marginBottom: 12 }}>
-            {/* Data-driven insights */}
-            {hasAnyTodayData && smartContent.insights
-              .filter((ins) => !dismissedInsightIds.has(ins.id))
-              .map((insight, i) => (
-              <StaggeredCard
-                key={insight.id}
-              >
-                <InsightCard
-                  insight={insight}
-                  onDismiss={handleDismissInsight}
-                  onLearnMore={(ins) => {
-                    if (ins.relatedTipId) {
-                      openSheetRaw({
-                        ownerId: activeChild?.id ?? "",
-                        formType: "content" as const,
-                        tipId: ins.relatedTipId,
-                      });
-                    }
-                  }}
-                  colorScheme={colorScheme}
-                />
-              </StaggeredCard>
-            ))}
-
-            {/* Cross-data correlations */}
-            {hasAnyTodayData && smartContent.correlations
-              .filter((corr) => !dismissedInsightIds.has(corr.id))
-              .map((corr, i) => (
-              <StaggeredCard key={corr.id}>
-                <InsightCard insight={corr} onDismiss={handleDismissInsight} colorScheme={colorScheme} />
-              </StaggeredCard>
-            ))}
-
-            {/* Upcoming milestones */}
-            {smartContent.upcomingMilestones.length > 0 && (
-              <StaggeredCard>
-                <MilestoneTimelineCard
-                  milestones={smartContent.upcomingMilestones}
-                  ageWeeks={
-                    activeChild?.birthDate
-                      ? Math.floor(
-                          (Date.now() -
-                            new Date(
-                              activeChild.birthDate
-                                .split("/")
-                                .reverse()
-                                .join("-"),
-                            ).getTime()) /
-                            (7 * 24 * 60 * 60 * 1000),
-                        )
-                      : 0
-                  }
-                  onViewAll={() => setShowMilestonesModal(true)}
-                  colorScheme={colorScheme}
-                />
-              </StaggeredCard>
-            )}
-          </View>
+          <HomeSmartContent
+            smartContent={smartContent}
+            dismissedInsightIds={dismissedInsightIds}
+            hasAnyTodayData={hasAnyTodayData}
+            activeChildBirthDate={activeChild?.birthDate}
+            onOpenInsightTip={(tipId) =>
+              openSheetRaw({
+                ownerId: activeChild?.id ?? "",
+                formType: "content" as const,
+                tipId,
+              })
+            }
+            onDismissInsight={handleDismissInsight}
+            onShowMilestonesModal={() => setShowMilestonesModal(true)}
+            colorScheme={colorScheme}
+            StaggeredCard={StaggeredCard}
+          />
         )}
 
         {/* Chronologie récente */}
@@ -2961,107 +2261,3 @@ export default function HomeDashboard() {
   );
 }
 
-// ============================================
-// STYLES
-// ============================================
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
-  headerRow: {
-    marginBottom: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginRight: 50,
-  },
-  header: {
-    padding: 20,
-    paddingBottom: 10,
-  },
-  inlineMicContainer: {
-    paddingTop: 10,
-  },
-  greeting: {
-    fontSize: 28,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  date: {
-    fontSize: 16,
-    textTransform: "capitalize",
-  },
-  section: {
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginHorizontal: 20,
-    marginBottom: 16,
-  },
-  sectionTitleInline: {
-    marginHorizontal: 0,
-    marginBottom: 0,
-  },
-  statsGroupContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 12,
-  },
-  // Mood card styles
-  moodCard: {
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  moodLabel: {
-    marginBottom: 6,
-    fontSize: 13,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  moodEmojisRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 4,
-  },
-  moodEmojiButton: {
-    flex: 1,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-  },
-  moodEmojiSelected: {
-    borderWidth: 2,
-  },
-  moodEmojiText: {
-    fontSize: 22,
-  },
-  milestonesModalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
-  },
-  milestonesModalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-  },
-});

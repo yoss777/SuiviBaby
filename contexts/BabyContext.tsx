@@ -218,6 +218,18 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       childDataRef.current,
       hiddenChildrenIdsRef.current,
     );
+
+    const isWaitingForInitialChildDocs =
+      !hasResolvedInitialLiveDataRef.current &&
+      currentChildIdsRef.current.size > 0 &&
+      childDataRef.current.size === 0 &&
+      visible.length === 0;
+
+    if (isWaitingForInitialChildDocs) {
+      logBaby('Accès enfants reçus, attente des documents enfant avant de synchroniser');
+      return;
+    }
+
     setChildren(visible);
     setActiveChildState((prev) =>
       pickActiveChild(

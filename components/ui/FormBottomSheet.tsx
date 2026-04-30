@@ -40,6 +40,7 @@ export interface FormBottomSheetProps {
   onCancel: () => void;
   onClose?: () => void;
   snapPoints?: string[];
+  initialIndex?: number;
 }
 
 // ============================================
@@ -64,6 +65,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
       onCancel,
       onClose,
       snapPoints: customSnapPoints,
+      initialIndex = -1,
     },
     ref,
   ) => {
@@ -103,7 +105,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
     return (
       <BottomSheet
         ref={ref}
-        index={-1}
+        index={initialIndex}
         snapPoints={snapPoints}
         enablePanDownToClose={enablePanDownToClose}
         enableContentPanningGesture={enablePanDownToClose}

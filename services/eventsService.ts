@@ -17,7 +17,6 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
-import { FIREBASE_STORAGE_BUCKET, extractStoragePath } from "@/utils/photoStorage";
 import { getTodayTypes } from "@/services/todayEventsCache";
 import { enqueueEvent, isOnline } from "./offlineQueueService";
 import {
@@ -73,214 +72,54 @@ function convertDateFields(value: unknown): unknown {
 // TYPES
 // ============================================
 
-export type EventType =
-  | "biberon"
-  | "tetee"
-  | "solide" // Repas solide (diversification)
-  | "pompage"
-  | "couche" // Legacy/backend event; modern UI derives diaper tracking from miction/selle
-  | "miction" // Pipi
-  | "selle" // Popo
-  | "sommeil"
-  | "bain"
-  | "temperature"
-  | "medicament"
-  | "symptome"
-  | "croissance" // Taille, poids, tête
-  | "vaccin"
-  | "vitamine"
-  | "activite" // Activités d'éveil
-  | "jalon" // Jalons et moments
-  | "nettoyage_nez"; // Nettoyage de nez
-
-export interface BaseEvent {
-  id?: string;
-  childId: string;
-  userId: string;
-  type: EventType;
-  date: Date | Timestamp;
-  createdAt: Date | Timestamp;
-  updatedAt?: Date | Timestamp;
-  note?: string;
-  migratedAt?: Date | Timestamp; // Pour tracking migration
-}
-
-// Interfaces spécifiques par type
-export interface BiberonEvent extends BaseEvent {
-  type: "biberon";
-  quantite: number; // ml
-  typeBiberon?: "lait_maternel" | "lait_infantile" | "eau" | "jus" | "autre";
-}
-
-export interface TeteeEvent extends BaseEvent {
-  type: "tetee";
-  coteGauche: boolean;
-  coteDroit: boolean;
-  dureeGauche?: number; // minutes
-  dureeDroite?: number; // minutes
-}
-
-export interface SolideEvent extends BaseEvent {
-  type: "solide";
-  typeSolide:
-    | "puree"
-    | "compote"
-    | "cereales"
-    | "yaourt"
-    | "morceaux"
-    | "autre";
-  momentRepas?:
-    | "petit_dejeuner"
-    | "dejeuner"
-    | "gouter"
-    | "diner"
-    | "collation";
-  ingredients?: string; // Liste libre des ingrédients
-  quantite?: "peu" | "moyen" | "beaucoup";
-  nouveauAliment?: boolean; // Flag pour premier essai
-  nomNouvelAliment?: string; // Nom de l'aliment introduit (ex: "avocat", "fraise")
-  allergenes?: string[]; // Liste des allergènes présents
-  reaction?: "aucune" | "legere" | "importante"; // Réaction si nouvel aliment
-  aime?: boolean; // Bébé a aimé ou non
-}
-
-export interface PompageEvent extends BaseEvent {
-  type: "pompage";
-  quantiteGauche?: number; // ml
-  quantiteDroite?: number; // ml
-  duree?: number; // minutes
-}
-
-export interface CoucheEvent extends BaseEvent {
-  type: "couche";
-  // Legacy/backend-only raw diaper change event.
-  // The modern UI product contract models diaper tracking through
-  // MictionEvent and SelleEvent.
-}
-
-export interface MictionEvent extends BaseEvent {
-  type: "miction";
-  volume?: number; // ml
-  couleur?: "claire" | "jaune" | "foncee" | "autre";
-  avecCouche?: boolean; // Si c'était dans une couche
-}
-
-export interface SelleEvent extends BaseEvent {
-  type: "selle";
-  consistance?: "liquide" | "molle" | "normale" | "dure";
-  couleur?: string;
-  quantite?: "peu" | "moyen" | "beaucoup";
-  avecCouche?: boolean; // Si c'était dans une couche
-}
-
-export interface SommeilEvent extends BaseEvent {
-  type: "sommeil";
-  heureDebut?: Date | Timestamp;
-  heureFin?: Date | Timestamp; // Le sommeil est peut-être en cours
-  duree?: number; // minutes // Calculé à partir de heureDebut et heureFin
-  location?: "lit" | "cododo" | "poussette" | "voiture" | "autre";
-  quality?: "paisible" | "agité" | "mauvais";
-  isNap: boolean; // Si c'est une sieste (true) ou sommeil nocturne (false)
-}
-
-export interface BainEvent extends BaseEvent {
-  type: "bain";
-  duree?: number; // minutes
-  temperatureEau?: number; // °C
-  produits?: string;
-}
-
-export interface NettoyageNezEvent extends BaseEvent {
-  type: "nettoyage_nez";
-  methode?: "serum" | "mouche_bebe" | "coton" | "autre";
-  resultat?: "efficace" | "mucus_clair" | "mucus_epais" | "mucus_colore";
-}
-
-export interface TemperatureEvent extends BaseEvent {
-  type: "temperature";
-  valeur: number; // °C
-  modePrise?: "rectale" | "axillaire" | "auriculaire" | "frontale" | "autre";
-}
-
-export interface MedicamentEvent extends BaseEvent {
-  type: "medicament";
-  nomMedicament: string;
-  dosage?: string;
-  voie?: "orale" | "topique" | "inhalation" | "autre";
-}
-
-export interface SymptomeEvent extends BaseEvent {
-  type: "symptome";
-  symptomes: string[];
-  intensite?: "leger" | "modere" | "fort";
-}
-
-export interface CroissanceEvent extends BaseEvent {
-  type: "croissance";
-  tailleCm?: number;
-  poidsKg?: number;
-  teteCm?: number;
-}
-
-export interface VaccinEvent extends BaseEvent {
-  type: "vaccin";
-  nomVaccin: string;
-  dosage?: string;
-  lieu?: string;
-}
-
-export interface VitamineEvent extends BaseEvent {
-  type: "vitamine";
-  nomVitamine: string;
-  dosage?: string;
-}
-
-export interface ActiviteEvent extends BaseEvent {
-  type: "activite";
-  typeActivite:
-    | "tummyTime"
-    | "jeux"
-    | "lecture"
-    | "promenade"
-    | "massage"
-    | "musique"
-    | "eveil"
-    | "sortie"
-    | "autre";
-  duree?: number; // minutes
-  description?: string;
-  heureDebut?: Date | Timestamp; // For chrono mode (promenade)
-  heureFin?: Date | Timestamp; // For chrono mode (promenade)
-}
-
-export interface JalonEvent extends BaseEvent {
-  type: "jalon";
-  typeJalon: "dent" | "pas" | "sourire" | "mot" | "humeur" | "photo" | "autre";
-  titre?: string;
-  description?: string;
-  photos?: string[]; // Legacy URLs or Storage paths
-  humeur?: 1 | 2 | 3 | 4 | 5;
-}
-
-export type Event =
-  | BiberonEvent
-  | TeteeEvent
-  | SolideEvent
-  | PompageEvent
-  | CoucheEvent
-  | MictionEvent
-  | SelleEvent
-  | SommeilEvent
-  | BainEvent
-  | TemperatureEvent
-  | MedicamentEvent
-  | SymptomeEvent
-  | CroissanceEvent
-  | VaccinEvent
-  | VitamineEvent
-  | ActiviteEvent
-  | JalonEvent
-  | NettoyageNezEvent;
+// Domain types live in services/events/types.ts. Re-export so existing
+// callers `import { Event, EventType, JalonEvent, ... } from
+// "@/services/eventsService"` continue to work without churn.
+export type {
+  ActiviteEvent,
+  BainEvent,
+  BaseEvent,
+  BiberonEvent,
+  CoucheEvent,
+  CroissanceEvent,
+  Event,
+  EventType,
+  JalonEvent,
+  MedicamentEvent,
+  MictionEvent,
+  NettoyageNezEvent,
+  PompageEvent,
+  SelleEvent,
+  SolideEvent,
+  SommeilEvent,
+  SymptomeEvent,
+  TeteeEvent,
+  TemperatureEvent,
+  VaccinEvent,
+  VitamineEvent,
+} from "./events/types";
+import type {
+  ActiviteEvent,
+  BainEvent,
+  BiberonEvent,
+  CoucheEvent,
+  CroissanceEvent,
+  Event,
+  EventType,
+  JalonEvent,
+  MedicamentEvent,
+  MictionEvent,
+  NettoyageNezEvent,
+  PompageEvent,
+  SelleEvent,
+  SolideEvent,
+  SommeilEvent,
+  SymptomeEvent,
+  TeteeEvent,
+  TemperatureEvent,
+  VaccinEvent,
+  VitamineEvent,
+} from "./events/types";
 
 // ============================================
 // CRUD UNIFIÉ
@@ -930,56 +769,10 @@ export async function ajouterVitamine(
 /**
  * Statistiques pour les dernières 24h
  */
-export async function obtenirStats24h(childId: string) {
-  const hier = new Date();
-  hier.setHours(hier.getHours() - 24);
-
-  const events = await obtenirEvenements(childId, { depuis: hier });
-
-  const stats = {
-    biberons: { count: 0, totalMl: 0 },
-    tetees: { count: 0, totalMinutes: 0 },
-    mictions: { count: 0 },
-    selles: { count: 0 },
-    couches: { count: 0 },
-    sommeil: { count: 0, totalMinutes: 0 },
-    bains: { count: 0 },
-  };
-
-  events.forEach((event) => {
-    switch (event.type) {
-      case "biberon":
-        stats.biberons.count++;
-        stats.biberons.totalMl += (event as BiberonEvent).quantite;
-        break;
-      case "tetee":
-        stats.tetees.count++;
-        const tetee = event as TeteeEvent;
-        stats.tetees.totalMinutes +=
-          (tetee.dureeGauche || 0) + (tetee.dureeDroite || 0);
-        break;
-      case "miction":
-        stats.mictions.count++;
-        break;
-      case "selle":
-        stats.selles.count++;
-        break;
-      case "couche":
-        // Legacy raw diaper-change stats are still counted for historical data.
-        stats.couches.count++;
-        break;
-      case "sommeil":
-        stats.sommeil.count++;
-        stats.sommeil.totalMinutes += (event as SommeilEvent).duree || 0;
-        break;
-      case "bain":
-        stats.bains.count++;
-        break;
-    }
-  });
-
-  return stats;
-}
+// 24h aggregation lives in services/events/stats.ts. Re-export so the
+// existing public API remains stable.
+export { obtenirStats24h } from "./events/stats";
+export type { Stats24h } from "./events/stats";
 
 // ============================================
 // OPTIMISTIC UI WRAPPERS
@@ -1223,56 +1016,8 @@ export async function getNextEventDateBefore(
   return eventDate instanceof Date ? eventDate : new Date(eventDate as any);
 }
 
-// ============================================
-// JALON PHOTO CLEANUP HELPERS
-// ============================================
-
-export async function deletePhotoFromStorage(photoRef: string): Promise<void> {
-  try {
-    const filePath = extractStoragePath(photoRef);
-    if (!filePath) {
-      console.warn("[DELETE_PHOTO] Référence photo non reconnue:", photoRef);
-      return;
-    }
-    const encodedPath = encodeURIComponent(filePath);
-    console.log("[DELETE_PHOTO] Suppression de:", filePath);
-
-    const user = auth.currentUser;
-    if (!user) {
-      console.warn("[DELETE_PHOTO] Utilisateur non connecté");
-      return;
-    }
-    const token = await user.getIdToken();
-
-    const deleteUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodedPath}`;
-    const response = await fetch(deleteUrl, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (response.ok || response.status === 404) {
-      console.log("[DELETE_PHOTO] Photo supprimée avec succès");
-    } else {
-      console.error("[DELETE_PHOTO] Erreur:", response.status, await response.text());
-    }
-  } catch (error) {
-    console.error("[DELETE_PHOTO] Erreur:", error);
-  }
-}
-
-/** Supprime un jalon avec nettoyage des photos Firebase Storage. */
-export async function supprimerJalon(childId: string, id: string) {
-  try {
-    const event = await obtenirEvenement(childId, id);
-    if ((event as any)?.photos && Array.isArray((event as any).photos)) {
-      for (const photoRef of (event as any).photos) {
-        if (photoRef) {
-          await deletePhotoFromStorage(photoRef);
-        }
-      }
-    }
-  } catch (error) {
-    console.error("[SUPPRIMER_JALON] Erreur récupération événement:", error);
-  }
-  return supprimerEvenement(childId, id);
-}
+// Photo / jalon cleanup helpers live in services/events/photoCleanup.ts.
+export {
+  deletePhotoFromStorage,
+  supprimerJalon,
+} from "./events/photoCleanup";

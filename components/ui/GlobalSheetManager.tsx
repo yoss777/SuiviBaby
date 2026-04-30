@@ -116,8 +116,12 @@ export const GlobalSheetManager = () => {
     closeSheet();
   }, [viewProps, closeSheet]);
 
+  if (!viewProps) {
+    return null;
+  }
+
   // Handle form-based sheets
-  if (viewProps && isFormSheetProps(viewProps)) {
+  if (isFormSheetProps(viewProps)) {
     // Handle soins form (temperature, medicament, symptome, vaccin, vitamine)
     if (isSoinsFormProps(viewProps)) {
       const { soinsType, editData } = viewProps;
@@ -128,6 +132,7 @@ export const GlobalSheetManager = () => {
       return (
         <FormBottomSheet
           ref={sheetRef}
+          initialIndex={1}
           title={title}
           icon="prescription-bottle"
           accentColor={config.color}
@@ -161,6 +166,7 @@ export const GlobalSheetManager = () => {
       return (
         <FormBottomSheet
           ref={sheetRef}
+          initialIndex={1}
           title={title}
           icon="baby"
           accentColor={eventColors.meal.dark}
@@ -194,6 +200,7 @@ export const GlobalSheetManager = () => {
       return (
         <FormBottomSheet
           ref={sheetRef}
+          initialIndex={1}
           title={title}
           icon="pump-medical"
           accentColor={eventColors.pumping.dark}
@@ -226,6 +233,7 @@ export const GlobalSheetManager = () => {
       return (
         <FormBottomSheet
           ref={sheetRef}
+          initialIndex={1}
           title={title}
           icon="play-circle"
           accentColor={eventColors.activite.dark}
@@ -265,6 +273,7 @@ export const GlobalSheetManager = () => {
       return (
         <FormBottomSheet
           ref={sheetRef}
+          initialIndex={1}
           title={title}
           icon="star"
           accentColor={eventColors.jalon.dark}
@@ -303,6 +312,7 @@ export const GlobalSheetManager = () => {
       return (
         <FormBottomSheet
           ref={sheetRef}
+          initialIndex={1}
           title={title}
           icon={icon}
           accentColor={accentColor}
@@ -363,6 +373,7 @@ export const GlobalSheetManager = () => {
       return (
         <FormBottomSheet
           ref={sheetRef}
+          initialIndex={1}
           title={title}
           icon={icon}
           iconLib={iconLib}
@@ -400,6 +411,7 @@ export const GlobalSheetManager = () => {
       return (
         <FormBottomSheet
           ref={sheetRef}
+          initialIndex={1}
           title={title}
           icon="seedling"
           accentColor={eventColors.croissance.dark}
@@ -430,6 +442,7 @@ export const GlobalSheetManager = () => {
       return (
         <FormBottomSheet
           ref={sheetRef}
+          initialIndex={1}
           title="Conseil"
           icon="lightbulb"
           accentColor={Colors[colorScheme].tint}
@@ -446,19 +459,11 @@ export const GlobalSheetManager = () => {
   }
 
   // Handle regular sheet props (with children)
-  const activeProps = viewProps && !isFormSheetProps(viewProps)
-    ? viewProps
-    : {
-        title: '',
-        children: null,
-        showActions: false,
-        onSubmit: () => {},
-      };
-
   return (
     <FormBottomSheet
       ref={sheetRef}
-      {...activeProps}
+      initialIndex={1}
+      {...viewProps}
       onCancel={closeSheet}
       onClose={closeSheet}
     />

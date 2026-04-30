@@ -11,7 +11,6 @@ import {
   Animated as RNAnimated,
   Dimensions,
   FlatList,
-  InteractionManager,
   Modal,
   Pressable,
   StyleSheet,
@@ -249,6 +248,14 @@ export const SwipeGallery = ({
     string | undefined
   >(undefined);
 
+  // Report & hide state
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  const [isActionSheetMounted, setIsActionSheetMounted] = useState(false);
+  const reportTargetRef = useRef<{ photoId: string; uri: string } | null>(null);
+  const actionSheetTranslateY = useRef(new RNAnimated.Value(32)).current;
+  const actionSheetBackdropOpacity = useRef(new RNAnimated.Value(0)).current;
+
   // Local toast state
   const [localToast, setLocalToast] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -349,18 +356,33 @@ export const SwipeGallery = ({
     itemVisiblePercentThreshold: 50,
   }).current;
 
+  const closeGalleryAndEdit = useCallback(
+    (photoId: string) => {
+      if (!onEdit) return;
+
+      const sortedIndex = sortedPhotos.findIndex((photo) => photo.id === photoId);
+      if (sortedIndex < 0) return;
+
+      setActionSheetVisible(false);
+      setIsActionSheetMounted(false);
+      setReportModalVisible(false);
+      setCommentsVisible(false);
+      onClose();
+
+      setTimeout(() => {
+        onEdit(photoId, sortedIndex);
+      }, 300);
+    },
+    [onClose, onEdit, sortedPhotos],
+  );
+
   // Edit current photo after closing the gallery modal to avoid stacking issues.
   const handleEdit = useCallback(() => {
     const item = galleryItems[currentIndex];
-    if (item.type === "photo" && onEdit) {
-      const offset = onAddPhoto ? 1 : 0;
-      const photoIndex = currentIndex - offset;
-      onClose();
-      InteractionManager.runAfterInteractions(() => {
-        onEdit(item.photo.id, photoIndex);
-      });
+    if (item.type === "photo") {
+      closeGalleryAndEdit(item.photo.id);
     }
-  }, [currentIndex, galleryItems, onClose, onEdit, onAddPhoto]);
+  }, [closeGalleryAndEdit, currentIndex, galleryItems]);
 
   // Handle add photo
   const handleAddPhoto = useCallback(() => {
@@ -513,14 +535,6 @@ export const SwipeGallery = ({
     [onDownload, showLocalToast],
   );
 
-  // Report & hide state
-  const [reportModalVisible, setReportModalVisible] = useState(false);
-  const [actionSheetVisible, setActionSheetVisible] = useState(false);
-  const [isActionSheetMounted, setIsActionSheetMounted] = useState(false);
-  const reportTargetRef = useRef<{ photoId: string; uri: string } | null>(null);
-  const actionSheetTranslateY = useRef(new RNAnimated.Value(32)).current;
-  const actionSheetBackdropOpacity = useRef(new RNAnimated.Value(0)).current;
-
   useEffect(() => {
     if (actionSheetVisible) {
       setIsActionSheetMounted(true);
@@ -580,12 +594,10 @@ export const SwipeGallery = ({
   }, []);
 
   const handleEditFromActionSheet = useCallback(() => {
-    closeActionSheet();
-    // Let the sheet close before we transition to the edit form.
-    InteractionManager.runAfterInteractions(() => {
-      handleEdit();
-    });
-  }, [closeActionSheet, handleEdit]);
+    const target = reportTargetRef.current;
+    if (!target) return;
+    closeGalleryAndEdit(target.photoId);
+  }, [closeGalleryAndEdit]);
 
   const handleDownloadFromActionSheet = useCallback(() => {
     const target = reportTargetRef.current;
@@ -852,8 +864,7 @@ export const SwipeGallery = ({
   );
 
   const currentItem = galleryItems[currentIndex] ?? galleryItems[0];
-  const shouldRenderGalleryLayer =
-    visible || isActionSheetMounted || reportModalVisible;
+  const shouldRenderGalleryLayer = visible;
 
   if (!shouldRenderGalleryLayer) {
     return null;
