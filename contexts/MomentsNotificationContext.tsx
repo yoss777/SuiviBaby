@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBaby } from '@/contexts/BabyContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, Timestamp, where } from 'firebase/firestore';
-import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 export type NotificationType = 'photo' | 'like' | 'comment';
 
@@ -307,17 +307,31 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     updateTotalCount();
   }, [updateTotalCount, activeChild?.id, user?.uid]);
 
+  // Memoise the provider value so consumers only re-render when one of the
+  // observed pieces actually changes — without this, every render of the
+  // parent (BabyProvider, AuthProvider, etc.) created a fresh value object
+  // and forced every useMomentsNotification() consumer to re-render.
+  const value = useMemo<MomentsNotificationContextType>(
+    () => ({
+      hasNewMoments,
+      newMomentsCount,
+      newEventIds,
+      newEventTypes,
+      markMomentsAsSeen,
+      markEventAsSeen,
+    }),
+    [
+      hasNewMoments,
+      newMomentsCount,
+      newEventIds,
+      newEventTypes,
+      markMomentsAsSeen,
+      markEventAsSeen,
+    ],
+  );
+
   return (
-    <MomentsNotificationContext.Provider
-      value={{
-        hasNewMoments,
-        newMomentsCount,
-        newEventIds,
-        newEventTypes,
-        markMomentsAsSeen,
-        markEventAsSeen,
-      }}
-    >
+    <MomentsNotificationContext.Provider value={value}>
       {children}
     </MomentsNotificationContext.Provider>
   );

@@ -22,7 +22,7 @@ const getUserId = () => {
   return user.uid;
 };
 
-export async function ajouterPompage(childId: string, data: any) {
+export async function ajouterPompage(childId: string, data: Record<string, unknown>) {
   try {
     const userId = getUserId();
     const ref = await addDoc(collection(db, "pompages"), {
@@ -99,7 +99,10 @@ export async function obtenirPompagesAvecLimite(childId: string, nombreLimit: nu
   }
 }
 
-export function ecouterPompages(childId: string, callback: (docs: any[]) => void) {
+export function ecouterPompages(
+  childId: string,
+  callback: (docs: Array<{ id: string } & Record<string, unknown>>) => void,
+) {
   const q = query(
     collection(db, "pompages"),
     where("childId", "==", childId),
@@ -117,7 +120,11 @@ export function ecouterPompages(childId: string, callback: (docs: any[]) => void
   return unsubscribe;
 }
 
-export async function modifierPompage(childId: string, id: string, nouveausDonnees: any) {
+export async function modifierPompage(
+  childId: string,
+  id: string,
+  nouveausDonnees: Record<string, unknown>,
+) {
   try {
     const docRef = doc(db, "pompages", id);
     const docSnap = await getDoc(docRef);

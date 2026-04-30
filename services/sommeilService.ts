@@ -23,7 +23,7 @@ const getUserId = () => {
   return user.uid;
 };
 
-export async function ajouterSommeil(childId: string, data: any) {
+export async function ajouterSommeil(childId: string, data: Record<string, unknown>) {
   try {
     const userId = getUserId();
     const ref = await addDoc(collection(db, "sommeils"), {
@@ -104,7 +104,7 @@ export async function obtenirSommeilsAvecLimite(
 
 export function ecouterSommeils(
   childId: string,
-  callback: (docs: any[]) => void,
+  callback: (docs: Array<{ id: string } & Record<string, unknown>>) => void,
 ) {
   const q = query(
     collection(db, "sommeils"),
@@ -126,7 +126,7 @@ export function ecouterSommeils(
 export async function modifierSommeil(
   childId: string,
   id: string,
-  nouvellesDonnees: any,
+  nouvellesDonnees: Record<string, unknown>,
 ) {
   try {
     const docRef = doc(db, "sommeils", id);
@@ -137,7 +137,10 @@ export async function modifierSommeil(
     }
 
     // Handle null values as field deletions
-    const updateData: any = { ...nouvellesDonnees, updatedAt: new Date() };
+    const updateData: Record<string, unknown> = {
+      ...nouvellesDonnees,
+      updatedAt: new Date(),
+    };
     if (nouvellesDonnees.heureFin === null) {
       updateData.heureFin = deleteField();
     }
@@ -145,7 +148,10 @@ export async function modifierSommeil(
       updateData.duree = deleteField();
     }
 
-    await updateDoc(docRef, updateData);
+    // updateDoc's signature requires PartialWithFieldValue<DocumentData>;
+    // our Record<string, unknown> is structurally identical but TS treats
+    // them as incompatible. Cast at the call site only.
+    await updateDoc(docRef, updateData as Record<string, never>);
     console.log("Sommeil modifié avec succès");
     return true;
   } catch (e) {

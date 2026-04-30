@@ -340,7 +340,9 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     });
 
     return () => unsubscribe();
-  }, [user]);
+    // Depend on the uid only — the user object identity changes on every
+    // refreshUser() call, but the listener key is the uid.
+  }, [user?.uid]);
 
   // Charger les enfants depuis Firestore
   // R5: No longer waits for preferencesLoaded — children and prefs load in parallel.
@@ -507,7 +509,9 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       childDataRef.current.clear();
       currentChildIdsRef.current.clear();
     };
-  }, [user, authLoading, syncState]);
+    // Same rationale as the prefs listener — depend on the stable uid, not
+    // the whole user object.
+  }, [user?.uid, authLoading, syncState]);
 
   useEffect(() => {
     if (!user?.uid || status === 'loading') return;
@@ -581,7 +585,9 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
         console.error('Erreur sauvegarde dernier enfant actif:', error);
       });
     }
-  }, [user]);
+    // setActiveChild's identity must remain stable across refreshUser() calls,
+    // otherwise consumers re-render. Depend on the uid only.
+  }, [user?.uid]);
 
   const addChild = useCallback((child: Child) => {
     setChildren((prev) => [...prev, child]);

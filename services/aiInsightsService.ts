@@ -6,6 +6,7 @@
 import { functions } from "@/config/firebase";
 import { httpsCallable } from "firebase/functions";
 import { captureServiceError } from "@/utils/errorReporting";
+import { toDate as toJsDate } from "@/utils/date";
 import { anonymizeChildData, anonymizeEvent, stripPII } from "@/services/dataAnonymizationService";
 import type { Baby } from "@/types/baby";
 import type { Insight, TipCategory } from "@/types/content";
@@ -14,6 +15,14 @@ import { TIP_CATEGORY_COLORS } from "@/types/content";
 // ============================================
 // TYPES
 // ============================================
+
+/**
+ * Event timestamps reach this layer in several shapes (Firestore Timestamp,
+ * httpsCallable {seconds, nanoseconds}, Date, ISO string, millis number).
+ * Treat them as `unknown` and pipe through `toJsDate` from `utils/date.ts`,
+ * which centralises every coercion and accepts all observed shapes.
+ */
+type EventTimestamp = unknown;
 
 export interface PredictionResult {
   type: "feeding" | "sleep" | "diaper";
@@ -61,12 +70,12 @@ const generateAiInsight = httpsCallable<AiInsightRequest, AiInsightResponse>(
  */
 export function predictNextFeeding(events: Array<{
   type: string;
-  timestamp: any;
+  timestamp: EventTimestamp;
 }>): PredictionResult | null {
   const feedings = events
     .filter((e) => e.type === "tetee" || e.type === "biberon")
     .map((e) => {
-      const ts = e.timestamp?.toDate?.() ?? new Date(e.timestamp);
+      const ts = toJsDate(e.timestamp);
       return ts.getTime();
     })
     .sort((a, b) => b - a) // Plus récent d'abord
@@ -126,13 +135,13 @@ export function predictNextFeeding(events: Array<{
  */
 export function predictNextSleep(events: Array<{
   type: string;
-  timestamp: any;
+  timestamp: EventTimestamp;
   isNap?: boolean;
 }>): PredictionResult | null {
   const naps = events
     .filter((e) => (e.type === "sommeil" || e.type === "sieste") && e.isNap !== false)
     .map((e) => {
-      const ts = e.timestamp?.toDate?.() ?? new Date(e.timestamp);
+      const ts = toJsDate(e.timestamp);
       return ts.getTime();
     })
     .sort((a, b) => b - a)
@@ -189,14 +198,14 @@ export function predictNextSleep(events: Array<{
  * Calcul local — pas besoin de LLM pour les stats de base.
  */
 export function generateDailySummary(
-  events: Array<{ type: string; timestamp: any; note?: string }>,
+  events: Array<{ type: string; timestamp: EventTimestamp; note?: string }>,
   babyName: string
 ): DailySummary {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const todayEvents = events.filter((e) => {
-    const ts = e.timestamp?.toDate?.() ?? new Date(e.timestamp);
+    const ts = toJsDate(e.timestamp);
     return ts >= today;
   });
 
@@ -249,7 +258,14 @@ export function generateDailySummary(
  */
 export async function generateAiEnhancedInsight(
   child: Baby,
-  events: Array<{ type: string; timestamp: any; details?: Record<string, unknown>; childId?: string; userId?: string; note?: string }>,
+  events: Array<{
+    type: string;
+    timestamp: EventTimestamp;
+    details?: Record<string, unknown>;
+    childId?: string;
+    userId?: string;
+    note?: string;
+  }>,
   knownNames: string[] = []
 ): Promise<Insight | null> {
   try {

@@ -22,7 +22,7 @@ const getUserId = () => {
   return user.uid;
 };
 
-export async function ajouterVaccin(childId: string, data: any) {
+export async function ajouterVaccin(childId: string, data: Record<string, unknown>) {
   try {
     const userId = getUserId();
     const ref = await addDoc(collection(db, "vaccins"), {
@@ -99,7 +99,10 @@ export async function obtenirVaccinsAvecLimite(childId: string, nombreLimit: num
   }
 }
 
-export function ecouterVaccins(childId: string, callback: (docs: any[]) => void) {
+export function ecouterVaccins(
+  childId: string,
+  callback: (docs: Array<{ id: string } & Record<string, unknown>>) => void,
+) {
   const q = query(
     collection(db, "vaccins"),
     where("childId", "==", childId),
@@ -117,7 +120,11 @@ export function ecouterVaccins(childId: string, callback: (docs: any[]) => void)
   return unsubscribe;
 }
 
-export async function modifierVaccin(childId: string, id: string, nouveausDonnees: any) {
+export async function modifierVaccin(
+  childId: string,
+  id: string,
+  nouveausDonnees: Record<string, unknown>,
+) {
   try {
     const docRef = doc(db, "vaccins", id);
     const docSnap = await getDoc(docRef);

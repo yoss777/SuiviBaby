@@ -1,5 +1,6 @@
 import PompagesChart from "@/components/suivibaby/PompagesChart";
 import RepasChart from "@/components/suivibaby/RepasChart";
+import { SafeBoundary } from "@/components/SafeBoundary";
 import SommeilChart from "@/components/suivibaby/SommeilChart";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
@@ -1029,13 +1030,18 @@ export default function StatsScreen() {
                   <IconPulseDots color={chartColors.tetees.blue} />
                 </View>
               ) : (
-                <RepasChart
-                  tetees={tetees}
-                  initialTypeFilter={initialTypeFilter}
-                  colorScheme={colorScheme}
-                  screenWidth={screenWidth}
-                  onWeekChange={handleRepasWeekChange}
-                />
+                <SafeBoundary
+                  name="stats.RepasChart"
+                  extras={{ childId: activeChild?.id, count: tetees?.length }}
+                >
+                  <RepasChart
+                    tetees={tetees}
+                    initialTypeFilter={initialTypeFilter}
+                    colorScheme={colorScheme}
+                    screenWidth={screenWidth}
+                    onWeekChange={handleRepasWeekChange}
+                  />
+                </SafeBoundary>
               )}
             </ScrollView>
             <ScrollView
@@ -1056,12 +1062,17 @@ export default function StatsScreen() {
                   <IconPulseDots color={chartColors.pompages.green} />
                 </View>
               ) : (
-                <PompagesChart
-                  pompages={pompages}
-                  colorScheme={colorScheme}
-                  screenWidth={screenWidth}
-                  onWeekChange={handlePompagesWeekChange}
-                />
+                <SafeBoundary
+                  name="stats.PompagesChart"
+                  extras={{ childId: activeChild?.id, count: pompages?.length }}
+                >
+                  <PompagesChart
+                    pompages={pompages}
+                    colorScheme={colorScheme}
+                    screenWidth={screenWidth}
+                    onWeekChange={handlePompagesWeekChange}
+                  />
+                </SafeBoundary>
               )}
             </ScrollView>
             <ScrollView
@@ -1082,14 +1093,22 @@ export default function StatsScreen() {
                   <IconPulseDots color={chartColors.sommeil.purple} />
                 </View>
               ) : (
-                <SommeilChart
-                  sommeils={sommeils}
-                  repas={tetees}
-                  babyName={activeChild?.name}
-                  colorScheme={colorScheme}
-                  screenWidth={screenWidth}
-                  onWeekChange={handleSommeilWeekChange}
-                />
+                <SafeBoundary
+                  name="stats.SommeilChart"
+                  extras={{
+                    childId: activeChild?.id,
+                    sleepCount: sommeils?.length,
+                  }}
+                >
+                  <SommeilChart
+                    sommeils={sommeils}
+                    repas={tetees}
+                    babyName={activeChild?.name}
+                    colorScheme={colorScheme}
+                    screenWidth={screenWidth}
+                    onWeekChange={handleSommeilWeekChange}
+                  />
+                </SafeBoundary>
               )}
             </ScrollView>
           </PagerView>

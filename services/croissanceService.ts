@@ -21,7 +21,7 @@ const getUserId = () => {
   return user.uid;
 };
 
-export async function ajouterCroissance(childId: string, data: any) {
+export async function ajouterCroissance(childId: string, data: Record<string, unknown>) {
   try {
     const userId = getUserId();
     const ref = await addDoc(collection(db, "croissances"), {
@@ -78,7 +78,7 @@ export async function obtenirToutesLesCroissances(childId: string) {
 
 export function ecouterCroissances(
   childId: string,
-  callback: (docs: any[]) => void
+  callback: (docs: Array<{ id: string } & Record<string, unknown>>) => void,
 ) {
   const q = query(
     collection(db, "croissances"),
@@ -100,7 +100,7 @@ export function ecouterCroissances(
 export async function modifierCroissance(
   childId: string,
   id: string,
-  nouvellesDonnees: any
+  nouvellesDonnees: Record<string, unknown>,
 ) {
   try {
     const docRef = doc(db, "croissances", id);
