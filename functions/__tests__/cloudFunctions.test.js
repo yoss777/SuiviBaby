@@ -206,7 +206,9 @@ describe("usage quota functions", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: jest.fn().mockResolvedValue({ status: "completed", text: "ajoute une sieste" }),
-      });
+      })
+      // S4-T5: post-completion DELETE on AssemblyAI (best-effort cleanup)
+      .mockResolvedValueOnce({ ok: true, json: jest.fn().mockResolvedValue({}) });
 
     mockFirestore.doc.mockImplementation((p) => {
       if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
@@ -230,7 +232,8 @@ describe("usage quota functions", () => {
       expect.objectContaining({ voiceCommandCount: 2, lastVoiceCommandAt: "TS" }),
       { merge: true }
     );
-    expect(global.fetch).toHaveBeenCalledTimes(3);
+    // 3 functional calls (upload, create, poll) + 1 best-effort DELETE (S4-T5).
+    expect(global.fetch).toHaveBeenCalledTimes(4);
   });
 
   it("consumes export quota for free users", async () => {

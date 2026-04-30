@@ -543,6 +543,31 @@ exports.transcribeAudio = onCall(
         throw new HttpsError("deadline-exceeded", "Transcription timeout.");
       }
 
+      // 7. Tell AssemblyAI to drop the upload + transcript (S4-T5).
+      //    Best-effort: a failure here is non-fatal — the transcript was
+      //    already delivered to the caller and there is no user value in
+      //    aborting the response. We just want to limit how long sensitive
+      //    audio of a child sits on AssemblyAI's side.
+      try {
+        const cleanup = fetch(
+          `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
+          { method: "DELETE", headers: { authorization: apiKey } }
+        );
+        if (cleanup && typeof cleanup.catch === "function") {
+          cleanup.catch((cleanupErr) => {
+            console.warn(
+              `transcribeAudio: AssemblyAI delete failed for ${transcriptId}:`,
+              cleanupErr?.message ?? cleanupErr
+            );
+          });
+        }
+      } catch (cleanupErr) {
+        console.warn(
+          `transcribeAudio: AssemblyAI delete sync error for ${transcriptId}:`,
+          cleanupErr?.message ?? cleanupErr
+        );
+      }
+
       return { text: result.text || "" };
     } catch (error) {
       // Re-throw HttpsError as-is
