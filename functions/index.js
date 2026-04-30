@@ -418,6 +418,10 @@ exports.transcribeAudio = onCall(
     memory: "512MiB",
     timeoutSeconds: 120,
     secrets: ["ASSEMBLYAI_API_KEY"],
+    // S4-T4: keep one instance warm + allow batching so voice commands
+    // don't pay a 3-8s cold start on Node 22. ~5€/month at current volume.
+    concurrency: 30,
+    minInstances: 1,
   }),
   async (request) => {
     // 1. Auth check
@@ -584,7 +588,7 @@ exports.transcribeAudio = onCall(
 );
 
 exports.getUsageQuotaStatus = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -621,7 +625,7 @@ exports.getUsageQuotaStatus = onCall(
 );
 
 exports.consumeUsageQuota = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -1441,7 +1445,7 @@ function validateEventData(type, data) {
  * validateAndCreateEvent — Création d'événement avec validation serveur
  */
 exports.validateAndCreateEvent = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -1509,7 +1513,7 @@ exports.validateAndCreateEvent = onCall(
  * validateAndUpdateEvent — Modification d'événement avec validation serveur
  */
 exports.validateAndUpdateEvent = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
