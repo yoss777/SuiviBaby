@@ -1,5 +1,6 @@
 // components/forms/MilestonesForm.tsx
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { useFormScroll } from "@/components/ui/FormScrollContext";
 import { PhotoImage } from "@/components/ui/PhotoImage";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
 import { getAccentColors } from "@/components/ui/accentColors";
@@ -25,6 +26,8 @@ import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   StyleSheet,
+  Image,
+  ActivityIndicator,
   Text,
   TextInput,
   TouchableOpacity,
@@ -227,6 +230,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   onDelete,
 }) => {
   const { activeChild } = useBaby();
+  const formScroll = useFormScroll();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
@@ -259,8 +263,12 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   const [photoUri, setPhotoUri] = useState<string | null>(
     editData?.photos?.[0] ?? null,
   );
+  const [photoOriginalUri, setPhotoOriginalUri] = useState<string | null>(null);
+  const [photoProcessing, setPhotoProcessing] = useState(false);
+  const [photoPreviewLoading, setPhotoPreviewLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+
   // Reset title when type changes
   const handleTypeChange = useCallback((type: JalonType) => {
     setTypeJalon(type);
@@ -273,7 +281,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
   // Photo picker
   const handlePickPhoto = useCallback(async () => {
+    onFormStepChange?.(true);
     try {
+      setPhotoProcessing(true);
       const permission =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
@@ -288,15 +298,21 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       });
 
       if (!result.canceled && result.assets?.[0]?.uri) {
-        // Compress image before storing
-        const compressedUri = await compressImage(result.assets[0].uri);
+        const originalUri = result.assets[0].uri;
+        const compressedUri = await compressImage(originalUri);
+        setPhotoOriginalUri(originalUri);
+        setPhotoPreviewLoading(true);
         setPhotoUri(compressedUri);
+        requestAnimationFrame(() => formScroll?.scrollToEnd());
       }
     } catch (error) {
       console.error("Erreur sélection photo:", error);
       showAlert("Erreur", "Impossible d'ajouter la photo.");
+    } finally {
+      setPhotoProcessing(false);
+      onFormStepChange?.(false);
     }
-  }, [showAlert]);
+  }, [formScroll, onFormStepChange, showAlert]);
 
   const handleDateHeureChange = useCallback((nextDate: Date) => {
     setDateHeure(nextDate);
@@ -551,18 +567,55 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
         <Text style={[styles.photoPolicyHint, { color: nc.textMuted }]}>
           Gardez les photos dans un cadre privé entre adultes autorisés. Ne partagez pas d'image montrant les parties intimes de l'enfant ou un contenu corporel sensible.
         </Text>
-        {photoUri ? (
+        {photoProcessing && !photoUri ? (
+          <View
+            style={[
+              styles.photoPlaceholder,
+              { borderColor: nc.border, backgroundColor: nc.background },
+            ]}
+          >
+            <ActivityIndicator size="small" color={eventColors.jalon.dark} />
+            <Text
+              style={[styles.photoPlaceholderText, { color: nc.textMuted }]}
+            >
+              Préparation de l'image...
+            </Text>
+          </View>
+        ) : photoUri ? (
           <View style={styles.photoPreviewContainer}>
-            <PhotoImage
-              photoRef={photoUri}
-              style={[styles.photoPreview, { backgroundColor: nc.background }]}
-            />
+            {isLocalPhotoUri(photoUri) ? (
+              <Image
+                source={{ uri: photoUri }}
+                style={[styles.photoPreview, { backgroundColor: nc.background }]}
+                resizeMode="cover"
+                onLoad={() => {
+                  setPhotoPreviewLoading(false);
+                }}
+                onError={() => {
+                  if (photoOriginalUri && photoOriginalUri !== photoUri) {
+                    setPhotoUri(photoOriginalUri);
+                    setPhotoPreviewLoading(true);
+                    return;
+                  }
+                  setPhotoPreviewLoading(false);
+                }}
+              />
+            ) : (
+              <PhotoImage
+                photoRef={photoUri}
+                style={[styles.photoPreview, { backgroundColor: nc.background }]}
+              />
+            )}
             <TouchableOpacity
               style={[
                 styles.photoRemoveButton,
                 { backgroundColor: nc.backgroundCard },
               ]}
-              onPress={() => setPhotoUri(null)}
+              onPress={() => {
+                setPhotoUri(null);
+                setPhotoOriginalUri(null);
+                setPhotoPreviewLoading(false);
+              }}
               activeOpacity={0.8}
               disabled={isSubmitting}
               accessibilityLabel="Retirer la photo"
@@ -570,15 +623,18 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             >
               <FontAwesome name="xmark" size={12} color="#dc3545" />
             </TouchableOpacity>
-            {photoUploading && (
+            {(photoProcessing || photoPreviewLoading || photoUploading) && (
               <Text
                 style={[
                   styles.photoUploading,
                   { color: eventColors.jalon.dark },
                 ]}
               >
-                Téléversement...{" "}
-                {uploadProgress > 0 ? `${uploadProgress}%` : ""}
+                {photoUploading
+                  ? `Téléversement... ${uploadProgress > 0 ? `${uploadProgress}%` : ""}`
+                  : photoPreviewLoading
+                    ? "Chargement de l'image..."
+                    : "Préparation de l'image..."}
               </Text>
             )}
           </View>

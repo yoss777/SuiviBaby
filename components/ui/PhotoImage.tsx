@@ -1,4 +1,8 @@
-import { getAuthenticatedPhotoSource, isStoragePathPhotoRef } from "@/utils/photoStorage";
+import {
+  getAuthenticatedPhotoSource,
+  isLocalPhotoUri,
+  isStoragePathPhotoRef,
+} from "@/utils/photoStorage";
 import { Image as ExpoImage, ImageProps as ExpoImageProps, ImageSource } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
@@ -40,6 +44,9 @@ export function PhotoImage({
     if (!photoRef) return null;
     if (isStoragePathPhotoRef(photoRef)) {
       return getCachedSource(photoRef);
+    }
+    if (isLocalPhotoUri(photoRef)) {
+      return { uri: photoRef };
     }
     return { uri: photoRef, cacheKey: photoRef };
   }, [photoRef]);
@@ -100,7 +107,7 @@ export function PhotoImage({
     <ExpoImage
       {...props}
       source={source}
-      cachePolicy="memory-disk"
+      cachePolicy={isLocalPhotoUri(photoRef) ? "none" : "memory-disk"}
       priority="high"
       contentFit={props.contentFit ?? resizeMode}
       transition={props.transition ?? fadeDuration}
