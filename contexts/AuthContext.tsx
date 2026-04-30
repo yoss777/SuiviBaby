@@ -87,13 +87,22 @@ const initialState: AuthState = {
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
-    case "SET_FIREBASE_USER":
+    case "SET_FIREBASE_USER": {
+      // Token refresh re-fires onAuthStateChanged with the same uid.
+      // Keep loading=false if we already have user data — flipping it back
+      // to true causes downstream contexts (BabyContext) to clear and reload.
+      const sameUid = state.firebaseUser?.uid === action.payload.uid;
+      const alreadyReady = state.user != null && !state.loading;
+      if (sameUid && alreadyReady) {
+        return { ...state, firebaseUser: action.payload };
+      }
       return {
         ...state,
         firebaseUser: action.payload,
         loading: true,
         status: "loading",
       };
+    }
     case "SET_USER_DATA":
       return {
         ...state,
@@ -134,6 +143,8 @@ export function AuthProvider({
 }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
   const isMountedRef = useRef(true);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const { showAlert } = useModal();
 
   // Fonction pour charger les données utilisateur
@@ -267,10 +278,14 @@ export function AuthProvider({
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!isMountedRef.current) return;
       if (fbUser) {
+        const isSameUser =
+          stateRef.current.firebaseUser?.uid === fbUser.uid &&
+          stateRef.current.user != null;
         dispatch({ type: "SET_FIREBASE_USER", payload: fbUser });
-        await loadUserData(fbUser);
-        // Relancer l'auto-sync offline après login (stopAutoSync est appelé au signOut)
-        startAutoSync();
+        if (!isSameUser) {
+          await loadUserData(fbUser);
+          startAutoSync();
+        }
       } else {
         dispatch({ type: "CLEAR_USER" });
       }

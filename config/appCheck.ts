@@ -75,6 +75,22 @@ function isNativeAppCheckConfigured(): boolean {
   return getAppCheckExtra()?.nativeConfigured === true;
 }
 
+function isNativeAppCheckRuntimeEnabled(): boolean {
+  if (!isNativeAppCheckConfigured()) {
+    return false;
+  }
+
+  // In development, Metro can serve JS to Expo Go or to a dev client that was
+  // built before RNFirebase was linked. Importing RNFirebase there hard-crashes
+  // with "Native module RNFBAppModule not found". Keep native App Check opt-in
+  // for local dev; production builds still initialize it when configured.
+  if (__DEV__) {
+    return process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_NATIVE_DEV_ENABLED === "true";
+  }
+
+  return true;
+}
+
 async function initializeWebAppCheck(app: FirebaseApp): Promise<void> {
   const siteKey = process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_WEB_SITE_KEY;
   if (!siteKey) {
@@ -88,13 +104,18 @@ async function initializeWebAppCheck(app: FirebaseApp): Promise<void> {
 }
 
 async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
-  if (!isNativeAppCheckConfigured()) {
+  if (!isNativeAppCheckRuntimeEnabled()) {
     return;
   }
 
-  const { default: reactNativeFirebaseAppCheck } = await import(
-    "@react-native-firebase/app-check"
-  );
+  let reactNativeFirebaseAppCheck: typeof import("@react-native-firebase/app-check").default;
+  try {
+    const module = await import("@react-native-firebase/app-check");
+    reactNativeFirebaseAppCheck = module.default;
+  } catch (error) {
+    console.warn("[AppCheck] Native module unavailable, skipping native App Check:", error);
+    return;
+  }
 
   const nativeAppCheck = reactNativeFirebaseAppCheck();
   const provider = nativeAppCheck.newReactNativeFirebaseAppCheckProvider();
