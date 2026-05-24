@@ -9,7 +9,7 @@ import {
   transcribeAudio,
   hasApiKey,
 } from "./voice/recorder";
-import { parseCommand, parseMultipleCommands } from "./voice/commandParser";
+import { parseCommand, parseMultipleCommands, parseMultipleCommandsWithMeta } from "./voice/commandParser";
 import { formatDataForFirebase, commandTypeToEventType } from "./voice/firebaseFormatter";
 
 // Re-export types so existing imports keep working
@@ -35,6 +35,7 @@ class VoiceCommandService {
   hasApiKey = hasApiKey;
   parseCommand = parseCommand;
   parseMultipleCommands = parseMultipleCommands;
+  parseMultipleCommandsWithMeta = parseMultipleCommandsWithMeta;
   formatDataForFirebase = formatDataForFirebase;
 }
 

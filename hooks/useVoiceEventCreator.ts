@@ -25,30 +25,81 @@ export interface ModalFeedback {
   showInfo: (title: string, message: string) => void;
 }
 
+/**
+ * Normalize an event's updatedAt into millis. Returns undefined when the
+ * event has never been updated (e.g. just-created locally) — in that case
+ * we skip the optimistic lock rather than reject a legitimate first edit.
+ */
+function extractUpdatedAtMillis(event: any): number | undefined {
+  const raw = event?.updatedAt;
+  if (!raw) return undefined;
+  if (raw instanceof Date) return raw.getTime();
+  if (typeof raw.toMillis === "function") return raw.toMillis();
+  if (typeof raw.toDate === "function") return raw.toDate().getTime();
+  if (typeof raw.seconds === "number") {
+    return raw.seconds * 1000 + Math.floor((raw.nanoseconds || 0) / 1_000_000);
+  }
+  if (typeof raw === "number") return raw;
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // findEventByIdentifier — locate an existing event for modify/delete
 // ---------------------------------------------------------------------------
 
+// T2.5 — tolerance tightened from ±30 to ±10 min so the parser is less likely
+// to "guess" the wrong event when two are close in time. If more than one
+// event falls inside the window, we return AmbiguousMatch so the UI can
+// prompt the user instead of silently picking one.
+const TARGET_TIME_TOLERANCE_MIN = 10;
+const LAST_EVENT_AMBIGUITY_WINDOW_MIN = 5;
+
+export interface AmbiguousMatch {
+  ambiguous: true;
+  candidates: Event[];
+}
+
+export type FindEventResult = Event | AmbiguousMatch | null;
+
+function isAmbiguous(result: FindEventResult): result is AmbiguousMatch {
+  return !!result && (result as AmbiguousMatch).ambiguous === true;
+}
+
+function eventDateToDate(event: Event): Date {
+  return event.date instanceof Date
+    ? event.date
+    : (event.date as any).toDate?.() ?? new Date((event.date as any).seconds * 1000);
+}
+
 export async function findEventByIdentifier(
   identifier: EventIdentifier,
   childIdToSearch: string,
-): Promise<Event | null> {
+): Promise<FindEventResult> {
   try {
     const eventType = commandTypeToEventType(identifier.type) as EventType;
 
-    // Si "le dernier", on récupère le plus récent
+    // "le dernier" — récupère le plus récent, mais avertit si plusieurs events
+    // du même type existent dans une fenêtre serrée (= ambigu côté humain).
     if (identifier.isLast) {
       const events = await obtenirEvenements(childIdToSearch, {
         type: eventType,
-        limite: 1,
+        limite: 2,
       });
-      return events.length > 0 ? events[0] : null;
+      if (events.length === 0) return null;
+      if (events.length === 1) return events[0];
+
+      const first = eventDateToDate(events[0]);
+      const second = eventDateToDate(events[1]);
+      const diffMin = Math.abs(first.getTime() - second.getTime()) / 60_000;
+      if (diffMin <= LAST_EVENT_AMBIGUITY_WINDOW_MIN) {
+        return { ambiguous: true, candidates: events };
+      }
+      return events[0];
     }
 
-    // Si une heure cible est spécifiée (ex: "de 15h20")
+    // "de 15h20" — fenêtre ±10 min. Si plusieurs candidats, ambigu.
     if (identifier.targetTime) {
       const targetDate = identifier.targetTime;
-      // Rechercher les événements de la journée
       const startOfDay = new Date(targetDate);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(targetDate);
@@ -60,34 +111,26 @@ export async function findEventByIdentifier(
         jusqu: endOfDay,
       });
 
-      // Trouver l'événement le plus proche de l'heure cible (tolérance de 30 min)
-      const targetMinutes = targetDate.getHours() * 60 + targetDate.getMinutes();
-      let closestEvent: Event | null = null;
-      let minDiff = Infinity;
-
+      const targetMs = targetDate.getTime();
+      const candidates: Event[] = [];
       for (const event of events) {
-        const eventDate = event.date instanceof Date
-          ? event.date
-          : (event.date as any).toDate?.() || new Date((event.date as any).seconds * 1000);
-        const eventMinutes = eventDate.getHours() * 60 + eventDate.getMinutes();
-        const diff = Math.abs(eventMinutes - targetMinutes);
-
-        if (diff < minDiff && diff <= 30) { // Tolérance de 30 minutes
-          minDiff = diff;
-          closestEvent = event;
+        const diffMin = Math.abs(eventDateToDate(event).getTime() - targetMs) / 60_000;
+        if (diffMin <= TARGET_TIME_TOLERANCE_MIN) {
+          candidates.push(event);
         }
       }
-      return closestEvent;
+
+      if (candidates.length === 0) return null;
+      if (candidates.length === 1) return candidates[0];
+      return { ambiguous: true, candidates };
     }
 
-    // Si un temps relatif est spécifié (ex: "il y a 30 min")
+    // "il y a 30 min" — fenêtre ±10 min (resserrée depuis ±15).
     if (identifier.relativeTime) {
       const now = new Date();
       const targetTime = new Date(now.getTime() - identifier.relativeTime * 60 * 1000);
-
-      // Fenêtre de recherche : target +/- 15 min
-      const depuis = new Date(targetTime.getTime() - 15 * 60 * 1000);
-      const jusqu = new Date(targetTime.getTime() + 15 * 60 * 1000);
+      const depuis = new Date(targetTime.getTime() - TARGET_TIME_TOLERANCE_MIN * 60 * 1000);
+      const jusqu = new Date(targetTime.getTime() + TARGET_TIME_TOLERANCE_MIN * 60 * 1000);
 
       const events = await obtenirEvenements(childIdToSearch, {
         type: eventType,
@@ -95,11 +138,9 @@ export async function findEventByIdentifier(
         jusqu,
       });
 
-      // Retourner le plus proche
-      if (events.length > 0) {
-        return events[0]; // Déjà trié par date desc
-      }
-      return null;
+      if (events.length === 0) return null;
+      if (events.length === 1) return events[0];
+      return { ambiguous: true, candidates: events };
     }
 
     return null;
@@ -108,6 +149,8 @@ export async function findEventByIdentifier(
     return null;
   }
 }
+
+export { isAmbiguous };
 
 // ---------------------------------------------------------------------------
 // executeDelete
@@ -198,11 +241,21 @@ export async function executeModify(
     dataToUpdate.note = `Modifié par commande vocale`;
 
     if (previousEvent.type === type) {
+      // T2.2 — extract previous updatedAt as an optimistic lock token.
+      // If a concurrent edit landed since we read the event, the CF will
+      // reject with code "aborted" and the optimistic store rolls back the
+      // visual change. The user sees the original value reappear (via the
+      // existing failOptimistic path) — a clearer toast would require
+      // plumbing failure metadata through optimisticEventsStore, which is
+      // tracked separately.
+      const expectedUpdatedAt = extractUpdatedAtMillis(previousEvent);
+
       modifierEvenementOptimistic(
         childId,
         eventId,
         dataToUpdate,
         previousEvent,
+        expectedUpdatedAt,
       );
       feedback.showInfo(
         "Succès",

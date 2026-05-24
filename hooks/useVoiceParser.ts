@@ -52,6 +52,20 @@ export function parseCommands(text: string): ParsedCommandResult[] {
   return VoiceCommandService.parseMultipleCommands(text);
 }
 
+export interface ParseCommandsMeta {
+  commands: ParsedCommandResult[];
+  /** Set when the parser dropped events (input too long / too many segments). */
+  truncated: boolean;
+}
+
+/**
+ * Same as parseCommands but exposes truncation metadata so the UI can warn
+ * the user when only a subset of their phrase was retained.
+ */
+export function parseCommandsWithMeta(text: string): ParseCommandsMeta {
+  return VoiceCommandService.parseMultipleCommandsWithMeta(text);
+}
+
 // ---------------------------------------------------------------------------
 // Formatting helpers (pure functions, no React state)
 // ---------------------------------------------------------------------------

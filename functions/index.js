@@ -8,6 +8,7 @@ const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
 const { buildRecapHTML } = require("./emailTemplates");
 const { hasRequiredChildAccess } = require("./accessControl");
+const VOICE_ENUMS = require("./lib/enums");
 
 admin.initializeApp();
 
@@ -213,6 +214,35 @@ async function getVoiceQuotaStatus(db, uid) {
   };
 }
 
+/**
+ * Refund a previously-reserved voice quota slot. Called when the downstream
+ * AssemblyAI pipeline fails after we have already incremented the counter.
+ * Best-effort: a refund failure is logged but does not surface to the user —
+ * the original error from AssemblyAI matters more than a lost quota slot.
+ */
+async function refundVoiceQuota(db, uid) {
+  try {
+    const usageRef = db.doc(`usage_limits/${uid}`);
+    await db.runTransaction(async (tx) => {
+      const usageDoc = await tx.get(usageRef);
+      if (!usageDoc.exists) return;
+      const usageData = usageDoc.data() ?? {};
+      const today = new Date().toISOString().split("T")[0];
+      // Only refund if the reservation is from today — older counters have
+      // already been reset by the date check in reserveVoiceQuota.
+      if (usageData.voiceCommandDate !== today) return;
+      const current = usageData.voiceCommandCount || 0;
+      if (current <= 0) return;
+      tx.update(usageRef, {
+        voiceCommandCount: current - 1,
+        lastVoiceQuotaRefundAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (err) {
+    console.error(`refundVoiceQuota failed for uid=${uid}:`, err?.message ?? err);
+  }
+}
+
 async function reserveVoiceQuota(db, uid) {
   const subscriptionState = await getSubscriptionState(db, uid);
 
@@ -407,6 +437,62 @@ exports.cleanupExpiredShareCodes = onSchedule("every 24 hours", async () => {
 });
 
 /**
+ * Awaited best-effort DELETE on an AssemblyAI transcript.
+ * Returns true on success, false on any failure (network, non-2xx, timeout).
+ * Bounded by a 3s timeout so it can't keep the parent CF hanging.
+ */
+async function deleteAssemblyAITranscript(transcriptId, apiKey, timeoutMs = 3000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(
+      `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
+      {
+        method: "DELETE",
+        headers: { authorization: apiKey },
+        signal: controller.signal,
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`AssemblyAI DELETE returned status ${response.status}`);
+    }
+    return true;
+  } catch (err) {
+    console.warn(
+      `deleteAssemblyAITranscript: failed for ${transcriptId}:`,
+      err?.message ?? err
+    );
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Queue a failed AssemblyAI delete for the retry scheduler. The doc id mirrors
+ * the transcriptId so a duplicate enqueue is a no-op (idempotent on retry).
+ */
+async function enqueueAssemblyAIDelete(db, transcriptId, reason) {
+  try {
+    await db.doc(`pending_assemblyai_deletes/${transcriptId}`).set(
+      {
+        transcriptId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        attempts: admin.firestore.FieldValue.increment(0), // create field
+        lastError: String(reason || "delete failed"),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.error(
+      `enqueueAssemblyAIDelete: could not queue ${transcriptId}:`,
+      err?.message ?? err
+    );
+  }
+}
+
+/**
  * transcribeAudio — Proxy sécurisé pour AssemblyAI
  * - Auth obligatoire
  * - Rate limiting : max 10 requêtes/min/user
@@ -431,7 +517,7 @@ exports.transcribeAudio = onCall(
     monitorAppCheck(request, "transcribeAudio");
 
     const uid = request.auth.uid;
-    const { audioBase64 } = request.data;
+    const { audioBase64, idempotencyKey } = request.data;
 
     if (!audioBase64 || typeof audioBase64 !== "string") {
       throw new HttpsError(
@@ -448,6 +534,21 @@ exports.transcribeAudio = onCall(
       );
     }
 
+    // Optional idempotency key: max 100 chars, alphanum/dash/underscore only.
+    // Lets the client safely retry a flaky upload without double-charging the
+    // user's daily quota or re-running AssemblyAI on the same audio.
+    let safeIdempotencyKey = null;
+    if (idempotencyKey !== undefined && idempotencyKey !== null) {
+      if (typeof idempotencyKey !== "string" || idempotencyKey.length > 100 ||
+          !/^[A-Za-z0-9_-]+$/.test(idempotencyKey)) {
+        throw new HttpsError(
+          "invalid-argument",
+          "idempotencyKey doit être une chaîne alphanumérique (max 100 caractères, _ et - autorisés)."
+        );
+      }
+      safeIdempotencyKey = idempotencyKey;
+    }
+
     const db = admin.firestore();
     const apiKey = process.env.ASSEMBLYAI_API_KEY;
 
@@ -460,8 +561,27 @@ exports.transcribeAudio = onCall(
 
     // 2. Rate limiting — max 10 requêtes/min/user
     await checkRateLimit(db, uid, "transcribe", 10);
-    // 3. Business quota — enforced server-side, client checks are UX only.
+
+    // 3. Idempotency cache lookup — short-circuit if the client retried with
+    // the same key within the TTL window (5 min). Cached response is returned
+    // without re-consuming quota or hitting AssemblyAI.
+    const TRANSCRIBE_CACHE_TTL_MS = 5 * 60 * 1000;
+    const cacheDocId = safeIdempotencyKey ? `${uid}_${safeIdempotencyKey}` : null;
+    if (cacheDocId) {
+      const cacheRef = db.doc(`voice_transcribe_cache/${cacheDocId}`);
+      const cacheDoc = await cacheRef.get();
+      if (cacheDoc.exists) {
+        const cached = cacheDoc.data();
+        const cachedAt = cached.createdAt?.toMillis?.() ?? 0;
+        if (Date.now() - cachedAt < TRANSCRIBE_CACHE_TTL_MS) {
+          return { text: cached.text || "", cached: true };
+        }
+      }
+    }
+
+    // 4. Business quota — enforced server-side, client checks are UX only.
     await reserveVoiceQuota(db, uid);
+    let quotaReserved = true;
 
     try {
       // 4. Upload audio to AssemblyAI
@@ -547,33 +667,55 @@ exports.transcribeAudio = onCall(
         throw new HttpsError("deadline-exceeded", "Transcription timeout.");
       }
 
-      // 7. Tell AssemblyAI to drop the upload + transcript (S4-T5).
-      //    Best-effort: a failure here is non-fatal — the transcript was
-      //    already delivered to the caller and there is no user value in
-      //    aborting the response. We just want to limit how long sensitive
-      //    audio of a child sits on AssemblyAI's side.
-      try {
-        const cleanup = fetch(
-          `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
-          { method: "DELETE", headers: { authorization: apiKey } }
-        );
-        if (cleanup && typeof cleanup.catch === "function") {
-          cleanup.catch((cleanupErr) => {
-            console.warn(
-              `transcribeAudio: AssemblyAI delete failed for ${transcriptId}:`,
-              cleanupErr?.message ?? cleanupErr
-            );
-          });
-        }
-      } catch (cleanupErr) {
-        console.warn(
-          `transcribeAudio: AssemblyAI delete sync error for ${transcriptId}:`,
-          cleanupErr?.message ?? cleanupErr
-        );
+      // 7. Tell AssemblyAI to drop the upload + transcript (T2.1).
+      //    Awaited with a 3s timeout so we don't block the response on a slow
+      //    cleanup; if the DELETE fails or times out, the transcriptId is
+      //    queued for retry via the scheduled retryAssemblyAIDeletes job.
+      //    This bounds how long sensitive audio of a child sits on
+      //    AssemblyAI's side (GDPR Art. 17/33).
+      const deleted = await deleteAssemblyAITranscript(transcriptId, apiKey);
+      if (!deleted) {
+        await enqueueAssemblyAIDelete(db, transcriptId, "initial-delete-failed");
       }
 
-      return { text: result.text || "" };
+      const text = result.text || "";
+
+      // 8. Cache result for the idempotency window so a client retry within
+      //    TRANSCRIBE_CACHE_TTL_MS returns the same transcript without
+      //    re-spending quota or hitting AssemblyAI again. Best-effort: a
+      //    cache write failure is non-fatal.
+      if (cacheDocId) {
+        try {
+          await db.doc(`voice_transcribe_cache/${cacheDocId}`).set({
+            text,
+            uid,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            // TTL field — configure a Firestore TTL policy on `expireAt` to
+            // auto-purge cache entries server-side without extra cost.
+            expireAt: admin.firestore.Timestamp.fromMillis(
+              Date.now() + TRANSCRIBE_CACHE_TTL_MS
+            ),
+          });
+        } catch (cacheErr) {
+          console.warn(
+            `transcribeAudio: cache write failed for ${cacheDocId}:`,
+            cacheErr?.message ?? cacheErr
+          );
+        }
+      }
+
+      // Quota was rightfully spent — disarm the refund.
+      quotaReserved = false;
+
+      return { text };
     } catch (error) {
+      // Refund the quota slot we reserved up front so a failed transcription
+      // doesn't eat into the user's daily limit (T1.3).
+      if (quotaReserved) {
+        await refundVoiceQuota(db, uid);
+        quotaReserved = false;
+      }
+
       // Re-throw HttpsError as-is
       if (error instanceof HttpsError) {
         throw error;
@@ -584,6 +726,87 @@ exports.transcribeAudio = onCall(
         "Erreur lors de la transcription audio."
       );
     }
+  }
+);
+
+/**
+ * retryAssemblyAIDeletes — drain the pending_assemblyai_deletes queue.
+ * Runs hourly. For each queued transcriptId:
+ *   - retry DELETE on AssemblyAI
+ *   - on success: remove the doc
+ *   - on failure: bump attempts; after MAX_DELETE_ATTEMPTS, keep the doc for
+ *     manual audit (and log loudly so it shows up in Sentry / Cloud Logs).
+ * Bounded batch size to keep one execution under the 540s scheduler cap.
+ */
+exports.retryAssemblyAIDeletes = onSchedule(
+  {
+    schedule: "every 60 minutes",
+    region: "europe-west1",
+    timeoutSeconds: 540,
+    secrets: ["ASSEMBLYAI_API_KEY"],
+  },
+  async () => {
+    const db = admin.firestore();
+    const apiKey = process.env.ASSEMBLYAI_API_KEY;
+    if (!apiKey) {
+      console.error("retryAssemblyAIDeletes: ASSEMBLYAI_API_KEY missing");
+      return;
+    }
+
+    const MAX_DELETE_ATTEMPTS = 5;
+    const BATCH = 50;
+
+    const snapshot = await db
+      .collection("pending_assemblyai_deletes")
+      .orderBy("lastAttemptAt")
+      .limit(BATCH)
+      .get();
+
+    if (snapshot.empty) {
+      console.log("retryAssemblyAIDeletes: queue empty");
+      return;
+    }
+
+    let succeeded = 0;
+    let stillFailing = 0;
+    let abandoned = 0;
+
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data() || {};
+      const attempts = (data.attempts || 0) + 1;
+      const transcriptId = data.transcriptId || docSnap.id;
+
+      const ok = await deleteAssemblyAITranscript(transcriptId, apiKey);
+      if (ok) {
+        await docSnap.ref.delete();
+        succeeded++;
+        continue;
+      }
+
+      if (attempts >= MAX_DELETE_ATTEMPTS) {
+        // Keep the doc for manual audit, mark it so it stops being retried.
+        await docSnap.ref.update({
+          attempts,
+          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+          abandonedAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastError: `Abandoned after ${attempts} attempts`,
+        });
+        console.error(
+          `retryAssemblyAIDeletes: abandoning ${transcriptId} after ${attempts} attempts`
+        );
+        abandoned++;
+      } else {
+        await docSnap.ref.update({
+          attempts,
+          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        stillFailing++;
+      }
+    }
+
+    console.log(
+      `retryAssemblyAIDeletes: succeeded=${succeeded} stillFailing=${stillFailing} abandoned=${abandoned}`
+    );
   }
 );
 
@@ -1322,6 +1545,20 @@ async function checkChildAccess(db, uid, childId, requiredRoles) {
 }
 
 /**
+ * Throws an HttpsError if `value` is defined but not in `whitelist`.
+ * Used to reject crafted enum values that bypass the client filter (T2.3).
+ */
+function assertEnum(value, whitelist, fieldName) {
+  if (value === undefined || value === null) return;
+  if (typeof value !== "string" || !whitelist.includes(value)) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${fieldName} invalide: '${value}'. Valeurs autorisées: ${whitelist.join(", ")}.`
+    );
+  }
+}
+
+/**
  * Validation des domaines de valeurs par type d'événement
  */
 function validateEventData(type, data) {
@@ -1344,6 +1581,22 @@ function validateEventData(type, data) {
     }
   }
 
+  // Note: bornée pour éviter les blobs (transcription brute, contextNote)
+  // qui gonflent les documents Firestore. Le client tronque déjà à ~500 chars
+  // (firebaseFormatter.MAX_RAW_TEXT + MAX_CONTEXT_NOTE + preamble) — 1000 est
+  // un plafond serveur défensif.
+  if (data.note !== undefined && data.note !== null) {
+    if (typeof data.note !== "string") {
+      throw new HttpsError("invalid-argument", "Note doit être une chaîne.");
+    }
+    if (data.note.length > 1000) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Note trop longue (max 1000 caractères)."
+      );
+    }
+  }
+
   switch (type) {
     case "biberon":
       if (data.quantite !== undefined) {
@@ -1354,6 +1607,40 @@ function validateEventData(type, data) {
           );
         }
       }
+      assertEnum(data.typeBiberon, VOICE_ENUMS.TYPES_BIBERON, "typeBiberon");
+      break;
+
+    case "selle":
+      assertEnum(data.consistance, VOICE_ENUMS.CONSISTANCES_SELLE, "consistance");
+      assertEnum(data.couleur, VOICE_ENUMS.COULEURS_SELLE, "couleur");
+      break;
+
+    case "activite":
+      assertEnum(data.typeActivite, VOICE_ENUMS.TYPES_ACTIVITE, "typeActivite");
+      if (data.duree !== undefined && data.duree !== null) {
+        if (typeof data.duree !== "number" || data.duree < 0 || data.duree > 1440) {
+          throw new HttpsError(
+            "invalid-argument",
+            "Durée activité doit être entre 0 et 1440 minutes."
+          );
+        }
+      }
+      break;
+
+    case "jalon":
+      assertEnum(data.typeJalon, VOICE_ENUMS.TYPES_JALON, "typeJalon");
+      if (data.humeur !== undefined && data.humeur !== null) {
+        if (typeof data.humeur !== "number" || data.humeur < 1 || data.humeur > 5) {
+          throw new HttpsError("invalid-argument", "humeur doit être un entier entre 1 et 5.");
+        }
+      }
+      break;
+
+    case "solide":
+      assertEnum(data.typeSolide, VOICE_ENUMS.TYPES_SOLIDE, "typeSolide");
+      assertEnum(data.momentRepas, VOICE_ENUMS.MOMENTS_REPAS, "momentRepas");
+      // `quantite` for solide is the enum (peu/moyen/beaucoup), not a number.
+      assertEnum(data.quantite, VOICE_ENUMS.QUANTITES_SOLIDE, "quantite (solide)");
       break;
 
     case "temperature":
@@ -1374,6 +1661,21 @@ function validateEventData(type, data) {
             "invalid-argument",
             "Durée sommeil doit être entre 1 et 1440 minutes."
           );
+        }
+      }
+      break;
+
+    case "tetee":
+      // duree (couple combiné) ou dureeGauche/dureeDroite individuels.
+      // Bornes T2.4: 0-180 min (3h, au-delà c'est une coquille).
+      for (const field of ["duree", "dureeGauche", "dureeDroite"]) {
+        if (data[field] !== undefined && data[field] !== null) {
+          if (typeof data[field] !== "number" || data[field] < 0 || data[field] > 180) {
+            throw new HttpsError(
+              "invalid-argument",
+              `${field} (tetee) doit être entre 0 et 180 minutes.`
+            );
+          }
         }
       }
       break;
@@ -1421,17 +1723,31 @@ function validateEventData(type, data) {
       if (!data.nomMedicament || typeof data.nomMedicament !== "string" || data.nomMedicament.trim().length === 0) {
         throw new HttpsError("invalid-argument", "Le nom du médicament est requis.");
       }
+      if (data.nomMedicament.length > 100) {
+        throw new HttpsError("invalid-argument", "Nom du médicament trop long (max 100 caractères).");
+      }
+      if (data.dosage !== undefined && data.dosage !== null) {
+        if (typeof data.dosage !== "string" || data.dosage.length > 100) {
+          throw new HttpsError("invalid-argument", "Dosage doit être une chaîne de max 100 caractères.");
+        }
+      }
       break;
 
     case "vaccin":
       if (!data.nomVaccin || typeof data.nomVaccin !== "string" || data.nomVaccin.trim().length === 0) {
         throw new HttpsError("invalid-argument", "Le nom du vaccin est requis.");
       }
+      if (data.nomVaccin.length > 100) {
+        throw new HttpsError("invalid-argument", "Nom du vaccin trop long (max 100 caractères).");
+      }
       break;
 
     case "vitamine":
       if (!data.nomVitamine || typeof data.nomVitamine !== "string" || data.nomVitamine.trim().length === 0) {
         throw new HttpsError("invalid-argument", "Le nom de la vitamine est requis.");
+      }
+      if (data.nomVitamine.length > 100) {
+        throw new HttpsError("invalid-argument", "Nom de la vitamine trop long (max 100 caractères).");
       }
       break;
   }
@@ -1524,47 +1840,92 @@ exports.validateAndUpdateEvent = onCall(
     const db = admin.firestore();
     await checkRateLimit(db, uid, "events", 30);
 
-    const { childId, eventId, ...updateData } = request.data;
+    const { childId, eventId, expectedUpdatedAt, ...updateData } = request.data;
 
     if (!childId || !eventId) {
       throw new HttpsError("invalid-argument", "childId et eventId sont requis.");
     }
 
-    // Permission check
-    await checkChildAccess(db, uid, childId, ["owner", "admin"]);
-
-    // Vérifier que l'événement existe et appartient à cet enfant
-    const eventRef = db.doc(`events/${eventId}`);
-    const eventDoc = await eventRef.get();
-
-    if (!eventDoc.exists) {
-      throw new HttpsError("not-found", "Événement introuvable.");
-    }
-
-    if (eventDoc.data().childId !== childId) {
-      throw new HttpsError("permission-denied", "Cet événement n'appartient pas à cet enfant.");
-    }
-
-    // Validation des données si le type est présent
-    const type = updateData.type || eventDoc.data().type;
-    validateEventData(type, updateData);
-
-    // Empêcher la modification de userId et childId
-    delete updateData.userId;
-    delete updateData.childId;
-
-    // Gérer les champs null comme des suppressions de champ
-    const cleanData = convertEventDateFields({
-      ...updateData,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    for (const [key, value] of Object.entries(cleanData)) {
-      if (value === null) {
-        cleanData[key] = admin.firestore.FieldValue.delete();
+    // Optional optimistic lock (T2.2): if the client knows when it last read
+    // the event, it can pass `expectedUpdatedAt` (millis since epoch) and we
+    // refuse the write if the server-side value has moved on. This blocks
+    // last-write-wins races on concurrent voice edits.
+    let expectedMillis = null;
+    if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+      if (typeof expectedUpdatedAt === "number") {
+        expectedMillis = expectedUpdatedAt;
+      } else if (expectedUpdatedAt && typeof expectedUpdatedAt.toMillis === "function") {
+        expectedMillis = expectedUpdatedAt.toMillis();
+      } else if (expectedUpdatedAt && typeof expectedUpdatedAt._seconds === "number") {
+        expectedMillis =
+          expectedUpdatedAt._seconds * 1000 +
+          Math.floor((expectedUpdatedAt._nanoseconds || 0) / 1_000_000);
+      } else {
+        throw new HttpsError(
+          "invalid-argument",
+          "expectedUpdatedAt doit être un timestamp (millis ou Firestore Timestamp)."
+        );
       }
     }
 
-    await eventRef.update(cleanData);
+    // Permission check
+    await checkChildAccess(db, uid, childId, ["owner", "admin"]);
+
+    const eventRef = db.doc(`events/${eventId}`);
+
+    // Transactional read+write so the lock check can't race with a concurrent
+    // update arriving between our read and write.
+    await db.runTransaction(async (tx) => {
+      const eventDoc = await tx.get(eventRef);
+
+      if (!eventDoc.exists) {
+        throw new HttpsError("not-found", "Événement introuvable.");
+      }
+
+      const current = eventDoc.data();
+
+      if (current.childId !== childId) {
+        throw new HttpsError("permission-denied", "Cet événement n'appartient pas à cet enfant.");
+      }
+
+      if (expectedMillis !== null) {
+        const currentMillis = current.updatedAt?.toMillis?.()
+          ?? current.updatedAt?._seconds * 1000
+          ?? null;
+        // Tolerate a small drift (1s) so a client that just round-tripped
+        // through Firestore's serverTimestamp doesn't trip its own write.
+        const drift = currentMillis === null ? 0 : Math.abs(currentMillis - expectedMillis);
+        if (currentMillis !== null && drift > 1000) {
+          throw new HttpsError(
+            "aborted",
+            "L'événement a été modifié entre-temps. Veuillez réessayer."
+          );
+        }
+      }
+
+      // Validation des données si le type est présent
+      const type = updateData.type || current.type;
+      validateEventData(type, updateData);
+
+      // Empêcher la modification de userId et childId
+      const sanitized = { ...updateData };
+      delete sanitized.userId;
+      delete sanitized.childId;
+
+      // Gérer les champs null comme des suppressions de champ
+      const cleanData = convertEventDateFields({
+        ...sanitized,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      for (const [key, value] of Object.entries(cleanData)) {
+        if (value === null) {
+          cleanData[key] = admin.firestore.FieldValue.delete();
+        }
+      }
+
+      tx.update(eventRef, cleanData);
+    });
+
     return { success: true };
   }
 );

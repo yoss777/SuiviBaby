@@ -1,6 +1,23 @@
 import type { CommandType, ParsedCommandResult, TimestampInfo } from "./types";
 
 /**
+ * Parse a numeric string into a bounded integer. Returns undefined when the
+ * value can't be parsed or falls outside [min, max] — caller falls back to
+ * its own default (often "no value", which the CF then rejects or fills in).
+ * Centralised so every detector applies the same defensive bounds, instead
+ * of relying on the CF as the only line of defense.
+ */
+export function parseQuantity(
+  raw: string | undefined,
+  { min, max }: { min: number; max: number },
+): number | undefined {
+  if (!raw) return undefined;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < min || n > max) return undefined;
+  return n;
+}
+
+/**
  * Crée un objet de base pour une commande
  */
 function createBaseCommand(
@@ -47,7 +64,7 @@ export function detectBiberon(lowerText: string, rawText: string, timestampInfo:
   for (const pattern of mlPatterns) {
     const match = lowerText.match(pattern);
     if (match) {
-      cmd.quantite = parseInt(match[1]);
+      cmd.quantite = parseQuantity(match[1], { min: 0, max: 500 });
       break;
     }
   }
@@ -101,12 +118,12 @@ export function detectTetee(lowerText: string, rawText: string, timestampInfo: T
     cmd.coteGauche = true;
   }
 
-  // Durée
+  // Durée — tetee plafonné à 180min (3h, au-delà c'est sûrement une erreur)
   const minPatterns = [/(\d+)\s*(min|minute)/i, /pendant\s+(\d+)/i, /duré\s+(\d+)/i];
   for (const pattern of minPatterns) {
     const match = lowerText.match(pattern);
     if (match) {
-      cmd.quantite = parseInt(match[1]);
+      cmd.quantite = parseQuantity(match[1], { min: 0, max: 180 });
       break;
     }
   }
@@ -135,16 +152,16 @@ export function detectPompage(lowerText: string, rawText: string, timestampInfo:
 
   const cmd = createBaseCommand("pompage", rawText, timestampInfo);
 
-  // Parse quantités gauche/droite
+  // Parse quantités gauche/droite — aligné avec la borne CF (0-500 ml chacun).
   const matchEt = lowerText.match(/(\d+)\s*(ml)?\s*gauche.*?(\d+)\s*(ml)?\s*droite/i);
   if (matchEt) {
-    cmd.quantiteGauche = parseInt(matchEt[1]);
-    cmd.quantiteDroite = parseInt(matchEt[3]);
+    cmd.quantiteGauche = parseQuantity(matchEt[1], { min: 0, max: 500 });
+    cmd.quantiteDroite = parseQuantity(matchEt[3], { min: 0, max: 500 });
   } else {
     const matchGauche = lowerText.match(/(\d+)\s*(ml)?\s*gauche/i);
     const matchDroite = lowerText.match(/(\d+)\s*(ml)?\s*droite/i);
-    if (matchGauche) cmd.quantiteGauche = parseInt(matchGauche[1]);
-    if (matchDroite) cmd.quantiteDroite = parseInt(matchDroite[1]);
+    if (matchGauche) cmd.quantiteGauche = parseQuantity(matchGauche[1], { min: 0, max: 500 });
+    if (matchDroite) cmd.quantiteDroite = parseQuantity(matchDroite[1], { min: 0, max: 500 });
   }
 
   return cmd;
@@ -233,16 +250,19 @@ export function detectSommeil(lowerText: string, rawText: string, timestampInfo:
 
   const cmd = createBaseCommand("sommeil", rawText, timestampInfo);
 
-  // Durée
+  // Durée — borne CF est 1-1440min. Si l'utilisateur dit "24h" → 1440min (OK).
+  // Au-delà (ex: "dormi 100 heures") parseQuantity rejette dès le parsing du
+  // raw avant multiplication, mais on garde une borne post-mult en sécurité.
   const dureePatterns = [/(\d+)\s*(h|heure)/i, /(\d+)\s*(min|minute)/i, /dormi\s+(\d+)/i];
   for (const pattern of dureePatterns) {
     const match = lowerText.match(pattern);
     if (match) {
-      let minutes = parseInt(match[1]);
-      if (match[2] && (match[2].startsWith("h") || match[2] === "heure")) {
-        minutes *= 60;
+      const isHours = !!match[2] && (match[2].startsWith("h") || match[2] === "heure");
+      const rawCap = isHours ? 24 : 1440;
+      const raw = parseQuantity(match[1], { min: 0, max: rawCap });
+      if (raw !== undefined) {
+        cmd.duree = isHours ? raw * 60 : raw;
       }
-      cmd.duree = minutes;
       break;
     }
   }
@@ -299,12 +319,12 @@ export function detectActivite(lowerText: string, rawText: string, timestampInfo
     cmd.typeActivite = "autre";
   }
 
-  // Durée
+  // Durée — activité max 24h (1440min)
   const minMatch = lowerText.match(/(\d+)\s*(min|minute|h|heure)/i);
   if (minMatch) {
-    let minutes = parseInt(minMatch[1]);
-    if (minMatch[2].startsWith("h")) minutes *= 60;
-    cmd.duree = minutes;
+    const isHours = minMatch[2].startsWith("h");
+    const raw = parseQuantity(minMatch[1], { min: 0, max: isHours ? 24 : 1440 });
+    if (raw !== undefined) cmd.duree = isHours ? raw * 60 : raw;
   }
 
   return cmd;
@@ -374,26 +394,35 @@ export function detectCroissance(lowerText: string, rawText: string, timestampIn
 
   const cmd = createBaseCommand("croissance", rawText, timestampInfo);
 
-  // Poids
+  // parseFloat bounded helper — defensive NaN check + range guard.
+  // Mirrors parseQuantity but for decimal values (kg/cm).
+  const parseDecimal = (raw: string, min: number, max: number): number | undefined => {
+    const n = parseFloat(raw.replace(",", "."));
+    if (!Number.isFinite(n) || n < min || n > max) return undefined;
+    return n;
+  };
+
+  // Poids — CF accepte 0.3 à 50 kg.
   const poidsMatchKg = lowerText.match(/(\d+[.,]?\d*)\s*(kg|kilo)/i);
   const poidsMatchG = lowerText.match(/(\d+)\s*(g|gramme)/i);
   if (poidsMatchKg) {
-    cmd.poids = parseFloat(poidsMatchKg[1].replace(",", "."));
+    cmd.poids = parseDecimal(poidsMatchKg[1], 0.3, 50);
   } else if (poidsMatchG) {
-    cmd.poids = parseInt(poidsMatchG[1]) / 1000;
+    const grams = parseQuantity(poidsMatchG[1], { min: 300, max: 50000 });
+    if (grams !== undefined) cmd.poids = grams / 1000;
   }
 
-  // Taille
+  // Taille — CF accepte 20 à 200 cm.
   const tailleMatch = lowerText.match(/(\d+[.,]?\d*)\s*(cm|centimètre)/i);
   if (tailleMatch) {
-    cmd.taille = parseFloat(tailleMatch[1].replace(",", "."));
+    cmd.taille = parseDecimal(tailleMatch[1], 20, 200);
   }
 
-  // Périmètre crânien
+  // Périmètre crânien — CF accepte 20 à 60 cm.
   if (lowerText.includes("périmètre") || lowerText.includes("crâne")) {
     const pcMatch = lowerText.match(/(\d+[.,]?\d*)\s*(cm)?/i);
     if (pcMatch) {
-      cmd.perimetreCranien = parseFloat(pcMatch[1].replace(",", "."));
+      cmd.perimetreCranien = parseDecimal(pcMatch[1], 20, 60);
     }
   }
 
@@ -452,9 +481,10 @@ export function detectBain(lowerText: string, rawText: string, timestampInfo: Ti
 
   const cmd = createBaseCommand("bain", rawText, timestampInfo);
 
+  // Bain — borne raisonnable 1h max (60min).
   const minMatch = lowerText.match(/(\d+)\s*(min|minute)/i);
   if (minMatch) {
-    cmd.duree = parseInt(minMatch[1]);
+    cmd.duree = parseQuantity(minMatch[1], { min: 0, max: 60 });
   }
 
   return cmd;
@@ -501,9 +531,14 @@ export function detectTemperature(lowerText: string, rawText: string, timestampI
 
   const cmd = createBaseCommand("temperature", rawText, timestampInfo);
 
+  // Température corporelle — CF accepte 34-43°C. Filtrer NaN et hors borne
+  // pour ne pas créer un event avec valeurTemperature absurde.
   const tempMatch = lowerText.match(/(\d+[.,]?\d*)\s*(°|degré)?/i);
   if (tempMatch) {
-    cmd.valeurTemperature = parseFloat(tempMatch[1].replace(",", "."));
+    const raw = parseFloat(tempMatch[1].replace(",", "."));
+    if (Number.isFinite(raw) && raw >= 34 && raw <= 43) {
+      cmd.valeurTemperature = raw;
+    }
   }
 
   return cmd;

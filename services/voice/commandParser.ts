@@ -1,8 +1,22 @@
 import type { CommandAction, CommandType, ParsedCommandResult } from "./types";
 import { normalizePhonetics } from "./phoneticNormalizer";
 import { extractTimestamp } from "./timestampParser";
-import { detectAction, detectEventIdentifier, extractContextNote, splitIntoSegments } from "./textParser";
+import { detectAction, detectEventIdentifier, extractContextNote, splitIntoSegmentsWithMeta } from "./textParser";
 import { ALL_DETECTORS } from "./detectors";
+
+/**
+ * Hard cap on events created from one voice command. Prevents a single quota'd
+ * transcription from spawning many Firestore writes via multi-segment parsing.
+ * Kept aligned with MAX_SEGMENTS_PER_COMMAND in textParser, but also enforced
+ * here because one segment can yield several detected events.
+ */
+export const MAX_EVENTS_PER_COMMAND = 5;
+
+export interface ParseCommandsResult {
+  commands: ParsedCommandResult[];
+  /** True when the parser dropped events because the input exceeded the cap. */
+  truncated: boolean;
+}
 
 /**
  * Parse un segment pour tous les types d'événements possibles
@@ -67,16 +81,16 @@ export function parseSingleCommand(text: string, action: CommandAction): ParsedC
  * Parse le texte transcrit pour extraire la commande (legacy - retourne le premier événement)
  */
 export function parseCommand(text: string): ParsedCommandResult | null {
-  const commands = parseMultipleCommands(text);
+  const { commands } = parseMultipleCommandsWithMeta(text);
   return commands.length > 0 ? commands[0] : null;
 }
 
 /**
- * Parse le texte transcrit pour extraire TOUS les événements détectés
- * Permet des phrases comme "il a bu 150ml, fait un pipi et on est allés au parc"
- * Gère les timestamps par segment et enrichit les notes avec le contexte
+ * Parse le texte transcrit pour extraire TOUS les événements détectés.
+ * Variante meta : retourne aussi un flag `truncated` quand le plafond
+ * MAX_EVENTS_PER_COMMAND a été atteint, pour permettre à l'UI de prévenir.
  */
-export function parseMultipleCommands(text: string): ParsedCommandResult[] {
+export function parseMultipleCommandsWithMeta(text: string): ParseCommandsResult {
   const normalizedText = normalizePhonetics(text);
   const lowerText = normalizedText.toLowerCase().trim();
 
@@ -86,21 +100,26 @@ export function parseMultipleCommands(text: string): ParsedCommandResult[] {
   // Pour modification/suppression, on ne supporte qu'un seul événement
   if (action !== "add") {
     const singleCommand = parseSingleCommand(text, action);
-    return singleCommand ? [singleCommand] : [];
+    return { commands: singleCommand ? [singleCommand] : [], truncated: false };
   }
 
   // Découper en segments pour gérer les timestamps individuels
-  const segments = splitIntoSegments(text);
+  const { segments, truncated: segmentsTruncated, inputClamped } = splitIntoSegmentsWithMeta(text);
 
   // Si pas de segments (phrase courte), utiliser l'ancien comportement
   if (segments.length <= 1) {
-    return parseSegmentForAllEvents(lowerText, normalizedText, extractTimestamp(lowerText));
+    const commands = parseSegmentForAllEvents(lowerText, normalizedText, extractTimestamp(lowerText));
+    if (commands.length > MAX_EVENTS_PER_COMMAND) {
+      return { commands: commands.slice(0, MAX_EVENTS_PER_COMMAND), truncated: true };
+    }
+    return { commands, truncated: segmentsTruncated || inputClamped };
   }
 
   // Pour chaque segment, détecter les événements avec leur timestamp propre
   const commands: ParsedCommandResult[] = [];
+  let truncated = segmentsTruncated || inputClamped;
 
-  for (const segment of segments) {
+  outer: for (const segment of segments) {
     const timestampInfo = {
       timestamp: segment.timestamp,
       timeOffset: segment.timeOffset,
@@ -115,8 +134,21 @@ export function parseMultipleCommands(text: string): ParsedCommandResult[] {
         cmd.contextNote = contextNote;
       }
       commands.push(cmd);
+      if (commands.length >= MAX_EVENTS_PER_COMMAND) {
+        truncated = true;
+        break outer;
+      }
     }
   }
 
-  return commands;
+  return { commands, truncated };
+}
+
+/**
+ * Parse le texte transcrit pour extraire TOUS les événements détectés
+ * Permet des phrases comme "il a bu 150ml, fait un pipi et on est allés au parc"
+ * Gère les timestamps par segment et enrichit les notes avec le contexte
+ */
+export function parseMultipleCommands(text: string): ParsedCommandResult[] {
+  return parseMultipleCommandsWithMeta(text).commands;
 }

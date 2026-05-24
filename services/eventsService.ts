@@ -144,14 +144,21 @@ function buildUpdatePayload(
   childId: string,
   id: string,
   data: Partial<Event>,
+  expectedUpdatedAt?: number,
 ) {
   const cleanData = stripUndefinedFields(data as Record<string, unknown>);
   const convertedData = convertDateFields(cleanData) as typeof cleanData;
-  const payload = {
+  const payload: Record<string, unknown> = {
     ...convertedData,
     childId,
     eventId: id,
   };
+
+  // Optional optimistic lock token (T2.2). The server compares this against
+  // the current event.updatedAt and rejects with "aborted" on mismatch.
+  if (typeof expectedUpdatedAt === "number" && Number.isFinite(expectedUpdatedAt)) {
+    payload.expectedUpdatedAt = expectedUpdatedAt;
+  }
 
   return payload;
 }
@@ -419,14 +426,17 @@ export function ecouterEvenements(
 }
 
 /**
- * Modifie un événement via Cloud Function (validation serveur)
+ * Modifie un événement via Cloud Function (validation serveur).
+ * `expectedUpdatedAt` (millis) permet d'activer le verrou optimiste T2.2 :
+ * la CF refuse l'écriture si le serveur a un updatedAt plus récent.
  */
 export async function modifierEvenement(
   childId: string,
   id: string,
   data: Partial<Event>,
+  expectedUpdatedAt?: number,
 ): Promise<void> {
-  const payload = buildUpdatePayload(childId, id, data);
+  const payload = buildUpdatePayload(childId, id, data, expectedUpdatedAt);
 
   // Si offline, mettre en queue
   const online = await isOnline();
@@ -892,6 +902,7 @@ export function modifierEvenementOptimistic(
   eventId: string,
   data: Partial<Event>,
   previousEvent: any,
+  expectedUpdatedAt?: number,
 ): string {
   const cleanData = stripUndefinedFields(
     data as Record<string, unknown>,
@@ -921,7 +932,7 @@ export function modifierEvenementOptimistic(
     previousEvent,
   );
 
-  const payload = buildUpdatePayload(childId, eventId, cleanData);
+  const payload = buildUpdatePayload(childId, eventId, cleanData, expectedUpdatedAt);
 
   void (async () => {
     try {

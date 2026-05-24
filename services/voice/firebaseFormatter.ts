@@ -1,13 +1,38 @@
 import type { CommandType, ParsedCommandResult } from "./types";
+import {
+  filterEnum,
+  TYPES_BIBERON,
+  TYPES_ACTIVITE,
+  TYPES_JALON,
+  CONSISTANCES_SELLE,
+  COULEURS_SELLE,
+  TYPES_SOLIDE,
+  MOMENTS_REPAS,
+  QUANTITES_SOLIDE,
+  METHODES_NETTOYAGE_NEZ,
+} from "./enums";
+
+// Hard caps: AssemblyAI transcripts and contextNote are user-influenced strings.
+// Truncate before Firestore write to keep documents bounded and the UI safe.
+const MAX_RAW_TEXT = 300;
+const MAX_CONTEXT_NOTE = 200;
+
+function clampString(value: string | undefined, max: number): string {
+  if (!value) return "";
+  const trimmed = value.trim();
+  return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
+}
 
 /**
  * Formate les données pour Firebase selon le type
  */
 export function formatDataForFirebase(command: ParsedCommandResult) {
   // Construire la note avec le contexte enrichi si disponible
-  let note = `Ajouté par commande vocale: "${command.rawText}"`;
-  if (command.contextNote) {
-    note = `${command.contextNote} - ${note}`;
+  const safeRaw = clampString(command.rawText, MAX_RAW_TEXT);
+  const safeContext = clampString(command.contextNote, MAX_CONTEXT_NOTE);
+  let note = `Ajouté par commande vocale: "${safeRaw}"`;
+  if (safeContext) {
+    note = `${safeContext} - ${note}`;
   }
 
   const baseData = {
@@ -23,7 +48,7 @@ export function formatDataForFirebase(command: ParsedCommandResult) {
         ...baseData,
         type: "biberon",
         quantite: command.quantite || 0,
-        typeBiberon: command.typeBiberon,
+        typeBiberon: filterEnum(command.typeBiberon, TYPES_BIBERON),
         unit: "ml",
       };
 
@@ -65,8 +90,8 @@ export function formatDataForFirebase(command: ParsedCommandResult) {
       return {
         ...baseData,
         type: "selle",
-        consistance: command.consistance,
-        couleur: command.couleur,
+        consistance: filterEnum(command.consistance, CONSISTANCES_SELLE),
+        couleur: filterEnum(command.couleur, COULEURS_SELLE),
       };
 
     case "vitamine":
@@ -88,7 +113,7 @@ export function formatDataForFirebase(command: ParsedCommandResult) {
       return {
         ...baseData,
         type: "activite",
-        typeActivite: command.typeActivite || "autre",
+        typeActivite: filterEnum(command.typeActivite, TYPES_ACTIVITE) ?? "autre",
         duree: command.duree,
       };
 
@@ -96,8 +121,10 @@ export function formatDataForFirebase(command: ParsedCommandResult) {
       return {
         ...baseData,
         type: "jalon",
-        typeJalon: command.typeJalon || "autre",
-        humeur: command.humeur,
+        typeJalon: filterEnum(command.typeJalon, TYPES_JALON) ?? "autre",
+        humeur: typeof command.humeur === "number" && command.humeur >= 1 && command.humeur <= 5
+          ? command.humeur
+          : undefined,
       };
 
     case "croissance":
@@ -113,9 +140,9 @@ export function formatDataForFirebase(command: ParsedCommandResult) {
       return {
         ...baseData,
         type: "solide",
-        typeSolide: command.typeSolide || "autre",
-        momentRepas: command.momentRepas,
-        quantite: command.quantiteSolide || "moyen",
+        typeSolide: filterEnum(command.typeSolide, TYPES_SOLIDE) ?? "autre",
+        momentRepas: filterEnum(command.momentRepas, MOMENTS_REPAS),
+        quantite: filterEnum(command.quantiteSolide, QUANTITES_SOLIDE) ?? "moyen",
       };
 
     case "bain":

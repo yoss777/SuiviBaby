@@ -138,11 +138,43 @@ export function extractContextNote(text: string, detectedType: CommandType): str
 }
 
 /**
+ * Cap on raw text length fed to the segment splitter. Beyond this, a long
+ * transcription (or an adversarial input) would force the regex engine to chew
+ * through alternations needlessly — and produce events we'd cap anyway.
+ */
+export const MAX_INPUT_TEXT_LENGTH = 2000;
+
+/**
+ * Maximum number of segments a single voice command can produce. Prevents
+ * a free-tier user from chaining many events into one quota'd command and
+ * bounds downstream Firestore writes per call.
+ */
+export const MAX_SEGMENTS_PER_COMMAND = 5;
+
+export interface SplitSegmentsMeta {
+  segments: ParsedSegment[];
+  /** True when the splitter discarded segments past MAX_SEGMENTS_PER_COMMAND. */
+  truncated: boolean;
+  /** True when the raw input was clamped to MAX_INPUT_TEXT_LENGTH chars. */
+  inputClamped: boolean;
+}
+
+/**
  * Découpe une phrase en segments séparés par virgules, "et", "puis", et autres adverbes de temps.
  * Gère les timestamps relatifs ("20min après" = relatif au segment précédent)
  */
 export function splitIntoSegments(text: string): ParsedSegment[] {
-  const normalizedText = normalizePhonetics(text);
+  return splitIntoSegmentsWithMeta(text).segments;
+}
+
+/**
+ * Variante de splitIntoSegments qui expose les flags de troncature.
+ * Utilisée par le parser pour prévenir l'UI en cas d'input dépassant les caps.
+ */
+export function splitIntoSegmentsWithMeta(text: string): SplitSegmentsMeta {
+  const inputClamped = text.length > MAX_INPUT_TEXT_LENGTH;
+  const safeText = inputClamped ? text.slice(0, MAX_INPUT_TEXT_LENGTH) : text;
+  const normalizedText = normalizePhonetics(safeText);
 
   // Séparateurs de segments
   const segmentPattern = new RegExp(
@@ -162,14 +194,21 @@ export function splitIntoSegments(text: string): ParsedSegment[] {
   const rawSegments = normalizedText.split(segmentPattern).map(s => s.trim()).filter(s => s.length > 0);
 
   if (rawSegments.length === 0) {
-    return [];
+    return { segments: [], truncated: false, inputClamped };
   }
+
+  // Hard cap: discard segments beyond MAX_SEGMENTS_PER_COMMAND. The UI surfaces
+  // the truncation via parseMultipleCommands so the user knows what was kept.
+  const wasTruncated = rawSegments.length > MAX_SEGMENTS_PER_COMMAND;
+  const cappedRawSegments = wasTruncated
+    ? rawSegments.slice(0, MAX_SEGMENTS_PER_COMMAND)
+    : rawSegments;
 
   const segments: ParsedSegment[] = [];
   let previousTimestamp = new Date();
 
-  for (let i = 0; i < rawSegments.length; i++) {
-    const segmentText = rawSegments[i];
+  for (let i = 0; i < cappedRawSegments.length; i++) {
+    const segmentText = cappedRawSegments[i];
     const lowerSegment = segmentText.toLowerCase();
 
     // Vérifier si c'est un temps relatif au segment précédent
@@ -232,5 +271,5 @@ export function splitIntoSegments(text: string): ParsedSegment[] {
     previousTimestamp = timestamp;
   }
 
-  return segments;
+  return { segments, truncated: wasTruncated, inputClamped };
 }

@@ -82,6 +82,17 @@ export async function stopRecording(): Promise<string | null> {
 }
 
 /**
+ * Generate a short idempotency key for transcribeAudio retries. Not used as
+ * a security token — purely a request dedup tag, scoped per-uid on the server.
+ * Format matches the server's regex /^[A-Za-z0-9_-]+$/ (max 100 chars).
+ */
+function generateIdempotencyKey(): string {
+  const ts = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `${ts}-${rand}`;
+}
+
+/**
  * Transcrit l'audio en texte via Cloud Function proxy (AssemblyAI)
  * L'API key reste côté serveur — jamais exposée dans le bundle client.
  */
@@ -92,11 +103,16 @@ export async function transcribeAudio(audioUri: string): Promise<string> {
     });
 
     const transcribe = httpsCallable<
-      { audioBase64: string },
-      { text: string }
+      { audioBase64: string; idempotencyKey: string },
+      { text: string; cached?: boolean }
     >(functions, "transcribeAudio");
 
-    const result = await transcribe({ audioBase64 });
+    // Generate a fresh key per call. A retry of the *same* logical recording
+    // would need to reuse this key to hit the server cache — that's handled
+    // higher up if/when we wire a retry layer; for now each new recording
+    // gets a fresh key, which is the safe default.
+    const idempotencyKey = generateIdempotencyKey();
+    const result = await transcribe({ audioBase64, idempotencyKey });
     return result.data.text || "";
   } catch (error: any) {
     if (error?.code === "functions/resource-exhausted") {

@@ -8,13 +8,14 @@ import type { ParsedCommandResult } from "@/services/voiceCommandService";
 import { useAudioRecorder } from "./useAudioRecorder";
 import {
   transcribeAudio,
-  parseCommands,
+  parseCommandsWithMeta,
   formatConfirmationMessage,
   formatEventDetails,
 } from "./useVoiceParser";
 import {
   findEventByIdentifier,
   executeCommand,
+  isAmbiguous,
   type ModalFeedback,
 } from "./useVoiceEventCreator";
 
@@ -68,13 +69,19 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   // =========================================================================
   // Traite plusieurs événements détectés dans une seule phrase
   // =========================================================================
-  const processMultipleCommands = async (commands: ParsedCommandResult[]) => {
+  const processMultipleCommands = async (
+    commands: ParsedCommandResult[],
+    truncated: boolean = false,
+  ) => {
     const eventDescriptions = commands.map((cmd, index) => {
       const desc = formatConfirmationMessage(cmd);
       return `${index + 1}. ${desc}`;
     }).join("\n");
 
-    const confirmMessage = `${commands.length} événements détectés:\n\n${eventDescriptions}`;
+    const truncationNotice = truncated
+      ? `\n\n⚠️ Phrase trop longue : seuls les ${commands.length} premiers événements ont été retenus.`
+      : "";
+    const confirmMessage = `${commands.length} événements détectés:${truncationNotice}\n\n${eventDescriptions}`;
 
     setConfirmModal({
       visible: true,
@@ -128,7 +135,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       setTranscription(text);
       console.log("🔍 Analyse de la commande:", text);
 
-      const commands = parseCommands(text);
+      const { commands, truncated } = parseCommandsWithMeta(text);
 
       if (commands.length === 0) {
         setInfoModal({
@@ -164,8 +171,14 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
 
       // Si plusieurs événements, utiliser le flow multi-événements
       if (commandsWithChildId.length > 1) {
-        await processMultipleCommands(commandsWithChildId);
+        await processMultipleCommands(commandsWithChildId, truncated);
         return;
+      }
+
+      // Single-event truncation (input dépassait MAX_INPUT_TEXT_LENGTH ou
+      // un seul segment a généré plus d'événements que le cap).
+      if (truncated) {
+        console.warn("⚠️ Commande vocale tronquée : seuil MAX_EVENTS_PER_COMMAND atteint");
       }
 
       // Flow single-event
@@ -185,9 +198,9 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       let targetEvent: AppEvent | null = null;
       if ((action === "modify" || action === "delete") && commandWithChildId.eventIdentifier) {
         console.log("🔍 Recherche de l'événement cible...");
-        targetEvent = await findEventByIdentifier(commandWithChildId.eventIdentifier, childId);
+        const found = await findEventByIdentifier(commandWithChildId.eventIdentifier, childId);
 
-        if (!targetEvent) {
+        if (!found) {
           setInfoModal({
             visible: true,
             title: "Événement non trouvé",
@@ -202,6 +215,25 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
           return;
         }
 
+        // T2.5 — plusieurs candidats dans la fenêtre : ne pas deviner,
+        // demander à l'utilisateur de préciser. Liste les heures pour l'aider.
+        if (isAmbiguous(found)) {
+          const times = found.candidates.map((c) => {
+            const d = c.date instanceof Date
+              ? c.date
+              : (c.date as any).toDate?.() ?? new Date((c.date as any).seconds * 1000);
+            return `${d.getHours()}h${d.getMinutes().toString().padStart(2, "0")}`;
+          });
+          setInfoModal({
+            visible: true,
+            title: "Précision requise",
+            message: `Plusieurs ${commandWithChildId.type}s trouvés (${times.join(", ")}).\n\nPrécisez l'heure exacte ou utilisez l'écran de l'événement pour le modifier directement.`,
+          });
+          setIsProcessing(false);
+          return;
+        }
+
+        targetEvent = found;
         console.log("✅ Événement trouvé:", targetEvent.id);
       }
 
