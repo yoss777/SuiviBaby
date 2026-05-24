@@ -306,3 +306,65 @@ describe("redteam: parseQuantity bornes", () => {
     expect(cmd!.valeurTemperature).toBeUndefined();
   });
 });
+
+// =========================================================================
+// T3.5 — bornes temporelles relatives
+// =========================================================================
+describe("redteam: relative time bounds (T3.5)", () => {
+  // extractTimestamp / textParser sont importés en haut du fichier.
+  it("clamps 'il y a 99999 heures' to no offset (would exceed 7 days)", () => {
+    const { extractTimestamp } = require("@/services/voice/timestampParser");
+    const result = extractTimestamp("il y a 99999 heures");
+    expect(result.timeOffset).toBe(0);
+    expect(result.isFuture).toBe(false);
+  });
+
+  it("clamps 'dans 50000 minutes' (≈ 35 days)", () => {
+    const { extractTimestamp } = require("@/services/voice/timestampParser");
+    const result = extractTimestamp("dans 50000 minutes");
+    expect(result.timeOffset).toBe(0);
+    expect(result.isFuture).toBe(false);
+  });
+
+  it("accepts 'il y a 30 minutes' (within bound)", () => {
+    const { extractTimestamp } = require("@/services/voice/timestampParser");
+    const result = extractTimestamp("il y a 30 minutes");
+    expect(result.timeOffset).toBe(30);
+    expect(result.isFuture).toBe(false);
+  });
+
+  it("accepts 'dans 5 heures' (within bound)", () => {
+    const { extractTimestamp } = require("@/services/voice/timestampParser");
+    const result = extractTimestamp("dans 5 heures");
+    expect(result.timeOffset).toBe(300);
+    expect(result.isFuture).toBe(true);
+  });
+});
+
+// =========================================================================
+// T3.1 — ReDoS bench guard
+// =========================================================================
+describe("redteam: ReDoS micro-bench (T3.1)", () => {
+  it("processes the maximum-size adversarial input in <100ms", () => {
+    // Pathological-looking input under MAX_INPUT_TEXT_LENGTH cap. Targets
+    // every alternation in segmentPattern + every phonetic rule.
+    const adversarial = ("biberon 150ml et puis plus tard après ça , millilitres centimètres degrés " +
+      "kilogrammes ").repeat(20);
+    expect(adversarial.length).toBeLessThan(MAX_INPUT_TEXT_LENGTH);
+
+    const start = Date.now();
+    const meta = splitIntoSegmentsWithMeta(adversarial);
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(100);
+    expect(meta.segments.length).toBeLessThanOrEqual(MAX_SEGMENTS_PER_COMMAND);
+  });
+
+  it("clamps then bounds an oversized 50000-char input", () => {
+    const huge = ("dodo et biberon, ").repeat(3000); // ~50k chars
+    const start = Date.now();
+    const meta = splitIntoSegmentsWithMeta(huge);
+    const elapsed = Date.now() - start;
+    expect(meta.inputClamped).toBe(true);
+    expect(elapsed).toBeLessThan(100);
+  });
+});

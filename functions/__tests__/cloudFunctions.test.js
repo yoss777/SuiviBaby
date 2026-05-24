@@ -247,7 +247,7 @@ describe("usage quota functions", () => {
     });
 
     await expect(
-      fns.transcribeAudio(auth("u1", { audioBase64: Buffer.from("audio").toString("base64") }))
+      fns.transcribeAudio(auth("u1", { audioBase64: Buffer.alloc(8000).toString("base64") }))
     ).rejects.toThrow("Limite quotidienne atteinte");
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -295,7 +295,7 @@ describe("usage quota functions", () => {
     });
 
     await expect(
-      fns.transcribeAudio(auth("u1", { audioBase64: Buffer.from("audio").toString("base64") }))
+      fns.transcribeAudio(auth("u1", { audioBase64: Buffer.alloc(8000).toString("base64") }))
     ).resolves.toEqual({ text: "ajoute une sieste" });
     expect(txSet).toHaveBeenCalledWith(
       expect.anything(),
@@ -708,7 +708,7 @@ describe("transcribeAudio — idempotency key validation (T1.2)", () => {
     process.env.ASSEMBLYAI_API_KEY = "test-key";
     await expect(
       fns.transcribeAudio(auth("u1", {
-        audioBase64: Buffer.from("audio").toString("base64"),
+        audioBase64: Buffer.alloc(8000).toString("base64"),
         idempotencyKey: "abc def!",
       }))
     ).rejects.toThrow("idempotencyKey");
@@ -718,7 +718,7 @@ describe("transcribeAudio — idempotency key validation (T1.2)", () => {
     process.env.ASSEMBLYAI_API_KEY = "test-key";
     await expect(
       fns.transcribeAudio(auth("u1", {
-        audioBase64: Buffer.from("audio").toString("base64"),
+        audioBase64: Buffer.alloc(8000).toString("base64"),
         idempotencyKey: "a".repeat(101),
       }))
     ).rejects.toThrow("idempotencyKey");
@@ -744,7 +744,7 @@ describe("transcribeAudio — idempotency key validation (T1.2)", () => {
     });
 
     const result = await fns.transcribeAudio(auth("u1", {
-      audioBase64: Buffer.from("audio").toString("base64"),
+      audioBase64: Buffer.alloc(8000).toString("base64"),
       idempotencyKey: "key123",
     }));
     expect(result).toEqual({ text: "cached transcript", cached: true });
@@ -780,11 +780,65 @@ describe("transcribeAudio — idempotency key validation (T1.2)", () => {
     });
 
     const result = await fns.transcribeAudio(auth("u1", {
-      audioBase64: Buffer.from("audio").toString("base64"),
+      audioBase64: Buffer.alloc(8000).toString("base64"),
       idempotencyKey: "keyold",
     }));
     expect(result).toEqual({ text: "fresh" });
     expect(global.fetch).toHaveBeenCalled();
+  });
+});
+
+describe("validateEventData — date bounds (T3.5)", () => {
+  it("rejects a date more than 1 year in the past", async () => {
+    access();
+    const oneYearAndOneDay = Math.floor((Date.now() - (366 * 24 * 60 * 60 * 1000)) / 1000);
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "biberon",
+        quantite: 150,
+        date: { _seconds: oneYearAndOneDay, _nanoseconds: 0 },
+      }))
+    ).rejects.toThrow("trop ancienne");
+  });
+
+  it("accepts a date 6 months in the past (within bound)", async () => {
+    access();
+    mockFirestore.collection.mockReturnValue({
+      add: jest.fn().mockResolvedValue({ id: "e1" }),
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue(snap()),
+    });
+    const sixMonthsAgo = Math.floor((Date.now() - (180 * 24 * 60 * 60 * 1000)) / 1000);
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "biberon",
+        quantite: 150,
+        date: { _seconds: sixMonthsAgo, _nanoseconds: 0 },
+      }))
+    ).resolves.toEqual({ id: "e1" });
+  });
+});
+
+describe("transcribeAudio — minimum audio size (T3.3)", () => {
+  const originalAssemblyKey = process.env.ASSEMBLYAI_API_KEY;
+  afterEach(() => {
+    if (originalAssemblyKey === undefined) delete process.env.ASSEMBLYAI_API_KEY;
+    else process.env.ASSEMBLYAI_API_KEY = originalAssemblyKey;
+  });
+
+  it("rejects an audio under the minimum size threshold", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    global.fetch = jest.fn();
+    // 4000 bytes raw → ~5333 base64. Under our 6667 server cap.
+    await expect(
+      fns.transcribeAudio(auth("u1", {
+        audioBase64: Buffer.alloc(4000).toString("base64"),
+      }))
+    ).rejects.toThrow("trop court");
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });
 
@@ -1058,7 +1112,7 @@ describe("transcribeAudio — quota refund on failure (T1.3)", () => {
 
     await expect(
       fns.transcribeAudio(auth("u1", {
-        audioBase64: Buffer.from("audio").toString("base64"),
+        audioBase64: Buffer.alloc(8000).toString("base64"),
       }))
     ).rejects.toThrow("Upload AssemblyAI");
 
