@@ -48,18 +48,24 @@ describe("validateAndCreateEvent", () => {
 });
 
 describe("validateAndUpdateEvent", () => {
+  // T2.2: updates now run inside a Firestore transaction. We capture the
+  // tx.update(ref, payload) call via a custom mockRunTransaction.
+  function captureTxUpdate(eventData) {
+    const txUpdate = jest.fn();
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockResolvedValue(doc(eventData)),
+        set: jest.fn(),
+        update: txUpdate,
+        delete: jest.fn(),
+      })
+    );
+    return txUpdate;
+  }
+
   it("converts heureFin on update", async () => {
     access();
-    mockDocRef.update.mockResolvedValue(undefined);
-    mockFirestore.doc.mockImplementation((p) => {
-      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
-      if (p?.includes("access")) return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
-      return {
-        get: jest.fn().mockResolvedValue(doc({ childId: "c1", type: "sommeil" })),
-        update: mockDocRef.update,
-        delete: jest.fn(),
-      };
-    });
+    const txUpdate = captureTxUpdate({ childId: "c1", type: "sommeil" });
 
     await fns.validateAndUpdateEvent(auth("u1", {
       childId: "c1",
@@ -67,23 +73,17 @@ describe("validateAndUpdateEvent", () => {
       heureFin: { seconds: 1710003600, nanoseconds: 0 },
     }));
 
-    expect(mockDocRef.update).toHaveBeenCalledWith(expect.objectContaining({
-      heureFin: expect.objectContaining({ seconds: 1710003600 }),
-    }));
+    expect(txUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        heureFin: expect.objectContaining({ seconds: 1710003600 }),
+      })
+    );
   });
 
   it("converts null fields to Firestore deletes on update", async () => {
     access();
-    mockDocRef.update.mockResolvedValue(undefined);
-    mockFirestore.doc.mockImplementation((p) => {
-      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
-      if (p?.includes("access")) return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
-      return {
-        get: jest.fn().mockResolvedValue(doc({ childId: "c1", type: "sommeil" })),
-        update: mockDocRef.update,
-        delete: jest.fn(),
-      };
-    });
+    const txUpdate = captureTxUpdate({ childId: "c1", type: "sommeil" });
 
     await fns.validateAndUpdateEvent(auth("u1", {
       childId: "c1",
@@ -92,10 +92,80 @@ describe("validateAndUpdateEvent", () => {
       duree: null,
     }));
 
-    expect(mockDocRef.update).toHaveBeenCalledWith(expect.objectContaining({
-      heureFin: "DEL",
-      duree: "DEL",
+    expect(txUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        heureFin: "DEL",
+        duree: "DEL",
+      })
+    );
+  });
+
+  it("rejects update when expectedUpdatedAt doesn't match current (T2.2 optimistic lock)", async () => {
+    access();
+    const currentMillis = Date.now();
+    const staleMillis = currentMillis - 60_000; // 1 minute behind
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockResolvedValue(doc({
+          childId: "c1",
+          type: "biberon",
+          updatedAt: { toMillis: () => currentMillis },
+        })),
+        set: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      })
+    );
+
+    await expect(
+      fns.validateAndUpdateEvent(auth("u1", {
+        childId: "c1",
+        eventId: "e1",
+        quantite: 200,
+        expectedUpdatedAt: staleMillis,
+      }))
+    ).rejects.toThrow("modifié entre-temps");
+  });
+
+  it("accepts update when expectedUpdatedAt matches (within 1s drift)", async () => {
+    access();
+    const currentMillis = Date.now();
+    const txUpdate = jest.fn();
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockResolvedValue(doc({
+          childId: "c1",
+          type: "biberon",
+          updatedAt: { toMillis: () => currentMillis },
+        })),
+        set: jest.fn(),
+        update: txUpdate,
+        delete: jest.fn(),
+      })
+    );
+
+    await fns.validateAndUpdateEvent(auth("u1", {
+      childId: "c1",
+      eventId: "e1",
+      quantite: 200,
+      expectedUpdatedAt: currentMillis + 500, // within 1s tolerance
     }));
+
+    expect(txUpdate).toHaveBeenCalled();
+  });
+
+  it("accepts update with no expectedUpdatedAt (backward compatible)", async () => {
+    access();
+    const txUpdate = captureTxUpdate({ childId: "c1", type: "biberon" });
+
+    await fns.validateAndUpdateEvent(auth("u1", {
+      childId: "c1",
+      eventId: "e1",
+      quantite: 200,
+    }));
+
+    expect(txUpdate).toHaveBeenCalled();
   });
 });
 
@@ -570,5 +640,434 @@ describe("createShareInvitation", () => {
     });
 
     await expect(fns.createShareInvitation(auth("u1", { childId: "c1", childName: "Bebe", invitedEmail: "target@example.com" }))).rejects.toThrow("2 co-parents maximum");
+  });
+});
+
+// =========================================================================
+// Voice pipeline hardening — Lot 1
+// =========================================================================
+
+describe("validateEventData — note cap (T1.1)", () => {
+  it("rejects a note longer than 1000 chars", async () => {
+    access();
+    mockFirestore.collection.mockReturnValue({
+      add: jest.fn().mockResolvedValue({ id: "e1" }),
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue(snap()),
+    });
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "biberon",
+        quantite: 150,
+        note: "x".repeat(1001),
+      }))
+    ).rejects.toThrow("Note trop longue");
+  });
+
+  it("rejects a non-string note", async () => {
+    access();
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "biberon",
+        quantite: 150,
+        note: { evil: true },
+      }))
+    ).rejects.toThrow("chaîne");
+  });
+
+  it("accepts a normal note", async () => {
+    access();
+    mockFirestore.collection.mockReturnValue({
+      add: jest.fn().mockResolvedValue({ id: "e1" }),
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue(snap()),
+    });
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "biberon",
+        quantite: 150,
+        note: "Note normale ajoutée par commande vocale",
+      }))
+    ).resolves.toEqual({ id: "e1" });
+  });
+});
+
+describe("transcribeAudio — idempotency key validation (T1.2)", () => {
+  const originalAssemblyKey = process.env.ASSEMBLYAI_API_KEY;
+  afterEach(() => {
+    if (originalAssemblyKey === undefined) delete process.env.ASSEMBLYAI_API_KEY;
+    else process.env.ASSEMBLYAI_API_KEY = originalAssemblyKey;
+  });
+
+  it("rejects idempotencyKey with invalid characters", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    await expect(
+      fns.transcribeAudio(auth("u1", {
+        audioBase64: Buffer.from("audio").toString("base64"),
+        idempotencyKey: "abc def!",
+      }))
+    ).rejects.toThrow("idempotencyKey");
+  });
+
+  it("rejects idempotencyKey longer than 100 chars", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    await expect(
+      fns.transcribeAudio(auth("u1", {
+        audioBase64: Buffer.from("audio").toString("base64"),
+        idempotencyKey: "a".repeat(101),
+      }))
+    ).rejects.toThrow("idempotencyKey");
+  });
+
+  it("returns cached transcript without calling AssemblyAI", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    global.fetch = jest.fn();
+
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "voice_transcribe_cache/u1_key123") {
+        // Fresh cache hit (now - 60s ago)
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            text: "cached transcript",
+            createdAt: { toMillis: () => Date.now() - 60_000 },
+          })),
+          set: jest.fn(),
+        };
+      }
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+
+    const result = await fns.transcribeAudio(auth("u1", {
+      audioBase64: Buffer.from("audio").toString("base64"),
+      idempotencyKey: "key123",
+    }));
+    expect(result).toEqual({ text: "cached transcript", cached: true });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("ignores expired cache and falls through to AssemblyAI", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: jest.fn().mockResolvedValue({ upload_url: "u" }) })
+      .mockResolvedValueOnce({ ok: true, json: jest.fn().mockResolvedValue({ id: "t1", status: "processing" }) })
+      .mockResolvedValueOnce({ ok: true, json: jest.fn().mockResolvedValue({ status: "completed", text: "fresh" }) })
+      .mockResolvedValueOnce({ ok: true, json: jest.fn().mockResolvedValue({}) });
+
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "voice_transcribe_cache/u1_keyold") {
+        // Expired (10 min ago > 5 min TTL)
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            text: "stale",
+            createdAt: { toMillis: () => Date.now() - 10 * 60_000 },
+          })),
+          set: jest.fn(),
+        };
+      }
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      if (p === "usage_limits/u1") {
+        return { get: jest.fn().mockResolvedValue(doc({ voiceCommandCount: 0 })) };
+      }
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+
+    const result = await fns.transcribeAudio(auth("u1", {
+      audioBase64: Buffer.from("audio").toString("base64"),
+      idempotencyKey: "keyold",
+    }));
+    expect(result).toEqual({ text: "fresh" });
+    expect(global.fetch).toHaveBeenCalled();
+  });
+});
+
+describe("validateEventData — enum whitelists (T2.3)", () => {
+  it("rejects an invented typeBiberon", async () => {
+    access();
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "biberon",
+        quantite: 150,
+        typeBiberon: "lait_de_chevre",
+      }))
+    ).rejects.toThrow("typeBiberon invalide");
+  });
+
+  it("rejects an invented typeActivite", async () => {
+    access();
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "activite",
+        typeActivite: "javascript:alert(1)",
+      }))
+    ).rejects.toThrow("typeActivite invalide");
+  });
+
+  it("rejects an out-of-range humeur on jalon", async () => {
+    access();
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "jalon",
+        typeJalon: "humeur",
+        humeur: 99,
+      }))
+    ).rejects.toThrow("humeur doit être un entier entre 1 et 5");
+  });
+
+  it("rejects a crafted consistance on selle", async () => {
+    access();
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "selle",
+        consistance: "<script>",
+      }))
+    ).rejects.toThrow("consistance invalide");
+  });
+
+  it("accepts a valid enum value", async () => {
+    access();
+    mockFirestore.collection.mockReturnValue({
+      add: jest.fn().mockResolvedValue({ id: "e1" }),
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue(snap()),
+    });
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "biberon",
+        quantite: 150,
+        typeBiberon: "lait_maternel",
+      }))
+    ).resolves.toEqual({ id: "e1" });
+  });
+});
+
+describe("validateEventData — extra bornes (T2.4)", () => {
+  it("rejects tetee duration > 180min", async () => {
+    access();
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "tetee",
+        duree: 500,
+      }))
+    ).rejects.toThrow("180 minutes");
+  });
+
+  it("rejects activite duration > 1440min", async () => {
+    access();
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "activite",
+        typeActivite: "promenade",
+        duree: 5000,
+      }))
+    ).rejects.toThrow("1440 minutes");
+  });
+
+  it("rejects nomMedicament > 100 chars", async () => {
+    access();
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "medicament",
+        nomMedicament: "x".repeat(101),
+      }))
+    ).rejects.toThrow("Nom du médicament trop long");
+  });
+
+  it("rejects dosage > 100 chars", async () => {
+    access();
+    await expect(
+      fns.validateAndCreateEvent(auth("u1", {
+        childId: "c1",
+        type: "medicament",
+        nomMedicament: "Doliprane",
+        dosage: "x".repeat(101),
+      }))
+    ).rejects.toThrow("Dosage");
+  });
+});
+
+describe("retryAssemblyAIDeletes (T2.1)", () => {
+  const originalAssemblyKey = process.env.ASSEMBLYAI_API_KEY;
+  afterEach(() => {
+    if (originalAssemblyKey === undefined) delete process.env.ASSEMBLYAI_API_KEY;
+    else process.env.ASSEMBLYAI_API_KEY = originalAssemblyKey;
+  });
+
+  it("removes the doc when DELETE succeeds", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+    const deleteDoc = jest.fn();
+    const updateDoc = jest.fn();
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name !== "pending_assemblyai_deletes") {
+        return { where: jest.fn().mockReturnThis(), orderBy: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+      }
+      return {
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue({
+          empty: false,
+          docs: [{
+            id: "tx_abc",
+            data: () => ({ transcriptId: "tx_abc", attempts: 0 }),
+            ref: { delete: deleteDoc, update: updateDoc },
+          }],
+        }),
+      };
+    });
+
+    await fns.retryAssemblyAIDeletes();
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(deleteDoc).toHaveBeenCalled();
+    expect(updateDoc).not.toHaveBeenCalled();
+  });
+
+  it("abandons after MAX_DELETE_ATTEMPTS", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 500 });
+
+    const deleteDoc = jest.fn();
+    const updateDoc = jest.fn();
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name !== "pending_assemblyai_deletes") {
+        return { where: jest.fn().mockReturnThis(), orderBy: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+      }
+      return {
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue({
+          empty: false,
+          docs: [{
+            id: "tx_old",
+            data: () => ({ transcriptId: "tx_old", attempts: 4 }), // 4 + 1 = 5 = MAX
+            ref: { delete: deleteDoc, update: updateDoc },
+          }],
+        }),
+      };
+    });
+
+    await fns.retryAssemblyAIDeletes();
+
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(updateDoc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempts: 5,
+        abandonedAt: "TS",
+      })
+    );
+  });
+
+  it("bumps attempts when delete still failing but under threshold", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 500 });
+
+    const updateDoc = jest.fn();
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name !== "pending_assemblyai_deletes") {
+        return { where: jest.fn().mockReturnThis(), orderBy: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+      }
+      return {
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue({
+          empty: false,
+          docs: [{
+            id: "tx_new",
+            data: () => ({ transcriptId: "tx_new", attempts: 1 }),
+            ref: { delete: jest.fn(), update: updateDoc },
+          }],
+        }),
+      };
+    });
+
+    await fns.retryAssemblyAIDeletes();
+
+    expect(updateDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ attempts: 2 })
+    );
+    expect(updateDoc).not.toHaveBeenCalledWith(
+      expect.objectContaining({ abandonedAt: expect.anything() })
+    );
+  });
+});
+
+describe("transcribeAudio — quota refund on failure (T1.3)", () => {
+  const originalAssemblyKey = process.env.ASSEMBLYAI_API_KEY;
+  afterEach(() => {
+    if (originalAssemblyKey === undefined) delete process.env.ASSEMBLYAI_API_KEY;
+    else process.env.ASSEMBLYAI_API_KEY = originalAssemblyKey;
+  });
+
+  it("refunds the quota slot when AssemblyAI upload fails", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    const reserveSet = jest.fn();
+    const refundUpdate = jest.fn();
+    let transactionCallCount = 0;
+    mockRunTransaction.mockImplementation(async (fn) => {
+      transactionCallCount++;
+      if (transactionCallCount === 1) {
+        // reserveVoiceQuota: increments to 1
+        return fn({
+          get: jest.fn().mockResolvedValue(no()),
+          set: reserveSet,
+          update: jest.fn(),
+          delete: jest.fn(),
+        });
+      }
+      // refundVoiceQuota: decrements
+      return fn({
+        get: jest.fn().mockResolvedValue(doc({
+          voiceCommandDate: new Date().toISOString().split("T")[0],
+          voiceCommandCount: 1,
+        })),
+        set: jest.fn(),
+        update: refundUpdate,
+        delete: jest.fn(),
+      });
+    });
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      text: jest.fn().mockResolvedValue("AssemblyAI down"),
+    });
+
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      if (p === "usage_limits/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+
+    await expect(
+      fns.transcribeAudio(auth("u1", {
+        audioBase64: Buffer.from("audio").toString("base64"),
+      }))
+    ).rejects.toThrow("Upload AssemblyAI");
+
+    expect(reserveSet).toHaveBeenCalled();
+    // tx.update is called as tx.update(ref, payload) — we only care about the
+    // payload, which is the second argument.
+    expect(refundUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ voiceCommandCount: 0, lastVoiceQuotaRefundAt: "TS" })
+    );
   });
 });
