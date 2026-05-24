@@ -3,8 +3,10 @@
 // Preserves the exact same public API so consumers need zero changes.
 
 import { useRef, useState } from "react";
+import { auth } from "@/config/firebase";
 import type { Event as AppEvent } from "@/services/eventsService";
 import type { ParsedCommandResult } from "@/services/voiceCommandService";
+import { getUserChildAccess } from "@/utils/permissions";
 import { useAudioRecorder } from "./useAudioRecorder";
 import {
   transcribeAudio,
@@ -169,6 +171,34 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       const commandsWithChildId = commands.map(cmd => ({ ...cmd, childId }));
       console.log(`✅ ${commandsWithChildId.length} événement(s) détecté(s):`, commandsWithChildId.map(c => c.type));
 
+      // T3.4 — pre-check role to avoid silent server-side rejection.
+      // Voice CFs (validateAndCreate/Update/deleteEventCascade) require
+      // owner/admin. A contributor can satisfy firestore.rules but the CF
+      // refuses → optimistic UI showed success while the write never
+      // landed. Block here with an explicit message instead.
+      const currentUid = auth?.currentUser?.uid;
+      if (currentUid) {
+        try {
+          const access = await getUserChildAccess(childId, currentUid);
+          const role = access?.role;
+          if (role !== "owner" && role !== "admin") {
+            setInfoModal({
+              visible: true,
+              title: "Action non autorisée",
+              message:
+                "Les commandes vocales sont réservées au parent propriétaire ou administrateur. " +
+                "Demandez à l'utilisateur principal de vous changer de rôle pour modifier les événements à la voix.",
+            });
+            setIsProcessing(false);
+            return;
+          }
+        } catch (err) {
+          console.warn("Voice role pre-check failed, letting CF gate decide:", err);
+          // Ne pas bloquer si on n'arrive pas à lire le rôle — la CF reste
+          // l'autorité finale. C'est juste un meilleur message UX quand possible.
+        }
+      }
+
       // Si plusieurs événements, utiliser le flow multi-événements
       if (commandsWithChildId.length > 1) {
         await processMultipleCommands(commandsWithChildId, truncated);
@@ -324,7 +354,12 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       }
 
       const result = await recorder.startRecording();
-      if (result === "no-permission") {
+      if (result === "no-permission" || result === "permission-denied-permanent") {
+        // T3.2 — same modal in both cases (it deep-links to Settings),
+        // which is the correct path when canAskAgain is false. When
+        // canAskAgain is true the system prompt has already been shown
+        // by requestPermissions/startRecording, so the modal is just a
+        // fallback explaining why nothing happened.
         setPermissionModal(true);
       } else if (result === "error") {
         setInfoModal({
@@ -394,10 +429,13 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       }
 
       if (result.error === "empty" || !result.text) {
+        // T3.3 — couvre les 2 cas (audio trop court côté client/CF, OU
+        // AssemblyAI a renvoyé un texte vide). UX uniforme : invite à
+        // réessayer plus longtemps/plus fort, sans présenter ça comme un bug.
         setInfoModal({
           visible: true,
-          title: "Erreur",
-          message: "Aucun texte détecté dans l'audio",
+          title: "Aucun son détecté",
+          message: "Réessayez en maintenant le bouton un peu plus longtemps et en parlant clairement.",
         });
         setIsProcessing(false);
         return;

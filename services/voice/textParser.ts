@@ -1,6 +1,6 @@
 import type { CommandAction, CommandType, EventIdentifier, ParsedSegment } from "./types";
 import { normalizePhonetics } from "./phoneticNormalizer";
-import { extractTime, extractTimestampFromSegment } from "./timestampParser";
+import { extractTime, extractTimestampFromSegment, MAX_RELATIVE_OFFSET_MIN } from "./timestampParser";
 
 /**
  * Détecte l'action (ajout, modification, suppression)
@@ -170,8 +170,17 @@ export function splitIntoSegments(text: string): ParsedSegment[] {
 /**
  * Variante de splitIntoSegments qui expose les flags de troncature.
  * Utilisée par le parser pour prévenir l'UI en cas d'input dépassant les caps.
+ *
+ * T3.1 — ReDoS posture:
+ *  - All `segmentPattern` alternatives are linear (no nested quantifiers
+ *    like `(a+)+` or `(.*?)*`). Worst-case is O(n) over the input.
+ *  - MAX_INPUT_TEXT_LENGTH caps n at 2000 chars before we touch regex.
+ *  - In __DEV__ we measure end-to-end and warn if it ever exceeds 100ms,
+ *    so a future pattern change that accidentally introduces a slow case
+ *    is caught locally before shipping.
  */
 export function splitIntoSegmentsWithMeta(text: string): SplitSegmentsMeta {
+  const startedAt = typeof __DEV__ !== "undefined" && __DEV__ ? Date.now() : 0;
   const inputClamped = text.length > MAX_INPUT_TEXT_LENGTH;
   const safeText = inputClamped ? text.slice(0, MAX_INPUT_TEXT_LENGTH) : text;
   const normalizedText = normalizePhonetics(safeText);
@@ -232,14 +241,22 @@ export function splitIntoSegmentsWithMeta(text: string): SplitSegmentsMeta {
 
     if (effectiveRelativeMatch && i > 0) {
       if (effectiveRelativeMatch[1]) {
-        relativeOffset = parseInt(effectiveRelativeMatch[1]);
+        const raw = parseInt(effectiveRelativeMatch[1]);
+        relativeOffset = Number.isFinite(raw) ? raw : 0;
         if (effectiveRelativeMatch[2] && effectiveRelativeMatch[2].startsWith("h")) {
           relativeOffset *= 60;
         }
       } else if (effectiveRelativeMatch[3] === "heure") {
         relativeOffset = 30;
       }
-      isRelativeToPrevious = true;
+      // T3.5 — clamp relative offset across consecutive segments. Beyond
+      // 7 days (10080 min) the parsed value is almost certainly garbage
+      // ("20 min après" qui se mis-transcrit "20000 min après"). Reset
+      // to 0 so the segment uses its own absolute timestamp instead.
+      if (relativeOffset > MAX_RELATIVE_OFFSET_MIN || relativeOffset < 0) {
+        relativeOffset = 0;
+      }
+      isRelativeToPrevious = relativeOffset > 0;
 
       timestamp = new Date(previousTimestamp.getTime() + relativeOffset * 60 * 1000);
       timeOffset = Math.round((new Date().getTime() - timestamp.getTime()) / 60000);
@@ -269,6 +286,20 @@ export function splitIntoSegmentsWithMeta(text: string): SplitSegmentsMeta {
     });
 
     previousTimestamp = timestamp;
+  }
+
+  // T3.1 — dev-only timing guard. If you ever see this warning, audit the
+  // regex change that introduced it BEFORE shipping (likely candidates:
+  // nested quantifiers in segmentPattern, or a new normalizePhonetics rule).
+  if (startedAt > 0) {
+    const elapsed = Date.now() - startedAt;
+    if (elapsed > 100) {
+      console.warn(
+        `[voice/textParser] splitIntoSegmentsWithMeta took ${elapsed}ms for ` +
+        `input length ${text.length} (cap ${MAX_INPUT_TEXT_LENGTH}). ` +
+        `Possible ReDoS regression — audit recently changed patterns.`
+      );
+    }
   }
 
   return { segments, truncated: wasTruncated, inputClamped };

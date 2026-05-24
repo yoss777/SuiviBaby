@@ -534,6 +534,18 @@ exports.transcribeAudio = onCall(
       );
     }
 
+    // T3.3 — bottom bound: ~5KB base64 ≈ 3.7KB raw ≈ < 0.5s of HIGH_QUALITY
+    // audio. Anything smaller is either a silent tap or a corrupted record.
+    // Bail before consuming quota / hitting AssemblyAI. The client mirrors
+    // this check on the file size so most empties never reach here, but
+    // the server is the source of truth (quota gate sits behind this).
+    if (audioBase64.length < 6_667) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Enregistrement trop court ou silencieux. Parlez plus fort ou plus longtemps."
+      );
+    }
+
     // Optional idempotency key: max 100 chars, alphanum/dash/underscore only.
     // Lets the client safely retry a flaky upload without double-charging the
     // user's daily quota or re-running AssemblyAI on the same audio.
@@ -1564,7 +1576,11 @@ function assertEnum(value, whitelist, fieldName) {
 function validateEventData(type, data) {
   const now = Date.now();
 
-  // Date ne peut pas être dans le futur (tolérance 5 minutes)
+  // Date ne peut pas être dans le futur (tolérance 5 minutes) ni trop
+  // ancienne. T3.5 — borne inférieure d'1 an : empêche un parsing vocal
+  // foireux ou un import erroné de créer un événement bébé daté de 1970,
+  // tout en gardant assez de marge pour les rétro-saisies réalistes (un
+  // parent qui démarre l'app quelques mois après la naissance).
   if (data.date) {
     const eventDate = data.date._seconds
       ? data.date._seconds * 1000
@@ -1577,6 +1593,13 @@ function validateEventData(type, data) {
       throw new HttpsError(
         "invalid-argument",
         "La date ne peut pas être dans le futur."
+      );
+    }
+    const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+    if (eventDate < now - ONE_YEAR_MS) {
+      throw new HttpsError(
+        "invalid-argument",
+        "La date est trop ancienne (max 1 an dans le passé)."
       );
     }
   }

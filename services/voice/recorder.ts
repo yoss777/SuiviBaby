@@ -6,6 +6,48 @@ import { captureServiceError } from "@/utils/errorReporting";
 
 let recording: Audio.Recording | null = null;
 
+/**
+ * T3.3 — minimum useful audio size before we even try to transcribe.
+ * HIGH_QUALITY preset records at ~16 KB/s; under 5 KB raw means well below
+ * a half-second of actual audio (or a silent tap). Filter client-side to
+ * avoid spending the user's daily quota on empty captures, then mirror the
+ * same check on the CF for defense in depth.
+ */
+const MIN_AUDIO_BYTES = 5_000;
+
+/**
+ * Custom error type that callers can match on to distinguish "no useful
+ * audio" from generic transcription failures. Lets the UI prompt the user
+ * to retry without burning a quota slot.
+ */
+export class EmptyAudioError extends Error {
+  constructor(message = "Aucun son détecté. Réessayez en parlant plus fort ou plus longtemps.") {
+    super(message);
+    this.name = "EmptyAudioError";
+  }
+}
+
+/**
+ * Thrown by startRecording when the OS reports the microphone permission
+ * as not granted at record-time (T3.2). Distinct from a first-launch
+ * "never asked" — that case still triggers the system prompt. This error
+ * is for the "user revoked from Settings between sessions" path, where
+ * we need to direct them to re-open Settings.
+ */
+export class VoicePermissionDeniedError extends Error {
+  /** True when the user actively denied (vs. never-asked, which getPermissionsAsync also reports). */
+  readonly canAskAgain: boolean;
+  constructor(canAskAgain: boolean) {
+    super(
+      canAskAgain
+        ? "Permission micro non accordée. Acceptez l'accès au microphone pour utiliser la voix."
+        : "Accès au microphone refusé. Activez-le dans Réglages > Suivi Baby > Microphone."
+    );
+    this.name = "VoicePermissionDeniedError";
+    this.canAskAgain = canAskAgain;
+  }
+}
+
 function isAudioAvailable(): boolean {
   return !!Audio?.requestPermissionsAsync && !!Audio?.Recording?.createAsync;
 }
@@ -29,7 +71,14 @@ export async function requestPermissions(): Promise<boolean> {
 }
 
 /**
- * Démarre l'enregistrement audio
+ * Démarre l'enregistrement audio.
+ *
+ * T3.2 — re-vérifie la permission micro à CHAQUE appel (pas seulement au
+ * boot de l'app). iOS peut révoquer la permission depuis Réglages sans
+ * prévenir l'app ; si on ne re-check pas, Audio.Recording.createAsync
+ * lance une exception générique qu'on ne peut pas distinguer d'un vrai
+ * crash. Avec ce check on lève un VoicePermissionDeniedError typé que
+ * l'UI peut catcher pour proposer "Ouvrir les réglages".
  */
 export async function startRecording(): Promise<void> {
   try {
@@ -40,6 +89,24 @@ export async function startRecording(): Promise<void> {
     if (!isAudioAvailable()) {
       throw new Error("Module audio indisponible. Vérifiez expo-av.");
     }
+
+    // Re-check au moment du record. getPermissionsAsync est synchrone côté
+    // OS (lit l'état actuel sans prompt), donc n'introduit pas de latence
+    // perçue par l'utilisateur.
+    const current = await Audio.getPermissionsAsync();
+    if (current.status !== "granted") {
+      // Si on peut encore demander, prompt l'utilisateur ; sinon, on lève
+      // l'erreur "ouvre les réglages" sans tenter le prompt (iOS refuse).
+      if (current.canAskAgain) {
+        const asked = await Audio.requestPermissionsAsync();
+        if (asked.status !== "granted") {
+          throw new VoicePermissionDeniedError(asked.canAskAgain ?? false);
+        }
+      } else {
+        throw new VoicePermissionDeniedError(false);
+      }
+    }
+
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
       playsInSilentModeIOS: true,
@@ -52,8 +119,12 @@ export async function startRecording(): Promise<void> {
     recording = result.recording;
     console.log("Enregistrement démarré");
   } catch (error) {
-    console.error("Erreur démarrage enregistrement:", error);
-    captureServiceError(error, { service: "voiceRecorder", operation: "startRecording" });
+    // Ne pas spammer Sentry pour les refus de permission — c'est un cas
+    // utilisateur normal, pas un bug.
+    if (!(error instanceof VoicePermissionDeniedError)) {
+      console.error("Erreur démarrage enregistrement:", error);
+      captureServiceError(error, { service: "voiceRecorder", operation: "startRecording" });
+    }
     throw error;
   }
 }
@@ -95,9 +166,22 @@ function generateIdempotencyKey(): string {
 /**
  * Transcrit l'audio en texte via Cloud Function proxy (AssemblyAI)
  * L'API key reste côté serveur — jamais exposée dans le bundle client.
+ *
+ * T3.3 — pre-check size client-side. If under MIN_AUDIO_BYTES, throw
+ * EmptyAudioError without hitting the CF (saves quota + latency).
  */
 export async function transcribeAudio(audioUri: string): Promise<string> {
   try {
+    // Check file size before reading the whole file into memory + base64ing it.
+    const info = await FileSystem.getInfoAsync(audioUri, { size: true });
+    if (!info.exists) {
+      throw new EmptyAudioError("Le fichier audio est introuvable.");
+    }
+    const rawSize = (info as { size?: number }).size ?? 0;
+    if (rawSize > 0 && rawSize < MIN_AUDIO_BYTES) {
+      throw new EmptyAudioError();
+    }
+
     const audioBase64 = await FileSystem.readAsStringAsync(audioUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
@@ -115,6 +199,16 @@ export async function transcribeAudio(audioUri: string): Promise<string> {
     const result = await transcribe({ audioBase64, idempotencyKey });
     return result.data.text || "";
   } catch (error: any) {
+    if (error instanceof EmptyAudioError) throw error;
+    // T3.3 — CF returns invalid-argument when audio is too small. Surface as
+    // EmptyAudioError so the UI shows the same friendly message either way.
+    if (
+      error?.code === "functions/invalid-argument" &&
+      typeof error?.message === "string" &&
+      error.message.includes("trop court")
+    ) {
+      throw new EmptyAudioError();
+    }
     if (error?.code === "functions/resource-exhausted") {
       throw new Error(error.message || "Limite de transcriptions atteinte.");
     }

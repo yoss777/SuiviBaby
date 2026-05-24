@@ -1,6 +1,15 @@
 import type { TimestampInfo } from "./types";
 
 /**
+ * T3.5 — bound on relative time offsets parsed from voice ("il y a X min",
+ * "dans X heures"). 7 days = 10080 minutes. Beyond that the input is
+ * almost certainly a mis-transcription ("il y a 99999 heures") and the CF
+ * would reject it anyway (createdAt > now+5min for future, or 30d-window
+ * check for past). Clamp client-side to give a clean defensive default.
+ */
+export const MAX_RELATIVE_OFFSET_MIN = 7 * 24 * 60;
+
+/**
  * Extrait l'heure d'un texte (format "15h20", "15 heures 20", etc.)
  */
 export function extractTime(text: string): Date | null {
@@ -49,11 +58,15 @@ export function extractTimestamp(lowerText: string): TimestampInfo {
   for (const pattern of futurePatterns) {
     const match = lowerText.match(pattern);
     if (match) {
-      timeOffset = parseInt(match[1]);
+      const raw = parseInt(match[1]);
+      let candidate = Number.isFinite(raw) ? raw : 0;
       if (match[2] && (match[2].startsWith("h") || match[2] === "heure")) {
-        timeOffset *= 60;
+        candidate *= 60;
       }
-      isFuture = true;
+      // T3.5 — clamp; offset 0 (= maintenant) si hors borne, mieux qu'un
+      // event 10 ans dans le futur.
+      timeOffset = candidate > MAX_RELATIVE_OFFSET_MIN ? 0 : candidate;
+      isFuture = timeOffset > 0;
       break;
     }
   }
@@ -63,10 +76,12 @@ export function extractTimestamp(lowerText: string): TimestampInfo {
     for (const pattern of pastPatterns) {
       const match = lowerText.match(pattern);
       if (match) {
-        timeOffset = parseInt(match[1]);
+        const raw = parseInt(match[1]);
+        let candidate = Number.isFinite(raw) ? raw : 0;
         if (match[2] && (match[2].startsWith("h") || match[2] === "heure")) {
-          timeOffset *= 60;
+          candidate *= 60;
         }
+        timeOffset = candidate > MAX_RELATIVE_OFFSET_MIN ? 0 : candidate;
         break;
       }
     }

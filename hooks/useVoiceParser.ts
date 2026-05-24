@@ -7,6 +7,7 @@ import type {
   CommandType,
   ParsedCommandResult,
 } from "@/services/voiceCommandService";
+import { EmptyAudioError } from "@/services/voice/recorder";
 import type { Event } from "@/services/eventsService";
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,11 @@ export async function transcribeAudio(audioUri: string): Promise<TranscribeResul
     }
     return { text: null, error: "empty" };
   } catch (error) {
+    // T3.3 — distinguish "silent/empty audio" (UX: invite à réessayer, pas
+    // d'incident) from real transcription errors (UX: signaler une erreur).
+    if (error instanceof EmptyAudioError) {
+      return { text: null, error: "empty" };
+    }
     console.error("Erreur transcription:", error);
     return { text: null, error: "transcription-error" };
   }
