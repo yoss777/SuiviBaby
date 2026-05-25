@@ -443,6 +443,82 @@ exports.cleanupExpiredShareCodes = onSchedule("every 24 hours", async () => {
 });
 
 /**
+ * cleanupExpiredSubscriptions — B4.S5.
+ *
+ * Force EXPIRATION sur les subscriptions dont expiresAt est dépassé mais
+ * dont le status est toujours "active" (ou "cancelled" sans "expired"
+ * follow-up). Garde-fou si RevenueCat oublie d'envoyer l'EXPIRATION
+ * webhook (réseau, bug RC, etc.).
+ *
+ * NB : subscriptions.expiresAt est stocké en ISO string par revenueCatWebhook.
+ * Pas de query Firestore directe par expiresAt < now (string compare peu
+ * fiable). On scan les subs candidates par status, puis on filtre côté
+ * code via Date.parse(). Coût accepté : 1 scan/jour avec un volume
+ * subscriptions limité (≤ active user count).
+ */
+exports.cleanupExpiredSubscriptions = onSchedule(
+  { schedule: "every 24 hours", region: "europe-west1" },
+  async () => {
+    const db = admin.firestore();
+    const nowMs = Date.now();
+    let lastDoc = null;
+    let flipped = 0;
+    let scanned = 0;
+
+    // Scan tous les subs avec status susceptible d'être stale.
+    // Lifetime n'a pas d'expiresAt → on skip.
+    const stalableStatuses = ["active", "cancelled", "billing_issue"];
+
+    for (const status of stalableStatuses) {
+      lastDoc = null;
+      while (true) {
+        let query = db
+          .collection("subscriptions")
+          .where("status", "==", status)
+          .limit(BATCH_LIMIT);
+        if (lastDoc) query = query.startAfter(lastDoc);
+
+        const snap = await query.get();
+        if (snap.empty) break;
+        scanned += snap.size;
+
+        const batch = db.batch();
+        let batchCount = 0;
+        for (const doc of snap.docs) {
+          const data = doc.data();
+          // Skip subs sans expiresAt (lifetime ou data incomplete).
+          if (!data.expiresAt || typeof data.expiresAt !== "string") continue;
+          const parsedMs = Date.parse(data.expiresAt);
+          if (!Number.isFinite(parsedMs) || parsedMs > nowMs) continue;
+
+          // Expired : flip à status=expired tier=free.
+          batch.set(
+            doc.ref,
+            {
+              status: "expired",
+              tier: "free",
+              updatedAt: admin.firestore.Timestamp.now(),
+              lastEvent: "cleanupExpiredSubscriptions",
+            },
+            { merge: true }
+          );
+          batchCount++;
+          flipped++;
+        }
+        if (batchCount > 0) await batch.commit();
+
+        lastDoc = snap.docs[snap.docs.length - 1];
+        if (snap.size < BATCH_LIMIT) break;
+      }
+    }
+
+    console.log(
+      `cleanupExpiredSubscriptions: scanned=${scanned}, flipped=${flipped} to expired`
+    );
+  }
+);
+
+/**
  * Awaited best-effort DELETE on an AssemblyAI transcript.
  * Returns true on success, false on any failure (network, non-2xx, timeout).
  * Bounded by a 3s timeout so it can't keep the parent CF hanging.
@@ -2481,10 +2557,24 @@ exports.grandfatherExistingUsers = onCall(
       throw new HttpsError("permission-denied", "Accès réservé aux administrateurs.");
     }
 
+    const uid = request.auth.uid;
     const db = admin.firestore();
-    const { cutoffDate } = request.data;
+
+    // B4.S6 — rate limit + audit log. Avant : un admin compromis pouvait
+    // grandfather toute la base en boucle (cadeau premium à tout le monde,
+    // perte de revenue). Maintenant : 1 appel/heure max + audit log avec
+    // adminUid, cutoffDate, count flippés, reason obligatoire.
+    await checkRateLimit(db, uid, "grandfather", 1);
+
+    const { cutoffDate, reason } = request.data || {};
     if (!cutoffDate) {
       throw new HttpsError("invalid-argument", "cutoffDate requis (ISO 8601).");
+    }
+    if (typeof reason !== "string" || reason.trim().length < 5 || reason.length > 500) {
+      throw new HttpsError(
+        "invalid-argument",
+        "reason requis (5-500 chars). Documente pourquoi tu grandfather ce batch."
+      );
     }
 
     const cutoff = new Date(cutoffDate);
@@ -2515,7 +2605,26 @@ exports.grandfatherExistingUsers = onCall(
       await batch.commit();
     }
 
-    console.log(`grandfatherExistingUsers: marked ${count} users as grandfathered (before ${cutoffDate})`);
+    // B4.S6 — audit log obligatoire. Si l'écriture échoue, on log mais
+    // on ne rollback pas le grandfathering (les 450 batches déjà commit
+    // ne sont pas réversibles facilement). Au moins on a une trace
+    // partielle dans Cloud Logs via le console.log ci-dessous.
+    try {
+      const callerRecord = await admin.auth().getUser(uid).catch(() => null);
+      await db.collection("adminAuditLog").add({
+        type: "grandfatherExistingUsers",
+        adminUid: uid,
+        adminEmail: callerRecord?.email || null,
+        cutoffDate,
+        count,
+        reason: reason.trim(),
+        at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.error("grandfatherExistingUsers: failed to write audit log", e?.message ?? e);
+    }
+
+    console.log(`grandfatherExistingUsers: marked ${count} users as grandfathered (before ${cutoffDate}, by ${uid})`);
     return { success: true, count };
   }
 );
