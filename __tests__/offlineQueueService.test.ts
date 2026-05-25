@@ -140,9 +140,13 @@ describe("offlineQueueService", () => {
 
       await onSignOut();
 
+      // B2.4 — cleanupOrphanedEvents purge maintenant aussi les events
+      // > 60j (cas "compte supprimé côté serveur après grace period").
+      // Signature : (sql, sixtyDaysAgoMs).
       expect(mockDb.runAsync).toHaveBeenNthCalledWith(
         1,
-        expect.stringContaining("DELETE FROM pending_events WHERE uid = ''"),
+        expect.stringContaining("DELETE FROM pending_events WHERE uid = '' OR createdAt < ?"),
+        expect.any(Number),
       );
       expect(mockDb.runAsync).toHaveBeenNthCalledWith(
         2,
