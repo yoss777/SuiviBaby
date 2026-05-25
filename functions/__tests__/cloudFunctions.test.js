@@ -339,7 +339,9 @@ describe("resolveReport (T2 — admin claim + audit log)", () => {
     });
   }
 
-  function setupFirestore() {
+  // T0.4 — admin doit aussi avoir accès au child du report. Le helper accepte
+  // un access role à mocker (par défaut "owner" pour simuler le cas standard).
+  function setupFirestore({ childAccessRole = "owner" } = {}) {
     mockFirestore.doc.mockImplementation((p) => {
       if (p === "reports/r1") {
         return {
@@ -355,6 +357,11 @@ describe("resolveReport (T2 — admin claim + audit log)", () => {
       if (p === "events/e1") {
         return { get: jest.fn().mockResolvedValue(no()), update: jest.fn() };
       }
+      if (p === "children/c1/access/admin1") {
+        return childAccessRole
+          ? { get: jest.fn().mockResolvedValue(doc({ role: childAccessRole })) }
+          : { get: jest.fn().mockResolvedValue(no()) };
+      }
       return { get: jest.fn().mockResolvedValue(no()), update: jest.fn() };
     });
   }
@@ -367,9 +374,18 @@ describe("resolveReport (T2 — admin claim + audit log)", () => {
     ).rejects.toThrow("administrateurs");
   });
 
-  it("allows a platform admin to resolve the report regardless of child access", async () => {
+  it("rejects admin who has no access to the child (T0.4)", async () => {
     setupAdminAuth({ callerHasAdminClaim: true });
-    setupFirestore();
+    setupFirestore({ childAccessRole: null });
+    delete process.env.RESEND_API_KEY;
+    await expect(
+      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
+    ).rejects.toThrow("owner ou admin de cet enfant");
+  });
+
+  it("allows admin who is also owner of the child to resolve", async () => {
+    setupAdminAuth({ callerHasAdminClaim: true });
+    setupFirestore({ childAccessRole: "owner" });
     delete process.env.RESEND_API_KEY;
     await expect(
       fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
@@ -378,7 +394,7 @@ describe("resolveReport (T2 — admin claim + audit log)", () => {
 
   it("writes an entry to adminAuditLog for every resolved report", async () => {
     setupAdminAuth({ callerHasAdminClaim: true });
-    setupFirestore();
+    setupFirestore({ childAccessRole: "owner" });
     const auditAdd = jest.fn().mockResolvedValue({ id: "audit1" });
     mockFirestore.collection.mockImplementation((name) => {
       if (name === "adminAuditLog") {
@@ -1123,5 +1139,228 @@ describe("transcribeAudio — quota refund on failure (T1.3)", () => {
       expect.anything(),
       expect.objectContaining({ voiceCommandCount: 0, lastVoiceQuotaRefundAt: "TS" })
     );
+  });
+});
+
+
+// ============================================
+// Lot 0 — red team app : tests dédiés
+// ============================================
+
+describe("revenueCatWebhook — anti-replay & dedup (T0.2)", () => {
+  const res = () => ({ status: jest.fn().mockReturnThis(), send: jest.fn() });
+  const originalSecret = process.env.REVENUECAT_WEBHOOK_SECRET;
+  afterEach(() => {
+    if (originalSecret === undefined) delete process.env.REVENUECAT_WEBHOOK_SECRET;
+    else process.env.REVENUECAT_WEBHOOK_SECRET = originalSecret;
+  });
+
+  it("rejects an event timestamp > 7 days in the past", async () => {
+    process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
+    const r = res();
+    const oldTs = Date.now() - 8 * 24 * 60 * 60 * 1000;
+    await fns.revenueCatWebhook(
+      {
+        method: "POST",
+        headers: { authorization: "Bearer topsecret" },
+        body: {
+          event: {
+            id: "old-evt",
+            event_timestamp_ms: oldTs,
+            app_user_id: "u1",
+            type: "INITIAL_PURCHASE",
+          },
+        },
+      },
+      r
+    );
+    expect(r.status).toHaveBeenCalledWith(200);
+    expect(r.send).toHaveBeenCalledWith(expect.stringMatching(/timestamp rejected/));
+  });
+
+  it("dedupes a duplicate event by event.id", async () => {
+    process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
+    const r = res();
+    // First call: doc.create succeeds. Second call: throws ALREADY_EXISTS.
+    const createMock = jest.fn()
+      .mockRejectedValueOnce({ code: 6, message: "Document already exists" });
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "revenuecat_webhook_events/dup-evt") {
+        return { create: createMock };
+      }
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), create: jest.fn() };
+    });
+    await fns.revenueCatWebhook(
+      {
+        method: "POST",
+        headers: { authorization: "Bearer topsecret" },
+        body: {
+          event: {
+            id: "dup-evt",
+            event_timestamp_ms: Date.now(),
+            app_user_id: "u1",
+            type: "INITIAL_PURCHASE",
+          },
+        },
+      },
+      r
+    );
+    expect(r.send).toHaveBeenCalledWith(expect.stringMatching(/duplicate/));
+  });
+
+  it("skips when the Firebase Auth user no longer exists", async () => {
+    process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
+    const adminMod = require("firebase-admin");
+    adminMod.auth.mockReturnValueOnce({
+      getUser: jest.fn().mockRejectedValue({ code: "auth/user-not-found" }),
+      deleteUser: jest.fn(),
+    });
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p?.startsWith("revenuecat_webhook_events/")) {
+        return { create: jest.fn().mockResolvedValue(undefined) };
+      }
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    const r = res();
+    await fns.revenueCatWebhook(
+      {
+        method: "POST",
+        headers: { authorization: "Bearer topsecret" },
+        body: {
+          event: {
+            id: "ghost-evt",
+            event_timestamp_ms: Date.now(),
+            app_user_id: "deleted-user",
+            type: "RENEWAL",
+          },
+        },
+      },
+      r
+    );
+    expect(r.send).toHaveBeenCalledWith(expect.stringMatching(/user deleted/));
+  });
+});
+
+describe("setAdminClaim (T0.3)", () => {
+  const originalSeed = process.env.INITIAL_ADMIN_EMAIL;
+  afterEach(() => {
+    if (originalSeed === undefined) delete process.env.INITIAL_ADMIN_EMAIL;
+    else process.env.INITIAL_ADMIN_EMAIL = originalSeed;
+  });
+
+  it("requires authentication", async () => {
+    await expect(
+      fns.setAdminClaim({ auth: null, data: { targetUid: "t1", value: true, reason: "test reason" } })
+    ).rejects.toThrow("Authentification");
+  });
+
+  it("rejects missing targetUid", async () => {
+    await expect(
+      fns.setAdminClaim(auth("a1", { value: true, reason: "x" }))
+    ).rejects.toThrow("targetUid");
+  });
+
+  it("rejects reason too short", async () => {
+    await expect(
+      fns.setAdminClaim(auth("a1", { targetUid: "t1", value: true, reason: "hi" }))
+    ).rejects.toThrow("reason");
+  });
+
+  it("rejects self-demotion", async () => {
+    await expect(
+      fns.setAdminClaim(adm("a1", { targetUid: "a1", value: false, reason: "trying to demote self" }))
+    ).rejects.toThrow("dépromouvoir vous-même");
+  });
+
+  it("rejects non-admin caller without seed email", async () => {
+    await expect(
+      fns.setAdminClaim(auth("u1", { targetUid: "t1", value: true, reason: "i want admin" }))
+    ).rejects.toThrow("admins existants");
+  });
+
+  it("accepts seed email when no admin exists yet (bootstrap)", async () => {
+    process.env.INITIAL_ADMIN_EMAIL = "u1@t.com"; // matches auth() helper
+    const adminMod = require("firebase-admin");
+    const setClaimsMock = jest.fn().mockResolvedValue(undefined);
+    // mockReturnValue (not Once) — code calls admin.auth() multiple times.
+    adminMod.auth.mockReturnValue({
+      getUser: jest.fn().mockResolvedValue({ uid: "t1", email: "t1@t.com", customClaims: {} }),
+      setCustomUserClaims: setClaimsMock,
+      deleteUser: jest.fn(),
+    });
+    const auditAdd = jest.fn().mockResolvedValue({ id: "audit1" });
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name === "adminAuditLog") {
+        return {
+          add: auditAdd,
+          where: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(snap()), // no existing admin
+        };
+      }
+      return { add: jest.fn(), where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+    });
+    const result = await fns.setAdminClaim(auth("u1", { targetUid: "t1", value: true, reason: "first admin bootstrap" }));
+    expect(result).toMatchObject({ success: true, requiresTokenRefresh: true });
+    expect(setClaimsMock).toHaveBeenCalledWith("t1", { admin: true });
+    expect(auditAdd).toHaveBeenCalledWith(expect.objectContaining({
+      type: "setAdminClaim",
+      adminUid: "u1",
+      targetUid: "t1",
+      value: true,
+      bootstrapMode: true,
+    }));
+  });
+});
+
+describe("deleteUserAccount — admin audit on cross-user delete (T0.6)", () => {
+  it("rejects admin deleting another account without reason", async () => {
+    const adminMod = require("firebase-admin");
+    adminMod.auth.mockReturnValueOnce({
+      getUser: jest.fn().mockResolvedValue({ uid: "a1", email: "a1@t.com", customClaims: { admin: true } }),
+      deleteUser: jest.fn(),
+    });
+    await expect(
+      fns.deleteUserAccount(adm("a1", { uid: "victim1" }))
+    ).rejects.toThrow("reason requis");
+  });
+
+  it("writes audit log when admin deletes another account with reason", async () => {
+    const adminMod = require("firebase-admin");
+    // First getUser for caller (admin check), second for target email lookup.
+    let callCount = 0;
+    adminMod.auth.mockReturnValue({
+      getUser: jest.fn().mockImplementation((u) => {
+        callCount++;
+        if (u === "a1") return Promise.resolve({ uid: "a1", email: "a1@t.com", customClaims: { admin: true } });
+        return Promise.resolve({ uid: u, email: `${u}@t.com`, customClaims: {} });
+      }),
+      deleteUser: jest.fn().mockResolvedValue(undefined),
+    });
+    const auditAdd = jest.fn().mockResolvedValue({ id: "audit1" });
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name === "adminAuditLog") return { add: auditAdd, where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+      if (name === "user_child_access") return { where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+      return { where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()), add: jest.fn() };
+    });
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), delete: jest.fn() };
+    });
+    mockFirestore.batch.mockReturnValue({
+      set: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      commit: jest.fn().mockResolvedValue(undefined),
+    });
+
+    await fns.deleteUserAccount(adm("a1", { uid: "victim1", reason: "user requested via support ticket #1234" }));
+
+    expect(auditAdd).toHaveBeenCalledWith(expect.objectContaining({
+      type: "deleteUserAccount",
+      adminUid: "a1",
+      targetUid: "victim1",
+      reason: "user requested via support ticket #1234",
+    }));
   });
 });

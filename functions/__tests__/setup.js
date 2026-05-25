@@ -30,11 +30,16 @@ jest.mock("firebase-admin", () => {
     toMillis: () => d.getTime(),
     seconds: Math.floor(d.getTime() / 1000),
   }));
+  MockTimestamp.fromMillis = jest.fn((ms) => ({
+    toDate: () => new Date(ms),
+    toMillis: () => ms,
+    seconds: Math.floor(ms / 1000),
+  }));
 
   const a = {
     initializeApp: jest.fn(),
     firestore: jest.fn(() => mockFirestore),
-    auth: jest.fn(() => ({ getUser: jest.fn(), deleteUser: jest.fn() })),
+    auth: jest.fn(() => ({ getUser: jest.fn(), deleteUser: jest.fn(), setCustomUserClaims: jest.fn() })),
   };
   a.firestore.FieldValue = {
     serverTimestamp: jest.fn(() => "TS"),
