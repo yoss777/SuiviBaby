@@ -186,9 +186,21 @@ describe("revenueCatWebhook", () => {
 
 describe("grandfatherExistingUsers", () => {
   it("rejects unauthenticated", async () => { await expect(fns.grandfatherExistingUsers({ auth: null, data: {} })).rejects.toThrow("Authentification"); });
-  it("rejects non-admin", async () => { await expect(fns.grandfatherExistingUsers(auth("u1", { cutoffDate: "2026-01-01" }))).rejects.toThrow("administrateurs"); });
-  it("accepts admin", async () => { mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) }); expect(await fns.grandfatherExistingUsers(adm("a1", { cutoffDate: "2026-01-01" }))).toEqual({ success: true, count: 0 }); });
-  it("rejects no cutoff", async () => { await expect(fns.grandfatherExistingUsers(adm("a1", {}))).rejects.toThrow("cutoffDate"); });
+  it("rejects non-admin", async () => { await expect(fns.grandfatherExistingUsers(auth("u1", { cutoffDate: "2026-01-01", reason: "test test" }))).rejects.toThrow("administrateurs"); });
+  it("accepts admin with reason", async () => {
+    mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()), add: jest.fn().mockResolvedValue({ id: "audit1" }) });
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    expect(await fns.grandfatherExistingUsers(adm("a1", { cutoffDate: "2026-01-01", reason: "migration legacy v2.3 users to free tier" }))).toEqual({ success: true, count: 0 });
+  });
+  it("rejects no cutoff", async () => { await expect(fns.grandfatherExistingUsers(adm("a1", { reason: "test" }))).rejects.toThrow("cutoffDate"); });
+  it("B4.S6 — rejects missing or too short reason", async () => {
+    mockFirestore.doc.mockImplementation((p) => p?.includes("rate_limits") ? { get: jest.fn().mockResolvedValue(no()), set: jest.fn() } : { get: jest.fn().mockResolvedValue(no()), set: jest.fn() });
+    await expect(fns.grandfatherExistingUsers(adm("a1", { cutoffDate: "2026-01-01" }))).rejects.toThrow("reason");
+    await expect(fns.grandfatherExistingUsers(adm("a1", { cutoffDate: "2026-01-01", reason: "x" }))).rejects.toThrow("reason");
+  });
 });
 
 describe("validateReferralCode", () => {
