@@ -213,12 +213,18 @@ export async function cleanupFailedEvents(): Promise<number> {
 }
 
 /**
- * Supprime les événements legacy sans uid (orphelins de la migration)
+ * Supprime les événements legacy sans uid (orphelins de la migration) ET
+ * les événements trop vieux (>60 jours). B2.4 — ce second nettoyage
+ * couvre le cas "compte supprimé côté serveur après 30j de grâce" : au
+ * prochain signOut, la queue de l'ancien user est purgée, évitant que
+ * le prochain user sur le même device hérite d'écritures fantômes.
  */
 export async function cleanupOrphanedEvents(): Promise<number> {
   const database = await getDb();
+  const sixtyDaysAgoMs = Date.now() - 60 * 24 * 60 * 60 * 1000;
   const result = await database.runAsync(
-    `DELETE FROM pending_events WHERE uid = ''`,
+    `DELETE FROM pending_events WHERE uid = '' OR createdAt < ?`,
+    sixtyDaysAgoMs,
   );
   return result.changes;
 }
@@ -238,6 +244,29 @@ export async function onSignOut(): Promise<void> {
       uid,
     );
   }
+  notifyListeners(0);
+}
+
+/**
+ * B2.4 — Appelé au DELETE d'un compte (pas au signOut).
+ * Purge TOUT ce qui reste localement pour cet uid : queue complète,
+ * pas seulement les retries épuisés. Le compte est irréversiblement
+ * supprimé côté serveur, donc rien ne doit être rejoué.
+ *
+ * À appeler depuis le flow accountDeletionService AVANT le signOut
+ * final pour éviter de tenter de resync au prochain login (potentiel
+ * autre user sur le même device).
+ */
+export async function onAccountDelete(uid: string): Promise<void> {
+  stopAutoSync();
+  const database = await getDb();
+  // Purge TOUS les events de cet uid, peu importe le retryCount.
+  await database.runAsync(
+    `DELETE FROM pending_events WHERE uid = ?`,
+    uid,
+  );
+  // Nettoie aussi les orphans (uid vide hérité d'anciens flows).
+  await cleanupOrphanedEvents();
   notifyListeners(0);
 }
 

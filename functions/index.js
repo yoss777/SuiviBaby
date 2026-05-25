@@ -136,6 +136,11 @@ async function deleteChildDataBatched(db, childId) {
     legacyCollections.map((coll) => deleteDocsByFieldBatched(db, coll, "childId", childId))
   );
 
+  // B2.2 — content reports liés à l'enfant. Avant : restaient indéfiniment
+  // après suppression de l'enfant, contenant raison/photoPath/reporterUid
+  // (données sensibles potentiellement). Maintenant purgés en cascade.
+  await deleteDocsByFieldBatched(db, "reports", "childId", childId);
+
   // Access subcollection
   const accessSnap = await db.collection("children").doc(childId).collection("access").get();
   if (!accessSnap.empty) {
@@ -3862,18 +3867,23 @@ async function softDeleteChild(db, childId, requestId, requestedBy) {
     if (data.userId) userIds.add(data.userId);
   });
 
-  // 2. Mark child as soft-deleted
-  await db.doc(`children/${childId}`).update({
-    deletedAt: now,
-    deletedBy: requestedBy,
-    deletionRequestId: requestId,
-  });
-
-  // 3. Update the deletion request — store access snapshot for potential restore
+  // 2. B2.3 — écrire le snapshot AVANT de marquer deletedAt. Avant, l'ordre
+  // était inverse, ce qui ouvrait une race : si cancelChildDeletion arrivait
+  // entre le mark deletedAt et l'update du snapshot, il restaurait avec un
+  // snapshot vide (fallback à "uid → owner") → perte des autres co-parents.
+  // Maintenant, si cancel arrive avant le mark, il échoue proprement
+  // (deletedAt absent). Si après, le snapshot est garanti dispo.
   await db.doc(`childDeletionRequests/${requestId}`).update({
     deletedAt: now,
     purgeAt,
     accessSnapshot, // { userId: { role, canWriteEvents, ... } } — used by cancelChildDeletion
+  });
+
+  // 3. Mark child as soft-deleted (point de bascule visible côté UI).
+  await db.doc(`children/${childId}`).update({
+    deletedAt: now,
+    deletedBy: requestedBy,
+    deletionRequestId: requestId,
   });
 
   // 4. Delete all access subcollection docs
@@ -3903,6 +3913,26 @@ async function softDeleteChild(db, childId, requestId, requestedBy) {
     deleteDocsByFieldBatched(db, "shareInvitations", "childId", childId),
     deleteDocsByFieldBatched(db, "babyAttachmentRequests", "childId", childId),
   ]);
+
+  // 8. B2.1 — wipe Storage IMMÉDIATEMENT au soft-delete (RGPD S9).
+  // Avant : les photos restaient accessibles via URLs Storage signées
+  // pendant 30j (durée de la grace period). storage.rules ne checke pas
+  // le `deletedAt` côté Firestore, donc l'auth seul ne bloquait pas.
+  // Maintenant : on supprime les fichiers tout de suite, la restoration
+  // (cancelChildDeletion) ne peut plus restaurer les photos — mais
+  // c'est cohérent avec la politique "soft-delete = données illisibles".
+  try {
+    const bucket = admin.storage().bucket();
+    const [files] = await bucket.getFiles({ prefix: `children/${childId}/` });
+    if (files.length > 0) {
+      await Promise.all(files.map((file) => file.delete().catch(() => null)));
+      console.log(`softDeleteChild: wiped ${files.length} storage files for ${childId}`);
+    }
+  } catch (storageErr) {
+    // Best-effort. Si échec, la purge planifiée à 30j rattrapera. On
+    // log mais on bloque pas le soft-delete pour autant.
+    console.warn(`softDeleteChild: storage wipe failed for ${childId}:`, storageErr?.message ?? storageErr);
+  }
 
   console.log(`softDeleteChild: childId=${childId}, requestId=${requestId}, usersCleared=${userIds.size}`);
 }

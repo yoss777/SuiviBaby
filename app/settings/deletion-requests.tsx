@@ -57,6 +57,21 @@ interface DeletionRequest {
   refusedBy?: string;
   refusedByEmail?: string;
   seenByUserIds: string[];
+  /** B2.5 — date à laquelle la purge effective sera lancée par le cron.
+   *  Présent uniquement après soft-delete (status === "approved"). */
+  purgeAt?: { seconds: number };
+}
+
+/**
+ * B2.5 — Calcule le nombre de jours restants avant la purge effective.
+ * Retourne 0 si déjà passé. Affiché dans l'UI pour informer l'utilisateur
+ * du "point of no return" de la grace period.
+ */
+function daysUntilPurge(purgeAt: { seconds: number } | undefined): number | null {
+  if (!purgeAt?.seconds) return null;
+  const diffMs = purgeAt.seconds * 1000 - Date.now();
+  if (diffMs <= 0) return 0;
+  return Math.ceil(diffMs / (24 * 60 * 60 * 1000));
 }
 
 // ============================================
@@ -518,6 +533,29 @@ export default function DeletionRequestsScreen() {
                       </View>
                     )}
 
+                    {/* B2.5 — countdown grace period.
+                        Affiche les jours restants avant la purge effective. */}
+                    {req.status === "approved" && req.purgeAt && (() => {
+                      const days = daysUntilPurge(req.purgeAt);
+                      if (days === null) return null;
+                      const label = days === 0
+                        ? "Suppression définitive imminente."
+                        : days === 1
+                        ? "Plus que 1 jour avant la suppression définitive."
+                        : `Plus que ${days} jours avant la suppression définitive.`;
+                      return (
+                        <Text
+                          style={[
+                            styles.countdownText,
+                            { color: nc.textMuted },
+                          ]}
+                          accessibilityRole="text"
+                        >
+                          {label}
+                        </Text>
+                      );
+                    })()}
+
                     {/* Cancel button — only for approved (soft-deleted, within retention) */}
                     {req.status === "approved" && (
                       <TouchableOpacity
@@ -727,5 +765,11 @@ const styles = StyleSheet.create({
   cancelDeletionText: {
     fontSize: 14,
     fontWeight: "700",
+  },
+  countdownText: {
+    fontSize: 13,
+    fontStyle: "italic",
+    marginBottom: 8,
+    textAlign: "center",
   },
 });
