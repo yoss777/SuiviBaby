@@ -34,8 +34,8 @@ Chaque domaine a son MD plan avec :
 | **B3** (auth & sessions, 8 surfaces — 2 vrais trous, 6 vérifiés OK) | 🟢 livré | [B3_CLOSURE.md](B3_CLOSURE.md) |
 | **B4** (payments, 7 surfaces — 2 vrais fixes + Lot 0 + faux positifs) | 🟢 livré | [B4_CLOSURE.md](B4_CLOSURE.md) |
 | **B5** (exports/AI/photos, 6 surfaces — 4 vrais fixes) | 🟢 livré | [B5_CLOSURE.md](B5_CLOSURE.md) |
+| **B6** (moderation, 8 surfaces — 4 vrais fixes + Lot 0) | 🟢 livré | [B6_CLOSURE.md](B6_CLOSURE.md) |
 | 0.1 App Check | ⏸ reporté TOUT DERNIER | [0_APP_CHECK_SETUP.md](0_APP_CHECK_SETUP.md) |
-| B6 | 🟡 plan rédigé | — |
 
 **Légende statut :**
 - ⚪ recon à faire (plan vide, agent à lancer)
