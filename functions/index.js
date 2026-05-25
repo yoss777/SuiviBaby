@@ -1,5 +1,6 @@
 const admin = require("firebase-admin");
 const { Buffer } = require("node:buffer");
+const crypto = require("node:crypto");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
@@ -471,12 +472,18 @@ async function deleteAssemblyAITranscript(transcriptId, apiKey, timeoutMs = 3000
 /**
  * Queue a failed AssemblyAI delete for the retry scheduler. The doc id mirrors
  * the transcriptId so a duplicate enqueue is a no-op (idempotent on retry).
+ *
+ * T0.5 — userId attaché pour permettre la purge RGPD au delete user. Avant,
+ * un transcriptId orphelin restait indéfiniment sans moyen de tracer son
+ * propriétaire. La back-fill des anciens docs sans userId reste à faire en
+ * one-shot (laisser tels quels = orphelins, ou supprimer-tous au cleanup mensuel).
  */
-async function enqueueAssemblyAIDelete(db, transcriptId, reason) {
+async function enqueueAssemblyAIDelete(db, transcriptId, reason, userId) {
   try {
     await db.doc(`pending_assemblyai_deletes/${transcriptId}`).set(
       {
         transcriptId,
+        userId: userId || null,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
         attempts: admin.firestore.FieldValue.increment(0), // create field
@@ -687,7 +694,7 @@ exports.transcribeAudio = onCall(
       //    AssemblyAI's side (GDPR Art. 17/33).
       const deleted = await deleteAssemblyAITranscript(transcriptId, apiKey);
       if (!deleted) {
-        await enqueueAssemblyAIDelete(db, transcriptId, "initial-delete-failed");
+        await enqueueAssemblyAIDelete(db, transcriptId, "initial-delete-failed", uid);
       }
 
       const text = result.text || "";
@@ -1272,6 +1279,36 @@ exports.resolveReport = onCall(
 
     if (reportData.status === "resolved") {
       throw new HttpsError("already-exists", "Ce signalement a déjà été traité.");
+    }
+
+    // T0.4 — l'admin doit avoir accès à l'enfant ciblé. Sans ce check, un
+    // admin global pouvait supprimer des events de n'importe quel enfant
+    // (escalation B6-S4). On garde l'admin claim comme pré-requis mais on
+    // ajoute la portée childId pour limiter le rayon d'action.
+    if (reportData.childId) {
+      const accessSnap = await db
+        .doc(`children/${reportData.childId}/access/${uid}`)
+        .get();
+      const role = accessSnap.exists ? accessSnap.data()?.role : null;
+      if (role !== "owner" && role !== "admin") {
+        // Audit log AVANT de refuser, pour tracer les tentatives.
+        try {
+          await db.collection("adminAuditLog").add({
+            type: "resolveReport_denied",
+            adminUid: uid,
+            reportId,
+            childId: reportData.childId,
+            reason: "no_child_access",
+            at: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (e) {
+          console.error("resolveReport: failed to write denial audit", e.message);
+        }
+        throw new HttpsError(
+          "permission-denied",
+          "Vous devez être owner ou admin de cet enfant pour modérer ce signalement."
+        );
+      }
     }
 
     // Audit-log every admin action — the admin custom claim grants the
@@ -2048,10 +2085,41 @@ exports.deleteUserAccount = onCall(
 
     // Optional payload override: admin can target a specific uid.
     const targetUid = request.data?.uid || uid;
+    const reason = typeof request.data?.reason === "string"
+      ? request.data.reason.trim().slice(0, 500)
+      : "";
+
     if (targetUid !== uid) {
-      // Audit log: admin acting on another account.
+      // T0.6 — quand un admin supprime un AUTRE compte, on exige une raison
+      // documentée et on écrit dans adminAuditLog (pas juste un console.log).
+      // C'est la voie d'évasion la plus sensible : un admin compromis peut
+      // effacer N comptes, on veut une trace traçable a posteriori.
+      if (reason.length < 5) {
+        throw new HttpsError(
+          "invalid-argument",
+          "reason requis (5-500 chars) pour supprimer le compte d'un autre utilisateur."
+        );
+      }
+      try {
+        await db.collection("adminAuditLog").add({
+          type: "deleteUserAccount",
+          adminUid: uid,
+          adminEmail: callerRecord.email || null,
+          targetUid,
+          reason,
+          at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        // Audit log est la défense principale ici — refuser si on n'arrive
+        // pas à le tracer.
+        console.error("deleteUserAccount: failed to write audit log", e.message);
+        throw new HttpsError(
+          "internal",
+          "Audit log indisponible — opération annulée pour traçabilité."
+        );
+      }
       console.log(
-        `deleteUserAccount: admin ${uid} deleting account ${targetUid}`
+        `deleteUserAccount: admin ${uid} deleting account ${targetUid} (reason="${reason.slice(0, 80)}")`
       );
     }
 
@@ -2126,7 +2194,19 @@ exports.deleteUserAccount = onCall(
       deleteDocsByFieldBatched(db, "referrals", "parrainUid", targetUid),
       deleteDocsByFieldBatched(db, "referrals", "filleulUid", targetUid),
       deleteDocsByFieldBatched(db, "childDeletionRequests", "requestedBy", targetUid),
+      // T0.5 — collections orphelines RGPD :
+      deleteDocsByFieldBatched(db, "user_hidden_photos", "userId", targetUid),
+      // pending_assemblyai_deletes a un userId field depuis T0.5. Les docs
+      // pré-T0.5 (sans userId) ne seront pas purgés ici — un cleanup
+      // ultérieur (retention 30j auto + abandonnés > 5 attempts) gère ça.
+      deleteDocsByFieldBatched(db, "pending_assemblyai_deletes", "userId", targetUid),
+      // voice_transcribe_cache : keys = `${uid}_${idempotencyKey}`, donc on
+      // peut filtrer par le field uid stocké dans le doc.
+      deleteDocsByFieldBatched(db, "voice_transcribe_cache", "uid", targetUid),
     ]);
+    // Note : adminAuditLog conservé volontairement même au delete user — c'est
+    // une trace d'investigation. Le champ adminUid pointant vers un compte
+    // supprimé reste valide pour audit légal.
 
     // 6. Supprimer les documents uniques de l'utilisateur
     const singleDocPaths = [
@@ -2163,7 +2243,15 @@ exports.deleteUserAccount = onCall(
 /**
  * revenueCatWebhook — Reçoit les événements RevenuCat et met à jour Firestore.
  * URL à configurer dans RevenuCat Dashboard → Integrations → Webhooks.
- * Authentifié par header Authorization Bearer.
+ *
+ * Hardening Lot 0 (T0.2) :
+ *  - Comparaison constant-time du Bearer pour éviter timing attacks.
+ *  - Idempotence par event.id : rejet duplicate si déjà traité (cache 30j
+ *    via TTL Firestore sur revenuecat_webhook_events.expireAt).
+ *  - Validation timestamp event : refus si > 5min futur ou > 7j passé
+ *    (anti-replay grossier).
+ *  - Skip si Firebase Auth user n'existe plus (évite user fantôme post-
+ *    suppression de compte) — voir T0.5 RGPD orphelins.
  */
 exports.revenueCatWebhook = onRequest(
   { region: "europe-west1", secrets: ["REVENUECAT_WEBHOOK_SECRET"] },
@@ -2182,7 +2270,13 @@ exports.revenueCatWebhook = onRequest(
       return;
     }
     const authHeader = req.headers.authorization || "";
-    if (authHeader !== `Bearer ${secret}`) {
+    const expected = `Bearer ${secret}`;
+    // Constant-time compare : évite que la durée de la comparaison string
+    // révèle combien de caractères du secret sont corrects (timing attack).
+    if (
+      authHeader.length !== expected.length ||
+      !crypto.timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected))
+    ) {
       console.warn("revenueCatWebhook: invalid auth header");
       res.status(401).send("Unauthorized");
       return;
@@ -2194,6 +2288,57 @@ exports.revenueCatWebhook = onRequest(
       return;
     }
 
+    // T0.2 — anti-replay grossier sur le timestamp. RC envoie event_timestamp_ms.
+    // Si l'event est étiqueté très loin dans le futur ou le passé, suspect.
+    const eventTs = typeof event.event_timestamp_ms === "number"
+      ? event.event_timestamp_ms
+      : null;
+    if (eventTs !== null) {
+      const now = Date.now();
+      const FIVE_MIN = 5 * 60 * 1000;
+      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+      if (eventTs > now + FIVE_MIN || eventTs < now - SEVEN_DAYS) {
+        console.warn(
+          `revenueCatWebhook: timestamp out of bounds (${eventTs} vs now=${now})`
+        );
+        // 200 OK pour éviter que RC retry — on accepte le rejet silencieux.
+        res.status(200).send("OK - timestamp rejected");
+        return;
+      }
+    }
+
+    // T0.2 — idempotence par event.id. RC envoie un UUID unique par event ;
+    // si on a déjà traité ce doc, on bail (replay protection).
+    const eventId = typeof event.id === "string" && event.id.length > 0
+      ? event.id
+      : null;
+    const db = admin.firestore();
+    if (eventId) {
+      const dedupRef = db.doc(`revenuecat_webhook_events/${eventId}`);
+      try {
+        await dedupRef.create({
+          eventId,
+          eventType: event.type ?? "unknown",
+          receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+          // TTL field — Firestore TTL policy auto-purge après expireAt.
+          // Provisionner avec functions/scripts/enable-rc-webhook-ttl.js.
+          expireAt: admin.firestore.Timestamp.fromMillis(
+            Date.now() + 30 * 24 * 60 * 60 * 1000
+          ),
+        });
+      } catch (err) {
+        // `create` throws ALREADY_EXISTS si le doc existe → duplicate webhook.
+        if (err?.code === 6 || /ALREADY_EXISTS|already exists/i.test(String(err?.message))) {
+          console.log(`revenueCatWebhook: duplicate event ${eventId}, skipping`);
+          res.status(200).send("OK - duplicate");
+          return;
+        }
+        // Autre erreur Firestore : on log mais on continue (mieux processer un
+        // event au pire 2x que perdre une mise à jour).
+        console.error(`revenueCatWebhook: dedup write failed for ${eventId}:`, err);
+      }
+    }
+
     const appUserId = event.app_user_id;
     if (!appUserId || appUserId.startsWith("$RCAnonymous")) {
       // Ignorer les utilisateurs anonymes
@@ -2201,7 +2346,24 @@ exports.revenueCatWebhook = onRequest(
       return;
     }
 
-    const db = admin.firestore();
+    // T0.2 + T0.5 — skip si le user Firebase Auth n'existe plus (compte
+    // supprimé). Évite de recréer un user fantôme dans subscriptions/
+    // via un webhook RC en retard. RC retry pendant ~3 jours → check
+    // côté Auth tant qu'on est dans cette fenêtre.
+    try {
+      await admin.auth().getUser(appUserId);
+    } catch (err) {
+      if (err?.code === "auth/user-not-found") {
+        console.log(
+          `revenueCatWebhook: user ${appUserId} no longer exists in Auth, skipping`
+        );
+        res.status(200).send("OK - user deleted");
+        return;
+      }
+      // Autre erreur (réseau Auth, etc.) : on continue, mieux que perdre l'event.
+      console.warn(`revenueCatWebhook: getUser check failed:`, err?.message ?? err);
+    }
+
     const eventType = event.type;
     const entitlements = event.entitlement_ids || [];
 
@@ -2346,6 +2508,136 @@ exports.grandfatherExistingUsers = onCall(
 
     console.log(`grandfatherExistingUsers: marked ${count} users as grandfathered (before ${cutoffDate})`);
     return { success: true, count };
+  }
+);
+
+// ============================================
+// ADMIN CLAIM MANAGEMENT (T0.3)
+// ============================================
+
+/**
+ * setAdminClaim — Promeut ou rétrograde un utilisateur en admin.
+ *
+ * Source unique pour gérer le custom claim `admin`. Avant cette CF, le claim
+ * était settable uniquement via Firebase Console (zéro audit, zéro restriction).
+ *
+ * Sécurité :
+ *  - Le caller doit déjà être admin (`request.auth.token.admin === true`).
+ *  - Bootstrap : un seed email est défini via la secret env INITIAL_ADMIN_EMAIL ;
+ *    si zéro admin existe encore et que le caller a cet email, on autorise.
+ *  - Toute action est loggée dans adminAuditLog avec type="setAdminClaim".
+ *  - Refus de se dépromouvoir soi-même (sinon œuf-et-poule pour les corrections).
+ *
+ * Limites :
+ *  - Le claim ne prend effet que sur le PROCHAIN token (refresh).
+ *    Le client doit appeler `getIdToken(true)` pour le force-refresh.
+ */
+exports.setAdminClaim = onCall(
+  withAppCheck({ region: "europe-west1", secrets: ["INITIAL_ADMIN_EMAIL"] }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    monitorAppCheck(request, "setAdminClaim");
+
+    const callerUid = request.auth.uid;
+    const callerEmail = request.auth.token.email || "";
+    const callerIsAdmin = request.auth.token.admin === true;
+    const seedEmail = process.env.INITIAL_ADMIN_EMAIL || "";
+
+    const { targetUid, value, reason } = request.data || {};
+
+    if (typeof targetUid !== "string" || !targetUid) {
+      throw new HttpsError("invalid-argument", "targetUid requis (string).");
+    }
+    if (typeof value !== "boolean") {
+      throw new HttpsError("invalid-argument", "value requis (boolean).");
+    }
+    if (typeof reason !== "string" || reason.trim().length < 5 || reason.length > 500) {
+      throw new HttpsError(
+        "invalid-argument",
+        "reason requis (string, 5-500 chars). Documente pourquoi tu promues/dépromues."
+      );
+    }
+    if (callerUid === targetUid && value === false) {
+      // Pas de self-demotion — évite de se retrouver sans aucun admin.
+      throw new HttpsError(
+        "failed-precondition",
+        "Vous ne pouvez pas vous dépromouvoir vous-même. Demandez à un autre admin."
+      );
+    }
+
+    // Bootstrap check : si le caller n'est pas admin, est-ce qu'on a une
+    // raison d'accepter quand même ? Oui, seulement si :
+    //   1. Le caller a l'email seed INITIAL_ADMIN_EMAIL
+    //   2. AUCUN admin n'existe encore (sinon le seed est inutile/dangereux)
+    if (!callerIsAdmin) {
+      if (!seedEmail || callerEmail.toLowerCase() !== seedEmail.toLowerCase()) {
+        throw new HttpsError(
+          "permission-denied",
+          "Seuls les admins existants peuvent gérer le claim admin."
+        );
+      }
+      // Vérifier qu'aucun admin n'existe via le compteur audit (proxy fiable).
+      const db = admin.firestore();
+      const adminCountSnap = await db
+        .collection("adminAuditLog")
+        .where("type", "==", "setAdminClaim")
+        .where("value", "==", true)
+        .limit(1)
+        .get();
+      if (!adminCountSnap.empty) {
+        throw new HttpsError(
+          "permission-denied",
+          "Le seed admin n'est utilisable qu'avant le premier admin promu."
+        );
+      }
+    }
+
+    // Appliquer le claim. Lire les claims existants pour ne pas écraser
+    // d'autres custom claims qu'on n'a pas en tête.
+    let targetUser;
+    try {
+      targetUser = await admin.auth().getUser(targetUid);
+    } catch (err) {
+      if (err?.code === "auth/user-not-found") {
+        throw new HttpsError("not-found", `Utilisateur ${targetUid} introuvable.`);
+      }
+      throw err;
+    }
+    const existingClaims = targetUser.customClaims || {};
+    const newClaims = { ...existingClaims };
+    if (value) {
+      newClaims.admin = true;
+    } else {
+      delete newClaims.admin;
+    }
+    await admin.auth().setCustomUserClaims(targetUid, newClaims);
+
+    // Audit log obligatoire, on ne fait pas best-effort ici : la trace est
+    // la défense principale contre les abus admin.
+    const db = admin.firestore();
+    await db.collection("adminAuditLog").add({
+      type: "setAdminClaim",
+      adminUid: callerUid,
+      adminEmail: callerEmail,
+      targetUid,
+      targetEmail: targetUser.email || null,
+      value,
+      reason: reason.trim(),
+      bootstrapMode: !callerIsAdmin,
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log(
+      `setAdminClaim: ${callerUid} → ${targetUid} admin=${value} (reason="${reason.slice(0, 50)}")`
+    );
+    return {
+      success: true,
+      // Le client doit appeler firebase.auth().currentUser.getIdToken(true)
+      // pour que le claim soit appliqué côté client.
+      requiresTokenRefresh: true,
+    };
   }
 );
 
