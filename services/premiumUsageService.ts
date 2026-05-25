@@ -19,7 +19,7 @@ const getUsageQuotaStatusCF = httpsCallable<
 >(functions, "getUsageQuotaStatus");
 
 const consumeUsageQuotaCF = httpsCallable<
-  { feature: Extract<UsageFeature, "voice" | "export"> },
+  { feature: Extract<UsageFeature, "voice" | "export">; childIds?: string[] },
   UsageQuotaStatus
 >(functions, "consumeUsageQuota");
 
@@ -58,7 +58,10 @@ export async function consumeVoiceQuota(): Promise<UsageQuotaStatus> {
   return result.data;
 }
 
-export async function consumeExportQuota(): Promise<UsageQuotaStatus> {
-  const result = await consumeUsageQuotaCF({ feature: "export" });
+export async function consumeExportQuota(childIds: string[]): Promise<UsageQuotaStatus> {
+  if (!Array.isArray(childIds) || childIds.length === 0) {
+    throw new Error("childIds (array non vide) requis pour consommer le quota export.");
+  }
+  const result = await consumeUsageQuotaCF({ feature: "export", childIds });
   return result.data;
 }

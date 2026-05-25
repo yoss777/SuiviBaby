@@ -1,6 +1,7 @@
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { EventType, obtenirEvenements } from "./eventsService";
+import { getHiddenEventIds } from "./hiddenPhotosService";
 import {
   LEGACY_BACKEND_EVENT_TYPES,
   MODERN_UI_EVENT_TYPES,
@@ -162,10 +163,24 @@ export async function exportAllEventsCSV(
   const rows: string[][] = [];
   rows.push(["Date", "Heure", "Type", "Details", "Note"]);
 
+  // B5.S3 — exclure les events que l'utilisateur a explicitement masqués
+  // côté UI via hidePhoto(). Avant, exportAllEventsCSV ignorait
+  // hiddenEventIds → des photos/notes cachées ré-apparaissaient dans
+  // l'export, surprise désagréable pour le user qui pensait avoir caché
+  // ces entrées. NB : la liste hiddenEventIds est globale au user
+  // (pas par enfant), c'est OK car les IDs d'events sont uniques.
+  let hiddenIds: Set<string>;
+  try {
+    hiddenIds = new Set(await getHiddenEventIds());
+  } catch {
+    hiddenIds = new Set();
+  }
+
   for (const type of eventTypes) {
     try {
       const events = await obtenirEvenements(childId, { type });
       for (const event of events) {
+        if (event.id && hiddenIds.has(event.id)) continue; // B5.S3 skip
         const date = toDate(event.date);
         const details = buildDetails(type, event);
         rows.push([

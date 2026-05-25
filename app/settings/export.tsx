@@ -856,7 +856,9 @@ export default function ExportScreen() {
       }
 
       if (!checkFeatureAccess("unlimited_export")) {
-        await consumeExportQuota();
+        // B5.S1 — passe les childIds pour que la CF valide l'accès à
+        // chaque enfant avant de débiter le quota free.
+        await consumeExportQuota(selectedChildren.map((item) => item.child.id));
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

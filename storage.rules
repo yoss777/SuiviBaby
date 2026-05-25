@@ -18,6 +18,18 @@ service firebase.storage {
         );
     }
 
+    // B5.S4 — défense en profondeur : refuse l'accès Storage si l'enfant
+    // est en cours de soft-delete (champ deletedAt présent). B2.1 wipe
+    // les files immédiatement au soft-delete, donc en théorie les files
+    // n'existent plus. Mais si le wipe échoue (best-effort + log), ce
+    // check rule bloque quand même la lecture jusqu'à la purge finale.
+    function isNotSoftDeleted(childId) {
+      let childDoc = firestore.get(
+        /databases/(default)/documents/children/$(childId)
+      );
+      return !('deletedAt' in childDoc.data);
+    }
+
     function canWriteChildMedia(childId) {
       let access = accessDoc(childId).data;
       return hasAccess(childId) && (
@@ -38,10 +50,14 @@ service firebase.storage {
     }
 
     match /children/{childId}/jalons/{fileName} {
-      allow read: if hasAccess(childId);
+      // B5.S4 — read et create bloqués si l'enfant est soft-deleted.
+      // delete reste autorisé (le wipe softDelete passe via admin SDK
+      // de toute façon, mais on accepte aussi un delete manuel par owner).
+      allow read: if hasAccess(childId) && isNotSoftDeleted(childId);
 
       // Les fichiers de jalons sont immuables: nouvel upload ou suppression.
       allow create: if canWriteChildMedia(childId) &&
+        isNotSoftDeleted(childId) &&
         isImageUpload() &&
         isWithinSizeLimit();
       allow update: if false;
