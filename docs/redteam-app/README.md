@@ -28,8 +28,8 @@ Chaque domaine a son MD plan avec :
 | Chantier | Statut | Closure |
 |---|---|---|
 | **Lot 0** (5 critiques transversales — T0.2 à T0.6) | 🟢 livré | [LOT0_CLOSURE.md](LOT0_CLOSURE.md) |
+| **A** (bornes UI, 13 gaps) | 🟢 livré | [A_CLOSURE.md](A_CLOSURE.md) |
 | 0.1 App Check | ⏸ reporté TOUT DERNIER | [0_APP_CHECK_SETUP.md](0_APP_CHECK_SETUP.md) |
-| A — Bornes UI | 🟡 plan rédigé | — |
 | B1-B6 | 🟡 plans rédigés | — |
 
 **Légende statut :**
