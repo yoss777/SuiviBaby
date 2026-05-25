@@ -221,6 +221,23 @@ async function getVoiceQuotaStatus(db, uid) {
 }
 
 /**
+ * B6.S5 — TTL Firestore sur adminAuditLog : 90 jours après l'action.
+ * Injecte `expireAt` automatiquement sur tous les writes. Le TTL field
+ * doit être provisionné via functions/scripts/enable-admin-audit-ttl.js.
+ *
+ * Wrapper centralisé pour ne pas dupliquer le calcul à chaque call site.
+ * Garde la signature `add()` simple : passer juste le payload, le wrapper
+ * ajoute `expireAt` et appelle `writeAdminAudit(db,...)`.
+ */
+const ADMIN_AUDIT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+async function writeAdminAudit(db, payload) {
+  return db.collection("adminAuditLog").add({
+    ...payload,
+    expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + ADMIN_AUDIT_RETENTION_MS),
+  });
+}
+
+/**
  * Refund a previously-reserved voice quota slot. Called when the downstream
  * AssemblyAI pipeline fails after we have already incremented the counter.
  * Best-effort: a refund failure is logged but does not surface to the user —
@@ -1345,6 +1362,110 @@ exports.onReportCreated = onDocumentCreated(
 );
 
 // ============================================
+// REPORT SUBMISSION (B6.S1/S2/S3)
+// ============================================
+
+/**
+ * submitContentReportCF — Crée un report avec validations serveur.
+ *
+ * Remplace l'ancienne création client directe (addDoc côté
+ * services/contentReportService.ts). Apporte :
+ *  - B6.S1 rate limit 5/min/uid (anti report flooding).
+ *  - B6.S2 vérification existence childId + eventId (rejet si
+ *    contenu reporté n'existe pas).
+ *  - B6.S3 refus auto-report : un user ne peut pas signaler son
+ *    propre event (évite le hack "hide my own photo from co-parents").
+ *  - hasAccess(childId) vérifié (déjà fait par les rules avant,
+ *    on garde la même contrainte).
+ *
+ * Le trigger onReportCreated reste en place et se déclenche aussi
+ * pour les writes admin SDK (notifications, email opérateur, etc.).
+ */
+const REPORT_REASONS = new Set([
+  "intimate_child_nudity",
+  "sensitive_child_photo",
+  "privacy",
+  "other",
+]);
+
+exports.submitContentReportCF = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    monitorAppCheck(request, "submitContentReportCF");
+
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "report", 5);
+
+    const { childId, eventId, photoPath, reason, message } = request.data || {};
+
+    // Validation des champs.
+    if (typeof childId !== "string" || childId.trim().length === 0) {
+      throw new HttpsError("invalid-argument", "childId requis.");
+    }
+    if (!REPORT_REASONS.has(reason)) {
+      throw new HttpsError("invalid-argument", `reason invalide. Attendu : ${[...REPORT_REASONS].join(", ")}.`);
+    }
+    if (eventId !== undefined && eventId !== null && typeof eventId !== "string") {
+      throw new HttpsError("invalid-argument", "eventId doit être string ou null.");
+    }
+    if (photoPath !== undefined && photoPath !== null && typeof photoPath !== "string") {
+      throw new HttpsError("invalid-argument", "photoPath doit être string ou null.");
+    }
+    if (message !== undefined && message !== null) {
+      if (typeof message !== "string") {
+        throw new HttpsError("invalid-argument", "message doit être string.");
+      }
+      if (message.length > 1000) {
+        throw new HttpsError("invalid-argument", "message trop long (max 1000 chars).");
+      }
+    }
+
+    // B6 hasAccess(childId) — l'ancien rules le checkait, on garde.
+    await checkChildAccess(db, uid, childId, ["owner", "admin", "contributor"]);
+
+    // B6.S2 — vérifier que l'event reporté existe (si eventId fourni).
+    if (eventId) {
+      const eventDoc = await db.doc(`events/${eventId}`).get();
+      if (!eventDoc.exists) {
+        throw new HttpsError("not-found", "Le contenu signalé n'existe pas ou a été supprimé.");
+      }
+      const eventData = eventDoc.data();
+      if (eventData.childId !== childId) {
+        throw new HttpsError("invalid-argument", "Le contenu signalé n'appartient pas à cet enfant.");
+      }
+
+      // B6.S3 — refuser l'auto-report. Un user ne doit pas pouvoir
+      // signaler son propre event pour le hide de tous les co-parents.
+      if (eventData.userId === uid) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Vous ne pouvez pas signaler votre propre contenu. Utilisez plutôt l'option modifier/supprimer."
+        );
+      }
+    }
+
+    // Write admin SDK — bypass rules (nécessaire car rules `allow create: if false`).
+    const trimmedMessage = message?.trim?.() || null;
+    const docRef = await db.collection("reports").add({
+      reporterUserId: uid,
+      childId,
+      eventId: eventId ?? null,
+      photoPath: photoPath ?? null,
+      reason,
+      message: trimmedMessage,
+      status: "open",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return { reportId: docRef.id };
+  }
+);
+
+// ============================================
 // REPORT RESOLUTION (admin-only)
 // ============================================
 
@@ -1374,14 +1495,39 @@ exports.resolveReport = onCall(
     }
 
     const reportRef = db.doc(`reports/${reportId}`);
-    const reportSnap = await reportRef.get();
-    if (!reportSnap.exists) {
-      throw new HttpsError("not-found", "Signalement introuvable.");
-    }
-    const reportData = reportSnap.data();
 
-    if (reportData.status === "resolved") {
-      throw new HttpsError("already-exists", "Ce signalement a déjà été traité.");
+    // B6.S7 — claim atomique : flip status open → resolving dans une
+    // transaction. Si 2 admins lancent en parallèle, la 2e tx voit
+    // status=resolving et throw already-exists. Évite la double-notif,
+    // le double-audit, et la double-suppression de photo. La transition
+    // finale resolving → resolved se fait à la fin (ligne ~1587).
+    let reportData;
+    try {
+      reportData = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(reportRef);
+        if (!snap.exists) {
+          throw new HttpsError("not-found", "Signalement introuvable.");
+        }
+        const data = snap.data();
+        if (data.status !== "open") {
+          throw new HttpsError(
+            "already-exists",
+            data.status === "resolving"
+              ? "Ce signalement est en cours de traitement par un autre admin."
+              : "Ce signalement a déjà été traité."
+          );
+        }
+        tx.update(reportRef, {
+          status: "resolving",
+          resolvingBy: uid,
+          resolvingAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return data;
+      });
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      console.error("resolveReport: claim transaction error", err);
+      throw new HttpsError("internal", "Erreur lors de la prise en charge du signalement.");
     }
 
     // T0.4 — l'admin doit avoir accès à l'enfant ciblé. Sans ce check, un
@@ -1396,7 +1542,7 @@ exports.resolveReport = onCall(
       if (role !== "owner" && role !== "admin") {
         // Audit log AVANT de refuser, pour tracer les tentatives.
         try {
-          await db.collection("adminAuditLog").add({
+          await writeAdminAudit(db,{
             type: "resolveReport_denied",
             adminUid: uid,
             reportId,
@@ -1418,7 +1564,7 @@ exports.resolveReport = onCall(
     // ability to act on any report, so the safeguard against rogue admins
     // is detection (this log) rather than prevention.
     try {
-      await db.collection("adminAuditLog").add({
+      await writeAdminAudit(db,{
         type: "resolveReport",
         adminUid: uid,
         reportId,
@@ -2208,7 +2354,7 @@ exports.deleteUserAccount = onCall(
         );
       }
       try {
-        await db.collection("adminAuditLog").add({
+        await writeAdminAudit(db,{
           type: "deleteUserAccount",
           adminUid: uid,
           adminEmail: callerRecord.email || null,
@@ -2633,7 +2779,7 @@ exports.grandfatherExistingUsers = onCall(
     // partielle dans Cloud Logs via le console.log ci-dessous.
     try {
       const callerRecord = await admin.auth().getUser(uid).catch(() => null);
-      await db.collection("adminAuditLog").add({
+      await writeAdminAudit(db,{
         type: "grandfatherExistingUsers",
         adminUid: uid,
         adminEmail: callerRecord?.email || null,
@@ -2757,7 +2903,7 @@ exports.setAdminClaim = onCall(
     // Audit log obligatoire, on ne fait pas best-effort ici : la trace est
     // la défense principale contre les abus admin.
     const db = admin.firestore();
-    await db.collection("adminAuditLog").add({
+    await writeAdminAudit(db,{
       type: "setAdminClaim",
       adminUid: callerUid,
       adminEmail: callerEmail,

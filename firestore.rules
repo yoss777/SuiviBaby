@@ -235,28 +235,10 @@ service cloud.firestore {
         request.query.limit <= 100 &&
         resource.data.reporterUserId == request.auth.uid;
 
-      allow create: if isSignedIn() &&
-        hasAccess(request.resource.data.childId) &&
-        request.resource.data.reporterUserId == request.auth.uid &&
-        request.resource.data.childId is string &&
-        request.resource.data.reason in ['intimate_child_nudity', 'sensitive_child_photo', 'privacy', 'other'] &&
-        request.resource.data.status == 'open' &&
-        request.resource.data.createdAt is timestamp &&
-        (
-          !('eventId' in request.resource.data) ||
-          request.resource.data.eventId == null ||
-          request.resource.data.eventId is string
-        ) &&
-        (
-          !('photoPath' in request.resource.data) ||
-          request.resource.data.photoPath == null ||
-          request.resource.data.photoPath is string
-        ) &&
-        (
-          !('message' in request.resource.data) ||
-          request.resource.data.message == null ||
-          request.resource.data.message is string
-        );
+      // B6.S1/S2/S3 — création client direct désactivée. Tout passe par
+      // la CF submitContentReportCF (rate limit + exists check + anti
+      // auto-report). La CF utilise admin SDK qui bypass rules.
+      allow create: if false;
 
       allow update, delete: if false;
     }
