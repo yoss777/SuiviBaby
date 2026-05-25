@@ -1364,3 +1364,283 @@ describe("deleteUserAccount — admin audit on cross-user delete (T0.6)", () => 
     }));
   });
 });
+
+// ============================================
+// B1 — sharing redeem & accept
+// ============================================
+
+describe("redeemShareCodeCF (B1.1)", () => {
+  it("requires authentication", async () => {
+    await expect(
+      fns.redeemShareCodeCF({ auth: null, data: { code: "ABC123" } })
+    ).rejects.toThrow("Authentification");
+  });
+
+  it("rejects user without email", async () => {
+    await expect(
+      fns.redeemShareCodeCF({
+        auth: { uid: "u1", token: {} },
+        app: true,
+        data: { code: "ABC123" },
+      })
+    ).rejects.toThrow("email");
+  });
+
+  it("rejects invalid code format", async () => {
+    await expect(
+      fns.redeemShareCodeCF(auth("u1", { code: "" }))
+    ).rejects.toThrow("code requis");
+    await expect(
+      fns.redeemShareCodeCF(auth("u1", { code: "ab" })) // too short
+    ).rejects.toThrow("Code invalide");
+    await expect(
+      fns.redeemShareCodeCF(auth("u1", { code: "abc def!" })) // invalid chars
+    ).rejects.toThrow("Code invalide");
+  });
+
+  it("rejects code not found (transaction returns)", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), update: jest.fn() };
+    });
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockResolvedValue(no()), // shareCode doesn't exist
+        set: jest.fn(),
+        update: jest.fn(),
+      })
+    );
+    await expect(
+      fns.redeemShareCodeCF(auth("u1", { code: "ABC123" }))
+    ).rejects.toThrow("Code invalide ou expiré");
+  });
+
+  it("rejects already-used code (anti-info-leak: same message as not-found)", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), update: jest.fn() };
+    });
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockResolvedValue(doc({ used: true, childId: "c1" })),
+        set: jest.fn(),
+        update: jest.fn(),
+      })
+    );
+    await expect(
+      fns.redeemShareCodeCF(auth("u1", { code: "ABC123" }))
+    ).rejects.toThrow("Code invalide ou expiré");
+  });
+
+  it("rejects expired code", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    const expiredMs = Date.now() - 1000;
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockResolvedValue(doc({
+          used: false,
+          childId: "c1",
+          expiresAt: { toMillis: () => expiredMs },
+        })),
+        set: jest.fn(),
+        update: jest.fn(),
+      })
+    );
+    await expect(
+      fns.redeemShareCodeCF(auth("u1", { code: "ABC123" }))
+    ).rejects.toThrow("Code invalide ou expiré");
+  });
+
+  it("rejects when user already has access (already-exists)", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    const futureMs = Date.now() + 24 * 60 * 60 * 1000;
+    let getCallCount = 0;
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockImplementation(() => {
+          getCallCount++;
+          if (getCallCount === 1) {
+            return Promise.resolve(doc({
+              used: false,
+              childId: "c1",
+              expiresAt: { toMillis: () => futureMs },
+            }));
+          }
+          // 2e get = existingAccess
+          return Promise.resolve(doc({ role: "owner" }));
+        }),
+        set: jest.fn(),
+        update: jest.fn(),
+      })
+    );
+    await expect(
+      fns.redeemShareCodeCF(auth("u1", { code: "ABC123" }))
+    ).rejects.toThrow("déjà accès");
+  });
+
+  it("succeeds: marks code used and creates access in one transaction", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    const futureMs = Date.now() + 24 * 60 * 60 * 1000;
+    const txUpdate = jest.fn();
+    const txSet = jest.fn();
+    let getCallCount = 0;
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockImplementation(() => {
+          getCallCount++;
+          if (getCallCount === 1) {
+            return Promise.resolve(doc({
+              used: false,
+              childId: "c1",
+              childName: "Baby",
+              createdBy: "creator-uid",
+              expiresAt: { toMillis: () => futureMs },
+            }));
+          }
+          return Promise.resolve(no()); // pas d'accès existant
+        }),
+        set: txSet,
+        update: txUpdate,
+      })
+    );
+    const result = await fns.redeemShareCodeCF(auth("u1", { code: "ABC123" }));
+    expect(result).toEqual({ childId: "c1", childName: "Baby" });
+    expect(txUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ used: true, usedBy: "u1", usedByEmail: "u1@t.com" }),
+    );
+    // 2 set : access doc + user_child_access index
+    expect(txSet).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("acceptInvitationCF (B1.4)", () => {
+  it("requires authentication", async () => {
+    await expect(
+      fns.acceptInvitationCF({ auth: null, data: { invitationId: "i1" } })
+    ).rejects.toThrow("Authentification");
+  });
+
+  it("rejects missing invitationId", async () => {
+    await expect(
+      fns.acceptInvitationCF(auth("u1", {}))
+    ).rejects.toThrow("invitationId requis");
+  });
+
+  it("rejects when not the intended recipient", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockResolvedValue(doc({
+          status: "pending",
+          invitedUserId: "someone-else",
+          invitedEmail: "other@t.com",
+          childId: "c1",
+        })),
+        set: jest.fn(),
+        update: jest.fn(),
+      })
+    );
+    await expect(
+      fns.acceptInvitationCF(auth("u1", { invitationId: "i1" }))
+    ).rejects.toThrow("ne vous est pas destinée");
+  });
+
+  it("rejects already-accepted invitation", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockResolvedValue(doc({
+          status: "accepted",
+          invitedUserId: "u1",
+          childId: "c1",
+        })),
+        set: jest.fn(),
+        update: jest.fn(),
+      })
+    );
+    await expect(
+      fns.acceptInvitationCF(auth("u1", { invitationId: "i1" }))
+    ).rejects.toThrow("déjà été traitée");
+  });
+
+  it("creates access and marks accepted when valid", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    const txUpdate = jest.fn();
+    const txSet = jest.fn();
+    let getCallCount = 0;
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockImplementation(() => {
+          getCallCount++;
+          if (getCallCount === 1) {
+            return Promise.resolve(doc({
+              status: "pending",
+              invitedUserId: "u1",
+              inviterId: "inviter-uid",
+              childId: "c1",
+            }));
+          }
+          return Promise.resolve(no()); // pas d'accès existant
+        }),
+        set: txSet,
+        update: txUpdate,
+      })
+    );
+    const result = await fns.acceptInvitationCF(auth("u1", { invitationId: "i1" }));
+    expect(result).toEqual({ success: true });
+    expect(txUpdate).toHaveBeenCalledWith(expect.anything(), { status: "accepted" });
+    // 2 set : access + index
+    expect(txSet).toHaveBeenCalledTimes(2);
+  });
+
+  it("is idempotent when access already exists (just marks accepted)", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    const txUpdate = jest.fn();
+    const txSet = jest.fn();
+    let getCallCount = 0;
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: jest.fn().mockImplementation(() => {
+          getCallCount++;
+          if (getCallCount === 1) {
+            return Promise.resolve(doc({
+              status: "pending",
+              invitedUserId: "u1",
+              inviterId: "inviter-uid",
+              childId: "c1",
+            }));
+          }
+          return Promise.resolve(doc({ role: "contributor" })); // accès déjà là
+        }),
+        set: txSet,
+        update: txUpdate,
+      })
+    );
+    const result = await fns.acceptInvitationCF(auth("u1", { invitationId: "i1" }));
+    expect(result).toEqual({ success: true });
+    expect(txSet).not.toHaveBeenCalled(); // pas de re-création
+    expect(txUpdate).toHaveBeenCalledWith(expect.anything(), { status: "accepted" });
+  });
+});

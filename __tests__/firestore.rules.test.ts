@@ -1047,9 +1047,14 @@ describe("shareCodes collection", () => {
     await assertSucceeds(getDoc(doc(db, "shareCodes", "CODE123")));
   });
 
-  test("valid unused code is readable by any authenticated user (not expired)", async () => {
+  test("B1.2 — non-creator/non-access user CANNOT read share code (anti-enumeration)", async () => {
+    // Avant B1.2 : un user authentifié quelconque pouvait lire un code non
+    // utilisé/non expiré, ce qui permettait de bruteforcer les codes
+    // valides et mapper des childIds. Le redeem passe maintenant uniquement
+    // par redeemShareCodeCF (admin SDK), donc le client n'a pas besoin de
+    // read direct. La rule a été resserrée à creator ∪ hasAccess(childId).
     const db = authedFirestore(BOB_UID);
-    await assertSucceeds(getDoc(doc(db, "shareCodes", "CODE123")));
+    await assertFails(getDoc(doc(db, "shareCodes", "CODE123")));
   });
 
   test("unauthenticated cannot read share code", async () => {
