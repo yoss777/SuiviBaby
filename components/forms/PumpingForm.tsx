@@ -13,7 +13,11 @@ import {
 } from "@/services/eventsService";
 
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+
+// Bornes CF (parité serveur). Same value sur les deux côtés.
+const PUMP_MAX = NUMERIC_BOUNDS.pompage.quantiteGauche.max;
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -326,7 +330,7 @@ export function PumpingForm({
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
               onPressIn={() =>
-                handlePressIn(() => setQuantiteGauche((q) => q + 5))
+                handlePressIn(() => setQuantiteGauche((q) => Math.min(PUMP_MAX, q + 5)))
               }
               onPressOut={handlePressOut}
               disabled={isSubmitting}
@@ -390,7 +394,7 @@ export function PumpingForm({
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
               onPressIn={() =>
-                handlePressIn(() => setQuantiteDroite((q) => q + 5))
+                handlePressIn(() => setQuantiteDroite((q) => Math.min(PUMP_MAX, q + 5)))
               }
               onPressOut={handlePressOut}
               disabled={isSubmitting}

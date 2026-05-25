@@ -1,6 +1,9 @@
 // components/forms/ActivitiesForm.tsx
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
+
+const ACTIVITE_DUREE_MAX = NUMERIC_BOUNDS.activite.duree.max;
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
@@ -563,7 +566,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               ]}
               onPressIn={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                handlePressIn(() => setDuree((value) => value + 5));
+                handlePressIn(() => setDuree((value) => Math.min(ACTIVITE_DUREE_MAX, value + 5)));
               }}
               onPressOut={handlePressOut}
               disabled={isSubmitting}
@@ -592,6 +595,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           onChangeText={setDescription}
           placeholder="Ajouter une description..."
           placeholderTextColor={nc.textMuted}
+          maxLength={500}
           style={[
             styles.input,
             { borderColor: nc.border, color: nc.textStrong },

@@ -1,6 +1,9 @@
 // components/forms/RoutinesForm.tsx
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
+
+const BAIN_DUREE_MAX = NUMERIC_BOUNDS.bain.duree.max;
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
@@ -729,6 +732,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           onChangeText={setNoteSommeil}
           placeholder="Ajouter une note"
           placeholderTextColor={nc.textMuted}
+          maxLength={1000}
+          multiline
           style={[
             styles.input,
             { borderColor: nc.border, color: nc.textStrong },
@@ -873,6 +878,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           onChangeText={setNoteNez}
           placeholder="Ajouter une note"
           placeholderTextColor={nc.textMuted}
+          maxLength={1000}
+          multiline
           style={[
             styles.input,
             { borderColor: nc.border, color: nc.textStrong },
@@ -937,7 +944,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               isSubmitting && styles.quantityButtonDisabled,
             ]}
             onPressIn={() =>
-              handlePressIn(() => setDureeBain((value) => value + 5))
+              handlePressIn(() => setDureeBain((value) => Math.min(BAIN_DUREE_MAX, value + 5)))
             }
             onPressOut={handlePressOut}
             disabled={isSubmitting}
@@ -969,7 +976,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             ]}
             onPressIn={() =>
               handlePressIn(() =>
-                setTemperatureEau((value) => Math.max(35, value - 0.5)),
+                // Borne UI 32-42°C : couvre les usages réels (chauffe-eau
+                // bébé recommandé ~37°C, marge confort). CF accepte 20-45.
+                setTemperatureEau((value) => Math.max(32, value - 0.5)),
               )
             }
             onPressOut={handlePressOut}
@@ -997,7 +1006,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             ]}
             onPressIn={() =>
               handlePressIn(() =>
-                setTemperatureEau((value) => Math.min(40, value + 0.5)),
+                setTemperatureEau((value) => Math.min(42, value + 0.5)),
               )
             }
             onPressOut={handlePressOut}
@@ -1041,6 +1050,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           onChangeText={setNoteBain}
           placeholder="Ajouter une note"
           placeholderTextColor={nc.textMuted}
+          maxLength={1000}
+          multiline
           style={[
             styles.input,
             { borderColor: nc.border, color: nc.textStrong },

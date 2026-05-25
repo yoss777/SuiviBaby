@@ -58,6 +58,28 @@ interface DateTimeSectionRowProps {
   // Heure fin constraints
   heureFinMinimumDate?: Date;
   heureFinMaximumDate?: Date;
+
+  // Contraintes globales sur la date principale (simple mode) et la date
+  // début (chrono mode). Évite que l'utilisateur saisisse une date que
+  // la CF refusera (validateEventData : futur ≤ +5min, passé ≥ −365j).
+  // Si non fournis, défaut = bornes CF actuelles.
+  minimumDate?: Date;
+  maximumDate?: Date;
+}
+
+/**
+ * Bornes par défaut alignées sur validateEventData côté CF :
+ *  - max = maintenant + 5 minutes (tolérance d'écart d'horloge serveur)
+ *  - min = maintenant − 365 jours (1 an de rétro-saisie)
+ * Calculées à la demande pour rester fraîches à chaque render. Pas de cache
+ * agressif (les pickers natifs gèrent le re-clamp eux-mêmes).
+ */
+function defaultEventDateBounds(): { minimumDate: Date; maximumDate: Date } {
+  const now = Date.now();
+  return {
+    minimumDate: new Date(now - 365 * 24 * 60 * 60 * 1000),
+    maximumDate: new Date(now + 5 * 60 * 1000),
+  };
 }
 
 // ============================================
@@ -106,8 +128,15 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
   // Constraints
   heureFinMinimumDate,
   heureFinMaximumDate,
+  minimumDate,
+  maximumDate,
 }: DateTimeSectionRowProps) {
   const nc = getNeutralColors(colorScheme);
+
+  // Defaults aligned with validateEventData CF bounds (T0.5/A audit).
+  const defaults = defaultEventDateBounds();
+  const effectiveMin = minimumDate ?? defaults.minimumDate;
+  const effectiveMax = maximumDate ?? defaults.maximumDate;
 
   // Computed duration
   const computedDuration = useMemo(() => {
@@ -132,6 +161,8 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
           mode="date"
           colorScheme={colorScheme}
           disabled={disabled}
+          minimumDate={effectiveMin}
+          maximumDate={effectiveMax}
           onChange={(date) => {
             const next = new Date(value);
             next.setFullYear(
@@ -224,6 +255,8 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
           mode="date"
           colorScheme={colorScheme}
           disabled={disabled}
+          minimumDate={effectiveMin}
+          maximumDate={effectiveMax}
           onChange={handleHeureDebutDateChange}
           onPickerToggle={onPickerToggle}
           valueStyle="small"

@@ -1303,12 +1303,14 @@ export function SoinsForm({
                 onPressIn={() =>
                   handlePressIn(() =>
                     setTemperatureValue((value) =>
-                      Math.min(45, Math.round((value + 0.1) * 10) / 10),
+                      // Borné à 43°C (parité CF validateEventData). Au-delà,
+                      // valeur non médicale + rejet serveur tardif.
+                      Math.min(43, Math.round((value + 0.1) * 10) / 10),
                     ),
                   )
                 }
                 onPressOut={handlePressOut}
-                disabled={isSubmitting || temperatureValue >= 45}
+                disabled={isSubmitting || temperatureValue >= 43}
                 accessibilityLabel="Augmenter la température"
               >
                 <Text
@@ -1374,6 +1376,7 @@ export function SoinsForm({
               onChangeText={setMedicamentName}
               placeholder="Paracétamol"
               placeholderTextColor={nc.textMuted}
+              maxLength={100}
               style={[
                 styles.input,
                 { borderColor: nc.border, color: nc.textStrong },
@@ -1389,6 +1392,7 @@ export function SoinsForm({
               onChangeText={setMedicamentDosage}
               placeholder="5 ml"
               placeholderTextColor={nc.textMuted}
+              maxLength={100}
               style={[
                 styles.input,
                 { borderColor: nc.border, color: nc.textStrong },
@@ -1606,6 +1610,7 @@ export function SoinsForm({
                 onChangeText={setVaccinCustomName}
                 placeholder="Nom du vaccin"
                 placeholderTextColor={nc.textMuted}
+                maxLength={100}
                 style={[
                   styles.input,
                   { borderColor: nc.border, color: nc.textStrong },
@@ -1624,6 +1629,7 @@ export function SoinsForm({
                   onChangeText={setVaccinDosage}
                   placeholder="1ère injection"
                   placeholderTextColor={nc.textMuted}
+                  maxLength={100}
                   style={[
                     styles.input,
                     { borderColor: nc.border, color: nc.textStrong },
@@ -1701,6 +1707,7 @@ export function SoinsForm({
                 onChangeText={setVitamineCustomName}
                 placeholder="Nom de la vitamine"
                 placeholderTextColor={nc.textMuted}
+                maxLength={100}
                 style={[
                   styles.input,
                   { borderColor: nc.border, color: nc.textStrong },
@@ -1806,6 +1813,8 @@ export function SoinsForm({
           onChangeText={setNote}
           placeholder="Ajouter une note"
           placeholderTextColor={nc.textMuted}
+          maxLength={1000}
+          multiline
           style={[
             styles.input,
             { borderColor: nc.border, color: nc.textStrong },

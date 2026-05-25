@@ -1090,6 +1090,7 @@ export function MealsForm({
             onChangeText={setIngredients}
             editable={!isSubmitting}
             multiline
+            maxLength={500}
           />
 
           {/* Nouvel aliment */}
@@ -1144,6 +1145,7 @@ export function MealsForm({
                 value={nomNouvelAliment}
                 onChangeText={setNomNouvelAliment}
                 editable={!isSubmitting}
+                maxLength={100}
               />
 
               <Text style={[styles.categoryLabel, { color: nc.textLight }]}>

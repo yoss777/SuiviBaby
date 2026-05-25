@@ -13,6 +13,12 @@ import {
   modifierEvenementOptimistic,
   supprimerEvenement,
 } from "@/services/eventsService";
+import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
+
+// Bornes CF alignées (source: utils/eventBounds.ts).
+const TAILLE = NUMERIC_BOUNDS.croissance.tailleCm;
+const POIDS = NUMERIC_BOUNDS.croissance.poidsKg;
+const TETE = NUMERIC_BOUNDS.croissance.teteCm;
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -138,6 +144,23 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
       return;
     }
 
+    // Validation bornes alignées CF — sinon le serveur rejette et l'utilisateur
+    // voit une erreur cryptique tardive. On bloque tôt avec un message clair.
+    const outOfRange: string[] = [];
+    if (tailleValue !== undefined && (tailleValue < TAILLE.min || tailleValue > TAILLE.max)) {
+      outOfRange.push(`Taille entre ${TAILLE.min} et ${TAILLE.max} ${TAILLE.unit}`);
+    }
+    if (poidsValue !== undefined && (poidsValue < POIDS.min || poidsValue > POIDS.max)) {
+      outOfRange.push(`Poids entre ${POIDS.min} et ${POIDS.max} ${POIDS.unit}`);
+    }
+    if (teteValue !== undefined && (teteValue < TETE.min || teteValue > TETE.max)) {
+      outOfRange.push(`Tour de tête entre ${TETE.min} et ${TETE.max} ${TETE.unit}`);
+    }
+    if (outOfRange.length > 0) {
+      showAlert("Valeur hors plage", outOfRange.join("\n"));
+      return;
+    }
+
     setIsSubmitting(true);
 
     const dateToSave = !isEditing || dateHeureDirty ? dateHeure : undefined;
@@ -197,9 +220,10 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
         <TextInput
           value={tailleCm}
           onChangeText={setTailleCm}
-          placeholder="ex: 62.5"
+          placeholder={`${TAILLE.min}-${TAILLE.max}`}
           placeholderTextColor={nc.textMuted}
           keyboardType="decimal-pad"
+          maxLength={5}
           style={[
             styles.input,
             { borderColor: nc.border, color: nc.textStrong },
@@ -216,9 +240,10 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
         <TextInput
           value={poidsKg}
           onChangeText={setPoidsKg}
-          placeholder="ex: 5.8"
+          placeholder={`${POIDS.min}-${POIDS.max}`}
           placeholderTextColor={nc.textMuted}
           keyboardType="decimal-pad"
+          maxLength={5}
           style={[
             styles.input,
             { borderColor: nc.border, color: nc.textStrong },
@@ -235,9 +260,10 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
         <TextInput
           value={teteCm}
           onChangeText={setTeteCm}
-          placeholder="ex: 41"
+          placeholder={`${TETE.min}-${TETE.max}`}
           placeholderTextColor={nc.textMuted}
           keyboardType="decimal-pad"
+          maxLength={5}
           style={[
             styles.input,
             { borderColor: nc.border, color: nc.textStrong },

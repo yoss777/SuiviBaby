@@ -485,6 +485,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             }}
             placeholder="Ajouter un titre"
             placeholderTextColor={nc.textMuted}
+            maxLength={200}
             style={[
               styles.input,
               { borderColor: nc.border, color: nc.textStrong },
@@ -505,6 +506,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           onChangeText={setDescription}
           placeholder="Ajouter un détail ou un souvenir..."
           placeholderTextColor={nc.textMuted}
+          maxLength={500}
           style={[
             styles.noteInput,
             { borderColor: nc.border, color: nc.textStrong },
@@ -667,6 +669,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           onChangeText={setNote}
           placeholder="Ajouter une note personnelle..."
           placeholderTextColor={nc.textMuted}
+          maxLength={1000}
           style={[
             styles.noteInput,
             { borderColor: nc.border, color: nc.textStrong },
