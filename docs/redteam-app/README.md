@@ -31,8 +31,9 @@ Chaque domaine a son MD plan avec :
 | **A** (bornes UI, 13 gaps) | 🟢 livré | [A_CLOSURE.md](A_CLOSURE.md) |
 | **B1** (sharing co-parent, 7 surfaces) | 🟢 livré | [B1_CLOSURE.md](B1_CLOSURE.md) |
 | **B2** (deletion RGPD, 10 surfaces) | 🟢 livré | [B2_CLOSURE.md](B2_CLOSURE.md) |
+| **B3** (auth & sessions, 8 surfaces — 2 vrais trous, 6 vérifiés OK) | 🟢 livré | [B3_CLOSURE.md](B3_CLOSURE.md) |
 | 0.1 App Check | ⏸ reporté TOUT DERNIER | [0_APP_CHECK_SETUP.md](0_APP_CHECK_SETUP.md) |
-| B3-B6 | 🟡 plans rédigés | — |
+| B4-B6 | 🟡 plans rédigés | — |
 
 **Légende statut :**
 - ⚪ recon à faire (plan vide, agent à lancer)
