@@ -388,7 +388,7 @@ describe("resolveReport (T2 — admin claim + audit log)", () => {
             childId: "c1",
             eventId: "e1",
             reporterUserId: "u_reporter",
-            status: "pending",
+            status: "open",
           })),
           update: jest.fn(),
         };
@@ -1681,5 +1681,138 @@ describe("acceptInvitationCF (B1.4)", () => {
     expect(result).toEqual({ success: true });
     expect(txSet).not.toHaveBeenCalled(); // pas de re-création
     expect(txUpdate).toHaveBeenCalledWith(expect.anything(), { status: "accepted" });
+  });
+});
+
+// ============================================
+// B6 — submitContentReportCF
+// ============================================
+
+describe("submitContentReportCF (B6.S1/S2/S3)", () => {
+  it("requires authentication", async () => {
+    await expect(
+      fns.submitContentReportCF({ auth: null, data: { childId: "c1", reason: "privacy" } })
+    ).rejects.toThrow("Authentification");
+  });
+
+  it("rejects missing childId", async () => {
+    await expect(
+      fns.submitContentReportCF(auth("u1", { reason: "privacy" }))
+    ).rejects.toThrow("childId requis");
+  });
+
+  it("rejects invalid reason", async () => {
+    await expect(
+      fns.submitContentReportCF(auth("u1", { childId: "c1", reason: "not_a_reason" }))
+    ).rejects.toThrow("reason invalide");
+  });
+
+  it("rejects message > 1000 chars", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "children/c1/access/u1") return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+    await expect(
+      fns.submitContentReportCF(auth("u1", { childId: "c1", reason: "privacy", message: "x".repeat(1001) }))
+    ).rejects.toThrow("trop long");
+  });
+
+  it("B6.S2 — rejects when reported event does not exist", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "children/c1/access/u1") return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
+      if (p === "events/e-ghost") return { get: jest.fn().mockResolvedValue(no()) };
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+    await expect(
+      fns.submitContentReportCF(auth("u1", { childId: "c1", eventId: "e-ghost", reason: "privacy" }))
+    ).rejects.toThrow("n'existe pas");
+  });
+
+  it("B6.S3 — rejects auto-report (reporter is event author)", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "children/c1/access/u1") return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
+      if (p === "events/e1") return { get: jest.fn().mockResolvedValue(doc({ childId: "c1", userId: "u1" })) };
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+    await expect(
+      fns.submitContentReportCF(auth("u1", { childId: "c1", eventId: "e1", reason: "privacy" }))
+    ).rejects.toThrow("propre contenu");
+  });
+
+  it("creates report when valid (other user's content)", async () => {
+    const addReport = jest.fn().mockResolvedValue({ id: "r-new" });
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "children/c1/access/u1") return { get: jest.fn().mockResolvedValue(doc({ role: "contributor" })) };
+      if (p === "events/e1") return { get: jest.fn().mockResolvedValue(doc({ childId: "c1", userId: "other-user" })) };
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+    mockFirestore.collection.mockImplementation((name) => {
+      if (name === "reports") return { add: addReport };
+      return { add: jest.fn(), where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
+    });
+    const result = await fns.submitContentReportCF(auth("u1", { childId: "c1", eventId: "e1", reason: "privacy", message: "test" }));
+    expect(result).toEqual({ reportId: "r-new" });
+    expect(addReport).toHaveBeenCalledWith(expect.objectContaining({
+      reporterUserId: "u1",
+      childId: "c1",
+      eventId: "e1",
+      reason: "privacy",
+      message: "test",
+      status: "open",
+    }));
+  });
+});
+
+describe("resolveReport (B6.S7 atomic claim)", () => {
+  it("rejects if status is already resolving (another admin in progress)", async () => {
+    const adminMod = require("firebase-admin");
+    adminMod.auth.mockReturnValue({
+      getUser: jest.fn().mockResolvedValue({ uid: "admin1", customClaims: { admin: true } }),
+      deleteUser: jest.fn(),
+    });
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "reports/r1") {
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            childId: "c1",
+            status: "resolving",
+            reporterUserId: "u_reporter",
+          })),
+        };
+      }
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+    await expect(
+      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
+    ).rejects.toThrow("en cours de traitement");
+  });
+
+  it("rejects if status is already resolved", async () => {
+    const adminMod = require("firebase-admin");
+    adminMod.auth.mockReturnValue({
+      getUser: jest.fn().mockResolvedValue({ uid: "admin1", customClaims: { admin: true } }),
+      deleteUser: jest.fn(),
+    });
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "reports/r1") {
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            childId: "c1",
+            status: "resolved",
+            reporterUserId: "u_reporter",
+          })),
+        };
+      }
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+    await expect(
+      fns.resolveReport(auth("admin1", { reportId: "r1", action: "dismiss" }))
+    ).rejects.toThrow("déjà été traité");
   });
 });
