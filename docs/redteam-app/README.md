@@ -29,8 +29,9 @@ Chaque domaine a son MD plan avec :
 |---|---|---|
 | **Lot 0** (5 critiques transversales — T0.2 à T0.6) | 🟢 livré | [LOT0_CLOSURE.md](LOT0_CLOSURE.md) |
 | **A** (bornes UI, 13 gaps) | 🟢 livré | [A_CLOSURE.md](A_CLOSURE.md) |
+| **B1** (sharing co-parent, 7 surfaces) | 🟢 livré | [B1_CLOSURE.md](B1_CLOSURE.md) |
 | 0.1 App Check | ⏸ reporté TOUT DERNIER | [0_APP_CHECK_SETUP.md](0_APP_CHECK_SETUP.md) |
-| B1-B6 | 🟡 plans rédigés | — |
+| B2-B6 | 🟡 plans rédigés | — |
 
 **Légende statut :**
 - ⚪ recon à faire (plan vide, agent à lancer)
