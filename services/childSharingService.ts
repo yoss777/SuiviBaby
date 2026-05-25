@@ -1,5 +1,5 @@
 // services/childSharingService.ts
-import { auth, db } from "@/config/firebase";
+import { auth, db, functions } from "@/config/firebase";
 import {
   collection,
   deleteDoc,
@@ -16,6 +16,7 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { grantChildAccess, revokeChildAccess } from "@/utils/permissions";
 import { captureServiceError } from "@/utils/errorReporting";
 import { createShareInvitationCF } from "@/services/premiumUsageService";
@@ -105,7 +106,13 @@ export async function createShareCode(
 }
 
 /**
- * Utilise un code de partage pour accéder à un enfant
+ * Utilise un code de partage pour accéder à un enfant.
+ *
+ * B1.1 — délègue à la CF transactional redeemShareCodeCF. Les 3 reads/writes
+ * Firestore individuels (race condition) sont remplacés par un seul appel
+ * CF qui fait tout dans une transaction. Le rate limit anti brute-force,
+ * le check d'existence d'accès, et la création du doc access se font
+ * atomiquement côté serveur.
  */
 export async function redeemShareCode(
   code: string,
@@ -114,58 +121,26 @@ export async function redeemShareCode(
     const user = auth.currentUser;
     if (!user) throw new Error("Utilisateur non connecté");
 
-    const codeDoc = await getDoc(doc(db, "shareCodes", code.toUpperCase()));
-
-    if (!codeDoc.exists()) {
+    const redeem = httpsCallable<
+      { code: string },
+      { childId: string; childName: string }
+    >(functions, "redeemShareCodeCF");
+    const result = await redeem({ code: code.toUpperCase() });
+    return result.data;
+  } catch (error: any) {
+    // Mapper les codes d'erreur Firebase Functions en messages user-friendly.
+    if (error?.code === "functions/not-found") {
       throw new Error("Code invalide ou expiré");
     }
-
-    const shareCode = codeDoc.data() as ShareCode;
-
-    // Vérifier si le code a déjà été utilisé
-    if (shareCode.used) {
-      throw new Error("Ce code a déjà été utilisé");
-    }
-
-    // Vérifier si le code n'est pas expiré
-    if (shareCode.expiresAt.toDate() < new Date()) {
-      throw new Error("Ce code a expiré");
-    }
-
-    const accessDoc = await getDoc(
-      doc(db, "children", shareCode.childId, "access", user.uid)
-    );
-    if (accessDoc.exists()) {
+    if (error?.code === "functions/already-exists") {
       throw new Error("Vous avez déjà accès à cet enfant");
     }
-
-    // IMPORTANT: Marquer le code comme utilisé AVANT de créer l'accès
-    // Car les règles Firestore vérifient que used == true ET usedBy == request.auth.uid
-    // Rules also check usedByEmail == request.auth.token.email, so we must pass it
-    if (!user.email) {
-      throw new Error("Vous devez avoir un email associé à votre compte");
+    if (error?.code === "functions/resource-exhausted") {
+      throw new Error("Trop de tentatives. Réessayez dans une minute.");
     }
-    await updateDoc(doc(db, "shareCodes", code.toUpperCase()), {
-      used: true,
-      usedBy: user.uid,
-      usedByEmail: user.email,
-      usedAt: serverTimestamp(),
-    });
-
-    // Créer l'accès pour l'utilisateur invité APRÈS avoir marqué le code comme utilisé
-    await grantChildAccess(
-      shareCode.childId,
-      user.uid,
-      "contributor",
-      shareCode.createdBy,
-      { invitationId: code.toUpperCase() }
-    );
-
-    return {
-      childId: shareCode.childId,
-      childName: shareCode.childName,
-    };
-  } catch (error) {
+    if (error?.code === "functions/failed-precondition") {
+      throw new Error(error.message || "Action impossible");
+    }
     console.error("Erreur lors de l'utilisation du code:", error);
     captureServiceError(error, { service: "childSharing", operation: "redeemShareCode" });
     throw error;
@@ -472,54 +447,25 @@ export async function acceptInvitation(invitationId: string): Promise<void> {
     const user = auth.currentUser;
     if (!user) throw new Error("Utilisateur non connecté");
 
-    const inviteDoc = await getDoc(doc(db, "shareInvitations", invitationId));
-    if (!inviteDoc.exists()) {
+    // B1.4 — délègue à la CF transactional acceptInvitationCF (race-free).
+    const accept = httpsCallable<{ invitationId: string }, { success: boolean }>(
+      functions,
+      "acceptInvitationCF",
+    );
+    await accept({ invitationId });
+  } catch (error: any) {
+    if (error?.code === "functions/not-found") {
       throw new Error("Invitation introuvable");
     }
-
-    const invitation = inviteDoc.data() as ShareInvitation;
-
-    // Vérifier que l'utilisateur est bien le destinataire
-    const userEmail = user.email?.toLowerCase() ?? "";
-    if (
-      invitation.invitedUserId !== user.uid &&
-      invitation.invitedEmail !== userEmail
-    ) {
+    if (error?.code === "functions/permission-denied") {
       throw new Error("Cette invitation ne vous est pas destinée");
     }
-
-    // Vérifier que l'invitation est encore en attente
-    if (invitation.status !== "pending") {
+    if (error?.code === "functions/failed-precondition") {
       throw new Error("Cette invitation a déjà été traitée");
     }
-
-    // Vérifier que l'utilisateur n'a pas déjà accès
-    const existingAccess = await getDoc(
-      doc(db, "children", invitation.childId, "access", user.uid)
-    );
-    if (existingAccess.exists()) {
-      // Marquer quand même l'invitation comme acceptée si l'accès existe déjà
-      await updateDoc(doc(db, "shareInvitations", invitationId), {
-        status: "accepted",
-      });
-      return; // Sortir sans erreur
+    if (error?.code === "functions/resource-exhausted") {
+      throw new Error("Trop de tentatives. Réessayez dans une minute.");
     }
-
-    // IMPORTANT: Créer l'accès AVANT de marquer l'invitation comme acceptée
-    // Car les règles Firestore vérifient que status == 'pending' ou 'accepted'
-    await grantChildAccess(
-      invitation.childId,
-      user.uid,
-      "contributor",
-      invitation.inviterId,
-      { invitationId }
-    );
-
-    // Marquer l'invitation comme acceptée APRÈS avoir créé l'accès
-    await updateDoc(doc(db, "shareInvitations", invitationId), {
-      status: "accepted",
-    });
-  } catch (error) {
     console.error("Erreur lors de l'acceptation de l'invitation:", error);
     captureServiceError(error, { service: "childSharing", operation: "acceptInvitation" });
     throw error;
@@ -664,7 +610,14 @@ export async function cleanupExpiredShareCodes(
 }
 
 /**
- * Retire l'accès d'un parent à un enfant
+ * Retire l'accès d'un parent à un enfant.
+ *
+ * B1.3 — empêche le cas "dernier owner" : si la cible est owner et qu'aucun
+ * autre owner n'existe, on refuse (sinon l'enfant devient orphelin sans
+ * owner pour reprendre la gestion). Ce check n'est pas atomique (race
+ * théorique : 2 owners A et B se suppriment simultanément), mais le risque
+ * est marginal dans un usage humain et la mitigation totale demanderait
+ * une transaction Firestore ou une CF.
  */
 export async function removeParentAccess(
   childId: string,
@@ -683,6 +636,24 @@ export async function removeParentAccess(
 
     if (parentUid === user.uid) {
       throw new Error("Impossible de retirer votre propre accès owner");
+    }
+
+    // B1.3 — Lire l'access doc de la cible. Si la cible est owner, compter
+    // les owners restants après suppression. Si zéro, refuser.
+    const targetAccessRef = doc(db, "children", childId, "access", parentUid);
+    const targetAccess = await getDoc(targetAccessRef);
+    if (targetAccess.exists() && targetAccess.data().role === "owner") {
+      const ownersSnap = await getDocs(
+        query(
+          collection(db, "children", childId, "access"),
+          where("role", "==", "owner"),
+        ),
+      );
+      if (ownersSnap.size <= 1) {
+        throw new Error(
+          "Impossible de retirer le dernier propriétaire de l'enfant. Promouvez d'abord un autre parent."
+        );
+      }
     }
 
     await revokeChildAccess(childId, parentUid);

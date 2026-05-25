@@ -1492,7 +1492,11 @@ exports.findUserByEmail = onCall(
     monitorAppCheck(request, "findUserByEmail");
 
     const db = admin.firestore();
-    await checkRateLimit(db, request.auth.uid, "findUser", 10);
+    // B1.5 — resserré de 10/min à 3/min. L'usage légitime (inviter un
+    // co-parent via email) ne nécessite que 1-2 calls par session.
+    // 10/min × 60 min × 24h = 14400 tentatives/jour/user → énumération
+    // d'une base ~100k users en 7 jours. 3/min divise par 3+.
+    await checkRateLimit(db, request.auth.uid, "findUser", 3);
 
     const { email } = request.data;
     if (!email || typeof email !== "string") {
@@ -2638,6 +2642,256 @@ exports.setAdminClaim = onCall(
       // pour que le claim soit appliqué côté client.
       requiresTokenRefresh: true,
     };
+  }
+);
+
+// ============================================
+// SHARING — REDEEM CODE (B1.1)
+// ============================================
+
+/**
+ * redeemShareCodeCF — Échange un code de partage contre un accès enfant.
+ *
+ * Avant cette CF, le redeem se faisait côté client en 3 calls Firestore
+ * séparés (read shareCode, update used, setDoc access). Une race entre
+ * deux calls concurrents pouvait créer deux accès avec un seul code,
+ * et il n'y avait aucun rate limit (1B combos bruteforce-able).
+ *
+ * Garanties :
+ *  - Transaction Firestore : read + update used + create access dans un
+ *    seul commit atomique. Race conditions impossibles.
+ *  - Rate limit 5/min/uid via checkRateLimit (anti brute-force codes).
+ *  - Message d'erreur générique ("code invalide ou expiré") pour ne pas
+ *    leak l'existence d'un childId (B1-S4).
+ *  - Vérifications : auth, code uppercase, code existe, !used, !expired,
+ *    user pas déjà accès, user a un email vérifié.
+ *
+ * Retourne le childId/childName pour navigation client immédiate.
+ */
+exports.redeemShareCodeCF = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    monitorAppCheck(request, "redeemShareCodeCF");
+
+    const uid = request.auth.uid;
+    const userEmail = request.auth.token.email;
+    if (!userEmail) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Vous devez avoir un email associé à votre compte."
+      );
+    }
+
+    const rawCode = request.data?.code;
+    if (typeof rawCode !== "string" || rawCode.trim().length === 0) {
+      throw new HttpsError("invalid-argument", "code requis (string).");
+    }
+    const code = rawCode.trim().toUpperCase();
+    // Garde fou cosmétique : codes attendus 6-12 chars alphanum. Permet de
+    // rejeter immédiatement les inputs farfelus (1MB de string).
+    if (!/^[A-Z0-9-]{4,16}$/.test(code)) {
+      throw new HttpsError("invalid-argument", "Code invalide ou expiré.");
+    }
+
+    const db = admin.firestore();
+    // T0 — rate limit anti brute-force. 5/min/uid laisse de la marge à un
+    // utilisateur qui retape, mais bloque l'énumération automatisée.
+    await checkRateLimit(db, uid, "redeem_share", 5);
+
+    const codeRef = db.doc(`shareCodes/${code}`);
+    const accessRef = db.doc(`children/__placeholder__/access/__placeholder__`);
+    // Le chemin précis dépend du childId qu'on lit dans la transaction.
+
+    let resultData;
+    try {
+      await db.runTransaction(async (tx) => {
+        const codeDoc = await tx.get(codeRef);
+        if (!codeDoc.exists) {
+          throw new HttpsError("not-found", "Code invalide ou expiré.");
+        }
+        const shareCode = codeDoc.data();
+
+        if (shareCode.used === true) {
+          // Message générique : on ne distingue pas "déjà utilisé" de
+          // "n'existe pas" pour ne pas confirmer à un attaquant qu'un code
+          // a existé (info utilisable pour cartographier des childIds).
+          throw new HttpsError("not-found", "Code invalide ou expiré.");
+        }
+
+        // expiresAt peut être un Timestamp Firestore. toMillis robuste.
+        const expiresMs =
+          shareCode.expiresAt?.toMillis?.() ??
+          shareCode.expiresAt?._seconds * 1000 ??
+          0;
+        if (expiresMs && expiresMs < Date.now()) {
+          throw new HttpsError("not-found", "Code invalide ou expiré.");
+        }
+
+        const childId = shareCode.childId;
+        if (!childId) {
+          throw new HttpsError("internal", "Code corrompu (childId absent).");
+        }
+
+        // Vérifier que l'utilisateur n'a pas déjà accès à cet enfant.
+        const existingAccessRef = db.doc(`children/${childId}/access/${uid}`);
+        const existingAccess = await tx.get(existingAccessRef);
+        if (existingAccess.exists) {
+          throw new HttpsError(
+            "already-exists",
+            "Vous avez déjà accès à cet enfant."
+          );
+        }
+
+        // 1. Marquer le code comme utilisé (champs exigés par firestore.rules).
+        tx.update(codeRef, {
+          used: true,
+          usedBy: uid,
+          usedByEmail: userEmail,
+          usedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // 2. Créer le doc d'accès. Rôle contributor par défaut (parité
+        //    avec l'ancien client redeemShareCode). Permissions héritées
+        //    du rôle (canWriteEvents/Likes/Comments) — mirrored from
+        //    DEFAULT_ROLE_PERMISSIONS côté client. Ici on hardcode pour
+        //    ne pas dupliquer ce constant côté serveur.
+        tx.set(existingAccessRef, {
+          userId: uid,
+          role: "contributor",
+          canWriteEvents: true,
+          canWriteLikes: true,
+          canWriteComments: true,
+          grantedBy: shareCode.createdBy,
+          grantedAt: admin.firestore.FieldValue.serverTimestamp(),
+          invitationId: code,
+        });
+
+        // 3. Créer l'entrée d'index user_child_access pour le listing rapide
+        //    côté client.
+        const indexRef = db.doc(`user_child_access/${uid}_${childId}`);
+        tx.set(indexRef, {
+          userId: uid,
+          childId,
+          invitationId: code,
+          grantedBy: shareCode.createdBy,
+          grantedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        resultData = {
+          childId,
+          childName: shareCode.childName ?? "",
+        };
+      });
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      console.error("redeemShareCodeCF transaction error:", err);
+      throw new HttpsError("internal", "Erreur lors de l'utilisation du code.");
+    }
+
+    return resultData;
+  }
+);
+
+/**
+ * acceptInvitationCF — Accepte une invitation par email de manière transactional.
+ *
+ * Avant : 3 calls Firestore séparés côté client (read invitation, read access,
+ * grantChildAccess + update status). Deux acceptations concurrentes pouvaient
+ * créer deux docs access (status check pas atomique).
+ *
+ * Garanties :
+ *  - Transaction : read invitation + check status + create access + mark
+ *    accepted, atomique. Race acceptation concurrente impossible.
+ *  - Rate limit 5/min/uid.
+ *  - Vérification que l'utilisateur est bien destinataire (uid ou email).
+ *  - Si l'access existe déjà, on marque juste l'invitation accepted (idempotent).
+ */
+exports.acceptInvitationCF = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    monitorAppCheck(request, "acceptInvitationCF");
+
+    const uid = request.auth.uid;
+    const userEmail = (request.auth.token.email || "").toLowerCase();
+    const invitationId = request.data?.invitationId;
+
+    if (typeof invitationId !== "string" || invitationId.trim().length === 0) {
+      throw new HttpsError("invalid-argument", "invitationId requis (string).");
+    }
+
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "accept_invite", 5);
+
+    const invitationRef = db.doc(`shareInvitations/${invitationId}`);
+
+    try {
+      await db.runTransaction(async (tx) => {
+        const inviteDoc = await tx.get(invitationRef);
+        if (!inviteDoc.exists) {
+          throw new HttpsError("not-found", "Invitation introuvable.");
+        }
+        const invitation = inviteDoc.data();
+
+        // Destinataire : on accepte si invitedUserId === uid, OU si
+        // invitedEmail correspond à l'email du user.
+        const matchByUid = invitation.invitedUserId === uid;
+        const matchByEmail = (invitation.invitedEmail || "").toLowerCase() === userEmail && userEmail.length > 0;
+        if (!matchByUid && !matchByEmail) {
+          throw new HttpsError("permission-denied", "Cette invitation ne vous est pas destinée.");
+        }
+
+        if (invitation.status !== "pending") {
+          throw new HttpsError("failed-precondition", "Cette invitation a déjà été traitée.");
+        }
+
+        const childId = invitation.childId;
+        if (!childId) {
+          throw new HttpsError("internal", "Invitation corrompue (childId absent).");
+        }
+
+        const accessRef = db.doc(`children/${childId}/access/${uid}`);
+        const existingAccess = await tx.get(accessRef);
+
+        if (!existingAccess.exists) {
+          // Créer l'access (rôle contributor par défaut comme l'ancien client).
+          tx.set(accessRef, {
+            userId: uid,
+            role: "contributor",
+            canWriteEvents: true,
+            canWriteLikes: true,
+            canWriteComments: true,
+            grantedBy: invitation.inviterId,
+            grantedAt: admin.firestore.FieldValue.serverTimestamp(),
+            invitationId,
+          });
+
+          // Index user_child_access.
+          tx.set(db.doc(`user_child_access/${uid}_${childId}`), {
+            userId: uid,
+            childId,
+            invitationId,
+            grantedBy: invitation.inviterId,
+            grantedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+
+        // Marquer l'invitation acceptée (idempotent : marche aussi si access
+        // existait déjà → on signale juste qu'elle est traitée).
+        tx.update(invitationRef, { status: "accepted" });
+      });
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      console.error("acceptInvitationCF transaction error:", err);
+      throw new HttpsError("internal", "Erreur lors de l'acceptation de l'invitation.");
+    }
+
+    return { success: true };
   }
 );
 

@@ -307,11 +307,15 @@ service cloud.firestore {
     }
 
     match /shareCodes/{code} {
-      // Lecture : uniquement si on a créé le code OU si on a accès à l'enfant
+      // Lecture : restreinte à créateur ou utilisateurs ayant déjà accès à
+      // l'enfant. B1.2 — l'ancienne branche `(used == false && expiresAt > now)`
+      // a été retirée car elle permettait à un attaquant authentifié de
+      // bruteforcer des codes valides (1B combos) et de mapper des childIds.
+      // L'unique chemin légitime de read pour un user externe est désormais
+      // via la CF redeemShareCodeCF (admin SDK, bypass rules).
       allow read: if isSignedIn() && (
         resource.data.createdBy == request.auth.uid ||
-        hasAccess(resource.data.childId) ||
-        (resource.data.used == false && resource.data.expiresAt > request.time)
+        hasAccess(resource.data.childId)
       );
 
       // Création : owner/admin (fallback via ownerId si access manquant)
@@ -321,19 +325,10 @@ service cloud.firestore {
          isAdmin(request.resource.data.childId) ||
          isChildOwner(request.resource.data.childId));
 
-      // Mise à jour : marquer le code comme utilisé (champ used uniquement)
-      allow update: if isSignedIn() &&
-        resource.data.used == false &&
-        request.resource.data.used == true &&
-        request.resource.data.usedBy == request.auth.uid &&
-        request.resource.data.usedByEmail == request.auth.token.email &&
-        request.resource.data.usedAt is timestamp &&
-        request.resource.data.childId == resource.data.childId &&
-        request.resource.data.childName == resource.data.childName &&
-        request.resource.data.code == resource.data.code &&
-        request.resource.data.createdBy == resource.data.createdBy &&
-        request.resource.data.createdAt == resource.data.createdAt &&
-        request.resource.data.expiresAt == resource.data.expiresAt;
+      // Mise à jour : interdite côté client. B1.2 — anciennement, le client
+      // marquait `used:true` directement. Maintenant tout passe par la CF
+      // redeemShareCodeCF (transactional, anti-race).
+      allow update: if false;
 
       // Suppression : uniquement le créateur ou owner de l'enfant
       allow delete: if isSignedIn() && (
