@@ -6,6 +6,7 @@ import { registerPushToken, removePushTokens } from "@/services/pushTokenService
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
 import { signOutGoogle } from "@/services/socialAuthService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   disableBiometric,
   purgeLegacyBiometricCredentials,
@@ -307,12 +308,34 @@ export function AuthProvider({
       // Supprimer les push tokens avant signOut (nécessite auth active)
       const uid = auth.currentUser?.uid;
       if (uid) await removePushTokens(uid).catch(() => {});
+      // B3.S5 — purger le cache boot enfants pour empêcher qu'un futur
+      // user sur le même device hérite des enfants cachés de celui-ci.
+      // Clé dupliquée depuis BabyContext (`@suivibaby_boot_children:{uid}`)
+      // pour éviter un cycle d'import BabyContext ↔ AuthContext.
+      if (uid) {
+        await AsyncStorage.removeItem(`@suivibaby_boot_children:${uid}`).catch(() => {});
+      }
       await signOutGoogle().catch(() => {});
       // Nettoyer le verrou biométrique : il pointait vers cette session.
       // Sans cela, l'écran de login afficherait un bouton biométrique qui
       // déboucherait toujours sur "Session expirée".
       await disableBiometric().catch(() => {});
       await firebaseSignOut(auth);
+      // B3.S3 — wipe défensif des clés AsyncStorage Firebase (refresh token,
+      // user record). firebaseSignOut() est censé le faire, mais c'est async
+      // et peut échouer silencieusement. On itère sur toutes les clés qui
+      // commencent par "firebase:" pour ne dépendre d'aucune convention
+      // interne du SDK (qui peut changer entre versions).
+      try {
+        const allKeys = await AsyncStorage.getAllKeys();
+        const firebaseKeys = allKeys.filter((k) => k.startsWith("firebase:"));
+        if (firebaseKeys.length > 0) {
+          await AsyncStorage.multiRemove(firebaseKeys);
+        }
+      } catch (wipeErr) {
+        // Best-effort : si le wipe échoue, on ne bloque pas le signOut.
+        console.warn("AuthContext: Firebase AsyncStorage wipe failed", wipeErr);
+      }
       if (isMountedRef.current) {
         dispatch({ type: "CLEAR_USER" });
       }

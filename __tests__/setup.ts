@@ -80,11 +80,15 @@ jest.mock("@react-native-community/netinfo", () => ({
   addEventListener: jest.fn(() => jest.fn()),
 }));
 
-// Mock AsyncStorage
+// Mock AsyncStorage. Toutes les méthodes retournent une Promise résolvée
+// pour matcher l'API réelle (les .catch() côté code prod chainent dessus).
 jest.mock("@react-native-async-storage/async-storage", () => ({
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
+  getItem: jest.fn(() => Promise.resolve(null)),
+  setItem: jest.fn(() => Promise.resolve()),
+  removeItem: jest.fn(() => Promise.resolve()),
+  // B3.S3 — utilisés par AuthContext.signOut pour wiper les clés Firebase.
+  getAllKeys: jest.fn(() => Promise.resolve([])),
+  multiRemove: jest.fn(() => Promise.resolve()),
 }));
 
 // Mock expo-constants
