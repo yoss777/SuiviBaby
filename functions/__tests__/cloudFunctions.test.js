@@ -318,14 +318,18 @@ describe("usage quota functions", () => {
     expect(global.fetch).toHaveBeenCalledTimes(4);
   });
 
-  it("consumes export quota for free users", async () => {
+  it("consumes export quota for free users (with childIds, B5.S1)", async () => {
     mockFirestore.doc.mockImplementation((p) => {
       if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
       if (p === "usage_limits/u1") return { get: jest.fn().mockResolvedValue(doc({ pdfExportCount: 0 })) };
+      // B5.S1 — checkChildAccess query
+      if (p === "children/c1/access/u1") return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
       return { get: jest.fn().mockResolvedValue(no()) };
     });
 
-    await expect(fns.consumeUsageQuota(auth("u1", { feature: "export" }))).resolves.toMatchObject({
+    await expect(
+      fns.consumeUsageQuota(auth("u1", { feature: "export", childIds: ["c1"] }))
+    ).resolves.toMatchObject({
       feature: "export",
       allowed: true,
       isUnlimited: false,
@@ -333,6 +337,29 @@ describe("usage quota functions", () => {
       limit: 1,
       remaining: 0,
     });
+  });
+
+  it("B5.S1 — rejects export quota without childIds", async () => {
+    await expect(
+      fns.consumeUsageQuota(auth("u1", { feature: "export" }))
+    ).rejects.toThrow("childIds");
+  });
+
+  it("B5.S1 — rejects export quota for child without access", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "children/c-other/access/u1") return { get: jest.fn().mockResolvedValue(no()) };
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+    await expect(
+      fns.consumeUsageQuota(auth("u1", { feature: "export", childIds: ["c-other"] }))
+    ).rejects.toThrow("accès");
+  });
+
+  it("B5.S1 — rejects export quota with too many childIds", async () => {
+    const tooMany = Array.from({ length: 21 }, (_, i) => `c${i}`);
+    await expect(
+      fns.consumeUsageQuota(auth("u1", { feature: "export", childIds: tooMany }))
+    ).rejects.toThrow("Trop d'enfants");
   });
 });
 
