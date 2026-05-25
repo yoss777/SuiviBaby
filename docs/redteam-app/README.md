@@ -23,6 +23,15 @@ Chaque domaine a son MD plan avec :
 
 **Total brut :** 12 surfaces CRITIQUES, 18 ÉLEVÉ, 17 MOYEN, 6 FAIBLE = **53 surfaces** identifiées.
 
+## Avancement
+
+| Chantier | Statut | Closure |
+|---|---|---|
+| **Lot 0** (5 critiques transversales — T0.2 à T0.6) | 🟢 livré | [LOT0_CLOSURE.md](LOT0_CLOSURE.md) |
+| 0.1 App Check | ⏸ reporté TOUT DERNIER | [0_APP_CHECK_SETUP.md](0_APP_CHECK_SETUP.md) |
+| A — Bornes UI | 🟡 plan rédigé | — |
+| B1-B6 | 🟡 plans rédigés | — |
+
 **Légende statut :**
 - ⚪ recon à faire (plan vide, agent à lancer)
 - 🟡 plan rédigé, exécution non démarrée ou en cours
