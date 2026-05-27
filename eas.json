@@ -50,16 +50,24 @@
     "production": {
       "autoIncrement": true,
       "distribution": "store",
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
       "android": {
         "buildType": "app-bundle",
         "credentialsSource": "remote"
       },
       "ios": {
-        "autoIncrement": true
+        "autoIncrement": true,
+        "image": "macos-sequoia-15.6-xcode-26.2"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6773195663"
+      }
+    }
   }
 }
