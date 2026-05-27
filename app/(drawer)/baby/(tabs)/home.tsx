@@ -65,9 +65,9 @@ import {
   View,
 } from "react-native";
 import { useHeaderRight } from "../../_layout";
-import { HomeSkeleton } from "./home/HomeSkeleton";
-import { HomeSmartContent } from "./home/HomeSmartContent";
-import { homeStyles as styles } from "./home/styles";
+import { HomeSkeleton } from "@/components/suivibaby/home/HomeSkeleton";
+import { HomeSmartContent } from "@/components/suivibaby/home/HomeSmartContent";
+import { homeStyles as styles } from "@/components/suivibaby/home/styles";
 
 // ============================================
 // SKELETON LOADING (P1)
@@ -2260,4 +2260,3 @@ export default function HomeDashboard() {
     </View>
   );
 }
-

@@ -7,7 +7,12 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { Tabs } from "expo-router";
-import { Platform, View } from "react-native";
+import { View } from "react-native";
+
+const hiddenTabOptions = {
+  href: null,
+  tabBarItemStyle: { display: "none" as const },
+};
 
 export default function BabyTabLayout() {
   const colorScheme = useColorScheme() ?? "light";
@@ -83,6 +88,7 @@ export default function BabyTabLayout() {
           options={{
             title: "Plus",
             href: showPlusTab ? undefined : null,
+            tabBarItemStyle: showPlusTab ? undefined : { display: "none" },
             tabBarIcon: ({ color }) => (
               <FontAwesome size={28} name="ellipsis-h" color={color} />
             ),
@@ -92,39 +98,30 @@ export default function BabyTabLayout() {
         {/* Sous-écrans de Plus - cachés de la tab bar mais persistants */}
         <Tabs.Screen
           name="meals"
-          options={{
-            href: null, // Caché de la tab bar
-          }}
+          options={hiddenTabOptions}
         />
         <Tabs.Screen
           name="pumping"
-          options={{
-            href: null,
-          }}
+          options={hiddenTabOptions}
         />
         <Tabs.Screen
           name="immunizations"
-          options={{
-            href: null,
-          }}
+          options={hiddenTabOptions}
         />
         <Tabs.Screen
           name="soins"
-          options={{
-            href: null,
-          }}
+          options={hiddenTabOptions}
         />
         <Tabs.Screen
           name="diapers"
-          options={{
-            href: null,
-          }}
+          options={hiddenTabOptions}
         />
         <Tabs.Screen
           name="stats"
           options={{
             title: "Stats",
             href: showStatsTab ? undefined : null,
+            tabBarItemStyle: showStatsTab ? undefined : { display: "none" },
             tabBarIcon: ({ color }) => (
               <FontAwesome size={28} name="chart-bar" color={color} />
             ),
@@ -132,27 +129,19 @@ export default function BabyTabLayout() {
         />
         <Tabs.Screen
           name="routines"
-          options={{
-            href: null,
-          }}
+          options={hiddenTabOptions}
         />
         <Tabs.Screen
           name="activities"
-          options={{
-            href: null,
-          }}
+          options={hiddenTabOptions}
         />
         <Tabs.Screen
           name="milestones"
-          options={{
-            href: null,
-          }}
+          options={hiddenTabOptions}
         />
         <Tabs.Screen
           name="growth"
-          options={{
-            href: null,
-          }}
+          options={hiddenTabOptions}
         />
       </Tabs>
     </View>

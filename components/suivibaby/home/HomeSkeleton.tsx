@@ -1,4 +1,4 @@
-// app/(drawer)/baby/(tabs)/home/HomeSkeleton.tsx
+// components/suivibaby/home/HomeSkeleton.tsx
 //
 // Loading placeholder for the home tab. Pure UI: a few rounded blocks
 // with a shimmer animation. Extracted from home.tsx (S3-T1a) to keep the

@@ -1,4 +1,4 @@
-// app/(drawer)/baby/(tabs)/home/HomeSmartContent.tsx
+// components/suivibaby/home/HomeSmartContent.tsx
 //
 // "Insights + correlations + upcoming milestones" block under the daily
 // summary on the home tab. Three lists rendered conditionally:

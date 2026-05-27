@@ -1,4 +1,4 @@
-// app/(drawer)/baby/(tabs)/home/styles.ts
+// components/suivibaby/home/styles.ts
 //
 // StyleSheet for the home tab. Extracted from home.tsx (S3-T1f) — pure
 // relocation, no logic change. Imported as `homeStyles` so the rename
