@@ -89,6 +89,24 @@
       ]
     },
     {
+      "collectionGroup": "eventLikes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "childId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "eventComments",
       "queryScope": "COLLECTION",
       "fields": [

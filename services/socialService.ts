@@ -115,7 +115,7 @@ export const ajouterLike = async (
   const userId = getUserId();
 
   // Vérifier si déjà liké
-  const existingLike = await obtenirMonLike(eventId);
+  const existingLike = await obtenirMonLike(eventId, childId);
   if (existingLike) {
     return existingLike.id!;
   }
@@ -141,11 +141,15 @@ export const ajouterLike = async (
 /**
  * Supprimer un like sur un événement
  */
-export const supprimerLike = async (eventId: string): Promise<void> => {
+export const supprimerLike = async (
+  eventId: string,
+  childId: string,
+): Promise<void> => {
   const userId = getUserId();
 
   const q = query(
     collection(db, "eventLikes"),
+    where("childId", "==", childId),
     where("eventId", "==", eventId),
     where("userId", "==", userId),
     limit(1)
@@ -174,7 +178,7 @@ export const toggleLike = async (
 ): Promise<boolean> => {
   let existingLike: EventLike | null = null;
   try {
-    existingLike = await obtenirMonLike(eventId);
+    existingLike = await obtenirMonLike(eventId, childId);
   } catch (error) {
     console.error("[Like] Erreur toggle (get):", error);
     captureServiceError(error, { service: "social", operation: "toggleLike.get" });
@@ -183,7 +187,7 @@ export const toggleLike = async (
 
   if (existingLike) {
     try {
-      await supprimerLike(eventId);
+      await supprimerLike(eventId, childId);
     } catch (error) {
       console.error("[Like] Erreur toggle (delete):", error);
       captureServiceError(error, { service: "social", operation: "toggleLike.delete" });
@@ -206,12 +210,14 @@ export const toggleLike = async (
  * Obtenir le like de l'utilisateur courant sur un événement
  */
 export const obtenirMonLike = async (
-  eventId: string
+  eventId: string,
+  childId: string,
 ): Promise<EventLike | null> => {
   const userId = getUserId();
 
   const q = query(
     collection(db, "eventLikes"),
+    where("childId", "==", childId),
     where("eventId", "==", eventId),
     where("userId", "==", userId),
     limit(1)
@@ -234,9 +240,13 @@ export const obtenirMonLike = async (
 /**
  * Obtenir tous les likes d'un événement
  */
-export const obtenirLikes = async (eventId: string): Promise<EventLike[]> => {
+export const obtenirLikes = async (
+  eventId: string,
+  childId: string,
+): Promise<EventLike[]> => {
   const q = query(
     collection(db, "eventLikes"),
+    where("childId", "==", childId),
     where("eventId", "==", eventId),
     orderBy("createdAt", "desc"),
     limit(500)
@@ -254,10 +264,11 @@ export const obtenirLikes = async (eventId: string): Promise<EventLike[]> => {
  */
 export const obtenirLikeInfo = async (
   eventId: string,
-  currentUserName?: string
+  childId: string,
+  _currentUserName?: string
 ): Promise<LikeInfo> => {
   const userId = getUserId();
-  const likes = await obtenirLikes(eventId);
+  const likes = await obtenirLikes(eventId, childId);
 
   const likedByMe = likes.some((like) => like.userId === userId);
 
@@ -285,7 +296,8 @@ export const obtenirLikeInfo = async (
  * Obtenir les infos de likes pour plusieurs événements (batch)
  */
 export const obtenirLikesInfoBatch = async (
-  eventIds: string[]
+  eventIds: string[],
+  childId: string,
 ): Promise<Record<string, LikeInfo>> => {
   if (eventIds.length === 0) return {};
 
@@ -305,6 +317,7 @@ export const obtenirLikesInfoBatch = async (
 
     const q = query(
       collection(db, "eventLikes"),
+      where("childId", "==", childId),
       where("eventId", "in", batch),
       limit(500)
     );
@@ -343,6 +356,7 @@ export const obtenirLikesInfoBatch = async (
  */
 export const ecouterLikes = (
   eventId: string,
+  childId: string,
   onUpdate: (info: LikeInfo) => void
 ): (() => void) => {
   const userId = getUserId();
@@ -350,6 +364,7 @@ export const ecouterLikes = (
 
   const q = query(
     collection(db, "eventLikes"),
+    where("childId", "==", childId),
     where("eventId", "==", eventId),
     orderBy("createdAt", "desc"),
     limit(500)
@@ -464,10 +479,12 @@ export const supprimerCommentaire = async (
  * Obtenir tous les commentaires d'un événement
  */
 export const obtenirCommentaires = async (
-  eventId: string
+  eventId: string,
+  childId: string,
 ): Promise<EventComment[]> => {
   const q = query(
     collection(db, "eventComments"),
+    where("childId", "==", childId),
     where("eventId", "==", eventId),
     orderBy("createdAt", "asc"),
     limit(500)
@@ -483,9 +500,10 @@ export const obtenirCommentaires = async (
  * Obtenir les infos de commentaires formatées pour l'UI
  */
 export const obtenirCommentaireInfo = async (
-  eventId: string
+  eventId: string,
+  childId: string,
 ): Promise<CommentInfo> => {
-  const comments = await obtenirCommentaires(eventId);
+  const comments = await obtenirCommentaires(eventId, childId);
 
   return {
     count: comments.length,
@@ -497,7 +515,8 @@ export const obtenirCommentaireInfo = async (
  * Obtenir le nombre de commentaires pour plusieurs événements (batch)
  */
 export const obtenirCommentCountsBatch = async (
-  eventIds: string[]
+  eventIds: string[],
+  childId: string,
 ): Promise<Record<string, number>> => {
   if (eventIds.length === 0) return {};
 
@@ -515,6 +534,7 @@ export const obtenirCommentCountsBatch = async (
 
     const q = query(
       collection(db, "eventComments"),
+      where("childId", "==", childId),
       where("eventId", "in", batch),
       limit(500)
     );
