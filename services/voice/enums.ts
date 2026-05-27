@@ -33,6 +33,7 @@ export const TYPES_JALON = [
   "geste_social",
   "coordination",
   "humeur",
+  "photo",
   "autre",
 ] as const;
 

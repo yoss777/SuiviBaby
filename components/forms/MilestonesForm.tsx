@@ -17,17 +17,17 @@ import {
   modifierEvenementOptimistic,
   supprimerJalon,
 } from "@/services/eventsService";
-import { isLocalPhotoUri } from "@/utils/photoStorage";
+import { FIREBASE_STORAGE_BUCKET, isLocalPhotoUri } from "@/utils/photoStorage";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as FileSystem from "expo-file-system";
-import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   StyleSheet,
   Image,
   ActivityIndicator,
+  AppState,
   Text,
   TextInput,
   TouchableOpacity,
@@ -140,8 +140,6 @@ const MOOD_OPTIONS: {
   { value: 5, emoji: "🥰", label: "Rayonnant" },
 ];
 
-const FIREBASE_STORAGE_BUCKET = "samaye-53723.firebasestorage.app";
-
 // ============================================
 // HELPERS
 // ============================================
@@ -153,17 +151,7 @@ const toDate = (value: any): Date => {
   return new Date(value);
 };
 
-const MAX_IMAGE_WIDTH = 1500;
 const IMAGE_QUALITY = 0.8;
-
-const compressImage = async (uri: string): Promise<string> => {
-  const result = await ImageManipulator.manipulateAsync(
-    uri,
-    [{ resize: { width: MAX_IMAGE_WIDTH } }],
-    { compress: IMAGE_QUALITY, format: ImageManipulator.SaveFormat.JPEG },
-  );
-  return result.uri;
-};
 
 const uploadMilestonePhoto = async (
   childId: string,
@@ -171,9 +159,8 @@ const uploadMilestonePhoto = async (
   onProgress?: (progress: number) => void,
 ): Promise<string> => {
   try {
-    const extension = uri.split(".").pop()?.split("?")[0] || "jpg";
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const filePath = `children/${childId}/jalons/${fileName}.${extension}`;
+    const filePath = `children/${childId}/jalons/${fileName}.jpg`;
 
     onProgress?.(10);
 
@@ -269,6 +256,37 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   const [photoUploading, setPhotoUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
+  const applyPickedPhotoResult = useCallback(
+    (
+      result:
+        | ImagePicker.ImagePickerResult
+        | ImagePicker.ImagePickerErrorResult
+        | null,
+    ) => {
+      if (!result) return false;
+
+      if ("code" in result) {
+        console.warn("[MILESTONES_PHOTO] Résultat picker en erreur:", result);
+        return false;
+      }
+
+      if (result.canceled) return false;
+
+      const pickedUri = result.assets?.find((asset) => asset.uri)?.uri;
+      if (!pickedUri) {
+        console.warn("[MILESTONES_PHOTO] Aucun URI retourné par le picker:", result);
+        return false;
+      }
+
+      setPhotoOriginalUri(pickedUri);
+      setPhotoPreviewLoading(true);
+      setPhotoUri(pickedUri);
+      requestAnimationFrame(() => formScroll?.scrollToEnd());
+      return true;
+    },
+    [formScroll],
+  );
+
   // Reset title when type changes
   const handleTypeChange = useCallback((type: JalonType) => {
     setTypeJalon(type);
@@ -281,7 +299,6 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
   // Photo picker
   const handlePickPhoto = useCallback(async () => {
-    onFormStepChange?.(true);
     try {
       setPhotoProcessing(true);
       const permission =
@@ -292,27 +309,46 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 1, // Full quality, compression done by ImageManipulator
+        mediaTypes: ["images"],
+        quality: IMAGE_QUALITY,
         allowsEditing: true, // User can optionally crop (no forced ratio)
       });
 
-      if (!result.canceled && result.assets?.[0]?.uri) {
-        const originalUri = result.assets[0].uri;
-        const compressedUri = await compressImage(originalUri);
-        setPhotoOriginalUri(originalUri);
-        setPhotoPreviewLoading(true);
-        setPhotoUri(compressedUri);
-        requestAnimationFrame(() => formScroll?.scrollToEnd());
-      }
+      applyPickedPhotoResult(result);
     } catch (error) {
       console.error("Erreur sélection photo:", error);
       showAlert("Erreur", "Impossible d'ajouter la photo.");
     } finally {
       setPhotoProcessing(false);
-      onFormStepChange?.(false);
     }
-  }, [formScroll, onFormStepChange, showAlert]);
+  }, [applyPickedPhotoResult, showAlert]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const recoverPendingPhoto = async () => {
+      try {
+        const pendingResult = await ImagePicker.getPendingResultAsync();
+        if (mounted) {
+          applyPickedPhotoResult(pendingResult);
+        }
+      } catch (error) {
+        console.warn("[MILESTONES_PHOTO] Récupération picker impossible:", error);
+      }
+    };
+
+    recoverPendingPhoto();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        recoverPendingPhoto();
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [applyPickedPhotoResult]);
 
   const handleDateHeureChange = useCallback((nextDate: Date) => {
     setDateHeure(nextDate);
@@ -567,7 +603,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       <View style={styles.inputGroup}>
         <Text style={[styles.inputLabel, { color: nc.textLight }]}>Photo</Text>
         <Text style={[styles.photoPolicyHint, { color: nc.textMuted }]}>
-          Gardez les photos dans un cadre privé entre adultes autorisés. Ne partagez pas d'image montrant les parties intimes de l'enfant ou un contenu corporel sensible.
+          {
+            "Gardez les photos dans un cadre privé entre adultes autorisés. Ne partagez pas d'image montrant les parties intimes de l'enfant ou un contenu corporel sensible."
+          }
         </Text>
         {photoProcessing && !photoUri ? (
           <View
@@ -580,7 +618,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             <Text
               style={[styles.photoPlaceholderText, { color: nc.textMuted }]}
             >
-              Préparation de l'image...
+              {"Préparation de l'image..."}
             </Text>
           </View>
         ) : photoUri ? (
