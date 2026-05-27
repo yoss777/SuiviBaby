@@ -66,6 +66,19 @@ type PhotoMilestone = {
   userId?: string;
 };
 
+type GalleryListItem =
+  | {
+      type: "month";
+      key: string;
+      label: string;
+      count: number;
+    }
+  | {
+      type: "row";
+      key: string;
+      photos: PhotoMilestone[];
+    };
+
 // ============================================
 // HELPERS
 // ============================================
@@ -617,24 +630,60 @@ export default function GalleryScreen() {
     return photos.sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [events, hiddenPhotoIds]);
 
-  // Group photos by month
-  const groupedPhotos = useMemo(() => {
-    const groups: { key: string; label: string; count: number; photos: PhotoMilestone[] }[] = [];
-    let currentGroup: typeof groups[number] | null = null;
+  // Group photos by month, then flatten into virtualized headers + rows.
+  const galleryListItems = useMemo<GalleryListItem[]>(() => {
+    const items: GalleryListItem[] = [];
+    const monthCounts = new Map<string, number>();
+    allPhotoMilestones.forEach((photo) => {
+      const monthKey = getMonthKey(photo.date);
+      monthCounts.set(monthKey, (monthCounts.get(monthKey) ?? 0) + 1);
+    });
+
+    let currentMonthKey: string | null = null;
+    let currentRow: PhotoMilestone[] = [];
 
     allPhotoMilestones.forEach((photo) => {
       const monthKey = getMonthKey(photo.date);
 
-      if (!currentGroup || currentGroup.key !== monthKey) {
-        currentGroup = { key: monthKey, label: getMonthLabel(photo.date), count: 0, photos: [] };
-        groups.push(currentGroup);
+      if (currentMonthKey !== monthKey) {
+        if (currentRow.length > 0 && currentMonthKey) {
+          items.push({
+            type: "row",
+            key: `${currentMonthKey}-row-${items.length}`,
+            photos: currentRow,
+          });
+          currentRow = [];
+        }
+
+        currentMonthKey = monthKey;
+        items.push({
+          type: "month",
+          key: `month-${monthKey}`,
+          label: getMonthLabel(photo.date),
+          count: monthCounts.get(monthKey) ?? 0,
+        });
       }
 
-      currentGroup.photos.push(photo);
-      currentGroup.count = currentGroup.photos.length;
+      currentRow.push(photo);
+      if (currentRow.length === NUM_COLUMNS && currentMonthKey) {
+        items.push({
+          type: "row",
+          key: `${currentMonthKey}-row-${photo.id}`,
+          photos: currentRow,
+        });
+        currentRow = [];
+      }
     });
 
-    return groups;
+    if (currentRow.length > 0 && currentMonthKey) {
+      items.push({
+        type: "row",
+        key: `${currentMonthKey}-row-last`,
+        photos: currentRow,
+      });
+    }
+
+    return items;
   }, [allPhotoMilestones]);
 
   // Data loading - load all jalons (not just 30 days)
@@ -882,19 +931,23 @@ export default function GalleryScreen() {
     [allPhotoMilestones],
   );
 
-  // Render monthly group
-  const renderMonthGroup = useCallback(({
+  const renderGalleryItem = useCallback(({
     item,
   }: {
-    item: { key: string; label: string; count: number; photos: PhotoMilestone[] };
-  }) => (
-    <View>
-      <View style={styles.monthHeader}>
-        <Text style={[styles.monthLabel, { color: nc.textStrong }]}>{item.label}</Text>
-        <Text style={[styles.monthCount, { color: nc.textLight }]}>
-          {item.count} photo{item.count > 1 ? "s" : ""}
-        </Text>
-      </View>
+    item: GalleryListItem;
+  }) => {
+    if (item.type === "month") {
+      return (
+        <View style={styles.monthHeader}>
+          <Text style={[styles.monthLabel, { color: nc.textStrong }]}>{item.label}</Text>
+          <Text style={[styles.monthCount, { color: nc.textLight }]}>
+            {item.count} photo{item.count > 1 ? "s" : ""}
+          </Text>
+        </View>
+      );
+    }
+
+    return (
       <View style={styles.monthGrid}>
         {item.photos.map((photo) => (
           <PhotoThumbnail
@@ -909,9 +962,13 @@ export default function GalleryScreen() {
             nc={nc}
           />
         ))}
+        {item.photos.length < NUM_COLUMNS &&
+          Array.from({ length: NUM_COLUMNS - item.photos.length }).map((_, index) => (
+            <View key={`spacer-${index}`} style={styles.thumbContainer} />
+          ))}
       </View>
-    </View>
-  ), [handlePhotoPress, canManageContent, handleEditPhoto, likesInfo, newEventIds, newEventTypes, nc]);
+    );
+  }, [handlePhotoPress, canManageContent, handleEditPhoto, likesInfo, newEventIds, newEventTypes, nc]);
 
   // Pull-to-refresh
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -974,14 +1031,14 @@ export default function GalleryScreen() {
           </View>
         ) : (
           <FlatList
-            data={groupedPhotos}
+            data={galleryListItems}
             keyExtractor={(item) => item.key}
-            renderItem={renderMonthGroup}
+            renderItem={renderGalleryItem}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            initialNumToRender={3}
-            maxToRenderPerBatch={2}
-            windowSize={5}
+            initialNumToRender={18}
+            maxToRenderPerBatch={12}
+            windowSize={7}
             removeClippedSubviews={true}
             refreshControl={
               <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
