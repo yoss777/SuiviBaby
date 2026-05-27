@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dimensions,
   ImageErrorEventData,
-  NativeSyntheticEvent,
   Pressable,
   StyleSheet,
   Text,
@@ -95,7 +94,7 @@ const PolaroidCard = ({
   const hasSocialInfo = hasLikes || hasComments;
   const [imageError, setImageError] = useState(false);
 
-  const handleImageError = useCallback((_e: NativeSyntheticEvent<ImageErrorEventData>) => {
+  const handleImageError = useCallback((_e: ImageErrorEventData) => {
     setImageError(true);
   }, []);
 
@@ -293,7 +292,7 @@ export const PolaroidGallery = ({
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: nc.textStrong }]}>Souvenirs</Text>
-        {photos.length > 0 && onSeeAll && (
+        {onSeeAll && (
           <Pressable
             onPress={onSeeAll}
             style={styles.seeAllButton}

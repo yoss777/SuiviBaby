@@ -15,6 +15,8 @@ import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 
 type MilestoneEventWithId = JalonEvent & { id: string };
 
+const MOMENTS_EVENT_PREVIEW_LIMIT = 500;
+
 export type MoodEntry = {
   id: string;
   date: Date;
@@ -137,7 +139,11 @@ export function useMomentsData(
           refreshResolveRef.current = null;
         }
       },
-      { type: "jalon", waitForServer: true, limite: 100 },
+      {
+        type: "jalon",
+        waitForServer: true,
+        limite: MOMENTS_EVENT_PREVIEW_LIMIT,
+      },
       () => {
         setLoaded(true);
         setLoadError(true);
@@ -159,7 +165,7 @@ export function useMomentsData(
       if (!childId) return [];
       return obtenirEvenements(childId, {
         type: "jalon",
-        limite: 100,
+        limite: MOMENTS_EVENT_PREVIEW_LIMIT,
         source: "server",
       }) as Promise<MilestoneEventWithId[]>;
     },
