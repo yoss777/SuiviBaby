@@ -28,6 +28,7 @@ import {
   Image,
   ActivityIndicator,
   AppState,
+  Platform,
   Text,
   TextInput,
   TouchableOpacity,
@@ -311,13 +312,31 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         quality: IMAGE_QUALITY,
-        allowsEditing: true, // User can optionally crop (no forced ratio)
+        // iOS: allowsEditing forces a locked square crop (Apple constraint) →
+        // off until we ship a custom in-form crop UI (see memory: photo crop UX).
+        // Android: native crop is free-form and well-behaved → keep it on.
+        allowsEditing: Platform.OS === "android",
+        // iOS: use Current (no transcoding) to avoid "Cannot load
+        // representation" errors that happen with Compatible/Automatic on
+        // some iCloud photos or HEIC variants. Downstream upload via
+        // FileSystem.uploadAsync streams the file as-is anyway.
+        ...(Platform.OS === "ios" && {
+          preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
+        }),
       });
 
       applyPickedPhotoResult(result);
     } catch (error) {
-      console.error("Erreur sélection photo:", error);
-      showAlert("Erreur", "Impossible d'ajouter la photo.");
+      const msg = (error as Error)?.message ?? "";
+      if (msg.includes("Cannot load representation")) {
+        showAlert(
+          "Image non disponible",
+          "Cette photo n'a pas pu être chargée (souvent un fichier iCloud non téléchargé). Téléchargez-la dans l'app Photos puis réessayez, ou choisissez une autre image.",
+        );
+      } else {
+        console.error("Erreur sélection photo:", error);
+        showAlert("Erreur", "Impossible d'ajouter la photo.");
+      }
     } finally {
       setPhotoProcessing(false);
     }
