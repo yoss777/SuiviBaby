@@ -59,27 +59,15 @@ interface DateTimeSectionRowProps {
   heureFinMinimumDate?: Date;
   heureFinMaximumDate?: Date;
 
-  // Contraintes globales sur la date principale (simple mode) et la date
-  // début (chrono mode). Évite que l'utilisateur saisisse une date que
-  // la CF refusera (validateEventData : futur ≤ +5min, passé ≥ −365j).
-  // Si non fournis, défaut = bornes CF actuelles.
+  // Contraintes optionnelles sur la date principale (simple mode) et la date
+  // début (chrono mode). Aucune borne par défaut : la validation des limites
+  // CF (futur ≤ +5min, passé ≥ −365j) doit rester côté onSubmit du form,
+  // sinon le picker bloque l'utilisateur quand l'heure courante avance ou
+  // remet brutalement les valeurs en place pendant la saisie.
+  // Si un caller veut quand même imposer des bornes au picker (ex: add-baby
+  // qui interdit les dates futures), il les passe explicitement.
   minimumDate?: Date;
   maximumDate?: Date;
-}
-
-/**
- * Bornes par défaut alignées sur validateEventData côté CF :
- *  - max = maintenant + 5 minutes (tolérance d'écart d'horloge serveur)
- *  - min = maintenant − 365 jours (1 an de rétro-saisie)
- * Calculées à la demande pour rester fraîches à chaque render. Pas de cache
- * agressif (les pickers natifs gèrent le re-clamp eux-mêmes).
- */
-function defaultEventDateBounds(): { minimumDate: Date; maximumDate: Date } {
-  const now = Date.now();
-  return {
-    minimumDate: new Date(now - 365 * 24 * 60 * 60 * 1000),
-    maximumDate: new Date(now + 5 * 60 * 1000),
-  };
 }
 
 // ============================================
@@ -133,11 +121,6 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
 }: DateTimeSectionRowProps) {
   const nc = getNeutralColors(colorScheme);
 
-  // Defaults aligned with validateEventData CF bounds (T0.5/A audit).
-  const defaults = defaultEventDateBounds();
-  const effectiveMin = minimumDate ?? defaults.minimumDate;
-  const effectiveMax = maximumDate ?? defaults.maximumDate;
-
   // Computed duration
   const computedDuration = useMemo(() => {
     if (!showDuration || !heureDebut || !heureFin) return null;
@@ -161,8 +144,8 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
           mode="date"
           colorScheme={colorScheme}
           disabled={disabled}
-          minimumDate={effectiveMin}
-          maximumDate={effectiveMax}
+          minimumDate={minimumDate}
+          maximumDate={maximumDate}
           onChange={(date) => {
             const next = new Date(value);
             next.setFullYear(
@@ -255,8 +238,8 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
           mode="date"
           colorScheme={colorScheme}
           disabled={disabled}
-          minimumDate={effectiveMin}
-          maximumDate={effectiveMax}
+          minimumDate={minimumDate}
+          maximumDate={maximumDate}
           onChange={handleHeureDebutDateChange}
           onPickerToggle={onPickerToggle}
           valueStyle="small"
