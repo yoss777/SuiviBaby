@@ -38,6 +38,27 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+// Share codes are 6 characters, alphanumeric uppercase (A-Z, 0-9).
+const SHARE_CODE_LENGTH = 6;
+const SHARE_CODE_ALLOWED = /[^A-Z0-9]/g;
+const PENDING_CHILD_TIMEOUT_MS = 10_000;
+
+// Sanitize error messages before showing them to the user. Service-level
+// errors with mapped messages (short, user-friendly French) pass through.
+// Anything else (Firebase internals, stack traces, network errors) becomes
+// a generic message — never leak raw Firebase error text to the UI.
+function sanitizeError(error: unknown, fallback: string): string {
+  if (!error || typeof error !== "object") return fallback;
+  const msg = (error as { message?: unknown }).message;
+  if (typeof msg !== "string") return fallback;
+  // Mapped service errors are short and don't contain technical prefixes.
+  if (msg.length > 120) return fallback;
+  if (/FirebaseError|functions\/|internal|unknown|network request/i.test(msg)) {
+    return fallback;
+  }
+  return msg;
+}
+
 export default function JoinChildScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -61,13 +82,43 @@ export default function JoinChildScreen() {
   >(null);
   const [pendingChildId, setPendingChildId] = useState<string | null>(null);
   const hasNavigatedRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const pendingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [switchPromptVisible, setSwitchPromptVisible] = useState(false);
   const [switchTarget, setSwitchTarget] = useState<Child | null>(null);
   const [isPreparingChild, setIsPreparingChild] = useState(false);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (pendingTimeoutRef.current) {
+        clearTimeout(pendingTimeoutRef.current);
+        pendingTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   const queueNavigateToChild = useCallback((childId: string) => {
     hasNavigatedRef.current = false;
     setPendingChildId(childId);
-  }, []);
+    // Safety net: if the child doesn't appear in the local list within
+    // PENDING_CHILD_TIMEOUT_MS (Firestore listener latency, transient
+    // perms issue, etc.), surface the situation instead of staying stuck.
+    if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
+    pendingTimeoutRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
+      pendingTimeoutRef.current = null;
+      setPendingChildId((current) => {
+        if (current !== childId) return current;
+        showAlert(
+          "Synchronisation en cours",
+          "Le profil de l'enfant n'est pas encore arrivé. Réessayez dans quelques secondes ou tirez la liste vers le bas.",
+        );
+        return null;
+      });
+    }, PENDING_CHILD_TIMEOUT_MS);
+  }, [showAlert]);
 
   const prefetchTodayForChild = useCallback(async (child: Child) => {
     try {
@@ -109,6 +160,7 @@ export default function JoinChildScreen() {
     });
 
     const unsubscribe = listenToPendingInvitations((invites) => {
+      if (!isMountedRef.current) return;
       setPendingInvitations(invites);
       setLoadingInvitations(false);
     });
@@ -121,6 +173,11 @@ export default function JoinChildScreen() {
     if (babyLoading || !childrenLoaded) return;
     const matchedChild = children.find((child) => child.id === pendingChildId);
     if (!matchedChild) return;
+    // Child just appeared in the local list — cancel the safety timeout.
+    if (pendingTimeoutRef.current) {
+      clearTimeout(pendingTimeoutRef.current);
+      pendingTimeoutRef.current = null;
+    }
     const hasVisibleActiveChild =
       !!activeChild && children.some((child) => child.id === activeChild.id);
     if (hasVisibleActiveChild && children.length > 1) {
@@ -143,32 +200,41 @@ export default function JoinChildScreen() {
   ]);
 
   const handleUseCode = useCallback(async () => {
-    if (!shareCode.trim()) {
-      showAlert("Erreur", "Veuillez saisir un code");
+    if (isLoadingCode) return; // Guard against double-tap during state flush.
+    const cleaned = shareCode.toUpperCase().replace(SHARE_CODE_ALLOWED, "");
+    if (cleaned.length !== SHARE_CODE_LENGTH) {
+      showAlert("Erreur", `Le code doit contenir ${SHARE_CODE_LENGTH} caractères (lettres et chiffres).`);
       return;
     }
 
     setIsLoadingCode(true);
     try {
-      const result = await redeemShareCode(shareCode.trim().toUpperCase());
+      const result = await redeemShareCode(cleaned);
+      if (!isMountedRef.current) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Code validé avec succès");
       queueNavigateToChild(result.childId);
       setShareCode("");
-    } catch (error: any) {
+    } catch (error) {
+      if (!isMountedRef.current) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast(error.message || "Code invalide. Réessayez.");
-      showAlert("Erreur", error.message || "Code invalide");
+      const msg = sanitizeError(error, "Code invalide. Réessayez.");
+      showToast(msg);
+      showAlert("Erreur", msg);
     } finally {
-      setIsLoadingCode(false);
+      if (isMountedRef.current) setIsLoadingCode(false);
     }
-  }, [shareCode, showAlert, showToast, queueNavigateToChild]);
+  }, [isLoadingCode, shareCode, showAlert, showToast, queueNavigateToChild]);
 
   const handleAcceptInvitation = useCallback(
     async (invitationId: string, childName: string) => {
+      // Block if any invitation is being processed (prevents parallel
+      // accept/reject from a fast double-tap or spam across rows).
+      if (processingInvitation) return;
       setProcessingInvitation(invitationId);
       try {
         await acceptInvitation(invitationId);
+        if (!isMountedRef.current) return;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         showToast(`Invitation pour ${childName} acceptée`);
         const accepted = pendingInvitations.find(
@@ -177,24 +243,22 @@ export default function JoinChildScreen() {
         if (accepted?.childId) {
           queueNavigateToChild(accepted.childId);
         }
-      } catch (error: any) {
+      } catch (error) {
+        if (!isMountedRef.current) return;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        showToast(
-          error.message || "Impossible d'accepter l'invitation. Réessayez.",
-        );
-        showAlert(
-          "Erreur",
-          error.message || "Impossible d'accepter l'invitation",
-        );
+        const msg = sanitizeError(error, "Impossible d'accepter l'invitation. Réessayez.");
+        showToast(msg);
+        showAlert("Erreur", msg);
       } finally {
-        setProcessingInvitation(null);
+        if (isMountedRef.current) setProcessingInvitation(null);
       }
     },
-    [pendingInvitations, queueNavigateToChild, showAlert, showToast],
+    [processingInvitation, pendingInvitations, queueNavigateToChild, showAlert, showToast],
   );
 
   const handleRejectInvitation = useCallback(
     async (invitationId: string) => {
+      if (processingInvitation) return;
       showAlert(
         "Refuser l'invitation",
         "Êtes-vous sûr de vouloir refuser cette invitation ?",
@@ -207,25 +271,28 @@ export default function JoinChildScreen() {
               setProcessingInvitation(invitationId);
               try {
                 await rejectInvitation(invitationId);
+                if (!isMountedRef.current) return;
                 Haptics.notificationAsync(
                   Haptics.NotificationFeedbackType.Success,
                 );
                 showToast("Invitation refusée");
               } catch (error) {
+                if (!isMountedRef.current) return;
                 Haptics.notificationAsync(
                   Haptics.NotificationFeedbackType.Error,
                 );
-                showToast("Impossible de refuser l'invitation. Réessayez.");
-                showAlert("Erreur", "Impossible de refuser l'invitation");
+                const msg = sanitizeError(error, "Impossible de refuser l'invitation. Réessayez.");
+                showToast(msg);
+                showAlert("Erreur", msg);
               } finally {
-                setProcessingInvitation(null);
+                if (isMountedRef.current) setProcessingInvitation(null);
               }
             },
           },
         ],
       );
     },
-    [showAlert, showToast],
+    [processingInvitation, showAlert, showToast],
   );
 
   const handleSwitchConfirm = useCallback(() => {
@@ -476,9 +543,12 @@ export default function JoinChildScreen() {
                     placeholder="ABC123"
                     placeholderTextColor={nc.textLight}
                     value={shareCode}
-                    onChangeText={(text) => setShareCode(text.toUpperCase())}
+                    onChangeText={(text) =>
+                      setShareCode(text.toUpperCase().replace(SHARE_CODE_ALLOWED, ""))
+                    }
                     autoCapitalize="characters"
-                    maxLength={6}
+                    autoCorrect={false}
+                    maxLength={SHARE_CODE_LENGTH}
                     editable={!isLoadingCode}
                     accessibilityLabel="Code de partage"
                   />
