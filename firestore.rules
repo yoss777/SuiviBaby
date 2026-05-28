@@ -334,10 +334,15 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid;
 
       // Création/Mise à jour : owner ou via invitation/code pour soi
+      // Note: isChildOwner regarde le doc enfant (ownerId), isOwner regarde
+      // l'access doc. Le bootstrap (création de l'enfant + premier access) doit
+      // utiliser isChildOwner sinon on a une race condition : au moment où on
+      // crée l'access doc, hasAccess() ne peut pas encore le voir.
       allow create, update: if isSignedIn() &&
         request.resource.data.userId is string &&
         request.resource.data.childId is string &&
-        (isOwner(request.resource.data.childId) ||
+        (isChildOwner(request.resource.data.childId) ||
+          isOwner(request.resource.data.childId) ||
           (request.auth.uid == request.resource.data.userId &&
             (isValidInvitation(request.resource.data.childId) ||
              isValidShareCode(request.resource.data.childId))));

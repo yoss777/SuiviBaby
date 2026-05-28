@@ -18,6 +18,7 @@ import * as Haptics from "expo-haptics";
 import { db } from "@/config/firebase";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
+import { formatBirthDate, getAgeLabel } from "@/utils/ageUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Child } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -123,40 +124,14 @@ export default function HiddenChildrenScreen() {
     return () => clearTimeout(timeoutId);
   }, [hiddenChildren.length, loading, router]);
 
-  // P17a: Memoize calculateAge function
-  const calculateAge = useCallback((birthDate: string) => {
-    const [day, month, year] = birthDate.split("/").map(Number);
-    const birth = new Date(year, month - 1, day);
-    const today = new Date();
-    let totalMonths =
-      (today.getFullYear() - birth.getFullYear()) * 12 +
-      (today.getMonth() - birth.getMonth());
-    if (today.getDate() < birth.getDate()) {
-      totalMonths -= 1;
-    }
-    if (totalMonths < 0) totalMonths = 0;
-
-    const years = Math.floor(totalMonths / 12);
-    const months = totalMonths % 12;
-
-    if (years === 0) {
-      return `${totalMonths} mois`;
-    } else if (months === 0) {
-      return years === 1 ? `${years} an` : `${years} ans`;
-    } else {
-      const yearText = years === 1 ? "an" : "ans";
-      return `${years} ${yearText} ${months} mois`;
-    }
-  }, []);
-
-  // P17a: Memoize age map for all hidden children
+  // P17a: Memoize age map for all hidden children (centralized in ageUtils)
   const ageMap = useMemo(() => {
     const map: Record<string, string> = {};
     hiddenChildren.forEach((child) => {
-      map[child.id] = calculateAge(child.birthDate);
+      map[child.id] = getAgeLabel(child.birthDate);
     });
     return map;
-  }, [hiddenChildren, calculateAge]);
+  }, [hiddenChildren]);
 
   const handleRestoreChild = (childId: string, childName: string) => {
     setChildToRestore({ id: childId, name: childName });
@@ -266,7 +241,7 @@ export default function HiddenChildrenScreen() {
                     style={styles.summaryContent}
                     accessible={true}
                     accessibilityRole="summary"
-                    accessibilityLabel={`${child.name}, ${ageText}, né le ${child.birthDate}`}
+                    accessibilityLabel={`${child.name}, ${ageText}, né le ${formatBirthDate(child.birthDate)}`}
                   >
                     <View
                       style={[
@@ -296,7 +271,7 @@ export default function HiddenChildrenScreen() {
                         ]}
                         numberOfLines={1}
                       >
-                        {ageText} • {child.birthDate}
+                        {ageText} • {formatBirthDate(child.birthDate)}
                       </Text>
                     </View>
                   </View>

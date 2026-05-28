@@ -2,7 +2,7 @@
 // Manages promotional content display on the dashboard
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getAgeInMonths } from "@/utils/ageUtils";
+import { getAgeInMonths, type BirthDateInput } from "@/utils/ageUtils";
 import {
   dismissPromo as dismissPromoService,
   fetchActivePromos,
@@ -14,7 +14,7 @@ import type { Promotion, UserPromos } from "@/types/promo";
 import { DEFAULT_USER_PROMOS } from "@/types/promo";
 
 interface UsePromosParams {
-  babyBirthDate: string | Date | null;
+  babyBirthDate: BirthDateInput;
   marketingEnabled: boolean;
 }
 

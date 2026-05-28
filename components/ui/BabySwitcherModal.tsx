@@ -14,6 +14,7 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import type { Child } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { getAgeLabel } from "@/utils/ageUtils";
 
 interface BabySwitcherModalProps {
   visible: boolean;
@@ -21,31 +22,6 @@ interface BabySwitcherModalProps {
   activeChild: Child | null;
   onSelect: (child: Child) => void;
   onClose: () => void;
-}
-
-function calculateAge(birthDate: string): string {
-  const [day, month, year] = birthDate.split("/").map(Number);
-  const birth = new Date(year, month - 1, day);
-  const today = new Date();
-  let totalMonths =
-    (today.getFullYear() - birth.getFullYear()) * 12 +
-    (today.getMonth() - birth.getMonth());
-  if (today.getDate() < birth.getDate()) {
-    totalMonths -= 1;
-  }
-  if (totalMonths < 0) totalMonths = 0;
-
-  const years = Math.floor(totalMonths / 12);
-  const months = totalMonths % 12;
-
-  if (years === 0) {
-    return `${totalMonths} mois`;
-  } else if (months === 0) {
-    return years === 1 ? `${years} an` : `${years} ans`;
-  } else {
-    const yearText = years === 1 ? "an" : "ans";
-    return `${years} ${yearText} ${months} mois`;
-  }
 }
 
 export function BabySwitcherModal({
@@ -83,7 +59,7 @@ export function BabySwitcherModal({
 
           {childOptions.map((child) => {
             const isActive = child.id === activeChild?.id;
-            const ageText = calculateAge(child.birthDate);
+            const ageText = getAgeLabel(child.birthDate);
 
             return (
               <TouchableOpacity

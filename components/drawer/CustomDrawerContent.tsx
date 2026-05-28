@@ -29,7 +29,7 @@ import { masquerEnfant, obtenirPreferencesNotifications } from "@/services/userP
 import { getUserPromoState, fetchActivePromos, trackClick, dismissPromo as dismissPromoService } from "@/services/promoService";
 import { ReferralCard } from "@/components/suivibaby/dashboard/ReferralCard";
 import { PromoBanner } from "@/components/suivibaby/dashboard/PromoBanner";
-import { getAgeInMonths } from "@/utils/ageUtils";
+import { formatBirthDate, getAgeInMonths, getAgeLabel } from "@/utils/ageUtils";
 import { db } from "@/config/firebase";
 import type { ChildRole } from "@/types/permissions";
 
@@ -145,31 +145,9 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     }
   }, [children.length, childrenLoaded, pathname, router]);
 
-  // Calculate baby's age in years and months
-  const calculateAge = useCallback((birthDate: string) => {
-    const [day, month, year] = birthDate.split("/").map(Number);
-    const birth = new Date(year, month - 1, day);
-    const today = new Date();
-    let totalMonths =
-      (today.getFullYear() - birth.getFullYear()) * 12 +
-      (today.getMonth() - birth.getMonth());
-    if (today.getDate() < birth.getDate()) {
-      totalMonths -= 1;
-    }
-    if (totalMonths < 0) totalMonths = 0;
-
-    const years = Math.floor(totalMonths / 12);
-    const months = totalMonths % 12;
-
-    if (years === 0) {
-      return `${totalMonths} mois`;
-    } else if (months === 0) {
-      return years === 1 ? `${years} an` : `${years} ans`;
-    } else {
-      const yearText = years === 1 ? "an" : "ans";
-      return `${years} ${yearText} ${months} mois`;
-    }
-  }, []);
+  // Centralized in utils/ageUtils — getAgeLabel handles legacy DD/MM/YYYY
+  // strings and Firestore Timestamps transparently.
+  const calculateAge = getAgeLabel;
 
   const handleSignOut = useCallback(() => {
     setShowSignOutModal(true);
@@ -308,7 +286,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
                       { color: itemColor, opacity: 0.7 },
                     ]}
                   >
-                    {ageText} • {child.birthDate}
+                    {ageText} • {formatBirthDate(child.birthDate)}
                   </Text>
                 </View>
               </TouchableOpacity>

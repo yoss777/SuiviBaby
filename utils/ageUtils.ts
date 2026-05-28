@@ -9,18 +9,49 @@ export type AgeTier =
   | "preschooler"; // 24+ mois
 
 /**
- * Parse a birth date from DD/MM/YYYY string or Date object
+ * Accepts:
+ * - Date object
+ * - Firestore Timestamp ({ toDate() } or { seconds, nanoseconds })
+ * - Legacy DD/MM/YYYY string (older docs in DB)
  */
-function parseBirthDate(birthDate: string | Date): Date {
+export type BirthDateInput =
+  | Date
+  | string
+  | { toDate: () => Date }
+  | { seconds: number; nanoseconds?: number }
+  | null
+  | undefined;
+
+export function parseBirthDateOrNull(birthDate: BirthDateInput): Date | null {
+  const parsed = parseBirthDate(birthDate);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseBirthDate(birthDate: BirthDateInput): Date {
+  if (!birthDate) return new Date(NaN);
   if (birthDate instanceof Date) return birthDate;
-  const [day, month, year] = birthDate.split("/").map(Number);
+  if (typeof birthDate === "object") {
+    if ("toDate" in birthDate && typeof birthDate.toDate === "function") {
+      return birthDate.toDate();
+    }
+    if ("seconds" in birthDate && typeof birthDate.seconds === "number") {
+      return new Date(birthDate.seconds * 1000);
+    }
+    return new Date(NaN);
+  }
+  // Legacy DD/MM/YYYY string format
+  const parts = birthDate.split("/").map(Number);
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
+    return new Date(NaN);
+  }
+  const [day, month, year] = parts;
   return new Date(year, month - 1, day);
 }
 
 /**
  * Get age in days
  */
-export function getAgeInDays(birthDate: string | Date): number {
+export function getAgeInDays(birthDate: BirthDateInput): number {
   const birth = parseBirthDate(birthDate);
   const now = new Date();
   const diffMs = now.getTime() - birth.getTime();
@@ -30,14 +61,14 @@ export function getAgeInDays(birthDate: string | Date): number {
 /**
  * Get age in weeks (floored)
  */
-export function getAgeInWeeks(birthDate: string | Date): number {
+export function getAgeInWeeks(birthDate: BirthDateInput): number {
   return Math.floor(getAgeInDays(birthDate) / 7);
 }
 
 /**
  * Get age in months (calendar-based, same logic as existing calculateAge)
  */
-export function getAgeInMonths(birthDate: string | Date): number {
+export function getAgeInMonths(birthDate: BirthDateInput): number {
   const birth = parseBirthDate(birthDate);
   const now = new Date();
   let totalMonths =
@@ -52,7 +83,7 @@ export function getAgeInMonths(birthDate: string | Date): number {
 /**
  * Get the age tier based on age in months
  */
-export function getAgeTier(birthDate: string | Date): AgeTier {
+export function getAgeTier(birthDate: BirthDateInput): AgeTier {
   const months = getAgeInMonths(birthDate);
   if (months < 1) return "newborn";
   if (months < 6) return "infant";
@@ -64,7 +95,7 @@ export function getAgeTier(birthDate: string | Date): AgeTier {
 /**
  * Get formatted age label: "2 mois et 3 semaines", "1 an 4 mois", etc.
  */
-export function getAgeLabel(birthDate: string | Date): string {
+export function getAgeLabel(birthDate: BirthDateInput): string {
   const birth = parseBirthDate(birthDate);
   const now = new Date();
 
@@ -100,9 +131,21 @@ export function getAgeLabel(birthDate: string | Date): string {
 }
 
 /**
+ * Format a birth date for display (handles legacy DD/MM/YYYY string and
+ * Firestore Timestamp). Returns "" if the date can't be parsed.
+ */
+export function formatBirthDate(birthDate: BirthDateInput): string {
+  // Keep legacy strings as-is — they're already in DD/MM/YYYY for display.
+  if (typeof birthDate === "string") return birthDate;
+  const parsed = parseBirthDate(birthDate);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("fr-FR");
+}
+
+/**
  * Get a short age label for compact display: "2m", "1a4m"
  */
-export function getAgeShortLabel(birthDate: string | Date): string {
+export function getAgeShortLabel(birthDate: BirthDateInput): string {
   const totalMonths = getAgeInMonths(birthDate);
   if (totalMonths === 0) {
     const weeks = getAgeInWeeks(birthDate);

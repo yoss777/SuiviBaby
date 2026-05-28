@@ -17,6 +17,7 @@ import {
   MilestoneTimelineCard,
 } from "@/components/suivibaby/dashboard";
 import type { useSmartContent } from "@/hooks/useSmartContent";
+import { getAgeInWeeks, type BirthDateInput } from "@/utils/ageUtils";
 import React from "react";
 import { View } from "react-native";
 
@@ -30,7 +31,7 @@ interface HomeSmartContentProps {
   smartContent: SmartContent;
   dismissedInsightIds: Set<string>;
   hasAnyTodayData: boolean;
-  activeChildBirthDate: string | undefined;
+  activeChildBirthDate: BirthDateInput;
   onOpenInsightTip: (tipId: string) => void;
   /** InsightCard.onDismiss receives insight.id, not the whole insight. */
   onDismissInsight: (insightId: string) => void;
@@ -90,17 +91,7 @@ export function HomeSmartContent({
         <StaggeredCard>
           <MilestoneTimelineCard
             milestones={smartContent.upcomingMilestones}
-            ageWeeks={
-              activeChildBirthDate
-                ? Math.floor(
-                    (Date.now() -
-                      new Date(
-                        activeChildBirthDate.split("/").reverse().join("-"),
-                      ).getTime()) /
-                      (7 * 24 * 60 * 60 * 1000),
-                  )
-                : 0
-            }
+            ageWeeks={activeChildBirthDate ? getAgeInWeeks(activeChildBirthDate) : 0}
             onViewAll={onShowMilestonesModal}
             colorScheme={colorScheme}
           />

@@ -16,6 +16,7 @@ import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
+import { parseBirthDateOrNull } from "@/utils/ageUtils";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -153,13 +154,6 @@ function createBandPath(
   }
   path.close();
   return path;
-}
-
-function parseBirthDate(value?: string | null): Date | null {
-  if (!value) return null;
-  const [day, month, year] = value.split("/").map((part) => Number(part));
-  if (!day || !month || !year) return null;
-  return new Date(year, month - 1, day);
 }
 
 function getAgeInDays(birthDate: Date, target: Date) {
@@ -1315,7 +1309,7 @@ export default function CroissanceScreen() {
   }, [filteredEntries, metric]);
 
   const birthDate = useMemo(
-    () => parseBirthDate(activeChild?.birthDate),
+    () => parseBirthDateOrNull(activeChild?.birthDate),
     [activeChild?.birthDate],
   );
   const omsSex = activeChild?.gender ?? null;

@@ -1,4 +1,5 @@
 import { ThemedView } from '@/components/themed-view';
+import { DateTimePickerRow } from '@/components/ui/DateTimePickerRow';
 import { db } from '@/config/firebase';
 import { getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
@@ -9,9 +10,9 @@ import { trackOnboardingEvent } from "@/services/onboardingAnalytics";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import { addDoc, collection } from 'firebase/firestore';
+import { Timestamp, addDoc, collection } from 'firebase/firestore';
 import { createOwnerAccess } from '@/utils/permissions';
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -38,17 +39,28 @@ export default function AddBabyScreen() {
   const { firstRun } = useLocalSearchParams<{ firstRun?: string }>();
   const isFirstRun = firstRun === "true";
   const [name, setName] = useState("");
-  const [birthDate, setBirthDate] = useState("");
+  const [birthDate, setBirthDate] = useState<Date>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
   const [gender, setGender] = useState<'male' | 'female' | ''>('');
   const [isLoading, setIsLoading] = useState(false);
   const isMountedRef = useRef(true);
 
   // Cleanup on unmount
-  useMemo(() => {
+  useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const maxBirthDate = useMemo(() => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return today;
+  }, []);
+
+  const minBirthDate = useMemo(() => new Date(1900, 0, 1), []);
 
   // Dynamic styles that depend on theme
   const dynamicStyles = useMemo(() => StyleSheet.create({
@@ -164,46 +176,6 @@ export default function AddBabyScreen() {
     },
   }), [nc, colorScheme]);
 
-  // Formater la date pendant la saisie (DD/MM/YYYY)
-  const handleDateChange = useCallback((text: string) => {
-    // Supprimer tout sauf les chiffres
-    const cleaned = text.replace(/\D/g, '');
-
-    // Ajouter les slashes automatiquement
-    let formatted = cleaned;
-    if (cleaned.length >= 2) {
-      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2);
-    }
-    if (cleaned.length >= 4) {
-      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2, 4) + '/' + cleaned.slice(4, 8);
-    }
-
-    setBirthDate(formatted);
-  }, []);
-
-  // Valider la date
-  const isValidDate = useCallback((dateStr: string): boolean => {
-    if (dateStr.length !== 10) return false;
-
-    const [day, month, year] = dateStr.split('/').map(Number);
-    if (!day || !month || !year) return false;
-
-    // Vérifier les plages valides
-    if (day < 1 || day > 31) return false;
-    if (month < 1 || month > 12) return false;
-    if (year < 1900 || year > new Date().getFullYear()) return false;
-
-    // Vérifier que la date existe
-    const date = new Date(year, month - 1, day);
-    if (date.getDate() !== day || date.getMonth() !== month - 1) return false;
-
-    // L'enfant doit être né : pas de date future
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    date.setHours(0, 0, 0, 0);
-    return date <= today;
-  }, []);
-
   // Valider le formulaire
   const validateForm = useCallback((): boolean => {
     if (!name.trim()) {
@@ -211,19 +183,12 @@ export default function AddBabyScreen() {
       return false;
     }
 
-    if (!isValidDate(birthDate)) {
-      // Distinguish between invalid format and future date
-      const [day, month, year] = birthDate.split('/').map(Number);
-      const parsed = day && month && year ? new Date(year, month - 1, day) : null;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (parsed) parsed.setHours(0, 0, 0, 0);
-      const isFuture = parsed && parsed.getDate() === day && parsed.getMonth() === month - 1 && parsed > today;
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (birthDate > today) {
       showAlert(
         'Erreur',
-        isFuture
-          ? 'La date de naissance ne peut pas être dans le futur. L\'enfant doit être né pour être ajouté.'
-          : 'Veuillez saisir une date de naissance valide (JJ/MM/AAAA)'
+        'La date de naissance ne peut pas être dans le futur. L\'enfant doit être né pour être ajouté.'
       );
       return false;
     }
@@ -234,7 +199,7 @@ export default function AddBabyScreen() {
     }
 
     return true;
-  }, [name, birthDate, gender, isValidDate, showAlert]);
+  }, [name, birthDate, gender, showAlert]);
 
   // Gender selection with haptic
   const handleGenderSelect = useCallback((value: 'male' | 'female') => {
@@ -257,7 +222,7 @@ export default function AddBabyScreen() {
       const parentEmail = user.email?.toLowerCase();
       const childData = {
         name: name.trim(),
-        birthDate: birthDate,
+        birthDate: Timestamp.fromDate(birthDate),
         gender: gender,
         ownerId: user.uid,
         parentIds: [user.uid],
@@ -291,7 +256,9 @@ export default function AddBabyScreen() {
 
       // Réinitialiser le formulaire
       setName('');
-      setBirthDate('');
+      const resetDate = new Date();
+      resetDate.setHours(0, 0, 0, 0);
+      setBirthDate(resetDate);
       setGender('');
     } catch (error) {
       if (!isMountedRef.current) return;
@@ -358,24 +325,18 @@ export default function AddBabyScreen() {
               <Text style={dynamicStyles.label}>
                 Date de naissance <Text style={styles.required}>*</Text>
               </Text>
-              <View style={dynamicStyles.inputContainer}>
-                <FontAwesome name="calendar" size={16} color={nc.textLight} />
-                <TextInput
-                  style={dynamicStyles.input}
-                  placeholder="JJ/MM/AAAA"
-                  placeholderTextColor={nc.textMuted}
-                  value={birthDate}
-                  onChangeText={handleDateChange}
-                  editable={!isLoading}
-                  keyboardType="numeric"
-                  maxLength={10}
-                  accessibilityLabel="Date de naissance au format jour mois année"
-                  accessibilityRole="none"
-                />
-              </View>
-              <Text style={dynamicStyles.helperText}>
-                Format: jour/mois/année (ex: 15/03/2024)
-              </Text>
+              <DateTimePickerRow
+                label="Né(e) le"
+                value={birthDate}
+                mode="date"
+                colorScheme={colorScheme}
+                disabled={isLoading}
+                onChange={setBirthDate}
+                minimumDate={minBirthDate}
+                maximumDate={maxBirthDate}
+                icon="calendar"
+                accessibilityLabel="Modifier la date de naissance"
+              />
             </View>
 
             {/* Sexe de l'enfant */}

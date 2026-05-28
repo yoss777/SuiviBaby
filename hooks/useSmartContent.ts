@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getAgeInMonths, getAgeInWeeks } from "@/utils/ageUtils";
+import { getAgeInMonths, getAgeInWeeks, type BirthDateInput } from "@/utils/ageUtils";
 import { getTopInsights } from "@/services/insightEngine";
 import { generateCorrelations } from "@/services/correlationService";
 import {
@@ -48,7 +48,7 @@ interface SmartContentParams {
     note?: string;
   }>;
   childId: string | null;
-  babyBirthDate: string | Date | null;
+  babyBirthDate: BirthDateInput;
   babyName: string;
   tipsEnabled: boolean; // From notification preferences
   insightsEnabled?: boolean;
