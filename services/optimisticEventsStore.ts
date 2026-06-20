@@ -2,6 +2,8 @@
 // Events written via Cloud Functions are slow; this store lets the UI
 // show them instantly while the CF runs in the background.
 
+import { addBreadcrumb } from "@/utils/errorReporting";
+
 export type OptimisticOperation = 'create' | 'update';
 export type OptimisticStatus =
   | 'pending'
@@ -46,6 +48,17 @@ export function setOnFailure(cb: ((message: string) => void) | null): void {
 
 function notify(): void {
   subscribers.forEach((cb) => cb());
+}
+
+function eventKeys(event: unknown): string[] {
+  if (!event || typeof event !== "object") return [];
+  return Object.keys(event as Record<string, unknown>).sort();
+}
+
+function hasHeureFin(event: unknown): boolean {
+  if (!event || typeof event !== "object") return false;
+  const value = (event as Record<string, unknown>).heureFin;
+  return value !== undefined && value !== null;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,9 +133,25 @@ export function confirmOptimistic(tempIdOrEventId: string, realId?: string): voi
   const entry = entries.get(tempIdOrEventId);
 
   if (entry) {
+    const statusBefore = entry.status;
     entry.status = 'confirmed';
     entry.confirmedAt = Date.now();
     if (realId) entry.realId = realId;
+    addBreadcrumb(
+      "optimistic-store",
+      "confirm",
+      {
+        action: "confirm",
+        operationId: entry.tempId,
+        eventId: entry.realId ?? entry.tempId,
+        eventType: entry.event?.type ?? null,
+        operation: entry.operation,
+        status_before: statusBefore,
+        has_reconciledAt: !!entry.reconciledAt,
+        age_ms: Date.now() - entry.createdAt,
+      },
+      "info",
+    );
     notify();
     return;
   }
@@ -130,9 +159,25 @@ export function confirmOptimistic(tempIdOrEventId: string, realId?: string): voi
   // Legacy fallback: older call sites passed the Firestore event id for updates.
   for (const e of entries.values()) {
     if (e.realId === tempIdOrEventId || (realId && e.realId === realId)) {
+      const statusBefore = e.status;
       e.status = 'confirmed';
       e.confirmedAt = Date.now();
       if (realId) e.realId = realId;
+      addBreadcrumb(
+        "optimistic-store",
+        "confirm",
+        {
+          action: "confirm",
+          operationId: e.tempId,
+          eventId: e.realId ?? e.tempId,
+          eventType: e.event?.type ?? null,
+          operation: e.operation,
+          status_before: statusBefore,
+          has_reconciledAt: !!e.reconciledAt,
+          age_ms: Date.now() - e.createdAt,
+        },
+        "info",
+      );
     }
   }
 
@@ -191,6 +236,33 @@ export function failOptimistic(
     event: entry.operation === 'update' ? entry.previousEvent : entry.event,
     operation: entry.operation,
   };
+
+  const previousHadHeureFin = hasHeureFin(entry.previousEvent);
+  const nextHadHeureFin = hasHeureFin(entry.event);
+  // A "stop rollback" is an update where the optimistic version added heureFin
+  // (i.e. user tapped Terminer) but the CF failed → rollback restores the
+  // pre-stop snapshot, making a finished walk/sleep "resurrect" silently.
+  const isTimedStopRollbackCandidate =
+    entry.operation === "update" && !previousHadHeureFin && nextHadHeureFin;
+
+  addBreadcrumb(
+    "optimistic-store",
+    "fail",
+    {
+      action: "fail",
+      operationId: entry.tempId,
+      eventId: entry.realId ?? entry.tempId,
+      eventType: entry.event?.type ?? null,
+      operation: entry.operation,
+      age_ms: Date.now() - entry.createdAt,
+      previous_had_heureFin: previousHadHeureFin,
+      next_had_heureFin: nextHadHeureFin,
+      previous_keys: eventKeys(entry.previousEvent),
+      next_keys: eventKeys(entry.event),
+      is_timed_stop_rollback_candidate: isTimedStopRollbackCandidate,
+    },
+    "warning",
+  );
 
   // Remove failed entries immediately – the caller already has the data.
   entries.delete(entry.tempId);
@@ -429,10 +501,27 @@ export function subscribe(callback: () => void): () => void {
 function cleanupSilent(): void {
   const now = Date.now();
   for (const [key, entry] of entries) {
-    if (
-      (entry.status === 'confirmed' && entry.reconciledAt) ||
-      (entry.status === 'pending' && now - entry.createdAt > STALE_THRESHOLD_MS)
-    ) {
+    const reconciled = entry.status === 'confirmed' && entry.reconciledAt;
+    const pendingStale =
+      entry.status === 'pending' && now - entry.createdAt > STALE_THRESHOLD_MS;
+    if (reconciled || pendingStale) {
+      if (pendingStale) {
+        addBreadcrumb(
+          "optimistic-store",
+          "stale_purge",
+          {
+            action: "stale_purge",
+            operationId: entry.tempId,
+            eventId: entry.realId ?? entry.tempId,
+            eventType: entry.event?.type ?? null,
+            operation: entry.operation,
+            age_ms: now - entry.createdAt,
+            status: entry.status,
+            had_heureFin: hasHeureFin(entry.event),
+          },
+          "warning",
+        );
+      }
       entries.delete(key);
     }
   }

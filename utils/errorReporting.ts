@@ -19,3 +19,19 @@ export function captureServiceError(
     Sentry.captureException(err);
   });
 }
+
+export type BreadcrumbLevel = "info" | "warning" | "error";
+
+/**
+ * Thin wrapper around Sentry.addBreadcrumb so callers (services, stores) stay
+ * decoupled from the Sentry SDK and can be mocked cleanly in tests. Data must
+ * be derived (booleans, ids, counts, age_ms) — never user-facing payloads.
+ */
+export function addBreadcrumb(
+  category: string,
+  message: string,
+  data: Record<string, unknown>,
+  level: BreadcrumbLevel = "info",
+): void {
+  Sentry.addBreadcrumb({ category, message, data, level });
+}

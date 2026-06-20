@@ -1,3 +1,9 @@
+jest.mock("@/utils/errorReporting", () => ({
+  addBreadcrumb: jest.fn(),
+  captureServiceError: jest.fn(),
+}));
+
+import { addBreadcrumb } from "@/utils/errorReporting";
 import {
   addOptimisticCreate,
   addOptimisticUpdate,
@@ -12,9 +18,12 @@ import {
   updateOptimisticCreate,
 } from "@/services/optimisticEventsStore";
 
+const addBreadcrumbMock = addBreadcrumb as jest.MockedFunction<typeof addBreadcrumb>;
+
 describe("optimisticEventsStore", () => {
   beforeEach(() => {
     resetOptimisticStoreForTests();
+    addBreadcrumbMock.mockClear();
   });
 
   it("keeps a queued offline create visible until Firestore confirms it", () => {
@@ -378,5 +387,80 @@ describe("optimisticEventsStore", () => {
     expect(onFailure).toHaveBeenCalledWith(
       "Erreur lors de la modification. Veuillez réessayer.",
     );
+  });
+
+  it("emits a fail breadcrumb flagged as timed stop rollback when heureFin disappears", () => {
+    const childId = "child-1";
+    const eventId = "event-stop-rollback";
+    const previousEvent = {
+      id: eventId,
+      type: "activite",
+      childId,
+      typeActivite: "promenade",
+      date: new Date("2026-03-28T12:00:00.000Z"),
+      heureDebut: new Date("2026-03-28T12:00:00.000Z"),
+    };
+    const updatedEvent = {
+      ...previousEvent,
+      heureFin: new Date("2026-03-28T12:45:00.000Z"),
+      duree: 45,
+    };
+
+    addOptimisticUpdate(eventId, childId, updatedEvent, previousEvent);
+    addBreadcrumbMock.mockClear();
+
+    failOptimistic(eventId);
+
+    const failCall = addBreadcrumbMock.mock.calls.find(
+      ([, message]) => message === "fail",
+    );
+    expect(failCall).toBeDefined();
+    const [category, , data, level] = failCall!;
+    expect(category).toBe("optimistic-store");
+    expect(level).toBe("warning");
+    expect(data).toMatchObject({
+      action: "fail",
+      eventId,
+      eventType: "activite",
+      operation: "update",
+      previous_had_heureFin: false,
+      next_had_heureFin: true,
+      is_timed_stop_rollback_candidate: true,
+    });
+    expect((data as Record<string, unknown>).previous_keys).toEqual(
+      expect.arrayContaining(["heureDebut", "type", "typeActivite"]),
+    );
+    expect((data as Record<string, unknown>).next_keys).toEqual(
+      expect.arrayContaining(["heureFin", "duree"]),
+    );
+    expect((data as Record<string, unknown>).age_ms).toEqual(expect.any(Number));
+  });
+
+  it("does not flag rollback of a non-stop update as timed stop candidate", () => {
+    const childId = "child-1";
+    const eventId = "event-quantity-edit";
+    const previousEvent = {
+      id: eventId,
+      type: "biberon",
+      childId,
+      quantite: 120,
+      date: new Date("2026-03-28T12:00:00.000Z"),
+    };
+    const updatedEvent = { ...previousEvent, quantite: 150 };
+
+    addOptimisticUpdate(eventId, childId, updatedEvent, previousEvent);
+    addBreadcrumbMock.mockClear();
+
+    failOptimistic(eventId);
+
+    const failCall = addBreadcrumbMock.mock.calls.find(
+      ([, message]) => message === "fail",
+    );
+    expect(failCall).toBeDefined();
+    expect(failCall![2]).toMatchObject({
+      is_timed_stop_rollback_candidate: false,
+      previous_had_heureFin: false,
+      next_had_heureFin: false,
+    });
   });
 });
