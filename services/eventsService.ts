@@ -800,7 +800,13 @@ function isNetworkError(error: unknown): boolean {
     msg.includes('failed to connect') ||
     msg.includes('internet') ||
     msg.includes('offline') ||
-    msg.includes('unavailable')
+    msg.includes('unavailable') ||
+    // Saturation / indisponibilité serveur : l'écriture est valide et doit
+    // repartir en queue offline plutôt que d'être perdue via failOptimistic.
+    msg.includes('no available instance') ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('deadline-exceeded') ||
+    msg.includes('billing')
   );
 }
 

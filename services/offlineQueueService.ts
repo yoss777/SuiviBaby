@@ -24,6 +24,44 @@ interface QueuedEvent {
 
 type QueueChangeListener = (size: number) => void;
 
+/**
+ * Nombre de tentatives au-delà duquel une écriture est considérée comme
+ * définitivement perdue. Ne s'applique QU'AUX erreurs permanentes (payload
+ * invalide, permission refusée) — les erreurs d'infrastructure ne consomment
+ * pas de tentative, cf. isTransientError.
+ */
+export const MAX_RETRIES = 3;
+
+/**
+ * Erreurs d'infrastructure : le serveur est temporairement indisponible mais
+ * l'écriture reste parfaitement valide. Incrémenter retryCount dessus fait
+ * perdre des données lors d'une panne prolongée (facturation coupée, cold
+ * start Cloud Run, réseau instable) — on réessaie donc indéfiniment.
+ *
+ * A contrario, une erreur permanente (invalid-argument, permission-denied)
+ * échouera identiquement à chaque rejeu : elle consomme une tentative.
+ */
+function isTransientError(error: any): boolean {
+  const code = String(error?.code ?? "").toLowerCase();
+  const message = String(error?.message ?? "").toLowerCase();
+  const haystack = `${code} ${message}`;
+
+  return (
+    haystack.includes("unavailable") ||
+    haystack.includes("resource-exhausted") ||
+    haystack.includes("deadline-exceeded") ||
+    haystack.includes("internal") ||
+    haystack.includes("aborted") ||
+    haystack.includes("no available instance") ||
+    haystack.includes("billing") ||
+    haystack.includes("network") ||
+    haystack.includes("timeout") ||
+    haystack.includes("fetch") ||
+    haystack.includes("failed to connect") ||
+    haystack.includes("offline")
+  );
+}
+
 // ============================================
 // DATABASE SETUP
 // ============================================
@@ -51,6 +89,15 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
     } catch {
       // Colonne existe déjà — OK
     }
+
+    // Une écriture marquée 'syncing' dont le process est mort (app tuée,
+    // crash, kill iOS pendant l'appel réseau) restait invisible à jamais :
+    // getPendingEvents et getQueueSize ne lisent que 'pending'/'failed'.
+    // Au démarrage, plus aucun envoi n'est en vol : on les repasse en
+    // 'pending' pour qu'elles soient rejouées.
+    await db.runAsync(
+      `UPDATE pending_events SET status = 'pending' WHERE status = 'syncing'`,
+    );
   }
   return db;
 }
@@ -61,6 +108,38 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
 
 const listeners: Set<QueueChangeListener> = new Set();
 let isProcessing = false;
+
+/** Pause entre deux écritures d'un même cycle, pour lisser la charge. */
+const INTER_WRITE_DELAY_MS = 300;
+
+/** Backoff exponentiel (plafonné) entre deux cycles après une panne serveur. */
+const BACKOFF_BASE_MS = 5000;
+const BACKOFF_MAX_MS = 5 * 60 * 1000;
+let consecutiveTransientFailures = 0;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Reprogramme un cycle après une erreur d'infrastructure, avec backoff
+ * exponentiel + jitter. Sans ça, une entrée transitoire attendrait le prochain
+ * changement d'état réseau — qui n'arrive jamais si la connexion n'a pas bougé
+ * (cas d'une panne purement serveur).
+ */
+function scheduleRetry(): void {
+  if (retryTimer) return;
+
+  const exponential = Math.min(
+    BACKOFF_BASE_MS * 2 ** (consecutiveTransientFailures - 1),
+    BACKOFF_MAX_MS,
+  );
+  // Jitter : évite que tous les clients reviennent en même temps et
+  // re-saturent le serveur qui vient à peine de se rétablir.
+  const delay = exponential * (0.5 + Math.random() * 0.5);
+
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void processQueue();
+  }, delay);
+}
 
 function notifyListeners(size: number) {
   listeners.forEach((listener) => listener(size));
@@ -119,7 +198,7 @@ export async function getPendingEvents(): Promise<QueuedEvent[]> {
   if (!uid) return [];
   const database = await getDb();
   const rows = await database.getAllAsync<QueuedEvent>(
-    `SELECT * FROM pending_events WHERE status IN ('pending', 'failed') AND retryCount < 3 AND uid = ? ORDER BY createdAt ASC`,
+    `SELECT * FROM pending_events WHERE status IN ('pending', 'failed') AND retryCount < ${MAX_RETRIES} AND uid = ? ORDER BY createdAt ASC`,
     uid,
   );
   return rows;
@@ -136,14 +215,24 @@ export async function processQueue(): Promise<number> {
 
   isProcessing = true;
   let synced = 0;
+  let hitTransient = false;
 
   try {
     const events = await getPendingEvents();
     if (events.length === 0) return 0;
 
     const database = await getDb();
+    let isFirst = true;
 
     for (const event of events) {
+      // Espacer les envois : une queue rejouée d'un bloc après une panne
+      // déclenche des cold starts en cascade sur Cloud Run, qui répond
+      // "no available instance" — la rafale crée la panne qu'elle subit.
+      if (!isFirst) {
+        await new Promise((r) => setTimeout(r, INTER_WRITE_DELAY_MS));
+      }
+      isFirst = false;
+
       try {
         // Marquer comme en cours de sync
         await database.runAsync(
@@ -179,14 +268,29 @@ export async function processQueue(): Promise<number> {
         );
         synced++;
       } catch (error: any) {
-        // Échec : incrémenter le compteur de retry
         const errorMessage =
           error?.message || error?.code || "Erreur inconnue";
+        const transient = isTransientError(error);
+
+        // Erreur d'infrastructure : on repasse en 'pending' SANS consommer de
+        // tentative. L'écriture est valide, seul le serveur est indisponible —
+        // la perdre après 3 essais serait une perte de données utilisateur.
         await database.runAsync(
-          `UPDATE pending_events SET status = 'failed', retryCount = retryCount + 1, lastError = ? WHERE id = ?`,
+          transient
+            ? `UPDATE pending_events SET status = 'pending', lastError = ? WHERE id = ?`
+            : `UPDATE pending_events SET status = 'failed', retryCount = retryCount + 1, lastError = ? WHERE id = ?`,
           errorMessage,
           event.id,
         );
+
+        // Le serveur est en difficulté : inutile de marteler avec le reste de
+        // la queue, on rendra la main et le prochain cycle réessaiera. Sans ça
+        // le rejeu en rafale sature Cloud Run et provoque lui-même les
+        // "no available instance" qu'il tente de surmonter.
+        if (transient) {
+          hitTransient = true;
+          break;
+        }
       }
     }
 
@@ -195,6 +299,13 @@ export async function processQueue(): Promise<number> {
     return synced;
   } finally {
     isProcessing = false;
+    // Hors du try : on veut reprogrammer même si getQueueSize a levé.
+    if (hitTransient) {
+      consecutiveTransientFailures++;
+      scheduleRetry();
+    } else {
+      consecutiveTransientFailures = 0;
+    }
   }
 }
 
@@ -210,6 +321,49 @@ export async function cleanupFailedEvents(): Promise<number> {
     uid,
   );
   return result.changes;
+}
+
+/**
+ * Réarme les écritures bloquées par un retryCount épuisé et relance un cycle.
+ *
+ * Sert après une panne d'infrastructure prolongée : avant le passage à
+ * isTransientError, chaque échec serveur consommait une tentative, si bien que
+ * des écritures parfaitement valides se retrouvaient exclues de la sync
+ * (getPendingEvents filtre sur retryCount < MAX_RETRIES) sans jamais être
+ * rejouées. Remet le compteur à zéro pour l'utilisateur courant.
+ *
+ * Retourne le nombre d'écritures réarmées.
+ */
+export async function retryExhaustedEvents(): Promise<number> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return 0;
+  const database = await getDb();
+  const result = await database.runAsync(
+    `UPDATE pending_events SET status = 'pending', retryCount = 0 WHERE retryCount >= ? AND uid = ?`,
+    MAX_RETRIES,
+    uid,
+  );
+  if (result.changes > 0) {
+    notifyListeners(await getQueueSize());
+    void processQueue();
+  }
+  return result.changes;
+}
+
+/**
+ * Écritures définitivement abandonnées (tentatives épuisées), pour affichage
+ * ou diagnostic. Permet de prévenir l'utilisateur plutôt que de perdre ses
+ * données en silence.
+ */
+export async function getExhaustedEvents(): Promise<QueuedEvent[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
+  const database = await getDb();
+  return database.getAllAsync<QueuedEvent>(
+    `SELECT * FROM pending_events WHERE retryCount >= ? AND uid = ? ORDER BY createdAt ASC`,
+    MAX_RETRIES,
+    uid,
+  );
 }
 
 /**
@@ -234,16 +388,13 @@ export async function cleanupOrphanedEvents(): Promise<number> {
  * Les events avec un uid valide restent pour être rejoués au re-login.
  */
 export async function onSignOut(): Promise<void> {
-  const uid = auth.currentUser?.uid;
   stopAutoSync();
   await cleanupOrphanedEvents();
-  if (uid) {
-    const database = await getDb();
-    await database.runAsync(
-      `DELETE FROM pending_events WHERE retryCount >= 3 AND uid = ?`,
-      uid,
-    );
-  }
+  // Volontairement : on ne purge plus les retryCount >= 3 ici. Une panne
+  // serveur prolongée pouvait épuiser le compteur sur des écritures valides,
+  // que le signOut supprimait alors définitivement — perte silencieuse de
+  // données utilisateur. Elles restent en base pour être rejouées au
+  // re-login ; cleanupOrphanedEvents (>60j) reste le filet de sécurité.
   notifyListeners(0);
 }
 
@@ -308,6 +459,13 @@ export function stopAutoSync(): void {
     unsubscribeNetInfo();
     unsubscribeNetInfo = null;
   }
+  // Annuler un rejeu programmé : sans ça, un cycle peut se déclencher après
+  // le signOut et écrire avec les credentials du user suivant.
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  consecutiveTransientFailures = 0;
 }
 
 /**
