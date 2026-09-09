@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useState,
 } from "react";
 import {
@@ -23,6 +24,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { useBaby } from "@/contexts/BabyContext";
 import { DeletionRequestNotifier } from "@/components/suivibaby/DeletionRequestNotifier";
+import { onQueueChange } from "@/services/offlineQueueService";
 
 // Contexte pour gérer le headerRight dynamiquement
 const HeaderRightContext = createContext<{
@@ -117,6 +119,11 @@ export default function DrawerLayout() {
   const netInfo = useNetInfo();
   const insets = useSafeAreaInsets();
 
+  // Écritures réellement en attente d'envoi au serveur. Distinct de
+  // authStatus/babyStatus, qui ne décrivent que la fraîcheur de l'affichage.
+  const [pendingWrites, setPendingWrites] = useState(0);
+  useEffect(() => onQueueChange(setPendingWrites), []);
+
   const setHeaderRight = useCallback(
     (component: React.ReactElement | null, ownerId?: string) => {
       setHeaderRightState((prev) => {
@@ -162,8 +169,23 @@ export default function DrawerLayout() {
 
   const isOffline =
     netInfo.isInternetReachable === false || netInfo.isConnected === false;
-  const showSyncBanner =
-    authStatus === "degraded" || babyStatus === "degraded";
+
+  // Deux conditions distinctes, longtemps confondues sous un seul bandeau
+  // "Synchronisation en cours" :
+  //  - des écritures attendent d'être envoyées (risque de perte réel) ;
+  //  - l'affichage repose sur du cache en attendant les listeners Firestore
+  //    (aucun risque, purement cosmétique).
+  // Les afficher pareil laissait croire à une sync active alors que la queue
+  // était vide, et surtout ne signalait RIEN quand des écritures étaient
+  // réellement bloquées.
+  const hasPendingWrites = pendingWrites > 0;
+  const isStaleDisplay =
+    !hasPendingWrites &&
+    (authStatus === "degraded" || babyStatus === "degraded");
+  const showSyncBanner = hasPendingWrites || isStaleDisplay;
+  const syncLabel = hasPendingWrites
+    ? `${pendingWrites} ${pendingWrites > 1 ? "événements en attente d'envoi" : "événement en attente d'envoi"}`
+    : "Actualisation des données…";
 
   return (
     <HeaderRightContext.Provider value={{ setHeaderRight }}>
@@ -185,8 +207,14 @@ export default function DrawerLayout() {
                 styles.syncBanner,
                 {
                   paddingTop: isOffline ? 4 : insets.top + 4,
-                  backgroundColor:
-                    colorScheme === "dark"
+                  // Ambre quand des écritures attendent (action possible de
+                  // l'utilisateur : rester connecté), bleu pour un simple
+                  // rafraîchissement d'affichage.
+                  backgroundColor: hasPendingWrites
+                    ? colorScheme === "dark"
+                      ? "rgba(245, 158, 11, 0.18)"
+                      : "#fef3c7"
+                    : colorScheme === "dark"
                       ? "rgba(56, 189, 248, 0.18)"
                       : "#e0f2fe",
                 },
@@ -196,12 +224,18 @@ export default function DrawerLayout() {
                 style={[
                   styles.syncText,
                   {
-                    color: colorScheme === "dark" ? "#7dd3fc" : "#075985",
+                    color: hasPendingWrites
+                      ? colorScheme === "dark"
+                        ? "#fcd34d"
+                        : "#92400e"
+                      : colorScheme === "dark"
+                        ? "#7dd3fc"
+                        : "#075985",
                   },
                 ]}
-                accessibilityLabel="Synchronisation en cours"
+                accessibilityLabel={syncLabel}
               >
-                Synchronisation en cours
+                {syncLabel}
               </Text>
             </View>
           )}
