@@ -122,6 +122,35 @@ describe("mapLlmParseResult", () => {
     expect(ago.eventIdentifier).toEqual({ type: "biberon", relativeTime: 30 });
   });
 
+  it("maps 'ago 0' (« celui que je viens de donner ») to the latest event", () => {
+    const cmd = mapLlmParseResult({
+      action: "delete", truncated: false, events: [{ type: "biberon", target: { kind: "ago", minutesAgo: 0 } }],
+    }, "…", NOW).commands[0];
+    expect(cmd.eventIdentifier).toEqual({ type: "biberon", isLast: true });
+  });
+
+  it("resolves a dated target (« celui d'hier à 21h »)", () => {
+    const cmd = mapLlmParseResult({
+      action: "delete", truncated: false, events: [{ type: "biberon", target: { kind: "at", clock: "21:00", dayOffset: -1 } }],
+    }, "…", NOW).commands[0];
+    expect(cmd.eventIdentifier!.targetTime!.getDate()).toBe(27);
+  });
+
+  it("puts a corrected tetee duration in `duree`, the stored field", () => {
+    const cmd = mapLlmParseResult({
+      action: "modify", truncated: false, events: [{ type: "tetee", target: { kind: "last" }, dureeMin: 15 }],
+    }, "Corrige la tétée à 15 minutes", NOW).commands[0];
+    expect(cmd.modifications).toEqual({ duree: 15 });
+  });
+
+  it("carries the fields the server dropped as out of bounds", () => {
+    const cmd = mapLlmParseResult({
+      action: "add", truncated: false, events: [{ type: "biberon", time: { kind: "now" }, ignored: ["quantiteMl"] }],
+    }, "Biberon de 900 ml", NOW).commands[0];
+    expect(cmd.ignoredFields).toEqual(["quantiteMl"]);
+    expect(cmd.quantite).toBeUndefined();
+  });
+
   it("propagates truncation", () => {
     expect(mapLlmParseResult({
       action: "add", truncated: true, events: [{ type: "miction", time: { kind: "now" } }],
@@ -134,27 +163,51 @@ describe("contract with the server schema (functions/lib/voiceParse.js)", () => 
   const { OUTPUT_SCHEMA, sanitizeParseResult } = require("../functions/lib/voiceParse");
   const props = OUTPUT_SCHEMA.properties.events.items.properties as Record<string, any>;
 
-  const sampleFor = (name: string, spec: any): unknown => {
-    if (spec.enum) return spec.enum[0];
-    if (spec.type === "boolean") return true;
-    if (spec.type === "string") return `val-${name}`;
-    return { humeur: 3, temperatureC: 38, poidsKg: 6, tailleCm: 60, perimetreCranienCm: 40 }[name] ?? 30;
+  /** Schema field → where it must land in ParsedCommandResult. Every value field is listed. */
+  const DESTINATION: Record<string, string> = {
+    quantiteMl: "quantite", typeBiberon: "typeBiberon", dureeMin: "duree",
+    quantiteGaucheMl: "quantiteGauche", quantiteDroiteMl: "quantiteDroite",
+    consistance: "consistance", couleur: "couleur", nomVitamine: "nomVitamine",
+    typeActivite: "typeActivite", typeJalon: "typeJalon", humeur: "humeur",
+    poidsKg: "poids", tailleCm: "taille", perimetreCranienCm: "perimetreCranien",
+    typeSolide: "typeSolide", momentRepas: "momentRepas", quantiteSolide: "quantiteSolide",
+    temperatureC: "valeurTemperature", nomMedicament: "nomMedicament", dosage: "dosage",
+    description: "descriptionSymptome", nomVaccin: "nomVaccin", methode: "methode",
+    note: "contextNote",
+    // Flags are derived per type (sideFlags / diaperFlags), checked by dedicated tests.
+    coteGauche: "coteGauche", coteDroit: "coteDroit", pipi: "pipi", popo: "popo",
+  };
+  // Distinct in-bounds numbers, so a value landing in the wrong field is caught.
+  const NUMBERS: Record<string, number> = {
+    quantiteMl: 101, dureeMin: 22, quantiteGaucheMl: 103, quantiteDroiteMl: 104,
+    humeur: 3, poidsKg: 6.4, tailleCm: 61, perimetreCranienCm: 41, temperatureC: 38.2,
   };
 
-  it("maps every value field the schema can produce", () => {
+  it("lists a destination for every schema field", () => {
     const valueKeys = Object.keys(props).filter((k) => !["type", "time", "target"].includes(k));
-    // One event per type that accepts a duration, so dureeMin survives sanitizing.
-    for (const type of ["biberon", "tetee", "sommeil"]) {
-      const raw: Record<string, unknown> = { type, time: { kind: "now" } };
-      for (const k of valueKeys) raw[k] = sampleFor(k, props[k]);
-      const clean = sanitizeParseResult({ action: "add", events: [raw] });
-      const [cmd] = mapLlmParseResult(clean, "x", NOW).commands;
-      const outValues = Object.values(cmd as unknown as Record<string, unknown>);
-      for (const k of Object.keys(clean.events[0])) {
-        if (["type", "time", "pipi", "popo", "coteGauche", "coteDroit"].includes(k)) continue;
-        expect({ field: k, mapped: outValues.includes(clean.events[0][k]) }).toEqual({ field: k, mapped: true });
-      }
+    expect(valueKeys.filter((k) => !(k in DESTINATION))).toEqual([]);
+  });
+
+  it("maps every value field to its exact destination", () => {
+    const raw: Record<string, unknown> = { type: "sommeil", time: { kind: "now" } };
+    for (const [k, spec] of Object.entries(props)) {
+      if (["type", "time", "target", "coteGauche", "coteDroit", "pipi", "popo"].includes(k)) continue;
+      raw[k] = spec.enum ? spec.enum[spec.enum.length - 1] : spec.type === "string" ? `val-${k}` : NUMBERS[k];
     }
+    const clean = sanitizeParseResult({ action: "add", events: [raw] });
+    const cmd = mapLlmParseResult(clean, "x", NOW).commands[0] as unknown as Record<string, unknown>;
+    for (const [k, v] of Object.entries(clean.events[0])) {
+      if (["type", "time"].includes(k)) continue;
+      // quantiteMl only lands in `quantite` for a biberon; checked below.
+      if (k === "quantiteMl") continue;
+      expect({ field: k, value: cmd[DESTINATION[k]] }).toEqual({ field: k, value: v });
+    }
+
+    const bib = mapLlmParseResult(
+      sanitizeParseResult({ action: "add", events: [{ type: "biberon", time: { kind: "now" }, quantiteMl: 101 }] }),
+      "x", NOW,
+    ).commands[0];
+    expect(bib.quantite).toBe(101);
   });
 });
 

@@ -99,10 +99,11 @@ function diffEvent(
   const types = Array.isArray(exp.type) ? exp.type : [exp.type];
   if (!types.includes(act.type)) return [`type ${act.type} ∉ [${types.join(",")}]`];
 
-  // For modify, the new values live in `modifications` when present.
+  // For modify, executeModify only writes `modifications`: grade that alone,
+  // so a value present only at the top level counts as not applied.
   const source: Record<string, unknown> =
-    action === "modify" && act.modifications
-      ? { ...act, ...act.modifications }
+    action === "modify"
+      ? ((act.modifications ?? {}) as Record<string, unknown>)
       : (act as unknown as Record<string, unknown>);
 
   for (const [key, matcher] of Object.entries(exp.fields ?? {})) {

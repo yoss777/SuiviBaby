@@ -15,6 +15,7 @@ const MAX_EVENTS = 5;
 const MAX_TEXT_FIELD = 100;
 const MAX_NOTE = 200;
 const MAX_MINUTES_AGO = 7 * 24 * 60; // aligned with MAX_RELATIVE_OFFSET_MIN (T3.5)
+const MAX_DAYS_BACK = 7;
 
 const EVENT_TYPES = [
   "biberon", "tetee", "pompage", "miction", "selle", "couche", "sommeil",
@@ -85,7 +86,7 @@ const OUTPUT_SCHEMA = {
               kind: enumProp(["now", "ago", "at"]),
               minutesAgo: { type: "integer" },
               clock: { type: "string", description: "HH:MM sur 24 h" },
-              dayOffset: { type: "integer", description: "0 = aujourd'hui, -1 = hier" },
+              dayOffset: { type: "integer", description: "0 = aujourd'hui, -1 = hier, -2 = avant-hier" },
             },
           },
           target: {
@@ -94,7 +95,8 @@ const OUTPUT_SCHEMA = {
             required: ["kind"],
             properties: {
               kind: enumProp(["last", "at", "ago"]),
-              clock: { type: "string" },
+              clock: { type: "string", description: "HH:MM sur 24 h" },
+              dayOffset: { type: "integer", description: "0 = aujourd'hui, -1 = hier" },
               minutesAgo: { type: "integer" },
             },
           },
@@ -173,11 +175,12 @@ Règles
 Heure de chaque événement (champ time, pour add)
 - Rien de précisé → {"kind":"now"}.
 - « il y a 20 minutes », « il y a une demi-heure » → {"kind":"ago","minutesAgo":20}.
-- Heure donnée → {"kind":"at","clock":"HH:MM"} sur 24 h (« 3h du matin » → 03:00, « 10h du soir » → 22:00). Ajoute "dayOffset":-1 si le parent dit « hier ».
+- Heure donnée → {"kind":"at","clock":"HH:MM"} sur 24 h, toujours avec deux chiffres (« 3h du matin » → "03:00", « 10h du soir » → "22:00"). Ajoute "dayOffset":-1 pour « hier », -2 pour « avant-hier ».
 
 Cible (champ target, pour modify et delete)
-- « le dernier », « la dernière » ou rien de précis → {"kind":"last"}.
-- « le biberon de 9h » → {"kind":"at","clock":"09:00"}.
+- Toujours renseigner target pour modify et delete.
+- « le dernier », « la dernière », « celui que je viens de donner » ou rien de précis → {"kind":"last"}.
+- « le biberon de 9h » → {"kind":"at","clock":"09:00"} ; « celui d'hier à 21h » → {"kind":"at","clock":"21:00","dayOffset":-1}.
 - « celui d'il y a 30 minutes » → {"kind":"ago","minutesAgo":30}.`;
 
 /** Escape the transcript so it cannot close or forge the wrapping tag. */
@@ -199,7 +202,11 @@ function buildUserMessage(text, localTime) {
 function cleanText(value, max) {
   if (typeof value !== "string") return undefined;
   // eslint-disable-next-line no-control-regex
-  const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  const cleaned = value
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
   return cleaned ? cleaned.slice(0, max) : undefined;
 }
 
@@ -207,45 +214,70 @@ function inRange(value, [min, max]) {
   return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
 }
 
+// Absent references get their documented default ("now" / "last"); a
+// reference the model *did* give but that is invalid returns null, which makes
+// the whole answer unusable. Guessing there would silently date an event "now"
+// or modify/delete the latest one instead of the one the parent named.
+
+function validMinutesAgo(v) {
+  return Number.isInteger(v) && v >= 0 && v <= MAX_MINUTES_AGO;
+}
+
+function validDayOffset(v) {
+  return v === undefined || (Number.isInteger(v) && v <= 0 && v >= -MAX_DAYS_BACK);
+}
+
+function sanitizeClockRef(ref) {
+  if (typeof ref.clock !== "string" || !CLOCK_RE.test(ref.clock) || !validDayOffset(ref.dayOffset)) {
+    return null;
+  }
+  return ref.dayOffset ? { kind: "at", clock: ref.clock, dayOffset: ref.dayOffset } : { kind: "at", clock: ref.clock };
+}
+
 function sanitizeTime(time) {
-  if (!time || typeof time !== "object") return { kind: "now" };
-  if (time.kind === "ago" && Number.isInteger(time.minutesAgo) &&
-      time.minutesAgo >= 0 && time.minutesAgo <= MAX_MINUTES_AGO) {
-    return { kind: "ago", minutesAgo: time.minutesAgo };
-  }
-  if (time.kind === "at" && typeof time.clock === "string" && CLOCK_RE.test(time.clock)) {
-    return time.dayOffset === -1
-      ? { kind: "at", clock: time.clock, dayOffset: -1 }
-      : { kind: "at", clock: time.clock };
-  }
-  return { kind: "now" };
+  if (time === undefined) return { kind: "now" };
+  if (!time || typeof time !== "object") return null;
+  if (time.kind === "now") return { kind: "now" };
+  if (time.kind === "ago") return validMinutesAgo(time.minutesAgo) ? { kind: "ago", minutesAgo: time.minutesAgo } : null;
+  if (time.kind === "at") return sanitizeClockRef(time);
+  return null;
 }
 
 function sanitizeTarget(target) {
-  if (target && typeof target === "object") {
-    if (target.kind === "at" && typeof target.clock === "string" && CLOCK_RE.test(target.clock)) {
-      return { kind: "at", clock: target.clock };
-    }
-    if (target.kind === "ago" && Number.isInteger(target.minutesAgo) &&
-        target.minutesAgo >= 0 && target.minutesAgo <= MAX_MINUTES_AGO) {
-      return { kind: "ago", minutesAgo: target.minutesAgo };
-    }
-  }
-  return { kind: "last" };
+  if (target === undefined) return { kind: "last" };
+  if (!target || typeof target !== "object") return null;
+  if (target.kind === "last") return { kind: "last" };
+  if (target.kind === "ago") return validMinutesAgo(target.minutesAgo) ? { kind: "ago", minutesAgo: target.minutesAgo } : null;
+  if (target.kind === "at") return sanitizeClockRef(target);
+  return null;
 }
 
+/** @returns {object|null} the clean event, or null when it is unusable */
 function sanitizeEvent(raw, action) {
   if (!raw || typeof raw !== "object" || !EVENT_TYPES.includes(raw.type)) return null;
   const out = { type: raw.type };
 
-  if (action === "add") out.time = sanitizeTime(raw.time);
-  else out.target = sanitizeTarget(raw.target);
-
-  for (const [field, bounds] of Object.entries(NUMERIC_BOUNDS)) {
-    if (inRange(raw[field], bounds)) out[field] = raw[field];
+  if (action === "add") {
+    out.time = sanitizeTime(raw.time);
+    if (!out.time) return null;
+  } else {
+    out.target = sanitizeTarget(raw.target);
+    if (!out.target) return null;
   }
-  const dureeBounds = DUREE_BOUNDS[raw.type];
-  if (dureeBounds && inRange(raw.dureeMin, dureeBounds)) out.dureeMin = raw.dureeMin;
+
+  // Out-of-range values are dropped but *reported*, so the confirmation can
+  // tell the parent instead of silently saving e.g. a 0 ml bottle.
+  const ignored = [];
+  for (const [field, bounds] of Object.entries(NUMERIC_BOUNDS)) {
+    if (raw[field] === undefined) continue;
+    if (inRange(raw[field], bounds)) out[field] = raw[field];
+    else ignored.push(field);
+  }
+  if (raw.dureeMin !== undefined) {
+    const dureeBounds = DUREE_BOUNDS[raw.type];
+    if (dureeBounds && inRange(raw.dureeMin, dureeBounds)) out.dureeMin = raw.dureeMin;
+    else if (dureeBounds) ignored.push("dureeMin");
+  }
 
   for (const [field, values] of Object.entries(ENUM_FIELDS)) {
     if (typeof raw[field] === "string" && values.includes(raw[field])) out[field] = raw[field];
@@ -259,6 +291,7 @@ function sanitizeEvent(raw, action) {
   }
   const note = cleanText(raw.note, MAX_NOTE);
   if (note) out.note = note;
+  if (ignored.length) out.ignored = ignored;
 
   return out;
 }
@@ -266,24 +299,25 @@ function sanitizeEvent(raw, action) {
 const NONE = Object.freeze({ action: "none", events: [], truncated: false });
 
 /**
- * Validate a model answer. Never throws: anything malformed collapses to
- * "none", which the client treats as "not understood".
+ * Validate a model answer. Never throws. Only a deliberate "none" from the
+ * model means "nothing to record"; anything malformed, empty or containing an
+ * invalid event is flagged `unusable`, and parseWithClaude turns that into a
+ * fallback to the rule parser rather than a "not understood" message.
  */
 function sanitizeParseResult(raw) {
   if (!raw || typeof raw !== "object" || !ACTIONS.includes(raw.action) ||
       !Array.isArray(raw.events)) {
-    return { ...NONE };
+    return { ...NONE, unusable: true };
   }
   const action = raw.action;
   if (action === "none") return { ...NONE };
 
-  const events = raw.events.map((e) => sanitizeEvent(e, action)).filter(Boolean);
+  const events = raw.events.map((e) => sanitizeEvent(e, action));
+  if (events.length === 0 || events.some((e) => e === null)) {
+    return { ...NONE, unusable: true };
+  }
   const cap = action === "add" ? MAX_EVENTS : 1;
-  const truncated = events.length > cap;
-  const kept = events.slice(0, cap);
-
-  if (kept.length === 0) return { ...NONE };
-  return { action, events: kept, truncated };
+  return { action, events: events.slice(0, cap), truncated: events.length > cap };
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +328,9 @@ function sanitizeParseResult(raw) {
 // than Opus 5.5. Overridable per deployment (see docs/VOICE_LLM_REFONTE.md).
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const MAX_INPUT_CHARS = 500;
-const REQUEST_TIMEOUT_MS = 8000;
+// No SDK retry: the client already falls back to rules, and its own timeout
+// (8 s) must outlast the whole server path (6 s model + Firestore overhead).
+const REQUEST_TIMEOUT_MS = 6000;
 
 /**
  * Thrown when the model could not produce a usable answer (refusal,
@@ -331,7 +367,7 @@ async function parseWithClaude({ client, text, localTime, model = DEFAULT_MODEL 
       },
       messages: [{ role: "user", content: buildUserMessage(text, localTime) }],
     },
-    { timeout: REQUEST_TIMEOUT_MS, maxRetries: 1 },
+    { timeout: REQUEST_TIMEOUT_MS, maxRetries: 0 },
   );
 
   if (response.stop_reason === "refusal") throw new ParseUnavailableError("refusal");
@@ -345,8 +381,11 @@ async function parseWithClaude({ client, text, localTime, model = DEFAULT_MODEL 
     throw new ParseUnavailableError("invalid_json");
   }
 
+  const result = sanitizeParseResult(parsed);
+  if (result.unusable) throw new ParseUnavailableError("unusable");
+
   return {
-    result: sanitizeParseResult(parsed),
+    result,
     usage: response.usage || {},
     stopReason: response.stop_reason,
   };

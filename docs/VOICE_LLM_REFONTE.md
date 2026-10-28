@@ -65,7 +65,7 @@ Principes :
 | 3 | Intégration client avec repli | ✅ |
 | 4 | Évaluation réelle LLM vs règles, itération du prompt | ⏸️ outillage prêt, en attente de la clé API |
 | 5 | Migration `expo-av` → `expo-audio` | ✅ (test sur appareil à faire) |
-| 6 | Revue multi-agents ECC + corrections | ⬜ |
+| 6 | Revue multi-agents ECC + corrections | ✅ |
 | 7 | Recette finale | ⬜ |
 
 ---
@@ -258,3 +258,65 @@ npx jest --config evals/jest.config.js
 **Reste à faire, sur appareil** (module natif : nécessite un nouveau build, pas
 de mise à jour OTA) : enregistrer une commande sur iPhone et Android, vérifier
 que la transcription reste correcte avec le nouvel encodeur.
+
+### Hors refonte — correctif Android API 36 (commit `a1beba4`)
+
+Découvert grâce à `expo-doctor` pendant l'étape 5. Le passage à l'API 36
+(commit `c8be217`) ne modifiait que le plugin `expo-build-properties` dans
+`app.json`. Or `android/` est versionné : EAS ne relance pas de prebuild et
+**ignore** les sections `ios`, `android` et `plugins` d'`app.json`. Le build
+serait donc parti en API 35. Correctif : `android.compileSdkVersion=36` et
+`android.targetSdkVersion=36` dans `android/gradle.properties`. Vérifié par
+Gradle : le manifeste fusionné contient `targetSdkVersion="36"`.
+
+À surveiller : cibler l'API 36 **impose** l'affichage bord à bord (edge-to-edge)
+alors que `expo.edgeToEdgeEnabled=false` ; à vérifier sur appareil Android.
+
+### Étape 6 — Revue multi-agents ECC ✅
+
+Trois relecteurs ECC lancés en parallèle sur `4dce699..b0c9120`, chacun sur un
+angle que l'auteur du code sous-estime typiquement :
+
+| Agent ECC | Angle |
+|---|---|
+| `ecc:security-reviewer` | injection de prompt, bornes, abus de coût, fuite de données |
+| `ecc:silent-failure-hunter` | chemins de repli, erreurs avalées, délais, fuites du recorder |
+| `ecc:typescript-reviewer` | contrat avec l'aval, fuseaux / heure d'été, typage, qualité des tests |
+
+**Apport d'ECC dans ce chantier :**
+- **`eval-harness`** (étape 0) : méthodologie du banc d'essai — correcteur par
+  code, séparation dev/holdout, pass^3, suivi latence et coût.
+- **Agents de revue spécialisés** (étape 6) : trois regards indépendants en
+  parallèle, au lieu d'une relecture par l'auteur.
+- Limite honnête : l'essentiel des ~400 skills et ~80 agents installés ne
+  concerne pas ce projet (Bengali, HarmonyOS, Django…). La valeur vient d'une
+  poignée de briques bien choisies, pas du volume.
+
+**Résultats de la revue.** Aucun point critique. Chaque constat a été vérifié
+dans le code avant d'être corrigé ou écarté.
+
+| Constat (agent) | Décision |
+|---|---|
+| Cible invalide → « dernier » : risque de supprimer le mauvais événement (silent-failure) | **Corrigé** : une cible ou une heure *donnée mais invalide* rend la réponse inutilisable → repli sur les règles. Absente → défaut documenté (« maintenant » / « dernier »). Cibles datées (`dayOffset`, « celui d'hier à 21h ») |
+| Réponse vide ou malformée → « commande non reconnue » au lieu du repli (silent-failure) | **Corrigé** : seul un « rien » choisi par le modèle est respecté ; le reste → repli |
+| Valeur hors bornes retirée en silence → biberon de 0 ml enregistré (silent-failure) | **Corrigé** : champs ignorés remontés jusqu'à la confirmation (« ⚠️ Valeur ignorée (hors limites) : quantité ») |
+| Créneau consommé même en cas d'échec ; clé révoquée invisible (silent-failure, security) | **Corrigé** : remboursement du créneau ; `console.error` sur 400/401/403/404 ; `not-found` signalé côté client |
+| Délais incohérents : client 10 s, serveur jusqu'à 16 s (silent-failure) | **Corrigé** : SDK 6 s sans nouvelle tentative, CF 15 s, client 8 s ; latence ajoutée aux fils d'Ariane |
+| `NetInfo.fetch` sans délai (silent-failure) | **Corrigé** : plafonné à 1 s, minuteur nettoyé |
+| `relativeTime: 0` ignoré par le finder (typescript) | **Corrigé** : `ago 0` → « dernier » |
+| Correction de tétée écrite dans `quantite` au lieu de `duree` (typescript) | **Corrigé** côté mapping LLM (défaut préexistant du parseur à règles, rendu fréquent par le LLM) |
+| Test de contrat tautologique (typescript) | **Corrigé** : valeurs distinctes, destination exacte par champ ; vérifié par mutation (poids ↔ taille) |
+| Correcteur trop indulgent sur les modifications (typescript) | **Corrigé** : seul `modifications` compte (ce qu'écrit l'app). Référence règles inchangée : 42 % |
+| Balises dans les textes libres (security) | **Corrigé** : `<` et `>` retirés |
+| Contrôle client du contenu (security, typescript) | **Corrigé** : type et format d'heure vérifiés par événement |
+| Tests recorder : Android non couvert, erreur non vérifiée (typescript) | **Corrigé** |
+| Règles en « second avis » quand le LLM dit « rien » | **Écarté** : réintroduit les faux positifs mesurés à l'étape 0 |
+| Limiteur de débit non atomique (security) | **Reporté** : `checkRateLimit` est préexistant et partagé par toutes les CF ; le plafond journalier, lui, est transactionnel |
+| Plafond de dépense global (security) | **Recommandation** : fixer une limite de dépense mensuelle dans la console Anthropic (aucun code, pas de document Firestore très sollicité) |
+| Double démarrage du recorder ignoré (silent-failure) | **Reporté** : comportement préexistant, non introduit ici |
+
+Vérifié en plus : toute suppression ou modification passe par la fenêtre de
+confirmation (`setConfirmModal`), aucune exécution automatique.
+
+Tests : serveur **167/167**, client **436** réussis (37 échecs préexistants
+inchangés), typage 43 erreurs préexistantes.

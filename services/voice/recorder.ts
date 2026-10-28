@@ -19,7 +19,10 @@ let recording: AudioRecorder | null = null;
  * Flatten a preset for the current platform, as expo-audio's own
  * useAudioRecorder does before calling the constructor (that helper isn't
  * exported). Passing the nested preset as-is would silently drop the
- * ios/android encoder settings.
+ * ios/android encoder settings. Copied from expo-audio 0.4.9
+ * (build/utils/options.js) — re-check on upgrade. The cast is needed because
+ * the native constructor takes the flat per-platform shape, which
+ * RecordingOptions doesn't describe.
  */
 function platformRecordingOptions(preset: RecordingOptions): Partial<RecordingOptions> {
   const common = {

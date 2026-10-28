@@ -8,11 +8,14 @@ const mockCallable = jest.fn();
 jest.mock("firebase/functions", () => ({
   httpsCallable: jest.fn(() => mockCallable),
 }));
+jest.mock("expo-audio", () => ({ AudioModule: {}, RecordingPresets: { HIGH_QUALITY: {} } }));
+jest.mock("expo-file-system", () => ({ EncodingType: { Base64: "base64" } }));
 
 import NetInfo from "@react-native-community/netinfo";
 import { httpsCallable } from "firebase/functions";
 import { captureServiceError } from "@/utils/errorReporting";
 import { parseVoiceText, LLM_PARSE_TIMEOUT_MS } from "@/services/voice/llmParser";
+import { formatConfirmationMessage } from "@/hooks/useVoiceParser";
 
 const NOW = new Date(2026, 9, 28, 14, 30);
 const callableError = (code: string) => Object.assign(new Error(code), { code });
@@ -48,7 +51,7 @@ describe("parseVoiceText", () => {
     expect(out).toEqual(expect.objectContaining({ source: "llm", commands: [] }));
   });
 
-  it.each(["functions/unavailable", "functions/resource-exhausted", "functions/deadline-exceeded", "functions/not-found"])(
+  it.each(["functions/unavailable", "functions/resource-exhausted", "functions/deadline-exceeded"])(
     "falls back to the rules on %s without reporting an error",
     async (code) => {
       mockCallable.mockRejectedValue(callableError(code));
@@ -60,15 +63,19 @@ describe("parseVoiceText", () => {
     },
   );
 
-  it("falls back and reports unexpected errors", async () => {
-    mockCallable.mockRejectedValue(callableError("functions/internal"));
+  it.each(["functions/internal", "functions/not-found"])("falls back and reports %s", async (code) => {
+    mockCallable.mockRejectedValue(callableError(code));
     const out = await parseVoiceText("pipi", NOW);
     expect(out.source).toBe("rules");
     expect(captureServiceError).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back on a malformed payload", async () => {
-    mockCallable.mockResolvedValue({ data: { action: "add", events: "nope" } });
+  it.each([
+    [{ action: "add", events: "nope", truncated: false }],
+    [{ action: "add", truncated: false, events: [{ type: "admin", time: { kind: "now" } }] }],
+    [{ action: "add", truncated: false, events: [{ type: "biberon", time: { kind: "at", clock: "9h" } }] }],
+  ])("falls back on a malformed payload %#", async (data) => {
+    mockCallable.mockResolvedValue({ data });
     const out = await parseVoiceText("pipi", NOW);
     expect(out).toEqual(expect.objectContaining({ source: "rules", fallbackReason: "malformed" }));
   });
@@ -86,9 +93,33 @@ describe("parseVoiceText", () => {
     expect(mockCallable).not.toHaveBeenCalled();
   });
 
+  it("does not wait on a hanging NetInfo", async () => {
+    jest.useFakeTimers();
+    (NetInfo.fetch as jest.Mock).mockReturnValue(new Promise(() => {}));
+    mockCallable.mockResolvedValue({ data: { action: "none", events: [], truncated: false } });
+    const pending = parseVoiceText("bonjour", NOW);
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect((await pending).source).toBe("llm");
+    jest.useRealTimers();
+  });
+
   it("still calls the LLM when NetInfo itself fails", async () => {
     (NetInfo.fetch as jest.Mock).mockRejectedValue(new Error("netinfo down"));
     mockCallable.mockResolvedValue({ data: { action: "none", events: [], truncated: false } });
     expect((await parseVoiceText("bonjour", NOW)).source).toBe("llm");
+  });
+});
+
+describe("confirmation message", () => {
+  it("warns about a value dropped for being out of bounds", async () => {
+    mockCallable.mockResolvedValue({
+      data: {
+        action: "add",
+        truncated: false,
+        events: [{ type: "biberon", time: { kind: "now" }, ignored: ["quantiteMl"] }],
+      },
+    });
+    const { commands } = await parseVoiceText("Biberon de 900 ml", NOW);
+    expect(formatConfirmationMessage(commands[0])).toContain("⚠️ Valeur ignorée (hors limites) : quantité");
   });
 });

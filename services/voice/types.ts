@@ -194,6 +194,8 @@ export interface ParsedCommandResult extends BaseCommand {
   methode?: string;
   isFuture?: boolean;
   contextNote?: string;
+  /** Values the parent said but that were out of bounds and dropped (LLM path). */
+  ignoredFields?: string[];
 }
 
 // Interface pour un segment de phrase parsé

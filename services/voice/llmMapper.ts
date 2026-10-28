@@ -15,7 +15,7 @@ export type LlmTimeRef =
 export type LlmTargetRef =
   | { kind: "last" }
   | { kind: "ago"; minutesAgo: number }
-  | { kind: "at"; clock: string };
+  | { kind: "at"; clock: string; dayOffset?: number };
 
 export interface LlmEvent {
   type: string;
@@ -49,6 +49,8 @@ export interface LlmEvent {
   nomVaccin?: string;
   methode?: string;
   note?: string;
+  /** Server-side: fields the model returned out of bounds, dropped. */
+  ignored?: string[];
 }
 
 export interface LlmParseResult {
@@ -82,12 +84,14 @@ export function resolveTimeRef(ref: LlmTimeRef | undefined, now: Date): Date {
 
 function toIdentifier(type: CommandType, target: LlmTargetRef | undefined, now: Date): EventIdentifier {
   if (target?.kind === "at") return { type, targetTime: resolveTimeRef(target, now) };
-  if (target?.kind === "ago") return { type, relativeTime: target.minutesAgo };
+  // "celui que je viens de donner" → ago 0; the finder treats relativeTime 0
+  // as "no identifier", so map it to the latest event instead.
+  if (target?.kind === "ago" && target.minutesAgo > 0) return { type, relativeTime: target.minutesAgo };
   return { type, isLast: true };
 }
 
 /** Value fields in the legacy ParsedCommandResult vocabulary. */
-function valueFields(e: LlmEvent): Partial<ParsedCommandResult> {
+function valueFields(e: LlmEvent, action: CommandAction): Partial<ParsedCommandResult> {
   const v: Partial<ParsedCommandResult> = {
     typeBiberon: e.typeBiberon,
     quantiteGauche: e.quantiteGaucheMl,
@@ -111,10 +115,12 @@ function valueFields(e: LlmEvent): Partial<ParsedCommandResult> {
     nomVaccin: e.nomVaccin,
     methode: e.methode,
   };
-  // Legacy quirks kept on purpose: biberon volume and tetee duration both
-  // live in `quantite`; sleep/activity/bath durations live in `duree`.
+  // Legacy quirks kept on purpose: biberon volume and, for a new tetee, its
+  // duration live in `quantite` (firebaseFormatter turns the latter into
+  // `duree`). executeModify writes `modifications.quantite` as-is, though, so
+  // a tetee correction must target `duree`, the stored field.
   if (e.type === "biberon") v.quantite = e.quantiteMl;
-  if (e.type === "tetee") v.quantite = e.dureeMin;
+  if (e.type === "tetee" && action === "add") v.quantite = e.dureeMin;
   else v.duree = e.dureeMin;
 
   for (const key of Object.keys(v) as (keyof typeof v)[]) {
@@ -123,7 +129,7 @@ function valueFields(e: LlmEvent): Partial<ParsedCommandResult> {
   return v;
 }
 
-function diaperFlags(e: LlmEvent): Pick<ParsedCommandResult, "pipi" | "popo"> | {} {
+function diaperFlags(e: LlmEvent): Partial<Pick<ParsedCommandResult, "pipi" | "popo">> {
   switch (e.type) {
     case "miction": return { pipi: true, popo: false };
     case "selle": return { pipi: false, popo: true };
@@ -132,7 +138,7 @@ function diaperFlags(e: LlmEvent): Pick<ParsedCommandResult, "pipi" | "popo"> | 
   }
 }
 
-function sideFlags(e: LlmEvent): Pick<ParsedCommandResult, "coteGauche" | "coteDroit"> | {} {
+function sideFlags(e: LlmEvent): Partial<Pick<ParsedCommandResult, "coteGauche" | "coteDroit">> {
   if (e.type !== "tetee") return {};
   const gauche = e.coteGauche === true;
   const droit = e.coteDroit === true;
@@ -150,7 +156,7 @@ export function mapLlmParseResult(
 
   const commands = result.events.map((e): ParsedCommandResult => {
     const type = e.type as CommandType;
-    const values = valueFields(e);
+    const values = valueFields(e, action);
     const timestamp = action === "add" ? resolveTimeRef(e.time, now) : new Date(now);
     const cmd: ParsedCommandResult = {
       type,
@@ -165,6 +171,7 @@ export function mapLlmParseResult(
       ...sideFlags(e),
     };
     if (e.note) cmd.contextNote = e.note;
+    if (e.ignored?.length) cmd.ignoredFields = e.ignored;
     if (action !== "add") {
       cmd.eventIdentifier = toIdentifier(type, e.target, now);
       if (action === "modify") cmd.modifications = values;

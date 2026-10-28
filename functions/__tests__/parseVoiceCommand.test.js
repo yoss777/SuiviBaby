@@ -106,6 +106,22 @@ describe("parseVoiceCommand", () => {
     expect(logged).not.toContain("Léa");
   });
 
+  it("refunds the daily slot when the model fails", async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const { usageSet } = stubFirestore({ voiceParseDate: today, voiceParseCount: 5 });
+    mockCreate.mockRejectedValue(Object.assign(new Error("overloaded"), { status: 529 }));
+    await expect(fns.parseVoiceCommand(call({ text: "pipi" }))).rejects.toMatchObject({ code: "unavailable" });
+    // The stub always reads 5: reserve writes 6, then the refund writes 5 − 1.
+    expect(usageSet).toHaveBeenCalledWith(expect.anything(), { voiceParseCount: 4 }, { merge: true });
+  });
+
+  it("logs a broken setup (revoked key, retired model) as an error", async () => {
+    stubFirestore();
+    mockCreate.mockRejectedValue(Object.assign(new Error("invalid x-api-key"), { status: 401 }));
+    await expect(fns.parseVoiceCommand(call({ text: "pipi" }))).rejects.toMatchObject({ code: "unavailable" });
+    expect(console.error).toHaveBeenCalledWith("parseVoiceCommand: configuration error", expect.any(String));
+  });
+
   it.each([
     ["an API error", () => mockCreate.mockRejectedValue(Object.assign(new Error("overloaded"), { status: 529 }))],
     ["a refusal", () => mockCreate.mockResolvedValue({ stop_reason: "refusal", content: [] })],

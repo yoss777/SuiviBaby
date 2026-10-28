@@ -334,8 +334,26 @@ export function formatConfirmationMessage(command: ParsedCommandResult): string 
       break;
   }
 
+  if (command.ignoredFields?.length) {
+    const labels = command.ignoredFields.map((f) => IGNORED_FIELD_LABELS[f] ?? f);
+    message += `\n\n⚠️ Valeur ignorée (hors limites) : ${labels.join(", ")}`;
+  }
+
   return message;
 }
+
+/** Field names from functions/lib/voiceParse.js → words a parent understands. */
+const IGNORED_FIELD_LABELS: Record<string, string> = {
+  quantiteMl: "quantité",
+  quantiteGaucheMl: "quantité gauche",
+  quantiteDroiteMl: "quantité droite",
+  temperatureC: "température",
+  poidsKg: "poids",
+  tailleCm: "taille",
+  perimetreCranienCm: "périmètre crânien",
+  humeur: "humeur",
+  dureeMin: "durée",
+};
 
 /**
  * Formate les détails d'un événement existant pour l'affichage.

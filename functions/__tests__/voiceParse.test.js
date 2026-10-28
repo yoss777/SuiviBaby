@@ -20,14 +20,17 @@ describe("sanitizeParseResult", () => {
     ]);
   });
 
-  it("rejects a non-object or an unknown action as 'none'", () => {
-    expect(sanitizeParseResult(null)).toEqual({ action: "none", events: [], truncated: false });
-    expect(sanitizeParseResult({ action: "drop_database", events: [ev({})] }).action).toBe("none");
+  it("flags a non-object or an unknown action as unusable", () => {
+    expect(sanitizeParseResult(null)).toEqual({ action: "none", events: [], truncated: false, unusable: true });
+    expect(sanitizeParseResult({ action: "drop_database", events: [ev({})] }).unusable).toBe(true);
   });
 
-  it("drops events of unknown type", () => {
-    const out = sanitizeParseResult({ action: "add", events: [ev({ type: "admin" }), ev({})] });
-    expect(out.events.map((e) => e.type)).toEqual(["biberon"]);
+  it("keeps a deliberate 'none' as a usable answer", () => {
+    expect(sanitizeParseResult({ action: "none", events: [] })).toEqual({ action: "none", events: [], truncated: false });
+  });
+
+  it("flags the whole answer unusable when one event has an unknown type", () => {
+    expect(sanitizeParseResult({ action: "add", events: [ev({ type: "admin" }), ev({})] }).unusable).toBe(true);
   });
 
   it(`caps the number of events at ${MAX_EVENTS} and flags truncation`, () => {
@@ -49,11 +52,18 @@ describe("sanitizeParseResult", () => {
       ],
     });
     expect(out.events[0].quantiteMl).toBeUndefined();
+    expect(out.events[0].ignored).toEqual(["quantiteMl"]);
     expect(out.events[1].temperatureC).toBeUndefined();
+    expect(out.events[1].ignored).toEqual(["temperatureC"]);
     expect(out.events[2].dureeMin).toBeUndefined();
     expect(out.events[3].poidsKg).toBe(6.4);
     expect(out.events[3].tailleCm).toBeUndefined();
     expect(out.events[4].humeur).toBeUndefined();
+    expect(out.events[3].ignored).toEqual(["tailleCm"]);
+  });
+
+  it("does not report fields that were simply absent", () => {
+    expect(sanitizeParseResult({ action: "add", events: [ev({ quantiteMl: 120 })] }).events[0].ignored).toBeUndefined();
   });
 
   it("drops enum values outside the whitelist", () => {
@@ -81,24 +91,34 @@ describe("sanitizeParseResult", () => {
     expect(out.events[0].note.length).toBeLessThanOrEqual(200);
   });
 
-  it("validates time references", () => {
+  it("keeps valid time references and defaults a missing one to now", () => {
     const out = sanitizeParseResult({
       action: "add",
       events: [
         ev({ time: { kind: "ago", minutesAgo: 20 } }),
-        ev({ time: { kind: "ago", minutesAgo: 999999 } }),
         ev({ time: { kind: "at", clock: "23:00", dayOffset: -1 } }),
-        ev({ time: { kind: "at", clock: "25:99" } }),
-        ev({ time: { kind: "tomorrow" } }),
+        ev({ time: { kind: "at", clock: "08:00", dayOffset: -2 } }),
+        { type: "miction" },
       ],
     });
     expect(out.events.map((e) => e.time)).toEqual([
       { kind: "ago", minutesAgo: 20 },
-      { kind: "now" },
       { kind: "at", clock: "23:00", dayOffset: -1 },
-      { kind: "now" },
+      { kind: "at", clock: "08:00", dayOffset: -2 },
       { kind: "now" },
     ]);
+  });
+
+  it.each([
+    [{ kind: "ago", minutesAgo: 999999 }],
+    [{ kind: "ago", minutesAgo: 2.5 }],
+    [{ kind: "at", clock: "25:99" }],
+    [{ kind: "at", clock: "9:00" }],
+    [{ kind: "at", clock: "09:00", dayOffset: 1 }],
+    [{ kind: "at", clock: "09:00", dayOffset: -30 }],
+    [{ kind: "tomorrow" }],
+  ])("rejects an invalid time %j instead of guessing 'now'", (time) => {
+    expect(sanitizeParseResult({ action: "add", events: [ev({ time })] }).unusable).toBe(true);
   });
 
   it("keeps only one event for modify/delete, with a sanitized target", () => {
@@ -118,8 +138,27 @@ describe("sanitizeParseResult", () => {
     expect(out.events[0].target).toEqual({ kind: "last" });
   });
 
-  it("turns 'add' with no events into 'none'", () => {
-    expect(sanitizeParseResult({ action: "add", events: [] }).action).toBe("none");
+  it("keeps a dated target", () => {
+    const out = sanitizeParseResult({
+      action: "delete", events: [{ type: "biberon", target: { kind: "at", clock: "21:00", dayOffset: -1 } }],
+    });
+    expect(out.events[0].target).toEqual({ kind: "at", clock: "21:00", dayOffset: -1 });
+  });
+
+  it.each([[{ kind: "at", clock: "9h" }], [{ kind: "ago", minutesAgo: -5 }], [{ kind: "first" }]])(
+    "rejects an invalid target %j instead of falling back to 'last'",
+    (target) => {
+      expect(sanitizeParseResult({ action: "delete", events: [{ type: "biberon", target }] }).unusable).toBe(true);
+    },
+  );
+
+  it("flags 'add' with no events as unusable", () => {
+    expect(sanitizeParseResult({ action: "add", events: [] }).unusable).toBe(true);
+  });
+
+  it("strips markup characters from free text", () => {
+    const out = sanitizeParseResult({ action: "add", events: [ev({ type: "symptome", description: "<b>Toux</b>" })] });
+    expect(out.events[0].description).toBe("bToux/b");
   });
 });
 
@@ -179,6 +218,7 @@ describe("parseWithClaude", () => {
     expect(params.output_config.effort).toBe("low");
     expect(params.messages[0].content).toContain("Biberon de 150 ml");
     expect(options.timeout).toBeGreaterThan(0);
+    expect(options.maxRetries).toBe(0);
   });
 
   it("reads the text block (after a thinking block) and sanitizes it", async () => {
@@ -197,6 +237,7 @@ describe("parseWithClaude", () => {
     ["max_tokens", answer({}, { stop_reason: "max_tokens" })],
     ["invalid_json", { stop_reason: "end_turn", content: [{ type: "text", text: "pas du json" }] }],
     ["invalid_json", { stop_reason: "end_turn", content: [] }],
+    ["unusable", answer({ action: "add", events: [] })],
   ])("throws ParseUnavailableError on %s", async (reason, response) => {
     const { client } = fakeClient(response);
     const err = await parseWithClaude({ client, text: "x" }).catch((e) => e);

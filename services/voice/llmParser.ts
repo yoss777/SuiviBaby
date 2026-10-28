@@ -13,7 +13,10 @@ import { addBreadcrumb, captureServiceError } from "@/utils/errorReporting";
 import { parseMultipleCommandsWithMeta, type ParseCommandsResult } from "./commandParser";
 import { mapLlmParseResult, type LlmParseResult } from "./llmMapper";
 
-export const LLM_PARSE_TIMEOUT_MS = 10_000;
+// Must outlast the server path (6 s model call + Firestore), and stays short
+// enough that a slow model falls back to the rules without a long wait.
+export const LLM_PARSE_TIMEOUT_MS = 8_000;
+const NETINFO_TIMEOUT_MS = 1_000;
 /** Mirrors MAX_INPUT_CHARS in functions/lib/voiceParse.js. */
 export const MAX_LLM_INPUT_CHARS = 500;
 
@@ -25,43 +28,68 @@ export interface VoiceParseResult extends ParseCommandsResult {
   fallbackReason?: string;
 }
 
-/** Degradations we expect in normal operation: fall back without alerting. */
+/**
+ * Degradations we expect in normal operation: fall back without alerting.
+ * `not-found` is deliberately absent: once the function is deployed, a
+ * missing function means a broken release and must surface in Sentry.
+ * Server-side configuration errors are alerted on by the CF's own logs.
+ */
 const EXPECTED_FALLBACK_CODES = new Set([
   "functions/unavailable",
   "functions/resource-exhausted",
   "functions/deadline-exceeded",
-  "functions/not-found",
 ]);
 
 const ACTIONS = new Set(["add", "modify", "delete", "none"]);
+const EVENT_TYPES = new Set<string>([
+  "biberon", "tetee", "pompage", "miction", "selle", "couche", "sommeil",
+  "vitamine", "activite", "jalon", "croissance", "solide", "bain",
+  "temperature", "medicament", "symptome", "vaccin", "nettoyage_nez",
+]);
+const CLOCK_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+/** The server sanitizes; this is a cheap second check before trusting the payload. */
 function isLlmParseResult(data: unknown): data is LlmParseResult {
   const d = data as LlmParseResult | null;
-  return !!d && typeof d === "object" && ACTIONS.has(d.action) &&
-    Array.isArray(d.events) && typeof d.truncated === "boolean";
+  if (!d || typeof d !== "object" || !ACTIONS.has(d.action) ||
+      !Array.isArray(d.events) || typeof d.truncated !== "boolean") {
+    return false;
+  }
+  return d.events.every((e) => {
+    if (!e || typeof e !== "object" || !EVENT_TYPES.has(e.type)) return false;
+    const ref = (e.time ?? e.target) as { kind?: string; clock?: unknown } | undefined;
+    return !ref || ref.kind !== "at" || (typeof ref.clock === "string" && CLOCK_RE.test(ref.clock));
+  });
 }
 
 const formatClock = (d: Date) =>
   `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
 async function isOffline(): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return (await NetInfo.fetch()).isConnected === false;
+    const state = await Promise.race([
+      NetInfo.fetch(),
+      new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), NETINFO_TIMEOUT_MS); }),
+    ]);
+    return state?.isConnected === false;
   } catch {
     return false; // can't tell — let the call decide
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 export async function parseVoiceText(text: string, now: Date = new Date()): Promise<VoiceParseResult> {
+  const startedAt = Date.now();
   const fallback = (reason: string): VoiceParseResult => {
-    addBreadcrumb("voice", "parse fell back to rules", { reason }, "warning");
+    addBreadcrumb("voice", "parse fell back to rules", { reason, ms: Date.now() - startedAt }, "warning");
     return { ...parseMultipleCommandsWithMeta(text), source: "rules", fallbackReason: reason };
   };
 
   if (text.length > MAX_LLM_INPUT_CHARS) return fallback("too-long");
   if (await isOffline()) return fallback("offline");
 
-  const startedAt = Date.now();
   try {
     const parse = httpsCallable<{ text: string; localTime: string }, unknown>(
       functions,

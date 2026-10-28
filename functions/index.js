@@ -952,6 +952,29 @@ async function reserveVoiceParseSlot(db, uid) {
 }
 
 /**
+ * Give back a slot when the model produced nothing usable, so an Anthropic
+ * outage doesn't eat a heavy user's daily budget. Best-effort.
+ */
+async function refundVoiceParseSlot(db, uid) {
+  const usageRef = db.doc(`usage_limits/${uid}`);
+  const today = new Date().toISOString().split("T")[0];
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(usageRef);
+      const data = snap.exists ? snap.data() : {};
+      if (data.voiceParseDate === today && (data.voiceParseCount || 0) > 0) {
+        tx.set(usageRef, { voiceParseCount: data.voiceParseCount - 1 }, { merge: true });
+      }
+    });
+  } catch (err) {
+    console.warn("refundVoiceParseSlot failed:", err?.message ?? err);
+  }
+}
+
+/** Anthropic statuses that mean our setup is broken, not a transient blip. */
+const VOICE_PARSE_CONFIG_ERRORS = new Set([400, 401, 403, 404]);
+
+/**
  * parseVoiceCommand — interprets a voice transcript with Claude and returns
  * sanitized, structured events (see functions/lib/voiceParse.js).
  *
@@ -966,7 +989,7 @@ exports.parseVoiceCommand = onCall(
   withAppCheck({
     region: "europe-west1",
     memory: "256MiB",
-    timeoutSeconds: 20,
+    timeoutSeconds: 15,
     concurrency: 40,
     secrets: ["ANTHROPIC_API_KEY"],
   }),
@@ -1021,14 +1044,22 @@ exports.parseVoiceCommand = onCall(
       return result;
     } catch (error) {
       if (error instanceof HttpsError) throw error;
+      await refundVoiceParseSlot(db, uid);
       // Anthropic errors (rate limit, overload, timeout, auth) and unusable
-      // answers all degrade the same way: the client uses its local parser.
-      console.warn("parseVoiceCommand: unavailable", JSON.stringify({
+      // answers all degrade the same way for the parent: the client uses its
+      // local parser. A broken setup (revoked key, retired model) would do so
+      // silently for every user, so it is logged as an error to be alerted on.
+      const details = JSON.stringify({
         model,
         ms: Date.now() - startedAt,
         reason: error.reason || error.name,
         status: error.status,
-      }));
+      });
+      if (VOICE_PARSE_CONFIG_ERRORS.has(error.status)) {
+        console.error("parseVoiceCommand: configuration error", details);
+      } else {
+        console.warn("parseVoiceCommand: unavailable", details);
+      }
       throw new HttpsError("unavailable", "Analyse vocale indisponible.");
     }
   }

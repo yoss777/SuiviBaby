@@ -38,6 +38,7 @@ import {
   setAudioModeAsync,
 } from "expo-audio";
 import { Platform } from "react-native";
+import { captureServiceError } from "@/utils/errorReporting";
 import {
   requestPermissions,
   startRecording,
@@ -80,6 +81,19 @@ describe("recorder (expo-audio)", () => {
     ));
     expect(mockRecorder.prepareToRecordAsync).toHaveBeenCalled();
     expect(mockRecorder.record).toHaveBeenCalled();
+  });
+
+  it("flattens the android block on Android", async () => {
+    const original = Platform.OS;
+    Object.defineProperty(Platform, "OS", { get: () => "android", configurable: true });
+    try {
+      await startRecording();
+      const options = (AudioModule.AudioRecorder as unknown as jest.Mock).mock.calls[0][0];
+      expect(options).toEqual(expect.objectContaining({ outputFormat: "mpeg4", audioEncoder: "aac" }));
+      expect(options).not.toHaveProperty("audioQuality");
+    } finally {
+      Object.defineProperty(Platform, "OS", { get: () => original, configurable: true });
+    }
   });
 
   it("ignores a second start while recording", async () => {
@@ -129,6 +143,9 @@ describe("recorder (expo-audio)", () => {
     mockRecorder.stop.mockRejectedValueOnce(new Error("io"));
     expect(await stopRecording()).toBeNull();
     expect(mockRecorder.release).toHaveBeenCalled();
+    expect(captureServiceError).toHaveBeenCalledWith(
+      expect.any(Error), expect.objectContaining({ operation: "stopRecording" }),
+    );
     await startRecording();
     expect(AudioModule.AudioRecorder).toHaveBeenCalledTimes(2);
   });
