@@ -66,5 +66,14 @@ target 'SuiviBaby' do
         end
       end
     end
+
+    # fmt 11.0.2 (pulled by React Native) fails to compile its consteval
+    # format strings with the Xcode 26 clang; C++17 disables consteval.
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'fmt'
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      end
+    end
   end
 end
