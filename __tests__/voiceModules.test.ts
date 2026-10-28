@@ -21,13 +21,12 @@ jest.mock("firebase/functions", () => ({
   httpsCallable: jest.fn(() => jest.fn()),
 }));
 
-jest.mock("expo-av", () => ({
-  Audio: {
-    requestPermissionsAsync: jest.fn(),
-    setAudioModeAsync: jest.fn(),
-    Recording: { createAsync: jest.fn() },
-    RecordingOptionsPresets: { HIGH_QUALITY: {} },
-  },
+jest.mock("expo-audio", () => ({
+  AudioModule: { AudioRecorder: jest.fn() },
+  RecordingPresets: { HIGH_QUALITY: {} },
+  getRecordingPermissionsAsync: jest.fn(),
+  requestRecordingPermissionsAsync: jest.fn(),
+  setAudioModeAsync: jest.fn(),
 }));
 
 jest.mock("expo-file-system", () => ({

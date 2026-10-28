@@ -22,7 +22,10 @@ const CONCURRENCY = 4;
 // Same "now" as the grader: the corpus reference time, given as the phone's clock.
 const localTime = corpus.referenceNow.slice(11, 16);
 
-// Opus/Sonnet 5.5 reject effort-less defaults the same way; only the model differs.
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.error("ANTHROPIC_API_KEY manquante : aucun appel lancé.");
+  process.exit(1);
+}
 const client = new Anthropic();
 
 async function runOne(c, attempt) {

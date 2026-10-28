@@ -64,7 +64,7 @@ Principes :
 | 2 | Cloud Function `parseVoiceCommand` | ✅ |
 | 3 | Intégration client avec repli | ✅ |
 | 4 | Évaluation réelle LLM vs règles, itération du prompt | ⏸️ outillage prêt, en attente de la clé API |
-| 5 | Migration `expo-av` → `expo-audio` | ⬜ |
+| 5 | Migration `expo-av` → `expo-audio` | ✅ (test sur appareil à faire) |
 | 6 | Revue multi-agents ECC + corrections | ⬜ |
 | 7 | Recette finale | ⬜ |
 
@@ -230,3 +230,31 @@ node evals/voice/run-llm.js claude-haiku-5-5
 node evals/voice/run-llm.js claude-opus-5-5     # comparaison, ≈ 1,5 $
 npx jest --config evals/jest.config.js
 ```
+
+### Étape 5 — Migration `expo-av` → `expo-audio` ✅
+
+- `expo-audio` ~0.4.9 (version alignée sur le SDK 53) ; `expo-av` désinstallé
+  et retiré des exclusions `expo install` / `expo-doctor` de `package.json`.
+- [services/voice/recorder.ts](../services/voice/recorder.ts) : API impérative
+  `AudioModule.AudioRecorder`, mêmes fonctions exportées, aucun appelant modifié.
+  Conservés : re-vérification de la permission à chaque enregistrement (T3.2),
+  contrôle de l'audio vide (T3.3).
+- **Écart avec [MIGRATION_EXPO_AUDIO.md](MIGRATION_EXPO_AUDIO.md)** : le plan
+  passait `RecordingPresets.HIGH_QUALITY` tel quel au constructeur. Le hook
+  officiel aplatit d'abord le preset par plateforme (`createRecordingOptions`,
+  non exporté) ; sans cela, les réglages d'encodage iOS/Android seraient
+  ignorés. Reproduit localement dans `platformRecordingOptions`.
+- Deux corrections au passage : l'enregistreur natif est libéré (`release()`)
+  après l'arrêt ou un démarrage raté ; un échec de `stop()` ne laisse plus le
+  module bloqué en « enregistrement en cours » (c'était le cas avec `expo-av`).
+- `ios/Podfile.lock` régénéré par `pod install` : `EXAV` retiré, `ExpoAudio`
+  ajouté. L'autolinking Android prend le module en compte au build.
+- **Tests** : le recorder n'était pas testé du tout (les mocks servaient
+  seulement à l'import). Nouveau `__tests__/voiceRecorder.test.ts`, 9 tests :
+  preset aplati, double démarrage, T3.2 (redemande / refus définitif), libération
+  sur échec, arrêt, arrêt en échec. Suite client : 426 réussis, mêmes 37 échecs
+  préexistants ; typage : 43 erreurs préexistantes.
+
+**Reste à faire, sur appareil** (module natif : nécessite un nouveau build, pas
+de mise à jour OTA) : enregistrer une commande sur iPhone et Android, vérifier
+que la transcription reste correcte avec le nouvel encodeur.

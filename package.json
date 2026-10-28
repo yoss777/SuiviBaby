@@ -38,7 +38,7 @@
     "dotenv": "^17.2.3",
     "expo": "~53.0.27",
     "expo-apple-authentication": "~7.2.4",
-    "expo-av": "^16.0.8",
+    "expo-audio": "~0.4.9",
     "expo-blur": "~14.1.5",
     "expo-build-properties": "~0.14.8",
     "expo-constants": "~17.1.7",
@@ -98,7 +98,6 @@
   "expo": {
     "install": {
       "exclude": [
-        "expo-av",
         "expo-image-manipulator",
         "react-native-pager-view"
       ]
@@ -107,7 +106,6 @@
       "reactNativeDirectoryCheck": {
         "exclude": [
           "@gorhom/portal",
-          "expo-av",
           "react-native-sticky-parallax-header"
         ],
         "listUnknownPackages": false

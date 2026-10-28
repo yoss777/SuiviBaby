@@ -1,10 +1,38 @@
 import { functions } from "@/config/firebase";
-import { Audio } from "expo-av";
+import {
+  AudioModule,
+  getRecordingPermissionsAsync,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  type AudioRecorder,
+  type RecordingOptions,
+} from "expo-audio";
 import * as FileSystem from "expo-file-system";
 import { httpsCallable } from "firebase/functions";
+import { Platform } from "react-native";
 import { captureServiceError } from "@/utils/errorReporting";
 
-let recording: Audio.Recording | null = null;
+let recording: AudioRecorder | null = null;
+
+/**
+ * Flatten a preset for the current platform, as expo-audio's own
+ * useAudioRecorder does before calling the constructor (that helper isn't
+ * exported). Passing the nested preset as-is would silently drop the
+ * ios/android encoder settings.
+ */
+function platformRecordingOptions(preset: RecordingOptions): Partial<RecordingOptions> {
+  const common = {
+    extension: preset.extension,
+    sampleRate: preset.sampleRate,
+    numberOfChannels: preset.numberOfChannels,
+    bitRate: preset.bitRate,
+    isMeteringEnabled: preset.isMeteringEnabled ?? false,
+  };
+  if (Platform.OS === "ios") return { ...common, ...preset.ios } as Partial<RecordingOptions>;
+  if (Platform.OS === "android") return { ...common, ...preset.android } as Partial<RecordingOptions>;
+  return common;
+}
 
 /**
  * T3.3 — minimum useful audio size before we even try to transcribe.
@@ -49,7 +77,7 @@ export class VoicePermissionDeniedError extends Error {
 }
 
 function isAudioAvailable(): boolean {
-  return !!Audio?.requestPermissionsAsync && !!Audio?.Recording?.createAsync;
+  return !!AudioModule?.AudioRecorder;
 }
 
 /**
@@ -58,10 +86,10 @@ function isAudioAvailable(): boolean {
 export async function requestPermissions(): Promise<boolean> {
   try {
     if (!isAudioAvailable()) {
-      console.error("Module audio indisponible. Vérifiez expo-av.");
+      console.error("Module audio indisponible. Vérifiez expo-audio.");
       return false;
     }
-    const { status } = await Audio.requestPermissionsAsync();
+    const { status } = await requestRecordingPermissionsAsync();
     return status === "granted";
   } catch (error) {
     console.error("Erreur permissions audio:", error);
@@ -87,18 +115,17 @@ export async function startRecording(): Promise<void> {
       return;
     }
     if (!isAudioAvailable()) {
-      throw new Error("Module audio indisponible. Vérifiez expo-av.");
+      throw new Error("Module audio indisponible. Vérifiez expo-audio.");
     }
 
-    // Re-check au moment du record. getPermissionsAsync est synchrone côté
-    // OS (lit l'état actuel sans prompt), donc n'introduit pas de latence
-    // perçue par l'utilisateur.
-    const current = await Audio.getPermissionsAsync();
+    // Re-check au moment du record. getRecordingPermissionsAsync lit l'état
+    // actuel sans prompt, donc n'introduit pas de latence perçue.
+    const current = await getRecordingPermissionsAsync();
     if (current.status !== "granted") {
       // Si on peut encore demander, prompt l'utilisateur ; sinon, on lève
       // l'erreur "ouvre les réglages" sans tenter le prompt (iOS refuse).
       if (current.canAskAgain) {
-        const asked = await Audio.requestPermissionsAsync();
+        const asked = await requestRecordingPermissionsAsync();
         if (asked.status !== "granted") {
           throw new VoicePermissionDeniedError(asked.canAskAgain ?? false);
         }
@@ -107,16 +134,24 @@ export async function startRecording(): Promise<void> {
       }
     }
 
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
     });
 
-    const result = await Audio.Recording.createAsync(
-      Audio.RecordingOptionsPresets.HIGH_QUALITY
+    const recorder = new AudioModule.AudioRecorder(
+      platformRecordingOptions(RecordingPresets.HIGH_QUALITY)
     );
+    try {
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+    } catch (error) {
+      // Created imperatively: nothing releases it for us.
+      recorder.release();
+      throw error;
+    }
 
-    recording = result.recording;
+    recording = recorder;
     console.log("Enregistrement démarré");
   } catch (error) {
     // Ne pas spammer Sentry pour les refus de permission — c'est un cas
@@ -139,9 +174,16 @@ export async function stopRecording(): Promise<string | null> {
       return null;
     }
 
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
+    const recorder = recording;
     recording = null;
+    let uri: string | null;
+    try {
+      await recorder.stop();
+      uri = recorder.uri;
+    } finally {
+      // The file stays on disk; only the native recorder is freed.
+      recorder.release();
+    }
 
     console.log("Enregistrement arrêté:", uri);
     return uri;
