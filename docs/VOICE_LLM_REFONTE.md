@@ -396,3 +396,20 @@ Cache de prompt lu sur 87/87 appels. Aucun JSON invalide après correction.
   formulations de parents ni erreurs de transcription d'AssemblyAI. Le juge
   final sera l'usage réel (journaux `parseVoiceCommand` : taux de repli, actions).
 - Comparaison Opus 5.5 non lancée : Haiku atteint le plafond du corpus.
+
+### Étape 7 — Déploiement
+
+Vérifications avant déploiement (état du commit `2926a3b`) : serveur 175/175,
+client 437 réussis (37 échecs préexistants inchangés), typage 43 erreurs
+préexistantes, CLI Firebase connectée à `samaye-53723`.
+
+Le déploiement en production est bloqué par le garde-fou de permissions de
+Claude Code : à lancer depuis le terminal de l'utilisateur.
+
+```bash
+cd /Users/yoss/Projets/SuiviBaby
+npx firebase-tools@latest deploy --only functions:parseVoiceCommand --project samaye-53723
+```
+
+Sans impact sur l'app publiée : elle n'appelle pas cette fonction ; la
+prochaine version l'utilisera, et se replie sur les règles si elle est absente.
