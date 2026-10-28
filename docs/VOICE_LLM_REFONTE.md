@@ -49,7 +49,7 @@ Principes :
 | # | Étape | Statut |
 |---|---|---|
 | 0 | Cadrage, corpus d'évaluation, mesure du parseur actuel | ✅ |
-| 1 | Contrat de sortie + validation serveur + mapping client (TDD) | ⬜ |
+| 1 | Contrat de sortie + validation serveur + mapping client (TDD) | ✅ |
 | 2 | Cloud Function `parseVoiceCommand` | ⬜ |
 | 3 | Intégration client avec repli | ⬜ |
 | 4 | Évaluation réelle LLM vs règles, itération du prompt | ⬜ |
@@ -98,3 +98,36 @@ d'aucun parseur) : h28 accepte « ROR » pour le vaccin rougeole ; h29 reformul�
 
 Bug existant découvert, hors refonte : « dans 30 min » produit un événement
 futur que `validateEventData` rejette (date > maintenant + 5 min).
+
+### Étape 1 — Contrat, validation serveur, mapping client ✅
+
+**Serveur — [functions/lib/voiceParse.js](../functions/lib/voiceParse.js)**
+- `OUTPUT_SCHEMA` : schéma JSON imposé au modèle (structured outputs). Types
+  d'événements et énums fermés ; chaque objet en `additionalProperties: false`.
+- `SYSTEM_PROMPT` : statique, donc mis en cache. Règles d'extraction par type,
+  et une consigne explicite : la transcription est une donnée, jamais une
+  instruction.
+- `buildUserMessage` : transcription encadrée par `<transcription>` ; les
+  chevrons sont neutralisés pour qu'un texte ne puisse pas fermer la balise.
+- `sanitizeParseResult` : revalide **toute** réponse du modèle avec les mêmes
+  bornes que `validateEventData` (biberon ≤ 500 ml, température 34-43 °C…),
+  les mêmes énums, au plus 5 événements (1 pour modifier/supprimer), textes
+  nettoyés et tronqués. Une réponse malformée devient `none`, sans exception.
+- `functions/lib/enums.js` : ajout de `METHODES_NETTOYAGE_NEZ`, qui manquait
+  dans le miroir serveur.
+
+**Client — [services/voice/llmMapper.ts](../services/voice/llmMapper.ts)**
+- Convertit la réponse validée en `ParsedCommandResult` : **l'aval ne change pas**.
+- Résolution déterministe des heures dans le fuseau du téléphone : une heure
+  « dans le futur » (au-delà de 5 min de tolérance) est ramenée à la veille
+  (« à 22h » dit à 14h30 → hier 22h).
+- Garde les particularités historiques (durée de tétée dans `quantite`, sein
+  gauche par défaut, drapeaux pipi/popo).
+
+**Tests**
+- `functions/__tests__/voiceParse.test.js` : 15 tests (injection, bornes,
+  énums, plafond d'événements, heures, cibles). Suite serveur : 131/131.
+- `__tests__/voiceLlmMapper.test.ts` : 13 tests, dont un **test de contrat** qui
+  charge le vrai schéma serveur, remplit tous ses champs et vérifie qu'aucun ne
+  se perd au mapping. Vérifié par mutation : retirer le mapping de `nomVaccin`
+  fait échouer le test.

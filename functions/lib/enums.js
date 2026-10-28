@@ -60,6 +60,8 @@ const MOMENTS_REPAS = [
 
 const QUANTITES_SOLIDE = ["peu", "moyen", "beaucoup"];
 
+const METHODES_NETTOYAGE_NEZ = ["serum", "mouche_bebe", "coton"];
+
 module.exports = {
   TYPES_BIBERON,
   TYPES_ACTIVITE,
@@ -69,4 +71,5 @@ module.exports = {
   TYPES_SOLIDE,
   MOMENTS_REPAS,
   QUANTITES_SOLIDE,
+  METHODES_NETTOYAGE_NEZ,
 };
