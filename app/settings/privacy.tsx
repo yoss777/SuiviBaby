@@ -53,7 +53,7 @@ const sections = [
     {
       title: "6. Sécurité et Destinataires",
       content:
-        "Nous ne vendons, n'échangeons ni ne louons vos données personnelles. Elles sont chiffrées en transit (protocole TLS) et au repos (chiffrement AES-256). Seuls les services techniques de notre sous-traitant Google Firebase et les personnes que vous autorisez explicitement via les fonctions de partage de l'application ont accès aux données.",
+        "Nous ne vendons, n'échangeons ni ne louons vos données personnelles. Elles sont chiffrées en transit (protocole TLS) et au repos (chiffrement AES-256). Seuls les services techniques de nos sous-traitants et les personnes que vous autorisez explicitement via les fonctions de partage de l'application ont accès aux données. Nos sous-traitants sont Google Firebase (hébergement) et, uniquement lorsque vous utilisez la commande vocale : AssemblyAI, qui transcrit l'enregistrement audio puis le supprime, et Anthropic (Claude), qui interprète le texte transcrit pour en déduire les événements à enregistrer. Ces deux services ne reçoivent que l'audio ou le texte de la commande, sans votre adresse email ni identifiant de compte.",
     },
     {
       title: "7. Signalements et contenu sensible",
@@ -122,7 +122,7 @@ const sections = [
                 { color: nc.textMuted },
               ]}
             >
-              Dernière mise à jour : 18 avril 2026
+              Dernière mise à jour : 28 octobre 2026
             </Text>
           </View>
 
