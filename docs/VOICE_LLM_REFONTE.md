@@ -342,3 +342,14 @@ enregistrement `expo-audio` sur iPhone et Android, commande de bout en bout,
 affichage edge-to-edge sur Android 16.
 
 **Recommandé** : limite de dépense mensuelle dans la console Anthropic.
+
+**28/10 — tentative d'évaluation réelle.** Accès au secret OK (projet
+`samaye-53723`, gcloud reconnecté). Tous les appels sont refusés par l'API :
+**« Your credit balance is too low »**. La clé de SuiviBaby n'a plus de crédit
+prépayé ; rien n'a été facturé. Conséquence en production : `generateAiInsight`
+utilise la même clé et échouerait aussi (aucune invocation sur 30 jours, donc
+aucun utilisateur touché). Le lanceur fait désormais un appel de sonde et
+s'arrête dès la première erreur de compte.
+
+Décision : limite de dépense mensuelle fixée à **10 €** (≈ 30 000 commandes
+vocales sur Haiku 5.5). Reste à **acheter du crédit** dans la console Anthropic.

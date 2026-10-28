@@ -44,6 +44,14 @@ async function main() {
     Array.from({ length: c.critical ? CRITICAL_REPEATS : 1 }, (_, i) => [c, i]),
   );
 
+  // Probe once: an account problem (no credit, bad key, unknown model) would
+  // otherwise come back 87 times as "results".
+  const probe = await runOne(cases[0], 0);
+  if (probe.error) {
+    console.error(`Appel de sonde refusé, évaluation annulée : ${probe.error}`);
+    process.exit(1);
+  }
+
   const runs = [];
   let next = 0;
   await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
