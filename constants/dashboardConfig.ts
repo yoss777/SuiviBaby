@@ -181,6 +181,23 @@ export const MOMENT_REPAS_LABELS: Record<string, string> = {
   collation: "Collation",
 };
 
+/**
+ * Moment du repas déduit de l'heure, pour pré-remplir le formulaire solide.
+ * Plages : petit-déjeuner 6h-11h, déjeuner 11h-15h, goûter 15h-18h,
+ * dîner 18h-22h, collation 22h-6h.
+ */
+export const getMomentRepasFromHeure = (
+  date: Date = new Date(),
+): (typeof MOMENT_REPAS_OPTIONS)[number]["value"] => {
+  const hour = date.getHours();
+  if (hour < 6) return "collation";
+  if (hour < 11) return "petit_dejeuner";
+  if (hour < 15) return "dejeuner";
+  if (hour < 18) return "gouter";
+  if (hour < 22) return "diner";
+  return "collation";
+};
+
 export const QUANTITE_SOLIDE_OPTIONS = [
   { value: "peu", label: "Peu", description: "Quelques cuillères" },
   { value: "moyen", label: "Moyen", description: "Une portion normale" },

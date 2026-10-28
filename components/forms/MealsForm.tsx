@@ -4,6 +4,7 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import {
   ALLERGENES_OPTIONS,
   BIBERON_TYPE_OPTIONS,
+  getMomentRepasFromHeure,
   MOMENT_REPAS_OPTIONS,
   QUANTITE_SOLIDE_OPTIONS,
   REACTION_OPTIONS,
@@ -179,8 +180,11 @@ export function MealsForm({
     editData?.typeSolide ?? "puree",
   );
   const [momentRepas, setMomentRepas] = useState<SolideEvent["momentRepas"]>(
-    editData?.momentRepas ?? "dejeuner",
+    editData?.momentRepas ?? getMomentRepasFromHeure(dateHeure),
   );
+  // Tant que l'utilisateur n'a pas choisi un moment lui-même, il suit l'heure
+  // du formulaire : saisir un repas oublié à 8h doit proposer petit-déjeuner.
+  const [momentRepasDirty, setMomentRepasDirty] = useState(false);
   const [ingredients, setIngredients] = useState(editData?.ingredients ?? "");
   const [quantiteSolide, setQuantiteSolide] = useState<SolideEvent["quantite"]>(
     editData?.quantiteSolide ?? "moyen",
@@ -224,10 +228,16 @@ export function MealsForm({
     if (intervalRef.current) clearInterval(intervalRef.current);
   }, []);
 
-  const handleDateHeureChange = useCallback((nextDate: Date) => {
-    setDateHeure(nextDate);
-    setDateHeureDirty(true);
-  }, []);
+  const handleDateHeureChange = useCallback(
+    (nextDate: Date) => {
+      setDateHeure(nextDate);
+      setDateHeureDirty(true);
+      if (!editData?.id && !momentRepasDirty) {
+        setMomentRepas(getMomentRepasFromHeure(nextDate));
+      }
+    },
+    [editData?.id, momentRepasDirty],
+  );
 
   // Reset uniquement au changement d'event (editData.id), pas à chaque render.
   // Si on dépendait de editData.date, chaque re-render avec un nouvel objet
@@ -236,6 +246,7 @@ export function MealsForm({
     if (!editData?.id) return;
     setDateHeure(toDate(editData.date));
     setDateHeureDirty(false);
+    setMomentRepasDirty(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editData?.id]);
 
@@ -979,7 +990,10 @@ export function MealsForm({
                   },
                   isSubmitting && styles.chipDisabled,
                 ]}
-                onPress={() => setMomentRepas(option.value)}
+                onPress={() => {
+                  setMomentRepas(option.value);
+                  setMomentRepasDirty(true);
+                }}
                 disabled={isSubmitting}
                 accessibilityLabel={`Moment ${option.label}`}
                 accessibilityRole="button"
