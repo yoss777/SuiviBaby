@@ -66,7 +66,7 @@ Principes :
 | 4 | Évaluation réelle LLM vs règles, itération du prompt | ✅ |
 | 5 | Migration `expo-av` → `expo-audio` | ✅ (test sur appareil à faire) |
 | 6 | Revue multi-agents ECC + corrections | ✅ |
-| 7 | Recette finale | ⏸️ tests automatisés faits ; évaluation réelle + déploiement en attente |
+| 7 | Recette finale | ✅ serveur déployé · ⏳ test sur appareil (build EAS) |
 
 ---
 
@@ -413,3 +413,15 @@ npx firebase-tools@latest deploy --only functions:parseVoiceCommand --project sa
 
 Sans impact sur l'app publiée : elle n'appelle pas cette fonction ; la
 prochaine version l'utilisera, et se replie sur les règles si elle est absente.
+
+**28/10 — déployée par l'utilisateur et vérifiée :** état `ACTIVE`
+(europe-west1, Node 22, 256 Mi, délai 15 s, concurrence 40), secret
+`ANTHROPIC_API_KEY` v1 lié, coupe-circuit et modèle sur leurs valeurs par
+défaut (activée, `claude-haiku-5-5`). Appel non authentifié →
+`UNAUTHENTICATED` (« Authentification requise. ») : le nouveau code répond,
+sans quota ni appel au modèle consommé.
+
+**Reste :** build EAS et test sur appareil (enregistrement `expo-audio`,
+commande de bout en bout, edge-to-edge Android 16). À surveiller ensuite dans
+les journaux `parseVoiceCommand` : part des replis (`unavailable`), toute ligne
+`configuration error`, latence.
