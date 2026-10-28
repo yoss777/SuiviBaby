@@ -149,11 +149,21 @@ describe("contract with the server schema (functions/lib/voiceParse.js)", () => 
       for (const k of valueKeys) raw[k] = sampleFor(k, props[k]);
       const clean = sanitizeParseResult({ action: "add", events: [raw] });
       const [cmd] = mapLlmParseResult(clean, "x", NOW).commands;
-      const outValues = Object.values(cmd as Record<string, unknown>);
+      const outValues = Object.values(cmd as unknown as Record<string, unknown>);
       for (const k of Object.keys(clean.events[0])) {
         if (["type", "time", "pipi", "popo", "coteGauche", "coteDroit"].includes(k)) continue;
         expect({ field: k, mapped: outValues.includes(clean.events[0][k]) }).toEqual({ field: k, mapped: true });
       }
     }
+  });
+});
+
+describe("formatEventClock (confirmation message)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { formatEventClock } = require("@/utils/date");
+  it("labels today, yesterday and older dates", () => {
+    expect(formatEventClock(new Date(2026, 9, 28, 13, 5), NOW)).toBe("À 13h05");
+    expect(formatEventClock(new Date(2026, 9, 27, 23, 0), NOW)).toBe("Hier à 23h00");
+    expect(formatEventClock(new Date(2026, 9, 26, 8, 0), NOW)).toBe("Le 26/10 à 8h00");
   });
 });

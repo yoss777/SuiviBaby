@@ -10,7 +10,7 @@ import { getUserChildAccess } from "@/utils/permissions";
 import { useAudioRecorder } from "./useAudioRecorder";
 import {
   transcribeAudio,
-  parseCommandsWithMeta,
+  parseCommandsSmart,
   formatConfirmationMessage,
   formatEventDetails,
 } from "./useVoiceParser";
@@ -137,7 +137,8 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       setTranscription(text);
       console.log("🔍 Analyse de la commande:", text);
 
-      const { commands, truncated } = parseCommandsWithMeta(text);
+      const { commands, truncated, source } = await parseCommandsSmart(text);
+      console.log(`🧠 Analyse: ${source}`);
 
       if (commands.length === 0) {
         setInfoModal({

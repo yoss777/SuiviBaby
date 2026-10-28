@@ -44,6 +44,17 @@ Principes :
 | Migration `expo-av` → `expo-audio` | |
 | Revue multi-agents (ECC) + recette | |
 
+**Suites possibles (hors refonte)**
+- **Transcription auto-hébergée avec `SYSTRAN/faster-whisper`** : principal
+  intérêt, faire disparaître le risque résiduel R3 du red team (audio de
+  l'enfant chez un sous-traitant américain). Service Python séparé (Cloud Run
+  en Europe), instance chaude nécessaire, coût supérieur à AssemblyAI au volume
+  actuel : le gain est la confidentialité, pas l'économie. À trancher par un
+  banc d'essai sur de vrais enregistrements. Transcription et interprétation
+  étant désormais découplées, le branchement est local à `transcribeAudio`.
+- Mode temps réel « Jarvis » — après l'activation d'App Check.
+- Siri / App Intents.
+
 ## Étapes
 
 | # | Étape | Statut |
@@ -51,7 +62,7 @@ Principes :
 | 0 | Cadrage, corpus d'évaluation, mesure du parseur actuel | ✅ |
 | 1 | Contrat de sortie + validation serveur + mapping client (TDD) | ✅ |
 | 2 | Cloud Function `parseVoiceCommand` | ✅ |
-| 3 | Intégration client avec repli | ⬜ |
+| 3 | Intégration client avec repli | ✅ |
 | 4 | Évaluation réelle LLM vs règles, itération du prompt | ⬜ |
 | 5 | Migration `expo-av` → `expo-audio` | ⬜ |
 | 6 | Revue multi-agents ECC + corrections | ⬜ |
@@ -165,3 +176,34 @@ client scripté qui appellerait directement l'analyse avec du texte.
 authentification, entrées invalides, coupe-circuit, plafond, résultat,
 transcription absente des journaux, repli sur 3 types de panne) et 6 tests de
 `parseWithClaude` avec un faux client. Suite serveur : **150/150**.
+
+### Étape 3 — Intégration client avec repli ✅
+
+**[services/voice/llmParser.ts](../services/voice/llmParser.ts) — `parseVoiceText`**
+- Appelle `parseVoiceCommand` (délai 10 s), puis le mapping de l'étape 1.
+- **Repli sur le parseur à règles**, sur le même texte, si : hors ligne (sans
+  appel réseau), texte > 500 caractères, fonction indisponible / désactivée /
+  plafond atteint / délai dépassé / **absente** (ancien backend), réponse
+  malformée, ou erreur imprévue.
+- Les replis attendus ne laissent qu'un fil d'Ariane Sentry ; seules les erreurs
+  imprévues remontent comme incidents.
+- Un « rien à enregistrer » du LLM est respecté : on ne relance pas les règles,
+  qui créeraient les faux positifs mesurés à l'étape 0.
+- Client et serveur sont déployables **dans n'importe quel ordre** : sans la
+  fonction déployée, l'app se comporte exactement comme aujourd'hui.
+
+**Branchement** : seul appelant, `processVoiceCommand` dans
+[hooks/useVoiceCommand.ts](../hooks/useVoiceCommand.ts), via
+`parseCommandsSmart`. L'indicateur de traitement couvre déjà l'attente.
+
+**Confirmation** : au-delà d'une heure d'écart, l'heure s'affiche en clair
+(« ⏰ Hier à 23h00 ») au lieu de « Il y a 930 minutes », pour que le parent
+puisse vérifier l'heure comprise avant l'écriture
+(`formatEventClock`, [utils/date.ts](../utils/date.ts)).
+
+**Tests** : `__tests__/voiceLlmParser.test.ts` (11 tests : chemin LLM, respect du
+« rien », 4 replis silencieux, erreur imprévue signalée, réponse malformée, hors
+ligne, texte trop long, NetInfo en panne) + 1 test du libellé d'heure.
+Suite client : 417 réussis ; les 37 échecs sont **les mêmes qu'avant la refonte**
+(BabyContext, childSharingService, storage.rules). Typage : 43 erreurs, toutes
+préexistantes.

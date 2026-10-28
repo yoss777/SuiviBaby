@@ -21,3 +21,7 @@ export {
 export { parseCommand, parseMultipleCommands, parseSegmentForAllEvents, parseSingleCommand } from "./commandParser";
 export { formatDataForFirebase, commandTypeToEventType } from "./firebaseFormatter";
 export { requestPermissions, startRecording, stopRecording, transcribeAudio, hasApiKey } from "./recorder";
+export { parseVoiceText } from "./llmParser";
+export type { VoiceParseResult, ParseSource } from "./llmParser";
+export { mapLlmParseResult, resolveTimeRef } from "./llmMapper";
+export type { LlmParseResult, LlmEvent } from "./llmMapper";

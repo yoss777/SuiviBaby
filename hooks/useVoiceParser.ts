@@ -8,7 +8,9 @@ import type {
   ParsedCommandResult,
 } from "@/services/voiceCommandService";
 import { EmptyAudioError } from "@/services/voice/recorder";
+import { parseVoiceText, type VoiceParseResult } from "@/services/voice/llmParser";
 import type { Event } from "@/services/eventsService";
+import { formatEventClock } from "@/utils/date";
 
 // ---------------------------------------------------------------------------
 // Transcription
@@ -70,6 +72,14 @@ export interface ParseCommandsMeta {
  */
 export function parseCommandsWithMeta(text: string): ParseCommandsMeta {
   return VoiceCommandService.parseMultipleCommandsWithMeta(text);
+}
+
+/**
+ * Production path: LLM interpretation (parseVoiceCommand CF) with the rule
+ * parser as fallback. `source` tells which one produced the commands.
+ */
+export function parseCommandsSmart(text: string): Promise<VoiceParseResult> {
+  return parseVoiceText(text);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +147,10 @@ export function formatConfirmationMessage(command: ParsedCommandResult): string 
       message += `⏰ Dans ${command.timeOffset} minute${
         command.timeOffset > 1 ? "s" : ""
       }\n`;
+    } else if (command.timeOffset >= 60) {
+      // "Il y a 930 minutes" is unreadable once clock times ("hier à 23h")
+      // are understood: show the resolved time instead.
+      message += `⏰ ${formatEventClock(new Date(command.timestamp))}\n`;
     } else {
       message += `⏰ Il y a ${command.timeOffset} minute${
         command.timeOffset > 1 ? "s" : ""
