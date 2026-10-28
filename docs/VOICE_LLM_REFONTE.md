@@ -63,7 +63,7 @@ Principes :
 | 1 | Contrat de sortie + validation serveur + mapping client (TDD) | ✅ |
 | 2 | Cloud Function `parseVoiceCommand` | ✅ |
 | 3 | Intégration client avec repli | ✅ |
-| 4 | Évaluation réelle LLM vs règles, itération du prompt | ⬜ |
+| 4 | Évaluation réelle LLM vs règles, itération du prompt | ⏸️ outillage prêt, en attente de la clé API |
 | 5 | Migration `expo-av` → `expo-audio` | ⬜ |
 | 6 | Revue multi-agents ECC + corrections | ⬜ |
 | 7 | Recette finale | ⬜ |
@@ -207,3 +207,26 @@ ligne, texte trop long, NetInfo en panne) + 1 test du libellé d'heure.
 Suite client : 417 réussis ; les 37 échecs sont **les mêmes qu'avant la refonte**
 (BabyContext, childSharingService, storage.rules). Typage : 43 erreurs, toutes
 préexistantes.
+
+### Étape 4 — Évaluation réelle ⏸️
+
+**Outillage prêt et vérifié à blanc :**
+- [evals/voice/run-llm.js](../evals/voice/run-llm.js) appelle le vrai
+  `parseWithClaude` sur le corpus (cas critiques ×3, 4 appels en parallèle) et
+  enregistre réponses, latences et tokens dans `evals/voice/results/`.
+- [evals/voice/llm.eval.ts](../evals/voice/llm.eval.ts) mappe les réponses avec
+  le mapping client et note : pass@1 par split et catégorie, pass^3 sur les cas
+  critiques, latence p50/p95, coût moyen par commande, taux de lecture du cache.
+- Essai à blanc avec des réponses simulées : 5/5 validés, et l'incohérence
+  glissée exprès dans un cas critique est bien détectée par le pass^3.
+
+**Bloquant :** la lecture du secret `ANTHROPIC_API_KEY` depuis Secret Manager a
+été refusée par le garde-fou de permissions de Claude Code (légitime : secret de
+production). Pour lancer l'évaluation :
+
+```bash
+export ANTHROPIC_API_KEY=…            # clé de dev de préférence
+node evals/voice/run-llm.js claude-haiku-5-5
+node evals/voice/run-llm.js claude-opus-5-5     # comparaison, ≈ 1,5 $
+npx jest --config evals/jest.config.js
+```
