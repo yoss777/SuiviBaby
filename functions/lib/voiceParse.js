@@ -286,11 +286,81 @@ function sanitizeParseResult(raw) {
   return { action, events: kept, truncated };
 }
 
+// ---------------------------------------------------------------------------
+// Model call
+// ---------------------------------------------------------------------------
+
+// Haiku 5.5: short structured extraction where latency matters, ~40x cheaper
+// than Opus 5.5. Overridable per deployment (see docs/VOICE_LLM_REFONTE.md).
+const DEFAULT_MODEL = "claude-haiku-5-5";
+const MAX_INPUT_CHARS = 500;
+const REQUEST_TIMEOUT_MS = 8000;
+
+/**
+ * Thrown when the model could not produce a usable answer (refusal,
+ * truncation, invalid JSON). The CF maps it to `unavailable` so the client
+ * falls back to the rule-based parser instead of telling the parent their
+ * command was not understood.
+ */
+class ParseUnavailableError extends Error {
+  constructor(reason) {
+    super(`voice parse unavailable: ${reason}`);
+    this.name = "ParseUnavailableError";
+    this.reason = reason;
+  }
+}
+
+/**
+ * @param {object} args
+ * @param {import("@anthropic-ai/sdk").default} args.client
+ * @param {string} args.text      transcript, already length-checked by the caller
+ * @param {string} [args.localTime] "HH:MM" on the parent's phone
+ * @param {string} [args.model]
+ * @returns {Promise<{result: object, usage: object, stopReason: string}>}
+ */
+async function parseWithClaude({ client, text, localTime, model = DEFAULT_MODEL }) {
+  const response = await client.messages.create(
+    {
+      model,
+      max_tokens: 2048, // thinking counts toward the cap; answers are ~200 tokens
+      // Static prefix: cached across every parent's commands.
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+      output_config: {
+        effort: "low",
+        format: { type: "json_schema", schema: OUTPUT_SCHEMA },
+      },
+      messages: [{ role: "user", content: buildUserMessage(text, localTime) }],
+    },
+    { timeout: REQUEST_TIMEOUT_MS, maxRetries: 1 },
+  );
+
+  if (response.stop_reason === "refusal") throw new ParseUnavailableError("refusal");
+  if (response.stop_reason === "max_tokens") throw new ParseUnavailableError("max_tokens");
+
+  const block = response.content.find((b) => b.type === "text");
+  let parsed;
+  try {
+    parsed = JSON.parse(block ? block.text : "");
+  } catch {
+    throw new ParseUnavailableError("invalid_json");
+  }
+
+  return {
+    result: sanitizeParseResult(parsed),
+    usage: response.usage || {},
+    stopReason: response.stop_reason,
+  };
+}
+
 module.exports = {
+  DEFAULT_MODEL,
   EVENT_TYPES,
   MAX_EVENTS,
+  MAX_INPUT_CHARS,
   OUTPUT_SCHEMA,
+  ParseUnavailableError,
   SYSTEM_PROMPT,
   buildUserMessage,
+  parseWithClaude,
   sanitizeParseResult,
 };

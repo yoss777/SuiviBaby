@@ -152,3 +152,55 @@ describe("OUTPUT_SCHEMA", () => {
     walk(OUTPUT_SCHEMA);
   });
 });
+
+describe("parseWithClaude", () => {
+  const { parseWithClaude, ParseUnavailableError, SYSTEM_PROMPT, DEFAULT_MODEL } = require("../lib/voiceParse");
+
+  const fakeClient = (response) => {
+    const create = jest.fn().mockResolvedValue(response);
+    return { client: { messages: { create } }, create };
+  };
+  const answer = (obj, extra = {}) => ({
+    stop_reason: "end_turn",
+    content: [{ type: "thinking", thinking: "" }, { type: "text", text: JSON.stringify(obj) }],
+    usage: { input_tokens: 40, output_tokens: 60, cache_read_input_tokens: 1500 },
+    ...extra,
+  });
+
+  it("sends a cacheable static system prompt and keeps the transcript out of it", async () => {
+    const { client, create } = fakeClient(answer({ action: "none", events: [] }));
+    await parseWithClaude({ client, text: "Biberon de 150 ml", localTime: "14:30" });
+
+    const [params, options] = create.mock.calls[0];
+    expect(params.model).toBe(DEFAULT_MODEL);
+    expect(params.system).toEqual([{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }]);
+    expect(JSON.stringify(params.system)).not.toContain("Biberon de 150 ml");
+    expect(params.output_config.format.type).toBe("json_schema");
+    expect(params.output_config.effort).toBe("low");
+    expect(params.messages[0].content).toContain("Biberon de 150 ml");
+    expect(options.timeout).toBeGreaterThan(0);
+  });
+
+  it("reads the text block (after a thinking block) and sanitizes it", async () => {
+    const { client } = fakeClient(answer({
+      action: "add",
+      events: [{ type: "biberon", time: { kind: "now" }, quantiteMl: 9000 }],
+    }));
+    const { result, usage } = await parseWithClaude({ client, text: "x" });
+    expect(result.events[0].type).toBe("biberon");
+    expect(result.events[0].quantiteMl).toBeUndefined();
+    expect(usage.cache_read_input_tokens).toBe(1500);
+  });
+
+  it.each([
+    ["refusal", answer({}, { stop_reason: "refusal" })],
+    ["max_tokens", answer({}, { stop_reason: "max_tokens" })],
+    ["invalid_json", { stop_reason: "end_turn", content: [{ type: "text", text: "pas du json" }] }],
+    ["invalid_json", { stop_reason: "end_turn", content: [] }],
+  ])("throws ParseUnavailableError on %s", async (reason, response) => {
+    const { client } = fakeClient(response);
+    const err = await parseWithClaude({ client, text: "x" }).catch((e) => e);
+    expect(err).toBeInstanceOf(ParseUnavailableError);
+    expect(err.reason).toBe(reason);
+  });
+});
