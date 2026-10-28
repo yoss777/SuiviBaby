@@ -35,7 +35,7 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "package": "com.tesfa.suivibaby",
-      "versionCode": 6
+      "versionCode": 7
     },
     "web": {
       "bundler": "metro",
@@ -70,8 +70,8 @@
             "newArchEnabled": true,
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
             "minSdkVersion": 21
           }
         }
