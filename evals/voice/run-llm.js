@@ -28,10 +28,10 @@ if (!process.env.ANTHROPIC_API_KEY) {
 }
 const client = new Anthropic();
 
-async function runOne(c, attempt) {
+async function runOne(c, attempt, timeoutMs) {
   const started = Date.now();
   try {
-    const { result, usage } = await parseWithClaude({ client, text: c.text, localTime, model });
+    const { result, usage } = await parseWithClaude({ client, text: c.text, localTime, model, timeoutMs });
     return { id: c.id, attempt, ms: Date.now() - started, result, usage };
   } catch (error) {
     return { id: c.id, attempt, ms: Date.now() - started, error: error.reason || error.message };
@@ -46,11 +46,14 @@ async function main() {
 
   // Probe once: an account problem (no credit, bad key, unknown model) would
   // otherwise come back 87 times as "results".
-  const probe = await runOne(cases[0], 0);
+  // Long timeout for the probe only: it must report an account problem, not
+  // a slow first connection. Real runs use the production timeout.
+  const probe = await runOne(cases[0], 0, 60_000);
   if (probe.error) {
     console.error(`Appel de sonde refusé, évaluation annulée : ${probe.error}`);
     process.exit(1);
   }
+  console.log(`Sonde OK en ${probe.ms} ms.`);
 
   const runs = [];
   let next = 0;

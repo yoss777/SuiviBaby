@@ -81,6 +81,13 @@ describe("mapLlmParseResult", () => {
     expect(commands[0]).toEqual(expect.objectContaining({ coteGauche: true, coteDroit: false }));
   });
 
+  it("reads a bare 'couche' (no flag) as a wet diaper", () => {
+    const { commands } = mapLlmParseResult({
+      action: "add", truncated: false, events: [{ type: "couche", time: { kind: "now" }, pipi: false, popo: false }],
+    }, "couche", NOW);
+    expect(commands[0]).toEqual(expect.objectContaining({ pipi: true, popo: false }));
+  });
+
   it("sets pipi / popo flags for diaper-related types", () => {
     const { commands } = mapLlmParseResult({
       action: "add",

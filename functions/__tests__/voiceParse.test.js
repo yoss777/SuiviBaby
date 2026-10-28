@@ -133,9 +133,10 @@ describe("sanitizeParseResult", () => {
     expect(out.events[0].target).toEqual({ kind: "at", clock: "11:20" });
   });
 
-  it("defaults a missing modify/delete target to 'last'", () => {
-    const out = sanitizeParseResult({ action: "delete", events: [{ type: "miction" }] });
-    expect(out.events[0].target).toEqual({ kind: "last" });
+  it("refuses a modify/delete without an explicit target instead of assuming 'last'", () => {
+    expect(sanitizeParseResult({ action: "delete", events: [{ type: "miction" }] }).unusable).toBe(true);
+    const ok = sanitizeParseResult({ action: "delete", events: [{ type: "miction", target: { kind: "last" } }] });
+    expect(ok.events[0].target).toEqual({ kind: "last" });
   });
 
   it("keeps a dated target", () => {
@@ -162,6 +163,52 @@ describe("sanitizeParseResult", () => {
   });
 });
 
+describe("neutral values of always-present fields", () => {
+  it("ignores neutral strings, booleans and refs", () => {
+    const out = sanitizeParseResult({
+      action: "add",
+      events: [{
+        type: "miction", note: "", nomVitamine: "", nomMedicament: "", dosage: "", description: "", nomVaccin: "",
+        coteGauche: false, coteDroit: false, pipi: false, popo: false,
+        time: { kind: "now", minutesAgo: 0, clock: "", dayOffset: 0 },
+      }],
+    });
+    expect(out.unusable).toBeUndefined();
+    expect(out.events[0]).toEqual(expect.objectContaining({ type: "miction", time: { kind: "now" } }));
+    expect(out.events[0].note).toBeUndefined();
+    expect(out.events[0].ignored).toBeUndefined();
+  });
+
+  it("reads a clock ref with a neutral dayOffset 0 as today", () => {
+    const out = sanitizeParseResult({
+      action: "add", events: [ev({ time: { kind: "at", minutesAgo: 0, clock: "13:00", dayOffset: 0 } })],
+    });
+    expect(out.events[0].time).toEqual({ kind: "at", clock: "13:00" });
+  });
+
+
+});
+
+describe("null fields (tolerated defensively)", () => {
+  it("treats null as 'not said', not as out of bounds", () => {
+    const out = sanitizeParseResult({
+      action: "add",
+      events: [{
+        type: "biberon", quantiteMl: null, typeBiberon: null, note: null, target: null,
+        time: { kind: "ago", minutesAgo: 20, clock: null, dayOffset: null },
+      }],
+    });
+    expect(out.unusable).toBeUndefined();
+    expect(out.events[0]).toEqual({ type: "biberon", time: { kind: "ago", minutesAgo: 20 } });
+  });
+
+  it("defaults a null time to now but refuses a null target", () => {
+    expect(sanitizeParseResult({ action: "add", events: [{ type: "miction", time: null }] }).events[0].time)
+      .toEqual({ kind: "now" });
+    expect(sanitizeParseResult({ action: "delete", events: [{ type: "miction", target: null }] }).unusable).toBe(true);
+  });
+});
+
 describe("buildUserMessage", () => {
   it("wraps the transcript as data and includes a validated local time", () => {
     const msg = buildUserMessage("Biberon de 150 ml", "14:30");
@@ -181,7 +228,12 @@ describe("buildUserMessage", () => {
 });
 
 describe("OUTPUT_SCHEMA", () => {
-  it("closes every object (structured outputs requirement)", () => {
+  it("is embedded in the static system prompt", () => {
+    const { SYSTEM_PROMPT } = require("../lib/voiceParse");
+    expect(SYSTEM_PROMPT).toContain(JSON.stringify(OUTPUT_SCHEMA));
+  });
+
+  it("closes every object", () => {
     const walk = (node) => {
       if (node && typeof node === "object") {
         if (node.type === "object") expect(node.additionalProperties).toBe(false);
@@ -214,8 +266,8 @@ describe("parseWithClaude", () => {
     expect(params.model).toBe(DEFAULT_MODEL);
     expect(params.system).toEqual([{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }]);
     expect(JSON.stringify(params.system)).not.toContain("Biberon de 150 ml");
-    expect(params.output_config.format.type).toBe("json_schema");
-    expect(params.output_config.effort).toBe("low");
+    // No grammar: the platform rejects this schema as too complex.
+    expect(params.output_config).toEqual({ effort: "low" });
     expect(params.messages[0].content).toContain("Biberon de 150 ml");
     expect(options.timeout).toBeGreaterThan(0);
     expect(options.maxRetries).toBe(0);
@@ -230,6 +282,26 @@ describe("parseWithClaude", () => {
     expect(result.events[0].type).toBe("biberon");
     expect(result.events[0].quantiteMl).toBeUndefined();
     expect(usage.cache_read_input_tokens).toBe(1500);
+  });
+
+  it("accepts JSON wrapped in a code fence or prose", async () => {
+    const { client } = fakeClient({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: 'Voici :\n```json\n{"action":"none","events":[]}\n```' }],
+    });
+    const { result } = await parseWithClaude({ client, text: "bonjour" });
+    expect(result).toEqual({ action: "none", events: [], truncated: false });
+  });
+
+  it("keeps the first object when the model appends a 'correction' and a second one", async () => {
+    const first = '{"action":"add","events":[{"type":"selle","note":"accolade } dans une chaîne \\"ok\\""}]}';
+    const { client } = fakeClient({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: `${first}\n\nCorrection : voici la réponse corrigée :\n\n{"action":"none","events":[]}` }],
+    });
+    const { result } = await parseWithClaude({ client, text: "caca" });
+    expect(result.action).toBe("add");
+    expect(result.events[0]).toEqual(expect.objectContaining({ type: "selle", note: 'accolade } dans une chaîne "ok"' }));
   });
 
   it.each([

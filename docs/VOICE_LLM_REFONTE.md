@@ -63,7 +63,7 @@ Principes :
 | 1 | Contrat de sortie + validation serveur + mapping client (TDD) | ✅ |
 | 2 | Cloud Function `parseVoiceCommand` | ✅ |
 | 3 | Intégration client avec repli | ✅ |
-| 4 | Évaluation réelle LLM vs règles, itération du prompt | ⏸️ outillage prêt, en attente de la clé API |
+| 4 | Évaluation réelle LLM vs règles, itération du prompt | ✅ |
 | 5 | Migration `expo-av` → `expo-audio` | ✅ (test sur appareil à faire) |
 | 6 | Revue multi-agents ECC + corrections | ✅ |
 | 7 | Recette finale | ⏸️ tests automatisés faits ; évaluation réelle + déploiement en attente |
@@ -353,3 +353,46 @@ s'arrête dès la première erreur de compte.
 
 Décision : limite de dépense mensuelle fixée à **10 €** (≈ 30 000 commandes
 vocales sur Haiku 5.5). Reste à **acheter du crédit** dans la console Anthropic.
+
+### Étape 4 — Évaluation réelle ✅ (28/10, après recharge du crédit)
+
+**Trois refus de l'API, trois enseignements** que les tests avec faux client ne
+pouvaient pas révéler :
+1. « too many optional parameters (36) » : les sorties structurées plafonnent à
+   **24 champs optionnels** et **16 champs à type union** (documentation).
+2. Schéma refondu en une variante par type d'événement, champs nullables :
+   « too many parameters with union types (192) ».
+3. Schéma aplati avec valeurs neutres (18 optionnels, 0 union) : « Schema is
+   too complex » (limite interne de taille de grammaire).
+
+**Décision : JSON demandé dans le prompt**, schéma inclus dans le prompt système
+(statique, en cache), sans grammaire imposée. La sécurité n'en dépend pas : le
+validateur serveur revalide chaque valeur, et un JSON invalide bascule sur les
+règles. Bonus : plus de compilation de grammaire au premier appel (cache 24 h).
+
+**Défauts trouvés en conditions réelles et corrigés :**
+- Le modèle ajoutait parfois une fausse « Correction : » et un second objet JSON
+  → extraction du **premier objet JSON complet** (comptage d'accolades hors
+  chaînes) + consigne de réponse unique.
+- Le modèle a omis une fois la cible de « la température **de 7h** » → elle
+  aurait visé la **dernière** température. Désormais une modification ou
+  suppression **exige une cible explicite** (« le dernier » → `last`), sinon
+  repli.
+
+**Résultats — Claude Haiku 5.5, effort `low`**
+
+| Passage | Total | dev | holdout | pass^3 | p50 / p95 | Coût / commande |
+|---|---|---|---|---|---|---|
+| 1ᵉʳ (avant corrections) | 69/71 (97 %) | 100 % | **94 %** | 8/8 | 0,88 / 1,34 s | 0,006 ¢ |
+| après corrections, ×3 | **71/71 (100 %)** à chaque passage | 100 % | 100 % | 8/8 | 0,84 / 1,6-1,9 s | 0,006 ¢ |
+| Référence — règles | 30/71 (42 %) | 45 % | 39 % | — | — | 0 |
+
+Cache de prompt lu sur 87/87 appels. Aucun JSON invalide après correction.
+
+**Réserves :**
+- Le holdout n'est plus totalement indépendant (2 corrections déclenchées par
+  des cas du holdout, même si génériques) : **le chiffre propre est 94 %**.
+- Le corpus est écrit par l'auteur du prompt ; il ne contient ni vraies
+  formulations de parents ni erreurs de transcription d'AssemblyAI. Le juge
+  final sera l'usage réel (journaux `parseVoiceCommand` : taux de repli, actions).
+- Comparaison Opus 5.5 non lancée : Haiku atteint le plafond du corpus.

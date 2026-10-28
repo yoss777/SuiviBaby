@@ -133,7 +133,8 @@ function diaperFlags(e: LlmEvent): Partial<Pick<ParsedCommandResult, "pipi" | "p
   switch (e.type) {
     case "miction": return { pipi: true, popo: false };
     case "selle": return { pipi: false, popo: true };
-    case "couche": return { pipi: e.pipi ?? !e.popo, popo: e.popo ?? false };
+    // A bare "couche" (neither flag set) is a wet diaper, as in detectCouche.
+    case "couche": return { pipi: e.pipi === true || e.popo !== true, popo: e.popo === true };
     default: return {};
   }
 }

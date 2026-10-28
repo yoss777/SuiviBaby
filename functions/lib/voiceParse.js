@@ -62,14 +62,35 @@ const CLOCK_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 // the schema language, hence the sanitizer below.
 // ---------------------------------------------------------------------------
 
-const enumProp = (values, description) => ({ type: "string", enum: values, description });
+const enumProp = (values) => ({ type: "string", enum: values });
+
+// The answer format, embedded in the (cached) system prompt. It is NOT
+// enforced as a structured-output grammar: the platform rejected it as too
+// complex (24-optional / 16-union caps, then "Schema is too complex"), and a
+// grammar costs a compilation on the first request every ~24 h. Safety does
+// not depend on it anyway: sanitizeParseResult re-checks every value, and
+// invalid JSON falls back to the rule parser on the client.
+const num = { type: "number" };
+const int = { type: "integer" };
+
+const refSchema = (kinds) => ({
+  type: "object",
+  additionalProperties: false,
+  required: ["kind"],
+  properties: {
+    kind: enumProp(kinds),
+    minutesAgo: int,
+    clock: { type: "string", description: "HH:MM sur 24 h" },
+    dayOffset: { type: "integer", description: "0 aujourd'hui, -1 hier, -2 avant-hier" },
+  },
+});
 
 const OUTPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["action", "events"],
   properties: {
-    action: enumProp(ACTIONS, "add = enregistrer, modify = corriger un événement existant, delete = supprimer, none = rien à enregistrer"),
+    action: enumProp(ACTIONS),
     events: {
       type: "array",
       items: {
@@ -78,35 +99,16 @@ const OUTPUT_SCHEMA = {
         required: ["type"],
         properties: {
           type: enumProp(EVENT_TYPES),
-          time: {
-            type: "object",
-            additionalProperties: false,
-            required: ["kind"],
-            properties: {
-              kind: enumProp(["now", "ago", "at"]),
-              minutesAgo: { type: "integer" },
-              clock: { type: "string", description: "HH:MM sur 24 h" },
-              dayOffset: { type: "integer", description: "0 = aujourd'hui, -1 = hier, -2 = avant-hier" },
-            },
-          },
-          target: {
-            type: "object",
-            additionalProperties: false,
-            required: ["kind"],
-            properties: {
-              kind: enumProp(["last", "at", "ago"]),
-              clock: { type: "string", description: "HH:MM sur 24 h" },
-              dayOffset: { type: "integer", description: "0 = aujourd'hui, -1 = hier" },
-              minutesAgo: { type: "integer" },
-            },
-          },
-          quantiteMl: { type: "number" },
+          time: refSchema(["now", "ago", "at"]),
+          target: refSchema(["last", "at", "ago"]),
+          note: { type: "string" },
+          quantiteMl: num,
           typeBiberon: enumProp(VOICE_ENUMS.TYPES_BIBERON),
           coteGauche: { type: "boolean" },
           coteDroit: { type: "boolean" },
-          dureeMin: { type: "number" },
-          quantiteGaucheMl: { type: "number" },
-          quantiteDroiteMl: { type: "number" },
+          dureeMin: num,
+          quantiteGaucheMl: num,
+          quantiteDroiteMl: num,
           pipi: { type: "boolean" },
           popo: { type: "boolean" },
           consistance: enumProp(VOICE_ENUMS.CONSISTANCES_SELLE),
@@ -114,20 +116,19 @@ const OUTPUT_SCHEMA = {
           nomVitamine: { type: "string" },
           typeActivite: enumProp(VOICE_ENUMS.TYPES_ACTIVITE),
           typeJalon: enumProp(VOICE_ENUMS.TYPES_JALON),
-          humeur: { type: "integer" },
-          poidsKg: { type: "number" },
-          tailleCm: { type: "number" },
-          perimetreCranienCm: { type: "number" },
+          humeur: int,
+          poidsKg: num,
+          tailleCm: num,
+          perimetreCranienCm: num,
           typeSolide: enumProp(VOICE_ENUMS.TYPES_SOLIDE),
           momentRepas: enumProp(VOICE_ENUMS.MOMENTS_REPAS),
           quantiteSolide: enumProp(VOICE_ENUMS.QUANTITES_SOLIDE),
-          temperatureC: { type: "number" },
+          temperatureC: num,
           nomMedicament: { type: "string" },
           dosage: { type: "string" },
-          description: { type: "string", description: "symptome : description courte" },
+          description: { type: "string" },
           nomVaccin: { type: "string" },
           methode: enumProp(VOICE_ENUMS.METHODES_NETTOYAGE_NEZ),
-          note: { type: "string", description: "contexte utile (lieu, personne), sinon absent" },
         },
       },
     },
@@ -181,7 +182,11 @@ Cible (champ target, pour modify et delete)
 - Toujours renseigner target pour modify et delete.
 - « le dernier », « la dernière », « celui que je viens de donner » ou rien de précis → {"kind":"last"}.
 - « le biberon de 9h » → {"kind":"at","clock":"09:00"} ; « celui d'hier à 21h » → {"kind":"at","clock":"21:00","dayOffset":-1}.
-- « celui d'il y a 30 minutes » → {"kind":"ago","minutesAgo":30}.`;
+- « celui d'il y a 30 minutes » → {"kind":"ago","minutesAgo":30}.
+
+Format de réponse
+Réponds uniquement par un seul objet JSON valide, sans texte ni balise autour, et sans correction ni second objet après lui, conforme à ce schéma JSON. Omets les champs qui ne s'appliquent pas ou qui n'ont pas été dits ; n'écris jamais 0 pour une valeur non dite.
+${JSON.stringify(OUTPUT_SCHEMA)}`;
 
 /** Escape the transcript so it cannot close or forge the wrapping tag. */
 function escapeTranscript(text) {
@@ -214,10 +219,10 @@ function inRange(value, [min, max]) {
   return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
 }
 
-// Absent references get their documented default ("now" / "last"); a
-// reference the model *did* give but that is invalid returns null, which makes
-// the whole answer unusable. Guessing there would silently date an event "now"
-// or modify/delete the latest one instead of the one the parent named.
+// A missing time defaults to "now"; a missing or invalid target, or a time
+// the model *did* give but that is invalid, returns null, which makes the
+// whole answer unusable (→ rule-parser fallback). Guessing there would
+// silently date an event "now" or modify/delete the wrong one.
 
 function validMinutesAgo(v) {
   return Number.isInteger(v) && v >= 0 && v <= MAX_MINUTES_AGO;
@@ -243,8 +248,10 @@ function sanitizeTime(time) {
   return null;
 }
 
+// No default for targets: a missing target used to mean "last", and in a live
+// run the model dropped the target of « la température de 7h », which would
+// have edited the latest temperature instead. Only an explicit "last" counts.
 function sanitizeTarget(target) {
-  if (target === undefined) return { kind: "last" };
   if (!target || typeof target !== "object") return null;
   if (target.kind === "last") return { kind: "last" };
   if (target.kind === "ago") return validMinutesAgo(target.minutesAgo) ? { kind: "ago", minutesAgo: target.minutesAgo } : null;
@@ -252,9 +259,21 @@ function sanitizeTarget(target) {
   return null;
 }
 
+/** Not produced by the schema, but tolerated defensively: null means "not said". */
+function dropNulls(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) if (v !== null) out[k] = v;
+  return out;
+}
+
 /** @returns {object|null} the clean event, or null when it is unusable */
-function sanitizeEvent(raw, action) {
-  if (!raw || typeof raw !== "object" || !EVENT_TYPES.includes(raw.type)) return null;
+function sanitizeEvent(input, action) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const raw = dropNulls(input);
+  for (const ref of ["time", "target"]) {
+    if (raw[ref] && typeof raw[ref] === "object") raw[ref] = dropNulls(raw[ref]);
+  }
+  if (!EVENT_TYPES.includes(raw.type)) return null;
   const out = { type: raw.type };
 
   if (action === "add") {
@@ -347,27 +366,48 @@ class ParseUnavailableError extends Error {
 }
 
 /**
+ * Return the first complete JSON object in the text. Tolerates a ```json
+ * fence or prose around it, and — observed on Haiku 5.5 — a spurious
+ * "Correction : …" followed by a second object, which a first-"{"-to-last-"}"
+ * slice would glue into invalid JSON.
+ */
+function extractJson(text) {
+  const start = text.indexOf("{");
+  if (start < 0) return text;
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === "\\") i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) return text.slice(start, i + 1);
+  }
+  return text;
+}
+
+/**
  * @param {object} args
  * @param {import("@anthropic-ai/sdk").default} args.client
  * @param {string} args.text      transcript, already length-checked by the caller
  * @param {string} [args.localTime] "HH:MM" on the parent's phone
  * @param {string} [args.model]
+ * @param {number} [args.timeoutMs] overridable for tooling (eval probe)
  * @returns {Promise<{result: object, usage: object, stopReason: string}>}
  */
-async function parseWithClaude({ client, text, localTime, model = DEFAULT_MODEL }) {
+async function parseWithClaude({ client, text, localTime, model = DEFAULT_MODEL, timeoutMs = REQUEST_TIMEOUT_MS }) {
   const response = await client.messages.create(
     {
       model,
       max_tokens: 2048, // thinking counts toward the cap; answers are ~200 tokens
       // Static prefix: cached across every parent's commands.
       system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-      output_config: {
-        effort: "low",
-        format: { type: "json_schema", schema: OUTPUT_SCHEMA },
-      },
+      output_config: { effort: "low" },
       messages: [{ role: "user", content: buildUserMessage(text, localTime) }],
     },
-    { timeout: REQUEST_TIMEOUT_MS, maxRetries: 0 },
+    { timeout: timeoutMs, maxRetries: 0 },
   );
 
   if (response.stop_reason === "refusal") throw new ParseUnavailableError("refusal");
@@ -376,7 +416,7 @@ async function parseWithClaude({ client, text, localTime, model = DEFAULT_MODEL 
   const block = response.content.find((b) => b.type === "text");
   let parsed;
   try {
-    parsed = JSON.parse(block ? block.text : "");
+    parsed = JSON.parse(extractJson(block ? block.text : ""));
   } catch {
     throw new ParseUnavailableError("invalid_json");
   }

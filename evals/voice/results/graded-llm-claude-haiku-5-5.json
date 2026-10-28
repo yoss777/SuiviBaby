@@ -1,0 +1,63 @@
+{
+  "parser": "LLM claude-haiku-5-5",
+  "total": {
+    "pass": 71,
+    "n": 71
+  },
+  "bySplit": {
+    "dev": {
+      "pass": 40,
+      "n": 40
+    },
+    "holdout": {
+      "pass": 31,
+      "n": 31
+    }
+  },
+  "byCat": {
+    "simple": {
+      "pass": 19,
+      "n": 19
+    },
+    "familier": {
+      "pass": 19,
+      "n": 19
+    },
+    "temps": {
+      "pass": 11,
+      "n": 11
+    },
+    "bornes": {
+      "pass": 1,
+      "n": 1
+    },
+    "multi": {
+      "pass": 7,
+      "n": 7
+    },
+    "modifier": {
+      "pass": 4,
+      "n": 4
+    },
+    "supprimer": {
+      "pass": 3,
+      "n": 3
+    },
+    "rien": {
+      "pass": 5,
+      "n": 5
+    },
+    "injection": {
+      "pass": 2,
+      "n": 2
+    }
+  },
+  "failures": [],
+  "extra": {
+    "pass^3 (critiques)": "8/8",
+    "latence p50 / p95 (ms)": "841 / 1684",
+    "coût moyen par commande ($)": "0.00006",
+    "cache lu (appels)": "87/87",
+    "erreurs": 0
+  }
+}
