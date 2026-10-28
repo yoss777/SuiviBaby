@@ -66,7 +66,7 @@ Principes :
 | 4 | Évaluation réelle LLM vs règles, itération du prompt | ⏸️ outillage prêt, en attente de la clé API |
 | 5 | Migration `expo-av` → `expo-audio` | ✅ (test sur appareil à faire) |
 | 6 | Revue multi-agents ECC + corrections | ✅ |
-| 7 | Recette finale | ⬜ |
+| 7 | Recette finale | ⏸️ tests automatisés faits ; évaluation réelle + déploiement en attente |
 
 ---
 
@@ -320,3 +320,25 @@ confirmation (`setConfirmModal`), aucune exécution automatique.
 
 Tests : serveur **167/167**, client **436** réussis (37 échecs préexistants
 inchangés), typage 43 erreurs préexistantes.
+
+### Étape 7 — Recette ⏸️
+
+**Fait (automatisé)** : serveur 167/167 ; client 436 réussis, 37 échecs
+préexistants inchangés depuis le début du chantier ; typage 43 erreurs, toutes
+préexistantes ; référence règles 42 % ; Gradle confirme `targetSdkVersion=36`.
+
+**En attente de `gcloud auth login`** (identifiants expirés, connexion
+interactive) :
+1. Évaluation réelle Haiku 5.5, puis Opus 5.5 pour comparaison.
+2. Ajustement du prompt sur le seul split **dev** si nécessaire, puis mesure
+   finale sur le **holdout**.
+3. Déploiement de la seule fonction `parseVoiceCommand`
+   (`firebase deploy --only functions:parseVoiceCommand`). Sans risque pour
+   l'app en production : l'app actuelle ne l'appelle pas, et la nouvelle se
+   replie sur les règles si elle est absente.
+
+**À faire sur appareil** (nécessite un nouveau build EAS, que tu pilotes) :
+enregistrement `expo-audio` sur iPhone et Android, commande de bout en bout,
+affichage edge-to-edge sur Android 16.
+
+**Recommandé** : limite de dépense mensuelle dans la console Anthropic.
