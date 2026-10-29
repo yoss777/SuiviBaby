@@ -42,6 +42,9 @@ jobs:
       - name: Run app tests
         run: npm test -- --ci
 
+      - name: Install function dependencies
+        run: cd functions && npm ci
+
       - name: Run CF tests
         run: npm run test:functions -- --ci
 

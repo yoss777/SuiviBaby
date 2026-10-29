@@ -2,10 +2,8 @@ import {
   getDoc,
   getDocs,
   setDoc,
-  addDoc,
   updateDoc,
   deleteDoc,
-  getDocFromServer,
   writeBatch,
   doc,
   collection,
@@ -16,20 +14,32 @@ import {
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
-import { getUserByEmail } from "@/services/usersService";
-import { grantChildAccess, revokeChildAccess } from "@/utils/permissions";
+import { httpsCallable } from "firebase/functions";
+import { revokeChildAccess } from "@/utils/permissions";
 import { captureServiceError } from "@/utils/errorReporting";
+import { createShareInvitationCF } from "@/services/premiumUsageService";
 
 // Mock config/firebase
 jest.mock("@/config/firebase", () => ({
   auth: { currentUser: { uid: "test-uid", email: "test@example.com" } },
   db: {},
+  functions: {},
 }));
 
-// Mock dependencies
-jest.mock("@/services/usersService", () => ({
-  getUserByEmail: jest.fn(),
+// Every callable created by the service (redeem, accept) shares this mock.
+const mockCallable = jest.fn();
+jest.mock("firebase/functions", () => ({
+  httpsCallable: jest.fn(() => mockCallable),
 }));
+
+jest.mock("@/services/premiumUsageService", () => ({
+  createShareInvitationCF: jest.fn(),
+}));
+
+// Shape of an HttpsError as the client SDK surfaces it.
+function callableError(code: string, message = code) {
+  return Object.assign(new Error(message), { code });
+}
 
 jest.mock("@/utils/permissions", () => ({
   grantChildAccess: jest.fn(),
@@ -206,113 +216,43 @@ describe("childSharingService", () => {
   });
 
   // ─── redeemShareCode ─────────────────────────────────────────────────
+  // B1.1 — delegated to the transactional redeemShareCodeCF.
 
   describe("redeemShareCode", () => {
-    it("should redeem a valid code successfully", async () => {
-      (getDoc as jest.Mock)
-        // First call: get the share code doc
-        .mockResolvedValueOnce(
-          mockDocSnap(true, {
-            code: "ABC123",
-            childId: "child-1",
-            childName: "Bébé",
-            createdBy: "owner-uid",
-            used: false,
-            expiresAt: futureTimestamp(),
-          }),
-        )
-        // Second call: check access doc (does not exist)
-        .mockResolvedValueOnce(mockDocSnap(false));
-
-      (updateDoc as jest.Mock).mockResolvedValueOnce(undefined);
-      (grantChildAccess as jest.Mock).mockResolvedValueOnce(undefined);
+    it("should redeem through the CF with the uppercased code", async () => {
+      mockCallable.mockResolvedValueOnce({ data: { childId: "child-1", childName: "Bébé" } });
 
       const result = await redeemShareCode("abc123");
 
       expect(result).toEqual({ childId: "child-1", childName: "Bébé" });
-      expect(updateDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          used: true,
-          usedBy: "test-uid",
-          usedByEmail: "test@example.com",
-        }),
-      );
-      expect(grantChildAccess).toHaveBeenCalledWith(
-        "child-1",
-        "test-uid",
-        "contributor",
-        "owner-uid",
-        { invitationId: "ABC123" },
-      );
+      expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), "redeemShareCodeCF");
+      expect(mockCallable).toHaveBeenCalledWith({ code: "ABC123" });
     });
 
-    it("should throw when code is not found", async () => {
-      (getDoc as jest.Mock).mockResolvedValueOnce(mockDocSnap(false));
+    it.each([
+      ["functions/not-found", "Code invalide ou expiré"],
+      ["functions/already-exists", "Vous avez déjà accès à cet enfant"],
+      ["functions/resource-exhausted", "Trop de tentatives. Réessayez dans une minute."],
+    ])("should map %s to a user message without reporting", async (code, message) => {
+      mockCallable.mockRejectedValueOnce(callableError(code));
 
-      await expect(redeemShareCode("BADCODE")).rejects.toThrow(
-        "Code invalide ou expiré",
-      );
+      await expect(redeemShareCode("BADCODE")).rejects.toThrow(message);
+      expect(captureServiceError).not.toHaveBeenCalled();
     });
 
-    it("should throw when code is already used", async () => {
-      (getDoc as jest.Mock).mockResolvedValueOnce(
-        mockDocSnap(true, {
-          used: true,
-          expiresAt: futureTimestamp(),
-        }),
-      );
+    it("should pass the server message through on failed-precondition", async () => {
+      mockCallable.mockRejectedValueOnce(callableError("functions/failed-precondition", "Ce code a expiré"));
 
-      await expect(redeemShareCode("USED01")).rejects.toThrow(
-        "Ce code a déjà été utilisé",
-      );
+      await expect(redeemShareCode("EXPIRD")).rejects.toThrow("Ce code a expiré");
     });
 
-    it("should throw when code is expired", async () => {
-      (getDoc as jest.Mock).mockResolvedValueOnce(
-        mockDocSnap(true, {
-          used: false,
-          expiresAt: pastTimestamp(),
-        }),
-      );
+    it("should report and rethrow unexpected errors", async () => {
+      mockCallable.mockRejectedValueOnce(callableError("functions/internal"));
 
-      await expect(redeemShareCode("EXPIRD")).rejects.toThrow(
-        "Ce code a expiré",
-      );
-    });
-
-    it("should throw when user already has access", async () => {
-      (getDoc as jest.Mock)
-        .mockResolvedValueOnce(
-          mockDocSnap(true, {
-            used: false,
-            childId: "child-1",
-            expiresAt: futureTimestamp(),
-          }),
-        )
-        .mockResolvedValueOnce(mockDocSnap(true)); // access doc exists
-
-      await expect(redeemShareCode("DUPLIC")).rejects.toThrow(
-        "Vous avez déjà accès à cet enfant",
-      );
-    });
-
-    it("should throw when user has no email", async () => {
-      getAuthMock().currentUser = { uid: "test-uid", email: null };
-
-      (getDoc as jest.Mock)
-        .mockResolvedValueOnce(
-          mockDocSnap(true, {
-            used: false,
-            childId: "child-1",
-            createdBy: "owner-uid",
-            expiresAt: futureTimestamp(),
-          }),
-        )
-        .mockResolvedValueOnce(mockDocSnap(false));
-
-      await expect(redeemShareCode("NOEMAL")).rejects.toThrow(
-        "Vous devez avoir un email associé à votre compte",
+      await expect(redeemShareCode("ANY123")).rejects.toThrow("functions/internal");
+      expect(captureServiceError).toHaveBeenCalledWith(
+        expect.any(Error),
+        { service: "childSharing", operation: "redeemShareCode" },
       );
     });
 
@@ -322,109 +262,60 @@ describe("childSharingService", () => {
       await expect(redeemShareCode("ANY")).rejects.toThrow(
         "Utilisateur non connecté",
       );
-    });
-
-    it("should uppercase the code for lookup", async () => {
-      (getDoc as jest.Mock)
-        .mockResolvedValueOnce(
-          mockDocSnap(true, {
-            code: "XYZ789",
-            childId: "child-1",
-            childName: "Bébé",
-            createdBy: "owner-uid",
-            used: false,
-            expiresAt: futureTimestamp(),
-          }),
-        )
-        .mockResolvedValueOnce(mockDocSnap(false));
-      (updateDoc as jest.Mock).mockResolvedValueOnce(undefined);
-      (grantChildAccess as jest.Mock).mockResolvedValueOnce(undefined);
-
-      await redeemShareCode("xyz789");
-
-      // doc() should be called with the uppercased code
-      expect(doc).toHaveBeenCalledWith(expect.anything(), "shareCodes", "XYZ789");
+      expect(mockCallable).not.toHaveBeenCalled();
     });
   });
 
   // ─── createEmailInvitation ────────────────────────────────────────────
+  // Delegated to the createShareInvitation CF, which checks the invitee,
+  // existing access and pending invitations server-side.
 
   describe("createEmailInvitation", () => {
-    it("should create an invitation successfully", async () => {
-      (getUserByEmail as jest.Mock).mockResolvedValueOnce({ id: "invited-uid" });
-      (getDocFromServer as jest.Mock).mockResolvedValueOnce(mockDocSnap(true, { parentIds: ["test-uid"] }));
-      (getDoc as jest.Mock).mockResolvedValueOnce(mockDocSnap(false)); // access check
-      (getDocs as jest.Mock).mockResolvedValueOnce(mockQuerySnap([])); // no pending
-      (addDoc as jest.Mock).mockResolvedValueOnce({ id: "invite-123" });
+    it("should create an invitation through the CF and return its id", async () => {
+      (createShareInvitationCF as unknown as jest.Mock).mockResolvedValueOnce({ data: { id: "invite-123" } });
 
       const id = await createEmailInvitation("child-1", "Bébé", "friend@example.com");
 
       expect(id).toBe("invite-123");
-      expect(addDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          childId: "child-1",
-          childName: "Bébé",
-          inviterId: "test-uid",
-          inviterEmail: "test@example.com",
-          invitedEmail: "friend@example.com",
-          invitedUserId: "invited-uid",
-          status: "pending",
-        }),
+      expect(createShareInvitationCF).toHaveBeenCalledWith({
+        childId: "child-1",
+        childName: "Bébé",
+        invitedEmail: "friend@example.com",
+      });
+    });
+
+    it("should normalize invited email to lowercase", async () => {
+      (createShareInvitationCF as unknown as jest.Mock).mockResolvedValueOnce({ data: { id: "invite-456" } });
+
+      await createEmailInvitation("child-1", "Bébé", "  FRIEND@Example.COM  ");
+
+      expect(createShareInvitationCF).toHaveBeenCalledWith(
+        expect.objectContaining({ invitedEmail: "friend@example.com" }),
       );
     });
 
-    it("should throw self-invite error when inviting own email", async () => {
+    it.each(["self-invite", "no-user", "already-pending", "already-linked", "sharing-limit"])(
+      "should expose the %s reason as error.code without reporting",
+      async (reason) => {
+        (createShareInvitationCF as unknown as jest.Mock).mockRejectedValueOnce(
+          Object.assign(callableError("functions/failed-precondition"), { details: { reason } }),
+        );
+
+        await expect(
+          createEmailInvitation("child-1", "Bébé", "friend@example.com"),
+        ).rejects.toMatchObject({ code: reason });
+        expect(captureServiceError).not.toHaveBeenCalled();
+      },
+    );
+
+    it("should attach the invited email to an already-linked error", async () => {
+      (createShareInvitationCF as unknown as jest.Mock).mockRejectedValueOnce(
+        Object.assign(callableError("functions/failed-precondition"), { details: { reason: "already-linked" } }),
+      );
+
       await expect(
-        createEmailInvitation("child-1", "Bébé", "test@example.com"),
-      ).rejects.toThrow("Vous ne pouvez pas vous inviter vous-même");
-
-      try {
-        await createEmailInvitation("child-1", "Bébé", "TEST@EXAMPLE.COM");
-      } catch (error: any) {
-        expect(error.code).toBe("self-invite");
-      }
-    });
-
-    it("should throw no-user error when invited email not found", async () => {
-      (getUserByEmail as jest.Mock).mockResolvedValueOnce(null);
-
-      try {
-        await createEmailInvitation("child-1", "Bébé", "nobody@example.com");
-        fail("Should have thrown");
-      } catch (error: any) {
-        expect(error.code).toBe("no-user");
-        expect(error.message).toContain("Aucun utilisateur trouvé");
-      }
-    });
-
-    it("should throw already-linked error when user already has access", async () => {
-      (getUserByEmail as jest.Mock).mockResolvedValueOnce({ id: "invited-uid" });
-      (getDocFromServer as jest.Mock).mockResolvedValueOnce(mockDocSnap(true, { parentIds: ["test-uid", "invited-uid"] }));
-      (getDoc as jest.Mock).mockResolvedValueOnce(mockDocSnap(true)); // access exists
-
-      try {
-        await createEmailInvitation("child-1", "Bébé", "friend@example.com");
-        fail("Should have thrown");
-      } catch (error: any) {
-        expect(error.code).toBe("already-linked");
-      }
-    });
-
-    it("should throw already-pending error when invitation exists", async () => {
-      (getUserByEmail as jest.Mock).mockResolvedValueOnce({ id: "invited-uid" });
-      (getDocFromServer as jest.Mock).mockResolvedValueOnce(mockDocSnap(true, {}));
-      (getDoc as jest.Mock).mockResolvedValueOnce(mockDocSnap(false)); // no access
-      (getDocs as jest.Mock).mockResolvedValueOnce(
-        mockQuerySnap([mockDocSnap(true, { status: "pending" }, "existing-invite")]),
-      );
-
-      try {
-        await createEmailInvitation("child-1", "Bébé", "friend@example.com");
-        fail("Should have thrown");
-      } catch (error: any) {
-        expect(error.code).toBe("already-pending");
-      }
+        createEmailInvitation("child-1", "Bébé", "friend@example.com"),
+      ).rejects.toMatchObject({ code: "already-linked", email: "friend@example.com" });
     });
 
     it("should throw when user is not logged in", async () => {
@@ -439,54 +330,15 @@ describe("childSharingService", () => {
       await expect(
         createEmailInvitation("", "Bébé", "friend@example.com"),
       ).rejects.toThrow("Enfant introuvable");
-    });
-
-    it("should throw when child does not exist", async () => {
-      (getUserByEmail as jest.Mock).mockResolvedValueOnce({ id: "invited-uid" });
-      (getDocFromServer as jest.Mock).mockResolvedValueOnce(mockDocSnap(false));
-
-      await expect(
-        createEmailInvitation("child-1", "Bébé", "friend@example.com"),
-      ).rejects.toThrow("Enfant introuvable");
-    });
-
-    it("should normalize invited email to lowercase", async () => {
-      (getUserByEmail as jest.Mock).mockResolvedValueOnce({ id: "invited-uid" });
-      (getDocFromServer as jest.Mock).mockResolvedValueOnce(mockDocSnap(true, {}));
-      (getDoc as jest.Mock).mockResolvedValueOnce(mockDocSnap(false));
-      (getDocs as jest.Mock).mockResolvedValueOnce(mockQuerySnap([]));
-      (addDoc as jest.Mock).mockResolvedValueOnce({ id: "invite-456" });
-
-      await createEmailInvitation("child-1", "Bébé", "  FRIEND@Example.COM  ");
-
-      expect(getUserByEmail).toHaveBeenCalledWith("friend@example.com");
-      expect(addDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ invitedEmail: "friend@example.com" }),
-      );
-    });
-
-    it("should not call captureServiceError for expected error codes", async () => {
-      (getUserByEmail as jest.Mock).mockResolvedValueOnce(null);
-
-      try {
-        await createEmailInvitation("child-1", "Bébé", "nobody@example.com");
-      } catch {
-        // expected
-      }
-
-      expect(captureServiceError).not.toHaveBeenCalled();
+      expect(createShareInvitationCF).not.toHaveBeenCalled();
     });
 
     it("should call captureServiceError for unexpected errors", async () => {
-      (getUserByEmail as jest.Mock).mockRejectedValueOnce(new Error("network fail"));
+      (createShareInvitationCF as unknown as jest.Mock).mockRejectedValueOnce(new Error("network fail"));
 
-      try {
-        await createEmailInvitation("child-1", "Bébé", "friend@example.com");
-      } catch {
-        // expected
-      }
-
+      await expect(
+        createEmailInvitation("child-1", "Bébé", "friend@example.com"),
+      ).rejects.toThrow("network fail");
       expect(captureServiceError).toHaveBeenCalledWith(
         expect.any(Error),
         { service: "childSharing", operation: "createEmailInvitation" },
@@ -495,119 +347,38 @@ describe("childSharingService", () => {
   });
 
   // ─── acceptInvitation ─────────────────────────────────────────────────
+  // B1.4 — delegated to the transactional acceptInvitationCF.
 
   describe("acceptInvitation", () => {
-    it("should accept a pending invitation successfully", async () => {
-      (getDoc as jest.Mock)
-        // First: invitation doc
-        .mockResolvedValueOnce(
-          mockDocSnap(true, {
-            childId: "child-1",
-            inviterId: "owner-uid",
-            invitedUserId: "test-uid",
-            invitedEmail: "test@example.com",
-            status: "pending",
-          }),
-        )
-        // Second: check existing access
-        .mockResolvedValueOnce(mockDocSnap(false));
-
-      (grantChildAccess as jest.Mock).mockResolvedValueOnce(undefined);
-      (updateDoc as jest.Mock).mockResolvedValueOnce(undefined);
+    it("should accept through the CF", async () => {
+      mockCallable.mockResolvedValueOnce({ data: { success: true } });
 
       await acceptInvitation("invite-1");
 
-      expect(grantChildAccess).toHaveBeenCalledWith(
-        "child-1",
-        "test-uid",
-        "contributor",
-        "owner-uid",
-        { invitationId: "invite-1" },
-      );
-      expect(updateDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        { status: "accepted" },
-      );
+      expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), "acceptInvitationCF");
+      expect(mockCallable).toHaveBeenCalledWith({ invitationId: "invite-1" });
     });
 
-    it("should throw when invitation is not found", async () => {
-      (getDoc as jest.Mock).mockResolvedValueOnce(mockDocSnap(false));
+    it.each([
+      ["functions/not-found", "Invitation introuvable"],
+      ["functions/permission-denied", "Cette invitation ne vous est pas destinée"],
+      ["functions/failed-precondition", "Cette invitation a déjà été traitée"],
+      ["functions/resource-exhausted", "Trop de tentatives. Réessayez dans une minute."],
+    ])("should map %s to a user message without reporting", async (code, message) => {
+      mockCallable.mockRejectedValueOnce(callableError(code));
 
-      await expect(acceptInvitation("nope")).rejects.toThrow(
-        "Invitation introuvable",
-      );
+      await expect(acceptInvitation("invite-1")).rejects.toThrow(message);
+      expect(captureServiceError).not.toHaveBeenCalled();
     });
 
-    it("should throw when invitation is not pending", async () => {
-      (getDoc as jest.Mock).mockResolvedValueOnce(
-        mockDocSnap(true, {
-          invitedUserId: "test-uid",
-          invitedEmail: "test@example.com",
-          status: "accepted",
-        }),
+    it("should report and rethrow unexpected errors", async () => {
+      mockCallable.mockRejectedValueOnce(callableError("functions/internal"));
+
+      await expect(acceptInvitation("invite-1")).rejects.toThrow("functions/internal");
+      expect(captureServiceError).toHaveBeenCalledWith(
+        expect.any(Error),
+        { service: "childSharing", operation: "acceptInvitation" },
       );
-
-      await expect(acceptInvitation("done")).rejects.toThrow(
-        "Cette invitation a déjà été traitée",
-      );
-    });
-
-    it("should throw when user is not the intended recipient", async () => {
-      (getDoc as jest.Mock).mockResolvedValueOnce(
-        mockDocSnap(true, {
-          invitedUserId: "other-uid",
-          invitedEmail: "other@example.com",
-          status: "pending",
-        }),
-      );
-
-      await expect(acceptInvitation("wrong")).rejects.toThrow(
-        "Cette invitation ne vous est pas destinée",
-      );
-    });
-
-    it("should handle already-has-access gracefully (mark accepted, no grantChildAccess)", async () => {
-      (getDoc as jest.Mock)
-        .mockResolvedValueOnce(
-          mockDocSnap(true, {
-            childId: "child-1",
-            invitedUserId: "test-uid",
-            invitedEmail: "test@example.com",
-            status: "pending",
-          }),
-        )
-        .mockResolvedValueOnce(mockDocSnap(true)); // access already exists
-
-      (updateDoc as jest.Mock).mockResolvedValueOnce(undefined);
-
-      await acceptInvitation("dup-access");
-
-      expect(grantChildAccess).not.toHaveBeenCalled();
-      expect(updateDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        { status: "accepted" },
-      );
-    });
-
-    it("should allow accepting via invitedEmail match", async () => {
-      (getDoc as jest.Mock)
-        .mockResolvedValueOnce(
-          mockDocSnap(true, {
-            childId: "child-1",
-            inviterId: "owner-uid",
-            invitedUserId: "different-uid", // doesn't match current user uid
-            invitedEmail: "test@example.com", // matches current user email
-            status: "pending",
-          }),
-        )
-        .mockResolvedValueOnce(mockDocSnap(false));
-
-      (grantChildAccess as jest.Mock).mockResolvedValueOnce(undefined);
-      (updateDoc as jest.Mock).mockResolvedValueOnce(undefined);
-
-      await acceptInvitation("email-match");
-
-      expect(grantChildAccess).toHaveBeenCalled();
     });
 
     it("should throw when user is not logged in", async () => {
@@ -616,6 +387,7 @@ describe("childSharingService", () => {
       await expect(acceptInvitation("any")).rejects.toThrow(
         "Utilisateur non connecté",
       );
+      expect(mockCallable).not.toHaveBeenCalled();
     });
   });
 
@@ -719,15 +491,40 @@ describe("childSharingService", () => {
   // ─── removeParentAccess ───────────────────────────────────────────────
 
   describe("removeParentAccess", () => {
-    it("should remove access when current user is owner", async () => {
-      (getDoc as jest.Mock).mockResolvedValueOnce(
-        mockDocSnap(true, { role: "owner" }),
-      );
+    it("should remove a non-owner parent when current user is owner", async () => {
+      (getDoc as jest.Mock)
+        .mockResolvedValueOnce(mockDocSnap(true, { role: "owner" })) // my access
+        .mockResolvedValueOnce(mockDocSnap(true, { role: "contributor" })); // target
       (revokeChildAccess as jest.Mock).mockResolvedValueOnce(undefined);
 
       await removeParentAccess("child-1", "other-uid");
 
+      expect(getDocs).not.toHaveBeenCalled();
       expect(revokeChildAccess).toHaveBeenCalledWith("child-1", "other-uid");
+    });
+
+    it("should remove another owner when one owner remains", async () => {
+      (getDoc as jest.Mock)
+        .mockResolvedValueOnce(mockDocSnap(true, { role: "owner" }))
+        .mockResolvedValueOnce(mockDocSnap(true, { role: "owner" }));
+      (getDocs as jest.Mock).mockResolvedValueOnce(mockQuerySnap([mockDocSnap(true), mockDocSnap(true)]));
+      (revokeChildAccess as jest.Mock).mockResolvedValueOnce(undefined);
+
+      await removeParentAccess("child-1", "other-owner");
+
+      expect(revokeChildAccess).toHaveBeenCalledWith("child-1", "other-owner");
+    });
+
+    it("should refuse to remove the last owner (B1.3)", async () => {
+      (getDoc as jest.Mock)
+        .mockResolvedValueOnce(mockDocSnap(true, { role: "owner" }))
+        .mockResolvedValueOnce(mockDocSnap(true, { role: "owner" }));
+      (getDocs as jest.Mock).mockResolvedValueOnce(mockQuerySnap([mockDocSnap(true)]));
+
+      await expect(removeParentAccess("child-1", "other-owner")).rejects.toThrow(
+        "Impossible de retirer le dernier propriétaire",
+      );
+      expect(revokeChildAccess).not.toHaveBeenCalled();
     });
 
     it("should throw when current user is not owner", async () => {

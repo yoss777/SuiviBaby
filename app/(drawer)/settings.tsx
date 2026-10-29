@@ -392,7 +392,7 @@ export default function SettingsScreen() {
         ? [
             {
               id: "hidden-children",
-              icon: "eye-off-outline",
+              icon: "eye-off-outline" as keyof typeof Ionicons.glyphMap,
               label: "Enfants masqués",
               value: `${hiddenChildrenCount}`,
               description: "Gérer les enfants masqués",
@@ -407,7 +407,7 @@ export default function SettingsScreen() {
         ? [
             {
               id: "hidden-photos",
-              icon: "eye-off-outline",
+              icon: "eye-off-outline" as keyof typeof Ionicons.glyphMap,
               label: "Photos masquées",
               value: `${hiddenPhotoIds.size}`,
               description: "Gérer les photos masquées",

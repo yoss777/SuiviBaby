@@ -7,7 +7,9 @@ module.exports = {
   testPathIgnorePatterns: [
     "<rootDir>/node_modules/",
     "<rootDir>/__tests__/setup.ts",
+    // Rules tests need the emulators: run them with `npm run test:rules`.
     "<rootDir>/__tests__/firestore.rules.test.ts",
+    "<rootDir>/__tests__/storage.rules.test.ts",
     "<rootDir>/functions/",
   ],
   moduleNameMapper: {

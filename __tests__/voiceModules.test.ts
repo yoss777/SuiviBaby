@@ -916,7 +916,7 @@ describe("firebaseFormatter", () => {
 
   describe("formatDataForFirebase", () => {
     it("formats biberon correctly", () => {
-      const data = formatDataForFirebase(baseCmd);
+      const data: Record<string, any> = formatDataForFirebase(baseCmd);
       expect(data.type).toBe("biberon");
       expect(data.quantite).toBe(150);
       expect(data.unit).toBe("ml");
@@ -933,7 +933,7 @@ describe("firebaseFormatter", () => {
         coteDroit: false,
         quantite: 15,
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("seins"); // mapped to "seins"
       expect(data.coteGauche).toBe(true);
       expect(data.coteDroit).toBe(false);
@@ -947,7 +947,7 @@ describe("firebaseFormatter", () => {
         quantiteGauche: 80,
         quantiteDroite: 60,
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("pompage");
       expect(data.quantiteGauche).toBe(80);
       expect(data.quantiteDroite).toBe(60);
@@ -961,7 +961,7 @@ describe("firebaseFormatter", () => {
         pipi: true,
         popo: false,
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("couche");
       expect(data.pipi).toBe(true);
       expect(data.popo).toBe(false);
@@ -969,7 +969,7 @@ describe("firebaseFormatter", () => {
 
     it("formats miction correctly", () => {
       const cmd: ParsedCommandResult = { ...baseCmd, type: "miction" };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("miction");
     });
 
@@ -980,7 +980,7 @@ describe("firebaseFormatter", () => {
         consistance: "molle",
         couleur: "jaune",
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("selle");
       expect(data.consistance).toBe("molle");
       expect(data.couleur).toBe("jaune");
@@ -992,7 +992,7 @@ describe("firebaseFormatter", () => {
         type: "vitamine",
         nomVitamine: "Vitamine D",
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("vitamine");
       expect(data.nomVitamine).toBe("Vitamine D");
     });
@@ -1003,7 +1003,7 @@ describe("firebaseFormatter", () => {
         type: "sommeil",
         duree: 90,
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("sommeil");
       expect(data.duree).toBe(90);
       expect(data.heureDebut).toEqual(cmd.timestamp);
@@ -1016,7 +1016,7 @@ describe("firebaseFormatter", () => {
         typeActivite: "promenade",
         duree: 30,
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("activite");
       expect(data.typeActivite).toBe("promenade");
       expect(data.duree).toBe(30);
@@ -1029,7 +1029,7 @@ describe("firebaseFormatter", () => {
         poids: 5.2,
         taille: 65,
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("croissance");
       expect(data.poids).toBe(5.2);
       expect(data.taille).toBe(65);
@@ -1041,7 +1041,7 @@ describe("firebaseFormatter", () => {
         type: "temperature",
         valeurTemperature: 38.5,
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("temperature");
       expect(data.valeur).toBe(38.5);
     });
@@ -1053,7 +1053,7 @@ describe("firebaseFormatter", () => {
         nomMedicament: "Doliprane",
         dosage: "2.5 ml",
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("medicament");
       expect(data.nomMedicament).toBe("Doliprane");
       expect(data.dosage).toBe("2.5 ml");
@@ -1065,7 +1065,7 @@ describe("firebaseFormatter", () => {
         type: "symptome",
         descriptionSymptome: "Toux sèche",
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("symptome");
       expect(data.description).toBe("Toux sèche");
     });
@@ -1076,7 +1076,7 @@ describe("firebaseFormatter", () => {
         type: "vaccin",
         nomVaccin: "ROR",
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("vaccin");
       expect(data.nomVaccin).toBe("ROR");
     });
@@ -1089,7 +1089,7 @@ describe("firebaseFormatter", () => {
         momentRepas: "dejeuner",
         quantiteSolide: "beaucoup",
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.type).toBe("solide");
       expect(data.typeSolide).toBe("puree");
       expect(data.momentRepas).toBe("dejeuner");
@@ -1101,12 +1101,12 @@ describe("firebaseFormatter", () => {
         ...baseCmd,
         contextNote: "au parc",
       };
-      const data = formatDataForFirebase(cmd);
+      const data: Record<string, any> = formatDataForFirebase(cmd);
       expect(data.note).toContain("au parc");
     });
 
     it("includes createdAt date", () => {
-      const data = formatDataForFirebase(baseCmd);
+      const data: Record<string, any> = formatDataForFirebase(baseCmd);
       expect(data.createdAt).toBeInstanceOf(Date);
     });
   });
