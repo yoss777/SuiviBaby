@@ -133,8 +133,11 @@ function pickActiveChild(
     const match = visibleChildren.find((c) => c.id === lastActiveId);
     if (match) return match;
   }
+  // prev may come from the cache or an older snapshot: keep it only while it
+  // is still visible, and return the live object so its updates propagate.
   if (prev && !hiddenIds.includes(prev.id)) {
-    return prev;
+    const match = visibleChildren.find((c) => c.id === prev.id);
+    if (match) return match;
   }
   return visibleChildren[0];
 }
