@@ -94,7 +94,7 @@ const BASE_EVENT_TYPES: ExportTypeItem[] = [
   },
   {
     id: "tetee",
-    label: "Tetee",
+    label: "Tétée",
     icon: { lib: "FontAwesome", name: "person-breastfeeding" },
   },
   {
@@ -145,17 +145,17 @@ const EXTRA_EVENT_TYPES: ExportTypeItem[] = [
   },
   {
     id: "temperature",
-    label: "Temperature",
+    label: "Température",
     icon: { lib: "MaterialCommunityIcons", name: "thermometer" },
   },
   {
     id: "medicament",
-    label: "Medicament",
+    label: "Médicament",
     icon: { lib: "MaterialCommunityIcons", name: "pill" },
   },
   {
     id: "symptome",
-    label: "Symptome",
+    label: "Symptôme",
     icon: { lib: "MaterialCommunityIcons", name: "alert-circle-outline" },
   },
   {
@@ -165,7 +165,7 @@ const EXTRA_EVENT_TYPES: ExportTypeItem[] = [
   },
   {
     id: "activite",
-    label: "Activite",
+    label: "Activité",
     icon: { lib: "MaterialCommunityIcons", name: "run-fast" },
   },
   {
@@ -250,7 +250,7 @@ export default function ExportScreen() {
     {
       id: "json",
       name: "JSON",
-      description: "Format structure pour une sauvegarde complete",
+      description: "Format structuré pour une sauvegarde complète",
       icon: "code-slash",
       extension: ".json",
     },
@@ -390,7 +390,7 @@ export default function ExportScreen() {
           setModalConfig({
             visible: true,
             title: "Erreur",
-            message: "Impossible de charger les donnees à exporter.",
+            message: "Impossible de charger les données à exporter.",
             mode: "text",
           });
         }
@@ -648,7 +648,7 @@ export default function ExportScreen() {
                     { color: nc.textMuted },
                   ]}
                 >
-                  Aucun evenement à exporter
+                  Aucun événement à exporter
                 </Text>
               ) : (
                 item.rows.map((row) => (
@@ -889,7 +889,7 @@ export default function ExportScreen() {
       setModalConfig({
         visible: true,
         title: "Erreur",
-        message: "Impossible d'exporter vos donnees. Réessayez.",
+        message: "Impossible d'exporter vos données. Réessayez.",
         mode: "text",
       });
     } finally {
@@ -1024,8 +1024,8 @@ export default function ExportScreen() {
                 ]}
               >
                 {totalEvents === 0
-                  ? "Aucun evenement (mes donnees)"
-                  : `${selectedEvents}/${totalEvents} evenements (mes donnees)`}
+                  ? "Aucun événement (mes données)"
+                  : `${selectedEvents}/${totalEvents} événements (mes données)`}
               </Text>
               <Text
                 style={[
@@ -1034,8 +1034,8 @@ export default function ExportScreen() {
                 ]}
               >
                 {totalInteractions === 0
-                  ? "Aucune interaction (mes donnees)"
-                  : `${totalInteractions} interactions (mes donnees)`}
+                  ? "Aucune interaction (mes données)"
+                  : `${totalInteractions} interactions (mes données)`}
               </Text>
             </View>
           </View>
@@ -1163,7 +1163,7 @@ export default function ExportScreen() {
               ]}
             >
               {isExporting || isLoading
-                ? "Preparation de l'export..."
+                ? "Préparation de l'export..."
                 : "Export terminé."}
             </Text>
             {(isExporting || isLoading) && (
@@ -1367,7 +1367,7 @@ export default function ExportScreen() {
                     { color: nc.textMuted },
                   ]}
                 >
-                  Aucune donnee à exporter.
+                  Aucune donnée à exporter.
                 </Text>
               </View>
             )}
@@ -1381,7 +1381,7 @@ export default function ExportScreen() {
                 color={nc.todayAccent}
               />
               <ThemedText style={styles.infoText}>
-                Vos donnees sont exportées localement. Stockez le fichier dans
+                Vos données sont exportées localement. Stockez le fichier dans
                 un endroit sûr.
               </ThemedText>
             </View>
@@ -1414,7 +1414,7 @@ export default function ExportScreen() {
                   },
                 ]}
               >
-                {isExporting ? "Export en cours..." : "Exporter les donnees"}
+                {isExporting ? "Export en cours..." : "Exporter les données"}
               </Text>
             </TouchableOpacity>
           </ScrollView>

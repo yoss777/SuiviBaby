@@ -107,9 +107,9 @@ export function predictNextFeeding(events: Array<{
     // Déjà en retard
     return {
       type: "feeding",
-      estimatedTime: "bientot (en retard sur le rythme habituel)",
+      estimatedTime: "bientôt (en retard sur le rythme habituel)",
       confidence,
-      basedOn: `Base sur les ${feedings.length} derniers repas`,
+      basedOn: `Basé sur les ${feedings.length} derniers repas`,
     };
   }
 
@@ -126,7 +126,7 @@ export function predictNextFeeding(events: Array<{
     type: "feeding",
     estimatedTime,
     confidence,
-    basedOn: `Base sur les ${feedings.length} derniers repas`,
+    basedOn: `Basé sur les ${feedings.length} derniers repas`,
   };
 }
 
@@ -170,9 +170,9 @@ export function predictNextSleep(events: Array<{
   if (nextEstimated.getTime() < now.getTime()) {
     return {
       type: "sleep",
-      estimatedTime: "bientot",
+      estimatedTime: "bientôt",
       confidence,
-      basedOn: `Base sur les ${naps.length} dernieres siestes`,
+      basedOn: `Basé sur les ${naps.length} dernières siestes`,
     };
   }
 
@@ -185,7 +185,7 @@ export function predictNextSleep(events: Array<{
     type: "sleep",
     estimatedTime,
     confidence,
-    basedOn: `Base sur les ${naps.length} dernieres siestes`,
+    basedOn: `Basé sur les ${naps.length} dernières siestes`,
   };
 }
 
@@ -219,8 +219,8 @@ export function generateDailySummary(
 
   // Alimentation
   const totalRepas = (counts["tetee"] || 0) + (counts["biberon"] || 0) + (counts["solide"] || 0);
-  if (totalRepas > 0) highlights.push(`${totalRepas} repas enregistre(s)`);
-  if (totalRepas === 0 && today.getHours() > 12) concerns.push("Aucun repas enregistre aujourd'hui");
+  if (totalRepas > 0) highlights.push(`${totalRepas} repas enregistré(s)`);
+  if (totalRepas === 0 && today.getHours() > 12) concerns.push("Aucun repas enregistré aujourd'hui");
 
   // Sommeil
   const totalSommeil = (counts["sommeil"] || 0);
@@ -229,20 +229,20 @@ export function generateDailySummary(
   // Couches
   const totalCouches = (counts["miction"] || 0) + (counts["selle"] || 0);
   if (totalCouches > 0) highlights.push(`${totalCouches} change(s)`);
-  if (totalCouches === 0 && today.getHours() > 14) concerns.push("Peu de changes aujourd'hui — verifier l'hydratation");
+  if (totalCouches === 0 && today.getHours() > 14) concerns.push("Peu de changes aujourd'hui — vérifier l'hydratation");
 
   // Température
-  if (counts["temperature"]) concerns.push("Temperature enregistree — surveiller l'evolution");
+  if (counts["temperature"]) concerns.push("Température enregistrée — surveiller l'évolution");
 
   const title = concerns.length > 0
-    ? `Journee de ${babyName} — point d'attention`
-    : `Belle journee pour ${babyName} !`;
+    ? `Journée de ${babyName} — point d'attention`
+    : `Belle journée pour ${babyName} !`;
 
   const suggestion = concerns.length > 0
-    ? "Consultez les details pour plus d'informations."
+    ? "Consultez les détails pour plus d'informations."
     : totalRepas > 4
       ? `${babyName} mange bien aujourd'hui !`
-      : "Continuez a enregistrer les evenements pour un suivi complet.";
+      : "Continuez à enregistrer les événements pour un suivi complet.";
 
   return { title, highlights, concerns, suggestion };
 }

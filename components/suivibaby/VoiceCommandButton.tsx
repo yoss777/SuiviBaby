@@ -363,7 +363,7 @@ export function VoiceCommandButton({
         visible={permissionModal}
         title="Permission requise"
         message="L'accès au microphone est nécessaire pour utiliser les commandes vocales."
-        confirmText="Parametres"
+        confirmText="Paramètres"
         cancelText="Annuler"
         backgroundColor={Colors[colorScheme].background}
         textColor={Colors[colorScheme].text}
@@ -402,8 +402,8 @@ export function VoiceCommandButton({
       {/* Voice limit paywall */}
       <InfoModal
         visible={voiceLimitReached}
-        title="Commandes vocales epuisees"
-        message="Vous avez utilise vos 3 commandes vocales du jour. Passez a Premium pour des commandes illimitees."
+        title="Commandes vocales épuisées"
+        message="Vous avez utilisé vos 3 commandes vocales du jour. Passez à Premium pour des commandes illimitées."
         confirmText="Voir Premium"
         dismissText="OK"
         backgroundColor={Colors[colorScheme].background}

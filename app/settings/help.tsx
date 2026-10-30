@@ -118,8 +118,8 @@ export default function HelpScreen() {
     showToast("Message envoyé avec succès");
     setModalConfig({
       visible: true,
-      title: "Message envoye",
-      message: "Nous vous repondrons dans les plus brefs delais.",
+      title: "Message envoyé",
+      message: "Nous vous répondrons dans les plus brefs délais.",
     });
     setSubject("");
     setMessage("");

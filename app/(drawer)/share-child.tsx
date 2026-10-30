@@ -282,7 +282,7 @@ export default function ShareChildScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showAlert("Erreur", error.message || "Impossible de crer le code");
+      showAlert("Erreur", error.message || "Impossible de créer le code");
     } finally {
       setIsLoadingCode(false);
     }
@@ -358,7 +358,7 @@ export default function ShareChildScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showAlert(
         "Invitation envoyée",
-        `Une invitation a été envoyée a ${trimmedEmail}. L'autre parent recevra une notification dans l'app.`,
+        `Une invitation a été envoyée à ${trimmedEmail}. L'autre parent recevra une notification dans l'app.`,
         [{ text: "" }],
       );
       setInviteEmail("");
@@ -431,7 +431,7 @@ export default function ShareChildScreen() {
               <FontAwesome name="share-alt" size={48} color={nc.todayAccent} />
               <Text style={dynamicStyles.title}>Partager {childName}</Text>
               <Text style={dynamicStyles.subtitle}>
-                Donnez acces au suivi de votre enfant a un autre parent
+                Donnez accès au suivi de votre enfant à un autre parent
               </Text>
             </View>
 
@@ -526,7 +526,7 @@ export default function ShareChildScreen() {
                         color={nc.white}
                       />
                       <Text style={dynamicStyles.generateButtonText}>
-                        Generer un code
+                        Générer un code
                       </Text>
                     </>
                   )}
@@ -597,7 +597,7 @@ export default function ShareChildScreen() {
               </View>
             </View>
 
-            {/* Information de securite */}
+            {/* Information de sécurité */}
             <View
               style={dynamicStyles.infoBox}
               accessibilityRole="text"
@@ -605,8 +605,8 @@ export default function ShareChildScreen() {
             >
               <FontAwesome name="shield-alt" size={20} color={nc.todayAccent} />
               <Text style={dynamicStyles.infoText}>
-                Les deux parents auront un acces complet au suivi de l&apos;enfant.
-                Vous pourrez retirer l&apos;acces à tout moment depuis les
+                Les deux parents auront un accès complet au suivi de l&apos;enfant.
+                Vous pourrez retirer l&apos;accès à tout moment depuis les
                 paramètres.
               </Text>
             </View>

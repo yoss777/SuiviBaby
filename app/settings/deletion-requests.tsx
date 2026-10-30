@@ -229,11 +229,11 @@ export default function DeletionRequestsScreen() {
       );
 
       if (result.status === "approved") {
-        showToast(`${childName} sera supprime dans 30 jours`);
+        showToast(`${childName} sera supprimé dans 30 jours`);
       } else if (result.status === "refused") {
-        showToast("Suppression refusee");
+        showToast("Suppression refusée");
       } else {
-        showToast("Vote enregistre");
+        showToast("Vote enregistré");
       }
     } catch (error) {
       if (!isMountedRef.current) return;
@@ -264,7 +264,7 @@ export default function DeletionRequestsScreen() {
       await cancelChildDeletion(requestId);
       if (!isMountedRef.current) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast(`Suppression de ${childName} annulee`);
+      showToast(`Suppression de ${childName} annulée`);
     } catch {
       if (!isMountedRef.current) return;
       setModalConfig({
@@ -304,11 +304,11 @@ export default function DeletionRequestsScreen() {
       case "pending":
         return "En attente";
       case "approved":
-        return "Approuvee";
+        return "Approuvée";
       case "refused":
-        return "Refusee";
+        return "Refusée";
       case "expired":
-        return "Expiree";
+        return "Expirée";
       default:
         return status;
     }
@@ -390,7 +390,7 @@ export default function DeletionRequestsScreen() {
                     ]}
                     accessible
                     accessibilityRole="summary"
-                    accessibilityLabel={`Demande de suppression de ${req.childName}, statut ${getStatusLabel(req.status)}, demandee par ${requesterName}`}
+                    accessibilityLabel={`Demande de suppression de ${req.childName}, statut ${getStatusLabel(req.status)}, demandée par ${requesterName}`}
                   >
                     {/* Header */}
                     <View style={styles.requestHeader}>
@@ -439,7 +439,7 @@ export default function DeletionRequestsScreen() {
                       <Text
                         style={[styles.votesLabel, { color: nc.textLight }]}
                       >
-                        Votes des proprietaires :
+                        Votes des propriétaires :
                       </Text>
                       {Object.entries(req.ownerVotes).map(([ownerId, vote]) => {
                         const icon = getVoteIcon(vote.vote);
@@ -450,9 +450,9 @@ export default function DeletionRequestsScreen() {
                               ownerId.slice(0, 8) + "...";
                         const suffix =
                           req.status === "refused" && vote.vote === "pending"
-                            ? " (vote annule)"
+                            ? " (vote annulé)"
                             : "";
-                        const voteLabel = vote.vote === "approved" ? "a approuve" : vote.vote === "refused" ? "a refuse" : "en attente";
+                        const voteLabel = vote.vote === "approved" ? "a approuvé" : vote.vote === "refused" ? "a refusé" : "en attente";
                         return (
                           <View
                             key={ownerId}
@@ -602,8 +602,8 @@ export default function DeletionRequestsScreen() {
             }
             message={
               voteConfirm.vote === "approved"
-                ? `Si tous les proprietaires approuvent, ${voteConfirm.childName} sera supprime apres 30 jours.`
-                : `La demande sera annulee et les autres proprietaires seront informes.`
+                ? `Si tous les propriétaires approuvent, ${voteConfirm.childName} sera supprimé après 30 jours.`
+                : `La demande sera annulée et les autres propriétaires seront informés.`
             }
             confirmText={
               voteConfirm.vote === "approved" ? "Approuver" : "Refuser"
@@ -625,7 +625,7 @@ export default function DeletionRequestsScreen() {
           <ConfirmModal
             visible={cancelConfirm.visible}
             title="Annuler la suppression ?"
-            message={`${cancelConfirm.childName} sera restaure et accessible a nouveau. Les autres proprietaires devront etre re-invites.`}
+            message={`${cancelConfirm.childName} sera restauré et accessible à nouveau. Les autres propriétaires devront être ré-invités.`}
             confirmText="Restaurer"
             cancelText="Annuler"
             backgroundColor={nc.backgroundCard}

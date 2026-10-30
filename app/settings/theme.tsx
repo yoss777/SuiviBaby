@@ -91,7 +91,7 @@ export default function ThemeScreen() {
       setModalConfig({
         visible: true,
         title: "Erreur",
-        message: "Impossible de mettre a jour le theme.",
+        message: "Impossible de mettre à jour le thème.",
       });
     } finally {
       if (isMountedRef.current) setIsSaving(false);

@@ -195,7 +195,7 @@ const CommentItem = ({
           style={styles.replyButton}
         >
           <Text style={[styles.replyButtonText, { color: nc.textMuted }]}>
-            Repondre
+            Répondre
           </Text>
         </Pressable>
       </View>
@@ -595,7 +595,7 @@ export const CommentsBottomSheet = ({
           Aucun commentaire
         </Text>
         <Text style={[styles.emptySubtext, { color: nc.textLight }]}>
-          Soyez le premier a commenter ce moment !
+          Soyez le premier à commenter ce moment !
         </Text>
       </View>
     );
@@ -751,7 +751,7 @@ export const CommentsBottomSheet = ({
               returnKeyType="send"
               onSubmitEditing={handleSendComment}
               blurOnSubmit={false}
-              accessibilityLabel="Ecrire un commentaire"
+              accessibilityLabel="Écrire un commentaire"
             />
             <Pressable
               style={[

@@ -198,7 +198,7 @@ export default function EditChildScreen() {
       if (!isMountedRef.current) return;
       setAllChildren((prev) => prev.map((c) => c.id === editingChildId ? { ...c, name: trimmedName } : c));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast("Nom modifie avec succes");
+      showToast("Nom modifié avec succès");
       cancelEditing();
     } catch {
       if (!isMountedRef.current) return;
@@ -230,17 +230,17 @@ export default function EditChildScreen() {
       if (!isMountedRef.current) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (result.status === "approved") {
-        showToast(`${child.name} supprime`);
+        showToast(`${child.name} supprimé`);
         setRefreshTick((prev) => prev + 1);
       } else {
-        showToast("Demande envoyee aux co-proprietaires");
+        showToast("Demande envoyée aux co-propriétaires");
       }
     } catch (error: any) {
       if (!isMountedRef.current) return;
       const message = error?.message?.includes("already-exists")
-        ? "Une demande de suppression est deja en cours."
+        ? "Une demande de suppression est déjà en cours."
         : error?.message?.includes("en cours de suppression")
-          ? "Cet enfant est deja en cours de suppression."
+          ? "Cet enfant est déjà en cours de suppression."
           : "Impossible de supprimer cet enfant.";
       setModalConfig({ visible: true, title: "Erreur", message });
     } finally {
@@ -294,13 +294,13 @@ export default function EditChildScreen() {
       await transferChildAndLeave(child.id, selectedParentId);
       if (!isMountedRef.current) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast(`Vous avez quitte ${child.name}`);
+      showToast(`Vous avez quitté ${child.name}`);
       setTransferModal({ visible: false, child: null, parents: [], selectedParentId: null, loading: false });
       setRefreshTick((prev) => prev + 1);
     } catch {
       if (!isMountedRef.current) return;
       setTransferModal((prev) => ({ ...prev, loading: false }));
-      setModalConfig({ visible: true, title: "Erreur", message: "Impossible de transferer la propriete." });
+      setModalConfig({ visible: true, title: "Erreur", message: "Impossible de transférer la propriété." });
     }
   }, [transferModal, showToast]);
 
@@ -336,7 +336,7 @@ export default function EditChildScreen() {
           ) : (
             <View style={styles.childrenList}>
               <Text style={[styles.infoText, { color: nc.textMuted }]}>
-                Appuyez sur un enfant pour modifier son nom. Seuls les enfants dont vous etes proprietaire sont modifiables.
+                Appuyez sur un enfant pour modifier son nom. Seuls les enfants dont vous êtes propriétaire sont modifiables.
               </Text>
               {allChildren.map((child) => {
                 const isHidden = hiddenChildrenIds.includes(child.id);
@@ -396,7 +396,7 @@ export default function EditChildScreen() {
                         >
                           <Text style={[styles.childName, { color: nc.textStrong }]}>{child.name}</Text>
                           <Text style={[styles.childAge, { color: nc.textMuted }]}>
-                            {ageText}{isHidden ? " • masque" : ""}
+                            {ageText}{isHidden ? " • masqué" : ""}
                           </Text>
                         </TouchableOpacity>
                       )}
@@ -468,8 +468,8 @@ export default function EditChildScreen() {
           title={`Supprimer ${deleteConfirm.child?.name || ""} ?`}
           message={
             deleteConfirm.child?.hasOtherParents
-              ? "Cette demande sera envoyee aux autres proprietaires pour approbation. Les donnees seront conservees 30 jours avant suppression definitive.\n\nVoulez-vous d'abord exporter les donnees ?"
-              : "Toutes les donnees seront supprimees apres 30 jours. Cette action est irreversible.\n\nVoulez-vous d'abord exporter les donnees ?"
+              ? "Cette demande sera envoyée aux autres propriétaires pour approbation. Les données seront conservées 30 jours avant suppression définitive.\n\nVoulez-vous d'abord exporter les données ?"
+              : "Toutes les données seront supprimées après 30 jours. Cette action est irréversible.\n\nVoulez-vous d'abord exporter les données ?"
           }
           confirmText="Supprimer"
           cancelText="Exporter d'abord"
@@ -496,7 +496,7 @@ export default function EditChildScreen() {
                 Se retirer de {transferModal.child?.name}
               </Text>
               <Text style={[styles.modalSubtitle, { color: nc.textLight }]}>
-                Choisissez le nouveau proprietaire :
+                Choisissez le nouveau propriétaire :
               </Text>
 
               {transferModal.loading && transferModal.parents.length === 0 ? (

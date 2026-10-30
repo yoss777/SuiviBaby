@@ -78,7 +78,7 @@ export async function detectNewMilestones(
         id,
         type: "tracking_duration",
         title: `${m.label} de suivi !`,
-        message: `Vous suivez votre bebe depuis ${m.label}. Bravo pour votre regularite !`,
+        message: `Vous suivez votre bébé depuis ${m.label}. Bravo pour votre régularité !`,
         emoji: m.emoji,
         isPremium: false,
         achievedAt: now.toISOString(),
@@ -88,9 +88,9 @@ export async function detectNewMilestones(
 
   // Nombre d'événements
   const countMilestones = [
-    { count: 100, label: "100 evenements" },
-    { count: 500, label: "500 evenements" },
-    { count: 1000, label: "1000 evenements" },
+    { count: 100, label: "100 événements" },
+    { count: 500, label: "500 événements" },
+    { count: 1000, label: "1000 événements" },
   ];
 
   for (const m of countMilestones) {
@@ -99,8 +99,8 @@ export async function detectNewMilestones(
       candidates.push({
         id,
         type: "event_count",
-        title: `${m.label} enregistres !`,
-        message: `Vous avez enregistre plus de ${m.count} evenements. Un suivi exemplaire !`,
+        title: `${m.label} enregistrés !`,
+        message: `Vous avez enregistré plus de ${m.count} événements. Un suivi exemplaire !`,
         emoji: "📊",
         isPremium: false,
         achievedAt: now.toISOString(),
@@ -114,8 +114,8 @@ export async function detectNewMilestones(
     candidates.push({
       id: id100feed,
       type: "event_count",
-      title: "100e repas enregistre !",
-      message: "Un cap symbolique — chaque repas compte pour le suivi de votre bebe.",
+      title: "100e repas enregistré !",
+      message: "Un cap symbolique — chaque repas compte pour le suivi de votre bébé.",
       emoji: "🍼",
       isPremium: false,
       achievedAt: now.toISOString(),
@@ -128,8 +128,8 @@ export async function detectNewMilestones(
     candidates.push({
       id: idSleep6h,
       type: "sleep_record",
-      title: "Premiere nuit de 6h+ !",
-      message: "Votre bebe a dormi plus de 6 heures d'affilee. Une etape importante !",
+      title: "Première nuit de 6h+ !",
+      message: "Votre bébé a dormi plus de 6 heures d'affilée. Une étape importante !",
       emoji: "🌙",
       isPremium: false,
       achievedAt: now.toISOString(),
@@ -148,8 +148,8 @@ export async function detectNewMilestones(
       candidates.push({
         id,
         type: "streak",
-        title: `${m.label} consecutifs !`,
-        message: `Vous enregistrez des evenements depuis ${m.label} sans interruption. Impressionnant !`,
+        title: `${m.label} consécutifs !`,
+        message: `Vous enregistrez des événements depuis ${m.label} sans interruption. Impressionnant !`,
         emoji: "🔥",
         isPremium: true, // Premium — gamification
         achievedAt: now.toISOString(),

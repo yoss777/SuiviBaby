@@ -93,7 +93,7 @@ export default function NotificationsScreen() {
         setModalConfig({
           visible: true,
           title: "Erreur",
-          message: "Impossible de charger les preferences de notifications.",
+          message: "Impossible de charger les préférences de notifications.",
           confirmText: undefined,
           onConfirm: undefined,
         });
@@ -142,8 +142,8 @@ export default function NotificationsScreen() {
         visible: true,
         title: "Autorisation requise",
         message:
-          "Pour activer les notifications push, autorisez-les dans les reglages du systeme.",
-        confirmText: "Ouvrir les reglages",
+          "Pour activer les notifications push, autorisez-les dans les réglages du système.",
+        confirmText: "Ouvrir les réglages",
         onConfirm: () => {
           Linking.openSettings();
         },
@@ -152,7 +152,7 @@ export default function NotificationsScreen() {
       setModalConfig({
         visible: true,
         title: "Erreur",
-        message: "Impossible de verifier les autorisations de notifications.",
+        message: "Impossible de vérifier les autorisations de notifications.",
         confirmText: undefined,
         onConfirm: undefined,
       });
@@ -518,9 +518,9 @@ export default function NotificationsScreen() {
               color={Colors[colorScheme].tint}
             />
             <ThemedText style={styles.infoText}>
-              Vous pouvez modifier vos préférences a tout moment. Les
-              notifications critiques relatives a la securite ne peuvent pas
-              etre desactivees.
+              Vous pouvez modifier vos préférences à tout moment. Les
+              notifications critiques relatives à la sécurité ne peuvent pas
+              être désactivées.
             </ThemedText>
           </View>
         </ScrollView>

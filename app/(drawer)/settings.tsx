@@ -797,7 +797,7 @@ export default function SettingsScreen() {
               </Text>
             </View>
           ) : (
-            "Votre compte sera programme pour suppression dans 30 jours. Vous pourrez annuler a tout moment depuis les parametres."
+            "Votre compte sera programmé pour suppression dans 30 jours. Vous pourrez annuler à tout moment depuis les paramètres."
           )) as any
         }
         value={deletePassword}

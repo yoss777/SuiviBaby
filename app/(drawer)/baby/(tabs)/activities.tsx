@@ -965,7 +965,7 @@ export default function ActivitiesScreen() {
         onSuccess: () => {
           ensureTodayInRange();
           applyTodayFilter();
-          showToast(isEditing ? "Activite modifiee" : "Activite enregistree");
+          showToast(isEditing ? "Activité modifiée" : "Activité enregistrée");
         },
         onDismiss: () => {
           editIdRef.current = null;
@@ -1067,7 +1067,7 @@ export default function ActivitiesScreen() {
     setSoftDeletedIds((prev) => new Set(prev).add(eventId));
 
     showUndoToast(
-      "Activite supprimee",
+      "Activité supprimée",
       // onUndo — restore visibility
       () => {
         setSoftDeletedIds((prev) => {

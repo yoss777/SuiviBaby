@@ -57,7 +57,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 const PASSWORD_RULES = [
   {
     id: "length",
-    label: "8+ caracteres",
+    label: "8+ caractères",
     test: (value: string) => value.length >= 8,
   },
   {
@@ -67,7 +67,7 @@ const PASSWORD_RULES = [
   },
   {
     id: "special",
-    label: "1 caractere special",
+    label: "1 caractère spécial",
     test: (value: string) => /[^A-Za-z0-9]/.test(value),
   },
 ];
@@ -308,7 +308,7 @@ export default function LoginScreen() {
       if (unmetRules.length > 0) {
         showModal(
           "Erreur",
-          "Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special.",
+          "Mot de passe trop faible. Utilisez 8+ caractères, 1 chiffre, 1 caractère spécial.",
         );
         return;
       }
@@ -845,7 +845,7 @@ export default function LoginScreen() {
                     },
                   ]}
                 >
-                  la politique de confidentialite
+                  la politique de confidentialité
                 </Text>
               </TouchableOpacity>
               <Text style={[styles.legalText, { color: nc.textMuted }]}>.</Text>
@@ -887,9 +887,9 @@ export default function LoginScreen() {
               >
                 J'autorise le traitement des{" "}
                 <Text style={{ fontWeight: "600" }}>
-                  donnees de sante
+                  données de santé
                 </Text>
-                {" "}de mon enfant (alimentation, sommeil, croissance) conformement au{" "}
+                {" "}de mon enfant (alimentation, sommeil, croissance) conformément au{" "}
                 <Text
                   style={{ color: nc.todayAccent, textDecorationLine: "underline" }}
                   onPress={() => router.push("/(auth)/privacy")}

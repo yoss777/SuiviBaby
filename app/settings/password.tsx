@@ -65,7 +65,7 @@ export default function PasswordScreen() {
     () => [
       {
         id: "length",
-        label: "8+ caracteres",
+        label: "8+ caractères",
         test: (value: string) => value.length >= 8,
       },
       {
@@ -75,7 +75,7 @@ export default function PasswordScreen() {
       },
       {
         id: "special",
-        label: "1 caractere special",
+        label: "1 caractère spécial",
         test: (value: string) => /[^A-Za-z0-9]/.test(value),
       },
     ],
@@ -99,7 +99,7 @@ export default function PasswordScreen() {
 
   const mapFirebaseError = useCallback((error: unknown) => {
     if (!error || typeof error !== "object") {
-      return "Une erreur est survenue. Reessayez.";
+      return "Une erreur est survenue. Réessayez.";
     }
 
     const code = "code" in error ? String(error.code) : "";
@@ -107,10 +107,10 @@ export default function PasswordScreen() {
       return "Mot de passe actuel incorrect.";
     }
     if (code === "auth/too-many-requests") {
-      return "Trop de tentatives. Reessayez plus tard.";
+      return "Trop de tentatives. Réessayez plus tard.";
     }
     if (code === "auth/weak-password") {
-      return "Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special.";
+      return "Mot de passe trop faible. Utilisez 8+ caractères, 1 chiffre, 1 caractère spécial.";
     }
     if (code === "auth/requires-recent-login") {
       return "Veuillez vous reconnecter pour changer votre mot de passe.";
@@ -123,7 +123,7 @@ export default function PasswordScreen() {
     const user = auth.currentUser;
     setErrorMessage("");
     if (!user?.email) {
-      setErrorMessage("Email introuvable pour la reinitialisation.");
+      setErrorMessage("Email introuvable pour la réinitialisation.");
       return;
     }
 
@@ -131,12 +131,12 @@ export default function PasswordScreen() {
       setIsSaving(true);
       await sendPasswordResetEmail(auth, user.email);
       if (!isMountedRef.current) return;
-      showToast("Email de reinitialisation envoye");
+      showToast("Email de réinitialisation envoyé");
     } catch (error) {
       if (!isMountedRef.current) return;
       const message = mapFirebaseError(error);
       setErrorMessage(message);
-      showActionToast("Echec de l'envoi de l'email.", "Reessayer", () => {
+      showActionToast("Échec de l'envoi de l'email.", "Réessayer", () => {
         handleForgotPassword();
       });
     } finally {
@@ -155,13 +155,13 @@ export default function PasswordScreen() {
 
     if (unmetRules.length > 0) {
       setErrorMessage(
-        "Mot de passe trop faible. Utilisez 8+ caracteres, 1 chiffre, 1 caractere special.",
+        "Mot de passe trop faible. Utilisez 8+ caractères, 1 chiffre, 1 caractère spécial.",
       );
       return;
     }
 
     if (newPassword === currentPassword) {
-      setErrorMessage("Le nouveau mot de passe doit etre different.");
+      setErrorMessage("Le nouveau mot de passe doit être différent.");
       return;
     }
 
@@ -172,7 +172,7 @@ export default function PasswordScreen() {
 
     const user = auth.currentUser;
     if (!user || !user.email) {
-      setErrorMessage("Utilisateur non authentifie.");
+      setErrorMessage("Utilisateur non authentifié.");
       return;
     }
 
@@ -186,11 +186,11 @@ export default function PasswordScreen() {
       await updatePassword(user, newPassword);
       if (!isMountedRef.current) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast("Mot de passe modifie avec succes");
+      showToast("Mot de passe modifié avec succès");
       setModalConfig({
         visible: true,
-        title: "Succes",
-        message: "Mot de passe modifie avec succes.",
+        title: "Succès",
+        message: "Mot de passe modifié avec succès.",
         onConfirm: () => router.back(),
       });
     } catch (error) {
@@ -199,7 +199,7 @@ export default function PasswordScreen() {
       setErrorMessage(message);
       showActionToast(
         "Impossible de modifier le mot de passe.",
-        "Reessayer",
+        "Réessayer",
         () => {
           handleChangePassword();
         },
@@ -301,7 +301,7 @@ export default function PasswordScreen() {
                 accessibilityState={{ disabled: isSaving }}
               >
                 <Text style={[styles.forgotLinkText, { color: nc.textMuted }]}>
-                  Mot de passe oublie ?
+                  Mot de passe oublié ?
                 </Text>
               </TouchableOpacity>
             </View>
@@ -433,7 +433,7 @@ export default function PasswordScreen() {
               color={nc.todayAccent}
             />
             <ThemedText style={styles.infoText}>
-              Conseil: 8+ caracteres, 1 chiffre, 1 caractere special.
+              Conseil: 8+ caractères, 1 chiffre, 1 caractère spécial.
             </ThemedText>
           </View>
 

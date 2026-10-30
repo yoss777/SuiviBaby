@@ -104,7 +104,7 @@ export default function LanguageScreen() {
       setModalConfig({
         visible: true,
         title: "Erreur",
-        message: "Impossible de mettre a jour la langue.",
+        message: "Impossible de mettre à jour la langue.",
       });
     } finally {
       setIsSaving(false);

@@ -153,11 +153,11 @@ export function DeletionRequestNotifier() {
       );
 
       if (result.status === "approved") {
-        showToast(`${currentRequest.childName} sera supprime dans 30 jours`);
+        showToast(`${currentRequest.childName} sera supprimé dans 30 jours`);
       } else if (result.status === "refused") {
-        showToast("Suppression refusee");
+        showToast("Suppression refusée");
       } else {
-        showToast("Vote enregistre");
+        showToast("Vote enregistré");
       }
     } catch {
       showToast("Erreur lors du vote");
@@ -201,12 +201,12 @@ export function DeletionRequestNotifier() {
           <Text style={[styles.title, { color: nc.textStrong }]}>
             {isPending
               ? "Demande de suppression"
-              : "Demande de suppression refusee"}
+              : "Demande de suppression refusée"}
           </Text>
           <Text style={[styles.message, { color: nc.textLight }]}>
             {isPending
               ? `${ownerNames[currentRequest.requestedBy] || currentRequest.requestedByEmail} souhaite supprimer ${currentRequest.childName}.`
-              : `${ownerNames[currentRequest.refusedBy || ""] || currentRequest.refusedByEmail || "Un proprietaire"} a refuse la suppression de ${currentRequest.childName}.`}
+              : `${ownerNames[currentRequest.refusedBy || ""] || currentRequest.refusedByEmail || "Un propriétaire"} a refusé la suppression de ${currentRequest.childName}.`}
           </Text>
 
           {/* Votes */}
@@ -221,7 +221,7 @@ export function DeletionRequestNotifier() {
                 const suffix =
                   currentRequest.status === "refused" &&
                   vote.vote === "pending"
-                    ? " (vote annule)"
+                    ? " (vote annulé)"
                     : "";
                 return (
                   <View key={ownerId} style={styles.voteRow}>

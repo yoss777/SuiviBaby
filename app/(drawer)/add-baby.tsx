@@ -281,13 +281,13 @@ export default function AddBabyScreen() {
             {isFirstRun ? (
               <>
                 <Text style={[styles.welcomeTitle, { color: nc.textStrong, marginTop: 16 }]}>
-                  Felicitations !
+                  Félicitations !
                 </Text>
                 <Text style={[dynamicStyles.subtitle, { marginTop: 8 }]}>
-                  Votre compte est cree. Commencez par ajouter votre bebe pour demarrer le suivi.
+                  Votre compte est créé. Commencez par ajouter votre bébé pour démarrer le suivi.
                 </Text>
                 <View style={[styles.stepIndicator, { backgroundColor: tint + '15' }]}>
-                  <Text style={[styles.stepText, { color: tint }]}>Etape 1/2 — Ajouter votre bebe</Text>
+                  <Text style={[styles.stepText, { color: tint }]}>Étape 1/2 — Ajouter votre bébé</Text>
                 </View>
               </>
             ) : (

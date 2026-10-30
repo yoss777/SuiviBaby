@@ -56,7 +56,7 @@ export default function ProfileScreen() {
       setModalConfig({
         visible: true,
         title: "Pseudo invalide",
-        message: "Le pseudo doit contenir au moins 6 caracteres.",
+        message: "Le pseudo doit contenir au moins 6 caractères.",
       });
       return;
     }
@@ -67,15 +67,15 @@ export default function ProfileScreen() {
       await refreshUser();
       if (!isMountedRef.current) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast("Profil mis a jour avec succes");
+      showToast("Profil mis à jour avec succès");
     } catch (error) {
       if (!isMountedRef.current) return;
       const message =
         error instanceof Error ? error.message : "Erreur inconnue.";
       setErrorMessage(message);
       showActionToast(
-        "Impossible de mettre a jour le profil.",
-        "Reessayer",
+        "Impossible de mettre à jour le profil.",
+        "Réessayer",
         () => {
           handleSave();
         },
@@ -136,7 +136,7 @@ export default function ProfileScreen() {
               />
               {isInvalid && (
                 <Text style={[styles.helperText, { color: nc.textMuted }]}>
-                  6 caracteres minimum.
+                  6 caractères minimum.
                 </Text>
               )}
             </View>

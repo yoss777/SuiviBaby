@@ -969,7 +969,7 @@ export default function GrowthScreen() {
           ensureTodayInRange();
           applyTodayFilter();
           showToast(
-            isEditing ? "Mesure modifiee" : "Mesure enregistree",
+            isEditing ? "Mesure modifiée" : "Mesure enregistrée",
           );
         },
         onDismiss: () => {
@@ -1057,7 +1057,7 @@ export default function GrowthScreen() {
     setSoftDeletedIds((prev) => new Set(prev).add(eventId));
 
     showUndoToast(
-      "Mesure supprimee",
+      "Mesure supprimée",
       // onUndo — restore visibility
       () => {
         setSoftDeletedIds((prev) => {
@@ -1478,11 +1478,11 @@ export default function GrowthScreen() {
               </View>
               <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
                 {events.length === 0
-                  ? "Aucune mesure enregistree"
+                  ? "Aucune mesure enregistrée"
                   : "Aucune mesure pour ce filtre"}
               </ThemedText>
               <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
-                Suivez le poids, la taille et le perimetre cranien
+                Suivez le poids, la taille et le périmètre crânien
               </ThemedText>
               {events.length === 0 && (
                 <Pressable

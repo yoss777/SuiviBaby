@@ -61,7 +61,7 @@ export function FirstTrackGuide({ onDismiss }: FirstTrackGuideProps) {
     [openSheet],
   );
 
-  const babyName = activeChild?.name?.split(" ")[0] || "votre bebe";
+  const babyName = activeChild?.name?.split(" ")[0] || "votre bébé";
 
   if (showCelebration) {
     return (
@@ -114,7 +114,7 @@ export function FirstTrackGuide({ onDismiss }: FirstTrackGuideProps) {
         style={[styles.stepBadge, { backgroundColor: nc.todayAccent + "15" }]}
       >
         <Text style={[styles.stepBadgeText, { color: nc.todayAccent }]}>
-          Etape 2/2
+          Étape 2/2
         </Text>
       </View>
 

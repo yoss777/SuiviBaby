@@ -943,7 +943,7 @@ export default function MilestonesScreen() {
         onSuccess: () => {
           ensureTodayInRange();
           applyTodayFilter();
-          showToast(isEditing ? "Jalon modifie" : "Jalon enregistre");
+          showToast(isEditing ? "Jalon modifié" : "Jalon enregistré");
         },
         onDismiss: () => {
           editIdRef.current = null;
@@ -1224,7 +1224,7 @@ export default function MilestonesScreen() {
     setSoftDeletedIds((prev) => new Set(prev).add(eventId));
 
     showUndoToast(
-      "Jalon supprime",
+      "Jalon supprimé",
       // onUndo — restore visibility
       () => {
         setSoftDeletedIds((prev) => {

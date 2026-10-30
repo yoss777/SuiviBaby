@@ -625,7 +625,7 @@ export default function DiapersScreen() {
         onSuccess: () => {
           ensureTodayInRange();
           applyTodayFilter();
-          showToast(isEditing ? "Couche modifiee" : "Couche enregistree");
+          showToast(isEditing ? "Couche modifiée" : "Couche enregistrée");
         },
         onDismiss: () => {
           editIdRef.current = null;
@@ -1110,7 +1110,7 @@ export default function DiapersScreen() {
     setSoftDeletedIds((prev) => new Set(prev).add(id));
 
     showUndoToast(
-      "Couche supprimee",
+      "Couche supprimée",
       // onUndo - restore visibility
       () => {
         setSoftDeletedIds((prev) => {
@@ -1197,7 +1197,7 @@ export default function DiapersScreen() {
             : excretion.couleur === "jaune"
               ? "Jaune"
               : excretion.couleur === "foncee"
-                ? "Foncee"
+                ? "Foncée"
                 : "Autre";
         detailParts.push(couleurLabel);
       }
@@ -1243,7 +1243,7 @@ export default function DiapersScreen() {
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Modifier cette excretion"
+            accessibilityLabel="Modifier cette excrétion"
             style={({ pressed }) => [
               styles.sessionCard,
               {
@@ -1426,8 +1426,8 @@ export default function DiapersScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={
                     isExpanded
-                      ? "Masquer les excretions"
-                      : "Voir toutes les excretions"
+                      ? "Masquer les excrétions"
+                      : "Voir toutes les excrétions"
                   }
                   style={({ pressed }) => [
                     styles.expandTrigger,
@@ -1448,7 +1448,7 @@ export default function DiapersScreen() {
                   >
                     {isExpanded
                       ? "Masquer"
-                      : `${item.excretions.length - 1} autre${item.excretions.length > 2 ? "s" : ""} excretion${item.excretions.length > 2 ? "s" : ""}`}
+                      : `${item.excretions.length - 1} autre${item.excretions.length > 2 ? "s" : ""} excrétion${item.excretions.length > 2 ? "s" : ""}`}
                   </Text>
                   <Ionicons
                     name={isExpanded ? "chevron-up" : "chevron-down"}
@@ -1551,11 +1551,11 @@ export default function DiapersScreen() {
             </View>
             <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
               {excretions.length === 0
-                ? "Aucune couche enregistree"
+                ? "Aucune couche enregistrée"
                 : "Aucune couche pour ce filtre"}
             </ThemedText>
             <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
-              Suivez les changes de bebe
+              Suivez les changes de bébé
             </ThemedText>
 
             {excretions.length === 0 && (
