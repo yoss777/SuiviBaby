@@ -2,6 +2,7 @@
 
 > **Vision** : Monétiser sans trahir la confiance parentale. Suivi Baby est un compagnon, pas un produit publicitaire.
 > Document de référence unique — stratégie business, implémentation technique et éthique.
+> **État réel vs cible (30/10/2026)** : voir [docs/PREMIUM_OFFRE_CIBLE.md](docs/PREMIUM_OFFRE_CIBLE.md) — fonctionnalités retirées du paywall tant qu'elles ne sont pas implémentées.
 
 ---
 

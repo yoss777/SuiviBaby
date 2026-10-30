@@ -32,35 +32,35 @@ const SLIDES = [
     icon: "baby-carriage" as const,
     title: "Bienvenue sur Suivi Baby",
     description:
-      "L'app qui vous accompagne au quotidien pour suivre l'alimentation, le sommeil et la croissance de votre bebe.",
+      "L'app qui vous accompagne au quotidien pour suivre l'alimentation, le sommeil et la croissance de votre bébé.",
     color: "#6366f1",
   },
   {
     icon: "clock" as const,
     title: "Saisie en 3 secondes",
     description:
-      "Un biberon a 3h du matin ? Un tap suffit. Mode nuit automatique, commandes vocales, saisie rapide — pensee pour les parents fatigues.",
+      "Un biberon à 3h du matin ? Un tap suffit. Mode nuit automatique, commandes vocales, saisie rapide — pensée pour les parents fatigués.",
     color: "#22c55e",
   },
   {
     icon: "users" as const,
-    title: "Toute la famille connectee",
+    title: "Toute la famille connectée",
     description:
-      "Partagez le suivi avec votre partenaire, la nounou ou les grands-parents. Chacun voit les evenements en temps reel.",
+      "Partagez le suivi avec votre partenaire, la nounou ou les grands-parents. Chacun voit les événements en temps réel.",
     color: "#f59e0b",
   },
   {
     icon: "shield-halved" as const,
-    title: "Donnees securisees",
+    title: "Données sécurisées",
     description:
-      "Chiffrement de bout en bout, zero publicite, conformite RGPD. Les donnees de votre bebe restent privees.",
+      "Chiffrement en transit et au repos, zéro publicité, conformité RGPD. Les données de votre bébé restent privées.",
     color: "#ef4444",
   },
   {
     icon: "wand-magic-sparkles" as const,
     title: "Insights intelligents",
     description:
-      "Decouvrez des tendances : \"Bebe dort mieux quand couche avant 19h30\". Courbes OMS, statistiques avancees et plus avec Premium.",
+      "Découvrez des tendances : \"Bébé dort mieux quand couché avant 19h30\". Courbes OMS, statistiques avancées et plus avec Premium.",
     color: "#8b5cf6",
   },
 ];

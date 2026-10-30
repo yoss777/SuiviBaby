@@ -26,69 +26,89 @@ export default function TermsScreen() {
 
   const sections = [
     {
-      title: '1. Qui fournit le service',
+      title: "1. Objet et acceptation",
       content:
-        'Le service est proposé par SuiviBaby (TESFA), 78 avenue des Champs-Élysées, 75008 Paris, France. Contact : contact@suivibaby.com.',
-    },
-{
-      title: '2. Avertissement médical important',
-      content:
-        'SuiviBaby est un outil d\'organisation personnelle. Il ne constitue pas un dispositif médical, ne fournit aucun diagnostic et ne remplace jamais l\'avis, l\'examen ou la prescription d\'un pédiatre ou d\'un professionnel de santé qualifié.',
+        "Ces conditions régissent l'utilisation de l'application SuiviBaby et la souscription des offres payantes. En créant un compte, vous les acceptez, ainsi que la politique de confidentialité.",
     },
     {
-      title: '3. Responsabilité de l\'utilisateur',
+      title: "2. Éditeur",
       content:
-        'Vous certifiez être le tuteur légal de l\'enfant pour lequel vous créez un profil. Vous êtes responsable de l\'exactitude des données saisies et de la confidentialité de vos identifiants d\'accès.',
+        "L'application est éditée par TESFA, 78 avenue des Champs-Élysées, 75008 Paris, France. Les mentions légales complètes figurent sur suivibaby.com/mentions-legales. Contact : support@suivibaby.com.",
     },
     {
-      title: '4. Utilisation appropriee',
+      title: "3. Avertissement médical important",
       content:
-        'Vous vous engagez a utiliser l\'application conformement aux lois en vigueur, ne pas detourner le service a des fins frauduleuses et fournir des informations exactes.',
+        "SuiviBaby est un outil d'organisation personnelle, pas un dispositif médical. Elle ne pose aucun diagnostic et ne remplace jamais l'avis, l'examen ou la prescription d'un médecin. Les statistiques, courbes et conseils sont donnés à titre informatif. En cas d'inquiétude, consultez un professionnel de santé. En cas d'urgence, appelez le 15 (SAMU) ou le 112.",
     },
     {
-      title: '5. Donnees et sauvegarde',
+      title: "4. Compte et conditions d'accès",
       content:
-        "Vos donnees sont enregistrees dans le cloud pour assurer leur synchronisation, dans la region us-central1. Des fonctionnalites d'export peuvent etre proposees, mais vous restez responsable de vos sauvegardes personnelles.",
+        "L'application est réservée aux personnes majeures, titulaires de l'autorité parentale sur l'enfant suivi ou agissant avec l'accord de son représentant légal. Vous vous engagez à fournir des informations exactes et à garder vos identifiants confidentiels. Un compte est personnel : pour partager le suivi, utilisez la fonction d'invitation.",
     },
     {
-      title: '6. Propriete intellectuelle',
+      title: "5. Règles d'utilisation",
       content:
-        'Le contenu, les marques, le design et le code de l\'application sont la propriete de SuiviBaby ou de ses partenaires.',
+        "Vous vous engagez à utiliser l'application conformément à la loi, et notamment à ne pas tenter d'accéder aux données d'autres utilisateurs, contourner les mesures de sécurité, copier ou perturber l'application, ni enregistrer des contenus illicites ou des données concernant un enfant sans y être autorisé.",
     },
     {
-      title: '7. Disponibilite du service',
+      title: "6. Photos et contenus",
       content:
-        'Nous nous efforcons de maintenir le service disponible, mais ne garantissons pas une disponibilite continue (maintenance, incidents, dependances techniques).',
+        "Vous restez propriétaire des contenus que vous ajoutez. Vous nous accordez uniquement le droit de les héberger et de les afficher, à vous et aux personnes invitées. Les photos sont destinées à un usage strictement privé : il est interdit d'ajouter des photos montrant les parties intimes d'un enfant ou tout contenu corporel sensible. Tout contenu peut être signalé depuis l'application ou à contact@suivibaby.com. Nous pouvons retirer un contenu manifestement illicite ou contraire à la sécurité de l'enfant.",
     },
     {
-      title: '8. Photos et contenu sensible',
+      title: "7. Partage du suivi",
       content:
-        "Les photos ajoutées dans SuiviBaby sont destinées à un usage privé dans le suivi de l'enfant. Vous ne devez pas utiliser le service pour partager des photos montrant les parties intimes d'un enfant, une couche ouverte avec exposition intime, ou un contenu corporel graphique sensible en dehors du cadre strictement privé des adultes autorisés.",
+        "Vous pouvez inviter d'autres personnes à consulter ou compléter le suivi d'un enfant, choisir leurs droits et les révoquer à tout moment. Vous êtes responsable du choix des personnes invitées. Leur nombre dépend de votre offre.",
     },
     {
-      title: '9. Signalement de contenu',
+      title: "8. Commande vocale",
       content:
-        "Un mécanisme de signalement peut être mis à disposition dans l'application pour signaler une photo sensible, un problème de confidentialité ou un contenu inadapté. Vous pouvez aussi nous contacter à contact@suivibaby.com.",
+        "La commande vocale est facultative. Elle s'appuie sur des services d'intelligence artificielle qui peuvent mal comprendre une phrase : vérifiez toujours les événements proposés avant de les valider.",
     },
     {
-      title: '10. Suppression du compte',
+      title: "9. Offres et abonnements",
       content:
-        'L\'utilisateur peut supprimer son compte via les paramètres de l\'application. Cette action est irréversible et entraîne la suppression immédiate de toutes les données de suivi associées.',
+        "L'offre gratuite donne accès au suivi sans limite de durée, avec des limites d'usage indiquées dans l'application. Les offres Premium et Famille sont proposées en abonnement mensuel ou annuel, ou en achat unique « à vie » ; le prix affiché par l'App Store ou Google Play au moment de l'achat fait foi. Le paiement passe par votre compte Apple ou Google : nous n'avons jamais accès à vos coordonnées bancaires. Les abonnements se renouvellent automatiquement, sauf résiliation au moins 24 heures avant la fin de la période en cours. Si une période d'essai est proposée, elle est indiquée avant l'achat. Vous pouvez résilier à tout moment depuis les réglages d'abonnement de votre store ; l'accès reste actif jusqu'à la fin de la période payée et vos données sont conservées.",
     },
     {
-      title: '11. Limitation de responsabilité',
+      title: "10. Droit de rétractation et remboursements",
       content:
-        'SuiviBaby décline toute responsabilité en cas de perte de données ou d\'interprétation erronée des graphiques de suivi par l\'utilisateur. Le service est fourni "en l\'état".',
+        "Pour un service numérique dont l'exécution commence immédiatement, le droit de rétractation de 14 jours ne s'applique plus lorsque vous avez demandé l'accès immédiat et renoncé à ce droit lors de l'achat (article L.221-28 du Code de la consommation). Les achats étant encaissés par Apple ou Google, les demandes de remboursement se font auprès d'eux. Notre support peut vous accompagner : support@suivibaby.com.",
     },
     {
-      title: '12. Modifications',
+      title: "11. Données personnelles",
       content:
-        'Nous pouvons modifier ces conditions. En cas de changement important, vous serez informe via l\'application ou par email.',
+        "Le traitement de vos données, dont les données de santé de votre enfant, est décrit dans la politique de confidentialité. Il repose sur votre consentement explicite, recueilli à l'inscription. Vous pouvez exporter vos données à tout moment depuis Paramètres → Export ; nous vous recommandons de le faire régulièrement.",
     },
     {
-      title: '13. Droit applicable',
+      title: "12. Disponibilité et évolution du service",
       content:
-        'Ces conditions sont regies par le droit francais. Tout litige releve de la competence des tribunaux de Paris.',
+        "Nous mettons en œuvre les moyens raisonnables pour assurer l'accès à l'application, qui peut être interrompu pour maintenance, mise à jour ou incident. Les saisies faites hors connexion sont synchronisées au retour du réseau. Une fonctionnalité payante substantielle ne sera pas retirée pendant une période déjà payée sans compensation.",
+    },
+    {
+      title: "13. Responsabilité",
+      content:
+        "TESFA est responsable de la bonne exécution du service conformément à la loi. Sa responsabilité ne saurait être engagée pour les dommages résultant d'une décision médicale prise sur la seule base des informations de l'application, d'une erreur de saisie, d'une utilisation non conforme ou d'un cas de force majeure. Rien dans ces conditions ne limite les droits que vous tenez du Code de la consommation.",
+    },
+    {
+      title: "14. Propriété intellectuelle",
+      content:
+        "L'application, son code, son design, ses textes et la marque SuiviBaby sont la propriété de TESFA ou de ses partenaires. Nous vous accordons un droit d'utilisation personnel, non exclusif et non transférable, pour la durée de votre compte.",
+    },
+    {
+      title: "15. Suppression du compte",
+      content:
+        "Vous pouvez supprimer votre compte à tout moment depuis Paramètres → Supprimer le compte. La suppression devient définitive après un délai de 30 jours, pendant lequel vous pouvez l'annuler. Pensez à résilier votre abonnement dans votre store : la suppression du compte ne l'arrête pas automatiquement.",
+    },
+    {
+      title: "16. Modifications des conditions",
+      content:
+        "Les changements importants vous sont notifiés dans l'application ou par e-mail au moins 30 jours avant leur entrée en vigueur. Si vous ne les acceptez pas, vous pouvez supprimer votre compte avant cette date.",
+    },
+    {
+      title: "17. Droit applicable et litiges",
+      content:
+        "Ces conditions sont soumises au droit français. En cas de difficulté, contactez d'abord support@suivibaby.com. À défaut de solution amiable, vous pouvez recourir gratuitement au médiateur de la consommation indiqué sur suivibaby.com/terms. Si vous êtes consommateur, vous pouvez saisir la juridiction de votre domicile. La version complète de ces conditions est disponible sur suivibaby.com/terms.",
     },
   ];
 
@@ -127,7 +147,7 @@ export default function TermsScreen() {
               Conditions d'utilisation
             </ThemedText>
             <Text style={[styles.headerDate, { color: nc.textMuted }]}>
-              Dernière mise à jour : 18 avril 2026
+              Dernière mise à jour : 30 octobre 2026
             </Text>
           </View>
 
@@ -156,7 +176,7 @@ export default function TermsScreen() {
 
           <View style={[styles.content, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText style={styles.intro}>
-              Bienvenue sur SuiviBaby. Ces conditions d'utilisation regissent votre accès et
+              Bienvenue sur SuiviBaby. Ces conditions d'utilisation régissent votre accès et
               utilisation de notre application. Veuillez les lire attentivement.
             </ThemedText>
 

@@ -65,9 +65,8 @@ const PLANS: PlanConfig[] = [
     annualMonthly: "0€",
     savings: "",
     features: [
-      "Suivi multi-bebe illimite",
-      "18 types d'evenements",
-      "Historique 90 jours",
+      "Suivi multi-bébé illimité",
+      "18 types d'événements",
       "2 co-parents",
       "3 commandes vocales/jour",
       "1 export PDF",
@@ -85,15 +84,12 @@ const PLANS: PlanConfig[] = [
     badge: "Populaire",
     features: [
       "Tout le plan Gratuit",
-      "Historique illimite",
-      "Exports PDF illimites",
-      "Commandes vocales illimitees",
-      "Partage illimite",
-      "Statistiques avancees",
+      "Exports PDF illimités",
+      "Commandes vocales illimitées",
+      "Partage illimité",
+      "Statistiques avancées",
       "Courbes OMS",
       "Insights IA",
-      "Widgets iOS/Android",
-      "Rapport pediatre PDF",
     ],
   },
   {
@@ -105,25 +101,23 @@ const PLANS: PlanConfig[] = [
     savings: "-46%",
     features: [
       "Tout le plan Premium",
-      "5 comptes lies",
-      "Dashboard partage temps reel",
-      "Notifications croisees",
+      "5 comptes liés",
     ],
   },
 ];
 
 const FAQ_ITEMS = [
   {
-    q: "Puis-je annuler a tout moment ?",
-    a: "Oui, vous pouvez annuler votre abonnement a tout moment depuis les parametres de votre store (App Store ou Google Play). Vous conservez l'acces Premium jusqu'a la fin de la periode payee.",
+    q: "Puis-je annuler à tout moment ?",
+    a: "Oui, vous pouvez annuler votre abonnement à tout moment depuis les paramètres de votre store (App Store ou Google Play). Vous conservez l'accès Premium jusqu'à la fin de la période payée.",
   },
   {
-    q: "L'essai gratuit est-il sans engagement ?",
-    a: "Oui, les 14 premiers jours sont gratuits. Si vous annulez avant la fin de l'essai, vous ne serez pas facture.",
+    q: "Y a-t-il un essai gratuit ?",
+    a: "Lorsqu'un essai gratuit est proposé, sa durée est indiquée par l'App Store ou Google Play avant l'achat. Si vous annulez au moins 24 heures avant la fin de l'essai, vous ne serez pas facturé.",
   },
   {
-    q: "Mes donnees sont-elles conservees si je repasse en Gratuit ?",
-    a: "Oui, toutes vos donnees restent intactes. Seul l'acces a l'historique au-dela de 90 jours et les fonctionnalites Premium sont desactives.",
+    q: "Mes données sont-elles conservées si je repasse en Gratuit ?",
+    a: "Oui, toutes vos données restent intactes. Seules les fonctionnalités Premium sont désactivées.",
   },
 ];
 
@@ -217,7 +211,7 @@ export default function PremiumScreen() {
         setModalConfig({
           visible: true,
           title: "Indisponible",
-          message: "Ce plan n'est pas encore disponible. Reessayez plus tard.",
+          message: "Ce plan n'est pas encore disponible. Réessayez plus tard.",
         });
         return;
       }
@@ -230,14 +224,14 @@ export default function PremiumScreen() {
             visible: true,
             title: "Bienvenue dans SuiviBaby+ !",
             message:
-              "Votre abonnement est actif. Profitez de toutes les fonctionnalites Premium.",
+              "Votre abonnement est actif. Profitez de toutes les fonctionnalités Premium.",
           });
         }
       } catch {
         setModalConfig({
           visible: true,
           title: "Erreur",
-          message: "L'achat a echoue. Veuillez reessayer.",
+          message: "L'achat a échoué. Veuillez réessayer.",
         });
       } finally {
         setPurchasing(false);
@@ -253,8 +247,8 @@ export default function PremiumScreen() {
       if (info) {
         setModalConfig({
           visible: true,
-          title: "Achats restaures",
-          message: "Vos achats precedents ont ete restaures avec succes.",
+          title: "Achats restaurés",
+          message: "Vos achats précédents ont été restaurés avec succès.",
         });
       }
     } catch {
@@ -262,7 +256,7 @@ export default function PremiumScreen() {
         visible: true,
         title: "Erreur",
         message:
-          "Impossible de restaurer les achats. Verifiez votre connexion.",
+          "Impossible de restaurer les achats. Vérifiez votre connexion.",
       });
     }
   }, []);
@@ -285,12 +279,12 @@ export default function PremiumScreen() {
           <Text style={[styles.title, { color: nc.textStrong }]}>
             {currentTier === "free"
               ? "Choisissez votre plan"
-              : "Gerez votre abonnement"}
+              : "Gérez votre abonnement"}
           </Text>
           <Text style={[styles.subtitle, { color: nc.textMuted }]}>
             {currentTier === "free"
-              ? "14 jours d'essai gratuit, sans engagement."
-              : "Changez de plan ou de cycle a tout moment."}
+              ? "Sans engagement, résiliable à tout moment."
+              : "Changez de plan ou de cycle à tout moment."}
           </Text>
         </View>
 
@@ -307,7 +301,7 @@ export default function PremiumScreen() {
           >
             <FontAwesome name="heart" size={16} color={nc.todayAccent} />
             <Text style={[styles.grandfatheredText, { color: nc.todayAccent }]}>
-              Merci d'etre un early adopter ! Vos donnees restent accessibles
+              Merci d'être un early adopter ! Vos données restent accessibles
               sans limite.
             </Text>
           </View>
@@ -422,13 +416,13 @@ export default function PremiumScreen() {
                       );
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel="Gerer mon abonnement"
-                    accessibilityHint="Ouvre les parametres d'abonnement du store pour annuler ou modifier"
+                    accessibilityLabel="Gérer mon abonnement"
+                    accessibilityHint="Ouvre les paramètres d'abonnement du store pour annuler ou modifier"
                   >
                     <Text
                       style={[styles.subscribeButtonText, { color: nc.white }]}
                     >
-                      Gerer mon abonnement
+                      Gérer mon abonnement
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -509,7 +503,7 @@ export default function PremiumScreen() {
                     },
                     {
                       key: "lifetime" as BillingCycle,
-                      label: "A vie",
+                      label: "À vie",
                       price: lifetimePrice,
                       sub: "paiement unique",
                     },
@@ -657,11 +651,11 @@ export default function PremiumScreen() {
                   if (isExactSameBilling) {
                     buttonLabel = "Abonnement actuel";
                   } else if (billingCycle === "lifetime") {
-                    buttonLabel = `Acheter ${tierLabel} a vie`;
+                    buttonLabel = `Acheter ${tierLabel} à vie`;
                   } else if (isExactSamePlan) {
                     buttonLabel =
                       billingCycle === "annual"
-                        ? "Passer a l'annuel"
+                        ? "Passer à l'annuel"
                         : "Passer au mensuel";
                   } else if (!userIsPaying) {
                     buttonLabel = `Essayer ${tierLabel} (14j)`;
@@ -705,7 +699,7 @@ export default function PremiumScreen() {
             style={styles.restoreButton}
             onPress={handleRestore}
             accessibilityRole="button"
-            accessibilityLabel="Restaurer mes achats precedents"
+            accessibilityLabel="Restaurer mes achats précédents"
           >
             <Text style={[styles.restoreText, { color: nc.todayAccent }]}>
               Restaurer mes achats
@@ -723,7 +717,7 @@ export default function PremiumScreen() {
               }}
               accessibilityRole="button"
               accessibilityLabel="Annuler mon abonnement"
-              accessibilityHint="Ouvre les parametres d'abonnement du store"
+              accessibilityHint="Ouvre les paramètres d'abonnement du store"
             >
               <Text style={[styles.restoreText, { color: nc.textLight }]}>
                 Annuler mon abonnement
@@ -736,7 +730,7 @@ export default function PremiumScreen() {
         <View style={[styles.faqDivider, { borderColor: nc.borderLight }]} />
         <View style={styles.faqSection}>
           <Text style={[styles.faqTitle, { color: nc.textStrong }]}>
-            Questions frequentes
+            Questions fréquentes
           </Text>
           {FAQ_ITEMS.map((item, index) => (
             <TouchableOpacity
@@ -843,7 +837,7 @@ export default function PremiumScreen() {
         {/* Legal */}
         <Text style={[styles.legal, { color: nc.textLight }]}>
           L'abonnement se renouvelle automatiquement sauf annulation au moins
-          24h avant la fin de la periode. Le paiement est debite via votre
+          24h avant la fin de la période. Le paiement est débité via votre
           compte App Store ou Google Play.
         </Text>
       </ScrollView>

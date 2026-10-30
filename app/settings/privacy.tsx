@@ -28,42 +28,57 @@ const sections = [
     {
       title: "1. Responsable du traitement",
       content:
-        "Le service SuiviBaby est opéré par TESFA, situé au 78 avenue des Champs-Élysées, 75008 Paris, France. Pour toute question relative à la protection de vos données, vous pouvez nous contacter à l'adresse : privacy@suivibaby.com.",
+        "Le service SuiviBaby est édité par TESFA, 78 avenue des Champs-Élysées, 75008 Paris, France. Pour toute question relative à vos données : privacy@suivibaby.com.",
     },
     {
-      title: "2. Nature des données collectées",
+      title: "2. Données traitées",
       content:
-        "Compte : Adresse email, pseudonyme. Données de l'enfant (catégories particulières de données) : Prénom, date de naissance, sexe, journal de bord de l'enfant (alimentation, sommeil, hygiène, santé, mesures de croissance) et photos ajoutées dans les jalons ou souvenirs. Ces données sont traitées uniquement pour vous fournir les fonctionnalités de suivi de l'application.",
+        "Compte : adresse e-mail, pseudonyme, méthode de connexion. Profil de l'enfant : prénom, date de naissance, sexe, allergies éventuelles. Santé et suivi de l'enfant (données sensibles) : repas, sommeil, couches, température, médicaments, symptômes, vaccins, mesures de croissance, notes. Photos ajoutées aux jalons et souvenirs. Commande vocale (facultative) : enregistrement audio et texte transcrit. Partage : invitations, codes, droits d'accès, commentaires et réactions. Préférences et preuve horodatée de vos consentements. Appareil : jeton de notification et données techniques de diagnostic. Abonnement : offre et statut (jamais vos coordonnées bancaires). Signalements de contenu.",
     },
     {
-      title: "3. Base légale et Consentement aux données de santé",
+      title: "3. Finalités et bases légales",
       content:
-        "Le traitement des données de suivi de l'enfant (données de santé) repose sur votre consentement explicite, conformément à l'Article 9.2.a du RGPD. En saisissant ces informations dans l'application, vous consentez activement à leur traitement par SuiviBaby. Vous pouvez retirer ce consentement à tout moment en supprimant les données concernées ou en clôturant votre compte.",
+        "Gestion du compte et synchronisation : exécution du contrat (art. 6.1.b RGPD). Suivi de santé de l'enfant, statistiques, courbes et conseils : votre consentement explicite (art. 9.2.a), recueilli par une case distincte à l'inscription. Commande vocale : consentement explicite, à chaque utilisation. Partage avec les personnes invitées : contrat et consentement. Notifications et récapitulatif hebdomadaire : consentement, uniquement si vous les activez. Abonnement : contrat et obligations comptables. Sécurité, prévention des abus et diagnostic des erreurs : intérêt légitime (art. 6.1.f). Nous n'utilisons pas vos données à des fins publicitaires et ne les vendons pas.",
     },
     {
-      title: "4. Hébergement et Transferts de données",
+      title: "4. Données des enfants",
       content:
-        "Vos données sont hébergées par Google Firebase sur des serveurs sécurisés situés dans la région us-central1 (Etats-Unis). Tout transfert éventuel hors UE est encadré par les Clauses Contractuelles Types (CCT) de la Commission Europeenne pour garantir un niveau de protection equivalent.",
+        "SuiviBaby est destinée aux adultes titulaires de l'autorité parentale, ou agissant avec leur accord. En créant le profil d'un enfant, vous confirmez être habilité à le faire. Vous pouvez retirer votre consentement à tout moment en supprimant les données concernées, le profil de l'enfant ou votre compte.",
     },
     {
-      title: "5. Conservation et Suppression des données",
+      title: "5. Commande vocale et intelligence artificielle",
       content:
-        "Les données sont conservées tant que votre compte est actif. En cas de demande de suppression par l'utilisateur, les données sont immédiatement effacées de nos bases de production. Pour des raisons de sécurité et de continuité de service, leur effacement définitif de nos copies de sauvegarde (backups) peut toutefois prendre jusqu'à 60 jours. Après 2 ans d'inactivité totale, votre compte et ses données associées seront automatiquement supprimés.",
+        "L'enregistrement est envoyé de façon chiffrée à notre serveur, puis à AssemblyAI pour être transcrit. Le texte transcrit et l'heure locale sont envoyés à Anthropic (modèle Claude) pour identifier les événements à créer. Rien n'est enregistré sans votre validation. L'audio n'est jamais stocké par SuiviBaby, la transcription est supprimée chez AssemblyAI juste après le traitement, et le texte est conservé au plus 5 minutes dans un cache technique. Ni le prénom de l'enfant ni votre identifiant de compte ne sont transmis à Anthropic.",
     },
     {
-      title: "6. Sécurité et Destinataires",
+      title: "6. Destinataires et sous-traitants",
       content:
-        "Nous ne vendons, n'échangeons ni ne louons vos données personnelles. Elles sont chiffrées en transit (protocole TLS) et au repos (chiffrement AES-256). Seuls les services techniques de nos sous-traitants et les personnes que vous autorisez explicitement via les fonctions de partage de l'application ont accès aux données. Nos sous-traitants sont Google Firebase (hébergement) et, uniquement lorsque vous utilisez la commande vocale : AssemblyAI, qui transcrit l'enregistrement audio puis le supprime, et Anthropic (Claude), qui interprète le texte transcrit pour en déduire les événements à enregistrer. Ces deux services ne reçoivent que l'audio ou le texte de la commande, sans votre adresse email ni identifiant de compte.",
+        "Vos données sont accessibles à vous, aux personnes que vous invitez selon les droits que vous leur donnez, à un nombre restreint de personnes habilitées de TESFA lorsque c'est nécessaire (support à votre demande, signalement, sécurité), et à nos sous-traitants : Google Firebase (hébergement, authentification, fonctions serveur), AssemblyAI (transcription vocale), Anthropic (interprétation du texte dicté et conseils, sans prénom ni identifiant), RevenueCat (abonnements), Resend (e-mails), Expo (notifications push) et Sentry (diagnostic des erreurs). Apple et Google interviennent comme responsables distincts pour la connexion avec leur compte et le paiement dans leurs stores.",
     },
     {
-      title: "7. Signalements et contenu sensible",
+      title: "7. Hébergement et transferts hors UE",
       content:
-        "Lorsqu'un utilisateur signale un contenu dans l'application, nous pouvons traiter les informations liées au signalement, comme l'identifiant de l'événement, le chemin du fichier, l'identifiant du compte à l'origine du signalement, le motif et la date du signalement. Ces données sont utilisées uniquement pour examiner le contenu signalé, protéger la confidentialité des enfants et faire respecter les règles d'utilisation de SuiviBaby.",
+        "La base de données est hébergée par Google Firebase dans l'Union européenne (région eur3) et les fonctions serveur en Belgique. Certains prestataires sont situés aux États-Unis : ces transferts sont encadrés par le EU-US Data Privacy Framework lorsque le prestataire y est certifié, et à défaut par les clauses contractuelles types de la Commission européenne.",
     },
     {
-      title: "8. Vos droits (RGPD)",
+      title: "8. Durées de conservation",
       content:
-        "Conformément à la réglementation, vous disposez des droits d'accès, de rectification, de suppression, de portabilité et de limitation du traitement de vos données. Pour exercer ces droits, contactez-nous à privacy@suivibaby.com. Vous avez également le droit d'introduire une réclamation auprès de la CNIL (www.cnil.fr).",
+        "Compte et suivi de l'enfant : tant que votre compte est actif. Après une demande de suppression du compte : 30 jours pendant lesquels vous pouvez annuler, puis effacement définitif. Profil d'enfant supprimé : 30 jours, puis effacement définitif. Audio : non conservé. Codes d'invitation : 7 jours. Journaux techniques : 90 jours maximum. Preuve de consentement : durée du compte, puis 5 ans. Données de facturation : 10 ans (obligation comptable), conservées par les stores et notre prestataire d'abonnement.",
+    },
+    {
+      title: "9. Sécurité",
+      content:
+        "Les échanges sont chiffrés (TLS) et les données sont chiffrées au repos par notre hébergeur. L'accès à chaque enfant est contrôlé par des règles strictes côté serveur, l'application vérifie son intégrité auprès du serveur et vous pouvez activer un verrouillage biométrique. Les données ne sont pas chiffrées de bout en bout : nos serveurs peuvent les traiter pour faire fonctionner le service (synchronisation, export, statistiques). En cas de violation de données présentant un risque pour vos droits, nous notifierons la CNIL et, si nécessaire, vous en informerons.",
+    },
+    {
+      title: "10. Vos droits",
+      content:
+        "Vous disposez des droits d'accès, de rectification, d'effacement (Paramètres → Supprimer le compte), de portabilité (Paramètres → Export), de retrait du consentement, d'opposition, de limitation et du droit de définir des directives sur le sort de vos données après votre décès. Écrivez à privacy@suivibaby.com depuis l'adresse liée à votre compte : nous répondons sous un mois. Vous pouvez aussi introduire une réclamation auprès de la CNIL (www.cnil.fr).",
+    },
+    {
+      title: "11. Modifications",
+      content:
+        "Nous pouvons faire évoluer cette politique. Les changements importants vous seront signalés dans l'application ou par e-mail. La version complète et à jour est disponible sur suivibaby.com/privacy.",
     },
   ];
 
@@ -122,7 +137,7 @@ const sections = [
                 { color: nc.textMuted },
               ]}
             >
-              Dernière mise à jour : 28 octobre 2026
+              Dernière mise à jour : 30 octobre 2026
             </Text>
           </View>
 
@@ -151,9 +166,9 @@ const sections = [
 
           <View style={[styles.content, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText style={styles.intro}>
-              Chez SuiviBaby, la protection de vos donnees personnelles est
-              notre priorite absolue. Cette politique explique comment nous
-              collectons, utilisons et protegeons vos informations.
+              Chez SuiviBaby, la protection de vos données personnelles est
+              notre priorité absolue. Cette politique explique comment nous
+              collectons, utilisons et protégeons vos informations.
             </ThemedText>
 
             {sections.map((section, index) => (

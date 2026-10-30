@@ -53,33 +53,33 @@ interface PaywallMessage {
 
 export const PAYWALL_MESSAGES: Record<PaywallTrigger, PaywallMessage> = {
   voice_limit: {
-    title: "Commandes vocales epuisees",
-    description: "Vous avez utilise vos 3 commandes vocales du jour. Passez a Premium pour des commandes illimitees.",
-    ctaText: "Debloquer la voix illimitee",
+    title: "Commandes vocales épuisées",
+    description: "Vous avez utilisé vos 3 commandes vocales du jour. Passez à Premium pour des commandes illimitées.",
+    ctaText: "Débloquer la voix illimitée",
   },
   export_limit: {
-    title: "Export PDF utilise",
-    description: "Votre export gratuit a ete utilise. Passez a Premium pour des exports illimites et des rapports pediatre.",
+    title: "Export PDF utilisé",
+    description: "Votre export gratuit a été utilisé. Passez à Premium pour des exports illimités.",
     ctaText: "Exporter sans limites",
   },
   history_limit: {
-    title: "Historique limite a 90 jours",
-    description: "Accedez a tout l'historique de votre bebe avec Premium. Retrouvez les donnees depuis la naissance.",
+    title: "Historique limité à 90 jours",
+    description: "Accédez à tout l'historique de votre bébé avec Premium. Retrouvez les données depuis la naissance.",
     ctaText: "Voir tout l'historique",
   },
   sharing_limit: {
     title: "Limite de partage atteinte",
-    description: "Le plan gratuit permet 2 co-parents. Passez a Famille pour inviter jusqu'a 5 personnes.",
+    description: "Le plan gratuit permet 2 co-parents. Passez à Famille pour inviter jusqu'à 5 personnes.",
     ctaText: "Inviter toute la famille",
   },
   advanced_stats: {
-    title: "Statistiques avancees",
-    description: "Decouvrez les correlations, tendances et courbes OMS avec Premium.",
-    ctaText: "Voir les stats avancees",
+    title: "Statistiques avancées",
+    description: "Découvrez les corrélations, tendances et courbes OMS avec Premium.",
+    ctaText: "Voir les stats avancées",
   },
   ai_insights: {
     title: "Insights IA",
-    description: "Recevez des analyses personnalisees : \"Bebe dort mieux quand couche avant 19h30\".",
+    description: "Recevez des analyses personnalisées : \"Bébé dort mieux quand couché avant 19h30\".",
     ctaText: "Activer les insights IA",
   },
 };
