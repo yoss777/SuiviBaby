@@ -25,22 +25,25 @@ pas promettre ce qui n'existe pas (phase 1), puis amener la barre dans l'app
 
 ## Phase 1 — Aligner le site sur l'app (avant déploiement du site)
 
-- [ ] **1.1 Geste** : « Appuyez et parlez… » → « Maintenez pour parler… »
+- [x] **1.1 Geste** : « Appuyez et parlez… » → « Maintenez pour parler… »
   (`index.html:158`, `site.js:183`) ; FAQ « Vous appuyez sur le micro » →
   « Vous maintenez le micro » (`index.html:459`).
-- [ ] **1.2 Confirmation** : remplacer « Enregistré ✓ » (`site.js:215`, `:229`)
+- [x] **1.2 Confirmation** : remplacer « Enregistré ✓ » (`site.js:215`, `:229`)
   par une étape de confirmation visible (« Biberon 150 ml à 06:40 ? ✓ »), puis
   l'ajout au journal.
-- [ ] **1.3 Icônes et couleurs** : emoji du journal démo (`site.js:146-150`) →
+- [x] **1.3 Icônes et couleurs** : emoji du journal démo (`site.js:146-150`) →
   SVG proches des icônes de l'app (biberon, lune, tétée…), teintes tirées de la
   palette « Pastel Moderne » (biberon `#E8785A`, nuit `#5A6BA4`, tétée `#D66B8F`).
-- [ ] **1.4 Tuiles** : remplacer « kg » par une donnée présente sur l'accueil
+- [x] **1.4 Tuiles** : remplacer « kg » par une donnée présente sur l'accueil
   (ex. « changes ») ; garder repas / sommeil.
 - [ ] **1.5 En-tête démo** : décider avatar/âge (garder si l'étape 2.5 est
   retenue, sinon « Bonjour » + prénom comme l'app).
-- [ ] **1.6 Vérif rendu** : captures 1440×900 et 390×844 (mobile réel ou
+- [x] **1.6 Vérif rendu** : captures 1440×900 et 390×844 (mobile réel ou
   émulation DevTools — Chrome headless impose ~500 px min), `prefers-reduced-motion`,
   bouton pause, contraste.
+  _Fait le 2026-10-31 : cycle dictée → « Confirmer ? » → « Confirmé ✓ » vérifié
+  en 1440×900, état statique vérifié en 390×844 avec `prefers-reduced-motion`,
+  aucune erreur console. Textes d'état sur fond `#1c2230` : `#ffd38a` / `#7fe0b0`._
 - [ ] **1.7 Déploiement** : `firebase deploy --only hosting` (sur validation).
 
 ## Phase 2 — Barre micro dans l'app

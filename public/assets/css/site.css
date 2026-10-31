@@ -278,6 +278,9 @@ button { font: inherit; color: inherit; }
 @keyframes ping { to { transform: scale(1.5); opacity: 0; } }
 .demo__transcript { font-size: 12.5px; line-height: 1.35; min-height: 1.35em; }
 .demo__transcript.is-typing::after { content: "▍"; opacity: .6; animation: blink 1s steps(1) infinite; }
+.demo__transcript.is-confirm { color: #ffd38a; font-weight: 600; }
+.demo__transcript.is-done { color: #7fe0b0; font-weight: 600; }
+.demo__item i svg { width: 17px; height: 17px; }
 @keyframes blink { 50% { opacity: 0; } }
 
 /* ---------- Event types explorer ---------- */

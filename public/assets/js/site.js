@@ -141,19 +141,32 @@
     var mic = $(".demo__mic", demo);
     var statFeeds = $('[data-stat="feeds"]', demo);
     var statSleep = $('[data-stat="sleep"]', demo);
+    var statChanges = $('[data-stat="changes"]', demo);
+
+    // Icônes au trait proches de celles de l'app, couleurs de la palette « Pastel Moderne ».
+    var ICONS = {
+      biberon: "M9 2h6M10 2v3M14 2v3M8 8a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v12a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2zM8 12h8M8 16h8",
+      miction: "M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z",
+      sommeil: "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z",
+      temperature: "M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0zM12 9v6",
+      tetee: "M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"
+    };
+    var COLORS = { biberon: "#E8785A", miction: "#5BA4A4", sieste: "#7C6BA4", nuit: "#5A6BA4", temperature: "#E85A5A", tetee: "#D66B8F" };
 
     var script = [
-      { say: "Biberon de 150 ml à 6 h 40", icon: "🍼", tint: "#fdf0eb", title: "Biberon", meta: "150 ml · lait infantile", time: "06:40", feeds: 1 },
-      { say: "Couche mouillée", icon: "💧", tint: "#e8f8f9", title: "Miction", meta: "Couche changée", time: "07:05" },
-      { say: "Il s'est endormi à 9 h 30", icon: "🌙", tint: "#f1eef7", title: "Sieste", meta: "En cours…", time: "09:30", sleep: true },
-      { say: "Température 37,8", icon: "🌡️", tint: "#fff5f5", title: "Température", meta: "37,8 °C · rectale", time: "11:15" },
-      { say: "Tétée sein gauche 12 minutes", icon: "🤱", tint: "#fde8ef", title: "Tétée", meta: "Gauche · 12 min", time: "12:02", feeds: 1 }
+      { say: "Biberon de 150 ml à 6 h 40", icon: "biberon", color: COLORS.biberon, title: "Biberon", meta: "150 ml · lait infantile", time: "06:40", confirm: "Biberon · 150 ml · 06:40", feeds: 1 },
+      { say: "Couche mouillée", icon: "miction", color: COLORS.miction, title: "Miction", meta: "Couche changée", time: "07:05", confirm: "Change · pipi · 07:05", changes: 1 },
+      { say: "Il s'est endormi à 9 h 30", icon: "sommeil", color: COLORS.sieste, title: "Sieste", meta: "En cours…", time: "09:30", confirm: "Sieste · début 09:30", sleep: true },
+      { say: "Température 37,8", icon: "temperature", color: COLORS.temperature, title: "Température", meta: "37,8 °C · rectale", time: "11:15", confirm: "Température · 37,8 °C · 11:15" },
+      { say: "Tétée sein gauche 12 minutes", icon: "tetee", color: COLORS.tetee, title: "Tétée", meta: "Gauche · 12 min", time: "12:02", confirm: "Tétée · gauche · 12 min", feeds: 1 }
     ];
     var seed = [
-      { icon: "🌙", tint: "#f1eef7", title: "Nuit", meta: "21:10 → 06:20 · 9 h 10", time: "06:20" }
+      { icon: "sommeil", color: COLORS.nuit, title: "Nuit", meta: "21:10 → 06:20 · 9 h 10", time: "06:20" }
     ];
+    var IDLE = "Maintenez pour parler…";
 
     var feeds = 0;
+    var changes = 0;
     var timers = [];
     var running = false;
     var idx = 0;
@@ -161,26 +174,51 @@
     var later = function (fn, ms) { timers.push(setTimeout(fn, ms)); };
     var clearTimers = function () { timers.forEach(clearTimeout); timers = []; };
 
+    var SVG_NS = "http://www.w3.org/2000/svg";
+    var iconEl = function (ev) {
+      var i = document.createElement("i");
+      i.setAttribute("aria-hidden", "true");
+      i.style.background = ev.color + "1f";
+      var svg = document.createElementNS(SVG_NS, "svg");
+      svg.setAttribute("viewBox", "0 0 24 24");
+      var path = document.createElementNS(SVG_NS, "path");
+      path.setAttribute("d", ICONS[ev.icon]);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", ev.color);
+      path.setAttribute("stroke-width", "2");
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      svg.appendChild(path);
+      i.appendChild(svg);
+      return i;
+    };
+
     var itemEl = function (ev, isNew) {
       var li = document.createElement("li");
       li.className = "demo__item" + (isNew ? " is-new" : "");
-      var i = document.createElement("i"); i.style.background = ev.tint; i.textContent = ev.icon; i.setAttribute("aria-hidden", "true");
       var txt = document.createElement("div");
       var b = document.createElement("b"); b.textContent = ev.title;
       var s = document.createElement("span"); s.textContent = ev.meta;
       txt.appendChild(b); txt.appendChild(s);
       var t = document.createElement("time"); t.textContent = ev.time;
-      li.appendChild(i); li.appendChild(txt); li.appendChild(t);
+      li.appendChild(iconEl(ev)); li.appendChild(txt); li.appendChild(t);
       return li;
+    };
+
+    var setStatus = function (text, state) {
+      transcript.textContent = text;
+      transcript.classList.toggle("is-confirm", state === "confirm");
+      transcript.classList.toggle("is-done", state === "done");
     };
 
     var reset = function () {
       list.textContent = "";
       seed.forEach(function (ev) { list.appendChild(itemEl(ev, false)); });
-      feeds = 0; idx = 0;
+      feeds = 0; changes = 0; idx = 0;
       if (statFeeds) statFeeds.textContent = "0";
       if (statSleep) statSleep.textContent = "9 h 10";
-      transcript.textContent = "Appuyez et parlez…";
+      if (statChanges) statChanges.textContent = "0";
+      setStatus(IDLE);
     };
 
     var addEvent = function (ev) {
@@ -188,12 +226,13 @@
       list.insertBefore(itemEl(ev, true), list.firstChild);
       while (list.children.length > 5) list.removeChild(list.lastChild);
       if (ev.feeds) { feeds += ev.feeds; if (statFeeds) statFeeds.textContent = String(feeds); }
+      if (ev.changes) { changes += ev.changes; if (statChanges) statChanges.textContent = String(changes); }
       if (ev.sleep && statSleep) statSleep.textContent = "9 h 10 +";
     };
 
     var typeText = function (text, done) {
       var n = 0;
-      transcript.textContent = "";
+      setStatus("");
       transcript.classList.add("is-typing");
       mic.classList.add("is-listening");
       var step = function () {
@@ -206,14 +245,19 @@
       later(step, 300);
     };
 
+    // Comme dans l'app : dictée → proposition à confirmer → ajout au journal.
     var next = function () {
       if (!running) return;
       if (idx >= script.length) { later(function () { reset(); next(); }, 2600); return; }
       var ev = script[idx++];
       typeText(ev.say, function () {
-        addEvent(ev);
-        later(function () { transcript.textContent = "Enregistré ✓"; }, 100);
-        later(next, 1700);
+        setStatus(ev.confirm + " — Confirmer ?", "confirm");
+        later(function () {
+          addEvent(ev);
+          setStatus("Confirmé ✓ ajouté au journal", "done");
+          later(function () { setStatus(IDLE); }, 1100);
+          later(next, 1500);
+        }, 1300);
       });
     };
 
@@ -226,7 +270,7 @@
       // Pas d'animation : on affiche un état final statique et lisible.
       script.slice(0, 4).forEach(addEvent);
       $$(".is-new", list).forEach(function (el) { el.classList.remove("is-new"); });
-      transcript.textContent = "« Température 37,8 » — Enregistré ✓";
+      setStatus("Température · 37,8 °C · 11:15 — confirmé ✓", "done");
       if (pauseBtn) pauseBtn.hidden = true;
     } else {
       // La démo tourne seulement si elle est visible, l'onglet actif et non mise en pause.
