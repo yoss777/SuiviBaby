@@ -1,3 +1,4 @@
+import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import {
   ConfettiBurst,
   // FloatingActionButton, // Commented - keeping animation for later use
@@ -37,7 +38,6 @@ import {
 import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import {
   SafeAreaView,
-  useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useHeaderRight } from "../../_layout";
 
@@ -56,7 +56,6 @@ export default function MomentsScreen() {
   const { newEventIds, newEventTypes, markEventAsSeen, markMomentsAsSeen } = useMomentsNotification();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const insets = useSafeAreaInsets();
   const headerOwnerId = useRef("moments-header");
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent =
@@ -195,7 +194,7 @@ export default function MomentsScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: Math.max(insets.bottom, 20) },
+            { paddingBottom: VOICE_DOCK_INSET },
           ]}
           refreshControl={
             <RefreshControl

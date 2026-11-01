@@ -9,8 +9,6 @@ import {
   type StatItem,
 } from "@/components/suivibaby/dashboard";
 import { FirstTrackGuide } from "@/components/suivibaby/FirstTrackGuide";
-import { GlobalFAB } from "@/components/suivibaby/GlobalFAB";
-import { VoiceCommandButton } from "@/components/suivibaby/VoiceCommandButton";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import {
   getCategoryColors,
@@ -18,13 +16,11 @@ import {
   itemColors,
 } from "@/constants/dashboardColors";
 import { MOMENT_REPAS_LABELS, MOOD_EMOJIS } from "@/constants/dashboardConfig";
-import { Colors } from "@/constants/theme";
-import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useCanManageContent } from "@/hooks/useCanManageContent";
 import { useEventEditHandler } from "@/hooks/useEventEditHandler";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
@@ -39,7 +35,7 @@ import { buildEventDetails, getDayLabel } from "@/utils/eventDisplay";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
-import { getPreferencesCache, getPermissionsCache } from "@/services/userPreferencesCache";
+import { getPreferencesCache } from "@/services/userPreferencesCache";
 import {
   buildTodayEventsData,
   getTodayEventsCache,
@@ -64,7 +60,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useHeaderRight } from "../../_layout";
 import { HomeSkeleton } from "@/components/suivibaby/home/HomeSkeleton";
 import { HomeSmartContent } from "@/components/suivibaby/home/HomeSmartContent";
 import { homeStyles as styles } from "@/components/suivibaby/home/styles";
@@ -173,10 +168,8 @@ interface TodayStats {
 
 export default function HomeDashboard() {
   const { activeChild, reminderPreferences } = useBaby();
-  const { firebaseUser } = useAuth();
   const { firstTrack } = useLocalSearchParams<{ firstTrack?: string }>();
   const [showFirstTrackGuide, setShowFirstTrackGuide] = useState(firstTrack === "true");
-  const { setHeaderRight } = useHeaderRight();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const cat = getCategoryColors(colorScheme);
@@ -193,12 +186,6 @@ export default function HomeDashboard() {
   const remindersEnabled = reminderPreferences.enabled;
   const reminderThresholds = reminderPreferences.thresholds;
   const [showRecentHint, setShowRecentHint] = useState(false);
-  const headerMicOpacity = useRef(new Animated.Value(0)).current;
-  const inlineMicOpacity = useRef(new Animated.Value(1)).current;
-  const [headerMicVisible, setHeaderMicVisible] = useState(false);
-  const headerMicVisibleRef = useRef(false);
-  const headerRowLayoutRef = useRef<{ y: number; height: number } | null>(null);
-  const scrollYRef = useRef(0);
   const {
     mergedEvents: mergedTodayEvents,
     setFirestoreEvents,
@@ -211,11 +198,7 @@ export default function HomeDashboard() {
   const [loadError, setLoadError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dismissedInsightIds, setDismissedInsightIds] = useState<Set<string>>(new Set());
-  const permsCached = getPermissionsCache();
-  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const canManageContent = permissions.loading && permsCached
-    ? permsCached.canManageContent
-    : permissions.role === "owner" || permissions.role === "admin";
+  const canManageContent = useCanManageContent();
 
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
   const lastBackPressRef = useRef(0);
@@ -1344,89 +1327,6 @@ export default function HomeDashboard() {
     showToast,
   ]);
 
-  const updateHeaderControls = useCallback(
-    (scrollY: number, headerLayout: { y: number; height: number } | null) => {
-      if (headerLayout) {
-        const threshold = headerLayout.y + headerLayout.height - 8;
-        const fadeRange = 70;
-        const fadeStart = threshold - fadeRange;
-        const progress = Math.max(
-          0,
-          Math.min(1, (scrollY - fadeStart) / fadeRange),
-        );
-        const nextHeaderOpacity = progress;
-        const nextInlineOpacity = 1 - progress;
-        headerMicOpacity.setValue(nextHeaderOpacity);
-        inlineMicOpacity.setValue(nextInlineOpacity);
-
-        const shouldShow = nextHeaderOpacity > 0.05;
-        if (shouldShow !== headerMicVisibleRef.current) {
-          headerMicVisibleRef.current = shouldShow;
-          setHeaderMicVisible(shouldShow);
-        }
-      }
-    },
-    [headerMicOpacity, inlineMicOpacity],
-  );
-
-  const handleScroll = useCallback(
-    (event: any) => {
-      const scrollY = event.nativeEvent.contentOffset.y || 0;
-      scrollYRef.current = scrollY;
-      updateHeaderControls(scrollY, headerRowLayoutRef.current);
-    },
-    [updateHeaderControls],
-  );
-
-  useEffect(() => {
-    updateHeaderControls(scrollYRef.current, headerRowLayoutRef.current);
-  }, [updateHeaderControls]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!canManageContent) {
-        setHeaderRight(null, headerOwnerId.current);
-        return () => {
-          setHeaderRight(null, headerOwnerId.current);
-        };
-      }
-      const headerButtons = (
-        <Animated.View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            paddingRight: 16,
-          }}
-          pointerEvents={headerMicVisible ? "auto" : "none"}
-        >
-          <Animated.View
-            style={{
-              opacity: headerMicOpacity,
-            }}
-            pointerEvents={headerMicVisible ? "auto" : "none"}
-          >
-            <VoiceCommandButton
-              size={18}
-              color={Colors[colorScheme].tint}
-              showTestToggle={false}
-            />
-          </Animated.View>
-        </Animated.View>
-      );
-
-      setHeaderRight(headerButtons, headerOwnerId.current);
-
-      return () => {
-        setHeaderRight(null, headerOwnerId.current);
-      };
-    }, [
-      colorScheme,
-      headerMicOpacity,
-      headerMicVisible,
-      setHeaderRight,
-      canManageContent,
-    ]),
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -1936,8 +1836,6 @@ export default function HomeDashboard() {
         style={[styles.container, { backgroundColor: nc.background }]}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={32}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -1947,14 +1845,7 @@ export default function HomeDashboard() {
         }
       >
         {/* En-tête avec salutation */}
-        <View
-          style={styles.headerRow}
-          onLayout={(event) => {
-            const { y, height } = event.nativeEvent.layout;
-            headerRowLayoutRef.current = { y, height };
-            updateHeaderControls(scrollYRef.current, { y, height });
-          }}
-        >
+        <View style={styles.headerRow}>
           <View style={styles.header}>
             <Text style={[styles.greeting, { color: nc.textStrong }]}>
               {getGreeting()}
@@ -1967,17 +1858,6 @@ export default function HomeDashboard() {
               })}
             </Text>
           </View>
-          {canManageContent && (
-            <Animated.View
-              style={[styles.inlineMicContainer, { opacity: inlineMicOpacity }]}
-            >
-              <VoiceCommandButton
-                size={40}
-                color={Colors[colorScheme].tint}
-                showTestToggle={false}
-              />
-            </Animated.View>
-          )}
         </View>
 
         {/* Guide premier tracking (onboarding J0) */}
@@ -2214,7 +2094,6 @@ export default function HomeDashboard() {
           />
         </StaggeredCard>
       </ScrollView>
-      {canManageContent && <GlobalFAB />}
       <ConfirmModal
         visible={deleteConfirm.visible}
         title="Supprimer cet événement ?"

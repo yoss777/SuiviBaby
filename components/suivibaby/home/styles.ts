@@ -27,9 +27,6 @@ export const homeStyles = StyleSheet.create({
     padding: 20,
     paddingBottom: 10,
   },
-  inlineMicContainer: {
-    paddingTop: 10,
-  },
   greeting: {
     fontSize: 28,
     fontWeight: "700",

@@ -201,18 +201,44 @@ const ActionButton = ({
   );
 };
 
-export const GlobalFAB = () => {
+type GlobalFABProps = {
+  /** Controlled menu state (VoiceDock coordinates it with the voice bar). */
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Distance from the bottom of the parent; defaults to the safe-area based offset. */
+  bottom?: number;
+  /** Disables the main button, e.g. while a voice command is recording. */
+  disabled?: boolean;
+};
+
+export const GlobalFAB = ({
+  isOpen: isOpenProp,
+  onOpenChange,
+  bottom,
+  disabled = false,
+}: GlobalFABProps = {}) => {
   const { openSheet } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
   const nc = getNeutralColors(colorScheme);
   const insets = useSafeAreaInsets();
   const { isNightMode, minButtonSize, animations } = useNightMode();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpenState, setIsOpenState] = useState(false);
+  const isOpen = isOpenProp ?? isOpenState;
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+  const setIsOpen = useCallback(
+    (next: boolean | ((current: boolean) => boolean)) => {
+      const value = typeof next === "function" ? next(isOpenRef.current) : next;
+      if (isOpenProp === undefined) setIsOpenState(value);
+      onOpenChange?.(value);
+    },
+    [isOpenProp, onOpenChange],
+  );
   const rotation = useSharedValue(0);
   const pulseScale = useSharedValue(1);
   const backdropOpacity = useSharedValue(0);
-  const fabBottom = Math.max(insets.bottom + 6, 24);
+  const fabBottom = bottom ?? Math.max(insets.bottom + 6, 24);
 
   // Subtle pulse animation when closed — skip in night mode (less visual noise)
   const hasPlayedPulse = useRef(false);
@@ -365,7 +391,7 @@ export const GlobalFAB = () => {
         handleQuickAddPress(action.sheetParams);
       }
     },
-    [handleQuickAddPress, isNightMode, openMoreSheet],
+    [handleQuickAddPress, isNightMode, openMoreSheet, setIsOpen],
   );
 
   const handleMainPress = useCallback(() => {
@@ -375,7 +401,7 @@ export const GlobalFAB = () => {
         : Haptics.ImpactFeedbackStyle.Medium,
     );
     setIsOpen((current) => !current);
-  }, [isNightMode]);
+  }, [isNightMode, setIsOpen]);
 
   return (
     <>
@@ -413,11 +439,14 @@ export const GlobalFAB = () => {
         {/* Main FAB */}
         <Pressable
           onPress={handleMainPress}
+          disabled={disabled}
           accessibilityRole="button"
           accessibilityLabel={
             isOpen ? "Fermer les actions rapides" : "Ouvrir les actions rapides"
           }
+          accessibilityState={{ expanded: isOpen, disabled }}
           style={({ pressed }) => [
+            disabled && styles.mainFabDisabled,
             styles.mainFab,
             { backgroundColor: Colors[colorScheme].tint },
             isNightMode && {
@@ -473,6 +502,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 8,
+  },
+  mainFabDisabled: {
+    opacity: 0.4,
   },
   mainFabPressed: {
     transform: [{ scale: 0.95 }],

@@ -48,31 +48,62 @@ pas promettre ce qui n'existe pas (phase 1), puis amener la barre dans l'app
 
 ## Phase 2 — Barre micro dans l'app
 
-- [ ] **2.1 Composant `VoiceBar`** (`components/suivibaby/VoiceBar.tsx`) :
+- [x] **2.1 Composant `VoiceBar`** (`components/suivibaby/VoiceBar.tsx`) :
   barre pleine largeur au-dessus de la tab bar, bouton micro rond à gauche,
   libellé « Maintenez pour parler » ; réutilise la logique de
   `VoiceCommandButton` (enregistrement, quota, modales) — extraire un hook
   `useVoiceCommand` plutôt que dupliquer.
-- [ ] **2.2 États** : repos / enregistrement (rouge `#ef4444`, durée, onde ou
+- [x] **2.2 États** : repos / enregistrement (rouge `#ef4444`, durée, onde ou
   point pulsé) / traitement (spinner + « Je réfléchis… ») / proposition (texte
   interprété) / erreur (message + réessayer) / quota atteint (modale existante)
   / permission micro refusée (lien Réglages).
-- [ ] **2.3 Placement** : sur l'accueil uniquement dans un premier temps ;
+- [x] **2.3 Placement** : sur l'accueil uniquement dans un premier temps ;
   owner/admin seulement (même règle que l'icône actuelle). Gérer la cohabitation
   avec le FAB `+` (`GlobalFAB.tsx`, bas-droite) : soit FAB remonté au-dessus de
   la barre, soit micro intégré au FAB — trancher sur maquette.
-- [ ] **2.4 Retirer l'ancien point d'entrée** : icône de la salutation
+- [x] **2.4 Retirer l'ancien point d'entrée** : icône de la salutation
   (`home.tsx:1974`) et version en-tête au scroll (`home.tsx:1347-1429`, `:1408`).
 - [ ] **2.5 (optionnel) En-tête** : avatar + âge de l'enfant actif, si on veut
   coller à la maquette.
-- [ ] **2.6 Accessibilité** : `accessibilityRole="button"`, label/hint « Maintenir
+- [x] **2.6 Accessibilité** : `accessibilityRole="button"`, label/hint « Maintenir
   pour dicter un événement », cible ≥ 48 px, alternative tap-to-toggle pour les
   utilisateurs qui ne peuvent pas maintenir, annonces VoiceOver/TalkBack des états.
-- [ ] **2.7 Safe areas / edge-to-edge** : Android 16 edge-to-edge, encoche iOS,
+- [x] **2.7 Safe areas / edge-to-edge** : Android 16 edge-to-edge, encoche iOS,
   clavier ouvert (barre masquée), mode sombre (`dashboardColors` dark).
-- [ ] **2.8 Tests** : unitaires du hook (états, quota, erreurs), snapshot du
+- [x] **2.8 Tests** : unitaires du hook (états, quota, erreurs), snapshot du
   composant, flow Maestro « maintenir → confirmer → événement au journal ».
 - [ ] **2.9 Build EAS + test appareil** (piloté par l'utilisateur).
+
+_Phase 2 — fait le 2026-10-31 (branche `feat/voice-bar-refonte`) :_
+- _`hooks/useVoiceInput.ts` : quota gratuit, maintien / appui court (mains libres,
+  second appui pour envoyer), durée, statut dérivé. Enregistrement et analyse
+  restent dans `useVoiceCommand`._
+- _`components/suivibaby/voice/VoiceCommandModals.tsx` : modales extraites telles
+  quelles de l'ancien `VoiceCommandButton` (supprimé)._
+- _`components/suivibaby/VoiceDock.tsx` (décision 2.3, revue ECC architecte +
+  accessibilité + UI/UX) : un seul composant monté dans `(tabs)/_layout.tsx`, qui
+  coordonne deux contrôles visuellement séparés — la pilule vocale (`VoiceBar`) et
+  le `+` (`GlobalFAB`, rendu contrôlable) — avec 12 dp d'écart (16 dp la nuit) ;
+  `+` désactivé pendant l'enregistrement ; pilule estompée et inactive sous le
+  menu du `+`. Visible sur Accueil, Journal, Croissance, Moments ; masqué sur
+  Plus/Stats et clavier ouvert (enregistrement annulé). Onglet actif lu depuis la
+  tab bar (`useSegments()` perd le nom de l'onglet initial)._
+- _`VoiceBar` : glisser hors de la pilule = annuler ; arrêt automatique à 60 s ;
+  annulation si l'app passe en arrière-plan ou si l'enfant actif change ;
+  contour rouge pendant l'enregistrement (visible la nuit sans pulsation) ;
+  polices nuit ; durée en chiffres tabulaires ; libellé accessible = texte visible
+  (WCAG 2.5.3), indication « touchez deux fois »._
+- _2.4 : `home.tsx` n'affiche plus de micro ni de FAB (gérés par le dock) ; marges
+  basses `VOICE_DOCK_INSET` sur Journal, Croissance, Moments ;
+  `useCanManageContent` partagé (cache de permissions, pas de clignotement)._
+- _À faire plus tard : « Enregistré · Annuler » après validation ; option main
+  gauche (dock inversé)._
+- _2.8 : `__tests__/useVoiceInput.test.tsx` et `__tests__/VoiceBar.test.tsx`
+  (17 tests) ; suite complète 492/492. Flow Maestro `maestro/04_voice_command.yaml`
+  adapté à la barre (non exécuté localement)._
+- _2.7 vérifié sur Samsung S21 Ultra (Android, build de dev) : dock au-dessus de la
+  tab bar sur les 4 onglets, masqué sur Plus. Reste : 2.5 (en-tête, optionnel),
+  2.9 (build EAS + iOS)._
 
 ## Phase 3 — Resynchroniser le site
 

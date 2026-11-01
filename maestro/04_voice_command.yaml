@@ -1,8 +1,8 @@
-# 04 — Voice command UI flow
-# Validates: microphone button, recording modal, UI states
-# Note: actual voice recording cannot be simulated in Maestro
-# This test only validates the UI flow and permission dialogs
-# Prerequisite: user logged in and on home screen
+# 04 — Voice bar UI flow
+# Validates: voice bar visible above the tab bar, tap-to-toggle recording,
+# microphone permission dialog and recording state.
+# Note: actual speech cannot be simulated in Maestro; this flow only checks the UI.
+# Prerequisite: user logged in (owner/admin of the active child) and on home screen
 appId: com.tesfa.suivibaby
 
 ---
@@ -14,24 +14,28 @@ appId: com.tesfa.suivibaby
     visible: "Accueil"
     timeout: 15000
 
-# Taper sur le bouton microphone (commande vocale)
+# La barre micro est visible au repos
+- assertVisible:
+    id: "voice-bar"
+- assertVisible: "Maintenez pour parler"
+
+# Appui court : démarre l'enregistrement mains libres
 - tapOn:
-    id: "Commande vocale"
+    id: "voice-bar"
 
-# Le bouton peut demander la permission micro ou afficher le modal d'enregistrement
-# Sur simulateur, le dialog de permission systeme peut apparaitre
-# On attend un des etats possibles
-
-# Verifier que l'UI de commande vocale est visible
-# Le bouton change d'etat : soit on voit le modal de permission,
-# soit l'enregistrement demarre (ActivityIndicator)
+# Soit la permission micro est demandée, soit l'enregistrement démarre
 - extendedWaitUntil:
     visible:
       anyOf:
-        - "Commande vocale"
         - "Autoriser"
-        - "Enregistrement"
+        - "Permission requise"
+        - "Touchez pour envoyer"
     timeout: 5000
 
-# Tenter de fermer / annuler si un modal est visible
-# (On ne peut pas tester l'enregistrement reel sur simulateur)
+# Si l'enregistrement a démarré, un second appui l'envoie
+- runFlow:
+    when:
+      visible: "Touchez pour envoyer"
+    commands:
+      - tapOn:
+          id: "voice-bar"

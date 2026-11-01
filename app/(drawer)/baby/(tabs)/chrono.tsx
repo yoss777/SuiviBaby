@@ -1,4 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
+import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { PhotoImage } from "@/components/ui/PhotoImage";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
@@ -555,7 +556,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: VOICE_DOCK_INSET,
     paddingTop: LIST_PADDING_TOP,
   },
   sectionHeader: {

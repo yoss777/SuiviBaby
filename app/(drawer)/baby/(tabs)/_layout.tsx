@@ -1,13 +1,53 @@
+import { VoiceDock } from "@/components/suivibaby/VoiceDock";
 import { TabBarBadge } from "@/components/ui/TabBarBadge";
 import { Colors } from "@/constants/theme";
-import { useAuth } from "@/contexts/AuthContext";
-import { useBaby } from "@/contexts/BabyContext";
 import { useMomentsNotification } from "@/contexts/MomentsNotificationContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useCanManageContent } from "@/hooks/useCanManageContent";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import { BottomTabBar, type BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs } from "expo-router";
-import { View } from "react-native";
+import { useEffect, useState } from "react";
+import { Keyboard, View } from "react-native";
+
+/** Tabs where parents consult the tracking and may want to add an event. */
+const VOICE_DOCK_ROUTES = new Set(["home", "chrono", "croissance", "moments"]);
+
+function useKeyboardVisible(): boolean {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setVisible(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return visible;
+}
+
+/**
+ * Default tab bar that reports its height (the dock sits on it) and the
+ * focused route (useSegments() drops the leaf name on the initial tab).
+ */
+function MeasuredTabBar({
+  onHeight,
+  onRoute,
+  ...props
+}: BottomTabBarProps & {
+  onHeight: (height: number) => void;
+  onRoute: (route: string) => void;
+}) {
+  const route = props.state.routes[props.state.index]?.name ?? "";
+  useEffect(() => {
+    onRoute(route);
+  }, [route, onRoute]);
+  return (
+    <View onLayout={(e) => onHeight(e.nativeEvent.layout.height)}>
+      <BottomTabBar {...props} />
+    </View>
+  );
+}
 
 const hiddenTabOptions = {
   href: null,
@@ -16,12 +56,13 @@ const hiddenTabOptions = {
 
 export default function BabyTabLayout() {
   const colorScheme = useColorScheme() ?? "light";
-  const { firebaseUser } = useAuth();
-  const { activeChild } = useBaby();
   const { hasNewMoments } = useMomentsNotification();
-  const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const canManageContent =
-    permissions.role === "owner" || permissions.role === "admin";
+  const canManageContent = useCanManageContent();
+  const [currentRoute, setCurrentRoute] = useState("");
+  const keyboardVisible = useKeyboardVisible();
+  const [tabBarHeight, setTabBarHeight] = useState(0);
+  const showVoiceDock =
+    VOICE_DOCK_ROUTES.has(currentRoute) && !keyboardVisible && tabBarHeight > 0;
 
   const showPlusTab = canManageContent;
   const showStatsTab = !canManageContent;
@@ -29,6 +70,9 @@ export default function BabyTabLayout() {
   return (
     <View style={{ flex: 1 }}>
       <Tabs
+        tabBar={(props) => (
+          <MeasuredTabBar {...props} onHeight={setTabBarHeight} onRoute={setCurrentRoute} />
+        )}
         screenOptions={{
           tabBarActiveTintColor: Colors[colorScheme].tint,
           tabBarInactiveTintColor: Colors[colorScheme].tabIconDefault,
@@ -144,6 +188,9 @@ export default function BabyTabLayout() {
           options={hiddenTabOptions}
         />
       </Tabs>
+      {canManageContent && (
+        <VoiceDock tabBarHeight={tabBarHeight} visible={showVoiceDock} />
+      )}
     </View>
   );
 }

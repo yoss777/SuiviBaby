@@ -102,7 +102,7 @@ L'animation est déjà intégrée dans `GlobalFAB.tsx`. Quand l'utilisateur cliq
 2. Le bottom sheet s'ouvre après 400ms
 3. L'animation se termine automatiquement après 1.5s
 
-### Dans VoiceCommandButton
+### Dans la commande vocale (VoiceBar)
 
 Pour intégrer après une commande vocale confirmée :
 

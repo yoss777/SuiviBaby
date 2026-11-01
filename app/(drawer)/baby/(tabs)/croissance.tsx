@@ -1,4 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
+import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import {
@@ -185,7 +186,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: VOICE_DOCK_INSET,
     gap: 12,
   },
   listWindow: {
