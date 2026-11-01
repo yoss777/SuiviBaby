@@ -50,8 +50,13 @@ function logBaby(...args: unknown[]) {
 interface CachedBabyState {
   children: Child[];
   activeChildId: string | null;
+  /** Hidden children at cache time, so a cached boot never shows them. */
+  hiddenChildrenIds?: string[];
   cachedAt: number;
 }
+
+/** Offline fallback: publish children even if preferences never arrive. */
+const PREFS_RESOLVE_TIMEOUT_MS = 3000;
 
 function getBabyCacheKey(uid: string) {
   return `${BABY_BOOT_CACHE_PREFIX}${uid}`;
@@ -72,6 +77,7 @@ async function loadCachedBabyState(uid: string): Promise<CachedBabyState | null>
     return {
       children: parsed.children,
       activeChildId: parsed.activeChildId ?? null,
+      hiddenChildrenIds: Array.isArray(parsed.hiddenChildrenIds) ? parsed.hiddenChildrenIds : [],
       cachedAt: parsed.cachedAt,
     };
   } catch (error) {
@@ -150,6 +156,16 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   const [status, setStatus] = useState<'loading' | 'ready' | 'degraded'>('loading');
   const [childrenLoaded, setChildrenLoaded] = useState(false);
   const [hiddenChildrenIds, setHiddenChildrenIds] = useState<string[]>([]);
+  // Children are only published once the hidden list is known (live prefs,
+  // boot cache or offline timeout); otherwise hidden children leak into the
+  // child picker while preferences are still loading.
+  const [prefsResolved, setPrefsResolved] = useState(false);
+  const prefsResolvedRef = useRef(false);
+  const markPrefsResolved = useCallback(() => {
+    if (prefsResolvedRef.current) return;
+    prefsResolvedRef.current = true;
+    setPrefsResolved(true);
+  }, []);
   const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences>(DEFAULT_REMINDERS);
   const lastActiveChildIdRef = useRef<string | null>(null);
   const lastActiveOverrideRef = useRef<string | null>(null);
@@ -188,6 +204,11 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       if (cached.activeChildId) {
         lastActiveOverrideRef.current = cached.activeChildId;
       }
+      if (!prefsResolvedRef.current) {
+        hiddenChildrenIdsRef.current = cached.hiddenChildrenIds ?? [];
+        setHiddenChildrenIds(cached.hiddenChildrenIds ?? []);
+        markPrefsResolved();
+      }
 
       const hydratedChildren = computeVisibleChildren(
         childDataRef.current,
@@ -211,13 +232,14 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     return () => {
       cancelled = true;
     };
-  }, [user?.uid, authLoading]);
+  }, [user?.uid, authLoading, markPrefsResolved]);
 
   /**
    * Recompute visible children + active child from refs, then setState.
    * Called from any listener callback — single source of truth.
    */
   const syncState = useCallback(() => {
+    if (!prefsResolvedRef.current) return;
     const visible = computeVisibleChildren(
       childDataRef.current,
       hiddenChildrenIdsRef.current,
@@ -295,15 +317,19 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     if (childDataRef.current.size > 0) {
       syncState();
     }
-  }, [hiddenChildrenIds, syncState]);
+  }, [hiddenChildrenIds, prefsResolved, syncState]);
 
   // Écouter les changements des préférences utilisateur en temps réel
   useEffect(() => {
+    prefsResolvedRef.current = false;
+    setPrefsResolved(false);
     if (!user?.uid) {
       setHiddenChildrenIds([]);
+      markPrefsResolved();
       return;
     }
 
+    const prefsTimeout = setTimeout(markPrefsResolved, PREFS_RESOLVE_TIMEOUT_MS);
     const userPrefsRef = doc(db, 'user_preferences', user.uid);
 
     const unsubscribe = onSnapshot(userPrefsRef, (snapshot) => {
@@ -311,12 +337,14 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
         const data = snapshot.data();
         logBaby('Préférences chargées', data.lastActiveChildId);
         const newHiddenIds = data.hiddenChildrenIds || [];
+        hiddenChildrenIdsRef.current = newHiddenIds;
         setHiddenChildrenIds((prev) => {
           if (prev.length === newHiddenIds.length && prev.every((id: string, i: number) => id === newHiddenIds[i])) {
             return prev;
           }
           return newHiddenIds;
         });
+        markPrefsResolved();
         // R7: Extract reminder preferences from the same snapshot
         const reminders = data.notifications?.reminders;
         if (reminders) {
@@ -333,7 +361,9 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
           lastActiveOverrideRef.current = null;
         }
       } else {
+        hiddenChildrenIdsRef.current = [];
         setHiddenChildrenIds((prev) => prev.length === 0 ? prev : []);
+        markPrefsResolved();
         setReminderPreferences(DEFAULT_REMINDERS);
         if (!lastActiveOverrideRef.current) {
           lastActiveChildIdRef.current = null;
@@ -350,15 +380,21 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
           return newHiddenIds;
         });
         lastActiveChildIdRef.current = prefs.lastActiveChildId || null;
+        hiddenChildrenIdsRef.current = newHiddenIds;
+        markPrefsResolved();
       }).catch(err => {
         console.error('Erreur lors du chargement des préférences:', err);
+        markPrefsResolved();
       });
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(prefsTimeout);
+      unsubscribe();
+    };
     // Depend on the uid only — the user object identity changes on every
     // refreshUser() call, but the listener key is the uid.
-  }, [user?.uid]);
+  }, [user?.uid, markPrefsResolved]);
 
   // Charger les enfants depuis Firestore
   // R5: No longer waits for preferencesLoaded — children and prefs load in parallel.
@@ -530,13 +566,14 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   }, [user?.uid, authLoading, syncState]);
 
   useEffect(() => {
-    if (!user?.uid || status === 'loading') return;
+    if (!user?.uid || status === 'loading' || !prefsResolved) return;
 
     saveCachedBabyState(user.uid, {
       children,
       activeChildId: activeChild?.id ?? null,
+      hiddenChildrenIds,
     });
-  }, [user?.uid, children, activeChild?.id, status]);
+  }, [user?.uid, children, activeChild?.id, status, prefsResolved, hiddenChildrenIds]);
 
   // Preload today's events for all children
   useEffect(() => {
@@ -631,9 +668,10 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
   const value = useMemo<BabyContextType>(() => ({
     children,
     activeChild,
-    loading,
+    // Children are withheld until the hidden list is known: report loading meanwhile.
+    loading: loading || !prefsResolved,
     status,
-    childrenLoaded,
+    childrenLoaded: childrenLoaded && prefsResolved,
     hiddenChildrenIds,
     reminderPreferences,
     setActiveChild,
@@ -642,7 +680,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     addChild,
     updateChild,
     deleteChild,
-  }), [children, activeChild, loading, status, childrenLoaded, hiddenChildrenIds, reminderPreferences, setActiveChild, hideChildOptimistically, unhideChildOptimistically, addChild, updateChild, deleteChild]);
+  }), [children, activeChild, loading, prefsResolved, status, childrenLoaded, hiddenChildrenIds, reminderPreferences, setActiveChild, hideChildOptimistically, unhideChildOptimistically, addChild, updateChild, deleteChild]);
 
   return (
     <BabyContext.Provider value={value}>

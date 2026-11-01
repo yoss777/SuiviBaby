@@ -57,11 +57,22 @@ function wrapper({ children }: { children: React.ReactNode }) {
 describe("BabyContext", () => {
   const accessCallbacks: ((snapshot: FirestoreSnapshot) => void)[] = [];
   const childCallbacks = new Map<string, (snapshot: FirestoreSnapshot) => void>();
+  const prefsCallbacks: ((snapshot: FirestoreSnapshot) => void)[] = [];
+
+  const emitPrefs = async (hiddenChildrenIds: string[] = []) => {
+    await act(async () => {
+      prefsCallbacks[0]?.({
+        exists: () => true,
+        data: () => ({ hiddenChildrenIds, lastActiveChildId: null }),
+      });
+    });
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
     accessCallbacks.length = 0;
     childCallbacks.clear();
+    prefsCallbacks.length = 0;
 
     (useAuth as jest.Mock).mockReturnValue({
       user: { uid: "user-1" },
@@ -93,6 +104,8 @@ describe("BabyContext", () => {
           accessCallbacks.push(onNext);
         } else if (ref.kind === "doc" && ref.path.startsWith("children/")) {
           childCallbacks.set(ref.path.split("/")[1], onNext);
+        } else if (ref.kind === "doc" && ref.path.startsWith("user_preferences/")) {
+          prefsCallbacks.push(onNext);
         }
 
         return jest.fn();
@@ -159,6 +172,7 @@ describe("BabyContext", () => {
     (AsyncStorage.getItem as jest.Mock).mockReturnValue(deferredCache.promise);
 
     const { result } = renderHook(() => useBaby(), { wrapper });
+    await emitPrefs();
 
     await act(async () => {
       accessCallbacks[0]?.({
@@ -211,6 +225,61 @@ describe("BabyContext", () => {
       expect(result.current.children).toHaveLength(1);
       expect(result.current.children[0]?.id).toBe("child-fresh");
       expect(result.current.activeChild?.id).toBe("child-fresh");
+    });
+  });
+
+  it("never publishes a hidden child while preferences are still loading", async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    const { result } = renderHook(() => useBaby(), { wrapper });
+
+    await act(async () => {
+      accessCallbacks[0]?.({
+        docs: [
+          { data: () => ({ userId: "user-1", childId: "child-visible" }) },
+          { data: () => ({ userId: "user-1", childId: "child-hidden" }) },
+        ],
+      });
+    });
+    await act(async () => {
+      childCallbacks.get("child-visible")?.({
+        exists: () => true,
+        data: () => ({ name: "Visible", birthDate: "01/01/2024" }),
+      });
+      childCallbacks.get("child-hidden")?.({
+        exists: () => true,
+        data: () => ({ name: "Hidden", birthDate: "01/01/2024" }),
+      });
+    });
+
+    // Children docs arrived before the preferences: nothing is published yet.
+    expect(result.current.children).toHaveLength(0);
+    expect(result.current.loading).toBe(true);
+
+    await emitPrefs(["child-hidden"]);
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.children.map((c) => c.id)).toEqual(["child-visible"]);
+      expect(result.current.activeChild?.id).toBe("child-visible");
+    });
+  });
+
+  it("hides cached hidden children on a cached boot", async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(
+      JSON.stringify({
+        children: [
+          { id: "child-a", name: "A", birthDate: "01/01/2024" },
+          { id: "child-b", name: "B", birthDate: "01/01/2024" },
+        ],
+        activeChildId: "child-a",
+        hiddenChildrenIds: ["child-b"],
+        cachedAt: Date.now(),
+      }),
+    );
+    const { result } = renderHook(() => useBaby(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.children.map((c) => c.id)).toEqual(["child-a"]);
     });
   });
 });
