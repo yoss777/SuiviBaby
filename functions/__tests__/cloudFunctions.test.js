@@ -1816,3 +1816,46 @@ describe("resolveReport (B6.S7 atomic claim)", () => {
     ).rejects.toThrow("déjà été traité");
   });
 });
+
+describe("generateAiInsight quota", () => {
+  // subscriptions/{uid} and usage_limits/{uid} are read through db.doc(path).get().
+  const insightDocs = ({ subscription, usage }) => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p?.startsWith("subscriptions/")) return { get: jest.fn().mockResolvedValue(subscription ? doc(subscription) : no()) };
+      if (p?.startsWith("usage_limits/")) return { get: jest.fn().mockResolvedValue(usage ? doc(usage) : no()), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+  };
+  const today = new Date().toISOString().split("T")[0];
+
+  it("blocks a free user after the daily free insight", async () => {
+    insightDocs({ usage: { lastInsightDate: today, dailyInsights: 1 } });
+    await expect(fns.generateAiInsight(auth("u1", {}))).rejects.toThrow("Limite quotidienne");
+  });
+
+  it("does not limit a grandfathered account flagged without the grandfathered status", async () => {
+    insightDocs({
+      subscription: { tier: "free", status: "active", grandfathered: true },
+      usage: { lastInsightDate: today, dailyInsights: 5 },
+    });
+    // Passes the quota check and stops on the missing payload instead.
+    await expect(fns.generateAiInsight(auth("u1", {}))).rejects.toThrow("Données manquantes");
+  });
+
+  it("does not limit an active premium subscriber", async () => {
+    insightDocs({
+      subscription: { tier: "premium", status: "active" },
+      usage: { lastInsightDate: today, dailyInsights: 5 },
+    });
+    await expect(fns.generateAiInsight(auth("u1", {}))).rejects.toThrow("Données manquantes");
+  });
+
+  it("limits an expired premium subscription like a free account", async () => {
+    insightDocs({
+      subscription: { tier: "premium", status: "expired" },
+      usage: { lastInsightDate: today, dailyInsights: 1 },
+    });
+    await expect(fns.generateAiInsight(auth("u1", {}))).rejects.toThrow("Limite quotidienne");
+  });
+});

@@ -3449,13 +3449,11 @@ exports.generateAiInsight = onCall(
     // Rate limit: 10 requêtes/heure
     await checkRateLimit(db, uid, "ai_insight", 10);
 
-    // Premium check: FREE = 1/jour, PREMIUM/FAMILY = illimité
-    const subDoc = await db.doc(`subscriptions/${uid}`).get();
-    const tier = subDoc.exists ? (subDoc.data().tier || "free") : "free";
-    const status = subDoc.exists ? (subDoc.data().status || "expired") : "expired";
-    const isPremium = (tier === "premium" || tier === "family") && (status === "active" || status === "trial" || status === "grandfathered");
+    // Premium check: FREE = 1/jour, PREMIUM/FAMILY = illimité. Same entitlement
+    // rule as voice, export and sharing (incl. the grandfathered flag).
+    const subscriptionState = await getSubscriptionState(db, uid);
 
-    if (!isPremium) {
+    if (!hasUnlimitedFeature(subscriptionState, "insights")) {
       const usageRef = db.doc(`usage_limits/${uid}`);
       const usageDoc = await usageRef.get();
       const today = new Date().toISOString().split("T")[0];
