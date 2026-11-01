@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { SkeletonList } from "@/components/ui/Skeleton";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useToast } from "@/contexts/ToastContext";
@@ -393,6 +394,11 @@ export default function NotificationsScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {isLoading ? (
+            // Real switch values are not known yet: avoid showing defaults that then flip.
+            <SkeletonList rows={6} />
+          ) : (
+            <>
           <View
             style={[styles.section, { backgroundColor: nc.backgroundCard }]}
           >
@@ -523,6 +529,8 @@ export default function NotificationsScreen() {
               être désactivées.
             </ThemedText>
           </View>
+            </>
+          )}
         </ScrollView>
         <InfoModal
           visible={modalConfig.visible}

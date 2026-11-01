@@ -1,5 +1,6 @@
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DotsLoader } from "@/components/ui/DotsLoader";
+import { SkeletonList } from "@/components/ui/Skeleton";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
@@ -380,6 +381,7 @@ export default function JoinChildScreen() {
             </View>
 
             {/* Invitations en attente */}
+            {loadingInvitations && <SkeletonList rows={1} style={{ marginBottom: 16 }} />}
             {!loadingInvitations && pendingInvitations.length > 0 && (
               <View style={sectionStyle}>
                 <View style={styles.sectionHeader}>

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { SkeletonBlock } from "@/components/ui/Skeleton";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useNavigation } from "@react-navigation/native";
 import Constants from "expo-constants";
@@ -98,6 +99,8 @@ export default function SettingsScreen() {
   const [isBiometricUpdating, setIsBiometricUpdating] = useState(false);
   const [isCancellingDeletion, setIsCancellingDeletion] = useState(false);
   const [isOwnerOfAny, setIsOwnerOfAny] = useState(false);
+  // Owner-only entries (profils enfants, demandes de suppression) wait for this check.
+  const [ownershipLoading, setOwnershipLoading] = useState(true);
   const [pendingDeletionRequests, setPendingDeletionRequests] = useState(0);
   const navigation = useNavigation();
 
@@ -127,9 +130,11 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (!user?.uid || children.length === 0) {
       setIsOwnerOfAny(false);
+      setOwnershipLoading(false);
       return;
     }
     let mounted = true;
+    setOwnershipLoading(true);
     (async () => {
       try {
         for (const child of children) {
@@ -144,6 +149,8 @@ export default function SettingsScreen() {
         if (mounted) setIsOwnerOfAny(false);
       } catch {
         if (mounted) setIsOwnerOfAny(false);
+      } finally {
+        if (mounted) setOwnershipLoading(false);
       }
     })();
     return () => { mounted = false; };
@@ -653,7 +660,7 @@ export default function SettingsScreen() {
     [accent, nc],
   );
 
-  const renderSection = (title: string, items: SettingItem[]) => (
+  const renderSection = (title: string, items: SettingItem[], pendingItem = false) => (
     <View style={styles.section}>
       <Text
         style={[styles.sectionTitle, { color: nc.textMuted }]}
@@ -665,6 +672,17 @@ export default function SettingsScreen() {
         style={[styles.sectionContent, { backgroundColor: nc.backgroundCard }]}
       >
         {items.map(renderSettingItem)}
+        {pendingItem && (
+          <View
+            style={styles.pendingItem}
+            accessible
+            accessibilityRole="progressbar"
+            accessibilityLabel="Chargement"
+          >
+            <SkeletonBlock width="45%" height={14} />
+            <SkeletonBlock width="75%" height={12} />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -679,7 +697,7 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {renderSection("Compte", accountSettings)}
-        {renderSection("Famille", familySettings)}
+        {renderSection("Famille", familySettings, ownershipLoading)}
         {renderSection("Préférences", preferencesSettings)}
         {renderSection("Informations", informationSettings)}
 
@@ -876,6 +894,10 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  pendingItem: {
+    padding: 16,
+    gap: 8,
+  },
   container: {
     flex: 1,
   },

@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { SkeletonList } from "@/components/ui/Skeleton";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useToast } from "@/contexts/ToastContext";
@@ -200,7 +201,11 @@ export default function LanguageScreen() {
               Langue
             </ThemedText> */}
             <View style={styles.languagesContainer}>
-              {languages.map(renderLanguageOption)}
+              {isLoading ? (
+                <SkeletonList rows={languages.length} />
+              ) : (
+                languages.map(renderLanguageOption)
+              )}
             </View>
           </View>
 

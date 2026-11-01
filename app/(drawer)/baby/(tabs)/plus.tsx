@@ -1,4 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
+import { SkeletonList } from "@/components/ui/Skeleton";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -224,7 +225,9 @@ export default function PlusScreen() {
             </Text>
           </View>
 
-          {visibleSections.length === 0 ? (
+          {permissions.loading && visibleSections.length === 0 ? (
+            <SkeletonList rows={4} />
+          ) : visibleSections.length === 0 ? (
             <View style={styles.emptyState}>
               <FontAwesome name="lock" size={24} color={nc.textMuted} />
               <Text style={[styles.emptyText, { color: nc.textLight }]}>
@@ -311,6 +314,10 @@ export default function PlusScreen() {
                 </View>
               </View>
             ))
+          )}
+          {/* Owner-only entries (e.g. access management) appear once permissions load. */}
+          {permissions.loading && visibleSections.length > 0 && (
+            <SkeletonList rows={1} style={styles.section} />
           )}
 
           {activeChild && (

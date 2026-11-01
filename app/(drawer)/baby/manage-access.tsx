@@ -10,13 +10,13 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useChildPermissions, useChildAccesses } from '@/hooks/useChildPermissions';
 import { updateChildAccess, revokeChildAccess } from '@/utils/permissions';
 import { useUserInfo } from '@/hooks/useUserInfo';
+import { SkeletonBlock, SkeletonList } from '@/components/ui/Skeleton';
 import {
   ChildRole,
   ROLE_LABELS,
@@ -164,10 +164,14 @@ function AccessListItem({
     <View style={ds.accessItem}>
       <View style={ds.accessItemHeader}>
         <View style={ds.accessItemInfo}>
-          <Text style={ds.accessItemName}>
-            {userLoading ? 'Chargement...' : displayName}
-            {isMe && <Text style={ds.meBadge}> (Vous)</Text>}
-          </Text>
+          {userLoading ? (
+            <SkeletonBlock width="50%" height={16} style={{ marginBottom: 6 }} />
+          ) : (
+            <Text style={ds.accessItemName}>
+              {displayName}
+              {isMe && <Text style={ds.meBadge}> (Vous)</Text>}
+            </Text>
+          )}
           <Text style={ds.accessItemRole}>
             {getRoleIcon(access.role)} {ROLE_LABELS[access.role]}
           </Text>
@@ -308,10 +312,7 @@ export default function ManageAccessScreen() {
             ),
           }}
         />
-        <View style={ds.centeredContainer}>
-          <ActivityIndicator size="large" color={tintColor} />
-          <Text style={ds.loadingText}>Chargement...</Text>
-        </View>
+        <SkeletonList rows={3} style={ds.listContent} />
       </View>
     );
   }
@@ -511,11 +512,6 @@ const dynamicStyles = (
       color: nc.white,
       fontSize: 16,
       fontWeight: '600',
-    },
-    loadingText: {
-      marginTop: 16,
-      fontSize: 16,
-      color: nc.textLight,
     },
     emptyContainer: {
       alignItems: 'center',

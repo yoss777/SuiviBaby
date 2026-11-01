@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { SkeletonList } from "@/components/ui/Skeleton";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useThemePreference } from "@/contexts/ThemeContext";
@@ -204,7 +205,11 @@ export default function ThemeScreen() {
               Apparence
             </ThemedText>
             <View style={styles.themesContainer}>
-              {themeOptions.map(renderThemeOption)}
+              {isLoading ? (
+                <SkeletonList rows={themeOptions.length} />
+              ) : (
+                themeOptions.map(renderThemeOption)
+              )}
             </View>
           </View>
 
