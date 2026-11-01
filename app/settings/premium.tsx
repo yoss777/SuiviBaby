@@ -1,6 +1,7 @@
 // app/settings/premium.tsx
 // Page pricing in-app — comparaison Gratuit vs Premium vs Famille
 
+import { SkeletonBlock, SkeletonList } from "@/components/ui/Skeleton";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { usePremium, type PremiumTier } from "@/contexts/PremiumContext";
@@ -9,6 +10,8 @@ import {
   getOfferings,
   purchasePackage,
   restorePurchases,
+  getTierFromCustomerInfo,
+  isReceiptOwnedByAnotherAccount,
 } from "@/services/revenueCatService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -130,6 +133,7 @@ export default function PremiumScreen() {
     isGrandfathered,
     devOverrideTier,
     devOverrideBilling,
+    isLoading: isPremiumLoading,
   } = usePremium();
   const [selectedPlan, setSelectedPlan] = useState<
     "free" | "premium" | "family"
@@ -244,14 +248,31 @@ export default function PremiumScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const info = await restorePurchases();
-      if (info) {
+      if (!info) return;
+      if (getTierFromCustomerInfo(info) === "free") {
         setModalConfig({
           visible: true,
-          title: "Achats restaurés",
-          message: "Vos achats précédents ont été restaurés avec succès.",
+          title: "Aucun achat à restaurer",
+          message:
+            "Aucun abonnement actif n'a été trouvé pour ce compte SuiviBaby sur ce compte App Store / Google Play.",
         });
+        return;
       }
-    } catch {
+      setModalConfig({
+        visible: true,
+        title: "Achats restaurés",
+        message: "Vos achats précédents ont été restaurés avec succès.",
+      });
+    } catch (error) {
+      if (isReceiptOwnedByAnotherAccount(error)) {
+        setModalConfig({
+          visible: true,
+          title: "Abonnement lié à un autre compte",
+          message:
+            "Cet abonnement est rattaché à un autre compte SuiviBaby. Connectez-vous avec le compte qui a effectué l'achat pour en profiter.",
+        });
+        return;
+      }
       setModalConfig({
         visible: true,
         title: "Erreur",
@@ -273,6 +294,17 @@ export default function PremiumScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {isPremiumLoading ? (
+          // The subscription is not known yet: don't show "Gratuit" as the current plan.
+          <>
+            <View style={styles.header}>
+              <FontAwesome name="crown" size={36} color={nc.todayAccent} />
+              <SkeletonBlock width="60%" height={22} />
+            </View>
+            <SkeletonList rows={3} />
+          </>
+        ) : (
+          <>
         {/* Header */}
         <View style={styles.header} accessibilityRole="header">
           <FontAwesome name="crown" size={36} color={nc.todayAccent} />
@@ -840,6 +872,8 @@ export default function PremiumScreen() {
           24h avant la fin de la période. Le paiement est débité via votre
           compte App Store ou Google Play.
         </Text>
+          </>
+        )}
       </ScrollView>
 
       <InfoModal

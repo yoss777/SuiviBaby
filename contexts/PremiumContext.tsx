@@ -111,17 +111,21 @@ const CACHE_KEY = "@suivibaby_premium_cache";
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
 
 interface CachedPremiumState {
+  /** Account the state belongs to: several accounts can share a device. */
+  uid: string;
   tier: PremiumTier;
   status: SubscriptionStatus;
   grandfathered: boolean;
   cachedAt: number;
 }
 
-async function loadCache(): Promise<CachedPremiumState | null> {
+async function loadCache(uid: string): Promise<CachedPremiumState | null> {
   try {
     const raw = await AsyncStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const cached: CachedPremiumState = JSON.parse(raw);
+    // Another account's tier must never leak (legacy entries have no uid).
+    if (cached.uid !== uid) return null;
     if (Date.now() - cached.cachedAt > CACHE_TTL_MS) return null;
     return cached;
   } catch {
@@ -156,16 +160,8 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
   const [devOverride, setDevOverride] = useState<PremiumTier | null>(null);
   const [devBillingOverride, setDevBillingOverride] = useState<BillingPeriod | null>(null);
 
-  // Step 1: Load cache on mount (instant, no network)
+  // Step 1: Init RevenuCat SDK on mount (no user yet)
   useEffect(() => {
-    loadCache().then((cached) => {
-      if (cached) {
-        setTier(cached.tier);
-        setStatus(cached.status);
-        setGrandfathered(cached.grandfathered);
-      }
-    });
-    // Init RevenuCat SDK (no user yet)
     initRevenueCat().catch(() => {});
   }, []);
 
@@ -181,12 +177,29 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     }
 
     let cancelled = false;
+    let unsubFallback: (() => void) | null = null;
+    const uid = firebaseUser.uid;
+    // Set once RevenuCat or Firestore answered: the cache must not override it.
+    let liveResolved = false;
+
+    // Instant state from this account's cache while RevenuCat / Firestore load.
+    loadCache(uid).then((cached) => {
+      if (cancelled || liveResolved || !cached) return;
+      setTier(cached.tier);
+      setStatus(cached.status);
+      setGrandfathered(cached.grandfathered);
+    });
 
     const syncFromRevenueCat = async () => {
       try {
         // Login to RevenuCat with Firebase UID
         const customerInfo = await loginRevenueCat(firebaseUser.uid);
-        if (cancelled || !customerInfo) return;
+        if (cancelled) return;
+        if (!customerInfo) {
+          // SDK not initialised or login failed: Firestore is the source of truth.
+          unsubFallback = syncFromFirestore();
+          return;
+        }
 
         const rcTier = getTierFromCustomerInfo(customerInfo);
         const rcStatus = getStatusFromCustomerInfo(customerInfo);
@@ -195,11 +208,12 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
         setTier(rcTier);
         setStatus(rcStatus);
         setBillingPeriod(rcBilling);
-        saveCache({ tier: rcTier, status: rcStatus, grandfathered: false });
+        liveResolved = true;
+        saveCache({ uid, tier: rcTier, status: rcStatus, grandfathered: false });
         setIsLoading(false);
       } catch {
         // RevenuCat failed — fallback to Firestore
-        if (!cancelled) syncFromFirestore();
+        if (!cancelled) unsubFallback = syncFromFirestore();
       }
     };
 
@@ -215,7 +229,8 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
             setStatus(data.status ?? "active");
             setBillingPeriod(data.billingPeriod ?? "unknown");
             setGrandfathered(data.grandfathered ?? false);
-            saveCache({ tier: data.tier ?? "free", status: data.status ?? "active", grandfathered: data.grandfathered ?? false });
+            liveResolved = true;
+            saveCache({ uid, tier: data.tier ?? "free", status: data.status ?? "active", grandfathered: data.grandfathered ?? false });
           }
           setIsLoading(false);
         },
@@ -232,7 +247,8 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       setTier(rcTier);
       setStatus(rcStatus);
       setBillingPeriod(rcBilling);
-      saveCache({ tier: rcTier, status: rcStatus, grandfathered: false });
+      liveResolved = true;
+      saveCache({ uid, tier: rcTier, status: rcStatus, grandfathered: false });
     });
 
     syncFromRevenueCat();
@@ -256,6 +272,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       removeRCListener();
       unsubFirestore();
+      unsubFallback?.();
     };
   }, [firebaseUser?.uid]);
 

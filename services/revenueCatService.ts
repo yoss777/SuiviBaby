@@ -240,6 +240,19 @@ export async function purchasePackage(
 /**
  * Restaure les achats précédents (obligatoire Apple/Google).
  */
+/**
+ * RevenueCat error code returned by a restore when the store receipt already
+ * belongs to another App User ID and the project's restore behavior is
+ * "Keep with original App User ID" (PURCHASES_ERROR_CODE.RECEIPT_ALREADY_IN_USE_ERROR).
+ */
+const RECEIPT_ALREADY_IN_USE_ERROR_CODE = "7";
+
+/** The store purchase belongs to another SuiviBaby account on this device. */
+export function isReceiptOwnedByAnotherAccount(error: unknown): boolean {
+  const code = (error as { code?: string | number } | null)?.code;
+  return code !== undefined && String(code) === RECEIPT_ALREADY_IN_USE_ERROR_CODE;
+}
+
 export async function restorePurchases(): Promise<CustomerInfo | null> {
   try {
     await initRevenueCat();

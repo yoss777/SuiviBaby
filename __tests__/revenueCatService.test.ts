@@ -497,3 +497,20 @@ describe("revenueCatService", () => {
     });
   });
 });
+
+describe("isReceiptOwnedByAnotherAccount", () => {
+  const { isReceiptOwnedByAnotherAccount } = jest.requireActual(
+    "@/services/revenueCatService",
+  ) as typeof import("@/services/revenueCatService");
+
+  it("detects the 'receipt already in use' restore error (Keep with original App User ID)", () => {
+    expect(isReceiptOwnedByAnotherAccount({ code: "7" })).toBe(true);
+    expect(isReceiptOwnedByAnotherAccount({ code: 7 })).toBe(true);
+  });
+
+  it("ignores other errors", () => {
+    expect(isReceiptOwnedByAnotherAccount({ code: "1" })).toBe(false);
+    expect(isReceiptOwnedByAnotherAccount(new Error("network"))).toBe(false);
+    expect(isReceiptOwnedByAnotherAccount(null)).toBe(false);
+  });
+});
