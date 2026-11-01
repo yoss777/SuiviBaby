@@ -72,19 +72,19 @@ export default function HiddenChildrenScreen() {
             return;
           }
 
-          const childIds = await getAccessibleChildIds(user.uid);
-          const childDocs = await Promise.all(
-            childIds.map((id) => getDoc(doc(db, "children", id)))
+          // Only read the hidden children the user can still access. A child
+          // pending deletion (soft-deleted) is denied by the rules: skip it
+          // instead of failing the whole list.
+          const accessibleIds = new Set(await getAccessibleChildIds(user.uid));
+          const results = await Promise.allSettled(
+            hiddenIds
+              .filter((id) => accessibleIds.has(id))
+              .map((id) => getDoc(doc(db, "children", id)))
           );
-          const allChildren: Child[] = childDocs
-            .filter((snap) => snap.exists())
-            .map((snap) => ({
-              id: snap.id,
-              ...(snap.data() as Omit<Child, "id">),
-            }));
-
-          const hidden = allChildren.filter((child) =>
-            hiddenIds.includes(child.id)
+          const hidden: Child[] = results.flatMap((result) =>
+            result.status === "fulfilled" && result.value.exists()
+              ? [{ id: result.value.id, ...(result.value.data() as Omit<Child, "id">) }]
+              : []
           );
           setHiddenChildren(hidden);
         } catch (error) {
