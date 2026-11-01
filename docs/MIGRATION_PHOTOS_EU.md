@@ -2,6 +2,8 @@
 
 > Plan rédigé le 2026-11-01. Étapes 1, 2, 4 et 5 faites le 2026-11-01 ; reste le build de l'app (3) puis la transition.
 
+> Échéances et contrôles : [SUIVI_ACTIONS.md](SUIVI_ACTIONS.md), section 1.
+
 ## Pourquoi
 
 Firestore est en **eur3** (UE), les fonctions en **europe-west1** (Belgique), mais
