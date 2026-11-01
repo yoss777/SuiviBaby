@@ -58,7 +58,7 @@ const sections = [
     {
       title: "7. Hébergement et transferts hors UE",
       content:
-        "La base de données est hébergée par Google Firebase dans l'Union européenne (région eur3) et les fonctions serveur en Belgique. Certains prestataires sont situés aux États-Unis : ces transferts sont encadrés par le EU-US Data Privacy Framework lorsque le prestataire y est certifié, et à défaut par les clauses contractuelles types de la Commission européenne.",
+        "La base de données est hébergée par Google Firebase dans l'Union européenne (région eur3) et les fonctions serveur en Belgique. Les photos sont stockées par Google Firebase aux États-Unis (région us-central1), et certains prestataires sont situés aux États-Unis : ces transferts sont encadrés par le EU-US Data Privacy Framework lorsque le prestataire y est certifié, et à défaut par les clauses contractuelles types de la Commission européenne.",
     },
     {
       title: "8. Durées de conservation",
