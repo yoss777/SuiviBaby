@@ -12,6 +12,8 @@ expo-env.d.ts
 
 # Native build caches (rebuilt by EAS)
 android/app/build/
+# Gradle autolinking cache: holds absolute paths of the machine that built it
+android/build/
 android/.gradle/
 ios/build/
 ios/Pods/
