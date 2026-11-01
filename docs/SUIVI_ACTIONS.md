@@ -13,7 +13,7 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 |---|---|---|---|---|---|---|
 | 1.1 | Bucket `samaye-53723-photos-eu` (europe-west1), règles, 7 fonctions, copie de 52 photos, 28 URL réécrites | 2026-11-01 | Claude | — | `node scripts/migratePhotosToEu.mjs` → « 0 à copier », « 0 URL à réécrire » | ✅ |
 | 1.2 | Fusionner `feat/voice-bar-refonte` sur `main` | 2026-11-04 | Yoss | Tests de la barre vocale validés sur téléphone | CI verte sur `main` (lint, tsc, tests) | ✅ 2026-11-01 |
-| 1.3 | Version **1.0.6** (`app.json` : version 1.0.6, iOS `buildNumber` 27, Android `versionCode` 8) + `eas build --profile production` | 2026-11-08 | Claude (feu vert Yoss) | 1.2 | Build EAS « finished » sur iOS et Android | ⏳ |
+| 1.3 | Version **1.0.6** (`app.json` : version 1.0.6, iOS `buildNumber` 27, Android `versionCode` 8) + `eas build --profile production` | 2026-11-08 | Claude (feu vert Yoss) | 1.2 | Build EAS « finished » sur iOS et Android | 🔄 lancé le 2026-11-01 (iOS build 27, Android 8) |
 | 1.4 | Publier la 1.0.6 sur l'App Store et Google Play | 2026-11-15 | Yoss | 1.3 | Version 1.0.6 « disponible » dans les deux consoles | ⏳ |
 | 1.5 | Contrôle hebdomadaire de la synchronisation US → UE | chaque lundi jusqu'à 1.9 | Claude ou Yoss | 1.1 | `node scripts/migratePhotosToEu.mjs` doit afficher « 0 à copier » ; sinon relancer avec `--apply` et vérifier les journaux de `mirrorLegacyPhotoUpload` | 🔄 |
 | 1.6 | Imposer la mise à jour : `app_config` → `minVersion: "1.0.6"` | 2026-12-15 | Yoss | 1.4 + ≥ 90 % des utilisateurs actifs en 1.0.6 (consoles des stores) | Une app en 1.0.5 affiche l'écran « mise à jour obligatoire » | ⏳ |
@@ -57,3 +57,4 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 2026-11-01 | Comptes `PcpPyt8mWHRxAQDt8Xgmfux65bB2` (RevenueCat + Firestore) et `PTKG0fc5f6dhSEw8FAn0Bqiq6SJ3` (Firestore) passés Premium |
 | 2026-11-01 | RevenueCat : comportement de restauration réglé sur « Keep with original App User ID » |
 | 2026-11-01 | Branche `feat/voice-bar-refonte` fusionnée sur `main` (CI verte) ; workflow de déploiement des fonctions réparé (en échec depuis mai 2026) |
+| 2026-11-01 | Version 1.0.6 : builds EAS de production lancés — Android `0b6308c0-1c82-4bf4-bfde-cbbeddcf32cd`, iOS `058dd2a8-25e3-4580-9aab-806929c3331a` |
