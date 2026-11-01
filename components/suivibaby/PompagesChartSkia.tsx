@@ -125,6 +125,23 @@ function createFillPath(points: { x: number; y: number }[]) {
 }
 
 export default function PompagesChart({ pompages }: Props) {
+  // Hooks live in PompagesChartContent so the hook count never changes
+  // when the list goes from empty to filled (rules of hooks).
+  if (!pompages || pompages.length === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <FontAwesome name="pump-medical" size={64} color="#e9ecef" />
+        <Text style={styles.emptyTitle}>Aucune donnée disponible</Text>
+        <Text style={styles.emptySubtitle}>
+          Commencez à enregistrer vos sessions pour voir les statistiques
+        </Text>
+      </View>
+    );
+  }
+  return <PompagesChartContent pompages={pompages} />;
+}
+
+function PompagesChartContent({ pompages }: Props) {
   const [currentDay, setCurrentDay] = useState<Date>(startOfDay(new Date()));
   const [currentWeek, setCurrentWeek] = useState<Date>(
     getStartOfWeek(new Date()),
@@ -147,19 +164,6 @@ export default function PompagesChart({ pompages }: Props) {
     setSelectedBarIndex(null);
   }, [currentWeek]);
 
-  const isEmpty = !pompages || pompages.length === 0;
-
-  if (isEmpty) {
-    return (
-      <View style={styles.emptyContainer}>
-        <FontAwesome name="pump-medical" size={64} color="#e9ecef" />
-        <Text style={styles.emptyTitle}>Aucune donnée disponible</Text>
-        <Text style={styles.emptySubtitle}>
-          Commencez à enregistrer vos sessions pour voir les statistiques
-        </Text>
-      </View>
-    );
-  }
 
   const dailyPompages = useMemo(() => {
     return pompages
@@ -396,7 +400,7 @@ export default function PompagesChart({ pompages }: Props) {
             style={styles.todayButton}
             onPress={() => setCurrentDay(startOfDay(new Date()))}
           >
-            <Text style={styles.todayText}>Aujourd'hui</Text>
+            <Text style={styles.todayText}>Aujourd&apos;hui</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

@@ -235,6 +235,20 @@ export default function ManageAccessScreen() {
     [accesses]
   );
 
+  // Hooks must run before any early return (rules of hooks).
+  useFocusEffect(
+    React.useCallback(() => {
+      const backButton = (
+        <HeaderBackButton
+          onPress={() => router.replace("/baby/plus")}
+          tintColor={Colors[colorScheme].text}
+        />
+      );
+      setHeaderLeft(backButton, headerOwnerId.current);
+      return () => setHeaderLeft(null, headerOwnerId.current);
+    }, [colorScheme, router, setHeaderLeft])
+  );
+
   // Vérifier les permissions
   if (!myPermissions.loading && !myPermissions.canManageAccess) {
     return (
@@ -257,7 +271,7 @@ export default function ManageAccessScreen() {
         <View style={ds.centeredContainer}>
           <Ionicons name="lock-closed" size={64} color={nc.textMuted} />
           <Text style={ds.errorText}>
-            Vous n'avez pas la permission de gérer les accès
+            Vous n&apos;avez pas la permission de gérer les accès
           </Text>
           <TouchableOpacity
             style={ds.backButton}
@@ -280,19 +294,6 @@ export default function ManageAccessScreen() {
       params: { childId, returnTo: `/baby/manage-access?childId=${childId}` },
     });
   };
-
-  useFocusEffect(
-    React.useCallback(() => {
-      const backButton = (
-        <HeaderBackButton
-          onPress={() => router.replace("/baby/plus")}
-          tintColor={Colors[colorScheme].text}
-        />
-      );
-      setHeaderLeft(backButton, headerOwnerId.current);
-      return () => setHeaderLeft(null, headerOwnerId.current);
-    }, [colorScheme, router, setHeaderLeft])
-  );
 
   if (loading || myPermissions.loading) {
     return (

@@ -66,6 +66,23 @@ function addWeeks(date: Date, weeks: number) {
 }
 
 export default function TeteesChart({ tetees }: Props) {
+  // Hooks live in TeteesChartContent so the hook count never changes
+  // when the list goes from empty to filled (rules of hooks).
+  if (!tetees || tetees.length === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <FontAwesome name="baby" size={64} color="#e9ecef" />
+        <Text style={styles.emptyTitle}>Aucune donnée disponible</Text>
+        <Text style={styles.emptySubtitle}>
+          Commencez à enregistrer des tétées pour voir les statistiques
+        </Text>
+      </View>
+    );
+  }
+  return <TeteesChartContent tetees={tetees} />;
+}
+
+function TeteesChartContent({ tetees }: Props) {
   const [viewMode, setViewMode] = useState<"quantity" | "frequency">(
     "quantity",
   );
@@ -92,19 +109,6 @@ export default function TeteesChart({ tetees }: Props) {
     setSelectedBarIndex(null);
   }, [currentWeek, viewMode, typeFilter]);
 
-  const isEmpty = !tetees || tetees.length === 0;
-
-  if (isEmpty) {
-    return (
-      <View style={styles.emptyContainer}>
-        <FontAwesome name="baby" size={64} color="#e9ecef" />
-        <Text style={styles.emptyTitle}>Aucune donnée disponible</Text>
-        <Text style={styles.emptySubtitle}>
-          Commencez à enregistrer des tétées pour voir les statistiques
-        </Text>
-      </View>
-    );
-  }
 
   const start = getStartOfWeek(currentWeek);
   const end = addWeeks(start, 1);
