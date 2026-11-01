@@ -1,6 +1,7 @@
 name: Deploy Cloud Functions
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -24,10 +25,31 @@ jobs:
       - name: Install function dependencies
         run: cd functions && npm ci
 
-      - name: Deploy Functions & Rules
-        uses: w9jds/firebase-action@v13.22.1
-        with:
-          args: deploy --only functions,firestore:rules,firestore:indexes
+      # firebase-tools runs on the runner's Node 22 (the former w9jds/firebase-action
+      # container shipped an older Node that cannot require() the ESM-only
+      # expo-server-sdk, so every deploy failed at source analysis).
+      - name: Write service account key
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          # The secret may hold the raw JSON key or its base64 encoding.
+          printf '%s' "$GCP_SA_KEY" > "$RUNNER_TEMP/gcp-key.raw"
+          if head -c 1 "$RUNNER_TEMP/gcp-key.raw" | grep -q '{'; then
+            mv "$RUNNER_TEMP/gcp-key.raw" "$RUNNER_TEMP/gcp-key.json"
+          else
+            base64 -d "$RUNNER_TEMP/gcp-key.raw" > "$RUNNER_TEMP/gcp-key.json"
+            rm "$RUNNER_TEMP/gcp-key.raw"
+          fi
+
+      - name: Deploy Functions & Rules
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-key.json
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: >
+          npx --yes firebase-tools@15 deploy
+          --only functions,firestore:rules,firestore:indexes
+          --project "$PROJECT_ID" --non-interactive
+
+      - name: Remove service account key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gcp-key.json"
