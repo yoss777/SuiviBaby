@@ -16,7 +16,9 @@
     "test:coverage": "jest --coverage",
     "typecheck": "tsc --noEmit",
     "postinstall": "node ./scripts/patch-expo.js",
-    "update-app-config": "node ./scripts/updateAppConfig.mjs"
+    "update-app-config": "node ./scripts/updateAppConfig.mjs",
+    "release:ios": "eas build --platform ios --profile production --non-interactive --auto-submit",
+    "release:android": "eas build --local --platform android --profile production --non-interactive"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
