@@ -1,6 +1,6 @@
 # Migration des photos vers un bucket Storage dans l'UE
 
-> Plan rédigé le 2026-11-01. Rien n'est encore exécuté.
+> Plan rédigé le 2026-11-01. Étapes 1, 2, 4 et 5 faites le 2026-11-01 ; reste le build de l'app (3) puis la transition.
 
 ## Pourquoi
 
@@ -61,24 +61,24 @@ second chargement à chaque affichage).
 1. ✅ **Bucket créé** : `samaye-53723-photos-eu`, `europe-west1`, rattaché à
    Firebase. Règles : `firebase.json` → `storage` en deux cibles (`legacy`,
    `photos-eu`) sur le même `storage.rules`, cibles dans `.firebaserc`.
-   ⏳ Déploiement : `firebase deploy --only storage` (accepter l'autorisation
-   « cross-service » des règles vers Firestore).
+   ✅ Règles déployées sur les deux buckets le 2026-11-01.
 2. ✅ **Cloud Functions** (code prêt) : les suppressions (modération, suppression
    d'un enfant, purge planifiée) agissent sur les deux buckets
    (`deletePhotoEverywhere`, `deleteChildPhotosEverywhere`). Miroir :
    `mirrorLegacyPhotoUpload` / `mirrorLegacyPhotoDelete` (déclencheurs sur le
    bucket US, région `us-central1` imposée) recopient chaque ajout et chaque
    suppression du bucket US vers le bucket UE.
-   ⏳ Déploiement des fonctions.
+   ✅ Déployé le 2026-11-01 (7 fonctions). Miroir vérifié avec un fichier témoin :
+   copie puis suppression répercutées en UE en quelques secondes.
 3. ✅ **App** (code prêt) : lecture et écriture dans le bucket UE
    (`config/firebase.ts`, `utils/photoStorage.ts`) ; les anciennes URL complètes
    sont converties en chemins à l'affichage (`normalizePhotoRef`) ; suppression
    dans les deux buckets (`photoCleanup.ts`). Tests : `__tests__/photoStorage.test.ts`.
    ⏳ Build EAS et publication, **après** les étapes 4 et 5.
-4. ⏳ **Copier les objets** : `node scripts/migratePhotosToEu.mjs --apply`
-   (simulation sans `--apply` : 52 objets à copier le 2026-11-01).
-5. ⏳ **Réécrire les 28 URL en chemins** : même script. Compatible avec les
-   anciennes versions de l'app, qui savent lire les chemins.
+4. ✅ **Objets copiés** le 2026-11-01 : 52/52 dans le bucket UE
+   (`node scripts/migratePhotosToEu.mjs --apply`).
+5. ✅ **28 URL réécrites en chemins** le 2026-11-01 (même script). Compatible
+   avec les anciennes versions de l'app, qui savent lire les chemins.
 6. **Transition** : le miroir couvre les anciennes versions (elles écrivent et
    suppriment encore aux États-Unis). Fin quand la version minimale imposée
    (`AppUpdateManager`) est celle de l'étape 3.
