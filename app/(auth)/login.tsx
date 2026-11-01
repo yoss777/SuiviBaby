@@ -543,7 +543,7 @@ export default function LoginScreen() {
             </View>
             {emailTouched && email.trim().length > 0 && !emailValid && (
               <Text style={[styles.inlineHint, { color: nc.error }]}>
-                Format d'email invalide
+                Format d&apos;email invalide
               </Text>
             )}
           </View>
@@ -799,7 +799,7 @@ export default function LoginScreen() {
                   showConsentError && { color: nc.error, fontWeight: "bold" },
                 ]}
               >
-                J'accepte{" "}
+                J&apos;accepte{" "}
               </Text>
               <TouchableOpacity
                 onPress={() => router.push("/(auth)/terms")}
@@ -885,7 +885,7 @@ export default function LoginScreen() {
                   showConsentError && !hasHealthConsent && { color: nc.error, fontWeight: "bold" },
                 ]}
               >
-                J'autorise le traitement des{" "}
+                J&apos;autorise le traitement des{" "}
                 <Text style={{ fontWeight: "600" }}>
                   données de santé
                 </Text>

@@ -333,7 +333,7 @@ export default function PremiumScreen() {
           >
             <FontAwesome name="heart" size={16} color={nc.todayAccent} />
             <Text style={[styles.grandfatheredText, { color: nc.todayAccent }]}>
-              Merci d'être un early adopter ! Vos données restent accessibles
+              Merci d&apos;être un early adopter ! Vos données restent accessibles
               sans limite.
             </Text>
           </View>
@@ -868,7 +868,7 @@ export default function PremiumScreen() {
 
         {/* Legal */}
         <Text style={[styles.legal, { color: nc.textLight }]}>
-          L'abonnement se renouvelle automatiquement sauf annulation au moins
+          L&apos;abonnement se renouvelle automatiquement sauf annulation au moins
           24h avant la fin de la période. Le paiement est débité via votre
           compte App Store ou Google Play.
         </Text>

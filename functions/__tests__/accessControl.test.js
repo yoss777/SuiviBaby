@@ -1,3 +1,4 @@
+/* global describe, it, expect */
 const { hasRequiredChildAccess } = require("../accessControl");
 describe("hasRequiredChildAccess", () => {
   it("returns false for null/undefined", () => { expect(hasRequiredChildAccess(null, ["owner"])).toBe(false); expect(hasRequiredChildAccess(undefined, ["owner"])).toBe(false); });

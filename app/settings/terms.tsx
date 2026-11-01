@@ -144,7 +144,7 @@ export default function TermsScreen() {
               <Ionicons name="document-text" size={32} color={Colors[colorScheme].tint} />
             </View>
             <ThemedText style={styles.headerTitle}>
-              Conditions d'utilisation
+              Conditions d&apos;utilisation
             </ThemedText>
             <Text style={[styles.headerDate, { color: nc.textMuted }]}>
               Dernière mise à jour : 30 octobre 2026
@@ -176,7 +176,7 @@ export default function TermsScreen() {
 
           <View style={[styles.content, { backgroundColor: nc.backgroundCard }]}>
             <ThemedText style={styles.intro}>
-              Bienvenue sur SuiviBaby. Ces conditions d'utilisation régissent votre accès et
+              Bienvenue sur SuiviBaby. Ces conditions d&apos;utilisation régissent votre accès et
               utilisation de notre application. Veuillez les lire attentivement.
             </ThemedText>
 

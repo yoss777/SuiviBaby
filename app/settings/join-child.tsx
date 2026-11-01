@@ -376,7 +376,7 @@ export default function JoinChildScreen() {
                 Rejoindre un suivi
               </Text>
               <Text style={[styles.subtitle, { color: nc.textLight }]}>
-                Accédez au suivi d'un enfant partagé avec vous
+                Accédez au suivi d&apos;un enfant partagé avec vous
               </Text>
             </View>
 
@@ -517,8 +517,8 @@ export default function JoinChildScreen() {
                   </Text>
                 </View>
                 <Text style={[styles.emptyStateText, { color: nc.textLight }]}>
-                  Aucune invitation en attente. Si quelqu'un partage un enfant
-                  avec vous, l'invitation apparaîtra ici.
+                  Aucune invitation en attente. Si quelqu&apos;un partage un enfant
+                  avec vous, l&apos;invitation apparaîtra ici.
                 </Text>
               </View>
             )}
@@ -609,8 +609,8 @@ export default function JoinChildScreen() {
                 color={nc.todayAccent}
               />
               <Text style={[styles.infoText, { color: nc.textStrong }]}>
-                Une fois l'accès validé, vous pourrez voir toutes les
-                informations et le suivi de l'enfant partagé avec vous.
+                Une fois l&apos;accès validé, vous pourrez voir toutes les
+                informations et le suivi de l&apos;enfant partagé avec vous.
               </Text>
             </View>
           </ScrollView>

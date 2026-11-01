@@ -92,7 +92,7 @@ export function FirstTrackGuide({ onDismiss }: FirstTrackGuideProps) {
           }}
         >
           <Text style={[styles.dismissButtonText, { color: nc.white }]}>
-            C'est parti !
+            C&apos;est parti !
           </Text>
         </TouchableOpacity>
       </Animated.View>

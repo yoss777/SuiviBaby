@@ -47,7 +47,7 @@ export class ErrorBoundary extends React.Component<
           <Text style={styles.emoji}>😕</Text>
           <Text style={styles.title}>Oups ! Une erreur est survenue</Text>
           <Text style={styles.message}>
-            L'application a rencontré un problème inattendu. Nous nous excusons
+            L&apos;application a rencontré un problème inattendu. Nous nous excusons
             pour la gêne occasionnée.
           </Text>
           {__DEV__ && this.state.error && (
@@ -58,7 +58,7 @@ export class ErrorBoundary extends React.Component<
             </View>
           )}
           <TouchableOpacity style={styles.button} onPress={this.handleReset}>
-            <Text style={styles.buttonText}>Relancer l'application</Text>
+            <Text style={styles.buttonText}>Relancer l&apos;application</Text>
           </TouchableOpacity>
         </View>
       );

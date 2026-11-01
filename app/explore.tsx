@@ -292,7 +292,7 @@ export default function Explore() {
               Suivi Baby
             </ThemedText>
             <ThemedText style={styles.subtitle}>
-              L'Amour au Cœur de la Vie
+              L&apos;Amour au Cœur de la Vie
             </ThemedText>
 
             {pendingInvitations.length > 0 && (

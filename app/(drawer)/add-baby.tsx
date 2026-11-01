@@ -419,7 +419,7 @@ export default function AddBabyScreen() {
               ) : (
                 <>
                   <FontAwesome name="plus-circle" size={18} color={nc.white} />
-                  <Text style={dynamicStyles.submitButtonText}>Ajouter l'enfant</Text>
+                  <Text style={dynamicStyles.submitButtonText}>Ajouter l&apos;enfant</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -429,7 +429,7 @@ export default function AddBabyScreen() {
           <View style={dynamicStyles.infoBox}>
             <FontAwesome name="info-circle" size={20} color={nc.todayAccent} />
             <Text style={dynamicStyles.infoText}>
-              L'enfant sera immédiatement ajouté à votre liste de suivi. Vous pourrez modifier ses informations plus tard depuis les paramètres.
+              L&apos;enfant sera immédiatement ajouté à votre liste de suivi. Vous pourrez modifier ses informations plus tard depuis les paramètres.
             </Text>
           </View>
         </ScrollView>

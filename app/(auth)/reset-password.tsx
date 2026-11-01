@@ -208,7 +208,7 @@ export default function ResetPasswordScreen() {
               Lien invalide
             </Text>
             <Text style={[styles.subtitle, { color: nc.textMuted }]}>
-              Ce lien de réinitialisation est invalide ou a expiré. Veuillez refaire une demande depuis l'écran de connexion.
+              Ce lien de réinitialisation est invalide ou a expiré. Veuillez refaire une demande depuis l&apos;écran de connexion.
             </Text>
           </View>
 

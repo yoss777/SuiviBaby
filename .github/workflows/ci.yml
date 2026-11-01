@@ -23,9 +23,8 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
-      - name: ESLint (informational — does not fail CI yet)
+      - name: ESLint (errors fail CI; warnings are reported)
         run: npm run lint
-        continue-on-error: true
 
       - name: Run app tests
         run: npm test -- --ci --coverage

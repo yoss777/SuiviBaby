@@ -39,7 +39,7 @@ export function EventScreen({ childId, currentUserId }: EventScreenProps) {
   if (!permissions.hasAccess) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text>Vous n'avez pas accès à cet enfant</Text>
+        <Text>Vous n&apos;avez pas accès à cet enfant</Text>
       </View>
     );
   }
@@ -130,7 +130,7 @@ export function ManageAccessScreen({
   if (!myPermissions.canManageAccess) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text>Vous n'avez pas la permission de gérer les accès</Text>
+        <Text>Vous n&apos;avez pas la permission de gérer les accès</Text>
       </View>
     );
   }

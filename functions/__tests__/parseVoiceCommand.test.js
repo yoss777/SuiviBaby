@@ -1,3 +1,4 @@
+/* global describe, it, expect, jest, beforeEach, afterAll */
 const { mockFirestore } = require("./setup");
 
 const mockCreate = jest.fn();

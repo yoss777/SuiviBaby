@@ -320,7 +320,7 @@ export default function HiddenChildrenScreen() {
               <Text
                 style={[styles.modalTitle, { color: nc.textStrong }]}
               >
-                Restaurer l'affichage
+                Restaurer l&apos;affichage
               </Text>
               <Text
                 style={[

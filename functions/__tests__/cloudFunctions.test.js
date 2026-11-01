@@ -1,3 +1,4 @@
+/* global Buffer, describe, it, expect, jest, beforeEach, afterEach, afterAll */
 const { mockFirestore, mockDocRef, mockGet, mockAdd, mockQueryChain, mockRunTransaction } = require("./setup");
 const fns = require("../index");
 const auth = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, admin: false } }, data, app: true });

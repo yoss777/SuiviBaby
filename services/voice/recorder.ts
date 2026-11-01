@@ -79,8 +79,13 @@ export class VoicePermissionDeniedError extends Error {
   }
 }
 
+// AudioModule is a typed native-module object, not an ES module namespace:
+// going through a typed local keeps TypeScript's check on `AudioRecorder`
+// while avoiding eslint-plugin-import's import/namespace false positive.
+const audioModule: typeof AudioModule = AudioModule;
+
 function isAudioAvailable(): boolean {
-  return !!AudioModule?.AudioRecorder;
+  return !!audioModule?.AudioRecorder;
 }
 
 /**
@@ -142,7 +147,7 @@ export async function startRecording(): Promise<void> {
       playsInSilentMode: true,
     });
 
-    const recorder = new AudioModule.AudioRecorder(
+    const recorder = new audioModule.AudioRecorder(
       platformRecordingOptions(RecordingPresets.HIGH_QUALITY)
     );
     try {

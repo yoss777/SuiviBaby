@@ -37,6 +37,9 @@ import {
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
 } from "expo-audio";
+
+// Typed local alias (AudioModule is a native-module object, not an ES namespace).
+const AudioRecorderMock = (AudioModule as unknown as { AudioRecorder: jest.Mock }).AudioRecorder;
 import { Platform } from "react-native";
 import { captureServiceError } from "@/utils/errorReporting";
 import {
@@ -71,7 +74,7 @@ describe("recorder (expo-audio)", () => {
   it("starts with the platform-flattened HIGH_QUALITY preset", async () => {
     await startRecording();
     expect(setAudioModeAsync).toHaveBeenCalledWith({ allowsRecording: true, playsInSilentMode: true });
-    const options = (AudioModule.AudioRecorder as unknown as jest.Mock).mock.calls[0][0];
+    const options = AudioRecorderMock.mock.calls[0][0];
     expect(options).toEqual(expect.objectContaining({ extension: ".m4a", sampleRate: 44100 }));
     // Nested per-platform blocks must be merged, not passed through.
     expect(options).not.toHaveProperty("ios");
@@ -88,7 +91,7 @@ describe("recorder (expo-audio)", () => {
     Object.defineProperty(Platform, "OS", { get: () => "android", configurable: true });
     try {
       await startRecording();
-      const options = (AudioModule.AudioRecorder as unknown as jest.Mock).mock.calls[0][0];
+      const options = AudioRecorderMock.mock.calls[0][0];
       expect(options).toEqual(expect.objectContaining({ outputFormat: "mpeg4", audioEncoder: "aac" }));
       expect(options).not.toHaveProperty("audioQuality");
     } finally {
@@ -99,7 +102,7 @@ describe("recorder (expo-audio)", () => {
   it("ignores a second start while recording", async () => {
     await startRecording();
     await startRecording();
-    expect(AudioModule.AudioRecorder).toHaveBeenCalledTimes(1);
+    expect(AudioRecorderMock).toHaveBeenCalledTimes(1);
   });
 
   it("T3.2 — re-checks permission at record time and asks when possible", async () => {
@@ -116,7 +119,7 @@ describe("recorder (expo-audio)", () => {
     expect(err).toBeInstanceOf(VoicePermissionDeniedError);
     expect(err.canAskAgain).toBe(false);
     expect(requestRecordingPermissionsAsync).not.toHaveBeenCalled();
-    expect(AudioModule.AudioRecorder).not.toHaveBeenCalled();
+    expect(AudioRecorderMock).not.toHaveBeenCalled();
   });
 
   it("releases the native recorder if preparing fails, and can start again", async () => {
@@ -147,6 +150,6 @@ describe("recorder (expo-audio)", () => {
       expect.any(Error), expect.objectContaining({ operation: "stopRecording" }),
     );
     await startRecording();
-    expect(AudioModule.AudioRecorder).toHaveBeenCalledTimes(2);
+    expect(AudioRecorderMock).toHaveBeenCalledTimes(2);
   });
 });

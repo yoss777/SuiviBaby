@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname */
 // Runs the real LLM parser (functions/lib/voiceParse.js) over the eval corpus
 // and stores raw sanitized answers + latency + token usage. Grading happens in
 // llm.eval.ts, which maps the answers with the client mapper.

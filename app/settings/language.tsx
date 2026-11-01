@@ -216,9 +216,9 @@ export default function LanguageScreen() {
               color={Colors[colorScheme].tint}
             />
             <ThemedText style={styles.infoText}>
-              Le changement de langue sera appliqu\u00e9 imm\u00e9diatement \u00e0 l'ensemble
-              de l'application. Les donn\u00e9es m\u00e9dicales resteront dans leur langue
-              d'origine.
+              Le changement de langue sera appliqu\u00e9 imm\u00e9diatement \u00e0 l&apos;ensemble
+              de l&apos;application. Les donn\u00e9es m\u00e9dicales resteront dans leur langue
+              d&apos;origine.
             </ThemedText>
           </View>
         </ScrollView>

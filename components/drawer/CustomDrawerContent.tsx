@@ -458,7 +458,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
               Êtes-vous sûr de vouloir masquer{" "}
               <Text style={styles.childNameInModal}>{childToHide?.name}</Text>{" "}
               de votre liste de suivi ?{"\n\n"}
-              L'enfant restera accessible aux autres parents et vous pourrez le
+              L&apos;enfant restera accessible aux autres parents et vous pourrez le
               réafficher à tout moment depuis les paramètres.
             </Text>
 

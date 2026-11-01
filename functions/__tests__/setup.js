@@ -1,3 +1,4 @@
+/* global jest */
 const mockGet = jest.fn();
 const mockSet = jest.fn();
 const mockAdd = jest.fn();

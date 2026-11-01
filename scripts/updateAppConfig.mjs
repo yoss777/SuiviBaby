@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global Buffer */
 // scripts/updateAppConfig.mjs
 // Met à jour app_config/latest_version dans Firestore à partir de app.json.
 //

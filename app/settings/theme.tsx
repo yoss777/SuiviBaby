@@ -220,7 +220,7 @@ export default function ThemeScreen() {
               color={Colors[colorScheme].tint}
             />
             <ThemedText style={styles.infoText}>
-              Le mode automatique adapte l'apparence de l'application en
+              Le mode automatique adapte l&apos;apparence de l&apos;application en
               fonction des param\u00e8tres de votre appareil pour un confort optimal
               \u00e0 toute heure.
             </ThemedText>

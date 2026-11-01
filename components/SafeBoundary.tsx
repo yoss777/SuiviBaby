@@ -69,7 +69,7 @@ export class SafeBoundary extends React.Component<
       <View style={styles.container} accessibilityRole="alert">
         <Text style={styles.title}>Affichage indisponible</Text>
         <Text style={styles.message}>
-          Cet élément n'a pas pu s'afficher. L'équipe a été notifiée.
+          Cet élément n&apos;a pas pu s&apos;afficher. L&apos;équipe a été notifiée.
         </Text>
         {__DEV__ && (
           <Text style={styles.errorText}>{error.message}</Text>

@@ -2,18 +2,18 @@
    Le code n'est jamais affiché ni injecté dans le DOM. */
 (function () {
   "use strict";
-  var params = new URLSearchParams(window.location.search);
-  var oobCode = params.get("oobCode");
-  var mode = params.get("mode");
+  let params = new URLSearchParams(window.location.search);
+  let oobCode = params.get("oobCode");
+  let mode = params.get("mode");
 
-  var loading = document.getElementById("loading");
-  var manual = document.getElementById("manual");
-  var error = document.getElementById("error");
-  var openApp = document.getElementById("openApp");
+  let loading = document.getElementById("loading");
+  let manual = document.getElementById("manual");
+  let error = document.getElementById("error");
+  let openApp = document.getElementById("openApp");
 
   // Codes Firebase : jetons opaques URL-safe. On refuse tout le reste.
-  var validCode = oobCode && /^[A-Za-z0-9_-]{10,512}$/.test(oobCode);
-  var validMode = !mode || mode === "resetPassword";
+  let validCode = oobCode && /^[A-Za-z0-9_-]{10,512}$/.test(oobCode);
+  let validMode = !mode || mode === "resetPassword";
 
   if (!validCode || !validMode) {
     loading.hidden = true;
@@ -22,7 +22,7 @@
     return;
   }
 
-  var deepLink = "suivibaby://reset-password?oobCode=" + encodeURIComponent(oobCode);
+  let deepLink = "suivibaby://reset-password?oobCode=" + encodeURIComponent(oobCode);
   window.location.href = deepLink;
 
   setTimeout(function () {

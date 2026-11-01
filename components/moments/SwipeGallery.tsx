@@ -748,7 +748,7 @@ export const SwipeGallery = ({
                 {imageErrorIds[item.photo.id] && (
                   <View style={styles.imageErrorOverlay}>
                     <Text style={styles.imageErrorText}>
-                      Impossible d'afficher l'image
+                      Impossible d&apos;afficher l&apos;image
                     </Text>
                   </View>
                 )}
@@ -1026,7 +1026,7 @@ export const SwipeGallery = ({
               >
                 <FontAwesome6 name="heart" size={16} color="#ef4444" solid />
                 <Text style={styles.doubleTapHintText}>
-                  Double-tapez une photo pour l'aimer
+                  Double-tapez une photo pour l&apos;aimer
                 </Text>
               </Animated.View>
             )}

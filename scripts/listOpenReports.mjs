@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global Buffer */
 // scripts/listOpenReports.mjs
 // Lists all open content reports from Firestore.
 // Usage: node scripts/listOpenReports.mjs
