@@ -41,6 +41,33 @@ async function deletePhotoEverywhere(path) {
   );
 }
 
+/** Storage path of a photo ref: legacy full download URL or plain `children/...` path. */
+function photoRefToPath(ref) {
+  if (typeof ref !== "string" || !ref) return null;
+  if (ref.startsWith("https://firebasestorage.googleapis.com/")) {
+    const match = ref.match(/\/o\/([^?]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+  return ref.startsWith("children/") ? ref : null;
+}
+
+/**
+ * Deletes the photos a user attached to events (including events of children
+ * shared with other parents, which survive the account deletion).
+ */
+async function deleteUserEventPhotos(db, uid) {
+  const snap = await db.collection("events").where("userId", "==", uid).get();
+  const paths = new Set();
+  snap.docs.forEach((doc) => {
+    (doc.data().photos || []).forEach((ref) => {
+      const path = photoRefToPath(ref);
+      if (path) paths.add(path);
+    });
+  });
+  await Promise.all([...paths].map((path) => deletePhotoEverywhere(path).catch(() => null)));
+  return paths.size;
+}
+
 /** Deletes every file under children/{childId}/ in every photo bucket; returns the count. */
 async function deleteChildPhotosEverywhere(childId) {
   let deleted = 0;
@@ -146,6 +173,14 @@ async function deleteDocsByFieldBatched(db, collectionName, field, value) {
  * Supprime toutes les données d'un enfant (événements, social, partage, legacy).
  */
 async function deleteChildDataBatched(db, childId) {
+  // Storage photos first: once the events are gone nothing references them.
+  // Best-effort so a Storage outage never blocks the account/child deletion.
+  try {
+    await deleteChildPhotosEverywhere(childId);
+  } catch (error) {
+    console.warn(`deleteChildDataBatched: photo cleanup failed for ${childId}:`, error?.message ?? error);
+  }
+
   // Main + social
   await Promise.all([
     deleteDocsByFieldBatched(db, "events", "childId", childId),
@@ -2599,6 +2634,12 @@ exports.deleteUserAccount = onCall(
     }
 
     // 3. Supprimer les données créées par l'utilisateur (par userId)
+    // Photos the user attached to events of shared children (best-effort).
+    try {
+      await deleteUserEventPhotos(db, targetUid);
+    } catch (e) {
+      console.warn(`photo cleanup failed for ${targetUid}`, e.message);
+    }
     await Promise.all([
       deleteDocsByFieldBatched(db, "events", "userId", targetUid),
       deleteDocsByFieldBatched(db, "eventLikes", "userId", targetUid),
@@ -3767,7 +3808,13 @@ exports.processScheduledDeletions = onSchedule(
           await accessDoc.ref.delete();
         }
 
-        // 2. Supprimer les données utilisateur
+        // 2. Supprimer les données utilisateur (photos d'abord, tant que les
+        //    événements qui les référencent existent encore)
+        try {
+          await deleteUserEventPhotos(db, uid);
+        } catch (e) {
+          console.warn(`processScheduledDeletions: photo cleanup failed for ${uid}`, e.message);
+        }
         await Promise.all([
           deleteDocsByFieldBatched(db, "events", "userId", uid),
           deleteDocsByFieldBatched(db, "eventLikes", "userId", uid),
@@ -4893,12 +4940,7 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
         legacyExtras.map((coll) => deleteDocsByFieldBatched(db, coll, "childId", childId))
       );
 
-      // Delete storage files
-      try {
-        await deleteChildPhotosEverywhere(childId);
-      } catch (storageErr) {
-        console.warn(`purgeDeletedChildren: storage cleanup failed for ${childId}:`, storageErr.message);
-      }
+      // Storage files are wiped by deleteChildDataBatched above.
 
       // Delete the child document itself
       await db.doc(`children/${childId}`).delete();

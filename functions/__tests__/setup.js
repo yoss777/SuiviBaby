@@ -13,6 +13,12 @@ const mockRunTransaction = jest.fn(async (fn) =>
 const mockQueryChain = { where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), orderBy: jest.fn().mockReturnThis(), get: mockGet };
 const mockDocRef = { get: mockGet, set: mockSet, update: jest.fn(), delete: jest.fn(), id: "mock-doc-id" };
 const mockCollectionRef = { add: mockAdd, doc: jest.fn(() => mockDocRef), where: mockQueryChain.where, limit: mockQueryChain.limit, orderBy: mockQueryChain.orderBy, get: mockGet };
+// Cloud Storage: every bucket shares one mock; getFiles returns one file per call.
+const mockBucket = {
+  getFiles: jest.fn(async () => [[{ delete: jest.fn(() => Promise.resolve()) }]]),
+  file: jest.fn(() => ({ delete: jest.fn(() => Promise.resolve()), copy: jest.fn(() => Promise.resolve()) })),
+};
+const mockStorage = { bucket: jest.fn(() => mockBucket) };
 const mockFirestore = { doc: jest.fn(() => mockDocRef), collection: jest.fn(() => mockCollectionRef), batch: jest.fn(() => ({ set: jest.fn(), update: jest.fn(), delete: jest.fn(), commit: jest.fn(() => Promise.resolve()) })), runTransaction: mockRunTransaction };
 jest.mock("firebase-admin", () => {
   const MockTimestamp = jest.fn((seconds, nanoseconds = 0) => ({
@@ -41,6 +47,7 @@ jest.mock("firebase-admin", () => {
     initializeApp: jest.fn(),
     firestore: jest.fn(() => mockFirestore),
     auth: jest.fn(() => ({ getUser: jest.fn(), deleteUser: jest.fn(), setCustomUserClaims: jest.fn() })),
+    storage: jest.fn(() => mockStorage),
   };
   a.firestore.FieldValue = {
     serverTimestamp: jest.fn(() => "TS"),
@@ -57,4 +64,4 @@ jest.mock("firebase-functions/v2/firestore", () => ({ onDocumentCreated: jest.fn
 jest.mock("expo-server-sdk", () => ({ Expo: jest.fn(() => ({ sendPushNotificationsAsync: jest.fn(() => Promise.resolve([])), chunkPushNotifications: jest.fn((m) => [m]), isExpoPushToken: jest.fn(() => true) })) }));
 jest.mock("resend", () => ({ Resend: jest.fn(() => ({ emails: { send: jest.fn(() => Promise.resolve({ id: "eid" })) } })) }));
 jest.mock("../emailTemplates", () => ({ buildRecapHTML: jest.fn(() => "<html></html>") }));
-module.exports = { mockFirestore, mockDocRef, mockCollectionRef, mockGet, mockSet, mockAdd, mockQueryChain, mockRunTransaction };
+module.exports = { mockFirestore, mockDocRef, mockCollectionRef, mockGet, mockSet, mockAdd, mockQueryChain, mockRunTransaction, mockStorage, mockBucket };

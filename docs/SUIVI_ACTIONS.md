@@ -14,7 +14,7 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 1.1 | Bucket `samaye-53723-photos-eu` (europe-west1), règles, 7 fonctions, copie de 52 photos, 28 URL réécrites | 2026-11-01 | Claude | — | `node scripts/migratePhotosToEu.mjs` → « 0 à copier », « 0 URL à réécrire » | ✅ |
 | 1.2 | Fusionner `feat/voice-bar-refonte` sur `main` | 2026-11-04 | Yoss | Tests de la barre vocale validés sur téléphone | CI verte sur `main` (lint, tsc, tests) | ✅ 2026-11-01 |
 | 1.3 | Version **1.0.6** — iOS : `npm run release:ios` (cloud + envoi automatique App Store Connect) ; Android : `npm run release:android` (`.aab` local, ≥ 8 Go libres) | 2026-11-08 | Claude | 1.2 | Build EAS « finished » sur iOS et Android | ✅ iOS build 28 (cloud, envoyé sur App Store Connect) ; Android 9 (`.aab` local, signé `samaye-key`) |
-| 1.4 | Publier la 1.0.6 : iOS → soumettre à la revue depuis App Store Connect (build 28 déjà envoyé) ; Android → importer `build-1793566274714.aab` dans Play Console | 2026-11-15 | Yoss | 1.3 | Version 1.0.6 « disponible » dans les deux consoles | 🔄 |
+| 1.4 | Publier la 1.0.6 : iOS → soumettre à la revue depuis App Store Connect (build 28 déjà envoyé) ; Android → importer `build-1793566274714.aab` dans Play Console | 2026-11-15 | Yoss | 1.3 | Version 1.0.6 « disponible » dans les deux consoles | 🔄 iOS build 28 dans TestFlight (à soumettre à la revue) ; Android en cours d'analyse par Google (2026-11-02) |
 | 1.5 | Contrôle hebdomadaire de la synchronisation US → UE | chaque lundi jusqu'à 1.9 | Claude ou Yoss | 1.1 | `node scripts/migratePhotosToEu.mjs` doit afficher « 0 à copier » ; sinon relancer avec `--apply` et vérifier les journaux de `mirrorLegacyPhotoUpload` | 🔄 |
 | 1.6 | Imposer la mise à jour : `app_config` → `minVersion: "1.0.6"` | 2026-12-15 | Yoss | 1.4 + ≥ 90 % des utilisateurs actifs en 1.0.6 (consoles des stores) | Une app en 1.0.5 affiche l'écran « mise à jour obligatoire » | ⏳ |
 | 1.7 | Politique de confidentialité site + app : « photos stockées dans l'UE (europe-west1) », retirer le transfert US pour les photos | 2026-12-15 | Claude | 1.6 | `public/privacy.html` et `app/settings/privacy.tsx` ne mentionnent plus us-central1 | ⏳ |
@@ -44,8 +44,8 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 
 | # | Action | Échéance | Qui | Prérequis | Contrôle | Statut |
 |---|---|---|---|---|---|---|
-| 4.1 | Vérifier que la suppression d'un **compte** efface les photos de ses enfants dans Storage (les deux buckets pendant la migration) | 2026-11-15 | Claude | — | Test sur un compte de test : plus aucun objet sous `children/{id}/` | ⏳ |
-| 4.2 | Enfants refusés par les règles (`Qd3RJtmHuafDAiUKgqQA`, `obhMXGzb8ooEcXdCbKID`) : vérifier s'il s'agit de suppressions en cours ou d'accès orphelins à nettoyer | 2026-11-15 | Claude | — | Plus d'avertissement « permission denied » au démarrage | ⏳ |
+| 4.1 | Vérifier que la suppression d'un **compte** efface les photos de ses enfants dans Storage (les deux buckets pendant la migration) | 2026-11-15 | Claude | — | Test sur un compte de test : plus aucun objet sous `children/{id}/` | 🔄 bug confirmé et corrigé dans le code (2026-11-02) ; à déployer |
+| 4.2 | Enfants refusés par les règles (`Qd3RJtmHuafDAiUKgqQA`, `obhMXGzb8ooEcXdCbKID`) : vérifier s'il s'agit de suppressions en cours ou d'accès orphelins à nettoyer | 2026-11-15 | Claude | — | Plus d'avertissement « permission denied » au démarrage | ✅ 2026-11-02 : enfants inexistants, 2 entrées `user_child_access` orphelines supprimées (sauvegardées) |
 | 4.3 | Désinstaller la version de développement `com.yoss7.samaye` du Samsung une fois les tests finis | fin des tests | Yoss | — | Seule l'app du Store reste installée | ⏳ |
 | 4.4 | Vérifier le workflow « Deploy Cloud Functions » réparé : lancement manuel (`gh workflow run deploy-functions.yml`) — redéploie les 35 fonctions à l'identique | 2026-11-04 | Claude (feu vert Yoss) | — | Exécution verte dans GitHub Actions | ⏳ |
 
@@ -60,3 +60,4 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 2026-11-01 | Version 1.0.6 : builds EAS de production lancés — Android `0b6308c0-1c82-4bf4-bfde-cbbeddcf32cd`, iOS `058dd2a8-25e3-4580-9aab-806929c3331a` |
 | 2026-11-01 | Builds 27/8 en échec (yarn.lock parasite, fichier Firebase iOS absent, cache d'autolinking local, apostrophes de la CSP dans firebase.json) — corrigés ; iOS 1.0.6 build 28 terminé (`af2a1170-4111-4b04-b175-5bcc3a4141ff`) |
 | 2026-11-01 | iOS build 28 envoyé sur App Store Connect (`eas submit`) ; Android `.aab` versionCode 9 compilé en local, signature vérifiée (SHA-1 AB:65:66:08…) |
+| 2026-11-02 | 1.0.6 : iOS build 28 dans TestFlight ; Android en analyse chez Google. Contrôle photos US→UE : 0 à copier. 4.2 réglé ; 4.1 corrigé dans le code |

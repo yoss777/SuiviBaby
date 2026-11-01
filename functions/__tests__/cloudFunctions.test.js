@@ -1860,3 +1860,29 @@ describe("generateAiInsight quota", () => {
     await expect(fns.generateAiInsight(auth("u1", {}))).rejects.toThrow("Limite quotidienne");
   });
 });
+
+describe("photo deletion when a child is purged", () => {
+  const { mockStorage, mockBucket } = require("./setup");
+
+  it("wipes children/{childId}/ in both the EU and the legacy US bucket", async () => {
+    const requestRef = { id: "req1", delete: jest.fn(() => Promise.resolve()), update: jest.fn() };
+    mockFirestore.collection.mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      get: jest.fn()
+        // expired pending requests
+        .mockResolvedValueOnce(snap())
+        // soft-deleted children past retention
+        .mockResolvedValueOnce({ docs: [{ id: "req1", ref: requestRef, data: () => ({ childId: "c1" }) }], empty: false, size: 1 })
+        .mockResolvedValue(snap()),
+    });
+    mockFirestore.doc.mockReturnValue({ get: jest.fn().mockResolvedValue(no()), delete: jest.fn(() => Promise.resolve()), set: jest.fn() });
+
+    await fns.purgeDeletedChildren();
+
+    const buckets = mockStorage.bucket.mock.calls.map((call) => call[0]);
+    expect(buckets).toEqual(expect.arrayContaining(["samaye-53723-photos-eu", "samaye-53723.firebasestorage.app"]));
+    expect(mockBucket.getFiles).toHaveBeenCalledWith({ prefix: "children/c1/" });
+  });
+});
