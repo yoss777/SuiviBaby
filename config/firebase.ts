@@ -14,7 +14,7 @@ const firebaseConfig = {
   authDomain: "samaye-53723.firebaseapp.com",
   databaseURL: "https://samaye-53723-default-rtdb.firebaseio.com",
   projectId: "samaye-53723",
-  storageBucket: "samaye-53723.firebasestorage.app",
+  storageBucket: "samaye-53723-photos-eu",
   messagingSenderId: "222899144223",
   appId: "1:222899144223:web:bdec5b5754d15fc987372a",
   measurementId: "G-SN50WE00WE"

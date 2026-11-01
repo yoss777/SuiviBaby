@@ -10,7 +10,7 @@
 // unavailable. Best-effort: a 404 is treated as success.
 
 import { auth } from "@/config/firebase";
-import { FIREBASE_STORAGE_BUCKET, extractStoragePath } from "@/utils/photoStorage";
+import { PHOTO_STORAGE_BUCKETS, extractStoragePath } from "@/utils/photoStorage";
 import {
   obtenirEvenement,
   supprimerEvenement,
@@ -33,20 +33,24 @@ export async function deletePhotoFromStorage(photoRef: string): Promise<void> {
     }
     const token = await user.getIdToken();
 
-    const deleteUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodedPath}`;
-    const response = await fetch(deleteUrl, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    // During the bucket migration a copy may exist in both buckets.
+    for (const bucket of PHOTO_STORAGE_BUCKETS) {
+      const deleteUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}`;
+      const response = await fetch(deleteUrl, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    if (response.ok || response.status === 404) {
-      console.log("[DELETE_PHOTO] Photo supprimée avec succès");
-    } else {
-      console.error(
-        "[DELETE_PHOTO] Erreur:",
-        response.status,
-        await response.text(),
-      );
+      if (response.ok || response.status === 404) {
+        console.log("[DELETE_PHOTO] Photo supprimée de", bucket);
+      } else {
+        console.error(
+          "[DELETE_PHOTO] Erreur:",
+          bucket,
+          response.status,
+          await response.text(),
+        );
+      }
     }
   } catch (error) {
     console.error("[DELETE_PHOTO] Erreur:", error);

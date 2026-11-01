@@ -1,6 +1,14 @@
 import { auth } from "@/config/firebase";
 
-export const FIREBASE_STORAGE_BUCKET = "samaye-53723.firebasestorage.app";
+/**
+ * Photos live in the EU bucket (europe-west1). The legacy US bucket is kept,
+ * and mirrored server-side, until older app versions are gone
+ * (docs/MIGRATION_PHOTOS_EU.md).
+ */
+export const FIREBASE_STORAGE_BUCKET = "samaye-53723-photos-eu";
+export const LEGACY_STORAGE_BUCKET = "samaye-53723.firebasestorage.app";
+/** Every bucket a photo copy may live in during the migration. */
+export const PHOTO_STORAGE_BUCKETS = [FIREBASE_STORAGE_BUCKET, LEGACY_STORAGE_BUCKET];
 
 const TOKEN_CACHE_TTL_MS = 50 * 60 * 1000;
 
@@ -40,6 +48,17 @@ export function extractStoragePath(photoRef: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * Legacy photo refs were stored as full download URLs that embed the US bucket
+ * name. Turn them into storage paths so they resolve against the current bucket.
+ */
+export function normalizePhotoRef(photoRef: string): string {
+  if (photoRef && isFirebaseStorageDownloadUrl(photoRef)) {
+    return extractStoragePath(photoRef) ?? photoRef;
+  }
+  return photoRef;
 }
 
 export function buildStorageMediaUrl(filePath: string): string {
@@ -85,6 +104,7 @@ export async function getAuthenticatedPhotoSource(
   cacheKey?: string;
 } | null> {
   if (!photoRef) return null;
+  photoRef = normalizePhotoRef(photoRef);
 
   if (!isStoragePathPhotoRef(photoRef)) {
     return { uri: photoRef, cacheKey: photoRef };

@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "samaye-53723"
+  },
+  "targets": {
+    "samaye-53723": {
+      "storage": {
+        "legacy": [
+          "samaye-53723.firebasestorage.app"
+        ],
+        "photos-eu": [
+          "samaye-53723-photos-eu"
+        ]
+      }
+    }
   }
 }

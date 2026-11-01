@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onObjectFinalized, onObjectDeleted } = require("firebase-functions/v2/storage");
 
 const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
@@ -23,6 +24,33 @@ const expo = new Expo();
 const FREE_DAILY_VOICE_LIMIT = 3;
 const FREE_TOTAL_PDF_EXPORTS = 1;
 const FREE_MAX_SHARED_USERS = 2;
+
+// Photos migrate from the US default bucket to an EU bucket
+// (docs/MIGRATION_PHOTOS_EU.md). Until the legacy bucket is deleted, every
+// deletion must hit both so no copy survives in either region.
+const PHOTOS_BUCKET = "samaye-53723-photos-eu";
+const LEGACY_PHOTOS_BUCKET = "samaye-53723.firebasestorage.app";
+const PHOTO_BUCKETS = [PHOTOS_BUCKET, LEGACY_PHOTOS_BUCKET];
+
+/** Deletes one photo path from every photo bucket. Missing objects are ignored. */
+async function deletePhotoEverywhere(path) {
+  await Promise.all(
+    PHOTO_BUCKETS.map((name) =>
+      admin.storage().bucket(name).file(path).delete({ ignoreNotFound: true }),
+    ),
+  );
+}
+
+/** Deletes every file under children/{childId}/ in every photo bucket; returns the count. */
+async function deleteChildPhotosEverywhere(childId) {
+  let deleted = 0;
+  for (const name of PHOTO_BUCKETS) {
+    const [files] = await admin.storage().bucket(name).getFiles({ prefix: `children/${childId}/` });
+    await Promise.all(files.map((file) => file.delete().catch(() => null)));
+    deleted += files.length;
+  }
+  return deleted;
+}
 
 // ============================================
 // SHARED HELPERS
@@ -1731,7 +1759,7 @@ exports.resolveReport = onCall(
     // Execute action
     if (action === "remove_photo" && reportData.photoPath) {
       try {
-        await admin.storage().bucket().file(reportData.photoPath).delete();
+        await deletePhotoEverywhere(reportData.photoPath);
         console.log(`resolveReport: deleted photo ${reportData.photoPath}`);
       } catch (error) {
         console.warn(`resolveReport: could not delete photo ${reportData.photoPath}`, error.message);
@@ -4397,11 +4425,9 @@ async function softDeleteChild(db, childId, requestId, requestedBy) {
   // (cancelChildDeletion) ne peut plus restaurer les photos — mais
   // c'est cohérent avec la politique "soft-delete = données illisibles".
   try {
-    const bucket = admin.storage().bucket();
-    const [files] = await bucket.getFiles({ prefix: `children/${childId}/` });
-    if (files.length > 0) {
-      await Promise.all(files.map((file) => file.delete().catch(() => null)));
-      console.log(`softDeleteChild: wiped ${files.length} storage files for ${childId}`);
+    const wiped = await deleteChildPhotosEverywhere(childId);
+    if (wiped > 0) {
+      console.log(`softDeleteChild: wiped ${wiped} storage files for ${childId}`);
     }
   } catch (storageErr) {
     // Best-effort. Si échec, la purge planifiée à 30j rattrapera. On
@@ -4869,11 +4895,7 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
 
       // Delete storage files
       try {
-        const bucket = admin.storage().bucket();
-        const [files] = await bucket.getFiles({ prefix: `children/${childId}/` });
-        if (files.length > 0) {
-          await Promise.all(files.map((file) => file.delete().catch(() => null)));
-        }
+        await deleteChildPhotosEverywhere(childId);
       } catch (storageErr) {
         console.warn(`purgeDeletedChildren: storage cleanup failed for ${childId}:`, storageErr.message);
       }
@@ -4917,3 +4939,39 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
     console.log(`purgeDeletedChildren: cleaned=${cleaned} stale requests`);
   }
 });
+
+// ============================================================================
+// PHOTO BUCKET MIGRATION — mirror the legacy US bucket into the EU bucket
+// ============================================================================
+// Older app versions still read/write the legacy bucket. Until they are gone
+// (docs/MIGRATION_PHOTOS_EU.md), every upload there is copied to the EU bucket
+// and every deletion there is applied to the EU copy. Storage triggers must run
+// in the bucket's region (us-central1); they only move bytes into the EU.
+
+function isChildPhotoObject(name) {
+  return typeof name === "string" && name.startsWith("children/");
+}
+
+exports.mirrorLegacyPhotoUpload = onObjectFinalized(
+  { bucket: LEGACY_PHOTOS_BUCKET, region: "us-central1" },
+  async (event) => {
+    const name = event.data.name;
+    if (!isChildPhotoObject(name)) return;
+    await admin
+      .storage()
+      .bucket(LEGACY_PHOTOS_BUCKET)
+      .file(name)
+      .copy(admin.storage().bucket(PHOTOS_BUCKET).file(name));
+    console.log(`mirrorLegacyPhotoUpload: copied ${name} to ${PHOTOS_BUCKET}`);
+  },
+);
+
+exports.mirrorLegacyPhotoDelete = onObjectDeleted(
+  { bucket: LEGACY_PHOTOS_BUCKET, region: "us-central1" },
+  async (event) => {
+    const name = event.data.name;
+    if (!isChildPhotoObject(name)) return;
+    await admin.storage().bucket(PHOTOS_BUCKET).file(name).delete({ ignoreNotFound: true });
+    console.log(`mirrorLegacyPhotoDelete: removed ${name} from ${PHOTOS_BUCKET}`);
+  },
+);

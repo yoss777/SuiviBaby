@@ -54,45 +54,46 @@ bucket US tant qu'elles ne sont pas réécrites.
 
 ## Étapes
 
-Chaque étape est réversible jusqu'à l'étape 8.
+Choix de transition (2026-11-01) : **miroir côté serveur** plutôt qu'une lecture
+de secours dans l'app (une photo absente aurait déclenché une erreur puis un
+second chargement à chaque affichage).
 
-1. **Créer le bucket** `samaye-53723-photos-eu` (console Firebase, `europe-west1`,
-   accès uniforme), puis déployer les règles sur les deux buckets :
-   `firebase.json` → `"storage": [{ "target": "main", "rules": "storage.rules" },
-   { "target": "eu", "rules": "storage.rules" }]` et
-   `firebase target:apply storage eu samaye-53723-photos-eu`.
-2. **Cloud Functions compatibles avec les deux buckets** : remplacer les trois
-   `admin.storage().bucket()` par une boucle sur `[PHOTOS_BUCKET, LEGACY_BUCKET]`
-   pour la suppression (un enfant supprimé doit être effacé partout). Déployer.
-3. **App : lecture tolérante** (`utils/photoStorage.ts`) : normaliser toute URL
-   complète en chemin, lire depuis le nouveau bucket, et si l'objet n'y est pas
-   encore (404), relire depuis l'ancien. L'upload et la suppression passent par
-   la constante du nouveau bucket. Build EAS et publication.
-4. **Copier les objets** : `gcloud storage rsync -r
-   gs://samaye-53723.firebasestorage.app gs://samaye-53723-photos-eu`, puis
-   comparer le nombre et la taille des objets.
-5. **Réécrire les 28 URL en chemins** : script Admin SDK
-   (`scripts/migratePhotoRefs.mjs`) avec `--dry-run` par défaut, idempotent
-   (n'agit que sur les valeurs qui commencent par `https://firebasestorage…`),
-   journalise chaque document modifié.
-6. **Période de transition** : tant que d'anciennes versions de l'app tournent,
-   elles écrivent encore dans le bucket US. Relancer le `rsync` (étape 4) chaque
-   jour, ou ajouter une fonction déclenchée à l'upload qui recopie l'objet. Fin
-   de transition : quand la version minimale imposée (`AppUpdateManager`) est la
-   version de l'étape 3.
-7. **Bascule finale** : dernier `rsync`, puis retirer la lecture de secours vers
-   l'ancien bucket (nouveau build).
-8. **Mettre à jour les textes** : politique de confidentialité du site
-   (`public/privacy.html`) et de l'app (`app/settings/privacy.tsx`) : « photos
-   stockées dans l'UE (europe-west1) » ; supprimer la mention du transfert vers
-   les États-Unis pour les photos.
-9. **Supprimer l'ancien bucket** après 30 jours sans lecture (vérifier les
-   journaux d'accès), en profitant pour purger les objets orphelins.
+1. ✅ **Bucket créé** : `samaye-53723-photos-eu`, `europe-west1`, rattaché à
+   Firebase. Règles : `firebase.json` → `storage` en deux cibles (`legacy`,
+   `photos-eu`) sur le même `storage.rules`, cibles dans `.firebaserc`.
+   ⏳ Déploiement : `firebase deploy --only storage` (accepter l'autorisation
+   « cross-service » des règles vers Firestore).
+2. ✅ **Cloud Functions** (code prêt) : les suppressions (modération, suppression
+   d'un enfant, purge planifiée) agissent sur les deux buckets
+   (`deletePhotoEverywhere`, `deleteChildPhotosEverywhere`). Miroir :
+   `mirrorLegacyPhotoUpload` / `mirrorLegacyPhotoDelete` (déclencheurs sur le
+   bucket US, région `us-central1` imposée) recopient chaque ajout et chaque
+   suppression du bucket US vers le bucket UE.
+   ⏳ Déploiement des fonctions.
+3. ✅ **App** (code prêt) : lecture et écriture dans le bucket UE
+   (`config/firebase.ts`, `utils/photoStorage.ts`) ; les anciennes URL complètes
+   sont converties en chemins à l'affichage (`normalizePhotoRef`) ; suppression
+   dans les deux buckets (`photoCleanup.ts`). Tests : `__tests__/photoStorage.test.ts`.
+   ⏳ Build EAS et publication, **après** les étapes 4 et 5.
+4. ⏳ **Copier les objets** : `node scripts/migratePhotosToEu.mjs --apply`
+   (simulation sans `--apply` : 52 objets à copier le 2026-11-01).
+5. ⏳ **Réécrire les 28 URL en chemins** : même script. Compatible avec les
+   anciennes versions de l'app, qui savent lire les chemins.
+6. **Transition** : le miroir couvre les anciennes versions (elles écrivent et
+   suppriment encore aux États-Unis). Fin quand la version minimale imposée
+   (`AppUpdateManager`) est celle de l'étape 3.
+7. **Bascule finale** : relancer le script (vérification), retirer
+   `LEGACY_STORAGE_BUCKET` des suppressions côté app et fonctions, supprimer les
+   deux fonctions miroir.
+8. **Textes** : politiques de confidentialité du site et de l'app, « photos
+   stockées dans l'UE (europe-west1) » ; retirer le transfert US pour les photos.
+9. **Supprimer l'ancien bucket** après 30 jours sans accès, en purgeant les
+   objets orphelins.
 
 ## Retour arrière
 
-Jusqu'à l'étape 7, l'ancien bucket reste complet et la lecture de secours le
-couvre : il suffit de remettre l'ancienne constante de bucket. Après l'étape 9,
+Jusqu'à l'étape 7, l'ancien bucket reste complet (le miroir ne copie que vers
+l'UE) : il suffit de remettre l'ancienne constante de bucket dans l'app. Après l'étape 9,
 plus de retour possible : ne supprimer qu'après vérification.
 
 ## Coût

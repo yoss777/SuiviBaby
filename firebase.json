@@ -10,9 +10,10 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "storage": {
-    "rules": "storage.rules"
-  },
+  "storage": [
+    { "target": "legacy", "rules": "storage.rules" },
+    { "target": "photos-eu", "rules": "storage.rules" }
+  ],
   "hosting": {
     "public": "public",
     "ignore": ["firebase.json", "**/node_modules/**"],

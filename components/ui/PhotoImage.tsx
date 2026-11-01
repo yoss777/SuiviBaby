@@ -2,6 +2,7 @@ import {
   getAuthenticatedPhotoSource,
   isLocalPhotoUri,
   isStoragePathPhotoRef,
+  normalizePhotoRef,
 } from "@/utils/photoStorage";
 import { Image as ExpoImage, ImageProps as ExpoImageProps, ImageSource } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
@@ -33,13 +34,15 @@ function getCachedSource(photoRef: string): ImageSource | null {
 }
 
 export function PhotoImage({
-  photoRef,
+  photoRef: rawPhotoRef,
   style,
   onError,
   resizeMode,
   fadeDuration,
   ...props
 }: PhotoImageProps) {
+  // Legacy full URLs point at the US bucket: resolve them as storage paths.
+  const photoRef = rawPhotoRef ? normalizePhotoRef(rawPhotoRef) : rawPhotoRef;
   const immediateSource = useMemo<ImageSource | null>(() => {
     if (!photoRef) return null;
     if (isStoragePathPhotoRef(photoRef)) {
