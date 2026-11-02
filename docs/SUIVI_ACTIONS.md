@@ -48,7 +48,7 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 4.1 | Vérifier que la suppression d'un **compte** efface les photos de ses enfants dans Storage (les deux buckets pendant la migration) | 2026-11-15 | Claude | — | Test sur un compte de test : plus aucun objet sous `children/{id}/` | ✅ corrigé et déployé le 2026-11-02 (`6ca9e03`) ; test sur un compte de test encore à faire |
 | 4.2 | Enfants refusés par les règles (`Qd3RJtmHuafDAiUKgqQA`, `obhMXGzb8ooEcXdCbKID`) : vérifier s'il s'agit de suppressions en cours ou d'accès orphelins à nettoyer | 2026-11-15 | Claude | — | Plus d'avertissement « permission denied » au démarrage | ✅ 2026-11-02 : enfants inexistants, 2 entrées `user_child_access` orphelines supprimées (sauvegardées) |
 | 4.3 | Désinstaller la version de développement `com.yoss7.samaye` du Samsung une fois les tests finis | fin des tests | Yoss | — | Seule l'app du Store reste installée | ⏳ |
-| 4.4 | Vérifier le workflow « Deploy Cloud Functions » réparé : lancement manuel (`gh workflow run deploy-functions.yml`) — redéploie les 35 fonctions à l'identique | 2026-11-04 | Claude (feu vert Yoss) | — | Exécution verte dans GitHub Actions | 🔄 2026-11-02 : 28 fonctions déployées par le CI ; les 7 planifiées en échec (403 Cloud Scheduler) → déployées à la main. Rôle `roles/cloudscheduler.admin` ajouté à `github-deploy@` le 2026-11-02 ; reste une exécution verte de bout en bout |
+| 4.4 | Vérifier le workflow « Deploy Cloud Functions » réparé : lancement manuel (`gh workflow run deploy-functions.yml`) — redéploie les 35 fonctions à l'identique | 2026-11-04 | Claude (feu vert Yoss) | — | Exécution verte dans GitHub Actions | ✅ 2026-11-02 : exécution verte de bout en bout au push `1a41925` (run 41400889208) — 35/35 fonctions mises à jour, dont les 7 planifiées |
 | 4.5 | Passer `cleanupExpiredShareCodes` et `purgeDeletedChildren` en `europe-west1` (aujourd'hui `us-central1`, sans région explicite) pour que « fonctions serveur dans l'UE » soit exact | 2026-11-15 | Claude (feu vert Yoss) | — | `firebase functions:list` : plus aucune fonction en us-central1 hors miroirs (supprimés en 1.8) | ⏳ |
 
 ## 4 bis. Sécurité — audit ECC du 2026-11-02
@@ -208,7 +208,11 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
   nettoyage, sans impact utilisateur).
 - **Réponse attendue.** « D9 : go ».
 
-### D10 — Vérification finale du workflow de déploiement (→ action 4.4)
+### D10 — Vérification finale du workflow de déploiement (→ action 4.4) ✅ réglé
+
+- **Résolu le 2026-11-02.** Le push `1a41925` a déclenché le workflow, vert de
+  bout en bout (35/35 fonctions, Cloud Scheduler compris). Plus rien à lancer.
+
 
 - **Constat.** Le CI déploie désormais les fonctions ; le rôle Cloud Scheduler
   manquant a été ajouté. Il reste à constater une exécution verte de bout en bout.
