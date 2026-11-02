@@ -20,6 +20,8 @@
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key>
     <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>CFBundleShortVersionString</key>
     <string>1.0.7</string>
     <key>CFBundleSignature</key>
@@ -47,7 +49,7 @@
       </dict>
     </array>
     <key>CFBundleVersion</key>
-    <string>28</string>
+    <string>29</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
     <key>LSRequiresIPhoneOS</key>
