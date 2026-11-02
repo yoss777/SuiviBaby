@@ -16,10 +16,10 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 1.3 | Version **1.0.6** — iOS : `npm run release:ios` (cloud + envoi automatique App Store Connect) ; Android : `npm run release:android` (`.aab` local, ≥ 8 Go libres) | 2026-11-08 | Claude | 1.2 | Build EAS « finished » sur iOS et Android | ✅ iOS build 28 (cloud, envoyé sur App Store Connect) ; Android 9 (`.aab` local, signé `samaye-key`) |
 | 1.4 | Publier la 1.0.6 : iOS → soumettre à la revue depuis App Store Connect (build 28 déjà envoyé) ; Android → importer `build-1793566274714.aab` dans Play Console | 2026-11-15 | Yoss | 1.3 | Version 1.0.6 « disponible » dans les deux consoles | ✅ 2026-11-02 : 1.0.6 en ligne sur l'App Store et Google Play |
 | 1.5 | Contrôle hebdomadaire de la synchronisation US → UE | chaque lundi jusqu'à 1.9 | Claude ou Yoss | 1.1 | `node scripts/migratePhotosToEu.mjs` doit afficher « 0 à copier » ; sinon relancer avec `--apply` et vérifier les journaux de `mirrorLegacyPhotoUpload` | 🔄 |
-| 1.6 | Imposer la mise à jour : `MIN_VERSION=1.0.6 node scripts/updateAppConfig.mjs` (`app_config/latest_version`) | 2026-12-15 | Yoss | 1.4 + ≥ 90 % des utilisateurs actifs en 1.0.6 (consoles des stores) | Une app en 1.0.5 affiche l'écran « mise à jour obligatoire » | ⏳ |
-| 1.7 | Politique de confidentialité site + app : « photos stockées dans l'UE (europe-west1) », retirer le transfert US pour les photos | 2026-12-15 | Claude | 1.6 | `public/privacy.html` et `app/settings/privacy.tsx` ne mentionnent plus us-central1 | ⏳ |
-| 1.8 | Bascule finale : retirer `LEGACY_STORAGE_BUCKET` (app + fonctions), supprimer `mirrorLegacyPhotoUpload` / `mirrorLegacyPhotoDelete` | 2027-01-15 | Claude | 1.6 depuis 30 jours ; 1.5 à « 0 à copier » | Plus aucun accès au bucket US dans les journaux depuis 30 jours | ⏳ |
-| 1.9 | Supprimer le bucket `samaye-53723.firebasestorage.app` (purger les ~12 orphelins avant) | 2027-01-31 | Yoss (action irréversible) | 1.8 | Bucket absent de la console ; photos visibles dans l'app | ⏳ |
+| 1.6 | Imposer la mise à jour : `MIN_VERSION=1.0.6 node scripts/updateAppConfig.mjs` (`app_config/latest_version`) | 2026-12-15 | Yoss | 1.4 | Une app en 1.0.5 affiche l'écran « mise à jour obligatoire » | ✅ 2026-11-02 (avancé, décision Yoss) : minVersion 1.0.6 ; vérifier l'écran sur un appareil en 1.0.5 |
+| 1.7 | Politique de confidentialité site + app : « photos stockées dans l'UE (europe-west1) », retirer le transfert US pour les photos | 2026-11-09 | Claude | 1.6 | `public/privacy.html` et `app/settings/privacy.tsx` ne mentionnent plus us-central1 | ⏳ |
+| 1.8 | Bascule finale : retirer `LEGACY_STORAGE_BUCKET` (app + fonctions), supprimer `mirrorLegacyPhotoUpload` / `mirrorLegacyPhotoDelete` | 2026-12-02 | Claude | 1.6 depuis 30 jours ; 1.5 à « 0 à copier » | Plus aucun accès au bucket US dans les journaux depuis 30 jours | ⏳ |
+| 1.9 | Supprimer le bucket `samaye-53723.firebasestorage.app` (purger les ~12 orphelins avant) | 2026-12-16 | Yoss (action irréversible) | 1.8 | Bucket absent de la console ; photos visibles dans l'app | ⏳ |
 
 ## 2. Site web et mentions légales
 
@@ -63,3 +63,4 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 2026-11-02 | 1.0.6 : iOS build 28 dans TestFlight ; Android en analyse chez Google. Contrôle photos US→UE : 0 à copier. 4.2 réglé ; 4.1 corrigé dans le code |
 | 2026-11-02 | **1.0.6 en ligne sur les deux stores.** Début de la période de transition (1.6 : imposer la 1.0.6 vers le 2026-12-15, selon l'adoption) |
 | 2026-11-02 | `app_config/latest_version` : latestVersion 1.0.6 (invitation à mettre à jour), minVersion 1.0.0, lien App Store corrigé (id6773195663) |
+| 2026-11-02 | **Mise à jour forcée** : minVersion 1.0.6 (écrit à 05:42 UTC). Calendrier avancé : 1.7 au 9 nov., 1.8 au 2 déc., 1.9 au 16 déc. |
