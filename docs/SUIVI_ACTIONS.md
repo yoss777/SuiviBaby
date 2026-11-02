@@ -28,7 +28,8 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 2.1 | Téléphone de TESFA dans les mentions légales | 2026-11-08 | Yoss (fournir) / Claude (intégrer) | — | Plus de `[À COMPLÉTER]` téléphone dans `public/mentions-legales.html` | ✅ 2026-11-02 (+33 7 67 55 48 80) |
 | 2.2 | **Adhérer à un médiateur de la consommation** (obligatoire pour vendre des abonnements) puis l'indiquer dans CGU + mentions | 2026-11-30 | Yoss | — | Nom, adresse, site du médiateur dans `public/terms.html` et `public/mentions-legales.html` | ⏳ |
 | 2.3 | Compléter les 4 cases jaunes de `privacy.html` : DPO (→ D2), sauvegardes (→ D1), région Sentry (→ D3), non-entraînement des IA (→ D5) | 2026-11-30 | Yoss (décisions) / Claude (intégration) | Section 5 | `grep -c 'class="todo"' public/*.html` → 0 | ⏳ |
-| 2.4 | Déployer le site : `firebase deploy --only hosting` | 2026-11-30 | Claude | 2.1 à 2.3 | https://suivibaby.com affiche la nouvelle version ; pages légales sans surlignage jaune | ⏳ |
+| 2.4 | Déployer le site : `firebase deploy --only hosting` | 2026-11-30 | Claude | 2.1 à 2.3, 2.5 | https://suivibaby.com affiche la nouvelle version ; pages légales sans surlignage jaune | ⏳ |
+| 2.5 | Refaire les captures du site avec la **1.0.6** (barre vocale + `+` en bas) : accueil, timeline, écran vocal (proposition à confirmer) ; thème clair, profil **Léo** sans photo ; remplacer `public/assets/img/screens/*.webp` ; aligner la démo animée du hero sur la barre livrée (phase 3 de `VOICE_BAR_REFONTE.md`) | 2026-11-15 | Claude (captures sur le Samsung branché, app du Store 1.0.6) | 1.4 | Les images du site montrent la barre vocale ; démo du hero cohérente avec l'app | ⏳ |
 
 ## 3. Abonnements et RevenueCat
 
