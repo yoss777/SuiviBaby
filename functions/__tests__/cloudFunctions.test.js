@@ -1886,3 +1886,69 @@ describe("photo deletion when a child is purged", () => {
     expect(mockBucket.getFiles).toHaveBeenCalledWith({ prefix: "children/c1/" });
   });
 });
+
+describe("transferAndLeave (ownership transfer, server-only since rules S1)", () => {
+  const setupDocs = (docs) => {
+    mockFirestore.doc.mockImplementation((p) => ({
+      path: p,
+      get: jest.fn().mockResolvedValue(p in docs ? (docs[p] ? doc(docs[p]) : no()) : no()),
+      set: jest.fn().mockResolvedValue(),
+      delete: jest.fn().mockResolvedValue(),
+    }));
+  };
+  const captureBatch = () => {
+    const b = { set: jest.fn(), update: jest.fn(), delete: jest.fn(), commit: jest.fn(() => Promise.resolve()) };
+    mockFirestore.batch.mockReturnValue(b);
+    return b;
+  };
+  const defaultBatch = mockFirestore.batch.getMockImplementation();
+  afterEach(() => { mockFirestore.batch.mockReset(); mockFirestore.batch.mockImplementation(defaultBatch); });
+
+  it("requires authentication", async () => {
+    await expect(
+      fns.transferAndLeave({ auth: null, data: { childId: "c1", newOwnerId: "u2" } })
+    ).rejects.toThrow("Authentification");
+  });
+
+  it("rejects transferring to oneself", async () => {
+    await expect(
+      fns.transferAndLeave(auth("u1", { childId: "c1", newOwnerId: "u1" }))
+    ).rejects.toThrow("à vous-même");
+  });
+
+  it("rejects a caller who is only admin", async () => {
+    setupDocs({ "children/c1/access/u1": { role: "admin" }, "children/c1/access/u2": { role: "viewer" } });
+    const b = captureBatch();
+    await expect(
+      fns.transferAndLeave(auth("u1", { childId: "c1", newOwnerId: "u2" }))
+    ).rejects.toThrow("Seul un propriétaire");
+    expect(b.commit).not.toHaveBeenCalled();
+  });
+
+  it("rejects a new owner without access to the child", async () => {
+    setupDocs({ "children/c1/access/u1": { role: "owner" } });
+    const b = captureBatch();
+    await expect(
+      fns.transferAndLeave(auth("u1", { childId: "c1", newOwnerId: "u2" }))
+    ).rejects.toThrow("n'a pas accès");
+    expect(b.commit).not.toHaveBeenCalled();
+  });
+
+  it("promotes the new owner, moves ownerId and removes the former owner atomically", async () => {
+    setupDocs({ "children/c1/access/u1": { role: "owner" }, "children/c1/access/u2": { role: "contributor" } });
+    const b = captureBatch();
+    const res = await fns.transferAndLeave(auth("u1", { childId: "c1", newOwnerId: "u2" }));
+
+    expect(res).toEqual({ success: true });
+    expect(b.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "children/c1/access/u2" }),
+      expect.objectContaining({ role: "owner", grantedBy: "u1" })
+    );
+    expect(b.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "children/c1" }),
+      { ownerId: "u2" }
+    );
+    expect(b.delete).toHaveBeenCalledWith(expect.objectContaining({ path: "children/c1/access/u1" }));
+    expect(b.commit).toHaveBeenCalledTimes(1);
+  });
+});

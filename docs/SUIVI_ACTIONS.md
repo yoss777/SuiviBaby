@@ -51,6 +51,19 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 4.4 | Vérifier le workflow « Deploy Cloud Functions » réparé : lancement manuel (`gh workflow run deploy-functions.yml`) — redéploie les 35 fonctions à l'identique | 2026-11-04 | Claude (feu vert Yoss) | — | Exécution verte dans GitHub Actions | 🔄 2026-11-02 : 28 fonctions déployées par le CI ; les 7 planifiées en échec (403 Cloud Scheduler) → déployées à la main. Rôle `roles/cloudscheduler.admin` ajouté à `github-deploy@` le 2026-11-02 ; reste une exécution verte de bout en bout |
 | 4.5 | Passer `cleanupExpiredShareCodes` et `purgeDeletedChildren` en `europe-west1` (aujourd'hui `us-central1`, sans région explicite) pour que « fonctions serveur dans l'UE » soit exact | 2026-11-15 | Claude (feu vert Yoss) | — | `firebase functions:list` : plus aucune fonction en us-central1 hors miroirs (supprimés en 1.8) | ⏳ |
 
+## 4 bis. Sécurité — audit ECC du 2026-11-02
+
+| # | Action | Échéance | Qui | Dépend de | Contrôle | Statut |
+|---|---|---|---|---|---|---|
+| S1 | **Critique.** Règles Firestore : un membre pouvait se déclarer `owner` via une invitation ou un code de partage, réécrire une invitation (`childId`), un admin pouvait changer `ownerId` | immédiat | Claude | — | Tests de règles (`npm run test:rules`) : 126/126 | ✅ corrigé et déployé le 2026-11-02 |
+| S2 | Contrôler en production qu'aucun accès `owner` ne diffère de `children.ownerId` (exploitation passée de S1) | 2026-11-04 | Claude (Yoss : `gcloud auth application-default login`) | S1 | Script d'audit en lecture seule : 0 suspect | ✅ 2026-11-02 : 6 accès owner, 1 seul ≠ `ownerId` (`LWZFCdDkjLymDv7I1E9O`, co-propriétaire ajouté par l'owner lui-même) → légitime |
+| S3 | `functions/accessControl.js` (`canWriteEvents`) : le rôle n'est pas vérifié comme dans les règles | 2026-11-15 | Claude | — | Test unitaire viewer refusé | ⏳ |
+| S4 | Activer App Check côté fonctions (`APPCHECK_ENFORCE=true`) après vérification des versions installées | 2026-11-30 | Claude (feu vert Yoss) | 1.0.6 majoritaire | Appels sans jeton refusés, aucune hausse d'erreurs Sentry | ⏳ |
+| S5 | Invitations par e-mail : exiger un e-mail vérifié (`email_verified`) dans `acceptInvitationCF` et les règles | 2026-11-30 | Claude | décision sur la vérification à l'inscription | Compte non vérifié refusé | ⏳ |
+| S6 | Limitation de débit des fonctions non transactionnelle (contournable en parallèle) | 2026-11-30 | Claude | — | Test de charge simple | ⏳ |
+| S7 | Lancer les tests de règles dans le CI (`ci.yml`, émulateur) | 2026-11-15 | Claude | — | Job CI vert, échoue si une règle régresse | ⏳ |
+| S8 | Premium coupé dès l'annulation au lieu de `expiresAt` ; ordre des événements du webhook RevenueCat non vérifié (`functions/index.js`) | 2026-11-15 | Claude | — | Tests du webhook | ⏳ |
+
 ## 5. Décisions en attente (questions détaillées)
 
 > Chaque question indique le contexte, ce qui a été **vérifié** dans le projet

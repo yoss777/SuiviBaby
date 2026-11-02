@@ -44,30 +44,9 @@ service cloud.firestore {
         getAccessDoc(childId).data.role == 'admin';
     }
 
-    function invitationDoc(invitationId) {
-      return get(/databases/$(database)/documents/shareInvitations/$(invitationId));
-    }
-
-    function shareCodeDoc(code) {
-      return get(/databases/$(database)/documents/shareCodes/$(code));
-    }
-
-    function isValidInvitation(childId) {
-      return request.resource.data.invitationId is string &&
-        exists(/databases/$(database)/documents/shareInvitations/$(request.resource.data.invitationId)) &&
-        invitationDoc(request.resource.data.invitationId).data.childId == childId &&
-        invitationDoc(request.resource.data.invitationId).data.status in ['pending', 'accepted'] &&
-        (invitationDoc(request.resource.data.invitationId).data.invitedUserId == request.auth.uid ||
-         invitationDoc(request.resource.data.invitationId).data.invitedEmail == request.auth.token.email);
-    }
-
-    function isValidShareCode(childId) {
-      return request.resource.data.invitationId is string &&
-        exists(/databases/$(database)/documents/shareCodes/$(request.resource.data.invitationId)) &&
-        shareCodeDoc(request.resource.data.invitationId).data.childId == childId &&
-        shareCodeDoc(request.resource.data.invitationId).data.used == true &&
-        shareCodeDoc(request.resource.data.invitationId).data.usedBy == request.auth.uid;
-    }
+    // Access is granted to invitees only by Cloud Functions (acceptInvitationCF,
+    // redeemShareCodeCF, Admin SDK). Clients can no longer write their own access
+    // from an invitation or a share code (privilege escalation, 2026-11-02 audit).
 
     // Vérifie si l'utilisateur peut écrire des events (owner ou admin)
     function canWriteEvents(childId) {
@@ -117,10 +96,12 @@ service cloud.firestore {
         request.resource.data.name.size() > 0 &&
         request.resource.data.birthDate is timestamp;
 
-      // Modification : owner ou admin uniquement, bloqué si soft-deleted
+      // Modification : owner ou admin uniquement, bloqué si soft-deleted.
+      // ownerId et deletedAt ne changent que côté serveur (transfert de
+      // propriété, suppression) : sinon un admin pourrait se déclarer owner.
       allow update: if isNotDeleted() && (
         isOwner(childId) || isAdmin(childId)
-      );
+      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'deletedAt']);
 
       // Suppression : uniquement via CF (purge RGPD) — plus de delete direct client
       allow delete: if false;
@@ -139,15 +120,10 @@ service cloud.firestore {
 
         // Création/Modification :
         // 1. Owner peut tout gérer
-        // 2. Bootstrap owner (via ownerId dans document enfant)
-        // 3. Auto-migration (si dans parentIds, peut créer son propre accès)
-        // 4. Invitation/ShareCode valide
+        // 2. Bootstrap owner (via ownerId dans document enfant, à la création)
+        // Les invités reçoivent leur accès via Cloud Functions uniquement.
         allow create, update: if (isOwner(childId) ||
-          (uid == request.auth.uid && isChildOwner(childId) && request.resource.data.role == 'owner') ||
-          (uid == request.auth.uid && isValidInvitation(childId) &&
-            request.resource.data.grantedBy == invitationDoc(request.resource.data.invitationId).data.inviterId) ||
-          (uid == request.auth.uid && isValidShareCode(childId) &&
-            request.resource.data.grantedBy == shareCodeDoc(request.resource.data.invitationId).data.createdBy)
+          (uid == request.auth.uid && isChildOwner(childId) && request.resource.data.role == 'owner')
           ) &&
           // Vérifications de cohérence
           request.resource.data.role in ['owner', 'admin', 'contributor', 'viewer'] &&
@@ -281,11 +257,18 @@ service cloud.firestore {
          isAdmin(request.resource.data.childId) ||
          isChildOwner(request.resource.data.childId));
 
-      // Mise à jour : l'invité peut accepter/refuser
+      // Mise à jour : l'invité peut seulement REFUSER une invitation en attente
+      // (l'acceptation passe par acceptInvitationCF). Aucun autre champ
+      // (childId, inviterId…) n'est modifiable.
+      // TODO(M2) : exiger email_verified ici et en lecture, une fois la
+      // vérification d'e-mail imposée à l'inscription.
       allow update: if isSignedIn() && (
         request.auth.uid == resource.data.invitedUserId ||
         request.auth.token.email == resource.data.invitedEmail
-      );
+      ) &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status == 'rejected' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
     }
 
     match /shareCodes/{code} {
@@ -333,7 +316,8 @@ service cloud.firestore {
         request.query.limit <= 200 &&
         resource.data.userId == request.auth.uid;
 
-      // Création/Mise à jour : owner ou via invitation/code pour soi
+      // Création/Mise à jour : owner uniquement (les invités sont ajoutés par
+      // acceptInvitationCF / redeemShareCodeCF côté serveur)
       // Note: isChildOwner regarde le doc enfant (ownerId), isOwner regarde
       // l'access doc. Le bootstrap (création de l'enfant + premier access) doit
       // utiliser isChildOwner sinon on a une race condition : au moment où on
@@ -342,10 +326,7 @@ service cloud.firestore {
         request.resource.data.userId is string &&
         request.resource.data.childId is string &&
         (isChildOwner(request.resource.data.childId) ||
-          isOwner(request.resource.data.childId) ||
-          (request.auth.uid == request.resource.data.userId &&
-            (isValidInvitation(request.resource.data.childId) ||
-             isValidShareCode(request.resource.data.childId))));
+          isOwner(request.resource.data.childId));
 
       // Suppression : owner ou l'utilisateur lui-même
       allow delete: if isSignedIn() &&

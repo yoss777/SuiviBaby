@@ -226,6 +226,30 @@ describe("children collection", () => {
       updateDoc(doc(db, "children", CHILD_ID), { name: "Hacked" })
     );
   });
+
+  test("admin cannot take ownership by rewriting ownerId", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
+        userId: BOB_UID,
+        role: "admin",
+        grantedBy: ALICE_UID,
+      });
+    });
+    const db = authedFirestore(BOB_UID);
+    await assertFails(
+      updateDoc(doc(db, "children", CHILD_ID), { ownerId: BOB_UID })
+    );
+    await assertSucceeds(
+      updateDoc(doc(db, "children", CHILD_ID), { name: "Renamed by admin" })
+    );
+  });
+
+  test("owner cannot soft-delete the child client-side", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(
+      updateDoc(doc(db, "children", CHILD_ID), { deletedAt: now })
+    );
+  });
 });
 
 // ===========================================================================
@@ -330,6 +354,53 @@ describe("children/access subcollection", () => {
         userId: CHARLIE_UID,
         role: "owner",
         grantedBy: CHARLIE_UID,
+      })
+    );
+  });
+
+  test("viewer cannot promote itself to owner", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertFails(
+      updateDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
+        role: "owner",
+      })
+    );
+  });
+
+  test("invitee cannot grant itself access from an invitation", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "shareInvitations", "inviteX"), {
+        inviterId: ALICE_UID,
+        invitedUserId: CHARLIE_UID,
+        invitedEmail: "charlie@test.com",
+        childId: CHILD_ID,
+        status: "pending",
+        role: "viewer",
+      });
+    });
+    const db = authedFirestore(CHARLIE_UID, "charlie@test.com");
+    await assertFails(
+      setDoc(doc(db, "children", CHILD_ID, "access", CHARLIE_UID), {
+        userId: CHARLIE_UID,
+        role: "owner",
+        grantedBy: ALICE_UID,
+        invitationId: "inviteX",
+      })
+    );
+    await assertFails(
+      setDoc(doc(db, "user_child_access", `${CHARLIE_UID}_${CHILD_ID}`), {
+        userId: CHARLIE_UID,
+        childId: CHILD_ID,
+        role: "owner",
+      })
+    );
+  });
+
+  test("owner can change a member's role", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertSucceeds(
+      updateDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
+        role: "contributor",
       })
     );
   });
@@ -522,9 +593,9 @@ describe("reports collection", () => {
     });
   });
 
-  test("authorized user can create a report for accessible child content", async () => {
+  test("reports cannot be created client-side, even with access (submitContentReportCF only)", async () => {
     const db = authedFirestore(BOB_UID);
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(db, "reports", "report2"), {
         reporterUserId: BOB_UID,
         childId: CHILD_ID,
@@ -996,11 +1067,44 @@ describe("shareInvitations collection", () => {
     await assertFails(getDoc(doc(db, "shareInvitations", "invite1")));
   });
 
-  test("invited user can update invitation (accept/refuse)", async () => {
+  test("invited user can reject a pending invitation", async () => {
     const db = authedFirestore(BOB_UID, "bob@test.com");
     await assertSucceeds(
       updateDoc(doc(db, "shareInvitations", "invite1"), {
+        status: "rejected",
+      })
+    );
+  });
+
+  test("invitee matched by email can reject", async () => {
+    const db = authedFirestore(CHARLIE_UID, "bob@test.com");
+    await assertSucceeds(
+      updateDoc(doc(db, "shareInvitations", "invite1"), {
+        status: "rejected",
+      })
+    );
+  });
+
+  test("invited user cannot accept client-side (CF only)", async () => {
+    const db = authedFirestore(BOB_UID, "bob@test.com");
+    await assertFails(
+      updateDoc(doc(db, "shareInvitations", "invite1"), {
         status: "accepted",
+      })
+    );
+  });
+
+  test("invited user cannot rewrite childId or role", async () => {
+    const db = authedFirestore(BOB_UID, "bob@test.com");
+    await assertFails(
+      updateDoc(doc(db, "shareInvitations", "invite1"), {
+        status: "rejected",
+        childId: CHILD2_ID,
+      })
+    );
+    await assertFails(
+      updateDoc(doc(db, "shareInvitations", "invite1"), {
+        role: "owner",
       })
     );
   });
