@@ -396,6 +396,72 @@ describe("children/access subcollection", () => {
     );
   });
 
+  test("a co-owner cannot demote or remove the primary owner (children.ownerId)", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", CHILD_ID, "access", CHARLIE_UID), {
+        userId: CHARLIE_UID,
+        role: "owner",
+        grantedBy: ALICE_UID,
+      });
+    });
+    const db = authedFirestore(CHARLIE_UID);
+    await assertFails(
+      updateDoc(doc(db, "children", CHILD_ID, "access", ALICE_UID), { role: "viewer" })
+    );
+    await assertFails(deleteDoc(doc(db, "children", CHILD_ID, "access", ALICE_UID)));
+    // …but the primary owner can still manage the co-owner
+    await assertSucceeds(
+      updateDoc(doc(authedFirestore(ALICE_UID), "children", CHILD_ID, "access", CHARLIE_UID), { role: "admin" })
+    );
+  });
+
+  test("ownerId bootstrap only applies on create, not to restore a demoted access", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", "childBoot"), { name: "B", birthDate: now, ownerId: CHARLIE_UID });
+      await setDoc(doc(db, "children", "childBoot", "access", CHARLIE_UID), {
+        userId: CHARLIE_UID,
+        role: "viewer",
+        grantedBy: ALICE_UID,
+      });
+    });
+    const db = authedFirestore(CHARLIE_UID);
+    await assertFails(
+      updateDoc(doc(db, "children", "childBoot", "access", CHARLIE_UID), { role: "owner" })
+    );
+  });
+
+  test("user_child_access: owner bootstrap works, forged or overwritten entries are denied", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", "childNew"), { name: "N", birthDate: now, ownerId: CHARLIE_UID });
+      await setDoc(doc(db, "user_child_access", `${BOB_UID}_${CHILD_ID}`), {
+        userId: BOB_UID,
+        childId: CHILD_ID,
+      });
+    });
+    const db = authedFirestore(CHARLIE_UID);
+    // legit: index entry for own new child
+    await assertSucceeds(
+      setDoc(doc(db, "user_child_access", `${CHARLIE_UID}_childNew`), {
+        userId: CHARLIE_UID,
+        childId: "childNew",
+      })
+    );
+    // overwrite Bob's entry for child1 with Charlie's own child
+    await assertFails(
+      setDoc(doc(db, "user_child_access", `${BOB_UID}_${CHILD_ID}`), {
+        userId: BOB_UID,
+        childId: "childNew",
+      })
+    );
+    // forge an entry for Bob on Charlie's child (not owner-granted access path)
+    await assertFails(
+      setDoc(doc(db, "user_child_access", `${BOB_UID}_childNew`), {
+        userId: BOB_UID,
+        childId: "childNew",
+      })
+    );
+  });
+
   test("owner can change a member's role", async () => {
     const db = authedFirestore(ALICE_UID);
     await assertSucceeds(
@@ -1067,6 +1133,18 @@ describe("shareInvitations collection", () => {
     await assertFails(getDoc(doc(db, "shareInvitations", "invite1")));
   });
 
+  test("owner cannot create an invitation directly (createShareInvitation only)", async () => {
+    const db = authedFirestore(ALICE_UID, "alice@test.com");
+    await assertFails(
+      setDoc(doc(db, "shareInvitations", "invite2"), {
+        inviterId: ALICE_UID,
+        invitedEmail: "dave@test.com",
+        childId: CHILD_ID,
+        status: "pending",
+      })
+    );
+  });
+
   test("invited user can reject a pending invitation", async () => {
     const db = authedFirestore(BOB_UID, "bob@test.com");
     await assertSucceeds(
@@ -1174,6 +1252,46 @@ describe("shareCodes collection", () => {
   test("non-creator non-owner cannot delete share code", async () => {
     const db = authedFirestore(BOB_UID);
     await assertFails(deleteDoc(doc(db, "shareCodes", "CODE123")));
+  });
+
+  test("a viewer of the child cannot read an active share code", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
+        userId: BOB_UID,
+        role: "viewer",
+        grantedBy: ALICE_UID,
+      });
+    });
+    const db = authedFirestore(BOB_UID);
+    await assertFails(getDoc(doc(db, "shareCodes", "CODE123")));
+  });
+
+  const codeData = (overrides: Record<string, unknown> = {}) => ({
+    code: "NEWCODE",
+    childId: CHILD_ID,
+    childName: "Baby",
+    createdBy: ALICE_UID,
+    createdAt: now,
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+    used: false,
+    ...overrides,
+  });
+
+  test("owner can create a valid 7-day share code", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertSucceeds(setDoc(doc(db, "shareCodes", "NEWCODE"), codeData()));
+  });
+
+  test("share code must be unused, match its id and expire within 8 days", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(setDoc(doc(db, "shareCodes", "NEWCODE"), codeData({ used: true })));
+    await assertFails(setDoc(doc(db, "shareCodes", "NEWCODE"), codeData({ code: "OTHER" })));
+    await assertFails(
+      setDoc(
+        doc(db, "shareCodes", "NEWCODE"),
+        codeData({ expiresAt: Timestamp.fromDate(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)) })
+      )
+    );
   });
 });
 

@@ -1935,7 +1935,7 @@ describe("transferAndLeave (ownership transfer, server-only since rules S1)", ()
   });
 
   it("rejects a new owner without access to the child", async () => {
-    setupDocs({ "children/c1/access/u1": { role: "owner" } });
+    setupDocs({ "children/c1": { ownerId: "u1" }, "children/c1/access/u1": { role: "owner" } });
     const b = captureBatch();
     await expect(
       fns.transferAndLeave(auth("u1", { childId: "c1", newOwnerId: "u2" }))
@@ -1943,8 +1943,17 @@ describe("transferAndLeave (ownership transfer, server-only since rules S1)", ()
     expect(b.commit).not.toHaveBeenCalled();
   });
 
+  it("refuses to transfer a child pending deletion", async () => {
+    setupDocs({ "children/c1": { ownerId: "u1", deletedAt: "2026-11-01" }, "children/c1/access/u1": { role: "owner" }, "children/c1/access/u2": { role: "admin" } });
+    const b = captureBatch();
+    await expect(
+      fns.transferAndLeave(auth("u1", { childId: "c1", newOwnerId: "u2" }))
+    ).rejects.toThrow("en cours de suppression");
+    expect(b.commit).not.toHaveBeenCalled();
+  });
+
   it("promotes the new owner, moves ownerId and removes the former owner atomically", async () => {
-    setupDocs({ "children/c1/access/u1": { role: "owner" }, "children/c1/access/u2": { role: "contributor" } });
+    setupDocs({ "children/c1": { ownerId: "u1" }, "children/c1/access/u1": { role: "owner" }, "children/c1/access/u2": { role: "contributor" } });
     const b = captureBatch();
     const res = await fns.transferAndLeave(auth("u1", { childId: "c1", newOwnerId: "u2" }));
 
@@ -2040,5 +2049,70 @@ describe("revenueCatWebhook — out-of-order events (S8)", () => {
       expect.objectContaining({ status: "active", lastEventTimestampMs: now }),
       { merge: true }
     );
+  });
+});
+
+describe("revenueCatWebhook — event types (review follow-up)", () => {
+  const originalSecret = process.env.REVENUECAT_WEBHOOK_SECRET;
+  afterEach(() => {
+    if (originalSecret === undefined) delete process.env.REVENUECAT_WEBHOOK_SECRET;
+    else process.env.REVENUECAT_WEBHOOK_SECRET = originalSecret;
+  });
+  const run = async (event) => {
+    process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p?.startsWith("revenuecat_webhook_events/")) return { create: jest.fn().mockResolvedValue(undefined) };
+      return { path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    mockFirestore.collection.mockImplementation(() => ({ add: jest.fn().mockResolvedValue({ id: "log" }) }));
+    const txSet = jest.fn();
+    mockRunTransaction.mockReset();
+    mockRunTransaction.mockImplementation(async (fn) => fn({ get: jest.fn().mockResolvedValue(no()), set: txSet, update: jest.fn() }));
+    const r = { status: jest.fn().mockReturnThis(), send: jest.fn() };
+    await fns.revenueCatWebhook({ method: "POST", headers: { authorization: "Bearer topsecret" }, body: { event: { app_user_id: "u1", event_timestamp_ms: Date.now(), ...event } } }, r);
+    return { txSet, r };
+  };
+
+  it("ignores unknown event types instead of rewriting the subscription", async () => {
+    const { txSet, r } = await run({ id: "t1", type: "SUBSCRIPTION_PAUSED", entitlement_ids: [] });
+    expect(txSet).not.toHaveBeenCalled();
+    expect(r.send).toHaveBeenCalledWith(expect.stringMatching(/ignored/));
+  });
+
+  it("revokes access immediately on a refund (CANCELLATION / CUSTOMER_SUPPORT)", async () => {
+    const { txSet } = await run({ id: "t2", type: "CANCELLATION", cancel_reason: "CUSTOMER_SUPPORT", entitlement_ids: ["premium"], expiration_at_ms: Date.now() + 20 * 86400000 });
+    expect(txSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "expired", tier: "free" }), { merge: true });
+  });
+
+  it("keeps a plain unsubscribe as cancelled until expiry", async () => {
+    const { txSet } = await run({ id: "t3", type: "CANCELLATION", cancel_reason: "UNSUBSCRIBE", entitlement_ids: ["premium"], expiration_at_ms: Date.now() + 20 * 86400000 });
+    expect(txSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "cancelled", tier: "premium" }), { merge: true });
+  });
+
+  it("uses the grace period end as expiresAt on BILLING_ISSUE", async () => {
+    const grace = Date.now() + 16 * 86400000;
+    const { txSet } = await run({ id: "t4", type: "BILLING_ISSUE", entitlement_ids: ["premium"], expiration_at_ms: Date.now() - 1000, grace_period_expiration_at_ms: grace });
+    expect(txSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "billing_issue", expiresAt: new Date(grace).toISOString() }), { merge: true });
+  });
+
+  it("treats UNCANCELLATION as active again", async () => {
+    const { txSet } = await run({ id: "t5", type: "UNCANCELLATION", entitlement_ids: ["premium"] });
+    expect(txSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "active", tier: "premium" }), { merge: true });
+  });
+});
+
+describe("createShareInvitation — invitee resolved via Firebase Auth", () => {
+  it("does not trust users/{uid}.email: unknown Auth email is rejected", async () => {
+    const adminMod = require("firebase-admin");
+    adminMod.auth.mockReturnValueOnce({ getUserByEmail: jest.fn().mockRejectedValue({ code: "auth/user-not-found" }) });
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "children/c1/access/u1") return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
+      if (p === "children/c1") return { get: jest.fn().mockResolvedValue(doc({ name: "Bebe" })) };
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(doc({ tier: "family", status: "active" })) };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    // a spoofed users doc claiming the email must not be used
+    mockFirestore.collection.mockImplementation(() => ({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap([{ id: "attacker" }])), add: jest.fn() }));
+    await expect(fns.createShareInvitation(auth("u1", { childId: "c1", childName: "Bebe", invitedEmail: "victim@example.com" }))).rejects.toThrow("Aucun utilisateur");
   });
 });

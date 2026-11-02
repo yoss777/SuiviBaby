@@ -1321,7 +1321,7 @@ exports.createShareInvitation = onCall(
     }
 
     const childDoc = await db.doc(`children/${childId}`).get();
-    if (!childDoc.exists) {
+    if (!childDoc.exists || childDoc.data()?.deletedAt) {
       throw new HttpsError("not-found", "Enfant introuvable.", { reason: "child-not-found" });
     }
 
@@ -1334,22 +1334,20 @@ exports.createShareInvitation = onCall(
       );
     }
 
-    const invitedUserSnap = await db
-      .collection("users")
-      .where("email", "==", invitedEmailLower)
-      .limit(1)
-      .get();
-
-    if (invitedUserSnap.empty) {
+    // Résolution via Firebase Auth (source de vérité de l'e-mail du compte),
+    // pas via users/{uid}.email que chaque utilisateur peut réécrire : sinon
+    // un attaquant y mettait l'e-mail d'une victime pour recevoir ses invitations.
+    let invitedUserId;
+    try {
+      invitedUserId = (await admin.auth().getUserByEmail(invitedEmailLower)).uid;
+    } catch (err) {
+      if (err?.code !== "auth/user-not-found") throw err;
       throw new HttpsError(
         "not-found",
         "Aucun utilisateur trouvé avec cet email. Veuillez demander au destinataire de créer un compte d'abord.",
         { reason: "no-user" }
       );
     }
-
-    const invitedUserDoc = invitedUserSnap.docs[0];
-    const invitedUserId = invitedUserDoc.id;
     const targetAccessDoc = await db.doc(`children/${childId}/access/${invitedUserId}`).get();
     if (targetAccessDoc.exists) {
       throw new HttpsError(
@@ -2858,16 +2856,34 @@ exports.revenueCatWebhook = onRequest(
 
     // Déterminer le status
     let status = "active";
-    const expiresAt = event.expiration_at_ms ? new Date(event.expiration_at_ms).toISOString() : null;
+    // BILLING_ISSUE : la période de grâce du store (si activée) est portée par
+    // grace_period_expiration_at_ms ; l'accès reste ouvert jusque-là.
+    const expiryMs =
+      eventType === "BILLING_ISSUE" && typeof event.grace_period_expiration_at_ms === "number"
+        ? event.grace_period_expiration_at_ms
+        : event.expiration_at_ms;
+    const expiresAt = expiryMs ? new Date(expiryMs).toISOString() : null;
 
     switch (eventType) {
       case "INITIAL_PURCHASE":
       case "RENEWAL":
       case "PRODUCT_CHANGE":
+      case "UNCANCELLATION":
+      case "NON_RENEWING_PURCHASE":
+      case "SUBSCRIPTION_EXTENDED":
+      case "TEMPORARY_ENTITLEMENT_GRANT":
         status = "active";
         break;
       case "CANCELLATION":
-        status = "cancelled";
+        // CUSTOMER_SUPPORT = remboursement : l'accès est retiré tout de suite.
+        // Les autres raisons (désabonnement, erreur de paiement…) gardent
+        // l'accès jusqu'à expiresAt.
+        if (event.cancel_reason === "CUSTOMER_SUPPORT") {
+          status = "expired";
+          tier = "free";
+        } else {
+          status = "cancelled";
+        }
         break;
       case "BILLING_ISSUE":
         status = "billing_issue";
@@ -2881,7 +2897,12 @@ exports.revenueCatWebhook = onRequest(
         res.status(200).send("OK - alias");
         return;
       default:
-        console.log(`revenueCatWebhook: unhandled event type ${eventType}`);
+        // TEST, TRANSFER, SUBSCRIPTION_PAUSED, INVOICE_ISSUANCE… : ne pas
+        // écraser l'abonnement avec un status "active" et un tier déduit
+        // d'entitlement_ids éventuellement vides.
+        console.log(`revenueCatWebhook: unhandled event type ${eventType}, skipping`);
+        res.status(200).send("OK - ignored");
+        return;
     }
 
     // Mettre à jour Firestore
@@ -4726,6 +4747,12 @@ exports.transferAndLeave = onCall(
     const callerAccess = await db.doc(`children/${childId}/access/${uid}`).get();
     if (!callerAccess.exists || callerAccess.data().role !== "owner") {
       throw new HttpsError("permission-denied", "Seul un propriétaire peut transférer.");
+    }
+
+    // Pas de transfert d'un enfant en cours de suppression
+    const childSnap = await db.doc(`children/${childId}`).get();
+    if (!childSnap.exists || childSnap.data()?.deletedAt) {
+      throw new HttpsError("failed-precondition", "Cet enfant est en cours de suppression.");
     }
 
     // Verify new owner has existing access

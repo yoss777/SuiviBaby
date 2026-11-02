@@ -144,7 +144,12 @@ export async function updateChildAccess(
 ): Promise<void> {
   try {
     const accessRef = doc(db, "children", childId, "access", userId);
-    await updateDoc(accessRef, updates);
+    // A role change resets the write flags to that role's defaults; otherwise
+    // a member demoted to viewer would keep canWriteEvents/Likes/Comments.
+    const roleDefaults = updates.role
+      ? (({ role: _role, ...flags }) => flags)(DEFAULT_ROLE_PERMISSIONS[updates.role])
+      : {};
+    await updateDoc(accessRef, { ...roleDefaults, ...updates });
   } catch (error) {
     console.error("Error updating child access:", error);
     throw error;

@@ -27,6 +27,10 @@ service cloud.firestore {
     }
 
     // Vérifie si l'utilisateur est owner selon le document enfant (bootstrap)
+    function childDoc(childId) {
+      return get(/databases/$(database)/documents/children/$(childId));
+    }
+
     function isChildOwner(childId) {
       return isSignedIn() &&
         childExists(childId) &&
@@ -122,9 +126,15 @@ service cloud.firestore {
         // 1. Owner peut tout gérer
         // 2. Bootstrap owner (via ownerId dans document enfant, à la création)
         // Les invités reçoivent leur accès via Cloud Functions uniquement.
+        // Le bootstrap ne vaut qu'en création ; l'accès du propriétaire principal
+        // (children.ownerId) ne peut être ni rétrogradé ni supprimé par un
+        // co-owner (transfert via transferAndLeave uniquement).
         allow create, update: if (isOwner(childId) ||
-          (uid == request.auth.uid && isChildOwner(childId) && request.resource.data.role == 'owner')
+          (request.method == 'create' && uid == request.auth.uid &&
+            isChildOwner(childId) && request.resource.data.role == 'owner')
           ) &&
+          (request.method == 'create' || uid != childDoc(childId).data.ownerId ||
+            request.resource.data.role == 'owner') &&
           // Vérifications de cohérence
           request.resource.data.role in ['owner', 'admin', 'contributor', 'viewer'] &&
           (request.method == 'create'
@@ -134,7 +144,8 @@ service cloud.firestore {
           (request.method == 'create' || request.resource.data.userId == resource.data.userId);
 
         // Suppression : uniquement le owner (sauf son propre accès)
-        allow delete: if isOwner(childId) && uid != request.auth.uid;
+        allow delete: if isOwner(childId) && uid != request.auth.uid &&
+          uid != childDoc(childId).data.ownerId;
       }
     }
 
@@ -250,12 +261,10 @@ service cloud.firestore {
           resource.data.invitedEmail == request.auth.token.email
         );
 
-      // Création : inviterId = uid et owner/admin (fallback via ownerId si access manquant)
-      allow create: if isSignedIn() &&
-        request.resource.data.inviterId == request.auth.uid &&
-        (isOwner(request.resource.data.childId) ||
-         isAdmin(request.resource.data.childId) ||
-         isChildOwner(request.resource.data.childId));
+      // Création : uniquement via createShareInvitation (quota co-parents,
+      // champs validés). Un create direct contournait le quota du plan gratuit
+      // et laissait l'inviteur fixer inviterEmail/childName librement.
+      allow create: if false;
 
       // Mise à jour : l'invité peut seulement REFUSER une invitation en attente
       // (l'acceptation passe par acceptInvitationCF). Aucun autre champ
@@ -278,14 +287,21 @@ service cloud.firestore {
       // bruteforcer des codes valides (1B combos) et de mapper des childIds.
       // L'unique chemin légitime de read pour un user externe est désormais
       // via la CF redeemShareCodeCF (admin SDK, bypass rules).
+      // Un viewer/contributeur ne voit pas les codes actifs (il pourrait les
+      // transmettre) : créateur, owner ou admin uniquement.
       allow read: if isSignedIn() && (
         resource.data.createdBy == request.auth.uid ||
-        hasAccess(resource.data.childId)
+        isOwner(resource.data.childId) ||
+        isAdmin(resource.data.childId)
       );
 
       // Création : owner/admin (fallback via ownerId si access manquant)
       allow create: if isSignedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.code == code &&
+        request.resource.data.used == false &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt <= request.time + duration.value(8, 'd') &&
         (isOwner(request.resource.data.childId) ||
          isAdmin(request.resource.data.childId) ||
          isChildOwner(request.resource.data.childId));
@@ -322,11 +338,18 @@ service cloud.firestore {
       // l'access doc. Le bootstrap (création de l'enfant + premier access) doit
       // utiliser isChildOwner sinon on a une race condition : au moment où on
       // crée l'access doc, hasAccess() ne peut pas encore le voir.
+      // L'id du doc est imposé ({userId}_{childId}) et userId/childId sont
+      // immuables : un owner ne peut pas écraser l'index d'un autre enfant.
       allow create, update: if isSignedIn() &&
         request.resource.data.userId is string &&
         request.resource.data.childId is string &&
-        (isChildOwner(request.resource.data.childId) ||
-          isOwner(request.resource.data.childId));
+        docId == request.resource.data.userId + '_' + request.resource.data.childId &&
+        (request.method == 'create' || (
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.childId == resource.data.childId)) &&
+        (isOwner(request.resource.data.childId) ||
+          (request.resource.data.userId == request.auth.uid &&
+            isChildOwner(request.resource.data.childId)));
 
       // Suppression : owner ou l'utilisateur lui-même
       allow delete: if isSignedIn() &&
