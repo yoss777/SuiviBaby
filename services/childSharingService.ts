@@ -49,13 +49,22 @@ export interface ShareInvitation {
 /**
  * Génère un code de partage aléatoire (6 caractères alphanumériques)
  */
-function generateShareCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Sans caractères ambigus (0, O, I, 1)
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+function randomBytes(length: number): Uint8Array {
+  // Generateur cryptographique (expo-crypto) : un code de partage donne un
+  // acces a l'enfant, il ne doit pas etre previsible. Repli sur Math.random
+  // uniquement si le module natif est absent (tests, build sans le module).
+  try {
+    const Crypto = require("expo-crypto");
+    return Crypto.getRandomBytes(length);
+  } catch {
+    return Uint8Array.from({ length }, () => Math.floor(Math.random() * 256));
   }
-  return code;
+}
+
+export function generateShareCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Sans caractères ambigus (0, O, I, 1)
+  // 32 caractères : byte % 32 est uniforme (256 = 8 × 32), sans biais.
+  return Array.from(randomBytes(6), (byte) => chars.charAt(byte % chars.length)).join("");
 }
 
 /**

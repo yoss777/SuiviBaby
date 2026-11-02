@@ -104,21 +104,22 @@ async function checkRateLimit(db, uid, bucket, maxPerMinute) {
   const oneMinuteAgo = now - 60 * 1000;
   const bucketKey = `${bucket}_timestamps`;
 
-  const rateLimitDoc = await rateLimitRef.get();
-  const data = rateLimitDoc.exists ? rateLimitDoc.data() : {};
-  const recentRequests = (data[bucketKey] || []).filter((t) => t > oneMinuteAgo);
+  // Lecture + écriture dans une transaction : sans elle, N appels parallèles
+  // lisaient tous le même compteur et passaient tous sous la limite.
+  await db.runTransaction(async function rateLimitTxn(tx) {
+    const rateLimitDoc = await tx.get(rateLimitRef);
+    const data = rateLimitDoc.exists ? rateLimitDoc.data() : {};
+    const recentRequests = (data[bucketKey] || []).filter((t) => t > oneMinuteAgo);
 
-  if (recentRequests.length >= maxPerMinute) {
-    throw new HttpsError(
-      "resource-exhausted",
-      "Trop de requêtes. Réessayez dans une minute."
-    );
-  }
+    if (recentRequests.length >= maxPerMinute) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "Trop de requêtes. Réessayez dans une minute."
+      );
+    }
 
-  await rateLimitRef.set(
-    { [bucketKey]: [...recentRequests, now] },
-    { merge: true }
-  );
+    tx.set(rateLimitRef, { [bucketKey]: [...recentRequests, now] }, { merge: true });
+  });
 }
 
 /**
@@ -1983,24 +1984,22 @@ exports.findUserByEmail = onCall(
       throw new HttpsError("invalid-argument", "Email requis.");
     }
 
-    // Chercher dans 'users' (collection privée) via admin SDK — pas dans users_public
-    // pour ne pas dépendre d'emails potentiellement non nettoyés dans users_public
-    const snapshot = await db
-      .collection("users")
-      .where("email", "==", email.toLowerCase())
-      .limit(1)
-      .get();
-
-    if (snapshot.empty) {
-      return { found: false, user: null };
+    // Résolution via Firebase Auth : users/{uid}.email est modifiable par son
+    // titulaire et ne prouve pas la possession de l'adresse.
+    let uid;
+    try {
+      uid = (await admin.auth().getUserByEmail(email.toLowerCase())).uid;
+    } catch (err) {
+      if (err?.code === "auth/user-not-found") return { found: false, user: null };
+      throw err;
     }
 
-    const userDoc = snapshot.docs[0];
+    const userDoc = await db.doc(`users/${uid}`).get();
     return {
       found: true,
       user: {
-        id: userDoc.id,
-        userName: userDoc.data().userName || "Utilisateur",
+        id: uid,
+        userName: (userDoc.exists && userDoc.data().userName) || "Utilisateur",
       },
     };
   }
@@ -3194,6 +3193,24 @@ exports.setAdminClaim = onCall(
 // SHARING — REDEEM CODE (B1.1)
 // ============================================
 
+
+// Vérifie, dans une transaction, que l'enfant existe et n'est pas en cours de
+// suppression, et que la personne qui a émis l'invitation ou le code est
+// toujours owner/admin (un admin révoqué ne doit plus pouvoir faire entrer
+// quelqu'un avec une invitation encore en attente).
+async function assertJoinStillValid(tx, db, childId, grantorUid, notFoundMessage) {
+  const [childSnap, grantorAccess] = await Promise.all([
+    tx.get(db.doc(`children/${childId}`)),
+    tx.get(db.doc(`children/${childId}/access/${grantorUid}`)),
+  ]);
+  if (!childSnap.exists || childSnap.data()?.deletedAt) {
+    throw new HttpsError("not-found", notFoundMessage);
+  }
+  if (!grantorAccess.exists || !hasChildRole(grantorAccess.data(), ["owner", "admin"])) {
+    throw new HttpsError("failed-precondition", "Cette invitation n'est plus valide.");
+  }
+}
+
 /**
  * redeemShareCodeCF — Échange un code de partage contre un accès enfant.
  *
@@ -3289,6 +3306,8 @@ exports.redeemShareCodeCF = onCall(
             "Vous avez déjà accès à cet enfant."
           );
         }
+
+        await assertJoinStillValid(tx, db, childId, shareCode.createdBy, "Code invalide ou expiré.");
 
         // 1. Marquer le code comme utilisé (champs exigés par firestore.rules).
         tx.update(codeRef, {
@@ -3400,6 +3419,8 @@ exports.acceptInvitationCF = onCall(
         const existingAccess = await tx.get(accessRef);
 
         if (!existingAccess.exists) {
+          await assertJoinStillValid(tx, db, childId, invitation.inviterId, "Invitation introuvable.");
+
           // Créer l'access (rôle contributor : likes et commentaires uniquement).
           tx.set(accessRef, {
             userId: uid,
@@ -3480,7 +3501,7 @@ exports.validateReferralCode = onCall(
 
     // Vérifier que le filleul n'a pas déjà utilisé un code
     const filleulDoc = await db.doc(`user_promos/${filleulUid}`).get();
-    if (filleulDoc.exists() && filleulDoc.data()?.referredBy) {
+    if (filleulDoc.exists && filleulDoc.data()?.referredBy) {
       throw new HttpsError("already-exists", "Vous avez deja utilise un code parrainage.");
     }
 
@@ -3510,23 +3531,22 @@ exports.validateReferralCode = onCall(
       referredAt: now,
     }, { merge: true });
 
-    // 4. Attribuer 1 mois Premium au parrain
-    batch.set(db.doc(`subscriptions/${parrainUid}`), {
+    // 4-5. 1 mois Premium offert au parrain et au filleul, sauf s'ils ont déjà
+    // un abonnement payant en cours : on n'écrase jamais un Premium/Famille
+    // actif (sinon un abonné Famille repassait en Premium, avec une fausse
+    // date d'expiration).
+    const reward = {
       tier: "premium",
       status: "active",
       startDate: now.toDate().toISOString(),
       expiresAt: oneMonthLater.toISOString(),
       source: "referral_reward",
-    }, { merge: true });
-
-    // 5. Attribuer 1 mois Premium au filleul
-    batch.set(db.doc(`subscriptions/${filleulUid}`), {
-      tier: "premium",
-      status: "active",
-      startDate: now.toDate().toISOString(),
-      expiresAt: oneMonthLater.toISOString(),
-      source: "referral_reward",
-    }, { merge: true });
+    };
+    for (const rewardUid of [parrainUid, filleulUid]) {
+      const state = await getSubscriptionState(db, rewardUid);
+      if (hasUnlimitedFeature(state, "voice")) continue;
+      batch.set(db.doc(`subscriptions/${rewardUid}`), reward, { merge: true });
+    }
 
     await batch.commit();
 

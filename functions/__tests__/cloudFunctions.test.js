@@ -1555,6 +1555,8 @@ describe("redeemShareCodeCF (B1.1)", () => {
               expiresAt: { toMillis: () => futureMs },
             }));
           }
+          if (getCallCount === 3) return Promise.resolve(doc({ name: "Bebe" })); // enfant actif
+          if (getCallCount === 4) return Promise.resolve(doc({ role: "owner" })); // émetteur toujours owner
           return Promise.resolve(no()); // pas d'accès existant
         }),
         set: txSet,
@@ -1650,6 +1652,8 @@ describe("acceptInvitationCF (B1.4)", () => {
               childId: "c1",
             }));
           }
+          if (getCallCount === 3) return Promise.resolve(doc({ name: "Bebe" })); // enfant actif
+          if (getCallCount === 4) return Promise.resolve(doc({ role: "owner" })); // émetteur toujours owner
           return Promise.resolve(no()); // pas d'accès existant
         }),
         set: txSet,
@@ -2118,5 +2122,87 @@ describe("createShareInvitation — invitee resolved via Firebase Auth", () => {
     // a spoofed users doc claiming the email must not be used
     mockFirestore.collection.mockImplementation(() => ({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap([{ id: "attacker" }])), add: jest.fn() }));
     await expect(fns.createShareInvitation(auth("u1", { childId: "c1", childName: "Bebe", invitedEmail: "victim@example.com" }))).rejects.toThrow("Aucun utilisateur");
+  });
+});
+
+describe("join flows re-check the child and the issuer (S13)", () => {
+  const rateLimitOnly = () => mockFirestore.doc.mockImplementation((p) => ({ path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() }));
+  const txWith = (byPath) => {
+    const txSet = jest.fn();
+    mockRunTransaction.mockImplementationOnce(async (fn) => fn({
+      get: jest.fn(async (ref) => (ref.path in byPath ? (byPath[ref.path] ? doc(byPath[ref.path]) : no()) : no())),
+      set: txSet,
+      update: jest.fn(),
+    }));
+    return txSet;
+  };
+  const invite = { status: "pending", invitedUserId: "u1", inviterId: "inv", childId: "c1" };
+
+  it("refuses an invitation for a child pending deletion", async () => {
+    rateLimitOnly();
+    const txSet = txWith({ "shareInvitations/i1": invite, "children/c1": { deletedAt: "2026-11-01" }, "children/c1/access/inv": { role: "owner" } });
+    await expect(fns.acceptInvitationCF(auth("u1", { invitationId: "i1" }))).rejects.toThrow("Invitation introuvable");
+    expect(txSet).not.toHaveBeenCalled();
+  });
+
+  it("refuses an invitation whose inviter is no longer owner/admin", async () => {
+    rateLimitOnly();
+    const txSet = txWith({ "shareInvitations/i1": invite, "children/c1": { name: "B" }, "children/c1/access/inv": { role: "viewer" } });
+    await expect(fns.acceptInvitationCF(auth("u1", { invitationId: "i1" }))).rejects.toThrow("plus valide");
+    expect(txSet).not.toHaveBeenCalled();
+  });
+
+  it("refuses a share code whose creator lost access", async () => {
+    rateLimitOnly();
+    const code = { childId: "c1", createdBy: "inv", used: false, expiresAt: { toMillis: () => Date.now() + 86400000 } };
+    const txSet = txWith({ "shareCodes/ABCDEF": code, "children/c1": { name: "B" } });
+    await expect(fns.redeemShareCodeCF(auth("u1", { code: "ABCDEF" }))).rejects.toThrow("plus valide");
+    expect(txSet).not.toHaveBeenCalled();
+  });
+});
+
+describe("validateReferralCode — reward (S13)", () => {
+  const setup = (subs) => {
+    const batch = { set: jest.fn(), update: jest.fn(), delete: jest.fn(), commit: jest.fn(() => Promise.resolve()) };
+    mockFirestore.batch.mockReturnValueOnce(batch);
+    mockFirestore.doc.mockImplementation((p) => ({
+      path: p,
+      get: jest.fn().mockResolvedValue(p in subs ? doc(subs[p]) : no()),
+      set: jest.fn(),
+    }));
+    mockFirestore.collection.mockImplementation(() => ({
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      doc: jest.fn(() => ({ path: "referrals/new" })),
+      get: jest.fn().mockResolvedValue({ empty: false, docs: [{ id: "parrain", ref: { path: "user_promos/parrain" }, data: () => ({ referralCount: 0 }) }] }),
+    }));
+    return batch;
+  };
+
+  it("works with a valid code (no exists() crash) and rewards both users", async () => {
+    const batch = setup({});
+    await expect(fns.validateReferralCode(auth("filleul", { referralCode: "ABC" }))).resolves.toMatchObject({ success: true });
+    const rewarded = batch.set.mock.calls.filter(([ref, data]) => ref.path?.startsWith("subscriptions/") && data.source === "referral_reward").map(([ref]) => ref.path);
+    expect(rewarded.sort()).toEqual(["subscriptions/filleul", "subscriptions/parrain"]);
+  });
+
+  it("does not overwrite an active Family subscription", async () => {
+    const batch = setup({ "subscriptions/parrain": { tier: "family", status: "active" } });
+    await fns.validateReferralCode(auth("filleul", { referralCode: "ABC" }));
+    const rewarded = batch.set.mock.calls.filter(([ref]) => ref.path?.startsWith("subscriptions/")).map(([ref]) => ref.path);
+    expect(rewarded).toEqual(["subscriptions/filleul"]);
+  });
+});
+
+describe("checkRateLimit is transactional (S6)", () => {
+  it("reads and writes the counter inside a transaction and rejects at the limit", async () => {
+    const full = Array.from({ length: 3 }, () => Date.now());
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(doc({ findUser_timestamps: full })), set: jest.fn() };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    await expect(fns.findUserByEmail(auth("u1", { email: "a@b.c" }))).rejects.toThrow("Trop de requêtes");
+    const txFns = mockFirestore.runTransaction.mock.calls.map(([fn]) => fn.name);
+    expect(txFns).toContain("rateLimitTxn");
   });
 });

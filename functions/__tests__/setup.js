@@ -19,7 +19,20 @@ const mockBucket = {
   file: jest.fn(() => ({ delete: jest.fn(() => Promise.resolve()), copy: jest.fn(() => Promise.resolve()) })),
 };
 const mockStorage = { bucket: jest.fn(() => mockBucket) };
-const mockFirestore = { doc: jest.fn(() => mockDocRef), collection: jest.fn(() => mockCollectionRef), batch: jest.fn(() => ({ set: jest.fn(), update: jest.fn(), delete: jest.fn(), commit: jest.fn(() => Promise.resolve()) })), runTransaction: mockRunTransaction };
+// checkRateLimit runs its own transaction (named rateLimitTxn). Route it to a
+// plain read/write on the mocked doc so the "Once" transactions that tests
+// queue on mockRunTransaction stay reserved for the function under test.
+const runTransactionRouter = jest.fn((fn, opts) =>
+  fn.name === "rateLimitTxn"
+    ? fn({
+      get: async (ref) => ref.get(),
+      set: (ref, data, options) => (ref.set ? ref.set(data, options) : undefined),
+      update: jest.fn(),
+      delete: jest.fn(),
+    })
+    : mockRunTransaction(fn, opts)
+);
+const mockFirestore = { doc: jest.fn(() => mockDocRef), collection: jest.fn(() => mockCollectionRef), batch: jest.fn(() => ({ set: jest.fn(), update: jest.fn(), delete: jest.fn(), commit: jest.fn(() => Promise.resolve()) })), runTransaction: runTransactionRouter };
 jest.mock("firebase-admin", () => {
   const MockTimestamp = jest.fn((seconds, nanoseconds = 0) => ({
     seconds,
