@@ -42,3 +42,27 @@ jobs:
           name: coverage
           path: coverage/
           retention-days: 7
+
+  rules-test:
+    name: Security rules tests (emulator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      - name: Run Firestore and Storage rules tests
+        run: >-
+          npx -y firebase-tools@15 emulators:exec --only firestore,storage
+          --project samaye-53723
+          'npx jest __tests__/firestore.rules.test.ts __tests__/storage.rules.test.ts --runInBand --ci --config jest.config.rules.js'

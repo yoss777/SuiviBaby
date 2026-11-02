@@ -9,7 +9,7 @@ const { onObjectFinalized, onObjectDeleted } = require("firebase-functions/v2/st
 const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
 const { buildRecapHTML } = require("./emailTemplates");
-const { hasRequiredChildAccess } = require("./accessControl");
+const { hasRequiredChildAccess, hasChildRole } = require("./accessControl");
 const VOICE_ENUMS = require("./lib/enums");
 const voiceParse = require("./lib/voiceParse");
 const Anthropic = require("@anthropic-ai/sdk").default;
@@ -226,7 +226,21 @@ async function getSubscriptionState(db, uid) {
     tier: data.tier || "free",
     status: data.status || "active",
     grandfathered: data.grandfathered === true || data.status === "grandfathered",
+    expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : null,
   };
+}
+
+// Une annulation (ou un incident de paiement, pendant la période de grâce
+// des stores) ne coupe pas l'accès : l'abonné garde Premium jusqu'à la fin
+// de la période déjà payée (expiresAt). EXPIRATION repasse ensuite en free.
+function isEntitledStatus(subscriptionState, nowMs = Date.now()) {
+  const { status, expiresAt } = subscriptionState;
+  if (status === "active" || status === "trial") return true;
+  if (status === "cancelled" || status === "billing_issue") {
+    const expiresMs = expiresAt ? Date.parse(expiresAt) : NaN;
+    return Number.isFinite(expiresMs) && expiresMs > nowMs;
+  }
+  return false;
 }
 
 function hasUnlimitedFeature(subscriptionState, feature) {
@@ -238,8 +252,7 @@ function hasUnlimitedFeature(subscriptionState, feature) {
 
   const isPaidTier =
     subscriptionState.tier === "premium" || subscriptionState.tier === "family";
-  const isActiveStatus =
-    subscriptionState.status === "active" || subscriptionState.status === "trial";
+  const isActiveStatus = isEntitledStatus(subscriptionState);
 
   if (!isPaidTier || !isActiveStatus) {
     return false;
@@ -1168,7 +1181,7 @@ exports.getUsageQuotaStatus = onCall(
     }
 
     const accessDoc = await db.doc(`children/${childId}/access/${uid}`).get();
-    if (!accessDoc.exists || !hasRequiredChildAccess(accessDoc.data(), ["owner", "admin"])) {
+    if (!accessDoc.exists || !hasChildRole(accessDoc.data(), ["owner", "admin"])) {
       throw new HttpsError("permission-denied", "Accès insuffisant à cet enfant.");
     }
 
@@ -1299,7 +1312,7 @@ exports.createShareInvitation = onCall(
     }
 
     const accessDoc = await db.doc(`children/${childId}/access/${uid}`).get();
-    if (!accessDoc.exists || !hasRequiredChildAccess(accessDoc.data(), ["owner", "admin"])) {
+    if (!accessDoc.exists || !hasChildRole(accessDoc.data(), ["owner", "admin"])) {
       throw new HttpsError(
         "permission-denied",
         "Accès insuffisant à cet enfant.",
@@ -2885,6 +2898,7 @@ exports.revenueCatWebhook = onRequest(
       billingPeriod,
       ...(expiresAt && { expiresAt }),
       ...(productId && { productId }),
+      ...(eventTs !== null && { lastEventTimestampMs: eventTs }),
       updatedAt: admin.firestore.Timestamp.now(),
       lastEvent: eventType,
     };
@@ -2895,11 +2909,13 @@ exports.revenueCatWebhook = onRequest(
       const existing = await tx.get(subRef);
       const existingData = existing.exists ? existing.data() : {};
 
-      // Ne pas downgrader si l'event est plus ancien que le dernier traité
-      if (existingData.updatedAt && subscriptionData.updatedAt &&
-          existingData.updatedAt.toMillis && subscriptionData.updatedAt.toMillis &&
-          existingData.updatedAt.toMillis() > subscriptionData.updatedAt.toMillis()) {
-        console.log(`revenueCatWebhook: skipping stale event for ${appUserId}`);
+      // Ne pas écraser l'état avec un event plus ancien que le dernier traité
+      // (RevenueCat ne garantit pas l'ordre de livraison ni des retries).
+      // On compare les horodatages des events, pas l'heure de traitement.
+      if (eventTs !== null &&
+          typeof existingData.lastEventTimestampMs === "number" &&
+          existingData.lastEventTimestampMs > eventTs) {
+        console.log(`revenueCatWebhook: skipping out-of-order event for ${appUserId}`);
         return;
       }
 

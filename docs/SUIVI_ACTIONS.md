@@ -57,12 +57,12 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 |---|---|---|---|---|---|---|
 | S1 | **Critique.** Règles Firestore : un membre pouvait se déclarer `owner` via une invitation ou un code de partage, réécrire une invitation (`childId`), un admin pouvait changer `ownerId` | immédiat | Claude | — | Tests de règles (`npm run test:rules`) : 126/126 | ✅ corrigé et déployé le 2026-11-02 |
 | S2 | Contrôler en production qu'aucun accès `owner` ne diffère de `children.ownerId` (exploitation passée de S1) | 2026-11-04 | Claude (Yoss : `gcloud auth application-default login`) | S1 | Script d'audit en lecture seule : 0 suspect | ✅ 2026-11-02 : 6 accès owner, 1 seul ≠ `ownerId` (`LWZFCdDkjLymDv7I1E9O`, co-propriétaire ajouté par l'owner lui-même) → légitime |
-| S3 | `functions/accessControl.js` (`canWriteEvents`) : le rôle n'est pas vérifié comme dans les règles | 2026-11-15 | Claude | — | Test unitaire viewer refusé | ⏳ |
+| S3 | `functions/accessControl.js` (`canWriteEvents`) : le rôle n'est pas vérifié comme dans les règles | 2026-11-15 | Claude | — | Test unitaire viewer refusé | ✅ 2026-11-02 : `hasChildRole` strict pour le partage (`createShareInvitation`, quota de partage) ; un contributeur ne peut plus inviter. Écriture d'événements inchangée (`canWriteEvents`) |
 | S4 | Activer App Check côté fonctions (`APPCHECK_ENFORCE=true`) après vérification des versions installées | 2026-11-30 | Claude (feu vert Yoss) | 1.0.6 majoritaire | Appels sans jeton refusés, aucune hausse d'erreurs Sentry | ⏳ |
 | S5 | Invitations par e-mail : exiger un e-mail vérifié (`email_verified`) dans `acceptInvitationCF` et les règles | 2026-11-30 | Claude | décision sur la vérification à l'inscription | Compte non vérifié refusé | ⏳ |
 | S6 | Limitation de débit des fonctions non transactionnelle (contournable en parallèle) | 2026-11-30 | Claude | — | Test de charge simple | ⏳ |
-| S7 | Lancer les tests de règles dans le CI (`ci.yml`, émulateur) | 2026-11-15 | Claude | — | Job CI vert, échoue si une règle régresse | ⏳ |
-| S8 | Premium coupé dès l'annulation au lieu de `expiresAt` ; ordre des événements du webhook RevenueCat non vérifié (`functions/index.js`) | 2026-11-15 | Claude | — | Tests du webhook | ⏳ |
+| S7 | Lancer les tests de règles dans le CI (`ci.yml`, émulateur) | 2026-11-15 | Claude | — | Job CI vert, échoue si une règle régresse | ✅ 2026-11-02 : job `rules-test` (émulateur, Java 21) ajouté à `ci.yml` ; à confirmer vert au prochain push |
+| S8 | Premium coupé dès l'annulation au lieu de `expiresAt` ; ordre des événements du webhook RevenueCat non vérifié (`functions/index.js`) | 2026-11-15 | Claude | — | Tests du webhook | ✅ 2026-11-02 : Premium (voix, analyses) gardé jusqu'à `expiresAt` après annulation ou incident de paiement ; ordre des events basé sur `event_timestamp_ms` (`lastEventTimestampMs`) |
 
 ## 5. Décisions en attente (questions détaillées)
 

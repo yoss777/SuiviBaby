@@ -697,6 +697,15 @@ describe("createShareInvitation", () => {
 
     await expect(fns.createShareInvitation(auth("u1", { childId: "c1", childName: "Bebe", invitedEmail: "target@example.com" }))).rejects.toThrow("2 co-parents maximum");
   });
+
+  it("rejects a contributor even with canWriteEvents (owner/admin only)", async () => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "children/c1/access/u1") return { get: jest.fn().mockResolvedValue(doc({ role: "contributor", canWriteEvents: true })) };
+      if (p === "children/c1") return { get: jest.fn().mockResolvedValue(doc({ name: "Bebe" })) };
+      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    await expect(fns.createShareInvitation(auth("u1", { childId: "c1", childName: "Bebe", invitedEmail: "target@example.com" }))).rejects.toThrow("Accès insuffisant");
+  });
 });
 
 // =========================================================================
@@ -1950,5 +1959,86 @@ describe("transferAndLeave (ownership transfer, server-only since rules S1)", ()
     );
     expect(b.delete).toHaveBeenCalledWith(expect.objectContaining({ path: "children/c1/access/u1" }));
     expect(b.commit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("subscription kept until expiresAt after cancellation (S8)", () => {
+  const voiceStatusWith = async (sub) => {
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(doc(sub)) };
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+    return fns.getUsageQuotaStatus(auth("u1", { feature: "voice" }));
+  };
+  const inDays = (d) => new Date(Date.now() + d * 24 * 60 * 60 * 1000).toISOString();
+
+  it("keeps unlimited voice for a cancelled subscription not yet expired", async () => {
+    await expect(voiceStatusWith({ tier: "premium", status: "cancelled", expiresAt: inDays(10) }))
+      .resolves.toMatchObject({ isUnlimited: true });
+  });
+
+  it("keeps unlimited voice during a billing issue grace period", async () => {
+    await expect(voiceStatusWith({ tier: "premium", status: "billing_issue", expiresAt: inDays(3) }))
+      .resolves.toMatchObject({ isUnlimited: true });
+  });
+
+  it("falls back to the free quota once a cancelled subscription has expired", async () => {
+    await expect(voiceStatusWith({ tier: "premium", status: "cancelled", expiresAt: inDays(-1) }))
+      .resolves.toMatchObject({ isUnlimited: false, limit: 3 });
+  });
+
+  it("does not grant unlimited to a cancelled subscription without expiresAt", async () => {
+    await expect(voiceStatusWith({ tier: "premium", status: "cancelled" }))
+      .resolves.toMatchObject({ isUnlimited: false });
+  });
+});
+
+describe("revenueCatWebhook — out-of-order events (S8)", () => {
+  const res = () => ({ status: jest.fn().mockReturnThis(), send: jest.fn() });
+  const originalSecret = process.env.REVENUECAT_WEBHOOK_SECRET;
+  afterEach(() => {
+    if (originalSecret === undefined) delete process.env.REVENUECAT_WEBHOOK_SECRET;
+    else process.env.REVENUECAT_WEBHOOK_SECRET = originalSecret;
+  });
+  const send = async (event, existing) => {
+    process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p?.startsWith("revenuecat_webhook_events/")) return { create: jest.fn().mockResolvedValue(undefined) };
+      return { path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+    });
+    mockFirestore.collection.mockImplementation(() => ({ add: jest.fn().mockResolvedValue({ id: "log" }) }));
+    const txSet = jest.fn();
+    // mockReset: drop "Once" implementations left unconsumed by earlier tests.
+    mockRunTransaction.mockReset();
+    mockRunTransaction.mockImplementation(async (fn) =>
+      fn({ get: jest.fn().mockResolvedValue(existing ? doc(existing) : no()), set: txSet, update: jest.fn() })
+    );
+    await fns.revenueCatWebhook(
+      { method: "POST", headers: { authorization: "Bearer topsecret" }, body: { event } },
+      res()
+    );
+    return txSet;
+  };
+
+  it("ignores an event older than the last processed one", async () => {
+    const now = Date.now();
+    const txSet = await send(
+      { id: "late-cancel", type: "CANCELLATION", app_user_id: "u1", event_timestamp_ms: now - 60_000, entitlement_ids: ["premium"] },
+      { tier: "premium", status: "active", lastEventTimestampMs: now - 1_000 }
+    );
+    expect(txSet).not.toHaveBeenCalled();
+  });
+
+  it("applies a newer event and records its timestamp", async () => {
+    const now = Date.now();
+    const txSet = await send(
+      { id: "renewal", type: "RENEWAL", app_user_id: "u1", event_timestamp_ms: now, entitlement_ids: ["premium"] },
+      { tier: "premium", status: "cancelled", lastEventTimestampMs: now - 60_000 }
+    );
+    expect(txSet).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: "active", lastEventTimestampMs: now }),
+      { merge: true }
+    );
   });
 });

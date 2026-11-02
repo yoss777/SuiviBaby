@@ -24,6 +24,21 @@ function hasRequiredChildAccess(accessData, requiredRoles) {
   return accessData.canWriteEvents === true;
 }
 
+/**
+ * Retourne true uniquement si le rôle fait partie des rôles requis, sans le
+ * fallback canWriteEvents. À utiliser pour les actions de gestion (partage,
+ * invitations) : un contributeur a canWriteEvents mais ne gère pas l'accès.
+ *
+ * @param {{ role?: string } | null | undefined} accessData
+ * @param {string[]} requiredRoles
+ * @returns {boolean}
+ */
+function hasChildRole(accessData, requiredRoles) {
+  if (!accessData || !Array.isArray(requiredRoles)) return false;
+  return requiredRoles.includes(accessData.role);
+}
+
 module.exports = {
   hasRequiredChildAccess,
+  hasChildRole,
 };
