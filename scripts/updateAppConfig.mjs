@@ -12,7 +12,7 @@
 // Options via env vars :
 //   MIN_VERSION=1.0.0           (default: 1.0.0, = pas de force update)
 //   RELEASE_NOTES="..."         (default: généré depuis git)
-//   IOS_STORE_URL="..."         (default: placeholder, à remplir)
+//   IOS_STORE_URL="..."         (default: fiche App Store id6773195663)
 //   ANDROID_STORE_URL="..."     (default: depuis app.json android.package)
 
 import { execSync } from "child_process";
@@ -42,7 +42,7 @@ const packageId = appJson.expo?.android?.package ?? "com.tesfa.suivibaby";
 const minVersion = process.env.MIN_VERSION ?? "1.0.0";
 const iosStoreUrl =
   process.env.IOS_STORE_URL ??
-  "https://apps.apple.com/app/suivi-baby/id0000000000";
+  "https://apps.apple.com/app/id6773195663"; // App Store ID from eas.json (ascAppId)
 const androidStoreUrl =
   process.env.ANDROID_STORE_URL ??
   `https://play.google.com/store/apps/details?id=${packageId}`;
