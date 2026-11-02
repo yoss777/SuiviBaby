@@ -1569,6 +1569,8 @@ describe("redeemShareCodeCF (B1.1)", () => {
     );
     // 2 set : access doc + user_child_access index
     expect(txSet).toHaveBeenCalledTimes(2);
+    // D11 — a contributor joins with likes/comments only, no event writes
+    expect(txSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ role: "contributor", canWriteEvents: false, canWriteLikes: true, canWriteComments: true }));
   });
 });
 
@@ -1659,6 +1661,8 @@ describe("acceptInvitationCF (B1.4)", () => {
     expect(txUpdate).toHaveBeenCalledWith(expect.anything(), { status: "accepted" });
     // 2 set : access + index
     expect(txSet).toHaveBeenCalledTimes(2);
+    // D11 — a contributor joins with likes/comments only, no event writes
+    expect(txSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ role: "contributor", canWriteEvents: false, canWriteLikes: true, canWriteComments: true }));
   });
 
   it("is idempotent when access already exists (just marks accepted)", async () => {

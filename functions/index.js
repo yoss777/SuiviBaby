@@ -10,6 +10,14 @@ const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
 const { buildRecapHTML } = require("./emailTemplates");
 const { hasRequiredChildAccess, hasChildRole } = require("./accessControl");
+
+// Rôle contributor (miroir de DEFAULT_ROLE_PERMISSIONS côté app) : likes et
+// commentaires sur les photos uniquement, aucune écriture d'événement.
+const CONTRIBUTOR_PERMISSIONS = Object.freeze({
+  canWriteEvents: false,
+  canWriteLikes: true,
+  canWriteComments: true,
+});
 const VOICE_ENUMS = require("./lib/enums");
 const voiceParse = require("./lib/voiceParse");
 const Anthropic = require("@anthropic-ai/sdk").default;
@@ -3290,17 +3298,13 @@ exports.redeemShareCodeCF = onCall(
           usedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
-        // 2. Créer le doc d'accès. Rôle contributor par défaut (parité
-        //    avec l'ancien client redeemShareCode). Permissions héritées
-        //    du rôle (canWriteEvents/Likes/Comments) — mirrored from
-        //    DEFAULT_ROLE_PERMISSIONS côté client. Ici on hardcode pour
-        //    ne pas dupliquer ce constant côté serveur.
+        // 2. Créer le doc d'accès. Rôle contributor : likes et commentaires
+        //    uniquement, pas d'écriture d'événements (DEFAULT_ROLE_PERMISSIONS
+        //    côté client, décision D11 du 2026-11-02).
         tx.set(existingAccessRef, {
           userId: uid,
           role: "contributor",
-          canWriteEvents: true,
-          canWriteLikes: true,
-          canWriteComments: true,
+          ...CONTRIBUTOR_PERMISSIONS,
           grantedBy: shareCode.createdBy,
           grantedAt: admin.firestore.FieldValue.serverTimestamp(),
           invitationId: code,
@@ -3396,13 +3400,11 @@ exports.acceptInvitationCF = onCall(
         const existingAccess = await tx.get(accessRef);
 
         if (!existingAccess.exists) {
-          // Créer l'access (rôle contributor par défaut comme l'ancien client).
+          // Créer l'access (rôle contributor : likes et commentaires uniquement).
           tx.set(accessRef, {
             userId: uid,
             role: "contributor",
-            canWriteEvents: true,
-            canWriteLikes: true,
-            canWriteComments: true,
+            ...CONTRIBUTOR_PERMISSIONS,
             grantedBy: invitation.inviterId,
             grantedAt: admin.firestore.FieldValue.serverTimestamp(),
             invitationId,
