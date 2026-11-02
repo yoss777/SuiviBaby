@@ -27,7 +27,7 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 |---|---|---|---|---|---|---|
 | 2.1 | Téléphone de TESFA dans les mentions légales | 2026-11-08 | Yoss (fournir) / Claude (intégrer) | — | Plus de `[À COMPLÉTER]` téléphone dans `public/mentions-legales.html` | ✅ 2026-11-02 (+33 7 67 55 48 80) |
 | 2.2 | **Adhérer à un médiateur de la consommation** (obligatoire pour vendre des abonnements) puis l'indiquer dans CGU + mentions | 2026-11-30 | Yoss | — | Nom, adresse, site du médiateur dans `public/terms.html` et `public/mentions-legales.html` | ⏳ |
-| 2.3 | Compléter : DPO (ou « non désigné »), durée des sauvegardes, région Sentry, non-entraînement AssemblyAI / Anthropic | 2026-11-30 | Yoss (infos) / Claude | — | `grep -c 'class="todo"' public/*.html` → 0 | ⏳ |
+| 2.3 | Compléter les 4 cases jaunes de `privacy.html` : DPO (→ D2), sauvegardes (→ D1), région Sentry (→ D3), non-entraînement des IA (→ D5) | 2026-11-30 | Yoss (décisions) / Claude (intégration) | Section 5 | `grep -c 'class="todo"' public/*.html` → 0 | ⏳ |
 | 2.4 | Déployer le site : `firebase deploy --only hosting` | 2026-11-30 | Claude | 2.1 à 2.3 | https://suivibaby.com affiche la nouvelle version ; pages légales sans surlignage jaune | ⏳ |
 
 ## 3. Abonnements et RevenueCat
@@ -50,6 +50,159 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 4.4 | Vérifier le workflow « Deploy Cloud Functions » réparé : lancement manuel (`gh workflow run deploy-functions.yml`) — redéploie les 35 fonctions à l'identique | 2026-11-04 | Claude (feu vert Yoss) | — | Exécution verte dans GitHub Actions | 🔄 2026-11-02 : 28 fonctions déployées par le CI ; les 7 planifiées en échec (403 Cloud Scheduler) → déployées à la main. Rôle `roles/cloudscheduler.admin` ajouté à `github-deploy@` le 2026-11-02 ; reste une exécution verte de bout en bout |
 | 4.5 | Passer `cleanupExpiredShareCodes` et `purgeDeletedChildren` en `europe-west1` (aujourd'hui `us-central1`, sans région explicite) pour que « fonctions serveur dans l'UE » soit exact | 2026-11-15 | Claude (feu vert Yoss) | — | `firebase functions:list` : plus aucune fonction en us-central1 hors miroirs (supprimés en 1.8) | ⏳ |
 
+## 5. Décisions en attente (questions détaillées)
+
+> Chaque question indique le contexte, ce qui a été **vérifié** dans le projet
+> (date de la vérification), les options, la recommandation et la réponse
+> attendue. Répondre directement dans la conversation (« D1 : oui », etc.) ;
+> la décision est ensuite reportée ici et dans l'action liée.
+
+### D1 — Sauvegardes de la base de données ⚠️ prioritaire
+
+- **Contexte.** La politique de confidentialité doit indiquer une durée de
+  conservation des sauvegardes (case jaune « Sauvegardes » de `privacy.html`).
+  Surtout, l'app conserve l'historique de santé des enfants : une perte serait
+  définitive.
+- **Constat (vérifié le 2026-11-02 par l'API Firestore / Storage).**
+  - Firestore `(default)`, région eur3 : **aucune planification de sauvegarde,
+    aucune sauvegarde existante**.
+  - Récupération à un instant donné (PITR) : **désactivée** ; seules les versions
+    de la dernière heure sont conservées (réglage par défaut).
+  - Protection contre la suppression de la base : **désactivée**.
+  - Storage (deux buckets) : corbeille (« soft delete ») de **7 jours** ; pas de
+    versions d'objets.
+- **Options.**
+  1. Sauvegarde **quotidienne** conservée **7 jours** + protection contre la
+     suppression. Coût : faible au volume actuel (facturation au stockage des
+     sauvegardes). *Recommandé.*
+  2. Sauvegarde quotidienne 7 jours + **hebdomadaire 30 jours** : plus de marge
+     pour découvrir un problème tard ; coût un peu plus élevé ; texte RGPD
+     « jusqu'à 30 jours ».
+  3. Activer en plus le **PITR** (retour à n'importe quelle minute des 7 derniers
+     jours) : le plus sûr, coût plus élevé.
+  4. Ne rien activer : texte « aucune sauvegarde de la base ; les fichiers
+     supprimés restent récupérables 7 jours » — risque de perte totale assumé.
+- **Recommandation.** Option 1 (ou 2), protection contre la suppression dans
+  tous les cas. Texte associé : « Sauvegardes : 7 jours glissants, puis
+  effacement définitif ; fichiers supprimés récupérables 7 jours ».
+- **Réponse attendue.** « D1 : option 1 » (ou 2, 3, 4). Claude active la
+  planification (`gcloud firestore backups schedules create` ou API) et la
+  protection, puis remplit la case jaune.
+
+### D2 — Délégué à la protection des données (DPO)
+
+- **Contexte.** Case jaune « Délégué à la protection des données » de
+  `privacy.html`. Le RGPD (art. 37) impose un DPO quand l'activité principale
+  consiste à traiter des données de santé **à grande échelle**.
+- **Constat.** Petite base d'utilisateurs aujourd'hui ; données de santé
+  d'enfants = catégorie sensible ; un contact dédié existe déjà
+  (privacy@suivibaby.com).
+- **Options.**
+  1. « **Non désigné à ce jour** ; pour toute question : privacy@suivibaby.com ».
+     *Recommandé à ce stade*, à revoir quand le nombre de familles augmente.
+  2. Désigner un DPO interne (toi), déclaré à la CNIL.
+  3. DPO externe mutualisé (prestataire, abonnement mensuel).
+- **Réponse attendue.** « D2 : option 1 » (ou 2 avec le nom, ou 3 avec le
+  prestataire).
+
+### D3 — Sentry : région et fonctionnement en production
+
+- **Contexte.** Case jaune « Sentry » de `privacy.html` (États-Unis ou UE) ; et
+  savoir si le suivi des erreurs fonctionne réellement.
+- **Constat (2026-11-02).** L'app lit `EXPO_PUBLIC_SENTRY_DSN`
+  (`app/_layout.tsx`). Cette variable n'est ni dans le dépôt ni dans les
+  variables EAS visibles ; le `.env` local est exclu des builds par
+  `.easignore`. **Risque : Sentry ne reçoit rien en production** (DSN vide).
+  Lecture des secrets bloquée par le garde-fou : à vérifier par toi.
+- **À vérifier dans Sentry.**
+  1. Des événements de la version **1.0.6** arrivent-ils (Issues / Releases) ?
+  2. Région de l'organisation : Settings → Organization → **Data Storage
+     Location** (US ou EU / Germany ; l'adresse DSN contient `ingest.de.sentry.io`
+     pour l'UE).
+- **Si rien n'arrive.** Ajouter le DSN dans les variables EAS (environnement
+  production) et dans le build Android local, puis nouveau build.
+- **Réponse attendue.** « D3 : région US/EU ; événements 1.0.6 oui/non ».
+
+### D4 — Transcription vocale (AssemblyAI) en Europe
+
+- **Contexte.** Aujourd'hui la commande vocale envoie l'audio au point d'accès
+  américain `api.assemblyai.com` (constaté dans `functions/index.js`) ; la
+  politique déclare donc AssemblyAI aux États-Unis.
+- **Option.** AssemblyAI propose un point d'accès **européen**
+  (`api.eu.assemblyai.com`). La bascule mettrait la transcription dans l'UE ; il
+  ne resterait qu'Anthropic (interprétation du texte) aux États-Unis.
+- **À vérifier.** Que ton compte AssemblyAI a accès à la région UE (et si une
+  clé API distincte est nécessaire), et que les modèles utilisés y sont
+  disponibles.
+- **Recommandation.** Étudier puis basculer : changement limité aux Cloud
+  Functions de transcription (URL + éventuellement clé), test, déploiement,
+  mise à jour de la politique.
+- **Réponse attendue.** « D4 : étudie » ou « D4 : non ».
+
+### D5 — Non-utilisation des données pour entraîner les IA
+
+- **Contexte.** Case jaune de `privacy.html` : la politique affirme que les
+  prestataires d'IA n'utilisent pas les données pour entraîner leurs modèles,
+  à confirmer.
+- **À vérifier.**
+  - **Anthropic** : conditions commerciales de l'API — par défaut, les données
+    envoyées par l'API ne servent pas à l'entraînement (à confirmer sur ton
+    compte / contrat, et l'éventuelle rétention de sécurité de 30 jours).
+  - **AssemblyAI** : réglages du compte et conditions (option d'opt-out de
+    l'amélioration des modèles, durée de rétention des transcriptions ;
+    l'app supprime déjà la transcription après traitement).
+- **Réponse attendue.** « D5 : Anthropic ok, AssemblyAI ok/opt-out activé » —
+  Claude adapte alors le texte (ou le nuance si un point n'est pas garanti).
+
+### D6 — Médiateur de la consommation (→ action 2.2)
+
+- **Obligation.** Code de la consommation, art. L.612-1 : médiation gratuite
+  pour le consommateur ; coordonnées à afficher (CGU, mentions légales) ;
+  amende jusqu'à 15 000 € pour une société (art. L.641-1).
+- **Comment.** Choisir un médiateur référencé par la CECMC (liste sur
+  economie.gouv.fr), adhérer (abonnement annuel, parfois coût par dossier),
+  transmettre nom + adresse + site.
+- **Exemples généralistes avec saisine en ligne.** CM2C, MEDICYS, CNPM
+  Médiation Consommation, Médiation Net Consommateurs.
+- **Réponse attendue.** Nom, adresse postale et site du médiateur choisi.
+
+### D7 — Offre Famille (→ action 3.2)
+
+- **Constat.** Côté serveur, Famille donne exactement les mêmes droits que
+  Premium (partage illimité pour les deux ; la limite « 5 comptes » n'est
+  appliquée nulle part — `functions/index.js`, `FREE_MAX_SHARED_USERS`).
+- **Options.** (a) Limiter le partage Premium (ex. 3 personnes) et réserver
+  5 comptes à Famille, appliqué côté serveur ; (b) fusionner Famille dans
+  Premium et retirer l'offre.
+- **Réponse attendue.** « D7 : a » (avec la limite Premium souhaitée) ou « D7 : b ».
+
+### D8 — Courbes OMS et statistiques avancées (→ action 3.3)
+
+- **Constat.** Présentées comme Premium (paywall, site) mais accessibles à tous
+  dans le code.
+- **Options.** (a) Les réserver réellement à Premium (gating dans l'app) ;
+  (b) les laisser gratuites et les retirer des avantages Premium affichés.
+- **Réponse attendue.** « D8 : a » ou « D8 : b ».
+
+### D9 — Fonctions planifiées en `us-central1` (→ action 4.5)
+
+- **Constat.** `cleanupExpiredShareCodes` et `purgeDeletedChildren` tournent en
+  `us-central1` (pas de région explicite) alors que la politique dit « fonctions
+  serveur dans l'UE ».
+- **Proposition.** Ajouter `region: "europe-west1"`, déployer (Firebase
+  supprime l'ancienne fonction américaine et crée la nouvelle ; tâche de
+  nettoyage, sans impact utilisateur).
+- **Réponse attendue.** « D9 : go ».
+
+### D10 — Vérification finale du workflow de déploiement (→ action 4.4)
+
+- **Constat.** Le CI déploie désormais les fonctions ; le rôle Cloud Scheduler
+  manquant a été ajouté. Il reste à constater une exécution verte de bout en bout.
+- **Action.** Lancer `gh workflow run deploy-functions.yml --ref main`
+  (redéploie les 35 fonctions à l'identique) — bloqué pour Claude par le
+  garde-fou : à lancer par toi (`! gh workflow run …`), Claude surveille.
+- **Réponse attendue.** Lancer la commande, ou « D10 : plus tard ».
+
 ## Historique
 
 | Date | Action |
@@ -65,3 +218,4 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 2026-11-02 | **1.0.6 en ligne sur les deux stores.** Début de la période de transition (1.6 : imposer la 1.0.6 vers le 2026-12-15, selon l'adoption) |
 | 2026-11-02 | `app_config/latest_version` : latestVersion 1.0.6 (invitation à mettre à jour), minVersion 1.0.0, lien App Store corrigé (id6773195663) |
 | 2026-11-02 | **Mise à jour forcée** : minVersion 1.0.6 (écrit à 05:42 UTC). Calendrier avancé : 1.7 au 9 nov., 1.8 au 2 déc., 1.9 au 16 déc. |
+| 2026-11-02 | Vérifications : aucune sauvegarde Firestore (PITR et protection désactivés), corbeille Storage 7 j, AssemblyAI en US, DSN Sentry introuvable dans les builds → questions D1 à D10 (section 5) |
