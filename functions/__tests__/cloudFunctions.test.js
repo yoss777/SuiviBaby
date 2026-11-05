@@ -1230,15 +1230,18 @@ describe("revenueCatWebhook — anti-replay & dedup (T0.2)", () => {
   it("dedupes a duplicate event by event.id", async () => {
     process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
     const r = res();
-    // First call: doc.create succeeds. Second call: throws ALREADY_EXISTS.
-    const createMock = jest.fn()
-      .mockRejectedValueOnce({ code: 6, message: "Document already exists" });
-    mockFirestore.doc.mockImplementation((p) => {
-      if (p === "revenuecat_webhook_events/dup-evt") {
-        return { create: createMock };
-      }
-      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), create: jest.fn() };
-    });
+    // The marker for this event id already exists (read inside the transaction).
+    mockFirestore.doc.mockImplementation((p) => ({ path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() }));
+    const txSet = jest.fn();
+    mockRunTransaction.mockReset();
+    mockRunTransaction.mockImplementation(async (fn) =>
+      fn({
+        get: jest.fn(async (ref) => (ref.path === "revenuecat_webhook_events/dup-evt" ? doc({}) : no())),
+        set: txSet,
+        create: jest.fn(),
+        update: jest.fn(),
+      })
+    );
     await fns.revenueCatWebhook(
       {
         method: "POST",
@@ -1255,6 +1258,7 @@ describe("revenueCatWebhook — anti-replay & dedup (T0.2)", () => {
       r
     );
     expect(r.send).toHaveBeenCalledWith(expect.stringMatching(/duplicate/));
+    expect(txSet).not.toHaveBeenCalled();
   });
 
   it("skips when the Firebase Auth user no longer exists", async () => {
@@ -2019,16 +2023,20 @@ describe("revenueCatWebhook — out-of-order events (S8)", () => {
   });
   const send = async (event, existing) => {
     process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
-    mockFirestore.doc.mockImplementation((p) => {
-      if (p?.startsWith("revenuecat_webhook_events/")) return { create: jest.fn().mockResolvedValue(undefined) };
-      return { path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
-    });
+    mockFirestore.doc.mockImplementation((p) => ({ path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() }));
     mockFirestore.collection.mockImplementation(() => ({ add: jest.fn().mockResolvedValue({ id: "log" }) }));
     const txSet = jest.fn();
     // mockReset: drop "Once" implementations left unconsumed by earlier tests.
     mockRunTransaction.mockReset();
     mockRunTransaction.mockImplementation(async (fn) =>
-      fn({ get: jest.fn().mockResolvedValue(existing ? doc(existing) : no()), set: txSet, update: jest.fn() })
+      fn({
+        get: jest.fn(async (ref) =>
+          ref.path?.startsWith("revenuecat_webhook_events/") ? no() : existing ? doc(existing) : no()
+        ),
+        set: txSet,
+        create: jest.fn(),
+        update: jest.fn(),
+      })
     );
     await fns.revenueCatWebhook(
       { method: "POST", headers: { authorization: "Bearer topsecret" }, body: { event } },
@@ -2075,7 +2083,7 @@ describe("revenueCatWebhook — event types (review follow-up)", () => {
     mockFirestore.collection.mockImplementation(() => ({ add: jest.fn().mockResolvedValue({ id: "log" }) }));
     const txSet = jest.fn();
     mockRunTransaction.mockReset();
-    mockRunTransaction.mockImplementation(async (fn) => fn({ get: jest.fn().mockResolvedValue(no()), set: txSet, update: jest.fn() }));
+    mockRunTransaction.mockImplementation(async (fn) => fn({ get: jest.fn().mockResolvedValue(no()), set: txSet, create: jest.fn(), update: jest.fn() }));
     const r = { status: jest.fn().mockReturnThis(), send: jest.fn() };
     await fns.revenueCatWebhook({ method: "POST", headers: { authorization: "Bearer topsecret" }, body: { event: { app_user_id: "u1", event_timestamp_ms: Date.now(), ...event } } }, r);
     return { txSet, r };
@@ -2204,5 +2212,82 @@ describe("checkRateLimit is transactional (S6)", () => {
     await expect(fns.findUserByEmail(auth("u1", { email: "a@b.c" }))).rejects.toThrow("Trop de requêtes");
     const txFns = mockFirestore.runTransaction.mock.calls.map(([fn]) => fn.name);
     expect(txFns).toContain("rateLimitTxn");
+  });
+});
+
+describe("revenueCatWebhook — no event lost on failure (audit A1)", () => {
+  const originalSecret = process.env.REVENUECAT_WEBHOOK_SECRET;
+  afterEach(() => {
+    if (originalSecret === undefined) delete process.env.REVENUECAT_WEBHOOK_SECRET;
+    else process.env.REVENUECAT_WEBHOOK_SECRET = originalSecret;
+  });
+  const event = { id: "evt-a1", type: "RENEWAL", app_user_id: "u1", entitlement_ids: ["premium"] };
+  const call = async (ev = event) => {
+    process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
+    const r = { status: jest.fn().mockReturnThis(), send: jest.fn() };
+    await fns.revenueCatWebhook(
+      { method: "POST", headers: { authorization: "Bearer topsecret" }, body: { event: { event_timestamp_ms: Date.now(), ...ev } } },
+      r
+    );
+    return r;
+  };
+  beforeEach(() => {
+    mockFirestore.doc.mockImplementation((p) => ({ path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() }));
+    mockFirestore.collection.mockImplementation(() => ({ add: jest.fn().mockResolvedValue({ id: "log" }) }));
+    mockRunTransaction.mockReset();
+  });
+
+  it("writes the dedup marker and the subscription in the same transaction", async () => {
+    const tx = { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), create: jest.fn(), update: jest.fn() };
+    mockRunTransaction.mockImplementation(async (fn) => fn(tx));
+    const r = await call();
+    expect(r.status).toHaveBeenCalledWith(200);
+    expect(tx.create).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "revenuecat_webhook_events/evt-a1" }),
+      expect.objectContaining({ eventId: "evt-a1" })
+    );
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "subscriptions/u1" }),
+      expect.objectContaining({ tier: "premium", status: "active" }),
+      { merge: true }
+    );
+  });
+
+  it("answers 500 when the transaction fails, so the retry processes the event", async () => {
+    // First delivery: the transaction aborts (nothing committed, marker included).
+    mockRunTransaction.mockRejectedValueOnce(new Error("firestore unavailable"));
+    const first = await call();
+    expect(first.status).toHaveBeenCalledWith(500);
+
+    // Retry: the marker does not exist, the subscription is written.
+    const tx = { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), create: jest.fn(), update: jest.fn() };
+    mockRunTransaction.mockImplementation(async (fn) => fn(tx));
+    const retry = await call();
+    expect(retry.status).toHaveBeenCalledWith(200);
+    expect(retry.send).toHaveBeenCalledWith("OK");
+    expect(tx.set).toHaveBeenCalled();
+  });
+
+  it("answers 500 (retry) when the Auth lookup fails for another reason than a deleted user", async () => {
+    const adminMod = require("firebase-admin");
+    adminMod.auth.mockReturnValueOnce({ getUser: jest.fn().mockRejectedValue({ code: "auth/internal-error" }) });
+    const r = await call();
+    expect(r.status).toHaveBeenCalledWith(500);
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it("ignores an app_user_id that is not a plain uid", async () => {
+    const r = await call({ ...event, id: "evt-path", app_user_id: "u1/../other" });
+    expect(r.send).toHaveBeenCalledWith("OK - invalid user id");
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it("still answers 200 when only the audit log write fails", async () => {
+    mockFirestore.collection.mockImplementation(() => ({ add: jest.fn().mockRejectedValue(new Error("log down")) }));
+    const tx = { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), create: jest.fn(), update: jest.fn() };
+    mockRunTransaction.mockImplementation(async (fn) => fn(tx));
+    const r = await call();
+    expect(r.status).toHaveBeenCalledWith(200);
+    expect(tx.set).toHaveBeenCalled();
   });
 });

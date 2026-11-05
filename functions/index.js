@@ -2796,42 +2796,27 @@ exports.revenueCatWebhook = onRequest(
       }
     }
 
-    // T0.2 — idempotence par event.id. RC envoie un UUID unique par event ;
-    // si on a déjà traité ce doc, on bail (replay protection).
+    // T0.2 — idempotence par event.id (UUID unique par event RC). Le marqueur
+    // est lu et créé DANS la transaction qui écrit l'abonnement (plus bas) :
+    // si le traitement échoue, rien n'est marqué et le retry de RevenueCat
+    // retraite l'événement au lieu de le prendre pour un doublon.
     const eventId = typeof event.id === "string" && event.id.length > 0
       ? event.id
       : null;
     const db = admin.firestore();
-    if (eventId) {
-      const dedupRef = db.doc(`revenuecat_webhook_events/${eventId}`);
-      try {
-        await dedupRef.create({
-          eventId,
-          eventType: event.type ?? "unknown",
-          receivedAt: admin.firestore.FieldValue.serverTimestamp(),
-          // TTL field — Firestore TTL policy auto-purge après expireAt.
-          // Provisionner avec functions/scripts/enable-rc-webhook-ttl.js.
-          expireAt: admin.firestore.Timestamp.fromMillis(
-            Date.now() + 30 * 24 * 60 * 60 * 1000
-          ),
-        });
-      } catch (err) {
-        // `create` throws ALREADY_EXISTS si le doc existe → duplicate webhook.
-        if (err?.code === 6 || /ALREADY_EXISTS|already exists/i.test(String(err?.message))) {
-          console.log(`revenueCatWebhook: duplicate event ${eventId}, skipping`);
-          res.status(200).send("OK - duplicate");
-          return;
-        }
-        // Autre erreur Firestore : on log mais on continue (mieux processer un
-        // event au pire 2x que perdre une mise à jour).
-        console.error(`revenueCatWebhook: dedup write failed for ${eventId}:`, err);
-      }
-    }
+    const dedupRef = eventId ? db.doc(`revenuecat_webhook_events/${eventId}`) : null;
 
     const appUserId = event.app_user_id;
     if (!appUserId || appUserId.startsWith("$RCAnonymous")) {
       // Ignorer les utilisateurs anonymes
       res.status(200).send("OK - skipped anonymous");
+      return;
+    }
+    // app_user_id = uid Firebase : refuser tout ce qui pourrait former un
+    // autre chemin Firestore (ex. "a/b") dans subscriptions/{appUserId}.
+    if (typeof appUserId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(appUserId)) {
+      console.warn("revenueCatWebhook: invalid app_user_id, skipping");
+      res.status(200).send("OK - invalid user id");
       return;
     }
 
@@ -2849,8 +2834,11 @@ exports.revenueCatWebhook = onRequest(
         res.status(200).send("OK - user deleted");
         return;
       }
-      // Autre erreur (réseau Auth, etc.) : on continue, mieux que perdre l'event.
-      console.warn(`revenueCatWebhook: getUser check failed:`, err?.message ?? err);
+      // Autre erreur (réseau Auth, etc.) : 500 pour que RevenueCat réessaie
+      // (rien n'est encore marqué comme traité).
+      console.error(`revenueCatWebhook: getUser check failed:`, err?.message ?? err);
+      res.status(500).send("Auth lookup failed");
+      return;
     }
 
     const eventType = event.type;
@@ -2931,35 +2919,70 @@ exports.revenueCatWebhook = onRequest(
       lastEvent: eventType,
     };
 
-    // Transaction pour éviter les race conditions (double webhook simultané)
-    await db.runTransaction(async (tx) => {
-      const subRef = db.doc(`subscriptions/${appUserId}`);
-      const existing = await tx.get(subRef);
-      const existingData = existing.exists ? existing.data() : {};
+    // Transaction : marqueur anti-doublon + abonnement écrits ensemble (ou pas
+    // du tout). Évite aussi les race conditions entre deux webhooks simultanés.
+    let duplicate = false;
+    try {
+      await db.runTransaction(async (tx) => {
+        const subRef = db.doc(`subscriptions/${appUserId}`);
+        const dedupSnap = dedupRef ? await tx.get(dedupRef) : null;
+        if (dedupSnap?.exists) {
+          duplicate = true;
+          return;
+        }
+        const existing = await tx.get(subRef);
+        const existingData = existing.exists ? existing.data() : {};
+        if (dedupRef) {
+          tx.create(dedupRef, {
+            eventId,
+            eventType: eventType ?? "unknown",
+            receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+            // TTL field — Firestore TTL policy auto-purge après expireAt.
+            // Provisionner avec functions/scripts/enable-rc-webhook-ttl.js.
+            expireAt: admin.firestore.Timestamp.fromMillis(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ),
+          });
+        }
 
-      // Ne pas écraser l'état avec un event plus ancien que le dernier traité
-      // (RevenueCat ne garantit pas l'ordre de livraison ni des retries).
-      // On compare les horodatages des events, pas l'heure de traitement.
-      if (eventTs !== null &&
-          typeof existingData.lastEventTimestampMs === "number" &&
-          existingData.lastEventTimestampMs > eventTs) {
-        console.log(`revenueCatWebhook: skipping out-of-order event for ${appUserId}`);
-        return;
-      }
+        // Ne pas écraser l'état avec un event plus ancien que le dernier traité
+        // (RevenueCat ne garantit pas l'ordre de livraison ni des retries).
+        // On compare les horodatages des events, pas l'heure de traitement.
+        if (eventTs !== null &&
+            typeof existingData.lastEventTimestampMs === "number" &&
+            existingData.lastEventTimestampMs > eventTs) {
+          console.log(`revenueCatWebhook: skipping out-of-order event for ${appUserId}`);
+          return;
+        }
 
-      tx.set(subRef, subscriptionData, { merge: true });
-    });
+        tx.set(subRef, subscriptionData, { merge: true });
+      });
+    } catch (err) {
+      console.error(`revenueCatWebhook: processing failed for event ${eventId ?? "(no id)"}:`, err);
+      res.status(500).send("Processing failed");
+      return;
+    }
+    if (duplicate) {
+      console.log(`revenueCatWebhook: duplicate event ${eventId}, skipping`);
+      res.status(200).send("OK - duplicate");
+      return;
+    }
 
-    // Log webhook pour debug et audit
-    await db.collection("webhook_logs").add({
-      source: "revenuecat",
-      appUserId,
-      eventType,
-      tier,
-      status,
-      productId,
-      processedAt: admin.firestore.Timestamp.now(),
-    });
+    // Log webhook pour debug et audit — non bloquant : l'abonnement est déjà
+    // écrit et l'événement marqué ; un échec ici ne doit pas renvoyer 5xx.
+    try {
+      await db.collection("webhook_logs").add({
+        source: "revenuecat",
+        appUserId,
+        eventType,
+        tier,
+        status,
+        productId,
+        processedAt: admin.firestore.Timestamp.now(),
+      });
+    } catch (err) {
+      console.error("revenueCatWebhook: webhook_logs write failed:", err?.message ?? err);
+    }
 
     console.log(`revenueCatWebhook: uid=${appUserId}, type=${eventType}, tier=${tier}, status=${status}`);
     res.status(200).send("OK");
