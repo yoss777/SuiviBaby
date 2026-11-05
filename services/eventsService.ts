@@ -314,6 +314,12 @@ export async function obtenirEvenements(
   }
 }
 
+// Per-snapshot listener traces: development only (they ran on every snapshot
+// of every listener in production).
+const listenerLog: (message: string) => void = __DEV__
+  ? (message) => console.log(message)
+  : () => {};
+
 /**
  * Écoute les événements en temps réel
  */
@@ -368,13 +374,13 @@ export function ecouterEvenements(
   const tl = Array.isArray(options?.type)
     ? options.type.length > 3 ? `[${options.type.length} types]` : options.type.join(",")
     : options?.type ?? "all";
-  console.log(`[L:${lid}] SETUP type=${tl} wfs=${!!options?.waitForServer} imc=${!!options?.waitForServer}`);
+  listenerLog(`[L:${lid}] SETUP type=${tl} wfs=${!!options?.waitForServer} imc=${!!options?.waitForServer}`);
 
   const unsubscribe = onSnapshot(
     q,
     { includeMetadataChanges: !!options?.waitForServer },
     (snapshot) => {
-      console.log(`[L:${lid}] SNAP type=${tl} sz=${snapshot.size} empty=${snapshot.empty} cache=${snapshot.metadata.fromCache} server=${hasReceivedServerSnapshot} fb=${fallbackTriggered}`);
+      listenerLog(`[L:${lid}] SNAP type=${tl} sz=${snapshot.size} empty=${snapshot.empty} cache=${snapshot.metadata.fromCache} server=${hasReceivedServerSnapshot} fb=${fallbackTriggered}`);
 
       if (!snapshot.metadata.fromCache) {
         hasReceivedServerSnapshot = true;
@@ -399,13 +405,13 @@ export function ecouterEvenements(
         snapshot.metadata.fromCache &&
         !(options.cacheFirst && events.length > 0)
       ) {
-        console.log(`[L:${lid}] CACHE waiting for server`);
+        listenerLog(`[L:${lid}] CACHE waiting for server`);
         if (!fallbackTimer && !fallbackTriggered) {
           fallbackTimer = setTimeout(() => {
-            console.log(`[L:${lid}] FALLBACK after ${waitForServerTimeoutMs}ms server=${hasReceivedServerSnapshot}`);
+            listenerLog(`[L:${lid}] FALLBACK after ${waitForServerTimeoutMs}ms server=${hasReceivedServerSnapshot}`);
             if (!hasReceivedServerSnapshot) {
               fallbackTriggered = true;
-              console.log(`[L:${lid}] CB ${cachedEvents?.length ?? 0} cached events`);
+              listenerLog(`[L:${lid}] CB ${cachedEvents?.length ?? 0} cached events`);
               callback(cachedEvents ?? []);
             }
           }, waitForServerTimeoutMs);
@@ -413,7 +419,7 @@ export function ecouterEvenements(
         return;
       }
 
-      console.log(`[L:${lid}] CB ${events.length} events`);
+      listenerLog(`[L:${lid}] CB ${events.length} events`);
       callback(events);
     },
     (error) => {

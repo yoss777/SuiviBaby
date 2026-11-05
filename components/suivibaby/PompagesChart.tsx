@@ -34,7 +34,6 @@ import {
 import {
   Gesture,
   GestureDetector,
-  GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -416,7 +415,7 @@ function PompagesChart({
   }));
 
   return (
-    <GestureHandlerRootView
+    <View
       style={[styles.container, { backgroundColor: nc.background }]}
     >
       {isEmpty ? (
@@ -1054,7 +1053,7 @@ function PompagesChart({
           </View>
         </>
       )}
-    </GestureHandlerRootView>
+    </View>
   );
 }
 

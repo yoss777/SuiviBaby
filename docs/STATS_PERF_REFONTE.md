@@ -421,11 +421,11 @@ point critique côté React. Corrigé :
   serveur répond juste après, une lecture `limite: 1` est faite pour rien
   (sans effet visible sur la semaine affichée).
 
-### Sprint 5 — Nettoyage · US-T3, US-9.1 · ⏳
+### Sprint 5 — Nettoyage · US-T3, US-9.1 · ✅ 2026-11-05
 
-- [ ] **5.1** `console.log` d'`eventsService.ts` (lignes 365, 371, 395, 398,
+- [x] **5.1** `console.log` d'`eventsService.ts` (lignes 365, 371, 395, 398,
   401, 409) supprimés ou sous `__DEV__`.
-- [ ] **5.2** Supprimer `components/suivibaby/PompagesChartSkia.tsx` et
+- [x] **5.2** Supprimer `components/suivibaby/PompagesChartSkia.tsx` et
   `TeteesChartSkia.tsx` (importés nulle part) ; vérifier
   `services/events/stats.ts` (`obtenirStats24h`, aucun appelant).
 - [ ] **5.3** Gestes mémoïsés (`Gesture.Tap()` / `Pan()`), suppression des
@@ -436,13 +436,25 @@ point critique côté React. Corrigé :
 - [ ] **5.5** Largeur des onglets internes de Repas calculée depuis
   `screenWidth` au lieu de `onLayout` → `setState` (`RepasChart.tsx:777`, `840`) ;
   indice d'aide (`TAP_HINT_KEY`) lu une fois au niveau de l'écran.
-- [ ] **5.6** Constantes (`jours`) sorties des composants ; commentaire sur
+- [x] **5.6** Constantes (`jours`) sorties des composants ; commentaire sur
   l'effet `initialTypeFilter` (`RepasChart.tsx:195-205`).
-- [ ] **5.7** Mesure finale (même protocole que le sprint 0) et mise à jour de
+- [x] **5.7** Mesure finale (même protocole que le sprint 0) et mise à jour de
   `docs/SUIVI_ACTIONS.md`.
 
 Fin de sprint : mesures « après » remplies ; branche prête à fusionner sur
 `main` puis à livrer dans la version suivante.
+
+_Bilan 2026-11-05 : traces par snapshot d'`ecouterEvenements` réservées au
+développement ; `PompagesChartSkia.tsx` et `TeteesChartSkia.tsx` supprimés
+(≈ 2 000 lignes, importés nulle part) ; `obtenirStats24h` gardé (ré-export
+volontaire, documenté dans `services/events/stats.ts`) ; les 3
+`GestureHandlerRootView` internes remplacés par des `View` (celui de
+`app/_layout.tsx` suffit) ; dépendances partielles de l'effet
+`initialTypeFilter` commentées ; lint sans erreur (6 avertissements de moins).
+Reportés, gain négligeable maintenant que les graphiques ne se redessinent
+qu'au besoin : 1.7 (chemins Skia), 5.3 (mémoïser les gestes), 5.4 (worklet de
+la courbe), 5.5 (largeur des onglets par `onLayout`, 2 rendus au montage du
+graphique Repas)._
 
 ## Correspondance stories → sprints
 
@@ -476,13 +488,13 @@ un Android d'entrée de gamme sous Hermes, compter 5 à 20 fois plus) :
 
 | Mesure | Avant | S1 | S2 | S3 | S4 | Après | Cible |
 |---|---|---|---|---|---|---|---|
-| Calcul des 3 graphiques par rendu (ms) | 28,3 (Repas 12,1 · Pompages 2,6 · Sommeil 15,6) | 2,3 quand les données ou la semaine changent, 0 sinon | | | | | < 3 |
-| Rendus de `StatsScreen` jusqu'aux données | 21 | 21 | 14 (16 avec préchargement) | 12 | | | ≤ 8 |
-| Rendus des graphiques (Repas / Pompages / Sommeil) | 11 / 6 / 2 | 11 / 6 / 2 | 2 / 0 / 0 | 1 / 1 / 1 (préchargés) | | | ≤ 2 chacun |
-| Calcul estimé au chargement (ms) | ≈ 180 | | | | | | < 20 |
-| Graphiques montés à l'ouverture | 3 | 3 | 1 | | | | 1 |
-| Écouteurs Firestore | 5 | 5 | 5 | 3 | | | 3 |
-| Événements lus à l'ouverture | tout l'historique (3 000) | 3 000 | 3 000 | 132 (fenêtre de 3 semaines) | | | fenêtre (≈ 3 semaines) |
+| Calcul des 3 graphiques par rendu (ms) | 28,3 (Repas 12,1 · Pompages 2,6 · Sommeil 15,6) | 2,3 si données ou semaine changent, 0 sinon | = | = | = | ≈ 0,15 sur la fenêtre (132 événements), 0 sinon | < 3 |
+| Rendus de `StatsScreen` jusqu'aux données | 21 | 21 | 14 (16 avec préchargement) | 12 | 12 | 12 | ≤ 8 |
+| Rendus des graphiques (Repas / Pompages / Sommeil) | 11 / 6 / 2 | 11 / 6 / 2 | 2 / 0 / 0 | 1 / 1 / 1 (préchargés) | = | 1 / 1 / 1 | ≤ 2 chacun |
+| Calcul estimé au chargement (ms) | ≈ 180 | ≈ 25 | ≈ 5 | < 1 | < 1 | < 1 | < 20 |
+| Graphiques montés à l'ouverture | 3 | 3 | 1 | 1 | 1 | 1 (les 2 autres ensuite, en arrière-plan) | 1 |
+| Écouteurs Firestore | 5 | 5 | 5 | 3 | 3 | 3 | 3 |
+| Événements lus à l'ouverture | tout l'historique (3 000) | 3 000 | 3 000 | 132 (fenêtre de 3 semaines) | 132, cache affiché d'abord | 132 | fenêtre (≈ 3 semaines) |
 | Ouverture → premier graphique sur le Samsung (ms) | à mesurer | | | | | | < 300 avec cache |
 
 ## Hors périmètre

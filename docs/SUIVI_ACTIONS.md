@@ -77,12 +77,12 @@ Plan détaillé, user stories et mesures : [STATS_PERF_REFONTE.md](STATS_PERF_RE
 
 | # | Action | Échéance | Qui | Dépend de | Contrôle | Statut |
 |---|---|---|---|---|---|---|
-| P0 | Sprint 0 — mesure de référence (jeu de 3 000 événements, profils sur le Samsung) | 2026-11-07 | Claude | — | Tableau « Mesures » rempli (avant) | ⏳ |
-| P1 | Sprint 1 — calculs des graphiques stables et rapides (memo, une passe, corrélation repas/sommeil) | 2026-11-10 | Claude | P0 | Tests d'agrégation verts, chiffres identiques | ⏳ |
-| P2 | Sprint 2 — écran réactif (React.memo, onglet actif seul, état de chargement unique, sans délai de 300 ms) | 2026-11-13 | Claude | P1 | 1 graphique monté à l'ouverture, aucune tâche JS > 100 ms | ⏳ |
-| P3 | Sprint 3 — requêtes bornées, semaines anciennes à la demande, PDF par requête ponctuelle | 2026-11-18 | Claude | P2 | Volume chargé indépendant de l'ancienneté, PDF identique | ⏳ |
-| P4 | Sprint 4 — cache affiché tout de suite, fusion optimiste allégée | 2026-11-21 | Claude | P3 | Ouverture sans spinner quand des données sont en cache | ⏳ |
-| P5 | Sprint 5 — nettoyage (logs, code mort `*ChartSkia.tsx`, gestes) et mesure finale | 2026-11-24 | Claude | P4 | Mesures « après » remplies, branche prête à fusionner | ⏳ |
+| P0 | Sprint 0 — mesure de référence (jeu de 3 000 événements, profils sur le Samsung) | 2026-11-07 | Claude | — | Tableau « Mesures » rempli (avant) | ✅ 2026-11-05 : référence 28 ms de calcul par rendu, 21 rendus de l'écran, 3 graphiques montés (Node, 3 000 événements) |
+| P1 | Sprint 1 — calculs des graphiques stables et rapides (memo, une passe, corrélation repas/sommeil) | 2026-11-10 | Claude | P0 | Tests d'agrégation verts, chiffres identiques | ✅ 2026-11-05 : 32 tests d'équivalence (Paris, UTC, São Paulo) |
+| P2 | Sprint 2 — écran réactif (React.memo, onglet actif seul, état de chargement unique, sans délai de 300 ms) | 2026-11-13 | Claude | P1 | 1 graphique monté à l'ouverture, aucune tâche JS > 100 ms | ✅ 2026-11-05 : 1 graphique monté à l'ouverture, plus de délai de 300 ms ; revue ECC corrigée |
+| P3 | Sprint 3 — requêtes bornées, semaines anciennes à la demande, PDF par requête ponctuelle | 2026-11-18 | Claude | P2 | Volume chargé indépendant de l'ancienneté, PDF identique | ✅ 2026-11-05 : 3 écouteurs sur 3 semaines (132 événements au lieu de 3 000) |
+| P4 | Sprint 4 — cache affiché tout de suite, fusion optimiste allégée | 2026-11-21 | Claude | P3 | Ouverture sans spinner quand des données sont en cache | ✅ 2026-11-05 : cache affiché d'abord ; revue ECC corrigée (courses, hors ligne, PDF partiel) |
+| P5 | Sprint 5 — nettoyage (logs, code mort `*ChartSkia.tsx`, gestes) et mesure finale | 2026-11-24 | Claude | P4 | Mesures « après » remplies, branche prête à fusionner | ✅ 2026-11-05 : nettoyage fait ; reste la mesure sur le Samsung et la fusion sur `main` |
 
 ## 5. Décisions en attente (questions détaillées)
 

@@ -37,7 +37,6 @@ import {
 import {
   Gesture,
   GestureDetector,
-  GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -461,7 +460,7 @@ function SommeilChart({
   // RENDER
   // ============================================
   return (
-    <GestureHandlerRootView style={[styles.container, { backgroundColor: nc.background }]}>
+    <View style={[styles.container, { backgroundColor: nc.background }]}>
       {isEmpty ? (
         <View style={styles.emptyContainer}>
           <FontAwesome name="bed" size={64} color={nc.textMuted} />
@@ -1005,7 +1004,7 @@ function SommeilChart({
           )}
         </View>
       )}
-    </GestureHandlerRootView>
+    </View>
   );
 }
 

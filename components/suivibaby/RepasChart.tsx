@@ -37,7 +37,6 @@ import {
 import {
   Gesture,
   GestureDetector,
-  GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -187,6 +186,9 @@ function RepasChart({
     });
   }, []);
 
+  // Only reacts to a new `initialTypeFilter` param (navigation from another
+  // screen); the user's own filter changes must not re-trigger it, hence the
+  // deliberately partial dependency list.
   useEffect(() => {
     if (initialTypeFilter && initialTypeFilter !== typeFilter) {
       setTypeFilter(initialTypeFilter);
@@ -577,7 +579,7 @@ function RepasChart({
   }));
 
   return (
-    <GestureHandlerRootView
+    <View
       style={[styles.container, { backgroundColor: nc.background }]}
     >
       {isEmpty ? (
@@ -1452,7 +1454,7 @@ function RepasChart({
           )}
         </View>
       )}
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
