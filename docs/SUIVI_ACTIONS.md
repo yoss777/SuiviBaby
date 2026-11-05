@@ -90,9 +90,9 @@ Rapport complet (P0, P1, P2, feuille de route) : [AUDIT_COMPLET_2026-11.md](AUDI
 
 | # | Action | Échéance | Qui | Dépend de | Contrôle | Statut |
 |---|---|---|---|---|---|---|
-| A1 | Webhook RevenueCat : marqueur anti-doublon dans la transaction (aucun paiement perdu sur erreur) | 2026-11-12 | Claude | — | Test : transaction en échec puis retry → abonnement appliqué | ⏳ |
-| A2 | Parrainage : champs non modifiables par le client, usage tracé côté serveur, code serveur | 2026-11-12 | Claude | — | Tests de règles + test : 2ᵉ usage refusé même après effacement de `referredBy` | ⏳ |
-| A3 | Une seule purge `purgeUserData` pour les deux parcours de suppression ; e-mail seulement après succès Auth ; photos avant événements | 2026-11-12 | Claude | — | Test qui compare les collections purgées | ⏳ |
+| A1 | Webhook RevenueCat : marqueur anti-doublon dans la transaction (aucun paiement perdu sur erreur) | 2026-11-12 | Claude | — | Test : transaction en échec puis retry → abonnement appliqué | 🔄 corrigé et testé le 2026-11-06 (sprint 1), en attente de revue et de déploiement |
+| A2 | Parrainage : champs non modifiables par le client, usage tracé côté serveur, code serveur | 2026-11-12 | Claude | — | Tests de règles + test : 2ᵉ usage refusé même après effacement de `referredBy` | 🔄 corrigé et testé le 2026-11-06 (sprint 1), en attente de revue et de déploiement |
+| A3 | Une seule purge `purgeUserData` pour les deux parcours de suppression ; e-mail seulement après succès Auth ; photos avant événements | 2026-11-12 | Claude | — | Test qui compare les collections purgées | 🔄 corrigé et testé le 2026-11-06 (sprint 1), en attente de revue et de déploiement |
 | A4 | Comptes Apple/Google : consentement santé bloquant + suppression de compte par ré-authentification fournisseur + révocation Apple | 2026-11-19 | Claude | — | Parcours testé avec un compte Google et un compte Apple | ⏳ |
 | A5 | Messages de santé : alerte fièvre selon l'âge à la saisie, « C'est normal », « meilleur endroit », fiche cododo | 2026-11-26 | Claude (code) / Yoss (relecture pédiatre) | relecture pédiatre | Textes validés et notés | ⏳ |
 | A6 | Sentry en production : filtrage des données de santé, DSN EAS, source maps, release/dist | 2026-11-12 | Claude / Yoss (DSN) | D3 | Événement de test reçu, sans donnée de santé | ⏳ |

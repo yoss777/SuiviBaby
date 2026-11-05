@@ -38,7 +38,7 @@
 
 ---
 
-## S1 — Ne plus perdre d'argent ni de données · serveur · P0 A1 A2 A3 · ⏳
+## S1 — Ne plus perdre d'argent ni de données · serveur · P0 A1 A2 A3 · ✅ 2026-11-06 (en attente de revue S1+S2 et de déploiement)
 
 But : aucun paiement perdu, plus de Premium gratuit par le parrainage, une
 suppression de compte complète et honnête.
@@ -51,35 +51,35 @@ User stories :
 - En tant que parent qui supprime son compte, je veux que toutes mes données
   disparaissent et ne recevoir la confirmation qu'une fois que c'est vrai.
 
-- [ ] **1.1** Webhook RevenueCat : marqueur anti-doublon créé dans la
+- [x] **1.1** Webhook RevenueCat : marqueur anti-doublon créé dans la
   transaction qui écrit `subscriptions/{uid}` (ou supprimé si le traitement
   échoue avant la réponse 5xx) ; `webhook_logs.add` non bloquant ; erreurs de
   `getUser` autres que `user-not-found` propagées ; validation de
   `app_user_id` (`^[A-Za-z0-9]{1,128}$`). Test : transaction en échec puis
   retry → abonnement appliqué. (`functions/index.js:2800-2960`)
-- [ ] **1.2** Parrainage : règles `user_promos` qui interdisent au client
+- [x] **1.2** Parrainage : règles `user_promos` qui interdisent au client
   d'écrire `referredBy`, `referralCode`, `referralCount` ; usage tracé dans
   `referrals/{filleulUid}` créé dans une transaction (refus s'il existe) ;
   code généré côté serveur (`crypto.randomBytes`) ; plafond de récompenses
   par parrain. Tests de règles + test de la fonction (2ᵉ usage refusé même
   après effacement de `referredBy`). (`firestore.rules:499`,
   `functions/index.js:3466-3560`, `services/promoService.ts:198`)
-- [ ] **1.3** `purgeUserData(uid)` unique, utilisée par
+- [x] **1.3** `purgeUserData(uid)` unique, utilisée par
   `processScheduledDeletions` et `deleteUserAccount` : toutes les collections
   (dont `subscriptions`, `user_promos`, `referrals` ×2, `user_content`,
   `webhook_logs`, `user_hidden_photos`, `voice_transcribe_cache`,
   `pending_assemblyai_deletes`, `childDeletionRequests`, `reports` par
   `reporterUid`) ; test qui compare la liste purgée à la liste des
   collections. (`functions/index.js:2600-2726`, `:3874-3935`)
-- [ ] **1.4** Ordre sûr : photos d'abord (échecs mis en file de reprise,
+- [x] **1.4** Ordre sûr : photos d'abord (échecs mis en file de reprise,
   comme `pending_assemblyai_deletes`), événements ensuite ; suppression Auth
   en dernier ; si Auth échoue (hors `user-not-found`), garder
   `pendingDeletion` + `deletionFailedAt` pour la reprise et ne pas envoyer
   l'e-mail ; e-mail seulement après succès.
-- [ ] **1.5** Événements saisis par le parent supprimé dans un dossier
+- [x] **1.5** Événements saisis par le parent supprimé dans un dossier
   partagé : anonymisés (`userId: "deleted"`) au lieu d'être effacés, pour que
   l'autre parent garde vaccins et températures.
-- [ ] **1.6** Tests manquants du cycle de suppression d'enfant :
+- [x] **1.6** Tests manquants du cycle de suppression d'enfant :
   `createDeletionRequest`, `voteDeletionRequest`, `cancelChildDeletion`,
   `purgeDeletedChildren` (quorum, annulation, délai de grâce, pas de purge
   d'un enfant annulé). Purge de `recap_history` et `notification_history`
@@ -88,6 +88,32 @@ User stories :
 Contrôle : `npm --prefix functions test` vert avec les nouveaux tests ;
 déploiement des fonctions ; un achat sandbox puis un renouvellement visibles
 dans `subscriptions/`.
+
+_Bilan 2026-11-06 (branche `sprint-1/argent-donnees`) :_
+- _1.1 : marqueur anti-doublon lu et créé dans la transaction de
+  l'abonnement ; 500 (nouvel essai) si la transaction ou la lecture Auth
+  échoue ; `app_user_id` validé ; journal d'audit non bloquant. 5 tests._
+- _1.2 : codes générés par le serveur (`ensureReferralCode`,
+  `referral_codes/{code}`), anciens codes repris s'ils sont libres ; un seul
+  parrainage par compte (`referrals/{filleulUid}` créé en transaction, anciens
+  parrainages détectés) ; e-mail vérifié exigé ; 10 récompenses maximum par
+  parrain ; règles : le client ne peut plus écrire les champs de parrainage.
+  11 tests + 5 tests de règles. L'app (`promoService`) demande son code au
+  serveur ; les anciennes versions ne peuvent plus créer de code (pas de carte
+  parrainage pour un nouveau compte tant qu'il n'a pas mis à jour)._
+- _1.3-1.5 : `purgeUserData` unique pour les deux parcours ; liste des
+  collections dans `functions/lib/userPurge.js` + test qui échoue si une
+  collection (app, fonctions ou règles) n'est ni purgée ni justifiée ; photos
+  d'abord (un échec arrête tout et la tâche réessaie), Auth puis
+  `users/{uid}` en dernier, e-mail seulement après succès, échec noté dans
+  `pendingDeletion.lastFailure` ; événements des dossiers partagés anonymisés
+  (`deleted-user`, photos retirées) ; `reports` et `referral_codes` ajoutés.
+  7 tests._
+- _1.6 : vote de suppression transactionnel ; la purge revérifie la demande et
+  l'enfant juste avant de supprimer ; `recap_history`, `notification_history`,
+  `croissances`, `sommeils` purgés avec l'enfant ; photos d'un enfant : un
+  échec garde la demande pour un nouvel essai. 10 tests._
+- _Fonctions : 234 tests (207 avant) ; règles : 138 ; app : 568._
 
 ## S2 — Voir ce qui se passe · serveur + app · P0 A6 A7 · ⏳
 
