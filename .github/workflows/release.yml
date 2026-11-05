@@ -1,9 +1,11 @@
 name: Release
 
+# Manual only until it is rewritten (audit sprint 12): a "v*" tag used to start
+# it, but it builds Android on EAS cloud (failing since May 2026), submits the
+# previous build (`--no-wait` then `submit --latest`), updates app_config before
+# store review and redeploys functions with a broken action. Releases go
+# through the local procedure (iOS EAS cloud + auto-submit, Android local .aab).
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       platform:

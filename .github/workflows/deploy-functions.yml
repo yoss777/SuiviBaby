@@ -41,6 +41,9 @@ jobs:
             rm "$RUNNER_TEMP/gcp-key.raw"
           fi
 
+      # --force: the code is the source of truth. Without it a non-interactive
+      # deploy fails as soon as a function is removed or moves region (old
+      # copy to delete), e.g. the move of the scheduled jobs to europe-west1.
       - name: Deploy Functions & Rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-key.json
@@ -48,7 +51,7 @@ jobs:
         run: >
           npx --yes firebase-tools@15 deploy
           --only functions,firestore:rules,firestore:indexes
-          --project "$PROJECT_ID" --non-interactive
+          --project "$PROJECT_ID" --non-interactive --force
 
       - name: Remove service account key
         if: always()

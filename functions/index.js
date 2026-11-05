@@ -1,10 +1,16 @@
 const admin = require("firebase-admin");
 const { Buffer } = require("node:buffer");
 const crypto = require("node:crypto");
+const { setGlobalOptions } = require("firebase-functions/v2");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onObjectFinalized, onObjectDeleted } = require("firebase-functions/v2/storage");
+
+// Every function runs in the EU unless it says otherwise (only the legacy US
+// bucket mirrors do). Without this, a function without an explicit region
+// silently landed in us-central1 (SUIVI_ACTIONS 4.5 / D9).
+setGlobalOptions({ region: "europe-west1" });
 
 const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
