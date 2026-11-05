@@ -23,6 +23,8 @@ jest.mock("@/services/eventsService", () => ({
   }),
   obtenirEvenements: jest.fn(() => Promise.resolve([])),
 }));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const eventsService = require("@/services/eventsService");
 
 // The global setup mocks Timestamp as a plain object; the screen uses instanceof.
 jest.mock("firebase/firestore", () => ({
@@ -87,10 +89,13 @@ jest.mock("react-native-pager-view", () => {
   });
 });
 
+const mockChartProps: Record<string, any> = {};
 const mockChart = (name: string) => {
   const { memo, useEffect } = jest.requireActual("react");
   const { countStatsRender } = jest.requireActual("@/utils/statsPerf");
-  const Chart = ({ onWeekChange }: any) => {
+  const Chart = (props: any) => {
+    const { onWeekChange } = props;
+    mockChartProps[name] = props;
     countStatsRender(name);
     useEffect(() => {
       const d = new Date();
@@ -116,8 +121,11 @@ const history = buildStatsEvents({ total: 3000, days: 365, now: Date.now() });
 function deliverSnapshotsOneByOne() {
   for (const listener of [...mockListeners]) {
     const types = listener.type.split(",");
+    const since = listener.options?.depuis?.getTime() ?? -Infinity;
     act(() => {
-      listener.callback(history.filter((e: any) => types.includes(e.type)));
+      listener.callback(
+        history.filter((e: any) => types.includes(e.type) && e.date.getTime() >= since),
+      );
     });
     act(() => {
       jest.advanceTimersByTime(100);
@@ -129,6 +137,9 @@ beforeEach(() => {
   jest.useFakeTimers();
   mockListeners.length = 0;
   resetStatsPerfCounters();
+  eventsService.ecouterEvenements.mockClear();
+  eventsService.obtenirEvenements.mockClear();
+  eventsService.obtenirEvenements.mockImplementation(() => Promise.resolve([]));
 });
 
 afterEach(() => {
@@ -162,8 +173,8 @@ describe("StatsScreen loading", () => {
     expect(counters.RepasChart).toBeLessThanOrEqual(2);
     expect(counters.PompagesChart ?? 0).toBeLessThanOrEqual(1);
     expect(counters.SommeilChart ?? 0).toBeLessThanOrEqual(1);
-    // 21 before sprint 2; each snapshot still costs two renders (count, then merge).
-    expect(counters.StatsScreen).toBeLessThanOrEqual(16);
+    // 21 before sprint 2, 16 with 5 listeners; each snapshot costs two renders (count, then merge).
+    expect(counters.StatsScreen).toBeLessThanOrEqual(12);
   });
 
   it("shows each resume card as soon as its own data is there", () => {
@@ -189,5 +200,54 @@ describe("StatsScreen loading", () => {
     refocus();
     refocus();
     expect(getStatsPerfCounters().StatsScreen).toBe(before);
+  });
+});
+
+describe("StatsScreen data window (sprint 3)", () => {
+  it("listens to 3 sources, from the Monday two weeks before the current week", () => {
+    render(<StatsScreen />);
+    expect(mockListeners.map((l) => l.type)).toEqual(["tetee,biberon,solide", "pompage", "sommeil"]);
+    const since: Date = mockListeners[0].options.depuis;
+    expect(since.getDay()).toBe(1);
+    const expected = new Date();
+    expected.setHours(0, 0, 0, 0);
+    expected.setDate(expected.getDate() - ((expected.getDay() + 6) % 7) - 14);
+    expect(since.getTime()).toBe(expected.getTime());
+  });
+
+  it("fetches older weeks once when a chart navigates back", async () => {
+    openAndLoad();
+    const older = new Date();
+    older.setDate(older.getDate() - 70);
+    await act(async () => {
+      mockChartProps.RepasChart.onWeekChange(older);
+    });
+    const calls = eventsService.obtenirEvenements.mock.calls.filter((c: any[]) => c[1]?.jusqu && !c[1]?.limite);
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1].depuis.getTime()).toBeLessThanOrEqual(older.getTime());
+    expect(calls[0][1].jusqu.getTime()).toBe(mockListeners[0].options.depuis.getTime() - 1);
+  });
+
+  it("probes for one older event when the window is empty", async () => {
+    render(<StatsScreen />);
+    const pompage = mockListeners.find((l) => l.type === "pompage")!;
+    await act(async () => {
+      pompage.callback([]);
+    });
+    const probe = eventsService.obtenirEvenements.mock.calls.find((c: any[]) => c[1]?.limite === 1);
+    expect(probe[1].type).toEqual(["pompage"]);
+    expect(probe[1].jusqu.getTime()).toBe(pompage.options.depuis.getTime() - 1);
+  });
+
+  it("pull-to-refresh reads the server once and keeps the listeners", async () => {
+    const { UNSAFE_getAllByType } = openAndLoad();
+    const { RefreshControl } = jest.requireActual("react-native");
+    const listenersBefore = eventsService.ecouterEvenements.mock.calls.length;
+    await act(async () => {
+      await UNSAFE_getAllByType(RefreshControl)[0].props.onRefresh();
+    });
+    expect(eventsService.ecouterEvenements.mock.calls.length).toBe(listenersBefore);
+    const serverCalls = eventsService.obtenirEvenements.mock.calls.filter((c: any[]) => c[1]?.source === "server");
+    expect(serverCalls).toHaveLength(1);
   });
 });

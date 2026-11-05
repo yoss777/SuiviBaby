@@ -47,6 +47,8 @@ type Props = {
   colorScheme?: "light" | "dark";
   screenWidth?: number;
   onWeekChange?: (weekStart: Date) => void;
+  /** Displayed day of the daily curve (lets the screen load older days on demand). */
+  onDayChange?: (dayStart: Date) => void;
 };
 
 const DEFAULT_SCREEN_WIDTH = Dimensions.get("window").width - 40;
@@ -112,6 +114,7 @@ function PompagesChart({
   colorScheme = "light",
   screenWidth: screenWidthProp,
   onWeekChange,
+  onDayChange,
 }: Props) {
   countStatsRender("PompagesChart");
   useEffect(() => {
@@ -154,6 +157,10 @@ function PompagesChart({
   useEffect(() => {
     onWeekChange?.(getStartOfWeek(currentWeek));
   }, [currentWeek, onWeekChange]);
+
+  useEffect(() => {
+    onDayChange?.(currentDay);
+  }, [currentDay, onDayChange]);
 
   const isEmpty = !pompages || pompages.length === 0;
 

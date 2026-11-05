@@ -303,35 +303,49 @@ Deux relecteurs indépendants (`ecc:react-reviewer`, `ecc:code-reviewer`).
 par les graphiques Repas et Pompages (elles étaient ignorées) ; une heure de
 sommeil illisible compte 0 min au lieu de rendre les totaux `NaN`.
 
-### Sprint 3 — Charger seulement ce qui est affiché · US-1.4, US-3.2, US-5.1, US-6.1, US-7.1, US-7.2 · ⏳
+### Sprint 3 — Charger seulement ce qui est affiché · US-1.4, US-3.2, US-5.1, US-6.1, US-7.1, US-7.2 · ✅ 2026-11-05
 
 But : le volume chargé ne dépend plus de l'ancienneté du compte.
 
-- [ ] **3.1** Fenêtre bornée : écouteurs avec `depuis` = début de la semaine
+- [x] **3.1** Fenêtre bornée : écouteurs avec `depuis` = début de la semaine
   affichée − 2 semaines (couvre la tendance « semaine précédente », le conseil
   sur 3 jours et la fenêtre de 6 h de la corrélation).
-- [ ] **3.2** Moins d'écouteurs : un seul pour les repas
+- [x] **3.2** Moins d'écouteurs : un seul pour les repas
   (`type: ["tetee", "biberon", "solide"]`), puis répartition par type côté
   client ; passer de 5 à 3 écouteurs (ou 1 requête multi-types, à trancher
   selon la lisibilité).
-- [ ] **3.3** Semaines anciennes à la demande : quand la semaine affichée sort
+- [x] **3.3** Semaines anciennes à la demande : quand la semaine affichée sort
   de la fenêtre, requête ponctuelle `obtenirEvenements` sur la tranche
   manquante, fusionnée avec ce qui est déjà en mémoire ; indicateur sur le
   graphique seulement.
-- [ ] **3.4** Export PDF : requête ponctuelle sur 12 semaines au clic, calcul
+- [x] **3.4** Export PDF : requête ponctuelle sur 12 semaines au clic, calcul
   hors rendu (fonction pure de 1.1, index de semaine par
   `Math.floor((ts - start) / 604800000)`) ; indicateur sur le bouton.
-- [ ] **3.5** Tirer pour rafraîchir : `obtenirEvenements` borné en
+- [x] **3.5** Tirer pour rafraîchir : `obtenirEvenements` borné en
   `source: "server"` sans détruire les écouteurs (`stats.tsx:524-533`).
-- [ ] **3.6** Retour d'arrière-plan : `useForegroundServerRefresh` borné à la
+- [x] **3.6** Retour d'arrière-plan : `useForegroundServerRefresh` borné à la
   fenêtre (`stats.tsx:281-300`).
 - [ ] **3.7** Ajouts optimistes et temps réel : vérifier qu'un événement ajouté
   (dont à la voix) et un ajout du co-parent apparaissent sans doublon.
-- [ ] **3.8** Tests : `__tests__/eventsService.test.ts` (requêtes bornées,
+- [x] **3.8** Tests : `__tests__/eventsService.test.ts` (requêtes bornées,
   fusion des tranches), PDF identique à l'actuel sur le jeu fixe.
 
 Fin de sprint : avec 3 000 événements, volume chargé à l'ouverture limité à la
 fenêtre ; PDF identique ; navigation arrière jusqu'au début de l'historique OK.
+
+_Bilan 2026-11-05 : 3 écouteurs (repas en une requête `type in`) depuis le
+lundi d'il y a 2 semaines (`utils/statsWindow.ts`, 8 tests) ; semaines plus
+anciennes chargées par tranches de 8 semaines quand un graphique (ou le jour
+des pompages, nouvelle prop `onDayChange`) en a besoin, avec un indicateur à
+côté de la semaine ; échec hors ligne non relancé en boucle. Fenêtre vide →
+une requête `limite: 1` cherche un événement plus ancien, pour qu'un compte
+sans données récentes garde ses graphiques. Tirer pour rafraîchir et retour
+d'arrière-plan : une lecture serveur de la plage chargée, sans recréer les
+écouteurs ni vider l'écran ; « Réessayer » (après erreur) se réabonne. PDF :
+lecture des 12 semaines au clic, fusionnée avec ce qui est affiché (ajouts
+optimistes), indicateur sur le bouton, repli sur les données chargées hors
+ligne. 3.7 (ajout optimiste et co-parent sans doublon) : logique inchangée
+(`mergeWithFirestoreEvents`), à vérifier sur appareil._
 
 ### Sprint 4 — Afficher le cache tout de suite, fusion allégée · US-1.1, US-8.1, US-7.1 · ⏳
 
@@ -414,12 +428,12 @@ un Android d'entrée de gamme sous Hermes, compter 5 à 20 fois plus) :
 | Mesure | Avant | S1 | S2 | S3 | S4 | Après | Cible |
 |---|---|---|---|---|---|---|---|
 | Calcul des 3 graphiques par rendu (ms) | 28,3 (Repas 12,1 · Pompages 2,6 · Sommeil 15,6) | 2,3 quand les données ou la semaine changent, 0 sinon | | | | | < 3 |
-| Rendus de `StatsScreen` jusqu'aux données | 21 | 21 | 14 | | | | ≤ 8 |
-| Rendus des graphiques (Repas / Pompages / Sommeil) | 11 / 6 / 2 | 11 / 6 / 2 | 2 / 0 / 0 | | | | ≤ 2 chacun |
+| Rendus de `StatsScreen` jusqu'aux données | 21 | 21 | 14 (16 avec préchargement) | 12 | | | ≤ 8 |
+| Rendus des graphiques (Repas / Pompages / Sommeil) | 11 / 6 / 2 | 11 / 6 / 2 | 2 / 0 / 0 | 1 / 1 / 1 (préchargés) | | | ≤ 2 chacun |
 | Calcul estimé au chargement (ms) | ≈ 180 | | | | | | < 20 |
 | Graphiques montés à l'ouverture | 3 | 3 | 1 | | | | 1 |
-| Écouteurs Firestore | 5 | | | | | | 3 |
-| Événements lus à l'ouverture | tout l'historique (3 000) | | | | | | fenêtre (≈ 3 semaines) |
+| Écouteurs Firestore | 5 | 5 | 5 | 3 | | | 3 |
+| Événements lus à l'ouverture | tout l'historique (3 000) | 3 000 | 3 000 | 132 (fenêtre de 3 semaines) | | | fenêtre (≈ 3 semaines) |
 | Ouverture → premier graphique sur le Samsung (ms) | à mesurer | | | | | | < 300 avec cache |
 
 ## Hors périmètre

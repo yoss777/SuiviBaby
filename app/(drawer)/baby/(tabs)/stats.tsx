@@ -9,13 +9,26 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
-import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
+import {
+  mergeFirestoreSnapshots,
+  useMergedOptimisticEvents,
+} from "@/hooks/useMergedOptimisticEvents";
 import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
 import {
   addWeeks,
   buildReportWeekRows,
   countInRange,
+  getReportWeekBoundaries,
+  toMillis,
 } from "@/utils/statsAggregations";
+import {
+  combineLiveAndHistory,
+  getEarliestNeededMs,
+  getHistoryRangeToLoad,
+  getLiveSince,
+  splitStatsEventsByType,
+  type StatsSplit,
+} from "@/utils/statsWindow";
 import { countStatsRender, markStatsMount } from "@/utils/statsPerf";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -28,6 +41,7 @@ import { Timestamp } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   Animated,
+  ActivityIndicator,
   BackHandler,
   InteractionManager,
   RefreshControl,
@@ -79,15 +93,18 @@ const tabIndexOf = (tab: TabKey) => TAB_CONFIG.findIndex((t) => t.key === tab);
 
 // Number of events received per Firestore listener; null until its first
 // snapshot. One reducer instead of five flags: one render per snapshot.
-type Source = "tetee" | "biberon" | "solide" | "pompage" | "sommeil";
+type Source = keyof StatsSplit<unknown>;
 type SourceCounts = Record<Source, number | null>;
-const NOT_LOADED: SourceCounts = {
-  tetee: null,
-  biberon: null,
-  solide: null,
-  pompage: null,
-  sommeil: null,
+const NOT_LOADED: SourceCounts = { repas: null, pompages: null, sommeils: null };
+
+const REPAS_TYPES = ["tetee", "biberon", "solide"] as const;
+const SOURCE_TYPES: Record<Source, ("tetee" | "biberon" | "solide" | "pompage" | "sommeil")[]> = {
+  repas: [...REPAS_TYPES],
+  pompages: ["pompage"],
+  sommeils: ["sommeil"],
 };
+const ALL_STATS_TYPES = [...REPAS_TYPES, "pompage", "sommeil"] as const;
+const emptySplit = (): StatsSplit<any> => ({ repas: [], pompages: [], sommeils: [] });
 type CountsAction =
   | { type: "reset" }
   | { type: "loaded"; source: Source; count: number }
@@ -102,11 +119,9 @@ function countsReducer(state: SourceCounts, action: CountsAction): SourceCounts 
         : { ...state, [action.source]: action.count };
     case "failed":
       return {
-        tetee: state.tetee ?? 0,
-        biberon: state.biberon ?? 0,
-        solide: state.solide ?? 0,
-        pompage: state.pompage ?? 0,
-        sommeil: state.sommeil ?? 0,
+        repas: state.repas ?? 0,
+        pompages: state.pompages ?? 0,
+        sommeils: state.sommeils ?? 0,
       };
   }
 }
@@ -184,11 +199,16 @@ export default function StatsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const latestFirestoreTeteesRef = useRef<any[]>([]);
-  const latestFirestoreBiberonsRef = useRef<any[]>([]);
-  const latestFirestoreSolidesRef = useRef<any[]>([]);
-  const latestFirestorePompagesRef = useRef<any[]>([]);
-  const latestFirestoreSommeilsRef = useRef<any[]>([]);
+  // Live listeners cover [liveSince, now]; older weeks are fetched on demand
+  // into `history` (docs/STATS_PERF_REFONTE.md, sprint 3).
+  const liveRef = useRef<StatsSplit<any>>(emptySplit());
+  const historyRef = useRef<StatsSplit<any>>(emptySplit());
+  const liveSinceRef = useRef(getLiveSince().getTime());
+  const historyFromRef = useRef(liveSinceRef.current);
+  const subscriptionRef = useRef(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [pompagesDayMs, setPompagesDayMs] = useState<number | null>(null);
 
   // Récupérer les paramètres de l'URL
   const { tab, returnTo } = useLocalSearchParams();
@@ -339,118 +359,123 @@ export default function StatsScreen() {
     dispatchCounts({ type: "failed" });
   }, []);
 
-  const pushRepasFirestoreEvents = useCallback(() => {
-    setRepasFirestoreEvents([
-      ...latestFirestoreTeteesRef.current,
-      ...latestFirestoreBiberonsRef.current,
-      ...latestFirestoreSolidesRef.current,
-    ]);
-  }, [setRepasFirestoreEvents]);
+  const setFirestoreBySource = useMemo(
+    () => ({
+      repas: setRepasFirestoreEvents,
+      pompages: setPompagesFirestoreEvents,
+      sommeils: setSommeilsFirestoreEvents,
+    }),
+    [setRepasFirestoreEvents, setPompagesFirestoreEvents, setSommeilsFirestoreEvents],
+  );
+  const pushSource = useCallback(
+    (source: Source) => {
+      setFirestoreBySource[source](
+        combineLiveAndHistory(liveRef.current[source], historyRef.current[source]),
+      );
+    },
+    [setFirestoreBySource],
+  );
+  const sourceCount = (source: Source) =>
+    liveRef.current[source].length + historyRef.current[source].length;
+
+  // Server read of everything loaded so far ([history start, now]): replaces
+  // the live part and the loaded history range, keeps older probe events.
+  // Used by pull-to-refresh and when coming back from background; listeners
+  // stay subscribed, so nothing disappears from the screen meanwhile.
+  const fetchLoadedRangeFromServer = useCallback(async () => {
+    if (!activeChild?.id) return null;
+    const from = Math.min(historyFromRef.current, liveSinceRef.current);
+    const events = await obtenirEvenements(activeChild.id, {
+      type: [...ALL_STATS_TYPES],
+      depuis: new Date(from),
+      source: "server",
+    });
+    return { events, from, subscription: subscriptionRef.current };
+  }, [activeChild?.id]);
+  const applyServerRange = useCallback(
+    (result: Awaited<ReturnType<typeof fetchLoadedRangeFromServer>>) => {
+      if (!result || result.subscription !== subscriptionRef.current) return;
+      const split = splitStatsEventsByType(result.events);
+      const liveSince = liveSinceRef.current;
+      (Object.keys(split) as Source[]).forEach((source) => {
+        const fresh = split[source];
+        liveRef.current[source] = fresh.filter((e) => toMillis(e.date) >= liveSince);
+        historyRef.current[source] = [
+          ...fresh.filter((e) => toMillis(e.date) < liveSince),
+          ...historyRef.current[source].filter((e) => toMillis(e.date) < result.from),
+        ];
+        pushSource(source);
+      });
+    },
+    [pushSource],
+  );
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
-    refresh: async () => {
-      if (!activeChild?.id) return [];
-      return obtenirEvenements(activeChild.id, {
-        type: ["tetee", "biberon", "solide", "pompage", "sommeil"],
-        source: "server",
-      });
-    },
-    apply: (freshEvents) => {
-      latestFirestoreTeteesRef.current = freshEvents.filter((event) => event.type === "tetee");
-      latestFirestoreBiberonsRef.current = freshEvents.filter((event) => event.type === "biberon");
-      latestFirestoreSolidesRef.current = freshEvents.filter((event) => event.type === "solide");
-      latestFirestorePompagesRef.current = freshEvents.filter((event) => event.type === "pompage");
-      latestFirestoreSommeilsRef.current = freshEvents.filter((event) => event.type === "sommeil");
-      pushRepasFirestoreEvents();
-      setPompagesFirestoreEvents(latestFirestorePompagesRef.current);
-      setSommeilsFirestoreEvents(latestFirestoreSommeilsRef.current);
-    },
+    refresh: fetchLoadedRangeFromServer,
+    apply: applyServerRange,
   });
 
   useEffect(() => {
     if (!activeChild?.id) return;
+    const childId = activeChild.id;
+    const subscription = ++subscriptionRef.current;
+    const isCurrent = () => subscriptionRef.current === subscription;
 
-    // Reset before subscribing (child change or manual refresh). The merged
-    // lists themselves are reset by useMergedOptimisticEvents on child change.
+    // Reset before subscribing (child change or retry after an error). The
+    // merged lists themselves are reset by useMergedOptimisticEvents on child change.
     setLoadError(null);
     dispatchCounts({ type: "reset" });
-    latestFirestoreTeteesRef.current = [];
-    latestFirestoreBiberonsRef.current = [];
-    latestFirestoreSolidesRef.current = [];
-    latestFirestorePompagesRef.current = [];
-    latestFirestoreSommeilsRef.current = [];
+    liveRef.current = emptySplit();
+    historyRef.current = emptySplit();
+    liveSinceRef.current = getLiveSince().getTime();
+    historyFromRef.current = liveSinceRef.current;
+    const liveSince = new Date(liveSinceRef.current);
+    const probed: Record<Source, boolean> = { repas: false, pompages: false, sommeils: false };
 
-    const unsubscribeTetees = ecouterEvenements(
-      activeChild.id,
-      (tetees) => {
-        latestFirestoreTeteesRef.current = tetees;
-        pushRepasFirestoreEvents();
-        dispatchCounts({ type: "loaded", source: "tetee", count: tetees.length });
-      },
-      { type: "tetee", waitForServer: true },
-      handleListenerError,
-    );
+    const subscribe = (source: Source) =>
+      ecouterEvenements(
+        childId,
+        (events) => {
+          if (!isCurrent()) return;
+          liveRef.current[source] = events;
+          pushSource(source);
+          if (events.length > 0 || historyRef.current[source].length > 0 || probed[source]) {
+            dispatchCounts({ type: "loaded", source, count: sourceCount(source) });
+            return;
+          }
+          // Nothing in the window: look for one older event so an account with
+          // only older data still gets its charts (and week navigation)
+          // instead of the "no data" screen.
+          probed[source] = true;
+          obtenirEvenements(childId, {
+            type: SOURCE_TYPES[source],
+            jusqu: new Date(liveSinceRef.current - 1),
+            limite: 1,
+          })
+            .then((older) => {
+              if (!isCurrent()) return;
+              historyRef.current[source] = mergeFirestoreSnapshots(
+                historyRef.current[source],
+                older,
+              );
+              pushSource(source);
+            })
+            .catch(() => {
+              // Probe is best effort: without it the empty state shows.
+            })
+            .finally(() => {
+              if (!isCurrent()) return;
+              dispatchCounts({ type: "loaded", source, count: sourceCount(source) });
+            });
+        },
+        { type: SOURCE_TYPES[source], depuis: liveSince, waitForServer: true },
+        handleListenerError,
+      );
 
-    const unsubscribeBiberons = ecouterEvenements(
-      activeChild.id,
-      (biberons) => {
-        latestFirestoreBiberonsRef.current = biberons;
-        pushRepasFirestoreEvents();
-        dispatchCounts({ type: "loaded", source: "biberon", count: biberons.length });
-      },
-      { type: "biberon", waitForServer: true },
-      handleListenerError,
-    );
-
-    const unsubscribeSolides = ecouterEvenements(
-      activeChild.id,
-      (solides) => {
-        latestFirestoreSolidesRef.current = solides;
-        pushRepasFirestoreEvents();
-        dispatchCounts({ type: "loaded", source: "solide", count: solides.length });
-      },
-      { type: "solide", waitForServer: true },
-      handleListenerError,
-    );
-
-    const unsubscribePompages = ecouterEvenements(
-      activeChild.id,
-      (data) => {
-        latestFirestorePompagesRef.current = data;
-        setPompagesFirestoreEvents(data);
-        dispatchCounts({ type: "loaded", source: "pompage", count: data.length });
-      },
-      { type: "pompage", waitForServer: true },
-      handleListenerError,
-    );
-
-    const unsubscribeSommeils = ecouterEvenements(
-      activeChild.id,
-      (data) => {
-        latestFirestoreSommeilsRef.current = data;
-        setSommeilsFirestoreEvents(data);
-        dispatchCounts({ type: "loaded", source: "sommeil", count: data.length });
-      },
-      { type: "sommeil", waitForServer: true },
-      handleListenerError,
-    );
-
-    return () => {
-      unsubscribeTetees();
-      unsubscribeBiberons();
-      unsubscribeSolides();
-      unsubscribePompages();
-      unsubscribeSommeils();
-    };
-  }, [
-    activeChild?.id,
-    refreshKey,
-    handleListenerError,
-    pushRepasFirestoreEvents,
-    setPompagesFirestoreEvents,
-    setSommeilsFirestoreEvents,
-  ]);
+    const unsubscribers = [subscribe("repas"), subscribe("pompages"), subscribe("sommeils")];
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, [activeChild?.id, refreshKey, handleListenerError, pushSource]);
 
   // Re-merge on tab focus — frozen tabs can miss optimistic updates. Only
   // emits when the merged lists actually changed (no re-render otherwise).
@@ -462,13 +487,10 @@ export default function StatsScreen() {
     }, [remergePompages, remergeRepas, remergeSommeils]),
   );
 
-  const repasCount =
-    counts.tetee === null || counts.biberon === null || counts.solide === null
-      ? null
-      : counts.tetee + counts.biberon + counts.solide;
+  const repasCount = counts.repas;
   const isTeteesLoading = repasCount === null;
-  const isPompagesLoading = counts.pompage === null;
-  const isSommeilLoading = counts.sommeil === null;
+  const isPompagesLoading = counts.pompages === null;
+  const isSommeilLoading = counts.sommeils === null;
   // A snapshot is merged after a short debounce: while events were received
   // but the merged list is still empty, keep the loader instead of flashing
   // the empty state (replaces the former fixed 300 ms delays).
@@ -484,10 +506,10 @@ export default function StatsScreen() {
     (shownRef.current.tetees || repasCount === 0 || tetees.length > 0);
   const isPompagesReady =
     !isPompagesLoading &&
-    (shownRef.current.pompages || counts.pompage === 0 || pompages.length > 0);
+    (shownRef.current.pompages || counts.pompages === 0 || pompages.length > 0);
   const isSommeilReady =
     !isSommeilLoading &&
-    (shownRef.current.sommeil || counts.sommeil === 0 || sommeils.length > 0);
+    (shownRef.current.sommeil || counts.sommeils === 0 || sommeils.length > 0);
   shownRef.current = {
     tetees: isTeteesReady,
     pompages: isPompagesReady,
@@ -516,10 +538,6 @@ export default function StatsScreen() {
     };
   }, [chartsReady, activeTabReady, prewarmDone]);
 
-  // End refresh spinner when ALL data arrives (tab-agnostic to avoid stuck spinner)
-  useEffect(() => {
-    if (isRefreshing && isAllReady) setIsRefreshing(false);
-  }, [isRefreshing, isAllReady]);
 
   // Per-tab week change callbacks
   // Same week → same state object: no re-render when a chart reports the
@@ -565,12 +583,72 @@ export default function StatsScreen() {
     return `${fmt(displayWeek)} – ${fmt(weekEnd)}`;
   }, [displayWeek]);
 
-  const handleRefresh = useCallback(() => {
+  // Pull-to-refresh: one server read of the loaded range; the charts keep
+  // their data on screen meanwhile.
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    // Same batch as the spinner, so it is not ended by data already loaded.
+    try {
+      applyServerRange(await fetchLoadedRangeFromServer());
+    } catch {
+      // Keep what is displayed; listeners stay authoritative.
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [applyServerRange, fetchLoadedRangeFromServer]);
+
+  // After a listener error: subscribe again from scratch.
+  const handleRetry = useCallback(() => {
     dispatchCounts({ type: "reset" });
     setRefreshKey((k) => k + 1);
   }, []);
+
+  const handlePompagesDayChange = useCallback((day: Date) => {
+    const ms = day.getTime();
+    setPompagesDayMs((prev) => (prev === ms ? prev : ms));
+  }, []);
+
+  // Older weeks on demand: when a chart shows a week (or the pumping chart a
+  // day) before what is loaded, fetch the missing range once.
+  const earliestNeededMs = useMemo(
+    () =>
+      getEarliestNeededMs(
+        [weekByTab.tetees, weekByTab.pompages, weekByTab.sommeil],
+        pompagesDayMs === null ? [] : [pompagesDayMs],
+      ),
+    [weekByTab, pompagesDayMs],
+  );
+  // A failed load is not retried for the same need (no loop when offline);
+  // the next week change tries again.
+  const historyFailedForRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!activeChild?.id || historyLoading || loadError) return;
+    if (historyFailedForRef.current === earliestNeededMs) return;
+    const range = getHistoryRangeToLoad(earliestNeededMs, historyFromRef.current);
+    if (!range) return;
+    const subscription = subscriptionRef.current;
+    setHistoryLoading(true);
+    obtenirEvenements(activeChild.id, {
+      type: [...ALL_STATS_TYPES],
+      depuis: range.from,
+      jusqu: range.to,
+    })
+      .then((events) => {
+        if (subscriptionRef.current !== subscription) return;
+        const split = splitStatsEventsByType(events);
+        (Object.keys(split) as Source[]).forEach((source) => {
+          historyRef.current[source] = mergeFirestoreSnapshots(
+            historyRef.current[source],
+            split[source],
+          );
+          pushSource(source);
+        });
+        historyFromRef.current = range.from.getTime();
+      })
+      .catch(() => {
+        historyFailedForRef.current = earliestNeededMs;
+      })
+      .finally(() => setHistoryLoading(false));
+  }, [activeChild?.id, earliestNeededMs, historyLoading, loadError, pushSource]);
 
   const repasBoundaryExtras = useMemo(
     () => ({ childId: activeChild?.id, count: tetees.length }),
@@ -586,8 +664,7 @@ export default function StatsScreen() {
   );
 
   // PDF Export — 3-month weekly trend report
-  const handleExportPDF = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const exportReport = useCallback(async () => {
     const name = activeChild?.name || "Bébé";
     const now = new Date();
     const dateStr = now.toLocaleDateString("fr-FR", {
@@ -604,8 +681,29 @@ export default function StatsScreen() {
         : `${m}min`;
     };
 
+    // The screen only holds a few weeks: read the 12 report weeks once, and
+    // keep the on-screen versions (optimistic edits) for ids present in both.
+    let report: StatsSplit<any> = { repas: tetees, pompages, sommeils };
+    if (activeChild?.id) {
+      try {
+        const fetched = splitStatsEventsByType(
+          await obtenirEvenements(activeChild.id, {
+            type: [...ALL_STATS_TYPES],
+            depuis: new Date(getReportWeekBoundaries(now)[0]),
+          }),
+        );
+        report = {
+          repas: mergeFirestoreSnapshots(tetees, fetched.repas),
+          pompages: mergeFirestoreSnapshots(pompages, fetched.pompages),
+          sommeils: mergeFirestoreSnapshots(sommeils, fetched.sommeils),
+        };
+      } catch {
+        // Offline: report on what is loaded.
+      }
+    }
+
     // 12 weekly rows, one pass per event list
-    const weekRows = buildReportWeekRows(tetees, pompages, sommeils, now);
+    const weekRows = buildReportWeekRows(report.repas, report.pompages, report.sommeils, now);
 
     const locLabel: Record<string, string> = {
       lit: "Lit",
@@ -717,7 +815,18 @@ export default function StatsScreen() {
     } catch (_) {
       // User cancelled sharing
     }
-  }, [activeChild?.name, tetees, pompages, sommeils]);
+  }, [activeChild?.id, activeChild?.name, tetees, pompages, sommeils]);
+
+  const handleExportPDF = useCallback(async () => {
+    if (isExporting) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsExporting(true);
+    try {
+      await exportReport();
+    } finally {
+      setIsExporting(false);
+    }
+  }, [isExporting, exportReport]);
 
   // Refresh tint color: use chart accent per tab
   const refreshTintColor =
@@ -823,9 +932,18 @@ export default function StatsScreen() {
       {/* RESUME CARDS + EXPORT */}
       {!loadError && (
           <View>
-            <Text style={[styles.weekLabel, { color: nc.textMuted }]}>
-              {weekLabel}
-            </Text>
+            <View style={styles.weekLabelRow}>
+              <Text style={[styles.weekLabel, { color: nc.textMuted }]}>
+                {weekLabel}
+              </Text>
+              {historyLoading && (
+                <ActivityIndicator
+                  size="small"
+                  color={nc.textMuted}
+                  accessibilityLabel="Chargement des semaines précédentes"
+                />
+              )}
+            </View>
             <View style={styles.resumeRow}>
               <TouchableOpacity
                 style={[
@@ -921,12 +1039,16 @@ export default function StatsScreen() {
                   !isAllReady && { opacity: 0.4 },
                 ]}
                 onPress={handleExportPDF}
-                disabled={!isAllReady}
+                disabled={!isAllReady || isExporting}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
                 accessibilityLabel="Exporter le rapport en PDF"
               >
-                <FontAwesome name="file-pdf" size={16} color={nc.textMuted} />
+                {isExporting ? (
+                  <ActivityIndicator size="small" color={nc.textMuted} />
+                ) : (
+                  <FontAwesome name="file-pdf" size={16} color={nc.textMuted} />
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -943,7 +1065,7 @@ export default function StatsScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: refreshTintColor }]}
-            onPress={handleRefresh}
+            onPress={handleRetry}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
             accessibilityLabel="Réessayer le chargement"
@@ -1022,6 +1144,7 @@ export default function StatsScreen() {
                     colorScheme={colorScheme}
                     screenWidth={screenWidth}
                     onWeekChange={handlePompagesWeekChange}
+                    onDayChange={handlePompagesDayChange}
                   />
                 </SafeBoundary>
               )}
@@ -1141,6 +1264,12 @@ const styles = StyleSheet.create({
   retryText: {
     fontSize: 15,
     fontWeight: "600",
+  },
+  weekLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
   },
   weekLabel: {
     fontSize: 11,
