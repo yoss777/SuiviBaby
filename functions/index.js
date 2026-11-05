@@ -73,9 +73,14 @@ async function deleteUserEventPhotos(db, uid) {
   const snap = await db.collection("events").where("userId", "==", uid).get();
   const paths = new Set();
   snap.docs.forEach((doc) => {
-    (doc.data().photos || []).forEach((ref) => {
+    const { childId, photos } = doc.data();
+    if (!childId) return;
+    // events.photos is written by clients: only delete files of the event's
+    // own child folder, never a path pointing at another child's photos.
+    const prefix = `children/${childId}/`;
+    (photos || []).forEach((ref) => {
       const path = photoRefToPath(ref);
-      if (path) paths.add(path);
+      if (path && path.startsWith(prefix) && !path.includes("..")) paths.add(path);
     });
   });
   const results = await Promise.allSettled([...paths].map((path) => deletePhotoEverywhere(path)));
@@ -91,10 +96,16 @@ async function deleteChildPhotosEverywhere(childId) {
   let deleted = 0;
   let failed = 0;
   for (const name of PHOTO_BUCKETS) {
-    const [files] = await admin.storage().bucket(name).getFiles({ prefix: `children/${childId}/` });
-    const results = await Promise.allSettled(files.map((file) => file.delete()));
-    failed += results.filter((r) => r.status === "rejected").length;
-    deleted += files.length;
+    // One bucket failing must not leave the other untouched.
+    try {
+      const [files] = await admin.storage().bucket(name).getFiles({ prefix: `children/${childId}/` });
+      const results = await Promise.allSettled(files.map((file) => file.delete()));
+      failed += results.filter((r) => r.status === "rejected").length;
+      deleted += files.length;
+    } catch (error) {
+      failed += 1;
+      console.error(`deleteChildPhotosEverywhere: listing ${name} failed for ${childId}`, error?.message ?? error);
+    }
   }
   if (failed > 0) throw new Error(`${failed} photos of child ${childId} could not be deleted`);
   return deleted;
@@ -292,6 +303,16 @@ async function purgeUserData(db, uid) {
     if (e?.code !== "auth/user-not-found") throw e;
   }
 
+  // 0. Lock the account so nothing recreates data during the purge
+  //    (app sessions, callables). A webhook arriving now is skipped later
+  //    since Auth is checked before writing.
+  try {
+    await admin.auth().updateUser(uid, { disabled: true });
+    await admin.auth().revokeRefreshTokens(uid);
+  } catch (e) {
+    if (e?.code !== "auth/user-not-found") throw e;
+  }
+
   // 1. Photos while the events that reference them still exist.
   await deleteUserEventPhotos(db, uid);
 
@@ -314,7 +335,10 @@ async function purgeUserData(db, uid) {
         await db.doc(`children/${childId}`).delete();
         await deleteChildDataBatched(db, childId);
       } else if (isMember) {
-        if (role === "owner") {
+        // Transfer only while the user is still the recorded owner: on a retry
+        // after a transfer, promoting someone else would create two owners.
+        const childSnap = await db.doc(`children/${childId}`).get();
+        if (role === "owner" && childSnap.exists && childSnap.data()?.ownerId === uid) {
           await transferOwnership(db, childId, uid, childAccessSnap);
         }
         await db.doc(`children/${childId}/access/${uid}`).delete();
@@ -359,8 +383,20 @@ async function purgeUserData(db, uid) {
   return { email };
 }
 
+/** Resend reports refusals (unverified domain, quota…) in the result. */
+async function sendEmailOrThrow(resend, payload) {
+  const result = await resend.emails.send(payload);
+  if (result?.error) {
+    throw new Error(`Resend: ${result.error.name ?? "error"} ${result.error.message ?? ""}`.trim());
+  }
+  return result;
+}
+
 async function getSubscriptionState(db, uid) {
-  const snap = await db.doc(`subscriptions/${uid}`).get();
+  return subscriptionStateFrom(await db.doc(`subscriptions/${uid}`).get());
+}
+
+function subscriptionStateFrom(snap) {
   const data = snap.exists ? snap.data() : {};
 
   return {
@@ -2699,7 +2735,10 @@ exports.deleteUserAccount = onCall(
     }
 
     // Optional payload override: admin can target a specific uid.
-    const targetUid = request.data?.uid || uid;
+    const targetUid = request.data?.uid ?? uid;
+    if (typeof targetUid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(targetUid)) {
+      throw new HttpsError("invalid-argument", "uid invalide.");
+    }
     const reason = typeof request.data?.reason === "string"
       ? request.data.reason.trim().slice(0, 500)
       : "";
@@ -2815,8 +2854,8 @@ exports.revenueCatWebhook = onRequest(
       const FIVE_MIN = 5 * 60 * 1000;
       const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
       if (eventTs > now + FIVE_MIN || eventTs < now - SEVEN_DAYS) {
-        console.warn(
-          `revenueCatWebhook: timestamp out of bounds (${eventTs} vs now=${now})`
+        console.error(
+          `revenueCatWebhook: timestamp out of bounds (${eventTs} vs now=${now}), event ignored`
         );
         // 200 OK pour éviter que RC retry — on accepte le rejet silencieux.
         res.status(200).send("OK - timestamp rejected");
@@ -2828,14 +2867,19 @@ exports.revenueCatWebhook = onRequest(
     // est lu et créé DANS la transaction qui écrit l'abonnement (plus bas) :
     // si le traitement échoue, rien n'est marqué et le retry de RevenueCat
     // retraite l'événement au lieu de le prendre pour un doublon.
-    const eventId = typeof event.id === "string" && event.id.length > 0
+    const eventId = typeof event.id === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(event.id)
       ? event.id
       : null;
+    if (event.id !== undefined && !eventId) {
+      console.error("revenueCatWebhook: invalid event id, skipping");
+      res.status(200).send("OK - invalid event id");
+      return;
+    }
     const db = admin.firestore();
     const dedupRef = eventId ? db.doc(`revenuecat_webhook_events/${eventId}`) : null;
 
     const appUserId = event.app_user_id;
-    if (!appUserId || appUserId.startsWith("$RCAnonymous")) {
+    if (!appUserId || (typeof appUserId === "string" && appUserId.startsWith("$RCAnonymous"))) {
       // Ignorer les utilisateurs anonymes
       res.status(200).send("OK - skipped anonymous");
       return;
@@ -2885,7 +2929,7 @@ exports.revenueCatWebhook = onRequest(
       eventType === "BILLING_ISSUE" && typeof event.grace_period_expiration_at_ms === "number"
         ? event.grace_period_expiration_at_ms
         : event.expiration_at_ms;
-    const expiresAt = expiryMs ? new Date(expiryMs).toISOString() : null;
+    const expiresAt = Number.isFinite(expiryMs) && expiryMs > 0 ? new Date(expiryMs).toISOString() : null;
 
     switch (eventType) {
       case "INITIAL_PURCHASE":
@@ -3547,7 +3591,9 @@ exports.ensureReferralCode = onCall(
       const code = await db.runTransaction(async (tx) => {
         const promosRef = db.doc(`user_promos/${uid}`);
         const promosSnap = await tx.get(promosRef);
-        const current = normalizeReferralCode(promosSnap.exists ? promosSnap.data()?.referralCode : "");
+        const stored = normalizeReferralCode(promosSnap.exists ? promosSnap.data()?.referralCode : "");
+        // An old app-written code becomes a document id: reject odd values.
+        const current = /^[A-Z0-9-]{4,20}$/.test(stored) ? stored : "";
         if (current) {
           const mappingRef = db.doc(`referral_codes/${current}`);
           const mapping = await tx.get(mappingRef);
@@ -3606,9 +3652,10 @@ exports.validateReferralCode = onCall(
       const legacy = await db
         .collection("user_promos")
         .where("referralCode", "==", referralCode)
-        .limit(1)
+        .limit(2)
         .get();
-      if (!legacy.empty) parrainUid = legacy.docs[0].id;
+      // Two accounts with the same old code: one of them copied it, refuse.
+      if (legacy.size === 1) parrainUid = legacy.docs[0].id;
     }
     if (!parrainUid) {
       throw new HttpsError("not-found", "Code parrainage introuvable.");
@@ -3627,12 +3674,6 @@ exports.validateReferralCode = onCall(
       throw new HttpsError("already-exists", "Vous avez deja utilise un code parrainage.");
     }
 
-    // Abonnements payants en cours : jamais écrasés par la récompense.
-    const [parrainState, filleulState] = await Promise.all([
-      getSubscriptionState(db, parrainUid),
-      getSubscriptionState(db, filleulUid),
-    ]);
-
     const now = admin.firestore.Timestamp.now();
     const oneMonthLater = new Date();
     oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
@@ -3649,11 +3690,19 @@ exports.validateReferralCode = onCall(
       const referralRef = db.doc(`referrals/${filleulUid}`);
       const filleulPromosRef = db.doc(`user_promos/${filleulUid}`);
       const parrainPromosRef = db.doc(`user_promos/${parrainUid}`);
-      const [used, filleulPromos, parrainPromos] = [
+      const filleulSubRef = db.doc(`subscriptions/${filleulUid}`);
+      const parrainSubRef = db.doc(`subscriptions/${parrainUid}`);
+      const [used, filleulPromos, parrainPromos, filleulSub, parrainSub] = [
         await tx.get(referralRef),
         await tx.get(filleulPromosRef),
         await tx.get(parrainPromosRef),
+        await tx.get(filleulSubRef),
+        await tx.get(parrainSubRef),
       ];
+      // Paid subscriptions are never overwritten by the reward (read here so
+      // a purchase landing meanwhile is seen).
+      const filleulState = subscriptionStateFrom(filleulSub);
+      const parrainState = subscriptionStateFrom(parrainSub);
       if (used.exists || filleulPromos.data()?.referredBy) {
         throw new HttpsError("already-exists", "Vous avez deja utilise un code parrainage.");
       }
@@ -3664,10 +3713,10 @@ exports.validateReferralCode = onCall(
       tx.set(filleulPromosRef, { referredBy: parrainUid, referredAt: now }, { merge: true });
 
       if (!hasUnlimitedFeature(filleulState, "voice")) {
-        tx.set(db.doc(`subscriptions/${filleulUid}`), reward, { merge: true });
+        tx.set(filleulSubRef, reward, { merge: true });
       }
       if (referralCount < REFERRAL_REWARD_CAP && !hasUnlimitedFeature(parrainState, "voice")) {
-        tx.set(db.doc(`subscriptions/${parrainUid}`), reward, { merge: true });
+        tx.set(parrainSubRef, reward, { merge: true });
         parrainRewarded = true;
       }
     });
@@ -3899,11 +3948,17 @@ exports.sendDeletionRequestEmail = onCall(
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
       console.error("sendDeletionRequestEmail: RESEND_API_KEY not configured");
-      return { success: false };
+      throw new HttpsError("unavailable", "Envoi d'e-mail indisponible.");
     }
 
+    // Kept with the request: the confirmation e-mail can still be sent after
+    // the Auth account is gone (retries of processScheduledDeletions).
+    await db.doc(`users/${uid}`).update({ "pendingDeletion.email": email }).catch((e) => {
+      console.error(`sendDeletionRequestEmail: could not store e-mail for uid=${uid}`, e);
+    });
+
     const resend = new Resend(apiKey);
-    await resend.emails.send({
+    await sendEmailOrThrow(resend, {
       from: "Suivi Baby <noreply@suivibaby.com>",
       to: email,
       subject: "Demande de suppression de votre compte Suivi Baby",
@@ -3953,32 +4008,35 @@ exports.processScheduledDeletions = onSchedule(
 
     for (const userDoc of snapshot.docs) {
       const uid = userDoc.id;
+      const pending = userDoc.data()?.pendingDeletion || {};
       try {
-        const { email } = await purgeUserData(db, uid);
+        const purged = await purgeUserData(db, uid);
+        // Auth may already be gone on a retry: fall back to the address kept
+        // with the request.
+        const email = purged.email || pending.email || "";
 
         // E-mail only once everything is really gone (Auth included).
-        if (email) {
+        const apiKey = process.env.RESEND_API_KEY;
+        if (!email || !apiKey) {
+          console.error(`processScheduledDeletions: no confirmation e-mail for uid=${uid} (${!email ? "no address" : "RESEND_API_KEY missing"})`);
+        } else {
           try {
-            const apiKey = process.env.RESEND_API_KEY;
-            if (apiKey) {
-              const resend = new Resend(apiKey);
-              await resend.emails.send({
-                from: "Suivi Baby <noreply@suivibaby.com>",
-                to: email,
-                subject: "Votre compte Suivi Baby a ete supprime",
-                html: `
-                  <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-                    <h2 style="color: #1a1a1a;">Suppression confirmee</h2>
-                    <p>Votre compte Suivi Baby et toutes les donnees associees ont ete definitivement supprimes, conformement a votre demande.</p>
-                    <p>Les saisies faites dans le carnet d'un enfant partage avec d'autres parents restent visibles pour eux, sans votre nom.</p>
-                    <p>Si vous n'etes pas a l'origine de cette suppression, contactez-nous immediatement a <a href="mailto:privacy@suivibaby.com">privacy@suivibaby.com</a>.</p>
-                    <p style="color: #666; font-size: 12px; margin-top: 30px;">Cet email a ete envoye automatiquement par Suivi Baby. Conformite RGPD art. 17.</p>
-                  </div>
-                `,
-              });
-            }
+            await sendEmailOrThrow(new Resend(apiKey), {
+              from: "Suivi Baby <noreply@suivibaby.com>",
+              to: email,
+              subject: "Votre compte Suivi Baby a ete supprime",
+              html: `
+                <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+                  <h2 style="color: #1a1a1a;">Suppression confirmee</h2>
+                  <p>Votre compte Suivi Baby et toutes les donnees associees ont ete definitivement supprimes, conformement a votre demande.</p>
+                  <p>Les saisies faites dans le carnet d'un enfant partage avec d'autres parents restent visibles pour eux, sans votre nom.</p>
+                  <p>Si vous n'etes pas a l'origine de cette suppression, contactez-nous immediatement a <a href="mailto:privacy@suivibaby.com">privacy@suivibaby.com</a>.</p>
+                  <p style="color: #666; font-size: 12px; margin-top: 30px;">Cet email a ete envoye automatiquement par Suivi Baby. Conformite RGPD art. 17.</p>
+                </div>
+              `,
+            });
           } catch (emailErr) {
-            console.warn(`processScheduledDeletions: failed to send deletion email for uid=${uid}`, emailErr.message);
+            console.error(`processScheduledDeletions: confirmation e-mail failed for uid=${uid}`, emailErr?.message ?? emailErr);
           }
         }
 
@@ -3986,13 +4044,21 @@ exports.processScheduledDeletions = onSchedule(
       } catch (e) {
         // users/{uid} (and its pendingDeletion) still exists: the next run
         // retries. No confirmation e-mail has been sent.
-        console.error(`processScheduledDeletions: error processing uid=${uid}`, e?.message ?? e);
+        const failureCount = (Number(pending.failureCount) || 0) + 1;
+        // Stable labels for the log-based alert (docs/FIREBASE_MONITORING.md §9).
+        console.error(
+          `processScheduledDeletions: error processing uid=${uid} failures=${failureCount}${failureCount >= 3 ? " STUCK" : ""}`,
+          e?.stack ?? e?.message ?? e
+        );
         await userDoc.ref
           .update({
             "pendingDeletion.lastFailureAt": now,
             "pendingDeletion.lastFailure": String(e?.message ?? e).slice(0, 300),
+            "pendingDeletion.failureCount": failureCount,
           })
-          .catch(() => {});
+          .catch((writeErr) => {
+            console.error(`processScheduledDeletions: could not record the failure for uid=${uid}`, writeErr);
+          });
       }
     }
   }
@@ -4598,7 +4664,7 @@ async function softDeleteChild(db, childId, requestId, requestedBy) {
   } catch (storageErr) {
     // Best-effort. Si échec, la purge planifiée à 30j rattrapera. On
     // log mais on bloque pas le soft-delete pour autant.
-    console.warn(`softDeleteChild: storage wipe failed for ${childId}:`, storageErr?.message ?? storageErr);
+    console.error(`softDeleteChild: storage wipe failed for ${childId}, retried by the purge:`, storageErr?.message ?? storageErr);
   }
 
   console.log(`softDeleteChild: childId=${childId}, requestId=${requestId}, usersCleared=${userIds.size}`);
@@ -4939,6 +5005,16 @@ exports.cancelChildDeletion = onCall(
       throw new HttpsError("failed-precondition", "La periode de retention a expire, la suppression ne peut plus etre annulee.");
     }
 
+    // Claim the cancellation atomically: a purge that reserved the request
+    // ("purging") wins, and two cancellations cannot both restore.
+    await db.runTransaction(async (tx) => {
+      const current = await tx.get(requestRef);
+      if (current.data()?.status !== "approved") {
+        throw new HttpsError("failed-precondition", "Cette suppression ne peut plus etre annulee.");
+      }
+      tx.update(requestRef, { status: "cancelled", cancelledBy: uid, cancelledAt: now });
+    });
+
     const batch = db.batch();
     const snapshot = data.accessSnapshot || {};
     const allUserIds = Object.keys(snapshot);
@@ -4980,13 +5056,6 @@ exports.cancelChildDeletion = onCall(
 
     await batch.commit();
 
-    // 5. Mark deletion request as cancelled
-    await requestRef.update({
-      status: "cancelled",
-      cancelledBy: uid,
-      cancelledAt: now,
-    });
-
     console.log(`cancelChildDeletion: childId=${childId}, cancelledBy=${uid}`);
     return { success: true };
   }
@@ -5025,10 +5094,29 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
     console.log(`purgeDeletedChildren: expired=${expired} pending requests`);
   }
 
+  // --- Step 1b: finish approvals whose soft-delete was interrupted ---
+  // (vote or request approved, then softDeleteChild failed: no purgeAt, the
+  // child is still active and nobody can vote again).
+  const approvedSnap = await db
+    .collection("childDeletionRequests")
+    .where("status", "==", "approved")
+    .limit(100)
+    .get();
+  for (const approvedDoc of approvedSnap.docs) {
+    const data = approvedDoc.data();
+    if (data.purgeAt || !data.childId) continue;
+    try {
+      await softDeleteChild(db, data.childId, approvedDoc.id, data.requestedBy);
+      console.log(`purgeDeletedChildren: resumed soft-delete of childId=${data.childId}`);
+    } catch (err) {
+      console.error(`purgeDeletedChildren: could not resume soft-delete of childId=${data.childId}`, err?.stack ?? err);
+    }
+  }
+
   // --- Step 2: Purge soft-deleted children past retention ---
   const requestsSnap = await db
     .collection("childDeletionRequests")
-    .where("status", "==", "approved")
+    .where("status", "in", ["approved", "purging"])
     .where("purgeAt", "<=", now)
     .limit(50)
     .get();
@@ -5047,9 +5135,16 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
     try {
       // Re-check just before deleting: a cancellation between the query and
       // now must not purge a child that was just restored.
-      const fresh = await requestDoc.ref.get();
-      const childSnap = await db.doc(`children/${childId}`).get();
-      if (fresh.data()?.status !== "approved" || (childSnap.exists && !childSnap.data()?.deletedAt)) {
+      // Reserve it atomically: once "purging", cancelChildDeletion refuses.
+      const reserved = await db.runTransaction(async (tx) => {
+        const fresh = await tx.get(requestDoc.ref);
+        const childSnap = await tx.get(db.doc(`children/${childId}`));
+        const stillApproved = ["approved", "purging"].includes(fresh.data()?.status);
+        if (!stillApproved || (childSnap.exists && !childSnap.data()?.deletedAt)) return false;
+        tx.update(requestDoc.ref, { status: "purging" });
+        return true;
+      });
+      if (!reserved) {
         console.log(`purgeDeletedChildren: skipping childId=${childId} (cancelled or restored)`);
         continue;
       }
@@ -5067,11 +5162,15 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
 
       purged++;
     } catch (err) {
-      console.error(`purgeDeletedChildren: error purging childId=${childId}:`, err.message);
+      console.error(`purgeDeletedChildren: error purging childId=${childId}:`, err?.stack ?? err?.message ?? err);
     }
   }
 
-  console.log(`purgeDeletedChildren: purged=${purged}/${requestsSnap.size}`);
+  if (purged < requestsSnap.size) {
+    console.error(`purgeDeletedChildren: error purged=${purged}/${requestsSnap.size}, failures will be retried`);
+  } else {
+    console.log(`purgeDeletedChildren: purged=${purged}/${requestsSnap.size}`);
+  }
 
   // --- Step 3: Cleanup stale requests (refused/expired/cancelled older than 30 days) ---
   const staleThreshold = admin.firestore.Timestamp.fromDate(

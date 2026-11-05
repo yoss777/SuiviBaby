@@ -30,7 +30,7 @@ import { setupNotificationHandler } from "@/services/localNotificationService";
 import { startAutoSync } from "@/services/offlineQueueService";
 import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
 import { ensureFirebaseAppCheck } from "@/config/firebase";
-import { filterBreadcrumb, filterEvent } from "@/utils/sentryFilters";
+import { filterBreadcrumb, filterEvent, filterTransaction } from "@/utils/sentryFilters";
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || "",
@@ -40,6 +40,7 @@ Sentry.init({
   sendDefaultPii: false,
   beforeBreadcrumb: (breadcrumb) => filterBreadcrumb(breadcrumb),
   beforeSend: (event) => filterEvent(event),
+  beforeSendTransaction: (event) => filterTransaction(event),
   environment: __DEV__ ? "development" : "production",
   // Performance monitoring
   tracesSampleRate: 0.2,

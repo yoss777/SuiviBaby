@@ -1,5 +1,5 @@
 // Collections that hold a user's data, used by purgeUserData (index.js) when
-// an account is deleted (audit A3). __tests__/purgeCoverage.test.js fails if a
+// an account is deleted (audit A3). __tests__/userPurge.test.js ("purge coverage") fails if a
 // collection used by the code or the rules is missing from these lists and
 // from its list of non-personal collections.
 

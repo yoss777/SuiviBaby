@@ -138,11 +138,12 @@ export async function trackImpression(promoId: string): Promise<void> {
         updatedAt: new Date(),
       });
     } else {
-      await setDoc(docRef, {
-        ...DEFAULT_USER_PROMOS,
-        seenPromos: [promoId],
-        lastPromoShownAt: new Date(),
-      });
+      // merge: never overwrite a referral code the server wrote meanwhile.
+      await setDoc(
+        docRef,
+        { ...DEFAULT_USER_PROMOS, seenPromos: [promoId], lastPromoShownAt: new Date() },
+        { merge: true },
+      );
     }
   } catch (e) {
     console.error("[promoService] trackImpression error:", e);
@@ -182,10 +183,11 @@ export async function dismissPromo(promoId: string): Promise<void> {
         updatedAt: new Date(),
       });
     } else {
-      await setDoc(docRef, {
-        ...DEFAULT_USER_PROMOS,
-        dismissedPromos: [promoId],
-      });
+      await setDoc(
+        docRef,
+        { ...DEFAULT_USER_PROMOS, dismissedPromos: [promoId] },
+        { merge: true },
+      );
     }
   } catch (e) {
     console.error("[promoService] dismissPromo error:", e);
@@ -201,15 +203,29 @@ export async function dismissPromo(promoId: string): Promise<void> {
  * Ask the server for the user's referral code (created on first call).
  * Returns null if the call fails; the referral card is then hidden.
  */
+// One request at a time, and no retry storm after a failure (each drawer
+// opening used to call again): retry after 5 minutes.
+let pendingReferralCode: Promise<string | null> | null = null;
+let referralCodeFailedAt = 0;
+
 async function ensureReferralCode(): Promise<string | null> {
-  try {
-    const call = httpsCallable<unknown, { referralCode: string }>(functions, "ensureReferralCode");
-    const { data } = await call({});
-    return data?.referralCode ?? null;
-  } catch (e) {
-    captureServiceError(e, { service: "promo", operation: "ensureReferralCode" });
-    return null;
-  }
+  if (pendingReferralCode) return pendingReferralCode;
+  if (Date.now() - referralCodeFailedAt < 5 * 60 * 1000) return null;
+  pendingReferralCode = (async () => {
+    try {
+      const call = httpsCallable<unknown, { referralCode: string }>(functions, "ensureReferralCode");
+      const { data } = await call({});
+      return data?.referralCode ?? null;
+    } catch (e) {
+      referralCodeFailedAt = Date.now();
+      console.error("[promoService] ensureReferralCode error:", e);
+      captureServiceError(e, { service: "promo", operation: "ensureReferralCode" });
+      return null;
+    } finally {
+      pendingReferralCode = null;
+    }
+  })();
+  return pendingReferralCode;
 }
 
 /**

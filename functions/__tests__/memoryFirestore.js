@@ -14,6 +14,7 @@ function memoryStore(initial) {
   const matches = (rawActual, op, rawV) => compare(comparable(rawActual), op, comparable(rawV));
   const compare = (actual, op, v) =>
     op === "==" ? actual === v
+      : op === "in" ? Array.isArray(v) && v.includes(actual)
       : actual === undefined ? false
         : op === "<=" ? actual <= v
           : op === ">=" ? actual >= v

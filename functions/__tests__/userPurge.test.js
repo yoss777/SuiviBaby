@@ -54,6 +54,8 @@ describe("processScheduledDeletions → purgeUserData (audit A3)", () => {
     authApi = {
       getUser: jest.fn().mockResolvedValue({ email: "p1@t.com" }),
       deleteUser: jest.fn().mockResolvedValue(undefined),
+      updateUser: jest.fn().mockResolvedValue(undefined),
+      revokeRefreshTokens: jest.fn().mockResolvedValue(undefined),
     };
     adminMod.auth.mockReturnValue(authApi);
     mockBucket.getFiles.mockResolvedValue([[]]);
@@ -128,8 +130,52 @@ describe("processScheduledDeletions → purgeUserData (audit A3)", () => {
     expect(docs.has(`user_child_access/${UID}_c2`)).toBe(false);
   });
 
+  it("locks the account before deleting anything", async () => {
+    memoryStore(seed());
+    await fns.processScheduledDeletions();
+    expect(authApi.updateUser).toHaveBeenCalledWith(UID, { disabled: true });
+    expect(authApi.revokeRefreshTokens).toHaveBeenCalledWith(UID);
+    expect(authApi.updateUser.mock.invocationCallOrder[0]).toBeLessThan(authApi.deleteUser.mock.invocationCallOrder[0]);
+  });
+
+  it("never deletes a photo outside the event's own child folder", async () => {
+    const deleted = [];
+    mockBucket.file.mockImplementation((p) => ({ delete: jest.fn(async () => deleted.push(p)) }));
+    const state = seed();
+    state["events/e2"].photos = ["children/c2/jalons/b.jpg", "children/other-child/x.jpg", "children/c2/../c9/y.jpg"];
+    memoryStore(state);
+    await fns.processScheduledDeletions();
+    expect(deleted).toContain("children/c2/jalons/b.jpg");
+    expect(deleted.some((p) => p.includes("other-child") || p.includes(".."))).toBe(false);
+  });
+
+  it("counts failures, and still e-mails the address kept with the request once Auth is gone", async () => {
+    authApi.deleteUser.mockRejectedValueOnce({ code: "auth/internal-error", message: "boom" });
+    const state = seed();
+    state[`users/${UID}`].pendingDeletion.email = "kept@t.com";
+    const docs = memoryStore(state);
+    await fns.processScheduledDeletions();
+    expect(docs.get(`users/${UID}`).pendingDeletion.failureCount).toBe(1);
+
+    // Retry: Auth already gone, the address comes from pendingDeletion.
+    authApi.getUser.mockRejectedValue({ code: "auth/user-not-found" });
+    authApi.updateUser.mockRejectedValue({ code: "auth/user-not-found" });
+    authApi.deleteUser.mockRejectedValue({ code: "auth/user-not-found" });
+    await fns.processScheduledDeletions();
+    expect(docs.has(`users/${UID}`)).toBe(false);
+    expect(sentEmails().map(([payload]) => payload.to)).toEqual(["kept@t.com"]);
+  });
+
+  it("does not fail the job when Resend refuses the confirmation", async () => {
+    Resend.mockImplementationOnce(() => ({ emails: { send: jest.fn().mockResolvedValue({ error: { name: "validation_error", message: "domain" } }) } }));
+    const docs = memoryStore(seed());
+    await fns.processScheduledDeletions();
+    expect(docs.has(`users/${UID}`)).toBe(false);
+  });
+
   it("finishes an account whose Auth user was already deleted", async () => {
     authApi.getUser.mockRejectedValue({ code: "auth/user-not-found" });
+    authApi.updateUser.mockRejectedValue({ code: "auth/user-not-found" });
     authApi.deleteUser.mockRejectedValue({ code: "auth/user-not-found" });
     const docs = memoryStore(seed());
     await fns.processScheduledDeletions();

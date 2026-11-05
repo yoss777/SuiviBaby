@@ -138,4 +138,21 @@ describe("purgeDeletedChildren", () => {
     expect(docs.has("childDeletionRequests/r9")).toBe(true);
     expect(docs.has("events/e1")).toBe(true);
   });
+
+  it("finishes an approval whose soft-delete was interrupted", async () => {
+    const docs = memoryStore({
+      ...family(),
+      "childDeletionRequests/r9": { childId: "c1", status: "approved", requestedBy: "a" },
+    });
+    await fns.purgeDeletedChildren();
+    expect(docs.get("children/c1").deletedAt).toBeDefined();
+    expect(docs.get("childDeletionRequests/r9").purgeAt).toBeDefined();
+  });
+
+  it("a cancellation is refused once the purge has reserved the request", async () => {
+    const docs = memoryStore(family());
+    const { requestId } = await fns.createDeletionRequest(call("a", { childId: "c1" }));
+    docs.get(`childDeletionRequests/${requestId}`).status = "purging";
+    await expect(fns.cancelChildDeletion(call("a", { requestId }))).rejects.toThrow();
+  });
 });

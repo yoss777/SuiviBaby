@@ -1,4 +1,4 @@
-import { filterBreadcrumb, filterEvent, maskEmails, scrubData } from "@/utils/sentryFilters";
+import { filterBreadcrumb, filterEvent, filterTransaction, maskEmails, scrubData } from "@/utils/sentryFilters";
 
 describe("Sentry privacy filters (audit A6)", () => {
   it("drops console breadcrumbs (logs may hold transcripts and events)", () => {
@@ -43,5 +43,24 @@ describe("Sentry privacy filters (audit A6)", () => {
   it("masks e-mails anywhere in strings and arrays", () => {
     expect(maskEmails("contact: x.y+z@mail.co.uk")).toBe("contact: [email]");
     expect(scrubData(["a@b.fr", 3])).toEqual(["[email]", 3]);
+  });
+
+  it("truncates data nested too deep instead of sending it unfiltered", () => {
+    expect(scrubData({ a: { b: { c: { d: { e: "secret" } } } } })).toEqual({ a: { b: { c: { d: "[truncated]" } } } });
+  });
+
+  it("scrubs tags and health values", () => {
+    const event = filterEvent({ tags: { service: "events", childName: "Léo" }, extra: { poids: 4.2, value: 38.5, count: 1 } });
+    expect(event.tags).toEqual({ service: "events" });
+    expect(event.extra).toEqual({ count: 1 });
+  });
+
+  it("strips query strings from transactions and spans", () => {
+    const tx = filterTransaction({
+      transaction: "/baby/stats?tab=sommeil",
+      spans: [{ description: "GET https://firestore.googleapis.com/x?key=a@b.fr", data: { email: "a@b.fr", status: 200 } }],
+    });
+    expect(tx.transaction).toBe("/baby/stats");
+    expect(tx.spans?.[0]).toEqual({ description: "GET https://firestore.googleapis.com/x", data: { status: 200 } });
   });
 });

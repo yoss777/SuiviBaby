@@ -368,7 +368,7 @@ describe("resolveReport (T2 — admin claim + audit log)", () => {
         }
         return { uid, customClaims: {} };
       }),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
   }
 
@@ -467,7 +467,7 @@ describe("handleReportCreated (T3 — graduated photo moderation)", () => {
     process.env.RESEND_API_KEY = "test-key";
     admin.auth.mockReturnValue({
       getUser: jest.fn(async (uid) => ({ uid, email: `${uid}@t.com` })),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
   });
 
@@ -632,7 +632,7 @@ describe("deleteUserAccount (T4 — admin-only direct path)", () => {
         email: `${uid}@t.com`,
         customClaims: callerHasAdminClaim ? { admin: true } : {},
       })),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
   }
 
@@ -1259,7 +1259,7 @@ describe("revenueCatWebhook — anti-replay & dedup (T0.2)", () => {
     const adminMod = require("firebase-admin");
     adminMod.auth.mockReturnValueOnce({
       getUser: jest.fn().mockRejectedValue({ code: "auth/user-not-found" }),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
     mockFirestore.doc.mockImplementation((p) => {
       if (p?.startsWith("revenuecat_webhook_events/")) {
@@ -1332,7 +1332,7 @@ describe("setAdminClaim (T0.3)", () => {
     adminMod.auth.mockReturnValue({
       getUser: jest.fn().mockResolvedValue({ uid: "t1", email: "t1@t.com", customClaims: {} }),
       setCustomUserClaims: setClaimsMock,
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
     const auditAdd = jest.fn().mockResolvedValue({ id: "audit1" });
     mockFirestore.collection.mockImplementation((name) => {
@@ -1364,7 +1364,7 @@ describe("deleteUserAccount — admin audit on cross-user delete (T0.6)", () => 
     const adminMod = require("firebase-admin");
     adminMod.auth.mockReturnValueOnce({
       getUser: jest.fn().mockResolvedValue({ uid: "a1", email: "a1@t.com", customClaims: { admin: true } }),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
     await expect(
       fns.deleteUserAccount(adm("a1", { uid: "victim1" }))
@@ -1382,6 +1382,8 @@ describe("deleteUserAccount — admin audit on cross-user delete (T0.6)", () => 
         return Promise.resolve({ uid: u, email: `${u}@t.com`, customClaims: {} });
       }),
       deleteUser: jest.fn().mockResolvedValue(undefined),
+      updateUser: jest.fn().mockResolvedValue(undefined),
+      revokeRefreshTokens: jest.fn().mockResolvedValue(undefined),
     });
     const auditAdd = jest.fn().mockResolvedValue({ id: "audit1" });
     mockFirestore.collection.mockImplementation((name) => {
@@ -1787,7 +1789,7 @@ describe("resolveReport (B6.S7 atomic claim)", () => {
     const adminMod = require("firebase-admin");
     adminMod.auth.mockReturnValue({
       getUser: jest.fn().mockResolvedValue({ uid: "admin1", customClaims: { admin: true } }),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
     mockFirestore.doc.mockImplementation((p) => {
       if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
@@ -1811,7 +1813,7 @@ describe("resolveReport (B6.S7 atomic claim)", () => {
     const adminMod = require("firebase-admin");
     adminMod.auth.mockReturnValue({
       getUser: jest.fn().mockResolvedValue({ uid: "admin1", customClaims: { admin: true } }),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
     mockFirestore.doc.mockImplementation((p) => {
       if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
@@ -1891,6 +1893,8 @@ describe("photo deletion when a child is purged", () => {
       orderBy: jest.fn().mockReturnThis(),
       get: jest.fn()
         // expired pending requests
+        .mockResolvedValueOnce(snap())
+        // approved requests whose soft-delete must be resumed
         .mockResolvedValueOnce(snap())
         // soft-deleted children past retention
         .mockResolvedValueOnce({ docs: [{ id: "req1", ref: requestRef, data: () => ({ childId: "c1" }) }], empty: false, size: 1 })
@@ -2189,7 +2193,7 @@ const referralStore = (initial = {}) => {
         const hits = [...docs.entries()]
           .filter(([path, data]) => path.startsWith(`${name}/`) && path.split("/").length === 2 && filters.every(([f, v]) => data?.[f] === v))
           .map(([path, data]) => ({ id: path.split("/")[1], ref: ref(path), data: () => data }));
-        return { empty: hits.length === 0, docs: hits };
+        return { empty: hits.length === 0, size: hits.length, docs: hits };
       },
     };
     return q;
@@ -2273,6 +2277,14 @@ describe("validateReferralCode — one referral per account (audit A2)", () => {
     });
     await redeem("filleul", "SAM-AAAA-BBBB");
     expect(docs.get("subscriptions/parrain")).toEqual({ tier: "family", status: "active" });
+  });
+
+  it("refuses an old code shared by two accounts (one copied it)", async () => {
+    referralStore({
+      "user_promos/parrain": { referralCode: "SAM-PARR-X1Y2" },
+      "user_promos/copycat": { referralCode: "SAM-PARR-X1Y2" },
+    });
+    await expect(redeem("filleul", "SAM-PARR-X1Y2")).rejects.toThrow("introuvable");
   });
 
   it("still accepts a code created by the app before the fix", async () => {
