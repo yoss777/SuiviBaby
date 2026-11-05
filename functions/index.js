@@ -306,15 +306,21 @@ async function purgeUserData(db, uid) {
       const childAccessSnap = await db
         .collection("children").doc(childId).collection("access")
         .get();
-      if (childAccessSnap.size <= 1) {
-        await deleteChildDataBatched(db, childId);
+      const isMember = childAccessSnap.docs.some((d) => d.id === uid);
+      const isAlone = isMember && childAccessSnap.docs.every((d) => d.id === uid);
+      if (isAlone) {
+        // Child document first: if a later step fails, the retry still finds
+        // the child through the index and the access entry.
         await db.doc(`children/${childId}`).delete();
-      } else {
+        await deleteChildDataBatched(db, childId);
+      } else if (isMember) {
         if (role === "owner") {
           await transferOwnership(db, childId, uid, childAccessSnap);
         }
         await db.doc(`children/${childId}/access/${uid}`).delete();
       }
+      // Not a member any more (an earlier run removed the access): only the
+      // index entry is left. Never delete a child other members still use.
     }
     await accessDoc.ref.delete();
   }

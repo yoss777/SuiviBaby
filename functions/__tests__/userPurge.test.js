@@ -114,6 +114,20 @@ describe("processScheduledDeletions → purgeUserData (audit A3)", () => {
     expect(sentEmails()).toHaveLength(0);
   });
 
+  it("a retry after an interrupted run never deletes a child shared with another parent", async () => {
+    // First run stopped right after removing the user's access to c2 (the
+    // index entry user_child_access/parent1_c2 is still there).
+    const state = seed();
+    delete state[`children/c2/access/${UID}`];
+    state["children/c2"] = { name: "Mia", ownerId: OTHER };
+    state[`children/c2/access/${OTHER}`] = { role: "owner", userId: OTHER };
+    const docs = memoryStore(state);
+    await fns.processScheduledDeletions();
+    expect(docs.get("children/c2")).toMatchObject({ ownerId: OTHER });
+    expect(docs.has("events/e3")).toBe(true);
+    expect(docs.has(`user_child_access/${UID}_c2`)).toBe(false);
+  });
+
   it("finishes an account whose Auth user was already deleted", async () => {
     authApi.getUser.mockRejectedValue({ code: "auth/user-not-found" });
     authApi.deleteUser.mockRejectedValue({ code: "auth/user-not-found" });
