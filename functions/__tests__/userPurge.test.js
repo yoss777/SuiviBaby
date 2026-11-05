@@ -1,4 +1,4 @@
-/* global describe, it, expect, jest, beforeEach, afterEach */
+/* global describe, it, expect, jest, beforeEach, afterEach, __dirname */
 // Account deletion (audit A3): purgeUserData through processScheduledDeletions
 // on an in-memory Firestore, plus a guard that every collection is classified.
 const fs = require("node:fs");
