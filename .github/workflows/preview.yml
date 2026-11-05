@@ -1,9 +1,11 @@
 name: EAS Preview
 
+# Manual only (Actions → EAS Preview → Run workflow). It used to run on every
+# pull request, but iOS internal builds need an ad hoc profile that was never
+# set up, so every run failed while still queueing an EAS Android build that
+# nobody installed; testing goes through TestFlight and the Play Alpha track.
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize]
+  workflow_dispatch:
 
 jobs:
   preview:
