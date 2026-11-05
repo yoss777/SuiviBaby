@@ -72,18 +72,25 @@ async function deleteUserEventPhotos(db, uid) {
       if (path) paths.add(path);
     });
   });
-  await Promise.all([...paths].map((path) => deletePhotoEverywhere(path).catch(() => null)));
+  const results = await Promise.allSettled([...paths].map((path) => deletePhotoEverywhere(path)));
+  const failed = results.filter((r) => r.status === "rejected").length;
+  // Throw rather than continue: the events are the only pointers to these
+  // files, deleting them now would leave unreachable photos (audit A3).
+  if (failed > 0) throw new Error(`${failed}/${paths.size} user photos could not be deleted`);
   return paths.size;
 }
 
 /** Deletes every file under children/{childId}/ in every photo bucket; returns the count. */
 async function deleteChildPhotosEverywhere(childId) {
   let deleted = 0;
+  let failed = 0;
   for (const name of PHOTO_BUCKETS) {
     const [files] = await admin.storage().bucket(name).getFiles({ prefix: `children/${childId}/` });
-    await Promise.all(files.map((file) => file.delete().catch(() => null)));
+    const results = await Promise.allSettled(files.map((file) => file.delete()));
+    failed += results.filter((r) => r.status === "rejected").length;
     deleted += files.length;
   }
+  if (failed > 0) throw new Error(`${failed} photos of child ${childId} could not be deleted`);
   return deleted;
 }
 
@@ -183,12 +190,9 @@ async function deleteDocsByFieldBatched(db, collectionName, field, value) {
  */
 async function deleteChildDataBatched(db, childId) {
   // Storage photos first: once the events are gone nothing references them.
-  // Best-effort so a Storage outage never blocks the account/child deletion.
-  try {
-    await deleteChildPhotosEverywhere(childId);
-  } catch (error) {
-    console.warn(`deleteChildDataBatched: photo cleanup failed for ${childId}:`, error?.message ?? error);
-  }
+  // A failure stops here (nothing else deleted yet); the caller's scheduled
+  // job retries on its next run instead of leaving orphan photos (audit A3).
+  await deleteChildPhotosEverywhere(childId);
 
   // Main + social
   await Promise.all([
@@ -204,8 +208,16 @@ async function deleteChildDataBatched(db, childId) {
     deleteDocsByFieldBatched(db, "babyAttachmentRequests", "childId", childId),
   ]);
 
+  // Notification and weekly recap histories (contain health figures)
+  await Promise.all([
+    deleteDocsByFieldBatched(db, "notification_history", "childId", childId),
+    deleteDocsByFieldBatched(db, "recap_history", "childId", childId),
+  ]);
+
   // Legacy collections
-  const legacyCollections = ["tetees", "pompages", "mictions", "selles", "vitamines", "vaccins"];
+  const legacyCollections = [
+    "tetees", "pompages", "mictions", "selles", "vitamines", "vaccins", "croissances", "sommeils",
+  ];
   await Promise.all(
     legacyCollections.map((coll) => deleteDocsByFieldBatched(db, coll, "childId", childId))
   );
@@ -225,6 +237,114 @@ async function deleteChildDataBatched(db, childId) {
 
   // user_child_access index entries for this child
   await deleteDocsByFieldBatched(db, "user_child_access", "childId", childId);
+}
+
+// ============================================
+// ACCOUNT PURGE (audit A3)
+// ============================================
+
+const { DELETED_USER_ID, USER_DATA_BY_FIELD, USER_DOCS_BY_ID } = require("./lib/userPurge");
+
+/** Updates in batches every document of `collectionName` where field == value. */
+async function updateDocsByFieldBatched(db, collectionName, field, value, patch) {
+  let total = 0;
+  while (true) {
+    const snapshot = await db
+      .collection(collectionName)
+      .where(field, "==", value)
+      .limit(BATCH_LIMIT)
+      .get();
+    if (snapshot.empty) return total;
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.update(doc.ref, patch));
+    await batch.commit();
+    total += snapshot.size;
+    if (snapshot.size < BATCH_LIMIT) return total;
+  }
+}
+
+/**
+ * Deletes everything about a user, in an order that can be retried:
+ *   1. their event photos (a failure stops before anything is deleted);
+ *   2. their children: deleted when they were the only member, otherwise
+ *      ownership transferred or their access removed;
+ *   3. events they wrote in children shared with others: kept for the other
+ *      parent but anonymised (author removed, photos already deleted);
+ *   4. every collection of USER_DATA_BY_FIELD / USER_DOCS_BY_ID, invitations;
+ *   5. Firebase Auth (a failure other than "already gone" throws: the caller
+ *      keeps users/{uid} so the next run retries);
+ *   6. users/{uid} last.
+ * Returns { email } for the confirmation e-mail, sent by the caller only after
+ * this resolves.
+ */
+async function purgeUserData(db, uid) {
+  let email = "";
+  try {
+    const userRecord = await admin.auth().getUser(uid);
+    email = (userRecord.email || "").toLowerCase();
+  } catch (e) {
+    if (e?.code !== "auth/user-not-found") throw e;
+  }
+
+  // 1. Photos while the events that reference them still exist.
+  await deleteUserEventPhotos(db, uid);
+
+  // 2. Children.
+  const accessSnapshot = await db
+    .collection("user_child_access")
+    .where("userId", "==", uid)
+    .get();
+  for (const accessDoc of accessSnapshot.docs) {
+    const { childId, role } = accessDoc.data();
+    if (childId) {
+      const childAccessSnap = await db
+        .collection("children").doc(childId).collection("access")
+        .get();
+      if (childAccessSnap.size <= 1) {
+        await deleteChildDataBatched(db, childId);
+        await db.doc(`children/${childId}`).delete();
+      } else {
+        if (role === "owner") {
+          await transferOwnership(db, childId, uid, childAccessSnap);
+        }
+        await db.doc(`children/${childId}/access/${uid}`).delete();
+      }
+    }
+    await accessDoc.ref.delete();
+  }
+
+  // 3. Events left are in children shared with others.
+  await updateDocsByFieldBatched(db, "events", "userId", uid, {
+    userId: DELETED_USER_ID,
+    photos: admin.firestore.FieldValue.delete(),
+  });
+
+  // 4. Everything else about the user.
+  await Promise.all(
+    USER_DATA_BY_FIELD.map(([collectionName, field]) =>
+      deleteDocsByFieldBatched(db, collectionName, field, uid)
+    )
+  );
+  if (email) {
+    await Promise.all([
+      deleteDocsByFieldBatched(db, "shareInvitations", "inviterEmail", email),
+      deleteDocsByFieldBatched(db, "shareInvitations", "invitedEmail", email),
+    ]);
+  }
+  const batch = db.batch();
+  USER_DOCS_BY_ID.forEach((collectionName) => batch.delete(db.doc(`${collectionName}/${uid}`)));
+  await batch.commit();
+  // adminAuditLog is kept on purpose: investigation trail, see deleteUserAccount.
+
+  // 5. Auth, then 6. the user document that carries pendingDeletion.
+  try {
+    await admin.auth().deleteUser(uid);
+  } catch (e) {
+    if (e?.code !== "auth/user-not-found") throw e;
+  }
+  await db.doc(`users/${uid}`).delete();
+
+  return { email };
 }
 
 async function getSubscriptionState(db, uid) {
@@ -2609,115 +2729,11 @@ exports.deleteUserAccount = onCall(
     // Rate limit on the admin caller (not the target).
     await checkRateLimit(db, uid, "delete", 1);
 
-    // Récupérer l'email pour cleanup des invitations
-    let email = "";
     try {
-      const userRecord = await admin.auth().getUser(targetUid);
-      email = (userRecord.email || "").toLowerCase();
+      await purgeUserData(db, targetUid);
     } catch (e) {
-      // User may already be partially deleted, continue
-      console.warn(`deleteUserAccount: could not fetch user record for ${targetUid}`, e.message);
-    }
-
-    // 1. Récupérer tous les enfants auxquels l'utilisateur a accès
-    const accessSnapshot = await db
-      .collection("user_child_access")
-      .where("userId", "==", targetUid)
-      .get();
-
-    // 2. Traiter chaque enfant
-    for (const accessDoc of accessSnapshot.docs) {
-      const { childId, role } = accessDoc.data();
-      if (!childId) continue;
-
-      const childAccessSnap = await db
-        .collection("children").doc(childId).collection("access")
-        .get();
-
-      if (childAccessSnap.size <= 1) {
-        // Seul utilisateur → supprimer l'enfant et toutes ses données
-        await deleteChildDataBatched(db, childId);
-        await db.doc(`children/${childId}`).delete();
-      } else if (role === "owner") {
-        // Owner avec co-parents → transférer la propriété
-        await transferOwnership(db, childId, targetUid, childAccessSnap);
-        await db.doc(`children/${childId}/access/${targetUid}`).delete();
-      } else {
-        // Non-owner → supprimer l'accès uniquement
-        await db.doc(`children/${childId}/access/${targetUid}`).delete();
-      }
-
-      // Supprimer l'entrée d'index
-      await accessDoc.ref.delete();
-    }
-
-    // 3. Supprimer les données créées par l'utilisateur (par userId)
-    // Photos the user attached to events of shared children (best-effort).
-    try {
-      await deleteUserEventPhotos(db, targetUid);
-    } catch (e) {
-      console.warn(`photo cleanup failed for ${targetUid}`, e.message);
-    }
-    await Promise.all([
-      deleteDocsByFieldBatched(db, "events", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "eventLikes", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "eventComments", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "shareCodes", "createdBy", targetUid),
-      deleteDocsByFieldBatched(db, "device_tokens", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "notification_history", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "recap_history", "userId", targetUid),
-    ]);
-
-    // 4. Supprimer les invitations par email
-    if (email) {
-      await Promise.all([
-        deleteDocsByFieldBatched(db, "shareInvitations", "inviterEmail", email),
-        deleteDocsByFieldBatched(db, "shareInvitations", "invitedEmail", email),
-      ]);
-    }
-
-    // 5. Supprimer les collections par userId (données de suivi et promos)
-    await Promise.all([
-      deleteDocsByFieldBatched(db, "webhook_logs", "appUserId", targetUid),
-      deleteDocsByFieldBatched(db, "referrals", "parrainUid", targetUid),
-      deleteDocsByFieldBatched(db, "referrals", "filleulUid", targetUid),
-      deleteDocsByFieldBatched(db, "childDeletionRequests", "requestedBy", targetUid),
-      // T0.5 — collections orphelines RGPD :
-      deleteDocsByFieldBatched(db, "user_hidden_photos", "userId", targetUid),
-      // pending_assemblyai_deletes a un userId field depuis T0.5. Les docs
-      // pré-T0.5 (sans userId) ne seront pas purgés ici — un cleanup
-      // ultérieur (retention 30j auto + abandonnés > 5 attempts) gère ça.
-      deleteDocsByFieldBatched(db, "pending_assemblyai_deletes", "userId", targetUid),
-      // voice_transcribe_cache : keys = `${uid}_${idempotencyKey}`, donc on
-      // peut filtrer par le field uid stocké dans le doc.
-      deleteDocsByFieldBatched(db, "voice_transcribe_cache", "uid", targetUid),
-    ]);
-    // Note : adminAuditLog conservé volontairement même au delete user — c'est
-    // une trace d'investigation. Le champ adminUid pointant vers un compte
-    // supprimé reste valide pour audit légal.
-
-    // 6. Supprimer les documents uniques de l'utilisateur
-    const singleDocPaths = [
-      `users/${targetUid}`,
-      `users_public/${targetUid}`,
-      `user_preferences/${targetUid}`,
-      `user_content/${targetUid}`,
-      `user_promos/${targetUid}`,
-      `subscriptions/${targetUid}`,
-      `rate_limits/${targetUid}`,
-      `usage_limits/${targetUid}`,
-    ];
-    const batch = db.batch();
-    singleDocPaths.forEach((path) => batch.delete(db.doc(path)));
-    await batch.commit();
-
-    // 7. Supprimer l'utilisateur Firebase Auth (DERNIER — irréversible)
-    try {
-      await admin.auth().deleteUser(targetUid);
-    } catch (e) {
-      console.error(`deleteUserAccount: failed to delete auth user ${targetUid}`, e.message);
-      // Data is already cleaned up, auth deletion failure is non-critical
+      console.error(`deleteUserAccount: purge failed for uid=${targetUid}`, e?.message ?? e);
+      throw new HttpsError("internal", "Suppression interrompue, relancez-la : rien n'a été confirmé.");
     }
 
     console.log(`deleteUserAccount: completed for uid=${targetUid} (admin=${uid})`);
@@ -3926,84 +3942,9 @@ exports.processScheduledDeletions = onSchedule(
     for (const userDoc of snapshot.docs) {
       const uid = userDoc.id;
       try {
-        // Récupérer email pour cleanup invitations
-        let email = "";
-        try {
-          const userRecord = await admin.auth().getUser(uid);
-          email = (userRecord.email || "").toLowerCase();
-        } catch (e) {
-          console.warn(`processScheduledDeletions: could not fetch user record for ${uid}`, e.message);
-        }
+        const { email } = await purgeUserData(db, uid);
 
-        // 1. Traiter les enfants
-        const accessSnapshot = await db
-          .collection("user_child_access")
-          .where("userId", "==", uid)
-          .get();
-
-        for (const accessDoc of accessSnapshot.docs) {
-          const { childId, role } = accessDoc.data();
-          if (!childId) continue;
-
-          const childAccessSnap = await db
-            .collection("children").doc(childId).collection("access")
-            .get();
-
-          if (childAccessSnap.size <= 1) {
-            await deleteChildDataBatched(db, childId);
-            await db.doc(`children/${childId}`).delete();
-          } else if (role === "owner") {
-            await transferOwnership(db, childId, uid, childAccessSnap);
-            await db.doc(`children/${childId}/access/${uid}`).delete();
-          } else {
-            await db.doc(`children/${childId}/access/${uid}`).delete();
-          }
-          await accessDoc.ref.delete();
-        }
-
-        // 2. Supprimer les données utilisateur (photos d'abord, tant que les
-        //    événements qui les référencent existent encore)
-        try {
-          await deleteUserEventPhotos(db, uid);
-        } catch (e) {
-          console.warn(`processScheduledDeletions: photo cleanup failed for ${uid}`, e.message);
-        }
-        await Promise.all([
-          deleteDocsByFieldBatched(db, "events", "userId", uid),
-          deleteDocsByFieldBatched(db, "eventLikes", "userId", uid),
-          deleteDocsByFieldBatched(db, "eventComments", "userId", uid),
-          deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", uid),
-          deleteDocsByFieldBatched(db, "shareCodes", "createdBy", uid),
-          deleteDocsByFieldBatched(db, "device_tokens", "userId", uid),
-          deleteDocsByFieldBatched(db, "notification_history", "userId", uid),
-          deleteDocsByFieldBatched(db, "recap_history", "userId", uid),
-        ]);
-
-        // 3. Invitations par email
-        if (email) {
-          await Promise.all([
-            deleteDocsByFieldBatched(db, "shareInvitations", "inviterEmail", email),
-            deleteDocsByFieldBatched(db, "shareInvitations", "invitedEmail", email),
-          ]);
-        }
-
-        // 4. Documents uniques
-        const singleDocPaths = [
-          `users/${uid}`, `users_public/${uid}`, `user_preferences/${uid}`,
-          `rate_limits/${uid}`, `usage_limits/${uid}`,
-        ];
-        const batch = db.batch();
-        singleDocPaths.forEach((path) => batch.delete(db.doc(path)));
-        await batch.commit();
-
-        // 5. Supprimer Firebase Auth
-        try {
-          await admin.auth().deleteUser(uid);
-        } catch (e) {
-          console.error(`processScheduledDeletions: failed to delete auth user ${uid}`, e.message);
-        }
-
-        // 6. Envoyer email de confirmation de suppression
+        // E-mail only once everything is really gone (Auth included).
         if (email) {
           try {
             const apiKey = process.env.RESEND_API_KEY;
@@ -4017,6 +3958,7 @@ exports.processScheduledDeletions = onSchedule(
                   <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
                     <h2 style="color: #1a1a1a;">Suppression confirmee</h2>
                     <p>Votre compte Suivi Baby et toutes les donnees associees ont ete definitivement supprimes, conformement a votre demande.</p>
+                    <p>Les saisies faites dans le carnet d'un enfant partage avec d'autres parents restent visibles pour eux, sans votre nom.</p>
                     <p>Si vous n'etes pas a l'origine de cette suppression, contactez-nous immediatement a <a href="mailto:privacy@suivibaby.com">privacy@suivibaby.com</a>.</p>
                     <p style="color: #666; font-size: 12px; margin-top: 30px;">Cet email a ete envoye automatiquement par Suivi Baby. Conformite RGPD art. 17.</p>
                   </div>
@@ -4030,7 +3972,15 @@ exports.processScheduledDeletions = onSchedule(
 
         console.log(`processScheduledDeletions: deleted uid=${uid}`);
       } catch (e) {
-        console.error(`processScheduledDeletions: error processing uid=${uid}`, e.message);
+        // users/{uid} (and its pendingDeletion) still exists: the next run
+        // retries. No confirmation e-mail has been sent.
+        console.error(`processScheduledDeletions: error processing uid=${uid}`, e?.message ?? e);
+        await userDoc.ref
+          .update({
+            "pendingDeletion.lastFailureAt": now,
+            "pendingDeletion.lastFailure": String(e?.message ?? e).slice(0, 300),
+          })
+          .catch(() => {});
       }
     }
   }
