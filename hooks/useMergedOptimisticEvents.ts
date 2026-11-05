@@ -31,6 +31,12 @@ type UseMergedOptimisticEventsResult<T> = {
   refreshMerged: () => void;
   /** Alias honnête de `refreshMerged` — même fonction, nom non trompeur. */
   recomputeMerged: () => void;
+  /**
+   * Re-fusion locale sans reset du fingerprint : n'émet vers React que si le
+   * résultat a changé (ex. mise à jour optimiste manquée pendant que l'écran
+   * était gelé). Évite un re-render complet à chaque retour sur l'écran.
+   */
+  remergeIfChanged: () => void;
 };
 
 export function mergeFirestoreSnapshots(current: any[], incoming: any[]): any[] {
@@ -149,5 +155,6 @@ export function useMergedOptimisticEvents<T = any>({
     setFirestoreEvents,
     refreshMerged,
     recomputeMerged: refreshMerged,
+    remergeIfChanged: scheduleMerge,
   };
 }

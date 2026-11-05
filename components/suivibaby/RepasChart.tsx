@@ -26,7 +26,7 @@ import {
 } from "@shopify/react-native-skia";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   StyleSheet,
@@ -106,7 +106,7 @@ function makeRRect(
   return path;
 }
 
-export default function RepasChart({
+function RepasChart({
   tetees,
   initialTypeFilter,
   colorScheme = "light",
@@ -1455,6 +1455,10 @@ export default function RepasChart({
     </GestureHandlerRootView>
   );
 }
+
+// Memoized: the statistics screen re-renders on every tab, loading or week
+// change; the chart only needs to when its own props change.
+export default memo(RepasChart);
 
 const styles = StyleSheet.create({
   container: {

@@ -3,6 +3,7 @@ import RepasChart from "@/components/suivibaby/RepasChart";
 import { SafeBoundary } from "@/components/SafeBoundary";
 import SommeilChart from "@/components/suivibaby/SommeilChart";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
+import { SkeletonBlock } from "@/components/ui/Skeleton";
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
@@ -14,7 +15,6 @@ import {
   addWeeks,
   buildReportWeekRows,
   countInRange,
-  getDurationMinutes,
 } from "@/utils/statsAggregations";
 import { countStatsRender, markStatsMount } from "@/utils/statsPerf";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -25,10 +25,11 @@ import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { Timestamp } from "firebase/firestore";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   Animated,
   BackHandler,
+  InteractionManager,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -72,6 +73,44 @@ const TAB_CONFIG: {
   },
 ];
 
+const tabFromParam = (raw: string | undefined): TabKey =>
+  raw === "pompages" ? "pompages" : raw === "sommeil" ? "sommeil" : "tetees";
+const tabIndexOf = (tab: TabKey) => TAB_CONFIG.findIndex((t) => t.key === tab);
+
+// Number of events received per Firestore listener; null until its first
+// snapshot. One reducer instead of five flags: one render per snapshot.
+type Source = "tetee" | "biberon" | "solide" | "pompage" | "sommeil";
+type SourceCounts = Record<Source, number | null>;
+const NOT_LOADED: SourceCounts = {
+  tetee: null,
+  biberon: null,
+  solide: null,
+  pompage: null,
+  sommeil: null,
+};
+type CountsAction =
+  | { type: "reset" }
+  | { type: "loaded"; source: Source; count: number }
+  | { type: "failed" };
+function countsReducer(state: SourceCounts, action: CountsAction): SourceCounts {
+  switch (action.type) {
+    case "reset":
+      return NOT_LOADED;
+    case "loaded":
+      return state[action.source] === action.count
+        ? state
+        : { ...state, [action.source]: action.count };
+    case "failed":
+      return {
+        tetee: state.tetee ?? 0,
+        biberon: state.biberon ?? 0,
+        solide: state.solide ?? 0,
+        pompage: state.pompage ?? 0,
+        sommeil: state.sommeil ?? 0,
+      };
+  }
+}
+
 const getDateTime = (value: any): number => {
   if (!value) return 0;
   if (value instanceof Timestamp) return value.toMillis();
@@ -106,7 +145,7 @@ export default function StatsScreen() {
   const {
     mergedEvents: tetees,
     setFirestoreEvents: setRepasFirestoreEvents,
-    refreshMerged: refreshRepasMerged,
+    remergeIfChanged: remergeRepas,
   } = useMergedOptimisticEvents<any>({
     childId: activeChild?.id,
     transformMerged: sortRepasEvents,
@@ -114,26 +153,18 @@ export default function StatsScreen() {
   const {
     mergedEvents: pompages,
     setFirestoreEvents: setPompagesFirestoreEvents,
-    refreshMerged: refreshPompagesMerged,
+    remergeIfChanged: remergePompages,
   } = useMergedOptimisticEvents<any>({
     childId: activeChild?.id,
   });
   const {
     mergedEvents: sommeils,
     setFirestoreEvents: setSommeilsFirestoreEvents,
-    refreshMerged: refreshSommeilsMerged,
+    remergeIfChanged: remergeSommeils,
   } = useMergedOptimisticEvents<any>({
     childId: activeChild?.id,
   });
-  const [teteesLoaded, setTeteesLoaded] = useState(false);
-  const [biberonsLoaded, setBiberonsLoaded] = useState(false);
-  const [solidesLoaded, setSolidesLoaded] = useState(false);
-  const [pompagesLoaded, setPompagesLoaded] = useState(false);
-  const [sommeilLoaded, setSommeilLoaded] = useState(false);
-  const [teteesEmptyDelayDone, setTeteesEmptyDelayDone] = useState(false);
-  const [pompagesEmptyDelayDone, setPompagesEmptyDelayDone] = useState(false);
-  const [sommeilEmptyDelayDone, setSommeilEmptyDelayDone] = useState(false);
-  const [selectedTab, setSelectedTab] = useState<TabKey>("tetees");
+  const [counts, dispatchCounts] = useReducer(countsReducer, NOT_LOADED);
   const [tabWidth, setTabWidth] = useState(0);
   const underlineX = useRef(new Animated.Value(0)).current;
   const pagerRef = useRef<PagerView>(null);
@@ -164,6 +195,30 @@ export default function StatsScreen() {
   const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const rawTab = Array.isArray(tab) ? tab[0] : tab;
 
+  const [selectedTab, setSelectedTab] = useState<TabKey>(() => tabFromParam(rawTab));
+  const selectedTabRef = useRef(selectedTab);
+  const initialPageRef = useRef(tabIndexOf(selectedTab));
+  selectedTabRef.current = selectedTab;
+  // Pages are mounted on their first visit only: opening the screen renders
+  // one chart instead of three.
+  const [visitedTabs, setVisitedTabs] = useState<Record<TabKey, boolean>>(() => ({
+    tetees: false,
+    pompages: false,
+    sommeil: false,
+    [tabFromParam(rawTab)]: true,
+  }));
+  const selectTab = useCallback((next: TabKey) => {
+    setSelectedTab(next);
+    setVisitedTabs((prev) => (prev[next] ? prev : { ...prev, [next]: true }));
+  }, []);
+  // Charts mount once the navigation transition is over; a light loader shows
+  // meanwhile, so the screen responds from the first frame.
+  const [chartsReady, setChartsReady] = useState(false);
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => setChartsReady(true));
+    return () => task.cancel();
+  }, []);
+
   // Mapper le paramètre tab vers l'onglet stats + filtre RepasChart
   const initialTypeFilter = useMemo(
     () =>
@@ -177,19 +232,16 @@ export default function StatsScreen() {
     [rawTab],
   );
 
-  // Définir l'onglet initial en fonction du paramètre
+  // Onglet initial : `initialPage` du pager. Ensuite, suivre les changements
+  // du paramètre (l'écran reste monté entre deux navigations).
+  const syncedTabParamRef = useRef(rawTab);
   useEffect(() => {
-    if (rawTab === "pompages") {
-      setSelectedTab("pompages");
-      pagerRef.current?.setPageWithoutAnimation(1);
-    } else if (rawTab === "sommeil") {
-      setSelectedTab("sommeil");
-      pagerRef.current?.setPageWithoutAnimation(2);
-    } else {
-      setSelectedTab("tetees");
-      pagerRef.current?.setPageWithoutAnimation(0);
-    }
-  }, [rawTab]);
+    if (syncedTabParamRef.current === rawTab) return;
+    syncedTabParamRef.current = rawTab;
+    const next = tabFromParam(rawTab);
+    selectTab(next);
+    pagerRef.current?.setPageWithoutAnimation(tabIndexOf(next));
+  }, [rawTab, selectTab]);
 
   useEffect(() => {
     if (tabWidth === 0) return;
@@ -202,24 +254,25 @@ export default function StatsScreen() {
     }).start();
   }, [selectedTab, tabWidth, underlineX]);
 
-  const handleTabChange = (tab: TabKey) => {
-    if (tab === selectedTab) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const tabIndex = TAB_CONFIG.findIndex((t) => t.key === tab);
-    pagerRef.current?.setPage(tabIndex);
-    setSelectedTab(tab);
-  };
+  const handleTabChange = useCallback(
+    (tab: TabKey) => {
+      if (tab === selectedTabRef.current) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      pagerRef.current?.setPage(tabIndexOf(tab));
+      selectTab(tab);
+    },
+    [selectTab],
+  );
 
   const handlePageSelected = useCallback(
     (e: { nativeEvent: { position: number } }) => {
-      const index = e.nativeEvent.position;
-      const tab = TAB_CONFIG[index]?.key;
-      if (tab && tab !== selectedTab) {
+      const tab = TAB_CONFIG[e.nativeEvent.position]?.key;
+      if (tab && tab !== selectedTabRef.current) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setSelectedTab(tab);
+        selectTab(tab);
       }
     },
-    [selectedTab],
+    [selectTab],
   );
 
   // Factored navigation handler
@@ -276,11 +329,7 @@ export default function StatsScreen() {
   // Error handler for Firestore listeners
   const handleListenerError = useCallback(() => {
     setLoadError("Impossible de charger les données");
-    setTeteesLoaded(true);
-    setBiberonsLoaded(true);
-    setSolidesLoaded(true);
-    setPompagesLoaded(true);
-    setSommeilLoaded(true);
+    dispatchCounts({ type: "failed" });
   }, []);
 
   const pushRepasFirestoreEvents = useCallback(() => {
@@ -315,7 +364,10 @@ export default function StatsScreen() {
   useEffect(() => {
     if (!activeChild?.id) return;
 
+    // Reset before subscribing (child change or manual refresh). The merged
+    // lists themselves are reset by useMergedOptimisticEvents on child change.
     setLoadError(null);
+    dispatchCounts({ type: "reset" });
     latestFirestoreTeteesRef.current = [];
     latestFirestoreBiberonsRef.current = [];
     latestFirestoreSolidesRef.current = [];
@@ -326,8 +378,8 @@ export default function StatsScreen() {
       activeChild.id,
       (tetees) => {
         latestFirestoreTeteesRef.current = tetees;
-        setTeteesLoaded(true);
         pushRepasFirestoreEvents();
+        dispatchCounts({ type: "loaded", source: "tetee", count: tetees.length });
       },
       { type: "tetee", waitForServer: true },
       handleListenerError,
@@ -337,8 +389,8 @@ export default function StatsScreen() {
       activeChild.id,
       (biberons) => {
         latestFirestoreBiberonsRef.current = biberons;
-        setBiberonsLoaded(true);
         pushRepasFirestoreEvents();
+        dispatchCounts({ type: "loaded", source: "biberon", count: biberons.length });
       },
       { type: "biberon", waitForServer: true },
       handleListenerError,
@@ -348,8 +400,8 @@ export default function StatsScreen() {
       activeChild.id,
       (solides) => {
         latestFirestoreSolidesRef.current = solides;
-        setSolidesLoaded(true);
         pushRepasFirestoreEvents();
+        dispatchCounts({ type: "loaded", source: "solide", count: solides.length });
       },
       { type: "solide", waitForServer: true },
       handleListenerError,
@@ -359,8 +411,8 @@ export default function StatsScreen() {
       activeChild.id,
       (data) => {
         latestFirestorePompagesRef.current = data;
-        setPompagesLoaded(true);
         setPompagesFirestoreEvents(data);
+        dispatchCounts({ type: "loaded", source: "pompage", count: data.length });
       },
       { type: "pompage", waitForServer: true },
       handleListenerError,
@@ -370,8 +422,8 @@ export default function StatsScreen() {
       activeChild.id,
       (data) => {
         latestFirestoreSommeilsRef.current = data;
-        setSommeilLoaded(true);
         setSommeilsFirestoreEvents(data);
+        dispatchCounts({ type: "loaded", source: "sommeil", count: data.length });
       },
       { type: "sommeil", waitForServer: true },
       handleListenerError,
@@ -393,102 +445,58 @@ export default function StatsScreen() {
     setSommeilsFirestoreEvents,
   ]);
 
-  // Re-merge on tab focus — frozen tabs miss state updates
+  // Re-merge on tab focus — frozen tabs can miss optimistic updates. Only
+  // emits when the merged lists actually changed (no re-render otherwise).
   useFocusEffect(
     useCallback(() => {
-      refreshRepasMerged();
-      refreshPompagesMerged();
-      refreshSommeilsMerged();
-    }, [refreshPompagesMerged, refreshRepasMerged, refreshSommeilsMerged]),
+      remergeRepas();
+      remergePompages();
+      remergeSommeils();
+    }, [remergePompages, remergeRepas, remergeSommeils]),
   );
 
-  useEffect(() => {
-    if (!activeChild?.id) return;
-    setTeteesLoaded(false);
-    setBiberonsLoaded(false);
-    setSolidesLoaded(false);
-    setPompagesLoaded(false);
-    setSommeilLoaded(false);
-    setTeteesEmptyDelayDone(false);
-    setPompagesEmptyDelayDone(false);
-    setSommeilEmptyDelayDone(false);
-    setLoadError(null);
-    latestFirestoreTeteesRef.current = [];
-    latestFirestoreBiberonsRef.current = [];
-    latestFirestoreSolidesRef.current = [];
-    latestFirestorePompagesRef.current = [];
-    latestFirestoreSommeilsRef.current = [];
-    setRepasFirestoreEvents([]);
-    setPompagesFirestoreEvents([]);
-    setSommeilsFirestoreEvents([]);
-  }, [
-    activeChild?.id,
-    setPompagesFirestoreEvents,
-    setRepasFirestoreEvents,
-    setSommeilsFirestoreEvents,
-  ]);
-
-  const isTeteesLoading = !(teteesLoaded && biberonsLoaded && solidesLoaded);
-  const isPompagesLoading = !pompagesLoaded;
-  const isSommeilLoading = !sommeilLoaded;
+  const repasCount =
+    counts.tetee === null || counts.biberon === null || counts.solide === null
+      ? null
+      : counts.tetee + counts.biberon + counts.solide;
+  const isTeteesLoading = repasCount === null;
+  const isPompagesLoading = counts.pompage === null;
+  const isSommeilLoading = counts.sommeil === null;
+  // A snapshot is merged after a short debounce: while events were received
+  // but the merged list is still empty, keep the loader instead of flashing
+  // the empty state (replaces the former fixed 300 ms delays).
+  const isTeteesReady = !isTeteesLoading && (repasCount === 0 || tetees.length > 0);
+  const isPompagesReady =
+    !isPompagesLoading && (counts.pompage === 0 || pompages.length > 0);
+  const isSommeilReady =
+    !isSommeilLoading && (counts.sommeil === 0 || sommeils.length > 0);
+  const isAllReady = isTeteesReady && isPompagesReady && isSommeilReady;
 
   // End refresh spinner when ALL data arrives (tab-agnostic to avoid stuck spinner)
   useEffect(() => {
-    if (!isRefreshing) return;
-    if (!isTeteesLoading && !isPompagesLoading && !isSommeilLoading) {
-      setIsRefreshing(false);
-    }
-  }, [isRefreshing, isTeteesLoading, isPompagesLoading, isSommeilLoading]);
-
-  useEffect(() => {
-    if (isTeteesLoading) {
-      setTeteesEmptyDelayDone(false);
-      return;
-    }
-    if (tetees.length > 0) {
-      setTeteesEmptyDelayDone(true);
-      return;
-    }
-    const timer = setTimeout(() => setTeteesEmptyDelayDone(true), 300);
-    return () => clearTimeout(timer);
-  }, [isTeteesLoading, tetees.length]);
-
-  useEffect(() => {
-    if (isPompagesLoading) {
-      setPompagesEmptyDelayDone(false);
-      return;
-    }
-    if (pompages.length > 0) {
-      setPompagesEmptyDelayDone(true);
-      return;
-    }
-    const timer = setTimeout(() => setPompagesEmptyDelayDone(true), 300);
-    return () => clearTimeout(timer);
-  }, [isPompagesLoading, pompages.length]);
-
-  useEffect(() => {
-    if (isSommeilLoading) {
-      setSommeilEmptyDelayDone(false);
-      return;
-    }
-    if (sommeils.length > 0) {
-      setSommeilEmptyDelayDone(true);
-      return;
-    }
-    const timer = setTimeout(() => setSommeilEmptyDelayDone(true), 300);
-    return () => clearTimeout(timer);
-  }, [isSommeilLoading, sommeils.length]);
+    if (isRefreshing && isAllReady) setIsRefreshing(false);
+  }, [isRefreshing, isAllReady]);
 
   // Per-tab week change callbacks
-  const handleRepasWeekChange = useCallback((ws: Date) => {
-    setWeekByTab((prev) => ({ ...prev, tetees: ws }));
+  // Same week → same state object: no re-render when a chart reports the
+  // week it already shows (it does so on mount).
+  const setTabWeek = useCallback((tab: TabKey, ws: Date) => {
+    setWeekByTab((prev) =>
+      prev[tab].getTime() === ws.getTime() ? prev : { ...prev, [tab]: ws },
+    );
   }, []);
-  const handlePompagesWeekChange = useCallback((ws: Date) => {
-    setWeekByTab((prev) => ({ ...prev, pompages: ws }));
-  }, []);
-  const handleSommeilWeekChange = useCallback((ws: Date) => {
-    setWeekByTab((prev) => ({ ...prev, sommeil: ws }));
-  }, []);
+  const handleRepasWeekChange = useCallback(
+    (ws: Date) => setTabWeek("tetees", ws),
+    [setTabWeek],
+  );
+  const handlePompagesWeekChange = useCallback(
+    (ws: Date) => setTabWeek("pompages", ws),
+    [setTabWeek],
+  );
+  const handleSommeilWeekChange = useCallback(
+    (ws: Date) => setTabWeek("sommeil", ws),
+    [setTabWeek],
+  );
 
   // Displayed week = the active tab's week
   const displayWeek = weekByTab[selectedTab];
@@ -515,14 +523,23 @@ export default function StatsScreen() {
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    setTeteesLoaded(false);
-    setBiberonsLoaded(false);
-    setSolidesLoaded(false);
-    setPompagesLoaded(false);
-    setSommeilLoaded(false);
-    setLoadError(null);
+    // Same batch as the spinner, so it is not ended by data already loaded.
+    dispatchCounts({ type: "reset" });
     setRefreshKey((k) => k + 1);
   }, []);
+
+  const repasBoundaryExtras = useMemo(
+    () => ({ childId: activeChild?.id, count: tetees.length }),
+    [activeChild?.id, tetees.length],
+  );
+  const pompagesBoundaryExtras = useMemo(
+    () => ({ childId: activeChild?.id, count: pompages.length }),
+    [activeChild?.id, pompages.length],
+  );
+  const sommeilBoundaryExtras = useMemo(
+    () => ({ childId: activeChild?.id, sleepCount: sommeils.length }),
+    [activeChild?.id, sommeils.length],
+  );
 
   // PDF Export — 3-month weekly trend report
   const handleExportPDF = useCallback(async () => {
@@ -760,10 +777,7 @@ export default function StatsScreen() {
       </View>
 
       {/* RESUME CARDS + EXPORT */}
-      {!loadError &&
-        !isTeteesLoading &&
-        !isPompagesLoading &&
-        !isSommeilLoading && (
+      {!loadError && (
           <View>
             <Text style={[styles.weekLabel, { color: nc.textMuted }]}>
               {weekLabel}
@@ -782,14 +796,18 @@ export default function StatsScreen() {
                   size={14}
                   color={chartColors.tetees.blue}
                 />
-                <Text
-                  style={[
-                    styles.resumeValue,
-                    { color: chartColors.tetees.blue },
-                  ]}
-                >
-                  {thisWeekCounts.repas}
-                </Text>
+                {isTeteesReady ? (
+                  <Text
+                    style={[
+                      styles.resumeValue,
+                      { color: chartColors.tetees.blue },
+                    ]}
+                  >
+                    {thisWeekCounts.repas}
+                  </Text>
+                ) : (
+                  <SkeletonBlock width={22} height={18} radius={4} />
+                )}
                 <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>
                   repas
                 </Text>
@@ -807,14 +825,18 @@ export default function StatsScreen() {
                   size={14}
                   color={chartColors.pompages.green}
                 />
-                <Text
-                  style={[
-                    styles.resumeValue,
-                    { color: chartColors.pompages.green },
-                  ]}
-                >
-                  {thisWeekCounts.pompages}
-                </Text>
+                {isPompagesReady ? (
+                  <Text
+                    style={[
+                      styles.resumeValue,
+                      { color: chartColors.pompages.green },
+                    ]}
+                  >
+                    {thisWeekCounts.pompages}
+                  </Text>
+                ) : (
+                  <SkeletonBlock width={22} height={18} radius={4} />
+                )}
                 <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>
                   pompages
                 </Text>
@@ -832,21 +854,30 @@ export default function StatsScreen() {
                   size={14}
                   color={chartColors.sommeil.purple}
                 />
-                <Text
-                  style={[
-                    styles.resumeValue,
-                    { color: chartColors.sommeil.purple },
-                  ]}
-                >
-                  {thisWeekCounts.sommeil}
-                </Text>
+                {isSommeilReady ? (
+                  <Text
+                    style={[
+                      styles.resumeValue,
+                      { color: chartColors.sommeil.purple },
+                    ]}
+                  >
+                    {thisWeekCounts.sommeil}
+                  </Text>
+                ) : (
+                  <SkeletonBlock width={22} height={18} radius={4} />
+                )}
                 <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>
                   sommeils
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.exportButton, { borderColor: nc.border }]}
+                style={[
+                  styles.exportButton,
+                  { borderColor: nc.border },
+                  !isAllReady && { opacity: 0.4 },
+                ]}
                 onPress={handleExportPDF}
+                disabled={!isAllReady}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
                 accessibilityLabel="Exporter le rapport en PDF"
@@ -884,7 +915,7 @@ export default function StatsScreen() {
           <PagerView
             ref={pagerRef}
             style={styles.pager}
-            initialPage={0}
+            initialPage={initialPageRef.current}
             onPageSelected={handlePageSelected}
             overdrag
           >
@@ -901,14 +932,14 @@ export default function StatsScreen() {
                 />
               }
             >
-              {isTeteesLoading || !teteesEmptyDelayDone ? (
+              {!chartsReady || !visitedTabs.tetees || !isTeteesReady ? (
                 <View style={styles.loaderContainer}>
                   <IconPulseDots color={chartColors.tetees.blue} />
                 </View>
               ) : (
                 <SafeBoundary
                   name="stats.RepasChart"
-                  extras={{ childId: activeChild?.id, count: tetees?.length }}
+                  extras={repasBoundaryExtras}
                 >
                   <RepasChart
                     tetees={tetees}
@@ -933,14 +964,14 @@ export default function StatsScreen() {
                 />
               }
             >
-              {isPompagesLoading || !pompagesEmptyDelayDone ? (
+              {!chartsReady || !visitedTabs.pompages || !isPompagesReady ? (
                 <View style={styles.loaderContainer}>
                   <IconPulseDots color={chartColors.pompages.green} />
                 </View>
               ) : (
                 <SafeBoundary
                   name="stats.PompagesChart"
-                  extras={{ childId: activeChild?.id, count: pompages?.length }}
+                  extras={pompagesBoundaryExtras}
                 >
                   <PompagesChart
                     pompages={pompages}
@@ -964,17 +995,14 @@ export default function StatsScreen() {
                 />
               }
             >
-              {isSommeilLoading || !sommeilEmptyDelayDone ? (
+              {!chartsReady || !visitedTabs.sommeil || !isSommeilReady ? (
                 <View style={styles.loaderContainer}>
                   <IconPulseDots color={chartColors.sommeil.purple} />
                 </View>
               ) : (
                 <SafeBoundary
                   name="stats.SommeilChart"
-                  extras={{
-                    childId: activeChild?.id,
-                    sleepCount: sommeils?.length,
-                  }}
+                  extras={sommeilBoundaryExtras}
                 >
                   <SommeilChart
                     sommeils={sommeils}

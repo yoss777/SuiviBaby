@@ -55,6 +55,7 @@ jest.mock("expo-print", () => ({ printToFileAsync: jest.fn() }));
 jest.mock("expo-sharing", () => ({ shareAsync: jest.fn() }));
 jest.mock("@expo/vector-icons/FontAwesome6", () => "FontAwesome6");
 jest.mock("@/components/ui/IconPulseDtos", () => ({ IconPulseDots: () => null }));
+jest.mock("@/components/ui/Skeleton", () => ({ SkeletonBlock: () => null }));
 jest.mock("react-native-pager-view", () => {
   const { forwardRef, useImperativeHandle } = jest.requireActual("react");
   const { View } = jest.requireActual("react-native");
@@ -65,7 +66,7 @@ jest.mock("react-native-pager-view", () => {
 });
 
 const mockChart = (name: string) => {
-  const { useEffect } = jest.requireActual("react");
+  const { memo, useEffect } = jest.requireActual("react");
   const { countStatsRender } = jest.requireActual("@/utils/statsPerf");
   const Chart = ({ onWeekChange }: any) => {
     countStatsRender(name);
@@ -77,7 +78,8 @@ const mockChart = (name: string) => {
     }, [onWeekChange]);
     return null;
   };
-  return { __esModule: true, default: Chart };
+  // The real charts are exported through React.memo.
+  return { __esModule: true, default: memo(Chart) };
 };
 jest.mock("@/components/suivibaby/RepasChart", () => mockChart("RepasChart"));
 jest.mock("@/components/suivibaby/PompagesChart", () => mockChart("PompagesChart"));
@@ -111,20 +113,59 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
+function openAndLoad(ui = <StatsScreen />) {
+  const utils = render(ui);
+  act(() => {
+    jest.advanceTimersByTime(10); // InteractionManager: charts allowed to mount
+  });
+  deliverSnapshotsOneByOne();
+  act(() => {
+    jest.advanceTimersByTime(1000);
+  });
+  return utils;
+}
+
 describe("StatsScreen loading", () => {
-  it("reports render counts from mount to data displayed", () => {
-    render(<StatsScreen />);
-    deliverSnapshotsOneByOne();
-    act(() => {
-      jest.advanceTimersByTime(1000);
-    });
+  it("renders only the active tab's chart, a bounded number of times", () => {
+    openAndLoad();
 
     const counters = getStatsPerfCounters();
-    // Reference figures for docs/STATS_PERF_REFONTE.md ("Mesures").
+    // Figures for docs/STATS_PERF_REFONTE.md ("Mesures").
     console.log(
       `[stats-renders] listeners=${mockListeners.length} screen=${counters.StatsScreen} ` +
         `repas=${counters.RepasChart ?? 0} pompages=${counters.PompagesChart ?? 0} sommeil=${counters.SommeilChart ?? 0}`,
     );
     expect(counters.RepasChart).toBeGreaterThan(0);
+    expect(counters.RepasChart).toBeLessThanOrEqual(2);
+    expect(counters.PompagesChart ?? 0).toBe(0);
+    expect(counters.SommeilChart ?? 0).toBe(0);
+    // 21 before sprint 2; each snapshot still costs two renders (count, then merge).
+    expect(counters.StatsScreen).toBeLessThanOrEqual(14);
+  });
+
+  it("shows each resume card as soon as its own data is there", () => {
+    const { getByText, queryByText } = render(<StatsScreen />);
+    act(() => {
+      jest.advanceTimersByTime(10);
+    });
+    const sommeil = mockListeners.find((l) => l.type === "sommeil")!;
+    act(() => {
+      sommeil.callback([{ id: "s1", type: "sommeil", date: new Date(), isNap: true }]);
+    });
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+    // Sleep is ready (1 this week) while meals and pumping are still loading.
+    expect(getByText("1")).toBeTruthy();
+    expect(queryByText("0")).toBeNull();
+  });
+
+  it("does not re-render when the screen regains focus without new data", () => {
+    openAndLoad();
+    const before = getStatsPerfCounters().StatsScreen;
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(getStatsPerfCounters().StatsScreen).toBe(before);
   });
 });

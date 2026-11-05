@@ -231,40 +231,51 @@ passe (le PDF anticipe la tâche 3.4). 1.7 (chemins Skia dans `bars`) reporté
 au sprint 5 : une vingtaine de chemins, gain négligeable une fois les rendus
 réduits._
 
-### Sprint 2 — Écran réactif pendant le chargement · US-1.1, US-1.2, US-1.3, US-2.1, US-4.1 · ⏳
+### Sprint 2 — Écran réactif pendant le chargement · US-1.1, US-1.2, US-1.3, US-2.1, US-4.1 · ✅ 2026-11-05
 
 But : l'utilisateur ne voit plus jamais l'écran figé ; un seul graphique se
 calcule à l'ouverture.
 
-- [ ] **2.1** `React.memo` sur `RepasChart`, `PompagesChart`, `SommeilChart` ;
+- [x] **2.1** `React.memo` sur `RepasChart`, `PompagesChart`, `SommeilChart` ;
   `extras` de `SafeBoundary` mémoïsé (`stats.tsx:1035`, `1067`, `1098`).
-- [ ] **2.2** Pages paresseuses : ne monter le graphique que si l'onglet est
+- [x] **2.2** Pages paresseuses : ne monter le graphique que si l'onglet est
   actif ou déjà visité (`visitedTabs`), placeholder léger sinon ; les
   `ScrollView` restent en place pour ne pas casser les index du pager.
-- [ ] **2.3** `onWeekChange` : garde d'égalité dans les setters
+- [x] **2.3** `onWeekChange` : garde d'égalité dans les setters
   (`stats.tsx:470-478`, retourner `prev` si `getTime()` identique) ; ne plus
   l'appeler au montage depuis les graphiques, seulement sur navigation.
-- [ ] **2.4** État de chargement unique : un `useReducer` `loaded` par source à
+- [x] **2.4** État de chargement unique : un `useReducer` `loaded` par source à
   la place des 5 `*Loaded` ; reset fusionné dans l'effet d'abonnement, avant
   les `ecouterEvenements` (supprime la course possible avec un snapshot synchrone).
-- [ ] **2.5** Suppression des 3 `*EmptyDelayDone` et de leurs timers de 300 ms
+- [x] **2.5** Suppression des 3 `*EmptyDelayDone` et de leurs timers de 300 ms
   (`stats.tsx:430-467`) ; état vide affiché directement (ou apparition animée).
-- [ ] **2.6** Cartes résumé indépendantes (`stats.tsx:887-890`) avec squelette
+- [x] **2.6** Cartes résumé indépendantes (`stats.tsx:887-890`) avec squelette
   (`components/ui/Skeleton.tsx`).
-- [ ] **2.7** Graphique monté après la transition d'ouverture
+- [x] **2.7** Graphique monté après la transition d'ouverture
   (`InteractionManager.runAfterInteractions` ou `startTransition`), squelette
   pendant ce temps.
-- [ ] **2.8** `useFocusEffect` (`stats.tsx:384-390`) : ne plus forcer la
+- [x] **2.8** `useFocusEffect` (`stats.tsx:384-390`) : ne plus forcer la
   re-fusion au focus si rien n'a changé.
-- [ ] **2.9** Onglet initial via `initialPage` calculé depuis le paramètre `tab`
+- [x] **2.9** Onglet initial via `initialPage` calculé depuis le paramètre `tab`
   (`stats.tsx:168-179`, `1011`) ; `handlePageSelected` sans dépendance à
   `selectedTab` (`stats.tsx:200-210`).
-- [ ] **2.10** Tests : `__tests__/StatsScreen.test.tsx` (seul l'onglet actif
+- [x] **2.10** Tests : `__tests__/StatsScreen.test.tsx` (seul l'onglet actif
   monte un graphique, cartes affichées indépendamment, pas de recalcul au
   focus sans changement).
 
 Fin de sprint : un seul graphique rendu à l'ouverture ; aucune tâche > 100 ms
 pendant le chargement (profil Hermes) ; changement d'onglet fluide.
+
+_Bilan 2026-11-05 : graphiques en `React.memo` ; pages montées à la première
+visite ; graphiques montés après la transition (`InteractionManager`) ; un
+seul `useReducer` de comptes par écouteur (null = pas encore reçu) remplace
+les 5 indicateurs ; les 3 délais de 300 ms sont remplacés par une règle
+exacte (événements reçus mais fusion pas encore émise → loader) ; cartes
+résumé indépendantes avec squelette, export PDF désactivé tant que tout n'est
+pas chargé ; garde d'égalité sur la semaine ; au focus, `remergeIfChanged`
+n'émet que si la fusion a changé ; onglet initial via `initialPage`.
+L'appel `onWeekChange` au montage des graphiques est gardé (la garde du parent
+l'annule) pour ne pas toucher à leur navigation._
 
 ### Sprint 3 — Charger seulement ce qui est affiché · US-1.4, US-3.2, US-5.1, US-6.1, US-7.1, US-7.2 · ⏳
 
@@ -377,10 +388,10 @@ un Android d'entrée de gamme sous Hermes, compter 5 à 20 fois plus) :
 | Mesure | Avant | S1 | S2 | S3 | S4 | Après | Cible |
 |---|---|---|---|---|---|---|---|
 | Calcul des 3 graphiques par rendu (ms) | 28,3 (Repas 12,1 · Pompages 2,6 · Sommeil 15,6) | 2,3 quand les données ou la semaine changent, 0 sinon | | | | | < 3 |
-| Rendus de `StatsScreen` jusqu'aux données | 21 | | | | | | ≤ 8 |
-| Rendus des graphiques (Repas / Pompages / Sommeil) | 11 / 6 / 2 | | | | | | ≤ 2 chacun |
+| Rendus de `StatsScreen` jusqu'aux données | 21 | 21 | 14 | | | | ≤ 8 |
+| Rendus des graphiques (Repas / Pompages / Sommeil) | 11 / 6 / 2 | 11 / 6 / 2 | 2 / 0 / 0 | | | | ≤ 2 chacun |
 | Calcul estimé au chargement (ms) | ≈ 180 | | | | | | < 20 |
-| Graphiques montés à l'ouverture | 3 | | | | | | 1 |
+| Graphiques montés à l'ouverture | 3 | 3 | 1 | | | | 1 |
 | Écouteurs Firestore | 5 | | | | | | 3 |
 | Événements lus à l'ouverture | tout l'historique (3 000) | | | | | | fenêtre (≈ 3 semaines) |
 | Ouverture → premier graphique sur le Samsung (ms) | à mesurer | | | | | | < 300 avec cache |

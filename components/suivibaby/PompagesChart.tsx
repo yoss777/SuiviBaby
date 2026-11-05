@@ -23,7 +23,7 @@ import {
 } from "@shopify/react-native-skia";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   Dimensions,
   StyleSheet,
@@ -107,7 +107,7 @@ function createFillPath(points: { x: number; y: number }[]) {
   return path;
 }
 
-export default function PompagesChart({
+function PompagesChart({
   pompages,
   colorScheme = "light",
   screenWidth: screenWidthProp,
@@ -1050,6 +1050,10 @@ export default function PompagesChart({
     </GestureHandlerRootView>
   );
 }
+
+// Memoized: the statistics screen re-renders on every tab, loading or week
+// change; the chart only needs to when its own props change.
+export default memo(PompagesChart);
 
 const styles = StyleSheet.create({
   container: {

@@ -74,4 +74,34 @@ describe("useMergedOptimisticEvents", () => {
     unmount();
     jest.useRealTimers();
   });
+
+  it("remergeIfChanged keeps the same array when nothing changed, refreshMerged re-emits", () => {
+    jest.useFakeTimers();
+    const event = { id: "biberon-1", type: "biberon", childId: "child-a", quantite: 120 };
+    const { result, unmount } = renderHook(() =>
+      useMergedOptimisticEvents({ childId: "child-a", debounceMs: 0 }),
+    );
+
+    act(() => {
+      result.current.setFirestoreEvents([event]);
+      jest.runOnlyPendingTimers();
+    });
+    const first = result.current.mergedEvents;
+
+    act(() => {
+      result.current.remergeIfChanged();
+      jest.runOnlyPendingTimers();
+    });
+    expect(result.current.mergedEvents).toBe(first);
+
+    act(() => {
+      result.current.refreshMerged();
+      jest.runOnlyPendingTimers();
+    });
+    expect(result.current.mergedEvents).not.toBe(first);
+    expect(result.current.mergedEvents).toEqual(first);
+
+    unmount();
+    jest.useRealTimers();
+  });
 });
