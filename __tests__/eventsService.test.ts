@@ -253,5 +253,46 @@ describe("eventsService", () => {
 
       jest.useRealTimers();
     });
+
+    it("cacheFirst delivers a non-empty cache at once, then the server snapshot", () => {
+      const callback = jest.fn();
+      ecouterEvenements("child1", callback, {
+        type: "sommeil",
+        waitForServer: true,
+        cacheFirst: true,
+      });
+      const snapshotCallback = (onSnapshot as jest.Mock).mock.calls[0][2];
+
+      snapshotCallback(snapshot([{ id: "s1", childId: "child1", type: "sommeil" }], true));
+      expect(callback).toHaveBeenCalledTimes(1);
+
+      snapshotCallback(
+        snapshot(
+          [
+            { id: "s1", childId: "child1", type: "sommeil" },
+            { id: "s2", childId: "child1", type: "sommeil" },
+          ],
+          false,
+        ),
+      );
+      expect(callback).toHaveBeenCalledTimes(2);
+      expect(callback.mock.calls[1][0]).toHaveLength(2);
+    });
+
+    it("cacheFirst still waits for the server when the cache is empty", () => {
+      const callback = jest.fn();
+      ecouterEvenements("child1", callback, {
+        type: "sommeil",
+        waitForServer: true,
+        cacheFirst: true,
+      });
+      const snapshotCallback = (onSnapshot as jest.Mock).mock.calls[0][2];
+
+      snapshotCallback(snapshot([], true));
+      expect(callback).not.toHaveBeenCalled();
+
+      snapshotCallback(snapshot([], false));
+      expect(callback).toHaveBeenCalledWith([]);
+    });
   });
 });

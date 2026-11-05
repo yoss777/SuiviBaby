@@ -347,30 +347,50 @@ optimistes), indicateur sur le bouton, repli sur les données chargées hors
 ligne. 3.7 (ajout optimiste et co-parent sans doublon) : logique inchangée
 (`mergeWithFirestoreEvents`), à vérifier sur appareil._
 
-### Sprint 4 — Afficher le cache tout de suite, fusion allégée · US-1.1, US-8.1, US-7.1 · ⏳
+### Sprint 4 — Afficher le cache tout de suite, fusion allégée · US-1.1, US-8.1, US-7.1 · ✅ 2026-11-05
 
 But : plus d'attente du serveur quand des données sont déjà connues.
 
-- [ ] **4.1** Afficher le cache immédiatement (stale-while-revalidate) : ne plus
+- [x] **4.1** Afficher le cache immédiatement (stale-while-revalidate) : ne plus
   ignorer le snapshot local dans `ecouterEvenements` pour cet écran ; garder
   l'anti-flash de vide uniquement quand le cache est vide ; retirer
   `includeMetadataChanges` ici (`eventsService.ts:367-407`).
-- [ ] **4.2** Empreinte de fusion par `id + updatedAt` (ou longueur + référence)
+- [x] **4.2** Empreinte de fusion par `id + updatedAt` (ou longueur + référence)
   au lieu du `JSON.stringify` complet (`optimisticEventsStore.ts:395-410`).
-- [ ] **4.3** Supprimer le second tri `sortRepasEvents` (`stats.tsx:86-91`),
+- [x] **4.3** Supprimer le second tri `sortRepasEvents` (`stats.tsx:86-91`),
   `mergeWithFirestoreEvents` trie déjà ; remplacer le `findIndex` par entrée
   optimiste par une `Map`.
-- [ ] **4.4** Étude (1 jour max) d'un cache persistant pour un démarrage à
+- [x] **4.4** Étude (1 jour max) d'un cache persistant pour un démarrage à
   froid : `persistentLocalCache` du SDK web dépend d'IndexedDB, absent sous
   React Native ; piste réaliste : instantané de la fenêtre dans AsyncStorage
   sur le modèle de `services/todayEventsCache.ts`. Décision notée ici avant
   toute implémentation.
-- [ ] **4.5** Tests : `__tests__/useMergedOptimisticEvents.test.ts` et
+- [x] **4.5** Tests : `__tests__/useMergedOptimisticEvents.test.ts` et
   `__tests__/optimisticEventsStore.test.ts` étendus (empreinte, pas de
   doublon, ordre conservé).
 
 Fin de sprint : ouverture avec données en cache sans spinner ; nombre de
 fusions par snapshot réduit (compteur 0.2).
+
+_Bilan 2026-11-05 :_
+- _4.1 : option `cacheFirst` de `ecouterEvenements` (utilisée par les stats
+  seulement) : un cache non vide est affiché tout de suite, le serveur corrige
+  ensuite ; un cache vide attend toujours le serveur (pas d'écran vide qui
+  clignote). `includeMetadataChanges` est gardé : sans lui, une réponse serveur
+  vide identique au cache vide ne déclencherait jamais le rappel._
+- _4.2 : l'empreinte reste un JSON complet par événement (un `id + updatedAt`
+  raterait des modifications sans `updatedAt`), mais elle est mise en cache par
+  objet (`WeakMap`) : refusionner les mêmes listes ne resérialise plus rien.
+  Profite aussi aux autres écrans qui utilisent la fusion optimiste._
+- _4.3 : second tri des repas supprimé (`mergeWithFirestoreEvents` trie déjà)._
+- _4.4, décision : pas de cache persistant pour l'instant. Le cache local du
+  SDK web (`persistentLocalCache`) exige IndexedDB, absent sous React Native ;
+  la seule voie est un instantané de la fenêtre dans AsyncStorage (comme
+  `services/todayEventsCache.ts`). Avec la fenêtre de 3 semaines et
+  `cacheFirst`, seul le tout premier affichage après un démarrage à froid
+  attend le serveur. À rouvrir si la mesure sur le Samsung le justifie ; cela
+  stockerait des données de santé de plus sur l'appareil, à refléter dans la
+  politique de confidentialité._
 
 ### Sprint 5 — Nettoyage · US-T3, US-9.1 · ⏳
 

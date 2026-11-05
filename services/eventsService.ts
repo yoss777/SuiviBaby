@@ -326,6 +326,12 @@ export function ecouterEvenements(
     depuis?: Date;
     jusqu?: Date;
     waitForServer?: boolean;
+    /**
+     * With waitForServer: deliver a non-empty cache snapshot at once (the
+     * server snapshot follows), and only wait for the server when the cache
+     * is empty, to avoid flashing an empty state. Used by the stats screen.
+     */
+    cacheFirst?: boolean;
   },
   onError?: (error: Error) => void,
 ): () => void {
@@ -390,7 +396,8 @@ export function ecouterEvenements(
       if (
         options?.waitForServer &&
         !hasReceivedServerSnapshot &&
-        snapshot.metadata.fromCache
+        snapshot.metadata.fromCache &&
+        !(options.cacheFirst && events.length > 0)
       ) {
         console.log(`[L:${lid}] CACHE waiting for server`);
         if (!fallbackTimer && !fallbackTriggered) {

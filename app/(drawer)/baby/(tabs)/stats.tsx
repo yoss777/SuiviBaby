@@ -37,7 +37,6 @@ import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { Timestamp } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   Animated,
@@ -126,15 +125,6 @@ function countsReducer(state: SourceCounts, action: CountsAction): SourceCounts 
   }
 }
 
-const getDateTime = (value: any): number => {
-  if (!value) return 0;
-  if (value instanceof Timestamp) return value.toMillis();
-  if (value instanceof Date) return value.getTime();
-  if (typeof value.toDate === "function") return value.toDate().getTime();
-  if (typeof value.seconds === "number") return value.seconds * 1000;
-  const parsed = new Date(value).getTime();
-  return Number.isNaN(parsed) ? 0 : parsed;
-};
 
 export default function StatsScreen() {
   countStatsRender("StatsScreen");
@@ -150,20 +140,13 @@ export default function StatsScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const screenWidth = windowWidth - 40;
   const { setHeaderLeft } = useHeaderLeft();
-  const sortRepasEvents = useCallback(
-    (merged: any[]) =>
-      [...merged].sort(
-        (a: any, b: any) => getDateTime(b.date) - getDateTime(a.date),
-      ),
-    [],
-  );
   const {
     mergedEvents: tetees,
     setFirestoreEvents: setRepasFirestoreEvents,
     remergeIfChanged: remergeRepas,
   } = useMergedOptimisticEvents<any>({
     childId: activeChild?.id,
-    transformMerged: sortRepasEvents,
+    // Already sorted by date (descending) by mergeWithFirestoreEvents.
   });
   const {
     mergedEvents: pompages,
@@ -469,7 +452,12 @@ export default function StatsScreen() {
               dispatchCounts({ type: "loaded", source, count: sourceCount(source) });
             });
         },
-        { type: SOURCE_TYPES[source], depuis: liveSince, waitForServer: true },
+        {
+          type: SOURCE_TYPES[source],
+          depuis: liveSince,
+          waitForServer: true,
+          cacheFirst: true,
+        },
         handleListenerError,
       );
 
