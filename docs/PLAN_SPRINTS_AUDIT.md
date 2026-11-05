@@ -166,6 +166,43 @@ budget : commandes prêtes, `gcloud auth login` nécessaire, Q2)._
 
 **Revue ECC (S1 + S2)** : `security-reviewer`, `silent-failure-hunter`.
 
+### Revue ECC des sprints 1 et 2 (2026-11-06) · ✅
+
+`ecc:security-reviewer` et `ecc:silent-failure-hunter`. Corrigé :
+
+- **Critique** : une relance de la purge après interruption pouvait supprimer
+  un enfant encore utilisé par l'autre parent (`size <= 1` sans vérifier qui
+  restait). Désormais : enfant supprimé seulement si le compte en est le seul
+  membre ; document de l'enfant supprimé en premier ; transfert de propriété
+  seulement si le compte est encore le propriétaire enregistré. Test de
+  relance ajouté.
+- Photos : seuls les chemins sous `children/{childId de l'événement}/` sont
+  supprimés (les chemins viennent du client) ; chaque bucket est traité même
+  si l'autre échoue ; échec de la suppression douce signalé en erreur.
+- Purge : compte désactivé et sessions révoquées avant tout ; compteur
+  d'échecs et libellé `STUCK` au 3ᵉ échec (alerte) ; échec d'écriture de la
+  cause journalisé ; e-mail de confirmation : erreurs Resend vérifiées,
+  adresse conservée dans `pendingDeletion.email` à la demande.
+- Suppression d'enfant : une approbation dont la suppression douce a échoué
+  est reprise par la tâche quotidienne ; la purge réserve la demande en
+  transaction (`purging`) et l'annulation se fait en transaction.
+- Webhook : `event.id`, type de `app_user_id` et date d'expiration validés ;
+  événement hors délai journalisé en erreur.
+- Parrainage : état d'abonnement relu dans la transaction ; ancien code
+  partagé par deux comptes refusé ; ancien code au format invalide remplacé.
+- App : `trackImpression` / `dismissPromo` en `merge` ; un seul appel
+  `ensureReferralCode` à la fois, pas de rafale après un échec.
+- Sentry : données trop profondes tronquées, tags filtrés, transactions et
+  spans filtrés (`beforeSendTransaction`), clés de santé ajoutées.
+
+Reportés (sprints suivants) : enfants sans entrée d'index ou suppression
+simultanée des deux parents (job de ramasse-miettes, S12) ; champs
+`ownerVotes` / `seenByUserIds` d'autres demandes (S3) ; robustesse du récap
+hebdomadaire (S3, tâche 3.5) ; limiter l'abus du parrainage par création de
+comptes (App Check, S13 / S4) ; fidélité de la base de test en mémoire
+(atomicité, `update` sur document absent) à améliorer avec les tests sur
+émulateur (S11).
+
 ## S3 — Droits des utilisateurs (RGPD) · app + serveur · P0 A4 · ⏳
 
 But : chaque utilisateur, quel que soit son mode de connexion, donne son
