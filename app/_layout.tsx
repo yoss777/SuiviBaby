@@ -30,10 +30,17 @@ import { setupNotificationHandler } from "@/services/localNotificationService";
 import { startAutoSync } from "@/services/offlineQueueService";
 import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
 import { ensureFirebaseAppCheck } from "@/config/firebase";
+import { filterBreadcrumb, filterEvent, filterTransaction } from "@/utils/sentryFilters";
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || "",
   enabled: !__DEV__,
+  // Never send health data, e-mails, names or transcripts (audit A6):
+  // console breadcrumbs dropped, HTTP bodies removed, sensitive keys scrubbed.
+  sendDefaultPii: false,
+  beforeBreadcrumb: (breadcrumb) => filterBreadcrumb(breadcrumb),
+  beforeSend: (event) => filterEvent(event),
+  beforeSendTransaction: (event) => filterTransaction(event),
   environment: __DEV__ ? "development" : "production",
   // Performance monitoring
   tracesSampleRate: 0.2,
@@ -42,7 +49,8 @@ Sentry.init({
   // Breadcrumbs pour contexte des erreurs
   enableAutoPerformanceTracing: true,
   attachStacktrace: true,
-  // Release tracking (auto-populated by expo plugin)
+  // Release / dist: set by the native SDK from the bundle id, version and
+  // build number — the names the source maps upload uses.
   enableCaptureFailedRequests: true,
 });
 

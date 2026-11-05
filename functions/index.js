@@ -1,10 +1,16 @@
 const admin = require("firebase-admin");
 const { Buffer } = require("node:buffer");
 const crypto = require("node:crypto");
+const { setGlobalOptions } = require("firebase-functions/v2");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onObjectFinalized, onObjectDeleted } = require("firebase-functions/v2/storage");
+
+// Every function runs in the EU unless it says otherwise (only the legacy US
+// bucket mirrors do). Without this, a function without an explicit region
+// silently landed in us-central1 (SUIVI_ACTIONS 4.5 / D9).
+setGlobalOptions({ region: "europe-west1" });
 
 const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
@@ -67,23 +73,41 @@ async function deleteUserEventPhotos(db, uid) {
   const snap = await db.collection("events").where("userId", "==", uid).get();
   const paths = new Set();
   snap.docs.forEach((doc) => {
-    (doc.data().photos || []).forEach((ref) => {
+    const { childId, photos } = doc.data();
+    if (!childId) return;
+    // events.photos is written by clients: only delete files of the event's
+    // own child folder, never a path pointing at another child's photos.
+    const prefix = `children/${childId}/`;
+    (photos || []).forEach((ref) => {
       const path = photoRefToPath(ref);
-      if (path) paths.add(path);
+      if (path && path.startsWith(prefix) && !path.includes("..")) paths.add(path);
     });
   });
-  await Promise.all([...paths].map((path) => deletePhotoEverywhere(path).catch(() => null)));
+  const results = await Promise.allSettled([...paths].map((path) => deletePhotoEverywhere(path)));
+  const failed = results.filter((r) => r.status === "rejected").length;
+  // Throw rather than continue: the events are the only pointers to these
+  // files, deleting them now would leave unreachable photos (audit A3).
+  if (failed > 0) throw new Error(`${failed}/${paths.size} user photos could not be deleted`);
   return paths.size;
 }
 
 /** Deletes every file under children/{childId}/ in every photo bucket; returns the count. */
 async function deleteChildPhotosEverywhere(childId) {
   let deleted = 0;
+  let failed = 0;
   for (const name of PHOTO_BUCKETS) {
-    const [files] = await admin.storage().bucket(name).getFiles({ prefix: `children/${childId}/` });
-    await Promise.all(files.map((file) => file.delete().catch(() => null)));
-    deleted += files.length;
+    // One bucket failing must not leave the other untouched.
+    try {
+      const [files] = await admin.storage().bucket(name).getFiles({ prefix: `children/${childId}/` });
+      const results = await Promise.allSettled(files.map((file) => file.delete()));
+      failed += results.filter((r) => r.status === "rejected").length;
+      deleted += files.length;
+    } catch (error) {
+      failed += 1;
+      console.error(`deleteChildPhotosEverywhere: listing ${name} failed for ${childId}`, error?.message ?? error);
+    }
   }
+  if (failed > 0) throw new Error(`${failed} photos of child ${childId} could not be deleted`);
   return deleted;
 }
 
@@ -183,12 +207,9 @@ async function deleteDocsByFieldBatched(db, collectionName, field, value) {
  */
 async function deleteChildDataBatched(db, childId) {
   // Storage photos first: once the events are gone nothing references them.
-  // Best-effort so a Storage outage never blocks the account/child deletion.
-  try {
-    await deleteChildPhotosEverywhere(childId);
-  } catch (error) {
-    console.warn(`deleteChildDataBatched: photo cleanup failed for ${childId}:`, error?.message ?? error);
-  }
+  // A failure stops here (nothing else deleted yet); the caller's scheduled
+  // job retries on its next run instead of leaving orphan photos (audit A3).
+  await deleteChildPhotosEverywhere(childId);
 
   // Main + social
   await Promise.all([
@@ -204,8 +225,16 @@ async function deleteChildDataBatched(db, childId) {
     deleteDocsByFieldBatched(db, "babyAttachmentRequests", "childId", childId),
   ]);
 
+  // Notification and weekly recap histories (contain health figures)
+  await Promise.all([
+    deleteDocsByFieldBatched(db, "notification_history", "childId", childId),
+    deleteDocsByFieldBatched(db, "recap_history", "childId", childId),
+  ]);
+
   // Legacy collections
-  const legacyCollections = ["tetees", "pompages", "mictions", "selles", "vitamines", "vaccins"];
+  const legacyCollections = [
+    "tetees", "pompages", "mictions", "selles", "vitamines", "vaccins", "croissances", "sommeils",
+  ];
   await Promise.all(
     legacyCollections.map((coll) => deleteDocsByFieldBatched(db, coll, "childId", childId))
   );
@@ -227,8 +256,147 @@ async function deleteChildDataBatched(db, childId) {
   await deleteDocsByFieldBatched(db, "user_child_access", "childId", childId);
 }
 
+// ============================================
+// ACCOUNT PURGE (audit A3)
+// ============================================
+
+const { DELETED_USER_ID, USER_DATA_BY_FIELD, USER_DOCS_BY_ID } = require("./lib/userPurge");
+
+/** Updates in batches every document of `collectionName` where field == value. */
+async function updateDocsByFieldBatched(db, collectionName, field, value, patch) {
+  let total = 0;
+  while (true) {
+    const snapshot = await db
+      .collection(collectionName)
+      .where(field, "==", value)
+      .limit(BATCH_LIMIT)
+      .get();
+    if (snapshot.empty) return total;
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.update(doc.ref, patch));
+    await batch.commit();
+    total += snapshot.size;
+    if (snapshot.size < BATCH_LIMIT) return total;
+  }
+}
+
+/**
+ * Deletes everything about a user, in an order that can be retried:
+ *   1. their event photos (a failure stops before anything is deleted);
+ *   2. their children: deleted when they were the only member, otherwise
+ *      ownership transferred or their access removed;
+ *   3. events they wrote in children shared with others: kept for the other
+ *      parent but anonymised (author removed, photos already deleted);
+ *   4. every collection of USER_DATA_BY_FIELD / USER_DOCS_BY_ID, invitations;
+ *   5. Firebase Auth (a failure other than "already gone" throws: the caller
+ *      keeps users/{uid} so the next run retries);
+ *   6. users/{uid} last.
+ * Returns { email } for the confirmation e-mail, sent by the caller only after
+ * this resolves.
+ */
+async function purgeUserData(db, uid) {
+  let email = "";
+  try {
+    const userRecord = await admin.auth().getUser(uid);
+    email = (userRecord.email || "").toLowerCase();
+  } catch (e) {
+    if (e?.code !== "auth/user-not-found") throw e;
+  }
+
+  // 0. Lock the account so nothing recreates data during the purge
+  //    (app sessions, callables). A webhook arriving now is skipped later
+  //    since Auth is checked before writing.
+  try {
+    await admin.auth().updateUser(uid, { disabled: true });
+    await admin.auth().revokeRefreshTokens(uid);
+  } catch (e) {
+    if (e?.code !== "auth/user-not-found") throw e;
+  }
+
+  // 1. Photos while the events that reference them still exist.
+  await deleteUserEventPhotos(db, uid);
+
+  // 2. Children.
+  const accessSnapshot = await db
+    .collection("user_child_access")
+    .where("userId", "==", uid)
+    .get();
+  for (const accessDoc of accessSnapshot.docs) {
+    const { childId, role } = accessDoc.data();
+    if (childId) {
+      const childAccessSnap = await db
+        .collection("children").doc(childId).collection("access")
+        .get();
+      const isMember = childAccessSnap.docs.some((d) => d.id === uid);
+      const isAlone = isMember && childAccessSnap.docs.every((d) => d.id === uid);
+      if (isAlone) {
+        // Child document first: if a later step fails, the retry still finds
+        // the child through the index and the access entry.
+        await db.doc(`children/${childId}`).delete();
+        await deleteChildDataBatched(db, childId);
+      } else if (isMember) {
+        // Transfer only while the user is still the recorded owner: on a retry
+        // after a transfer, promoting someone else would create two owners.
+        const childSnap = await db.doc(`children/${childId}`).get();
+        if (role === "owner" && childSnap.exists && childSnap.data()?.ownerId === uid) {
+          await transferOwnership(db, childId, uid, childAccessSnap);
+        }
+        await db.doc(`children/${childId}/access/${uid}`).delete();
+      }
+      // Not a member any more (an earlier run removed the access): only the
+      // index entry is left. Never delete a child other members still use.
+    }
+    await accessDoc.ref.delete();
+  }
+
+  // 3. Events left are in children shared with others.
+  await updateDocsByFieldBatched(db, "events", "userId", uid, {
+    userId: DELETED_USER_ID,
+    photos: admin.firestore.FieldValue.delete(),
+  });
+
+  // 4. Everything else about the user.
+  await Promise.all(
+    USER_DATA_BY_FIELD.map(([collectionName, field]) =>
+      deleteDocsByFieldBatched(db, collectionName, field, uid)
+    )
+  );
+  if (email) {
+    await Promise.all([
+      deleteDocsByFieldBatched(db, "shareInvitations", "inviterEmail", email),
+      deleteDocsByFieldBatched(db, "shareInvitations", "invitedEmail", email),
+    ]);
+  }
+  const batch = db.batch();
+  USER_DOCS_BY_ID.forEach((collectionName) => batch.delete(db.doc(`${collectionName}/${uid}`)));
+  await batch.commit();
+  // adminAuditLog is kept on purpose: investigation trail, see deleteUserAccount.
+
+  // 5. Auth, then 6. the user document that carries pendingDeletion.
+  try {
+    await admin.auth().deleteUser(uid);
+  } catch (e) {
+    if (e?.code !== "auth/user-not-found") throw e;
+  }
+  await db.doc(`users/${uid}`).delete();
+
+  return { email };
+}
+
+/** Resend reports refusals (unverified domain, quota…) in the result. */
+async function sendEmailOrThrow(resend, payload) {
+  const result = await resend.emails.send(payload);
+  if (result?.error) {
+    throw new Error(`Resend: ${result.error.name ?? "error"} ${result.error.message ?? ""}`.trim());
+  }
+  return result;
+}
+
 async function getSubscriptionState(db, uid) {
-  const snap = await db.doc(`subscriptions/${uid}`).get();
+  return subscriptionStateFrom(await db.doc(`subscriptions/${uid}`).get());
+}
+
+function subscriptionStateFrom(snap) {
   const data = snap.exists ? snap.data() : {};
 
   return {
@@ -2567,7 +2735,10 @@ exports.deleteUserAccount = onCall(
     }
 
     // Optional payload override: admin can target a specific uid.
-    const targetUid = request.data?.uid || uid;
+    const targetUid = request.data?.uid ?? uid;
+    if (typeof targetUid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(targetUid)) {
+      throw new HttpsError("invalid-argument", "uid invalide.");
+    }
     const reason = typeof request.data?.reason === "string"
       ? request.data.reason.trim().slice(0, 500)
       : "";
@@ -2609,115 +2780,11 @@ exports.deleteUserAccount = onCall(
     // Rate limit on the admin caller (not the target).
     await checkRateLimit(db, uid, "delete", 1);
 
-    // Récupérer l'email pour cleanup des invitations
-    let email = "";
     try {
-      const userRecord = await admin.auth().getUser(targetUid);
-      email = (userRecord.email || "").toLowerCase();
+      await purgeUserData(db, targetUid);
     } catch (e) {
-      // User may already be partially deleted, continue
-      console.warn(`deleteUserAccount: could not fetch user record for ${targetUid}`, e.message);
-    }
-
-    // 1. Récupérer tous les enfants auxquels l'utilisateur a accès
-    const accessSnapshot = await db
-      .collection("user_child_access")
-      .where("userId", "==", targetUid)
-      .get();
-
-    // 2. Traiter chaque enfant
-    for (const accessDoc of accessSnapshot.docs) {
-      const { childId, role } = accessDoc.data();
-      if (!childId) continue;
-
-      const childAccessSnap = await db
-        .collection("children").doc(childId).collection("access")
-        .get();
-
-      if (childAccessSnap.size <= 1) {
-        // Seul utilisateur → supprimer l'enfant et toutes ses données
-        await deleteChildDataBatched(db, childId);
-        await db.doc(`children/${childId}`).delete();
-      } else if (role === "owner") {
-        // Owner avec co-parents → transférer la propriété
-        await transferOwnership(db, childId, targetUid, childAccessSnap);
-        await db.doc(`children/${childId}/access/${targetUid}`).delete();
-      } else {
-        // Non-owner → supprimer l'accès uniquement
-        await db.doc(`children/${childId}/access/${targetUid}`).delete();
-      }
-
-      // Supprimer l'entrée d'index
-      await accessDoc.ref.delete();
-    }
-
-    // 3. Supprimer les données créées par l'utilisateur (par userId)
-    // Photos the user attached to events of shared children (best-effort).
-    try {
-      await deleteUserEventPhotos(db, targetUid);
-    } catch (e) {
-      console.warn(`photo cleanup failed for ${targetUid}`, e.message);
-    }
-    await Promise.all([
-      deleteDocsByFieldBatched(db, "events", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "eventLikes", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "eventComments", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "shareCodes", "createdBy", targetUid),
-      deleteDocsByFieldBatched(db, "device_tokens", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "notification_history", "userId", targetUid),
-      deleteDocsByFieldBatched(db, "recap_history", "userId", targetUid),
-    ]);
-
-    // 4. Supprimer les invitations par email
-    if (email) {
-      await Promise.all([
-        deleteDocsByFieldBatched(db, "shareInvitations", "inviterEmail", email),
-        deleteDocsByFieldBatched(db, "shareInvitations", "invitedEmail", email),
-      ]);
-    }
-
-    // 5. Supprimer les collections par userId (données de suivi et promos)
-    await Promise.all([
-      deleteDocsByFieldBatched(db, "webhook_logs", "appUserId", targetUid),
-      deleteDocsByFieldBatched(db, "referrals", "parrainUid", targetUid),
-      deleteDocsByFieldBatched(db, "referrals", "filleulUid", targetUid),
-      deleteDocsByFieldBatched(db, "childDeletionRequests", "requestedBy", targetUid),
-      // T0.5 — collections orphelines RGPD :
-      deleteDocsByFieldBatched(db, "user_hidden_photos", "userId", targetUid),
-      // pending_assemblyai_deletes a un userId field depuis T0.5. Les docs
-      // pré-T0.5 (sans userId) ne seront pas purgés ici — un cleanup
-      // ultérieur (retention 30j auto + abandonnés > 5 attempts) gère ça.
-      deleteDocsByFieldBatched(db, "pending_assemblyai_deletes", "userId", targetUid),
-      // voice_transcribe_cache : keys = `${uid}_${idempotencyKey}`, donc on
-      // peut filtrer par le field uid stocké dans le doc.
-      deleteDocsByFieldBatched(db, "voice_transcribe_cache", "uid", targetUid),
-    ]);
-    // Note : adminAuditLog conservé volontairement même au delete user — c'est
-    // une trace d'investigation. Le champ adminUid pointant vers un compte
-    // supprimé reste valide pour audit légal.
-
-    // 6. Supprimer les documents uniques de l'utilisateur
-    const singleDocPaths = [
-      `users/${targetUid}`,
-      `users_public/${targetUid}`,
-      `user_preferences/${targetUid}`,
-      `user_content/${targetUid}`,
-      `user_promos/${targetUid}`,
-      `subscriptions/${targetUid}`,
-      `rate_limits/${targetUid}`,
-      `usage_limits/${targetUid}`,
-    ];
-    const batch = db.batch();
-    singleDocPaths.forEach((path) => batch.delete(db.doc(path)));
-    await batch.commit();
-
-    // 7. Supprimer l'utilisateur Firebase Auth (DERNIER — irréversible)
-    try {
-      await admin.auth().deleteUser(targetUid);
-    } catch (e) {
-      console.error(`deleteUserAccount: failed to delete auth user ${targetUid}`, e.message);
-      // Data is already cleaned up, auth deletion failure is non-critical
+      console.error(`deleteUserAccount: purge failed for uid=${targetUid}`, e?.message ?? e);
+      throw new HttpsError("internal", "Suppression interrompue, relancez-la : rien n'a été confirmé.");
     }
 
     console.log(`deleteUserAccount: completed for uid=${targetUid} (admin=${uid})`);
@@ -2787,8 +2854,8 @@ exports.revenueCatWebhook = onRequest(
       const FIVE_MIN = 5 * 60 * 1000;
       const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
       if (eventTs > now + FIVE_MIN || eventTs < now - SEVEN_DAYS) {
-        console.warn(
-          `revenueCatWebhook: timestamp out of bounds (${eventTs} vs now=${now})`
+        console.error(
+          `revenueCatWebhook: timestamp out of bounds (${eventTs} vs now=${now}), event ignored`
         );
         // 200 OK pour éviter que RC retry — on accepte le rejet silencieux.
         res.status(200).send("OK - timestamp rejected");
@@ -2796,42 +2863,32 @@ exports.revenueCatWebhook = onRequest(
       }
     }
 
-    // T0.2 — idempotence par event.id. RC envoie un UUID unique par event ;
-    // si on a déjà traité ce doc, on bail (replay protection).
-    const eventId = typeof event.id === "string" && event.id.length > 0
+    // T0.2 — idempotence par event.id (UUID unique par event RC). Le marqueur
+    // est lu et créé DANS la transaction qui écrit l'abonnement (plus bas) :
+    // si le traitement échoue, rien n'est marqué et le retry de RevenueCat
+    // retraite l'événement au lieu de le prendre pour un doublon.
+    const eventId = typeof event.id === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(event.id)
       ? event.id
       : null;
-    const db = admin.firestore();
-    if (eventId) {
-      const dedupRef = db.doc(`revenuecat_webhook_events/${eventId}`);
-      try {
-        await dedupRef.create({
-          eventId,
-          eventType: event.type ?? "unknown",
-          receivedAt: admin.firestore.FieldValue.serverTimestamp(),
-          // TTL field — Firestore TTL policy auto-purge après expireAt.
-          // Provisionner avec functions/scripts/enable-rc-webhook-ttl.js.
-          expireAt: admin.firestore.Timestamp.fromMillis(
-            Date.now() + 30 * 24 * 60 * 60 * 1000
-          ),
-        });
-      } catch (err) {
-        // `create` throws ALREADY_EXISTS si le doc existe → duplicate webhook.
-        if (err?.code === 6 || /ALREADY_EXISTS|already exists/i.test(String(err?.message))) {
-          console.log(`revenueCatWebhook: duplicate event ${eventId}, skipping`);
-          res.status(200).send("OK - duplicate");
-          return;
-        }
-        // Autre erreur Firestore : on log mais on continue (mieux processer un
-        // event au pire 2x que perdre une mise à jour).
-        console.error(`revenueCatWebhook: dedup write failed for ${eventId}:`, err);
-      }
+    if (event.id !== undefined && !eventId) {
+      console.error("revenueCatWebhook: invalid event id, skipping");
+      res.status(200).send("OK - invalid event id");
+      return;
     }
+    const db = admin.firestore();
+    const dedupRef = eventId ? db.doc(`revenuecat_webhook_events/${eventId}`) : null;
 
     const appUserId = event.app_user_id;
-    if (!appUserId || appUserId.startsWith("$RCAnonymous")) {
+    if (!appUserId || (typeof appUserId === "string" && appUserId.startsWith("$RCAnonymous"))) {
       // Ignorer les utilisateurs anonymes
       res.status(200).send("OK - skipped anonymous");
+      return;
+    }
+    // app_user_id = uid Firebase : refuser tout ce qui pourrait former un
+    // autre chemin Firestore (ex. "a/b") dans subscriptions/{appUserId}.
+    if (typeof appUserId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(appUserId)) {
+      console.warn("revenueCatWebhook: invalid app_user_id, skipping");
+      res.status(200).send("OK - invalid user id");
       return;
     }
 
@@ -2849,8 +2906,11 @@ exports.revenueCatWebhook = onRequest(
         res.status(200).send("OK - user deleted");
         return;
       }
-      // Autre erreur (réseau Auth, etc.) : on continue, mieux que perdre l'event.
-      console.warn(`revenueCatWebhook: getUser check failed:`, err?.message ?? err);
+      // Autre erreur (réseau Auth, etc.) : 500 pour que RevenueCat réessaie
+      // (rien n'est encore marqué comme traité).
+      console.error(`revenueCatWebhook: getUser check failed:`, err?.message ?? err);
+      res.status(500).send("Auth lookup failed");
+      return;
     }
 
     const eventType = event.type;
@@ -2869,7 +2929,7 @@ exports.revenueCatWebhook = onRequest(
       eventType === "BILLING_ISSUE" && typeof event.grace_period_expiration_at_ms === "number"
         ? event.grace_period_expiration_at_ms
         : event.expiration_at_ms;
-    const expiresAt = expiryMs ? new Date(expiryMs).toISOString() : null;
+    const expiresAt = Number.isFinite(expiryMs) && expiryMs > 0 ? new Date(expiryMs).toISOString() : null;
 
     switch (eventType) {
       case "INITIAL_PURCHASE":
@@ -2931,35 +2991,70 @@ exports.revenueCatWebhook = onRequest(
       lastEvent: eventType,
     };
 
-    // Transaction pour éviter les race conditions (double webhook simultané)
-    await db.runTransaction(async (tx) => {
-      const subRef = db.doc(`subscriptions/${appUserId}`);
-      const existing = await tx.get(subRef);
-      const existingData = existing.exists ? existing.data() : {};
+    // Transaction : marqueur anti-doublon + abonnement écrits ensemble (ou pas
+    // du tout). Évite aussi les race conditions entre deux webhooks simultanés.
+    let duplicate = false;
+    try {
+      await db.runTransaction(async (tx) => {
+        const subRef = db.doc(`subscriptions/${appUserId}`);
+        const dedupSnap = dedupRef ? await tx.get(dedupRef) : null;
+        if (dedupSnap?.exists) {
+          duplicate = true;
+          return;
+        }
+        const existing = await tx.get(subRef);
+        const existingData = existing.exists ? existing.data() : {};
+        if (dedupRef) {
+          tx.create(dedupRef, {
+            eventId,
+            eventType: eventType ?? "unknown",
+            receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+            // TTL field — Firestore TTL policy auto-purge après expireAt.
+            // Provisionner avec functions/scripts/enable-rc-webhook-ttl.js.
+            expireAt: admin.firestore.Timestamp.fromMillis(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ),
+          });
+        }
 
-      // Ne pas écraser l'état avec un event plus ancien que le dernier traité
-      // (RevenueCat ne garantit pas l'ordre de livraison ni des retries).
-      // On compare les horodatages des events, pas l'heure de traitement.
-      if (eventTs !== null &&
-          typeof existingData.lastEventTimestampMs === "number" &&
-          existingData.lastEventTimestampMs > eventTs) {
-        console.log(`revenueCatWebhook: skipping out-of-order event for ${appUserId}`);
-        return;
-      }
+        // Ne pas écraser l'état avec un event plus ancien que le dernier traité
+        // (RevenueCat ne garantit pas l'ordre de livraison ni des retries).
+        // On compare les horodatages des events, pas l'heure de traitement.
+        if (eventTs !== null &&
+            typeof existingData.lastEventTimestampMs === "number" &&
+            existingData.lastEventTimestampMs > eventTs) {
+          console.log(`revenueCatWebhook: skipping out-of-order event for ${appUserId}`);
+          return;
+        }
 
-      tx.set(subRef, subscriptionData, { merge: true });
-    });
+        tx.set(subRef, subscriptionData, { merge: true });
+      });
+    } catch (err) {
+      console.error(`revenueCatWebhook: processing failed for event ${eventId ?? "(no id)"}:`, err);
+      res.status(500).send("Processing failed");
+      return;
+    }
+    if (duplicate) {
+      console.log(`revenueCatWebhook: duplicate event ${eventId}, skipping`);
+      res.status(200).send("OK - duplicate");
+      return;
+    }
 
-    // Log webhook pour debug et audit
-    await db.collection("webhook_logs").add({
-      source: "revenuecat",
-      appUserId,
-      eventType,
-      tier,
-      status,
-      productId,
-      processedAt: admin.firestore.Timestamp.now(),
-    });
+    // Log webhook pour debug et audit — non bloquant : l'abonnement est déjà
+    // écrit et l'événement marqué ; un échec ici ne doit pas renvoyer 5xx.
+    try {
+      await db.collection("webhook_logs").add({
+        source: "revenuecat",
+        appUserId,
+        eventType,
+        tier,
+        status,
+        productId,
+        processedAt: admin.firestore.Timestamp.now(),
+      });
+    } catch (err) {
+      console.error("revenueCatWebhook: webhook_logs write failed:", err?.message ?? err);
+    }
 
     console.log(`revenueCatWebhook: uid=${appUserId}, type=${eventType}, tier=${tier}, status=${status}`);
     res.status(200).send("OK");
@@ -3459,9 +3554,74 @@ exports.acceptInvitationCF = onCall(
 // REFERRAL SYSTEM
 // ============================================
 
+// Referral codes are created by the server only (audit A2): the client can no
+// longer write referralCode / referredBy / referralCount (firestore.rules), and
+// referral_codes/{code} maps a code to its owner without a forgeable query.
+const REFERRAL_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+// Rewards granted to one referrer (the referred user is always rewarded once).
+const REFERRAL_REWARD_CAP = 10;
+
+function generateServerReferralCode() {
+  const bytes = crypto.randomBytes(8);
+  let code = "";
+  for (let i = 0; i < 8; i += 1) code += REFERRAL_CODE_ALPHABET[bytes[i] % REFERRAL_CODE_ALPHABET.length];
+  return `SAM-${code.slice(0, 4)}-${code.slice(4)}`;
+}
+
+function normalizeReferralCode(value) {
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
+}
+
+/**
+ * ensureReferralCode — Renvoie le code parrainage de l'utilisateur, en le
+ * créant côté serveur s'il n'existe pas. Un ancien code généré par l'app est
+ * repris s'il n'appartient à personne d'autre.
+ */
+exports.ensureReferralCode = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "referralCode", 10);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const code = await db.runTransaction(async (tx) => {
+        const promosRef = db.doc(`user_promos/${uid}`);
+        const promosSnap = await tx.get(promosRef);
+        const stored = normalizeReferralCode(promosSnap.exists ? promosSnap.data()?.referralCode : "");
+        // An old app-written code becomes a document id: reject odd values.
+        const current = /^[A-Z0-9-]{4,20}$/.test(stored) ? stored : "";
+        if (current) {
+          const mappingRef = db.doc(`referral_codes/${current}`);
+          const mapping = await tx.get(mappingRef);
+          if (mapping.exists && mapping.data()?.uid === uid) return current;
+          if (!mapping.exists) {
+            tx.create(mappingRef, { uid, createdAt: admin.firestore.Timestamp.now(), legacy: true });
+            return current;
+          }
+        }
+        const candidate = generateServerReferralCode();
+        const candidateRef = db.doc(`referral_codes/${candidate}`);
+        const taken = await tx.get(candidateRef);
+        if (taken.exists) return null;
+        tx.create(candidateRef, { uid, createdAt: admin.firestore.Timestamp.now() });
+        tx.set(promosRef, { referralCode: candidate }, { merge: true });
+        return candidate;
+      });
+      if (code) return { referralCode: code };
+    }
+    throw new HttpsError("resource-exhausted", "Impossible de créer un code, réessayez.");
+  }
+);
+
 /**
  * validateReferralCode — Valide un code parrainage et attribue 1 mois Premium
- * au parrain ET au filleul.
+ * au filleul, et au parrain dans la limite de REFERRAL_REWARD_CAP.
+ * Un compte ne peut être parrainé qu'une fois : referrals/{filleulUid} est
+ * créé dans la même transaction que les récompenses.
  */
 exports.validateReferralCode = onCall(
   withAppCheck({ region: "europe-west1" }),
@@ -3469,72 +3629,54 @@ exports.validateReferralCode = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
     }
+    if (request.auth.token?.email_verified !== true) {
+      throw new HttpsError("failed-precondition", "Vérifiez votre adresse e-mail avant d'utiliser un code.");
+    }
 
     const filleulUid = request.auth.uid;
     const db = admin.firestore();
     await checkRateLimit(db, filleulUid, "referral", 5);
 
-    const { referralCode } = request.data;
-
-    if (!referralCode || typeof referralCode !== "string") {
+    const referralCode = normalizeReferralCode(request.data?.referralCode);
+    if (!/^[A-Z0-9-]{4,20}$/.test(referralCode)) {
       throw new HttpsError("invalid-argument", "Code parrainage invalide.");
     }
 
-    // Chercher le parrain par son code (stocké dans user_promos)
-    const promosSnap = await db
-      .collection("user_promos")
-      .where("referralCode", "==", referralCode.toUpperCase())
-      .limit(1)
-      .get();
-
-    if (promosSnap.empty) {
+    // Parrain : table referral_codes (codes serveur), sinon ancien code stocké
+    // dans user_promos (créé par l'app avant le correctif).
+    let parrainUid = null;
+    const mapping = await db.doc(`referral_codes/${referralCode}`).get();
+    if (mapping.exists) {
+      parrainUid = mapping.data()?.uid ?? null;
+    } else {
+      const legacy = await db
+        .collection("user_promos")
+        .where("referralCode", "==", referralCode)
+        .limit(2)
+        .get();
+      // Two accounts with the same old code: one of them copied it, refuse.
+      if (legacy.size === 1) parrainUid = legacy.docs[0].id;
+    }
+    if (!parrainUid) {
       throw new HttpsError("not-found", "Code parrainage introuvable.");
     }
-
-    const parrainDoc = promosSnap.docs[0];
-    const parrainUid = parrainDoc.id;
-
-    // Empêcher l'auto-parrainage
     if (parrainUid === filleulUid) {
       throw new HttpsError("failed-precondition", "Vous ne pouvez pas utiliser votre propre code.");
     }
 
-    // Vérifier que le filleul n'a pas déjà utilisé un code
-    const filleulDoc = await db.doc(`user_promos/${filleulUid}`).get();
-    if (filleulDoc.exists && filleulDoc.data()?.referredBy) {
+    // Parrainages enregistrés avant le correctif (identifiant aléatoire).
+    const legacyUse = await db
+      .collection("referrals")
+      .where("filleulUid", "==", filleulUid)
+      .limit(1)
+      .get();
+    if (!legacyUse.empty) {
       throw new HttpsError("already-exists", "Vous avez deja utilise un code parrainage.");
     }
 
     const now = admin.firestore.Timestamp.now();
     const oneMonthLater = new Date();
     oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
-
-    const batch = db.batch();
-
-    // 1. Enregistrer le parrainage
-    batch.set(db.collection("referrals").doc(), {
-      parrainUid,
-      filleulUid,
-      referralCode,
-      createdAt: now,
-    });
-
-    // 2. Incrémenter le compteur du parrain
-    const parrainData = parrainDoc.data() || {};
-    batch.update(parrainDoc.ref, {
-      referralCount: (parrainData.referralCount || 0) + 1,
-    });
-
-    // 3. Marquer le filleul comme parrainé
-    batch.set(db.doc(`user_promos/${filleulUid}`), {
-      referredBy: parrainUid,
-      referredAt: now,
-    }, { merge: true });
-
-    // 4-5. 1 mois Premium offert au parrain et au filleul, sauf s'ils ont déjà
-    // un abonnement payant en cours : on n'écrase jamais un Premium/Famille
-    // actif (sinon un abonné Famille repassait en Premium, avec une fausse
-    // date d'expiration).
     const reward = {
       tier: "premium",
       status: "active",
@@ -3542,15 +3684,44 @@ exports.validateReferralCode = onCall(
       expiresAt: oneMonthLater.toISOString(),
       source: "referral_reward",
     };
-    for (const rewardUid of [parrainUid, filleulUid]) {
-      const state = await getSubscriptionState(db, rewardUid);
-      if (hasUnlimitedFeature(state, "voice")) continue;
-      batch.set(db.doc(`subscriptions/${rewardUid}`), reward, { merge: true });
-    }
 
-    await batch.commit();
+    let parrainRewarded = false;
+    await db.runTransaction(async (tx) => {
+      const referralRef = db.doc(`referrals/${filleulUid}`);
+      const filleulPromosRef = db.doc(`user_promos/${filleulUid}`);
+      const parrainPromosRef = db.doc(`user_promos/${parrainUid}`);
+      const filleulSubRef = db.doc(`subscriptions/${filleulUid}`);
+      const parrainSubRef = db.doc(`subscriptions/${parrainUid}`);
+      const [used, filleulPromos, parrainPromos, filleulSub, parrainSub] = [
+        await tx.get(referralRef),
+        await tx.get(filleulPromosRef),
+        await tx.get(parrainPromosRef),
+        await tx.get(filleulSubRef),
+        await tx.get(parrainSubRef),
+      ];
+      // Paid subscriptions are never overwritten by the reward (read here so
+      // a purchase landing meanwhile is seen).
+      const filleulState = subscriptionStateFrom(filleulSub);
+      const parrainState = subscriptionStateFrom(parrainSub);
+      if (used.exists || filleulPromos.data()?.referredBy) {
+        throw new HttpsError("already-exists", "Vous avez deja utilise un code parrainage.");
+      }
+      const referralCount = Number(parrainPromos.data()?.referralCount) || 0;
 
-    console.log(`validateReferralCode: parrain=${parrainUid}, filleul=${filleulUid}`);
+      tx.create(referralRef, { parrainUid, filleulUid, referralCode, createdAt: now });
+      tx.set(parrainPromosRef, { referralCount: referralCount + 1 }, { merge: true });
+      tx.set(filleulPromosRef, { referredBy: parrainUid, referredAt: now }, { merge: true });
+
+      if (!hasUnlimitedFeature(filleulState, "voice")) {
+        tx.set(filleulSubRef, reward, { merge: true });
+      }
+      if (referralCount < REFERRAL_REWARD_CAP && !hasUnlimitedFeature(parrainState, "voice")) {
+        tx.set(parrainSubRef, reward, { merge: true });
+        parrainRewarded = true;
+      }
+    });
+
+    console.log(`validateReferralCode: parrain=${parrainUid}, filleul=${filleulUid}, parrainRewarded=${parrainRewarded}`);
     return { success: true, parrainUid, message: "1 mois Premium offert !" };
   }
 );
@@ -3777,11 +3948,17 @@ exports.sendDeletionRequestEmail = onCall(
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
       console.error("sendDeletionRequestEmail: RESEND_API_KEY not configured");
-      return { success: false };
+      throw new HttpsError("unavailable", "Envoi d'e-mail indisponible.");
     }
 
+    // Kept with the request: the confirmation e-mail can still be sent after
+    // the Auth account is gone (retries of processScheduledDeletions).
+    await db.doc(`users/${uid}`).update({ "pendingDeletion.email": email }).catch((e) => {
+      console.error(`sendDeletionRequestEmail: could not store e-mail for uid=${uid}`, e);
+    });
+
     const resend = new Resend(apiKey);
-    await resend.emails.send({
+    await sendEmailOrThrow(resend, {
       from: "Suivi Baby <noreply@suivibaby.com>",
       to: email,
       subject: "Demande de suppression de votre compte Suivi Baby",
@@ -3831,112 +4008,57 @@ exports.processScheduledDeletions = onSchedule(
 
     for (const userDoc of snapshot.docs) {
       const uid = userDoc.id;
+      const pending = userDoc.data()?.pendingDeletion || {};
       try {
-        // Récupérer email pour cleanup invitations
-        let email = "";
-        try {
-          const userRecord = await admin.auth().getUser(uid);
-          email = (userRecord.email || "").toLowerCase();
-        } catch (e) {
-          console.warn(`processScheduledDeletions: could not fetch user record for ${uid}`, e.message);
-        }
+        const purged = await purgeUserData(db, uid);
+        // Auth may already be gone on a retry: fall back to the address kept
+        // with the request.
+        const email = purged.email || pending.email || "";
 
-        // 1. Traiter les enfants
-        const accessSnapshot = await db
-          .collection("user_child_access")
-          .where("userId", "==", uid)
-          .get();
-
-        for (const accessDoc of accessSnapshot.docs) {
-          const { childId, role } = accessDoc.data();
-          if (!childId) continue;
-
-          const childAccessSnap = await db
-            .collection("children").doc(childId).collection("access")
-            .get();
-
-          if (childAccessSnap.size <= 1) {
-            await deleteChildDataBatched(db, childId);
-            await db.doc(`children/${childId}`).delete();
-          } else if (role === "owner") {
-            await transferOwnership(db, childId, uid, childAccessSnap);
-            await db.doc(`children/${childId}/access/${uid}`).delete();
-          } else {
-            await db.doc(`children/${childId}/access/${uid}`).delete();
-          }
-          await accessDoc.ref.delete();
-        }
-
-        // 2. Supprimer les données utilisateur (photos d'abord, tant que les
-        //    événements qui les référencent existent encore)
-        try {
-          await deleteUserEventPhotos(db, uid);
-        } catch (e) {
-          console.warn(`processScheduledDeletions: photo cleanup failed for ${uid}`, e.message);
-        }
-        await Promise.all([
-          deleteDocsByFieldBatched(db, "events", "userId", uid),
-          deleteDocsByFieldBatched(db, "eventLikes", "userId", uid),
-          deleteDocsByFieldBatched(db, "eventComments", "userId", uid),
-          deleteDocsByFieldBatched(db, "babyAttachmentRequests", "userId", uid),
-          deleteDocsByFieldBatched(db, "shareCodes", "createdBy", uid),
-          deleteDocsByFieldBatched(db, "device_tokens", "userId", uid),
-          deleteDocsByFieldBatched(db, "notification_history", "userId", uid),
-          deleteDocsByFieldBatched(db, "recap_history", "userId", uid),
-        ]);
-
-        // 3. Invitations par email
-        if (email) {
-          await Promise.all([
-            deleteDocsByFieldBatched(db, "shareInvitations", "inviterEmail", email),
-            deleteDocsByFieldBatched(db, "shareInvitations", "invitedEmail", email),
-          ]);
-        }
-
-        // 4. Documents uniques
-        const singleDocPaths = [
-          `users/${uid}`, `users_public/${uid}`, `user_preferences/${uid}`,
-          `rate_limits/${uid}`, `usage_limits/${uid}`,
-        ];
-        const batch = db.batch();
-        singleDocPaths.forEach((path) => batch.delete(db.doc(path)));
-        await batch.commit();
-
-        // 5. Supprimer Firebase Auth
-        try {
-          await admin.auth().deleteUser(uid);
-        } catch (e) {
-          console.error(`processScheduledDeletions: failed to delete auth user ${uid}`, e.message);
-        }
-
-        // 6. Envoyer email de confirmation de suppression
-        if (email) {
+        // E-mail only once everything is really gone (Auth included).
+        const apiKey = process.env.RESEND_API_KEY;
+        if (!email || !apiKey) {
+          console.error(`processScheduledDeletions: no confirmation e-mail for uid=${uid} (${!email ? "no address" : "RESEND_API_KEY missing"})`);
+        } else {
           try {
-            const apiKey = process.env.RESEND_API_KEY;
-            if (apiKey) {
-              const resend = new Resend(apiKey);
-              await resend.emails.send({
-                from: "Suivi Baby <noreply@suivibaby.com>",
-                to: email,
-                subject: "Votre compte Suivi Baby a ete supprime",
-                html: `
-                  <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-                    <h2 style="color: #1a1a1a;">Suppression confirmee</h2>
-                    <p>Votre compte Suivi Baby et toutes les donnees associees ont ete definitivement supprimes, conformement a votre demande.</p>
-                    <p>Si vous n'etes pas a l'origine de cette suppression, contactez-nous immediatement a <a href="mailto:privacy@suivibaby.com">privacy@suivibaby.com</a>.</p>
-                    <p style="color: #666; font-size: 12px; margin-top: 30px;">Cet email a ete envoye automatiquement par Suivi Baby. Conformite RGPD art. 17.</p>
-                  </div>
-                `,
-              });
-            }
+            await sendEmailOrThrow(new Resend(apiKey), {
+              from: "Suivi Baby <noreply@suivibaby.com>",
+              to: email,
+              subject: "Votre compte Suivi Baby a ete supprime",
+              html: `
+                <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+                  <h2 style="color: #1a1a1a;">Suppression confirmee</h2>
+                  <p>Votre compte Suivi Baby et toutes les donnees associees ont ete definitivement supprimes, conformement a votre demande.</p>
+                  <p>Les saisies faites dans le carnet d'un enfant partage avec d'autres parents restent visibles pour eux, sans votre nom.</p>
+                  <p>Si vous n'etes pas a l'origine de cette suppression, contactez-nous immediatement a <a href="mailto:privacy@suivibaby.com">privacy@suivibaby.com</a>.</p>
+                  <p style="color: #666; font-size: 12px; margin-top: 30px;">Cet email a ete envoye automatiquement par Suivi Baby. Conformite RGPD art. 17.</p>
+                </div>
+              `,
+            });
           } catch (emailErr) {
-            console.warn(`processScheduledDeletions: failed to send deletion email to ${email}`, emailErr.message);
+            console.error(`processScheduledDeletions: confirmation e-mail failed for uid=${uid}`, emailErr?.message ?? emailErr);
           }
         }
 
         console.log(`processScheduledDeletions: deleted uid=${uid}`);
       } catch (e) {
-        console.error(`processScheduledDeletions: error processing uid=${uid}`, e.message);
+        // users/{uid} (and its pendingDeletion) still exists: the next run
+        // retries. No confirmation e-mail has been sent.
+        const failureCount = (Number(pending.failureCount) || 0) + 1;
+        // Stable labels for the log-based alert (docs/FIREBASE_MONITORING.md §9).
+        console.error(
+          `processScheduledDeletions: error processing uid=${uid} failures=${failureCount}${failureCount >= 3 ? " STUCK" : ""}`,
+          e?.stack ?? e?.message ?? e
+        );
+        await userDoc.ref
+          .update({
+            "pendingDeletion.lastFailureAt": now,
+            "pendingDeletion.lastFailure": String(e?.message ?? e).slice(0, 300),
+            "pendingDeletion.failureCount": failureCount,
+          })
+          .catch((writeErr) => {
+            console.error(`processScheduledDeletions: could not record the failure for uid=${uid}`, writeErr);
+          });
       }
     }
   }
@@ -4392,7 +4514,7 @@ exports.sendWeeklyRecap = onSchedule(
           stats.pompages.count > 0;
 
         if (!hasActivity) {
-          console.log(`sendWeeklyRecap: SKIP ${childName} (${childId}) - no activity this week (meals=${stats.meals.count}, sleep=${stats.sleep.totalMinutes}, changes=${stats.changes.total})`);
+          console.log(`sendWeeklyRecap: SKIP child=${childId} - no activity this week`);
           totalSkipped++;
           continue;
         }
@@ -4407,7 +4529,7 @@ exports.sendWeeklyRecap = onSchedule(
         });
 
         // Envoyer via Resend
-        console.log(`sendWeeklyRecap: sending to ${userEmail} for ${childName} (hasActivity=${hasActivity})`);
+        console.log(`sendWeeklyRecap: sending uid=${userId} child=${childId} (hasActivity=${hasActivity})`);
         try {
           const sendResult = await resend.emails.send({
             from: "Suivi Baby <noreply@suivibaby.com>",
@@ -4415,7 +4537,11 @@ exports.sendWeeklyRecap = onSchedule(
             subject: `Récap semaine — ${childName}`,
             html,
           });
-          console.log(`sendWeeklyRecap: Resend response`, JSON.stringify(sendResult));
+          // Resend reports failures in the result instead of throwing.
+          if (sendResult?.error) {
+            throw new Error(`Resend: ${sendResult.error.name ?? "error"} ${sendResult.error.message ?? ""}`.trim());
+          }
+          console.log(`sendWeeklyRecap: sent id=${sendResult?.data?.id ?? sendResult?.id ?? "?"}`);
 
           // Enregistrer dans l'historique
           await db.collection("recap_history").add({
@@ -4430,7 +4556,7 @@ exports.sendWeeklyRecap = onSchedule(
           totalSent++;
         } catch (error) {
           console.error(
-            `sendWeeklyRecap: error sending to ${userEmail} for ${childName}:`,
+            `sendWeeklyRecap: error sending uid=${userId} child=${childId}:`,
             error.message
           );
         }
@@ -4538,7 +4664,7 @@ async function softDeleteChild(db, childId, requestId, requestedBy) {
   } catch (storageErr) {
     // Best-effort. Si échec, la purge planifiée à 30j rattrapera. On
     // log mais on bloque pas le soft-delete pour autant.
-    console.warn(`softDeleteChild: storage wipe failed for ${childId}:`, storageErr?.message ?? storageErr);
+    console.error(`softDeleteChild: storage wipe failed for ${childId}, retried by the purge:`, storageErr?.message ?? storageErr);
   }
 
   console.log(`softDeleteChild: childId=${childId}, requestId=${requestId}, usersCleared=${userIds.size}`);
@@ -4674,67 +4800,56 @@ exports.voteDeletionRequest = onCall(
     }
 
     const requestRef = db.doc(`childDeletionRequests/${requestId}`);
-    const requestDoc = await requestRef.get();
 
-    if (!requestDoc.exists) {
-      throw new HttpsError("not-found", "Demande introuvable.");
-    }
+    // Read and record the vote in one transaction: two owners voting at the
+    // same time can no longer both miss (or both trigger) the final approval.
+    const outcome = await db.runTransaction(async (tx) => {
+      const requestDoc = await tx.get(requestRef);
+      if (!requestDoc.exists) {
+        throw new HttpsError("not-found", "Demande introuvable.");
+      }
+      const data = requestDoc.data();
+      if (data.status !== "pending") {
+        throw new HttpsError("failed-precondition", "Cette demande n'est plus en attente.");
+      }
+      // Verify caller is an owner in the votes
+      if (!data.ownerVotes || !data.ownerVotes[uid]) {
+        throw new HttpsError("permission-denied", "Vous n'êtes pas propriétaire de cet enfant.");
+      }
+      if (data.ownerVotes[uid].vote !== "pending") {
+        throw new HttpsError("failed-precondition", "Vous avez déjà voté.");
+      }
 
-    const data = requestDoc.data();
+      const now = admin.firestore.Timestamp.now();
+      if (vote === "refused") {
+        // One refusal stops everything
+        tx.update(requestRef, {
+          status: "refused",
+          refusedBy: uid,
+          refusedByEmail: request.auth.token.email || "",
+          refusedAt: now,
+          [`ownerVotes.${uid}.vote`]: "refused",
+          [`ownerVotes.${uid}.votedAt`]: now,
+        });
+        return { status: "refused" };
+      }
 
-    if (data.status !== "pending") {
-      throw new HttpsError("failed-precondition", "Cette demande n'est plus en attente.");
-    }
-
-    // Verify caller is an owner in the votes
-    if (!data.ownerVotes || !data.ownerVotes[uid]) {
-      throw new HttpsError("permission-denied", "Vous n'êtes pas propriétaire de cet enfant.");
-    }
-
-    if (data.ownerVotes[uid].vote !== "pending") {
-      throw new HttpsError("failed-precondition", "Vous avez déjà voté.");
-    }
-
-    const now = admin.firestore.Timestamp.now();
-
-    if (vote === "refused") {
-      // One refusal stops everything
-      await requestRef.update({
-        status: "refused",
-        refusedBy: uid,
-        refusedByEmail: request.auth.token.email || "",
-        refusedAt: now,
-        [`ownerVotes.${uid}.vote`]: "refused",
-        [`ownerVotes.${uid}.votedAt`]: now,
-      });
-      return { status: "refused" };
-    }
-
-    // Vote approved
-    const updatedVotes = { ...data.ownerVotes };
-    updatedVotes[uid] = { vote: "approved", votedAt: now };
-
-    // Check if all owners have now approved
-    const allApproved = Object.values(updatedVotes).every((v) => v.vote === "approved");
-
-    if (allApproved) {
-      await requestRef.update({
-        status: "approved",
-        approvedAt: now,
+      const updatedVotes = { ...data.ownerVotes, [uid]: { vote: "approved", votedAt: now } };
+      const allApproved = Object.values(updatedVotes).every((v) => v.vote === "approved");
+      tx.update(requestRef, {
         [`ownerVotes.${uid}.vote`]: "approved",
         [`ownerVotes.${uid}.votedAt`]: now,
+        ...(allApproved ? { status: "approved", approvedAt: now } : {}),
       });
-      await softDeleteChild(db, data.childId, requestId, data.requestedBy);
-      return { status: "approved" };
-    }
-
-    // Not all approved yet — just record this vote
-    await requestRef.update({
-      [`ownerVotes.${uid}.vote`]: "approved",
-      [`ownerVotes.${uid}.votedAt`]: now,
+      return allApproved
+        ? { status: "approved", childId: data.childId, requestedBy: data.requestedBy }
+        : { status: "pending" };
     });
 
-    return { status: "pending" };
+    if (outcome.status === "approved") {
+      await softDeleteChild(db, outcome.childId, requestId, outcome.requestedBy);
+    }
+    return { status: outcome.status };
   }
 );
 
@@ -4890,6 +5005,16 @@ exports.cancelChildDeletion = onCall(
       throw new HttpsError("failed-precondition", "La periode de retention a expire, la suppression ne peut plus etre annulee.");
     }
 
+    // Claim the cancellation atomically: a purge that reserved the request
+    // ("purging") wins, and two cancellations cannot both restore.
+    await db.runTransaction(async (tx) => {
+      const current = await tx.get(requestRef);
+      if (current.data()?.status !== "approved") {
+        throw new HttpsError("failed-precondition", "Cette suppression ne peut plus etre annulee.");
+      }
+      tx.update(requestRef, { status: "cancelled", cancelledBy: uid, cancelledAt: now });
+    });
+
     const batch = db.batch();
     const snapshot = data.accessSnapshot || {};
     const allUserIds = Object.keys(snapshot);
@@ -4931,13 +5056,6 @@ exports.cancelChildDeletion = onCall(
 
     await batch.commit();
 
-    // 5. Mark deletion request as cancelled
-    await requestRef.update({
-      status: "cancelled",
-      cancelledBy: uid,
-      cancelledAt: now,
-    });
-
     console.log(`cancelChildDeletion: childId=${childId}, cancelledBy=${uid}`);
     return { success: true };
   }
@@ -4976,10 +5094,29 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
     console.log(`purgeDeletedChildren: expired=${expired} pending requests`);
   }
 
+  // --- Step 1b: finish approvals whose soft-delete was interrupted ---
+  // (vote or request approved, then softDeleteChild failed: no purgeAt, the
+  // child is still active and nobody can vote again).
+  const approvedSnap = await db
+    .collection("childDeletionRequests")
+    .where("status", "==", "approved")
+    .limit(100)
+    .get();
+  for (const approvedDoc of approvedSnap.docs) {
+    const data = approvedDoc.data();
+    if (data.purgeAt || !data.childId) continue;
+    try {
+      await softDeleteChild(db, data.childId, approvedDoc.id, data.requestedBy);
+      console.log(`purgeDeletedChildren: resumed soft-delete of childId=${data.childId}`);
+    } catch (err) {
+      console.error(`purgeDeletedChildren: could not resume soft-delete of childId=${data.childId}`, err?.stack ?? err);
+    }
+  }
+
   // --- Step 2: Purge soft-deleted children past retention ---
   const requestsSnap = await db
     .collection("childDeletionRequests")
-    .where("status", "==", "approved")
+    .where("status", "in", ["approved", "purging"])
     .where("purgeAt", "<=", now)
     .limit(50)
     .get();
@@ -4996,14 +5133,24 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
     const childId = data.childId;
 
     try {
+      // Re-check just before deleting: a cancellation between the query and
+      // now must not purge a child that was just restored.
+      // Reserve it atomically: once "purging", cancelChildDeletion refuses.
+      const reserved = await db.runTransaction(async (tx) => {
+        const fresh = await tx.get(requestDoc.ref);
+        const childSnap = await tx.get(db.doc(`children/${childId}`));
+        const stillApproved = ["approved", "purging"].includes(fresh.data()?.status);
+        if (!stillApproved || (childSnap.exists && !childSnap.data()?.deletedAt)) return false;
+        tx.update(requestDoc.ref, { status: "purging" });
+        return true;
+      });
+      if (!reserved) {
+        console.log(`purgeDeletedChildren: skipping childId=${childId} (cancelled or restored)`);
+        continue;
+      }
+
       // Hard-delete all child data (reuse existing helper)
       await deleteChildDataBatched(db, childId);
-
-      // Delete legacy collections not covered by deleteChildDataBatched
-      const legacyExtras = ["croissances", "sommeils"];
-      await Promise.all(
-        legacyExtras.map((coll) => deleteDocsByFieldBatched(db, coll, "childId", childId))
-      );
 
       // Storage files are wiped by deleteChildDataBatched above.
 
@@ -5015,11 +5162,15 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
 
       purged++;
     } catch (err) {
-      console.error(`purgeDeletedChildren: error purging childId=${childId}:`, err.message);
+      console.error(`purgeDeletedChildren: error purging childId=${childId}:`, err?.stack ?? err?.message ?? err);
     }
   }
 
-  console.log(`purgeDeletedChildren: purged=${purged}/${requestsSnap.size}`);
+  if (purged < requestsSnap.size) {
+    console.error(`purgeDeletedChildren: error purged=${purged}/${requestsSnap.size}, failures will be retried`);
+  } else {
+    console.log(`purgeDeletedChildren: purged=${purged}/${requestsSnap.size}`);
+  }
 
   // --- Step 3: Cleanup stale requests (refused/expired/cancelled older than 30 days) ---
   const staleThreshold = admin.firestore.Timestamp.fromDate(

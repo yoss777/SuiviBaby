@@ -59,7 +59,7 @@ jest.mock("firebase-admin", () => {
   const a = {
     initializeApp: jest.fn(),
     firestore: jest.fn(() => mockFirestore),
-    auth: jest.fn(() => ({ getUser: jest.fn(), deleteUser: jest.fn(), setCustomUserClaims: jest.fn() })),
+    auth: jest.fn(() => ({ getUser: jest.fn(), deleteUser: jest.fn(), setCustomUserClaims: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn() })),
     storage: jest.fn(() => mockStorage),
   };
   a.firestore.FieldValue = {

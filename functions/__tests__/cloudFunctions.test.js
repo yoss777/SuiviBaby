@@ -204,13 +204,6 @@ describe("grandfatherExistingUsers", () => {
   });
 });
 
-describe("validateReferralCode", () => {
-  it("rejects unauthenticated", async () => { await expect(fns.validateReferralCode({ auth: null, data: {} })).rejects.toThrow("Authentification"); });
-  it("rejects empty code", async () => { mockFirestore.doc.mockReturnValue({ get: jest.fn().mockResolvedValue(no()), set: jest.fn() }); await expect(fns.validateReferralCode(auth("u1", { referralCode: "" }))).rejects.toThrow("invalide"); });
-  it("rejects not found", async () => { mockFirestore.doc.mockReturnValue({ get: jest.fn().mockResolvedValue(no()), set: jest.fn() }); mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) }); await expect(fns.validateReferralCode(auth("u1", { referralCode: "ABC" }))).rejects.toThrow("introuvable"); });
-  it("rejects self-referral", async () => { mockFirestore.doc.mockReturnValue({ get: jest.fn().mockResolvedValue(no()), set: jest.fn() }); mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap([{ id: "u1" }])) }); await expect(fns.validateReferralCode(auth("u1", { referralCode: "ABC" }))).rejects.toThrow("propre code"); });
-});
-
 describe("usage quota functions", () => {
   const originalAssemblyKey = process.env.ASSEMBLYAI_API_KEY;
   const originalFetch = global.fetch;
@@ -375,7 +368,7 @@ describe("resolveReport (T2 — admin claim + audit log)", () => {
         }
         return { uid, customClaims: {} };
       }),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
   }
 
@@ -474,7 +467,7 @@ describe("handleReportCreated (T3 — graduated photo moderation)", () => {
     process.env.RESEND_API_KEY = "test-key";
     admin.auth.mockReturnValue({
       getUser: jest.fn(async (uid) => ({ uid, email: `${uid}@t.com` })),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
   });
 
@@ -639,7 +632,7 @@ describe("deleteUserAccount (T4 — admin-only direct path)", () => {
         email: `${uid}@t.com`,
         customClaims: callerHasAdminClaim ? { admin: true } : {},
       })),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
   }
 
@@ -1230,15 +1223,18 @@ describe("revenueCatWebhook — anti-replay & dedup (T0.2)", () => {
   it("dedupes a duplicate event by event.id", async () => {
     process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
     const r = res();
-    // First call: doc.create succeeds. Second call: throws ALREADY_EXISTS.
-    const createMock = jest.fn()
-      .mockRejectedValueOnce({ code: 6, message: "Document already exists" });
-    mockFirestore.doc.mockImplementation((p) => {
-      if (p === "revenuecat_webhook_events/dup-evt") {
-        return { create: createMock };
-      }
-      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), create: jest.fn() };
-    });
+    // The marker for this event id already exists (read inside the transaction).
+    mockFirestore.doc.mockImplementation((p) => ({ path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() }));
+    const txSet = jest.fn();
+    mockRunTransaction.mockReset();
+    mockRunTransaction.mockImplementation(async (fn) =>
+      fn({
+        get: jest.fn(async (ref) => (ref.path === "revenuecat_webhook_events/dup-evt" ? doc({}) : no())),
+        set: txSet,
+        create: jest.fn(),
+        update: jest.fn(),
+      })
+    );
     await fns.revenueCatWebhook(
       {
         method: "POST",
@@ -1255,6 +1251,7 @@ describe("revenueCatWebhook — anti-replay & dedup (T0.2)", () => {
       r
     );
     expect(r.send).toHaveBeenCalledWith(expect.stringMatching(/duplicate/));
+    expect(txSet).not.toHaveBeenCalled();
   });
 
   it("skips when the Firebase Auth user no longer exists", async () => {
@@ -1262,7 +1259,7 @@ describe("revenueCatWebhook — anti-replay & dedup (T0.2)", () => {
     const adminMod = require("firebase-admin");
     adminMod.auth.mockReturnValueOnce({
       getUser: jest.fn().mockRejectedValue({ code: "auth/user-not-found" }),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
     mockFirestore.doc.mockImplementation((p) => {
       if (p?.startsWith("revenuecat_webhook_events/")) {
@@ -1335,7 +1332,7 @@ describe("setAdminClaim (T0.3)", () => {
     adminMod.auth.mockReturnValue({
       getUser: jest.fn().mockResolvedValue({ uid: "t1", email: "t1@t.com", customClaims: {} }),
       setCustomUserClaims: setClaimsMock,
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
     const auditAdd = jest.fn().mockResolvedValue({ id: "audit1" });
     mockFirestore.collection.mockImplementation((name) => {
@@ -1367,7 +1364,7 @@ describe("deleteUserAccount — admin audit on cross-user delete (T0.6)", () => 
     const adminMod = require("firebase-admin");
     adminMod.auth.mockReturnValueOnce({
       getUser: jest.fn().mockResolvedValue({ uid: "a1", email: "a1@t.com", customClaims: { admin: true } }),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
     await expect(
       fns.deleteUserAccount(adm("a1", { uid: "victim1" }))
@@ -1385,6 +1382,8 @@ describe("deleteUserAccount — admin audit on cross-user delete (T0.6)", () => 
         return Promise.resolve({ uid: u, email: `${u}@t.com`, customClaims: {} });
       }),
       deleteUser: jest.fn().mockResolvedValue(undefined),
+      updateUser: jest.fn().mockResolvedValue(undefined),
+      revokeRefreshTokens: jest.fn().mockResolvedValue(undefined),
     });
     const auditAdd = jest.fn().mockResolvedValue({ id: "audit1" });
     mockFirestore.collection.mockImplementation((name) => {
@@ -1790,7 +1789,7 @@ describe("resolveReport (B6.S7 atomic claim)", () => {
     const adminMod = require("firebase-admin");
     adminMod.auth.mockReturnValue({
       getUser: jest.fn().mockResolvedValue({ uid: "admin1", customClaims: { admin: true } }),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
     mockFirestore.doc.mockImplementation((p) => {
       if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
@@ -1814,7 +1813,7 @@ describe("resolveReport (B6.S7 atomic claim)", () => {
     const adminMod = require("firebase-admin");
     adminMod.auth.mockReturnValue({
       getUser: jest.fn().mockResolvedValue({ uid: "admin1", customClaims: { admin: true } }),
-      deleteUser: jest.fn(),
+      deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
     mockFirestore.doc.mockImplementation((p) => {
       if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
@@ -1882,13 +1881,20 @@ describe("photo deletion when a child is purged", () => {
   const { mockStorage, mockBucket } = require("./setup");
 
   it("wipes children/{childId}/ in both the EU and the legacy US bucket", async () => {
-    const requestRef = { id: "req1", delete: jest.fn(() => Promise.resolve()), update: jest.fn() };
+    const requestRef = {
+      id: "req1",
+      get: jest.fn().mockResolvedValue(doc({ status: "approved", childId: "c1" })),
+      delete: jest.fn(() => Promise.resolve()),
+      update: jest.fn(),
+    };
     mockFirestore.collection.mockReturnValue({
       where: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       get: jest.fn()
         // expired pending requests
+        .mockResolvedValueOnce(snap())
+        // approved requests whose soft-delete must be resumed
         .mockResolvedValueOnce(snap())
         // soft-deleted children past retention
         .mockResolvedValueOnce({ docs: [{ id: "req1", ref: requestRef, data: () => ({ childId: "c1" }) }], empty: false, size: 1 })
@@ -2019,16 +2025,20 @@ describe("revenueCatWebhook — out-of-order events (S8)", () => {
   });
   const send = async (event, existing) => {
     process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
-    mockFirestore.doc.mockImplementation((p) => {
-      if (p?.startsWith("revenuecat_webhook_events/")) return { create: jest.fn().mockResolvedValue(undefined) };
-      return { path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
-    });
+    mockFirestore.doc.mockImplementation((p) => ({ path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() }));
     mockFirestore.collection.mockImplementation(() => ({ add: jest.fn().mockResolvedValue({ id: "log" }) }));
     const txSet = jest.fn();
     // mockReset: drop "Once" implementations left unconsumed by earlier tests.
     mockRunTransaction.mockReset();
     mockRunTransaction.mockImplementation(async (fn) =>
-      fn({ get: jest.fn().mockResolvedValue(existing ? doc(existing) : no()), set: txSet, update: jest.fn() })
+      fn({
+        get: jest.fn(async (ref) =>
+          ref.path?.startsWith("revenuecat_webhook_events/") ? no() : existing ? doc(existing) : no()
+        ),
+        set: txSet,
+        create: jest.fn(),
+        update: jest.fn(),
+      })
     );
     await fns.revenueCatWebhook(
       { method: "POST", headers: { authorization: "Bearer topsecret" }, body: { event } },
@@ -2075,7 +2085,7 @@ describe("revenueCatWebhook — event types (review follow-up)", () => {
     mockFirestore.collection.mockImplementation(() => ({ add: jest.fn().mockResolvedValue({ id: "log" }) }));
     const txSet = jest.fn();
     mockRunTransaction.mockReset();
-    mockRunTransaction.mockImplementation(async (fn) => fn({ get: jest.fn().mockResolvedValue(no()), set: txSet, update: jest.fn() }));
+    mockRunTransaction.mockImplementation(async (fn) => fn({ get: jest.fn().mockResolvedValue(no()), set: txSet, create: jest.fn(), update: jest.fn() }));
     const r = { status: jest.fn().mockReturnThis(), send: jest.fn() };
     await fns.revenueCatWebhook({ method: "POST", headers: { authorization: "Bearer topsecret" }, body: { event: { app_user_id: "u1", event_timestamp_ms: Date.now(), ...event } } }, r);
     return { txSet, r };
@@ -2161,36 +2171,152 @@ describe("join flows re-check the child and the issuer (S13)", () => {
   });
 });
 
-describe("validateReferralCode — reward (S13)", () => {
-  const setup = (subs) => {
-    const batch = { set: jest.fn(), update: jest.fn(), delete: jest.fn(), commit: jest.fn(() => Promise.resolve()) };
-    mockFirestore.batch.mockReturnValueOnce(batch);
-    mockFirestore.doc.mockImplementation((p) => ({
-      path: p,
-      get: jest.fn().mockResolvedValue(p in subs ? doc(subs[p]) : no()),
-      set: jest.fn(),
-    }));
-    mockFirestore.collection.mockImplementation(() => ({
-      where: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      doc: jest.fn(() => ({ path: "referrals/new" })),
-      get: jest.fn().mockResolvedValue({ empty: false, docs: [{ id: "parrain", ref: { path: "user_promos/parrain" }, data: () => ({ referralCount: 0 }) }] }),
-    }));
-    return batch;
-  };
+// Small in-memory Firestore for the referral flow (audit A2): documents by
+// path, equality queries, and transactions whose create() fails on an
+// existing document — what the abuse cases depend on.
+const referralStore = (initial = {}) => {
+  const docs = new Map(Object.entries(initial));
+  const snapOf = (path) => (docs.has(path) ? { ...doc(docs.get(path)), id: path.split("/").pop() } : { ...no(), id: path.split("/").pop() });
+  const ref = (path) => ({
+    path,
+    id: path.split("/").pop(),
+    get: async () => snapOf(path),
+    set: async (data, opts) => docs.set(path, opts?.merge ? { ...(docs.get(path) || {}), ...data } : data),
+  });
+  mockFirestore.doc.mockImplementation((path) => ref(path));
+  mockFirestore.collection.mockImplementation((name) => {
+    const filters = [];
+    const q = {
+      where: (field, _op, value) => { filters.push([field, value]); return q; },
+      limit: () => q,
+      get: async () => {
+        const hits = [...docs.entries()]
+          .filter(([path, data]) => path.startsWith(`${name}/`) && path.split("/").length === 2 && filters.every(([f, v]) => data?.[f] === v))
+          .map(([path, data]) => ({ id: path.split("/")[1], ref: ref(path), data: () => data }));
+        return { empty: hits.length === 0, size: hits.length, docs: hits };
+      },
+    };
+    return q;
+  });
+  mockRunTransaction.mockReset();
+  mockRunTransaction.mockImplementation(async (fn) => {
+    const writes = [];
+    const result = await fn({
+      get: async (r) => snapOf(r.path),
+      create: (r, data) => {
+        if (docs.has(r.path)) throw Object.assign(new Error("already exists"), { code: 6 });
+        writes.push([r.path, data, false]);
+      },
+      set: (r, data, opts) => writes.push([r.path, data, !!opts?.merge]),
+      update: (r, data) => writes.push([r.path, data, true]),
+    });
+    for (const [path, data, merge] of writes) docs.set(path, merge ? { ...(docs.get(path) || {}), ...data } : data);
+    return result;
+  });
+  return docs;
+};
+const verified = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, email_verified: true } }, data, app: true });
+const redeem = (uid, code) => fns.validateReferralCode(verified(uid, { referralCode: code }));
 
-  it("works with a valid code (no exists() crash) and rewards both users", async () => {
-    const batch = setup({});
-    await expect(fns.validateReferralCode(auth("filleul", { referralCode: "ABC" }))).resolves.toMatchObject({ success: true });
-    const rewarded = batch.set.mock.calls.filter(([ref, data]) => ref.path?.startsWith("subscriptions/") && data.source === "referral_reward").map(([ref]) => ref.path);
-    expect(rewarded.sort()).toEqual(["subscriptions/filleul", "subscriptions/parrain"]);
+describe("validateReferralCode — one referral per account (audit A2)", () => {
+  it("rejects unauthenticated calls and unverified e-mails", async () => {
+    await expect(fns.validateReferralCode({ auth: null, data: {} })).rejects.toThrow("Authentification");
+    referralStore();
+    await expect(fns.validateReferralCode(auth("u1", { referralCode: "SAM-AAAA-BBBB" }))).rejects.toThrow("Vérifiez");
+  });
+
+  it("rejects malformed, unknown and own codes", async () => {
+    referralStore({ "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" } });
+    await expect(redeem("filleul", "")).rejects.toThrow("invalide");
+    await expect(redeem("filleul", "SAM-ZZZZ-ZZZZ")).rejects.toThrow("introuvable");
+    await expect(redeem("parrain", "sam-aaaa-bbbb")).rejects.toThrow("propre code");
+  });
+
+  it("rewards both users, records the use and counts it for the referrer", async () => {
+    const docs = referralStore({ "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" } });
+    await expect(redeem("filleul", "sam-aaaa-bbbb")).resolves.toMatchObject({ success: true });
+    expect(docs.get("referrals/filleul")).toMatchObject({ parrainUid: "parrain", filleulUid: "filleul" });
+    expect(docs.get("user_promos/parrain").referralCount).toBe(1);
+    expect(docs.get("subscriptions/filleul")).toMatchObject({ tier: "premium", source: "referral_reward" });
+    expect(docs.get("subscriptions/parrain")).toMatchObject({ tier: "premium", source: "referral_reward" });
+  });
+
+  it("refuses a second use, even after referredBy was removed from user_promos", async () => {
+    const docs = referralStore({
+      "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" },
+      "referral_codes/SAM-CCCC-DDDD": { uid: "other" },
+    });
+    await redeem("filleul", "SAM-AAAA-BBBB");
+    docs.set("user_promos/filleul", {}); // the old exploit: wipe referredBy
+    await expect(redeem("filleul", "SAM-CCCC-DDDD")).rejects.toThrow("deja utilise");
+  });
+
+  it("refuses an account referred before the fix (random-id referral)", async () => {
+    referralStore({
+      "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" },
+      "referrals/old-random-id": { parrainUid: "x", filleulUid: "filleul" },
+    });
+    await expect(redeem("filleul", "SAM-AAAA-BBBB")).rejects.toThrow("deja utilise");
+  });
+
+  it("stops rewarding a referrer past the cap, still rewards the new user", async () => {
+    const docs = referralStore({
+      "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" },
+      "user_promos/parrain": { referralCount: 10 },
+    });
+    await redeem("filleul", "SAM-AAAA-BBBB");
+    expect(docs.get("subscriptions/filleul")).toMatchObject({ source: "referral_reward" });
+    expect(docs.has("subscriptions/parrain")).toBe(false);
+    expect(docs.get("user_promos/parrain").referralCount).toBe(11);
   });
 
   it("does not overwrite an active Family subscription", async () => {
-    const batch = setup({ "subscriptions/parrain": { tier: "family", status: "active" } });
-    await fns.validateReferralCode(auth("filleul", { referralCode: "ABC" }));
-    const rewarded = batch.set.mock.calls.filter(([ref]) => ref.path?.startsWith("subscriptions/")).map(([ref]) => ref.path);
-    expect(rewarded).toEqual(["subscriptions/filleul"]);
+    const docs = referralStore({
+      "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" },
+      "subscriptions/parrain": { tier: "family", status: "active" },
+    });
+    await redeem("filleul", "SAM-AAAA-BBBB");
+    expect(docs.get("subscriptions/parrain")).toEqual({ tier: "family", status: "active" });
+  });
+
+  it("refuses an old code shared by two accounts (one copied it)", async () => {
+    referralStore({
+      "user_promos/parrain": { referralCode: "SAM-PARR-X1Y2" },
+      "user_promos/copycat": { referralCode: "SAM-PARR-X1Y2" },
+    });
+    await expect(redeem("filleul", "SAM-PARR-X1Y2")).rejects.toThrow("introuvable");
+  });
+
+  it("still accepts a code created by the app before the fix", async () => {
+    const docs = referralStore({ "user_promos/parrain": { referralCode: "SAM-PARR-X1Y2" } });
+    await expect(redeem("filleul", "SAM-PARR-X1Y2")).resolves.toMatchObject({ parrainUid: "parrain" });
+    expect(docs.has("referrals/filleul")).toBe(true);
+  });
+});
+
+describe("ensureReferralCode (audit A2)", () => {
+  it("creates a server code and its mapping when the user has none", async () => {
+    const docs = referralStore();
+    const { referralCode } = await fns.ensureReferralCode(verified("u1"));
+    expect(referralCode).toMatch(/^SAM-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    expect(docs.get(`referral_codes/${referralCode}`)).toMatchObject({ uid: "u1" });
+    expect(docs.get("user_promos/u1").referralCode).toBe(referralCode);
+  });
+
+  it("keeps an old app-generated code when nobody else owns it", async () => {
+    const docs = referralStore({ "user_promos/u1": { referralCode: "SAM-U1AB-CD34" } });
+    await expect(fns.ensureReferralCode(verified("u1"))).resolves.toEqual({ referralCode: "SAM-U1AB-CD34" });
+    expect(docs.get("referral_codes/SAM-U1AB-CD34")).toMatchObject({ uid: "u1", legacy: true });
+  });
+
+  it("replaces a copied code that belongs to someone else", async () => {
+    const docs = referralStore({
+      "user_promos/thief": { referralCode: "SAM-U1AB-CD34" },
+      "referral_codes/SAM-U1AB-CD34": { uid: "u1" },
+    });
+    const { referralCode } = await fns.ensureReferralCode(verified("thief"));
+    expect(referralCode).not.toBe("SAM-U1AB-CD34");
+    expect(docs.get(`referral_codes/${referralCode}`)).toMatchObject({ uid: "thief" });
   });
 });
 
@@ -2204,5 +2330,82 @@ describe("checkRateLimit is transactional (S6)", () => {
     await expect(fns.findUserByEmail(auth("u1", { email: "a@b.c" }))).rejects.toThrow("Trop de requêtes");
     const txFns = mockFirestore.runTransaction.mock.calls.map(([fn]) => fn.name);
     expect(txFns).toContain("rateLimitTxn");
+  });
+});
+
+describe("revenueCatWebhook — no event lost on failure (audit A1)", () => {
+  const originalSecret = process.env.REVENUECAT_WEBHOOK_SECRET;
+  afterEach(() => {
+    if (originalSecret === undefined) delete process.env.REVENUECAT_WEBHOOK_SECRET;
+    else process.env.REVENUECAT_WEBHOOK_SECRET = originalSecret;
+  });
+  const event = { id: "evt-a1", type: "RENEWAL", app_user_id: "u1", entitlement_ids: ["premium"] };
+  const call = async (ev = event) => {
+    process.env.REVENUECAT_WEBHOOK_SECRET = "topsecret";
+    const r = { status: jest.fn().mockReturnThis(), send: jest.fn() };
+    await fns.revenueCatWebhook(
+      { method: "POST", headers: { authorization: "Bearer topsecret" }, body: { event: { event_timestamp_ms: Date.now(), ...ev } } },
+      r
+    );
+    return r;
+  };
+  beforeEach(() => {
+    mockFirestore.doc.mockImplementation((p) => ({ path: p, get: jest.fn().mockResolvedValue(no()), set: jest.fn() }));
+    mockFirestore.collection.mockImplementation(() => ({ add: jest.fn().mockResolvedValue({ id: "log" }) }));
+    mockRunTransaction.mockReset();
+  });
+
+  it("writes the dedup marker and the subscription in the same transaction", async () => {
+    const tx = { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), create: jest.fn(), update: jest.fn() };
+    mockRunTransaction.mockImplementation(async (fn) => fn(tx));
+    const r = await call();
+    expect(r.status).toHaveBeenCalledWith(200);
+    expect(tx.create).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "revenuecat_webhook_events/evt-a1" }),
+      expect.objectContaining({ eventId: "evt-a1" })
+    );
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "subscriptions/u1" }),
+      expect.objectContaining({ tier: "premium", status: "active" }),
+      { merge: true }
+    );
+  });
+
+  it("answers 500 when the transaction fails, so the retry processes the event", async () => {
+    // First delivery: the transaction aborts (nothing committed, marker included).
+    mockRunTransaction.mockRejectedValueOnce(new Error("firestore unavailable"));
+    const first = await call();
+    expect(first.status).toHaveBeenCalledWith(500);
+
+    // Retry: the marker does not exist, the subscription is written.
+    const tx = { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), create: jest.fn(), update: jest.fn() };
+    mockRunTransaction.mockImplementation(async (fn) => fn(tx));
+    const retry = await call();
+    expect(retry.status).toHaveBeenCalledWith(200);
+    expect(retry.send).toHaveBeenCalledWith("OK");
+    expect(tx.set).toHaveBeenCalled();
+  });
+
+  it("answers 500 (retry) when the Auth lookup fails for another reason than a deleted user", async () => {
+    const adminMod = require("firebase-admin");
+    adminMod.auth.mockReturnValueOnce({ getUser: jest.fn().mockRejectedValue({ code: "auth/internal-error" }) });
+    const r = await call();
+    expect(r.status).toHaveBeenCalledWith(500);
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it("ignores an app_user_id that is not a plain uid", async () => {
+    const r = await call({ ...event, id: "evt-path", app_user_id: "u1/../other" });
+    expect(r.send).toHaveBeenCalledWith("OK - invalid user id");
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it("still answers 200 when only the audit log write fails", async () => {
+    mockFirestore.collection.mockImplementation(() => ({ add: jest.fn().mockRejectedValue(new Error("log down")) }));
+    const tx = { get: jest.fn().mockResolvedValue(no()), set: jest.fn(), create: jest.fn(), update: jest.fn() };
+    mockRunTransaction.mockImplementation(async (fn) => fn(tx));
+    const r = await call();
+    expect(r.status).toHaveBeenCalledWith(200);
+    expect(tx.set).toHaveBeenCalled();
   });
 });

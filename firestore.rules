@@ -496,11 +496,31 @@ service cloud.firestore {
     // USER PROMOS — Promo tracking (own data only)
     // ============================================
 
+    // Les champs de parrainage ne sont écrits que par le serveur
+    // (ensureReferralCode / validateReferralCode, audit A2) : sinon un client
+    // effaçait referredBy pour réutiliser un code, ou copiait le code d'un autre.
     match /user_promos/{userId} {
+      function referralFieldsUntouchedOnCreate() {
+        let d = request.resource.data;
+        return !d.keys().hasAny(['referralCode', 'referredBy', 'referredAt'])
+          && (!('referralCount' in d) || d.referralCount == 0)
+          && (!('referralRewards' in d) || d.referralRewards.size() == 0);
+      }
+      function referralFieldsUntouchedOnUpdate() {
+        return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['referralCode', 'referredBy', 'referredAt', 'referralCount', 'referralRewards']);
+      }
       allow read: if isSignedIn() && request.auth.uid == userId;
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && referralFieldsUntouchedOnCreate();
+      allow update: if isSignedIn() && request.auth.uid == userId
+        && referralFieldsUntouchedOnUpdate();
       allow delete: if false;
+    }
+
+    // Code parrainage → propriétaire : serveur uniquement.
+    match /referral_codes/{code} {
+      allow read, write: if false;
     }
 
     // ============================================

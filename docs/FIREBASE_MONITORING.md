@@ -143,7 +143,9 @@
 ### Crash rate élevé
 1. Vérifier Sentry → Issues récentes
 2. Identifier le stacktrace et le device/OS
-3. Rollback si nécessaire (`eas update --rollback`)
+3. Pas de retour arrière à distance (`expo-updates` n'est pas installé) :
+   corriger et publier une nouvelle version ; en urgence sur Android,
+   arrêter le déploiement de la version fautive dans Play Console
 4. Hotfix et redéploiement
 
 ### Cloud Function erreurs
@@ -176,9 +178,9 @@ cela, l'activation bloque les clients légitimes.
 
 2. **Activation progressive** — d'abord sur CFs critiques (impact coût) :
    ```bash
-   # Définir la variable d'env pour le déploiement
-   firebase functions:config:set appcheck.enforce=true
-   # OU via .env.production avec APPCHECK_ENFORCE=true
+   # Les fonctions v2 lisent process.env : fichier d'environnement du projet
+   # (functions:config:set est l'ancienne configuration v1, sans effet ici)
+   echo "APPCHECK_ENFORCE=true" >> functions/.env.samaye-53723
    firebase deploy --only \
      functions:transcribeAudio,functions:revenueCatWebhook,functions:consumeUsageQuota
    ```
@@ -223,3 +225,59 @@ par design (les webhooks viennent de fournisseurs externes).
 - agrège VERIFIED / UNVERIFIED par CF
 - exit non-zero si une CF dépasse le seuil de 0,5 %
 - utilisable en CI pour pré-vérifier toute bascule
+
+## 9. Sauvegardes, alertes et Sentry (audit A6 / A7, sprint 2)
+
+À lancer une fois, avec un compte propriétaire du projet
+(`gcloud auth login` puis `gcloud config set project samaye-53723`).
+
+### Sauvegardes Firestore
+```bash
+gcloud firestore backups schedules create --database='(default)' \
+  --recurrence=daily --retention=7d
+gcloud firestore backups schedules create --database='(default)' \
+  --recurrence=weekly --day-of-week=SUN --retention=30d
+gcloud firestore databases update --database='(default)' --delete-protection
+gcloud firestore backups list --location=eur3   # vérifier après 24 h
+```
+Restauration (test dans une base séparée, jamais sur `(default)`) :
+```bash
+gcloud firestore databases restore \
+  --source-backup=projects/samaye-53723/locations/eur3/backups/<ID> \
+  --destination-database=restore-test
+# vérifier quelques documents, puis supprimer restore-test
+```
+
+### Alertes
+1. Métriques sur les journaux :
+   ```bash
+   gcloud logging metrics create functions_errors \
+     --description="Erreurs des Cloud Functions" \
+     --log-filter='resource.type="cloud_run_revision" AND severity>=ERROR'
+   gcloud logging metrics create webhook_5xx \
+     --description="Webhook RevenueCat en erreur" \
+     --log-filter='resource.labels.service_name="revenuecatwebhook" AND httpRequest.status>=500'
+   gcloud logging metrics create scheduled_job_failures \
+     --description="Échecs des tâches planifiées" \
+     --log-filter='textPayload=~"(processScheduledDeletions|purgeDeletedChildren|sendWeeklyRecap|checkAndSendReminders): error"'
+   ```
+2. Cloud Monitoring → Alertes : une règle par métrique (seuil > 0 sur 15 min),
+   canal e-mail du propriétaire.
+3. Facturation → Budgets : budget mensuel avec alertes à 50 %, 90 % et 100 %.
+
+### Sentry en production
+Le projet existe (`tesfa-f9` / `suivibaby`) mais aucun DSN n'est fourni aux
+builds de production : Sentry ne reçoit rien. Les filtres de confidentialité
+(`utils/sentryFilters.ts`) sont en place avant l'activation.
+```bash
+# DSN : Sentry → Settings → Projects → suivibaby → Client Keys
+npx eas env:create --environment production --name EXPO_PUBLIC_SENTRY_DSN \
+  --value "<DSN>" --visibility plaintext
+# Source maps : jeton d'organisation (Settings → Auth Tokens)
+npx eas env:create --environment production --name SENTRY_AUTH_TOKEN \
+  --value "<TOKEN>" --visibility secret
+```
+Puis retirer `SENTRY_DISABLE_AUTO_UPLOAD` du profil `production` d'`eas.json`
+(sinon les traces restent illisibles) et vérifier qu'une erreur de test
+arrive, sans e-mail ni prénom. Région de l'organisation Sentry : voir D3.
+
