@@ -3966,7 +3966,7 @@ exports.processScheduledDeletions = onSchedule(
               });
             }
           } catch (emailErr) {
-            console.warn(`processScheduledDeletions: failed to send deletion email to ${email}`, emailErr.message);
+            console.warn(`processScheduledDeletions: failed to send deletion email for uid=${uid}`, emailErr.message);
           }
         }
 
@@ -4436,7 +4436,7 @@ exports.sendWeeklyRecap = onSchedule(
           stats.pompages.count > 0;
 
         if (!hasActivity) {
-          console.log(`sendWeeklyRecap: SKIP ${childName} (${childId}) - no activity this week (meals=${stats.meals.count}, sleep=${stats.sleep.totalMinutes}, changes=${stats.changes.total})`);
+          console.log(`sendWeeklyRecap: SKIP child=${childId} - no activity this week`);
           totalSkipped++;
           continue;
         }
@@ -4451,7 +4451,7 @@ exports.sendWeeklyRecap = onSchedule(
         });
 
         // Envoyer via Resend
-        console.log(`sendWeeklyRecap: sending to ${userEmail} for ${childName} (hasActivity=${hasActivity})`);
+        console.log(`sendWeeklyRecap: sending uid=${userId} child=${childId} (hasActivity=${hasActivity})`);
         try {
           const sendResult = await resend.emails.send({
             from: "Suivi Baby <noreply@suivibaby.com>",
@@ -4459,7 +4459,11 @@ exports.sendWeeklyRecap = onSchedule(
             subject: `Récap semaine — ${childName}`,
             html,
           });
-          console.log(`sendWeeklyRecap: Resend response`, JSON.stringify(sendResult));
+          // Resend reports failures in the result instead of throwing.
+          if (sendResult?.error) {
+            throw new Error(`Resend: ${sendResult.error.name ?? "error"} ${sendResult.error.message ?? ""}`.trim());
+          }
+          console.log(`sendWeeklyRecap: sent id=${sendResult?.data?.id ?? sendResult?.id ?? "?"}`);
 
           // Enregistrer dans l'historique
           await db.collection("recap_history").add({
@@ -4474,7 +4478,7 @@ exports.sendWeeklyRecap = onSchedule(
           totalSent++;
         } catch (error) {
           console.error(
-            `sendWeeklyRecap: error sending to ${userEmail} for ${childName}:`,
+            `sendWeeklyRecap: error sending uid=${userId} child=${childId}:`,
             error.message
           );
         }
