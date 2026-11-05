@@ -188,36 +188,48 @@ But : savoir d'où on part, pour fixer des cibles chiffrées.
 
 Fin de sprint : tableau « Mesures » rempli (avant).
 
-### Sprint 1 — Calculs des graphiques stables et rapides · US-T2, US-1.2, US-3.1, US-9.1 · ⏳
+### Sprint 1 — Calculs des graphiques stables et rapides · US-T2, US-1.2, US-3.1, US-9.1 · ✅ 2026-11-05
 
 But : un graphique ne recalcule que quand ses données ou sa semaine changent,
 et chaque calcul est en une passe. Aucun changement visible pour l'utilisateur.
 
-- [ ] **1.1** Tests de non-régression d'abord : extraire les agrégations dans
+- [x] **1.1** Tests de non-régression d'abord : extraire les agrégations dans
   `utils/statsAggregations.ts` (fonctions pures : semaine courante, semaine
   précédente, totaux par jour, nouveaux aliments, réactions, `thisWeekCounts`,
   corrélation repas/sommeil) et figer leurs résultats actuels dans
   `__tests__/statsAggregations.test.ts` sur un jeu fixe.
-- [ ] **1.2** Semaine stable : `startMs = getStartOfWeek(currentWeek).getTime()`
+- [x] **1.2** Semaine stable : `startMs = getStartOfWeek(currentWeek).getTime()`
   et `start` / `end` en `useMemo([startMs])` dans les 3 graphiques
   (`RepasChart.tsx:230`, `SommeilChart.tsx:191`, `PompagesChart.tsx:286`).
-- [ ] **1.3** Couleurs stables : palettes précalculées au niveau du module dans
+- [x] **1.3** Couleurs stables : palettes précalculées au niveau du module dans
   `constants/dashboardColors.ts`, ou `useMemo([colorScheme])` dans chaque graphique.
-- [ ] **1.4** Une passe mémoïsée par graphique : `useMemo(() => aggregate(data,
+- [x] **1.4** Une passe mémoïsée par graphique : `useMemo(() => aggregate(data,
   startMs, filtre), [data, startMs, filtre])`, timestamps numériques, jour de la
   semaine via `(d.getDay() + 6) % 7` au lieu de `toLocaleDateString`.
-- [ ] **1.5** Corrélation repas/sommeil : timestamps des repas triés une fois
+- [x] **1.5** Corrélation repas/sommeil : timestamps des repas triés une fois
   (`useMemo([repas])`), recherche binaire du dernier repas dans la fenêtre de
   6 h avant chaque nuit, sans copie ni tri par nuit (`SommeilChart.tsx:338-346`).
-- [ ] **1.6** Pompages du jour : filtrer par plage de millisecondes avant de
+- [x] **1.6** Pompages du jour : filtrer par plage de millisecondes avant de
   construire les objets (`PompagesChart.tsx:168-186`) ; `dailyValues` /
   `dailyLabels` mémoïsés pour que `chartPoints`, `linePath`, `fillPath` le soient.
 - [ ] **1.7** Chemins Skia (`makeRRect`) construits dans le `useMemo` de `bars`
   (`RepasChart.tsx:1225`, `1255`, SommeilChart).
-- [ ] **1.8** `thisWeekCounts` (`stats.tsx:484-513`) sur timestamps, une passe.
+- [x] **1.8** `thisWeekCounts` (`stats.tsx:484-513`) sur timestamps, une passe.
 
 Fin de sprint : tests 1.1 verts sans changer les attendus ; rendus par tap
 divisés (compteur 0.2) ; chiffres affichés identiques sur le Samsung.
+
+_Bilan 2026-11-05 : `utils/statsAggregations.ts` + 23 tests qui comparent
+chaque calcul à l'ancien code sur 3 000 événements (semaine courante, semaine
+passée, semaine du changement d'heure, 4 filtres repas ; fuseaux Paris et UTC).
+Les 3 graphiques ne recalculent plus que si les données, la semaine ou le
+filtre changent ; `getChartColors` renvoie un objet stable par thème ; plus
+aucun `toLocaleDateString` dans les boucles (jour via `getDay()`, ce qui évite
+aussi des jours non reconnus si Intl renvoie une autre langue) ; corrélation
+repas/sommeil par recherche binaire ; compteurs de la semaine et PDF en une
+passe (le PDF anticipe la tâche 3.4). 1.7 (chemins Skia dans `bars`) reporté
+au sprint 5 : une vingtaine de chemins, gain négligeable une fois les rendus
+réduits._
 
 ### Sprint 2 — Écran réactif pendant le chargement · US-1.1, US-1.2, US-1.3, US-2.1, US-4.1 · ⏳
 
@@ -364,7 +376,7 @@ un Android d'entrée de gamme sous Hermes, compter 5 à 20 fois plus) :
 
 | Mesure | Avant | S1 | S2 | S3 | S4 | Après | Cible |
 |---|---|---|---|---|---|---|---|
-| Calcul des 3 graphiques par rendu (ms) | 28,3 (Repas 12,1 · Pompages 2,6 · Sommeil 15,6) | | | | | | < 3 |
+| Calcul des 3 graphiques par rendu (ms) | 28,3 (Repas 12,1 · Pompages 2,6 · Sommeil 15,6) | 2,3 quand les données ou la semaine changent, 0 sinon | | | | | < 3 |
 | Rendus de `StatsScreen` jusqu'aux données | 21 | | | | | | ≤ 8 |
 | Rendus des graphiques (Repas / Pompages / Sommeil) | 11 / 6 / 2 | | | | | | ≤ 2 chacun |
 | Calcul estimé au chargement (ms) | ≈ 180 | | | | | | < 20 |

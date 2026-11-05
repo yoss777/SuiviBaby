@@ -10,6 +10,12 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
+import {
+  addWeeks,
+  buildReportWeekRows,
+  countInRange,
+  getDurationMinutes,
+} from "@/utils/statsAggregations";
 import { countStatsRender, markStatsMount } from "@/utils/statsPerf";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -489,33 +495,12 @@ export default function StatsScreen() {
 
   // Weekly counts for resume cards — synced with displayed week
   const thisWeekCounts = useMemo(() => {
-    const weekStart = displayWeek;
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-
-    const toD = (d: any): Date => {
-      if (d instanceof Timestamp) return d.toDate();
-      if (d && typeof d.toDate === "function") return d.toDate();
-      if (d && d.seconds) return new Date(d.seconds * 1000);
-      return new Date(d);
-    };
-
-    const repasCount = tetees.filter((t) => {
-      const d = toD(t.date);
-      return d >= weekStart && d < weekEnd;
-    }).length;
-    const pompagesCount = pompages.filter((p) => {
-      const d = toD(p.date);
-      return d >= weekStart && d < weekEnd;
-    }).length;
-    const sommeilCount = sommeils.filter((s) => {
-      const d = toD(s.date);
-      return d >= weekStart && d < weekEnd;
-    }).length;
+    const startMs = displayWeek.getTime();
+    const endMs = addWeeks(displayWeek, 1).getTime();
     return {
-      repas: repasCount,
-      pompages: pompagesCount,
-      sommeil: sommeilCount,
+      repas: countInRange(tetees, startMs, endMs),
+      pompages: countInRange(pompages, startMs, endMs),
+      sommeil: countInRange(sommeils, startMs, endMs),
     };
   }, [tetees, pompages, sommeils, displayWeek]);
 
@@ -550,42 +535,6 @@ export default function StatsScreen() {
       year: "numeric",
     });
 
-    const toD = (d: any): Date => {
-      if (d instanceof Timestamp) return d.toDate();
-      if (d && typeof d.toDate === "function") return d.toDate();
-      if (d && d.seconds) return new Date(d.seconds * 1000);
-      return new Date(d);
-    };
-
-    // Build 12 weeks of data (3 months)
-    const getWeekStart = (date: Date) => {
-      const d = new Date(date);
-      const day = d.getDay();
-      const dayOfWeek = day === 0 ? 7 : day;
-      d.setDate(d.getDate() - (dayOfWeek - 1));
-      d.setHours(0, 0, 0, 0);
-      return d;
-    };
-
-    const currentWeekStart = getWeekStart(now);
-    const weeks: { start: Date; end: Date; label: string }[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const ws = new Date(currentWeekStart);
-      ws.setDate(ws.getDate() - i * 7);
-      const we = new Date(ws);
-      we.setDate(we.getDate() + 7);
-      const label = `${ws.getDate()}/${ws.getMonth() + 1}`;
-      weeks.push({ start: ws, end: we, label });
-    }
-
-    const getDurMin = (s: any): number => {
-      if (s.duree && typeof s.duree === "number") return s.duree;
-      const st = s.heureDebut ? toD(s.heureDebut) : null;
-      const en = s.heureFin ? toD(s.heureFin) : null;
-      if (st && en) return Math.max(0, (en.getTime() - st.getTime()) / 60000);
-      return 0;
-    };
-
     const fmtH = (min: number) => {
       const h = Math.floor(min / 60);
       const m = Math.round(min % 60);
@@ -594,88 +543,8 @@ export default function StatsScreen() {
         : `${m}min`;
     };
 
-    // Compute weekly data
-    type WeekRow = {
-      label: string;
-      tetees: number;
-      biberons: number;
-      solides: number;
-      repasTotal: number;
-      pompages: number;
-      pompagesMl: number;
-      nuits: number;
-      siestes: number;
-      sommeilTotal: number;
-      sommeilMinutes: number;
-      nuitLieux: Record<string, number>;
-      siesteLieux: Record<string, number>;
-    };
-
-    const emptyLieux = () => ({
-      lit: 0,
-      cododo: 0,
-      poussette: 0,
-      voiture: 0,
-      autre: 0,
-    });
-    const weekRows: WeekRow[] = weeks.map((w) => {
-      const row: WeekRow = {
-        label: w.label,
-        tetees: 0,
-        biberons: 0,
-        solides: 0,
-        repasTotal: 0,
-        pompages: 0,
-        pompagesMl: 0,
-        nuits: 0,
-        siestes: 0,
-        sommeilTotal: 0,
-        sommeilMinutes: 0,
-        nuitLieux: emptyLieux(),
-        siesteLieux: emptyLieux(),
-      };
-
-      tetees.forEach((t) => {
-        const d = toD(t.date);
-        if (d >= w.start && d < w.end) {
-          const type = t.type || "tetee";
-          if (type === "tetee" || type === "seins") row.tetees++;
-          else if (type === "biberon") row.biberons++;
-          else if (type === "solide") row.solides++;
-          row.repasTotal++;
-        }
-      });
-
-      pompages.forEach((p) => {
-        const d = toD(p.date);
-        if (d >= w.start && d < w.end) {
-          row.pompages++;
-          row.pompagesMl +=
-            (p.quantiteGauche || 0) +
-            (p.quantiteDroite || 0) +
-            (p.totalQuantite || 0);
-        }
-      });
-
-      sommeils.forEach((s) => {
-        const d = toD(s.date);
-        if (d >= w.start && d < w.end) {
-          const loc = s.location || "autre";
-          const dur = getDurMin(s);
-          row.sommeilTotal++;
-          row.sommeilMinutes += dur;
-          if (s.isNap) {
-            row.siestes++;
-            row.siesteLieux[loc] = (row.siesteLieux[loc] || 0) + 1;
-          } else {
-            row.nuits++;
-            row.nuitLieux[loc] = (row.nuitLieux[loc] || 0) + 1;
-          }
-        }
-      });
-
-      return row;
-    });
+    // 12 weekly rows, one pass per event list
+    const weekRows = buildReportWeekRows(tetees, pompages, sommeils, now);
 
     const locLabel: Record<string, string> = {
       lit: "Lit",

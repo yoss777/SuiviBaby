@@ -1,4 +1,13 @@
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
+import {
+  JOURS,
+  addDays,
+  addWeeks,
+  aggregatePompagesWeek,
+  getStartOfWeek,
+  getWeekBounds,
+  selectDailyPompages,
+} from "@/utils/statsAggregations";
 import { countStatsRender, markStatsChartPainted } from "@/utils/statsPerf";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import {
@@ -13,7 +22,6 @@ import {
   vec,
 } from "@shopify/react-native-skia";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Timestamp } from "firebase/firestore";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -53,27 +61,6 @@ function startOfDay(date: Date) {
   return d;
 }
 
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function getStartOfWeek(date: Date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const dayOfWeek = day === 0 ? 7 : day;
-  const diff = dayOfWeek - 1;
-  d.setDate(d.getDate() - diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addWeeks(date: Date, weeks: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + weeks * 7);
-  return d;
-}
 
 function createSmoothPath(points: { x: number; y: number }[]) {
   if (points.length === 0) return "";
@@ -170,24 +157,39 @@ export default function PompagesChart({
 
   const isEmpty = !pompages || pompages.length === 0;
 
-  const dailyPompages = useMemo(() => {
-    return pompages
-      .map((p) => ({
-        ...p,
-        dateObj:
-          p.date instanceof Timestamp ? p.date.toDate() : new Date(p.date),
-        totalQuantite: (p.quantiteDroite || 0) + (p.quantiteGauche || 0),
-      }))
-      .filter((p) => startOfDay(p.dateObj).getTime() === currentDay.getTime())
-      .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-  }, [pompages, currentDay]);
+  // Sessions of the displayed day: range check first, objects built only for that day.
+  const dailyPompages = useMemo(
+    () =>
+      selectDailyPompages(
+        pompages,
+        currentDay.getTime(),
+        addDays(currentDay, 1).getTime(),
+      ),
+    [pompages, currentDay],
+  );
 
-  const dailyValues = dailyPompages.map((p) => p.totalQuantite);
-  const dailyLabels = dailyPompages.map((p) =>
-    p.dateObj.toLocaleTimeString("fr-FR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
+  const dailyValues = useMemo(
+    () => dailyPompages.map((p) => p.totalQuantite),
+    [dailyPompages],
+  );
+  const dailyLabels = useMemo(
+    () =>
+      dailyPompages.map((p) =>
+        p.dateObj.toLocaleTimeString("fr-FR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      ),
+    [dailyPompages],
+  );
+  const dayLabel = useMemo(
+    () =>
+      currentDay.toLocaleDateString("fr-FR", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      }),
+    [currentDay],
   );
 
   const maxDaily = Math.max(...dailyValues, 0);
@@ -288,54 +290,32 @@ export default function PompagesChart({
     ],
   }));
 
-  const weekStart = getStartOfWeek(currentWeek);
-  const weekEnd = addWeeks(weekStart, 1);
-  const jours = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-  const weeklyData: Record<string, number> = {
-    Lun: 0,
-    Mar: 0,
-    Mer: 0,
-    Jeu: 0,
-    Ven: 0,
-    Sam: 0,
-    Dim: 0,
-  };
+  // Week bounds keyed on a number: the weekly memos only recompute when the
+  // displayed week or the data change.
+  const weekStartMs = getStartOfWeek(currentWeek).getTime();
+  const bounds = useMemo(() => getWeekBounds(weekStartMs), [weekStartMs]);
+  const weekRangeLabel = useMemo(() => {
+    const fmt = (ms: number) =>
+      new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    return `${fmt(bounds.startMs)} - ${fmt(bounds.endMs - 1)}`;
+  }, [bounds]);
+  const weekAggregate = useMemo(
+    () => aggregatePompagesWeek(pompages, bounds),
+    [pompages, bounds],
+  );
+  const weeklyData: Record<string, number> = weekAggregate.days;
+  const prevWeekData: Record<string, number> = weekAggregate.prev;
 
-  pompages.forEach((p) => {
-    const d = p.date instanceof Timestamp ? p.date.toDate() : new Date(p.date);
-    if (d >= weekStart && d < weekEnd) {
-      const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
-      const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
-      const total = (p.quantiteDroite || 0) + (p.quantiteGauche || 0);
-      if (weeklyData[jourKey] !== undefined) {
-        weeklyData[jourKey] += total;
-      }
-    }
-  });
+  const prevWeekTotal = useMemo(() => JOURS.reduce((a, j) => a + prevWeekData[j], 0), [prevWeekData]);
 
-  // Previous week data for ghost bars
-  const prevWeekStart = useMemo(() => addWeeks(weekStart, -1), [weekStart]);
-  const prevWeekEnd = useMemo(() => new Date(weekStart.getTime()), [weekStart]);
-
-  const prevWeekData = useMemo(() => {
-    const data: Record<string, number> = {};
-    jours.forEach((j) => { data[j] = 0; });
-    pompages.forEach((p) => {
-      const d = p.date instanceof Timestamp ? p.date.toDate() : new Date(p.date);
-      if (d >= prevWeekStart && d < prevWeekEnd) {
-        const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
-        const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
-        const total = (p.quantiteDroite || 0) + (p.quantiteGauche || 0);
-        if (data[jourKey] !== undefined) data[jourKey] += total;
-      }
-    });
-    return data;
-  }, [pompages, prevWeekStart, prevWeekEnd]);
-
-  const prevWeekTotal = useMemo(() => jours.reduce((a, j) => a + prevWeekData[j], 0), [prevWeekData]);
-
-  const weeklyValues = jours.map((j) => weeklyData[j]);
-  const prevWeekValues = jours.map((j) => prevWeekData[j]);
+  const weeklyValues = useMemo(
+    () => JOURS.map((j) => weeklyData[j]),
+    [weeklyData],
+  );
+  const prevWeekValues = useMemo(
+    () => JOURS.map((j) => prevWeekData[j]),
+    [prevWeekData],
+  );
   const maxWeekly = Math.max(...weeklyValues, ...prevWeekValues, 0);
   const weeklyTotal = weeklyValues.reduce((a, b) => a + b, 0);
   const daysWithWeeklyData = weeklyValues.filter((v) => v > 0).length;
@@ -344,9 +324,9 @@ export default function PompagesChart({
     weeklyTotal > 0 && daysWithWeeklyData > 0
       ? Math.round(weeklyTotal / daysWithWeeklyData)
       : 0;
-  const bestDay = jours[weeklyValues.indexOf(maxWeekly)];
+  const bestDay = JOURS[weeklyValues.indexOf(maxWeekly)];
 
-  const weeklyBarWidth = CHART_WIDTH / (jours.length * 1.45);
+  const weeklyBarWidth = CHART_WIDTH / (JOURS.length * 1.45);
   const weeklyBarSpacing = weeklyBarWidth / 2.2;
   const weeklyChartHeight =
     CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
@@ -359,7 +339,7 @@ export default function PompagesChart({
   }, [weeklyTotal, prevWeekTotal]);
 
   const weeklyBars = useMemo(() => {
-    return jours.map((jour, index) => {
+    return JOURS.map((jour, index) => {
       const value = weeklyValues[index];
       const barHeight =
         maxWeekly > 0 ? (value / maxWeekly) * weeklyChartHeight : 0;
@@ -483,11 +463,7 @@ export default function PompagesChart({
                   Pompages du jour
                 </Text>
                 <Text style={[styles.sectionSubtitle, { color: C.muted }]}>
-                  {currentDay.toLocaleDateString("fr-FR", {
-                    weekday: "long",
-                    day: "numeric",
-                    month: "long",
-                  })}
+                  {dayLabel}
                 </Text>
               </View>
             </View>
@@ -818,16 +794,7 @@ export default function PompagesChart({
                   Semaine en cours
                 </Text>
                 <Text style={[styles.sectionSubtitle, { color: C.muted }]}>
-                  {`${weekStart.toLocaleDateString("fr-FR", {
-                    day: "numeric",
-                    month: "short",
-                  })} - ${new Date(weekEnd.getTime() - 1).toLocaleDateString(
-                    "fr-FR",
-                    {
-                      day: "numeric",
-                      month: "short",
-                    },
-                  )}`}
+                  {weekRangeLabel}
                 </Text>
               </View>
             </View>
@@ -1060,7 +1027,7 @@ export default function PompagesChart({
               )}
 
               <View style={styles.xAxisContainer}>
-                {jours.map((jour, index) => (
+                {JOURS.map((jour, index) => (
                   <Text
                     key={`wx-${index}`}
                     style={[
