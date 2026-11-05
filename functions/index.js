@@ -4718,67 +4718,56 @@ exports.voteDeletionRequest = onCall(
     }
 
     const requestRef = db.doc(`childDeletionRequests/${requestId}`);
-    const requestDoc = await requestRef.get();
 
-    if (!requestDoc.exists) {
-      throw new HttpsError("not-found", "Demande introuvable.");
-    }
+    // Read and record the vote in one transaction: two owners voting at the
+    // same time can no longer both miss (or both trigger) the final approval.
+    const outcome = await db.runTransaction(async (tx) => {
+      const requestDoc = await tx.get(requestRef);
+      if (!requestDoc.exists) {
+        throw new HttpsError("not-found", "Demande introuvable.");
+      }
+      const data = requestDoc.data();
+      if (data.status !== "pending") {
+        throw new HttpsError("failed-precondition", "Cette demande n'est plus en attente.");
+      }
+      // Verify caller is an owner in the votes
+      if (!data.ownerVotes || !data.ownerVotes[uid]) {
+        throw new HttpsError("permission-denied", "Vous n'êtes pas propriétaire de cet enfant.");
+      }
+      if (data.ownerVotes[uid].vote !== "pending") {
+        throw new HttpsError("failed-precondition", "Vous avez déjà voté.");
+      }
 
-    const data = requestDoc.data();
+      const now = admin.firestore.Timestamp.now();
+      if (vote === "refused") {
+        // One refusal stops everything
+        tx.update(requestRef, {
+          status: "refused",
+          refusedBy: uid,
+          refusedByEmail: request.auth.token.email || "",
+          refusedAt: now,
+          [`ownerVotes.${uid}.vote`]: "refused",
+          [`ownerVotes.${uid}.votedAt`]: now,
+        });
+        return { status: "refused" };
+      }
 
-    if (data.status !== "pending") {
-      throw new HttpsError("failed-precondition", "Cette demande n'est plus en attente.");
-    }
-
-    // Verify caller is an owner in the votes
-    if (!data.ownerVotes || !data.ownerVotes[uid]) {
-      throw new HttpsError("permission-denied", "Vous n'êtes pas propriétaire de cet enfant.");
-    }
-
-    if (data.ownerVotes[uid].vote !== "pending") {
-      throw new HttpsError("failed-precondition", "Vous avez déjà voté.");
-    }
-
-    const now = admin.firestore.Timestamp.now();
-
-    if (vote === "refused") {
-      // One refusal stops everything
-      await requestRef.update({
-        status: "refused",
-        refusedBy: uid,
-        refusedByEmail: request.auth.token.email || "",
-        refusedAt: now,
-        [`ownerVotes.${uid}.vote`]: "refused",
-        [`ownerVotes.${uid}.votedAt`]: now,
-      });
-      return { status: "refused" };
-    }
-
-    // Vote approved
-    const updatedVotes = { ...data.ownerVotes };
-    updatedVotes[uid] = { vote: "approved", votedAt: now };
-
-    // Check if all owners have now approved
-    const allApproved = Object.values(updatedVotes).every((v) => v.vote === "approved");
-
-    if (allApproved) {
-      await requestRef.update({
-        status: "approved",
-        approvedAt: now,
+      const updatedVotes = { ...data.ownerVotes, [uid]: { vote: "approved", votedAt: now } };
+      const allApproved = Object.values(updatedVotes).every((v) => v.vote === "approved");
+      tx.update(requestRef, {
         [`ownerVotes.${uid}.vote`]: "approved",
         [`ownerVotes.${uid}.votedAt`]: now,
+        ...(allApproved ? { status: "approved", approvedAt: now } : {}),
       });
-      await softDeleteChild(db, data.childId, requestId, data.requestedBy);
-      return { status: "approved" };
-    }
-
-    // Not all approved yet — just record this vote
-    await requestRef.update({
-      [`ownerVotes.${uid}.vote`]: "approved",
-      [`ownerVotes.${uid}.votedAt`]: now,
+      return allApproved
+        ? { status: "approved", childId: data.childId, requestedBy: data.requestedBy }
+        : { status: "pending" };
     });
 
-    return { status: "pending" };
+    if (outcome.status === "approved") {
+      await softDeleteChild(db, outcome.childId, requestId, outcome.requestedBy);
+    }
+    return { status: outcome.status };
   }
 );
 
@@ -5040,14 +5029,17 @@ exports.purgeDeletedChildren = onSchedule("every 24 hours", async () => {
     const childId = data.childId;
 
     try {
+      // Re-check just before deleting: a cancellation between the query and
+      // now must not purge a child that was just restored.
+      const fresh = await requestDoc.ref.get();
+      const childSnap = await db.doc(`children/${childId}`).get();
+      if (fresh.data()?.status !== "approved" || (childSnap.exists && !childSnap.data()?.deletedAt)) {
+        console.log(`purgeDeletedChildren: skipping childId=${childId} (cancelled or restored)`);
+        continue;
+      }
+
       // Hard-delete all child data (reuse existing helper)
       await deleteChildDataBatched(db, childId);
-
-      // Delete legacy collections not covered by deleteChildDataBatched
-      const legacyExtras = ["croissances", "sommeils"];
-      await Promise.all(
-        legacyExtras.map((coll) => deleteDocsByFieldBatched(db, coll, "childId", childId))
-      );
 
       // Storage files are wiped by deleteChildDataBatched above.
 

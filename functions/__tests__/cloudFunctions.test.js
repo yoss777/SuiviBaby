@@ -1879,7 +1879,12 @@ describe("photo deletion when a child is purged", () => {
   const { mockStorage, mockBucket } = require("./setup");
 
   it("wipes children/{childId}/ in both the EU and the legacy US bucket", async () => {
-    const requestRef = { id: "req1", delete: jest.fn(() => Promise.resolve()), update: jest.fn() };
+    const requestRef = {
+      id: "req1",
+      get: jest.fn().mockResolvedValue(doc({ status: "approved", childId: "c1" })),
+      delete: jest.fn(() => Promise.resolve()),
+      update: jest.fn(),
+    };
     mockFirestore.collection.mockReturnValue({
       where: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),

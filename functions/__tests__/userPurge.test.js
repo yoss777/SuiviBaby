@@ -3,79 +3,10 @@
 // on an in-memory Firestore, plus a guard that every collection is classified.
 const fs = require("node:fs");
 const path = require("node:path");
-const { mockFirestore, mockBucket } = require("./setup");
+const { mockBucket } = require("./setup");
+const { memoryStore } = require("./memoryFirestore");
 const fns = require("../index");
 const { DELETED_USER_ID, USER_DATA_BY_FIELD, USER_DOCS_BY_ID } = require("../lib/userPurge");
-
-// ---------------------------------------------------------------------------
-// In-memory Firestore: documents by full path, equality queries, batches,
-// sub-collections, FieldValue.delete() ("DEL" in setup.js).
-// ---------------------------------------------------------------------------
-function memoryStore(initial) {
-  const docs = new Map(Object.entries(initial));
-  const field = (data, dotted) => dotted.split(".").reduce((o, k) => o?.[k], data);
-  const matches = (actual, op, v) =>
-    op === "==" ? actual === v
-      : actual === undefined ? false
-        : op === "<=" ? actual <= v
-          : op === ">=" ? actual >= v
-            : op === "<" ? actual < v
-              : op === ">" ? actual > v
-                : false;
-  const applyPatch = (current, patch) => {
-    const next = { ...(current || {}) };
-    for (const [k, v] of Object.entries(patch)) {
-      if (k.includes(".")) {
-        // update({"a.b": v}) sets a nested field, like Firestore.
-        const [head, ...rest] = k.split(".");
-        next[head] = applyPatch(next[head], { [rest.join(".")]: v });
-      } else if (v === "DEL") delete next[k];
-      else next[k] = v;
-    }
-    return next;
-  };
-  const ref = (p) => ({
-    path: p,
-    id: p.split("/").pop(),
-    get: async () => (docs.has(p) ? { exists: true, id: p.split("/").pop(), data: () => docs.get(p) } : { exists: false, data: () => undefined }),
-    set: async (data, opts) => docs.set(p, opts?.merge ? applyPatch(docs.get(p), data) : data),
-    update: async (data) => docs.set(p, applyPatch(docs.get(p), data)),
-    delete: async () => docs.delete(p),
-    collection: (sub) => query(`${p}/${sub}`),
-  });
-  const query = (collPath) => {
-    const filters = [];
-    let max = Infinity;
-    const q = {
-      where: (field, op, value) => { filters.push([field, op, value]); return q; },
-      limit: (n) => { max = n; return q; },
-      orderBy: () => q,
-      doc: (id) => ref(`${collPath}/${id}`),
-      get: async () => {
-        const depth = collPath.split("/").length + 1;
-        const hits = [...docs.entries()]
-          .filter(([p]) => p.startsWith(`${collPath}/`) && p.split("/").length === depth)
-          .filter(([, data]) => filters.every(([f, op, v]) => matches(field(data, f), op, v)))
-          .slice(0, max)
-          .map(([p, data]) => ({ id: p.split("/").pop(), ref: ref(p), data: () => data }));
-        return { empty: hits.length === 0, size: hits.length, docs: hits };
-      },
-    };
-    return q;
-  };
-  mockFirestore.doc.mockImplementation((p) => ref(p));
-  mockFirestore.collection.mockImplementation((name) => query(name));
-  mockFirestore.batch.mockImplementation(() => {
-    const ops = [];
-    return {
-      set: (r, d, o) => ops.push(() => r.set(d, o)),
-      update: (r, d) => ops.push(() => r.update(d)),
-      delete: (r) => ops.push(() => r.delete()),
-      commit: async () => { for (const op of ops) await op(); },
-    };
-  });
-  return docs;
-}
 
 const UID = "parent1";
 const OTHER = "parent2";
