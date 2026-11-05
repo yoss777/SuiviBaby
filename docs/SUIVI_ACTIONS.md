@@ -86,7 +86,7 @@ Plan détaillé, user stories et mesures : [STATS_PERF_REFONTE.md](STATS_PERF_RE
 
 ## 4 quater. Audit complet ECC du 2026-11-05 — actions P0
 
-Rapport complet (P0, P1, P2, feuille de route) : [AUDIT_COMPLET_2026-11.md](AUDIT_COMPLET_2026-11.md).
+Rapport complet (P0, P1, P2, feuille de route) : [AUDIT_COMPLET_2026-11.md](AUDIT_COMPLET_2026-11.md). Plan des 13 sprints : [PLAN_SPRINTS_AUDIT.md](PLAN_SPRINTS_AUDIT.md) (A1-A3 → S1, A6-A7 → S2, A4 → S3, A5 → S5).
 
 | # | Action | Échéance | Qui | Dépend de | Contrôle | Statut |
 |---|---|---|---|---|---|---|

@@ -121,6 +121,8 @@ ailleurs :
 
 ## Feuille de route proposée
 
+Plan détaillé par sprint (tâches, critères, décisions) : [PLAN_SPRINTS_AUDIT.md](PLAN_SPRINTS_AUDIT.md).
+
 | Semaine | Contenu |
 |---|---|
 | S+1 | A1 webhook, A2 parrainage, A3 purge unique (avec tests), A6 Sentry (filtrage puis DSN), désactiver `release.yml` |
