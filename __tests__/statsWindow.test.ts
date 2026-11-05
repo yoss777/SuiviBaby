@@ -6,6 +6,7 @@ import {
   getLiveSince,
   olderThan,
   splitStatsEventsByType,
+  withTimeout,
 } from "@/utils/statsWindow";
 
 const NOW = new Date(2026, 10, 5, 12, 0); // Thursday 5 Nov 2026
@@ -84,5 +85,16 @@ describe("olderThan / splitStatsEventsByType", () => {
     expect(split.repas.map((e) => e.id)).toEqual(["1", "2"]);
     expect(split.pompages.map((e) => e.id)).toEqual(["3"]);
     expect(split.sommeils.map((e) => e.id)).toEqual(["4"]);
+  });
+});
+
+describe("withTimeout", () => {
+  it("resolves with the value, or rejects once the delay is over", async () => {
+    await expect(withTimeout(Promise.resolve(3), 50)).resolves.toBe(3);
+    jest.useFakeTimers();
+    const pending = withTimeout(new Promise(() => {}), 1000);
+    jest.advanceTimersByTime(1000);
+    await expect(pending).rejects.toThrow("timeout");
+    jest.useRealTimers();
   });
 });

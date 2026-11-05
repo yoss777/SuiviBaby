@@ -14,6 +14,7 @@ import {
   useMergedOptimisticEvents,
 } from "@/hooks/useMergedOptimisticEvents";
 import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
+import { captureServiceError } from "@/utils/errorReporting";
 import {
   addWeeks,
   buildReportWeekRows,
@@ -27,6 +28,7 @@ import {
   getHistoryRangeToLoad,
   getLiveSince,
   splitStatsEventsByType,
+  withTimeout,
   type StatsSplit,
 } from "@/utils/statsWindow";
 import { countStatsRender, markStatsMount } from "@/utils/statsPerf";
@@ -41,6 +43,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import {
   Animated,
   ActivityIndicator,
+  Alert,
   BackHandler,
   InteractionManager,
   RefreshControl,
@@ -104,6 +107,11 @@ const SOURCE_TYPES: Record<Source, ("tetee" | "biberon" | "solide" | "pompage" |
 };
 const ALL_STATS_TYPES = [...REPAS_TYPES, "pompage", "sommeil"] as const;
 const emptySplit = (): StatsSplit<any> => ({ repas: [], pompages: [], sommeils: [] });
+const SOURCES: Source[] = ["repas", "pompages", "sommeils"];
+// One-shot reads give up after this delay (spinners never hang).
+const READ_TIMEOUT_MS = 15_000;
+const PROBE_TIMEOUT_MS = 5_000;
+const ACCESS_DENIED_MESSAGE = "Accès refusé à ces données";
 type CountsAction =
   | { type: "reset" }
   | { type: "loaded"; source: Source; count: number }
@@ -189,7 +197,14 @@ export default function StatsScreen() {
   const liveSinceRef = useRef(getLiveSince().getTime());
   const historyFromRef = useRef(liveSinceRef.current);
   const subscriptionRef = useRef(0);
+  // Bumped by every listener snapshot: a server read started before a
+  // snapshot must not overwrite it (see applyServerRange).
+  const liveVersionRef = useRef<Record<Source, number>>({ repas: 0, pompages: 0, sommeils: 0 });
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
+  const [historyRetryKey, setHistoryRetryKey] = useState(0);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const historyFailedForRef = useRef<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [pompagesDayMs, setPompagesDayMs] = useState<number | null>(null);
 
@@ -337,8 +352,11 @@ export default function StatsScreen() {
   );
 
   // Error handler for Firestore listeners
-  const handleListenerError = useCallback(() => {
-    setLoadError("Impossible de charger les données");
+  const handleListenerError = useCallback((error?: Error) => {
+    const code = (error as { code?: string } | undefined)?.code;
+    setLoadError(
+      code === "permission-denied" ? ACCESS_DENIED_MESSAGE : "Impossible de charger les données",
+    );
     dispatchCounts({ type: "failed" });
   }, []);
 
@@ -363,28 +381,37 @@ export default function StatsScreen() {
 
   // Server read of everything loaded so far ([history start, now]): replaces
   // the live part and the loaded history range, keeps older probe events.
-  // Used by pull-to-refresh and when coming back from background; listeners
-  // stay subscribed, so nothing disappears from the screen meanwhile.
+  // Used by pull-to-refresh, focus and coming back from background; listeners
+  // stay subscribed, so nothing disappears from the screen meanwhile. Tokens
+  // are captured before the await so a late answer can be recognised.
   const fetchLoadedRangeFromServer = useCallback(async () => {
     if (!activeChild?.id) return null;
-    const from = Math.min(historyFromRef.current, liveSinceRef.current);
-    const events = await obtenirEvenements(activeChild.id, {
-      type: [...ALL_STATS_TYPES],
-      depuis: new Date(from),
-      source: "server",
-    });
-    return { events, from, subscription: subscriptionRef.current };
+    const subscription = subscriptionRef.current;
+    const liveSince = liveSinceRef.current;
+    const liveVersions = { ...liveVersionRef.current };
+    const from = Math.min(historyFromRef.current, liveSince);
+    const events = await withTimeout(
+      obtenirEvenements(activeChild.id, {
+        type: [...ALL_STATS_TYPES],
+        depuis: new Date(from),
+        source: "server",
+      }),
+      READ_TIMEOUT_MS,
+    );
+    return { events, from, liveSince, liveVersions, subscription };
   }, [activeChild?.id]);
   const applyServerRange = useCallback(
     (result: Awaited<ReturnType<typeof fetchLoadedRangeFromServer>>) => {
       if (!result || result.subscription !== subscriptionRef.current) return;
       const split = splitStatsEventsByType(result.events);
-      const liveSince = liveSinceRef.current;
-      (Object.keys(split) as Source[]).forEach((source) => {
+      SOURCES.forEach((source) => {
         const fresh = split[source];
-        liveRef.current[source] = fresh.filter((e) => toMillis(e.date) >= liveSince);
+        // A snapshot arrived during the read: the listener is newer, keep it.
+        if (liveVersionRef.current[source] === result.liveVersions[source]) {
+          liveRef.current[source] = fresh.filter((e) => toMillis(e.date) >= result.liveSince);
+        }
         historyRef.current[source] = [
-          ...fresh.filter((e) => toMillis(e.date) < liveSince),
+          ...fresh.filter((e) => toMillis(e.date) < result.liveSince),
           ...historyRef.current[source].filter((e) => toMillis(e.date) < result.from),
         ];
         pushSource(source);
@@ -413,6 +440,9 @@ export default function StatsScreen() {
     historyRef.current = emptySplit();
     liveSinceRef.current = getLiveSince().getTime();
     historyFromRef.current = liveSinceRef.current;
+    historyFailedForRef.current = null;
+    setHistoryError(false);
+    setRefreshFailed(false);
     const liveSince = new Date(liveSinceRef.current);
     const probed: Record<Source, boolean> = { repas: false, pompages: false, sommeils: false };
 
@@ -421,6 +451,7 @@ export default function StatsScreen() {
         childId,
         (events) => {
           if (!isCurrent()) return;
+          liveVersionRef.current[source] += 1;
           liveRef.current[source] = events;
           pushSource(source);
           if (events.length > 0 || historyRef.current[source].length > 0 || probed[source]) {
@@ -431,11 +462,17 @@ export default function StatsScreen() {
           // only older data still gets its charts (and week navigation)
           // instead of the "no data" screen.
           probed[source] = true;
-          obtenirEvenements(childId, {
-            type: SOURCE_TYPES[source],
-            jusqu: new Date(liveSinceRef.current - 1),
-            limite: 1,
-          })
+          withTimeout(
+            obtenirEvenements(childId, {
+              type: SOURCE_TYPES[source],
+              jusqu: new Date(liveSinceRef.current - 1),
+              limite: 1,
+              // The server, not a possibly empty offline cache, says whether
+              // older data exists.
+              source: "server",
+            }),
+            PROBE_TIMEOUT_MS,
+          )
             .then((older) => {
               if (!isCurrent()) return;
               historyRef.current[source] = mergeFirestoreSnapshots(
@@ -445,7 +482,9 @@ export default function StatsScreen() {
               pushSource(source);
             })
             .catch(() => {
-              // Probe is best effort: without it the empty state shows.
+              // Offline or timeout: show what the window has (empty state, as
+              // before) and probe again on the next snapshot.
+              probed[source] = false;
             })
             .finally(() => {
               if (!isCurrent()) return;
@@ -467,12 +506,27 @@ export default function StatsScreen() {
 
   // Re-merge on tab focus — frozen tabs can miss optimistic updates. Only
   // emits when the merged lists actually changed (no re-render otherwise).
+  // Weeks older than the live window have no listener: when some were
+  // loaded, re-read them on return so edits made elsewhere show up.
   useFocusEffect(
     useCallback(() => {
       remergeRepas();
       remergePompages();
       remergeSommeils();
-    }, [remergePompages, remergeRepas, remergeSommeils]),
+      if (historyFromRef.current < liveSinceRef.current) {
+        fetchLoadedRangeFromServer()
+          .then(applyServerRange)
+          .catch(() => {
+            // Opportunistic; pull-to-refresh reports failures.
+          });
+      }
+    }, [
+      applyServerRange,
+      fetchLoadedRangeFromServer,
+      remergePompages,
+      remergeRepas,
+      remergeSommeils,
+    ]),
   );
 
   const repasCount = counts.repas;
@@ -577,8 +631,11 @@ export default function StatsScreen() {
     setIsRefreshing(true);
     try {
       applyServerRange(await fetchLoadedRangeFromServer());
+      setRefreshFailed(false);
     } catch {
-      // Keep what is displayed; listeners stay authoritative.
+      // Keep what is displayed (listeners stay subscribed) and say it was
+      // not updated. The read error itself is reported by eventsService.
+      setRefreshFailed(true);
     } finally {
       setIsRefreshing(false);
     }
@@ -605,38 +662,55 @@ export default function StatsScreen() {
       ),
     [weekByTab, pompagesDayMs],
   );
-  // A failed load is not retried for the same need (no loop when offline);
-  // the next week change tries again.
-  const historyFailedForRef = useRef<number | null>(null);
+  // A failed load is not retried for the same need (no loop when offline):
+  // the user sees "unavailable · retry", and moving to another week retries.
   useEffect(() => {
     if (!activeChild?.id || historyLoading || loadError) return;
-    if (historyFailedForRef.current === earliestNeededMs) return;
+    if (historyFailedForRef.current !== null) {
+      if (historyFailedForRef.current === earliestNeededMs) return;
+      historyFailedForRef.current = null;
+      setHistoryError(false);
+    }
     const range = getHistoryRangeToLoad(earliestNeededMs, historyFromRef.current);
     if (!range) return;
     const subscription = subscriptionRef.current;
     setHistoryLoading(true);
-    obtenirEvenements(activeChild.id, {
-      type: [...ALL_STATS_TYPES],
-      depuis: range.from,
-      jusqu: range.to,
-    })
+    // Server read: offline, an empty cache answer would mark these weeks as
+    // loaded with zero events.
+    withTimeout(
+      obtenirEvenements(activeChild.id, {
+        type: [...ALL_STATS_TYPES],
+        depuis: range.from,
+        jusqu: range.to,
+        source: "server",
+      }),
+      READ_TIMEOUT_MS,
+    )
       .then((events) => {
         if (subscriptionRef.current !== subscription) return;
+        historyFromRef.current = range.from.getTime();
         const split = splitStatsEventsByType(events);
-        (Object.keys(split) as Source[]).forEach((source) => {
+        SOURCES.forEach((source) => {
           historyRef.current[source] = mergeFirestoreSnapshots(
             historyRef.current[source],
             split[source],
           );
           pushSource(source);
         });
-        historyFromRef.current = range.from.getTime();
       })
       .catch(() => {
+        if (subscriptionRef.current !== subscription) return;
         historyFailedForRef.current = earliestNeededMs;
+        setHistoryError(true);
       })
       .finally(() => setHistoryLoading(false));
-  }, [activeChild?.id, earliestNeededMs, historyLoading, loadError, pushSource]);
+  }, [activeChild?.id, earliestNeededMs, historyLoading, historyRetryKey, loadError, pushSource]);
+
+  const retryHistory = useCallback(() => {
+    historyFailedForRef.current = null;
+    setHistoryError(false);
+    setHistoryRetryKey((k) => k + 1);
+  }, []);
 
   const repasBoundaryExtras = useMemo(
     () => ({ childId: activeChild?.id, count: tetees.length }),
@@ -672,13 +746,18 @@ export default function StatsScreen() {
     // The screen only holds a few weeks: read the 12 report weeks once, and
     // keep the on-screen versions (optimistic edits) for ids present in both.
     let report: StatsSplit<any> = { repas: tetees, pompages, sommeils };
+    let partialSince: Date | null = null;
     if (activeChild?.id) {
       try {
         const fetched = splitStatsEventsByType(
-          await obtenirEvenements(activeChild.id, {
-            type: [...ALL_STATS_TYPES],
-            depuis: new Date(getReportWeekBoundaries(now)[0]),
-          }),
+          await withTimeout(
+            obtenirEvenements(activeChild.id, {
+              type: [...ALL_STATS_TYPES],
+              depuis: new Date(getReportWeekBoundaries(now)[0]),
+              source: "server",
+            }),
+            READ_TIMEOUT_MS,
+          ),
         );
         report = {
           repas: mergeFirestoreSnapshots(tetees, fetched.repas),
@@ -686,7 +765,22 @@ export default function StatsScreen() {
           sommeils: mergeFirestoreSnapshots(sommeils, fetched.sommeils),
         };
       } catch {
-        // Offline: report on what is loaded.
+        // Offline: this report goes to a doctor, never pass partial weeks
+        // off as complete. Ask, and say it in the document if accepted.
+        const loadedFrom = new Date(Math.min(historyFromRef.current, liveSinceRef.current));
+        const proceed = await new Promise<boolean>((resolve) =>
+          Alert.alert(
+            "Rapport incomplet",
+            `Hors connexion, le rapport ne couvrira que les données depuis le ${loadedFrom.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}.`,
+            [
+              { text: "Annuler", style: "cancel", onPress: () => resolve(false) },
+              { text: "Continuer", onPress: () => resolve(true) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(false) },
+          ),
+        );
+        if (!proceed) return;
+        partialSince = loadedFrom;
       }
     }
 
@@ -755,6 +849,11 @@ export default function StatsScreen() {
       <body>
         <h1>Rapport 3 mois — ${name}</h1>
         <div class="subtitle">${dateStr} · Tendance sur 12 semaines</div>
+        ${
+          partialSince
+            ? `<div class="subtitle" style="color:#b45309">Données partielles : généré hors connexion, semaines antérieures au ${partialSince.toLocaleDateString("fr-FR")} non incluses.</div>`
+            : ""
+        }
 
         <div class="grid">
           <div class="card">
@@ -794,14 +893,22 @@ export default function StatsScreen() {
       </html>
     `;
 
+    let uri: string;
     try {
-      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      ({ uri } = await Print.printToFileAsync({ html, base64: false }));
+    } catch (e) {
+      captureServiceError(e, { service: "stats", operation: "exportPDF.print" });
+      Alert.alert("Export impossible", "Le PDF n'a pas pu être généré. Réessayez.");
+      return;
+    }
+    try {
       await Sharing.shareAsync(uri, {
         mimeType: "application/pdf",
         UTI: "com.adobe.pdf",
       });
-    } catch (_) {
-      // User cancelled sharing
+    } catch (e) {
+      // Usually the user closing the share sheet; reported in case it is not.
+      captureServiceError(e, { service: "stats", operation: "exportPDF.share" });
     }
   }, [activeChild?.id, activeChild?.name, tetees, pompages, sommeils]);
 
@@ -811,6 +918,9 @@ export default function StatsScreen() {
     setIsExporting(true);
     try {
       await exportReport();
+    } catch (e) {
+      captureServiceError(e, { service: "stats", operation: "exportPDF" });
+      Alert.alert("Export impossible", "Le rapport n'a pas pu être préparé. Réessayez.");
     } finally {
       setIsExporting(false);
     }
@@ -932,6 +1042,23 @@ export default function StatsScreen() {
                 />
               )}
             </View>
+            {!historyLoading && historyError && (
+              <TouchableOpacity
+                onPress={retryHistory}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Semaines précédentes indisponibles, réessayer"
+              >
+                <Text style={[styles.statusNote, { color: nc.error }]}>
+                  Semaines précédentes indisponibles · Réessayer
+                </Text>
+              </TouchableOpacity>
+            )}
+            {refreshFailed && (
+              <Text style={[styles.statusNote, { color: nc.textMuted }]}>
+                Actualisation impossible, données non mises à jour
+              </Text>
+            )}
             <View style={styles.resumeRow}>
               <TouchableOpacity
                 style={[
@@ -1049,7 +1176,9 @@ export default function StatsScreen() {
             {loadError}
           </Text>
           <Text style={[styles.errorSubtitle, { color: nc.textLight }]}>
-            Vérifiez votre connexion internet
+            {loadError === ACCESS_DENIED_MESSAGE
+              ? "Votre accès à ce profil a peut-être changé"
+              : "Vérifiez votre connexion internet"}
           </Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: refreshTintColor }]}
@@ -1252,6 +1381,11 @@ const styles = StyleSheet.create({
   retryText: {
     fontSize: 15,
     fontWeight: "600",
+  },
+  statusNote: {
+    fontSize: 12,
+    textAlign: "center",
+    marginBottom: 4,
   },
   weekLabelRow: {
     flexDirection: "row",

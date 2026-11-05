@@ -136,6 +136,7 @@ function deliverSnapshotsOneByOne() {
 beforeEach(() => {
   jest.useFakeTimers();
   mockListeners.length = 0;
+  for (const key of Object.keys(mockChartProps)) delete mockChartProps[key];
   resetStatsPerfCounters();
   eventsService.ecouterEvenements.mockClear();
   eventsService.obtenirEvenements.mockClear();
@@ -249,5 +250,66 @@ describe("StatsScreen data window (sprint 3)", () => {
     expect(eventsService.ecouterEvenements.mock.calls.length).toBe(listenersBefore);
     const serverCalls = eventsService.obtenirEvenements.mock.calls.filter((c: any[]) => c[1]?.source === "server");
     expect(serverCalls).toHaveLength(1);
+  });
+
+  it("says when older weeks could not be loaded, and retries on demand", async () => {
+    const { findByText } = openAndLoad();
+    eventsService.obtenirEvenements.mockImplementation(() => Promise.reject(new Error("offline")));
+    const older = new Date();
+    older.setDate(older.getDate() - 70);
+    await act(async () => {
+      mockChartProps.RepasChart.onWeekChange(older);
+    });
+    const note = await findByText("Semaines précédentes indisponibles · Réessayer");
+    const before = eventsService.obtenirEvenements.mock.calls.length;
+    eventsService.obtenirEvenements.mockImplementation(() => Promise.resolve([]));
+    const { fireEvent } = jest.requireActual("@testing-library/react-native");
+    await act(async () => {
+      fireEvent.press(note);
+    });
+    expect(eventsService.obtenirEvenements.mock.calls.length).toBe(before + 1);
+  });
+
+  it("says when pull-to-refresh failed and keeps the data", async () => {
+    const { UNSAFE_getAllByType, findByText } = openAndLoad();
+    const { RefreshControl } = jest.requireActual("react-native");
+    eventsService.obtenirEvenements.mockImplementation(() => Promise.reject(new Error("offline")));
+    await act(async () => {
+      await UNSAFE_getAllByType(RefreshControl)[0].props.onRefresh();
+    });
+    expect(await findByText("Actualisation impossible, données non mises à jour")).toBeTruthy();
+  });
+
+  it("a late server read does not overwrite a newer listener snapshot", async () => {
+    const { UNSAFE_getAllByType } = openAndLoad();
+    const { RefreshControl } = jest.requireActual("react-native");
+    let resolveRead: (events: any[]) => void = () => {};
+    eventsService.obtenirEvenements.mockImplementation(
+      () => new Promise((resolve) => (resolveRead = resolve)),
+    );
+    let refreshDone: Promise<void> = Promise.resolve();
+    act(() => {
+      refreshDone = UNSAFE_getAllByType(RefreshControl)[0].props.onRefresh();
+    });
+    act(() => {
+      jest.advanceTimersByTime(3000); // let the sleep tab pre-mount in the background
+    });
+    // A new sleep arrives through the listener while the read is pending.
+    const sommeil = mockListeners.find((l) => l.type === "sommeil")!;
+    const fresh = { id: "new-sleep", type: "sommeil", date: new Date(), isNap: true };
+    act(() => {
+      sommeil.callback([fresh]);
+    });
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
+    await act(async () => {
+      resolveRead([]); // stale: does not contain the new sleep
+      await refreshDone;
+    });
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
+    expect(mockChartProps.SommeilChart.sommeils.map((e: any) => e.id)).toContain("new-sleep");
   });
 });

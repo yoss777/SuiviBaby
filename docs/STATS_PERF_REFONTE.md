@@ -392,6 +392,35 @@ _Bilan 2026-11-05 :_
   stockerait des données de santé de plus sur l'appareil, à refléter dans la
   politique de confidentialité._
 
+### Revue ECC des sprints 3 et 4 (2026-11-05) · ✅
+
+Deux relecteurs (`ecc:react-reviewer`, `ecc:silent-failure-hunter`), aucun
+point critique côté React. Corrigé :
+
+- **Données de l'ancien enfant** possibles après un rafraîchissement lancé
+  juste avant un changement d'enfant : jeton de souscription, début de fenêtre
+  et versions des écouteurs capturés avant la lecture.
+- **Rafraîchissement lent qui écrasait un snapshot plus récent** (ajout ou
+  suppression perdu) : chaque snapshot incrémente une version par source ; une
+  lecture serveur commencée avant ne remplace plus la partie temps réel.
+- **Semaines anciennes à zéro hors ligne** : l'historique, la sonde et le PDF
+  lisent le serveur (`source: "server"`) avec un délai maximal (15 s, sonde
+  5 s) ; un échec affiche « Semaines précédentes indisponibles · Réessayer »
+  et n'est plus mémorisé d'un enfant ou d'une semaine à l'autre.
+- **PDF de 12 semaines incomplet partagé sans le dire** : hors connexion,
+  l'utilisateur choisit Continuer / Annuler et le PDF porte la mention
+  « Données partielles » ; les erreurs d'impression sont signalées (message +
+  Sentry) au lieu d'être prises pour une annulation.
+- **Échec du « tirer pour rafraîchir » invisible** : message « Actualisation
+  impossible, données non mises à jour ».
+- **Semaines anciennes figées** (pas d'écouteur au-delà de la fenêtre) :
+  relues au retour sur l'écran quand l'utilisateur en a chargé.
+- Accès retiré (`permission-denied`) : message dédié au lieu de « Vérifiez
+  votre connexion ».
+- Laissé tel quel : si la sonde part sur le repli de 800 ms alors que le
+  serveur répond juste après, une lecture `limite: 1` est faite pour rien
+  (sans effet visible sur la semaine affichée).
+
 ### Sprint 5 — Nettoyage · US-T3, US-9.1 · ⏳
 
 - [ ] **5.1** `console.log` d'`eventsService.ts` (lignes 365, 371, 395, 398,
