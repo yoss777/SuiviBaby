@@ -6,8 +6,9 @@ import {
   buildReportWeekRows,
   computeMealSleepCorrelation,
   countInRange,
-  getStartOfWeek,
+  getDurationMinutes,
   getWeekBounds,
+  matchesRepasFilter,
   selectDailyPompages,
   sortedMealTimes,
   toMillis,
@@ -27,6 +28,16 @@ const legacyDayKey = (d: Date) => {
   const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
   return jour.charAt(0).toUpperCase() + jour.slice(1, 3);
 };
+// Independent copy of the old getStartOfWeek (not the module under test).
+const getStartOfWeek = (date: Date) => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const dayOfWeek = day === 0 ? 7 : day;
+  d.setDate(d.getDate() - (dayOfWeek - 1));
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+const SOLIDE_TYPES_LEGACY = ["puree", "compote", "cereales", "yaourt", "morceaux", "autre"];
 const legacyAddWeeks = (date: Date, weeks: number) => {
   const d = new Date(date);
   d.setDate(d.getDate() + weeks * 7);
@@ -80,7 +91,7 @@ function legacyRepas(tetees: any[], currentWeek: Date, typeFilter: RepasTypeFilt
       } else if (type === "solide") {
         days[key].solidesCount += 1;
         const ts = t.typeSolide || "autre";
-        days[key].solidesByType[ts in days[key].solidesByType ? ts : "autre"] += 1;
+        days[key].solidesByType[SOLIDE_TYPES_LEGACY.includes(ts) ? ts : "autre"] += 1;
       }
     }
   });
@@ -206,7 +217,7 @@ describe("statsAggregations — same results as the previous chart code", () => 
       const actual = aggregateRepasWeek(repas, getWeekBounds(week), filter);
       expect(actual.days).toEqual(expected.days);
       expect(actual.prev).toEqual(expected.prev);
-      expect(actual.newFoods.map((e) => e.id).sort()).toEqual(expected.newFoods.map((e: any) => e.id).sort());
+      expect(actual.newFoods.map((e) => e.id)).toEqual(expected.newFoods.map((e: any) => e.id));
       expect(actual.reactions).toBe(expected.reactions);
     },
   );
@@ -268,6 +279,143 @@ describe("statsAggregations — same results as the previous chart code", () => 
     );
     expect(rows.reduce((a, r) => a + r.sommeilTotal, 0)).toBe(sommeils.filter(inReport).length);
     expect(rows.reduce((a, r) => a + r.pompages, 0)).toBe(pompages.filter(inReport).length);
+  });
+});
+
+// Old PDF computation (stats.tsx before sprint 1), week by week.
+function legacyReportRows(tetees: any[], pompages: any[], sommeils: any[], now: Date) {
+  const currentWeekStart = getStartOfWeek(now);
+  const weeks: { start: Date; end: Date; label: string }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const ws = new Date(currentWeekStart);
+    ws.setDate(ws.getDate() - i * 7);
+    const we = new Date(ws);
+    we.setDate(we.getDate() + 7);
+    weeks.push({ start: ws, end: we, label: `${ws.getDate()}/${ws.getMonth() + 1}` });
+  }
+  const emptyLieux = () => ({ lit: 0, cododo: 0, poussette: 0, voiture: 0, autre: 0 }) as Record<string, number>;
+  return weeks.map((w) => {
+    const row = {
+      label: w.label, tetees: 0, biberons: 0, solides: 0, repasTotal: 0, pompages: 0, pompagesMl: 0,
+      nuits: 0, siestes: 0, sommeilTotal: 0, sommeilMinutes: 0, nuitLieux: emptyLieux(), siesteLieux: emptyLieux(),
+    };
+    tetees.forEach((t) => {
+      const d = legacyToDate(t.date);
+      if (d >= w.start && d < w.end) {
+        const type = t.type || "tetee";
+        if (type === "tetee" || type === "seins") row.tetees++;
+        else if (type === "biberon") row.biberons++;
+        else if (type === "solide") row.solides++;
+        row.repasTotal++;
+      }
+    });
+    pompages.forEach((p) => {
+      const d = legacyToDate(p.date);
+      if (d >= w.start && d < w.end) {
+        row.pompages++;
+        row.pompagesMl += (p.quantiteGauche || 0) + (p.quantiteDroite || 0) + (p.totalQuantite || 0);
+      }
+    });
+    sommeils.forEach((s) => {
+      const d = legacyToDate(s.date);
+      if (d >= w.start && d < w.end) {
+        const loc = s.location || "autre";
+        row.sommeilTotal++;
+        row.sommeilMinutes += legacyDuration(s);
+        if (s.isNap) { row.siestes++; row.siesteLieux[loc] = (row.siesteLieux[loc] || 0) + 1; }
+        else { row.nuits++; row.nuitLieux[loc] = (row.nuitLieux[loc] || 0) + 1; }
+      }
+    });
+    return row;
+  });
+}
+
+// Hand-made events on every edge the random history does not reach.
+const WEEK = getWeekBounds(NOW);
+const monday = new Date(WEEK.startMs);
+const at = (base: number, deltaMs: number) => new Date(base + deltaMs);
+const edgeRepas = [
+  { id: "untyped", date: at(WEEK.startMs, 0) }, // Monday 00:00:00.000, no type → seins
+  { id: "seins", type: "seins", date: at(WEEK.startMs, 3600000) },
+  { id: "biberons", type: "biberons", date: at(WEEK.startMs, 7200000), quantite: 90 },
+  { id: "no-qty", type: "biberon", date: at(WEEK.endMs, -1) }, // Sunday 23:59:59.999
+  { id: "unknown", type: "autre-repas", date: at(WEEK.startMs, 3 * 3600000) },
+  { id: "solide-x", type: "solide", typeSolide: "toString", nouveauAliment: true, date: at(WEEK.startMs, 4 * 3600000) },
+  { id: "solide-none", type: "solide", reaction: "aucune", date: at(WEEK.startMs, 5 * 3600000) },
+  { id: "prev-start", type: "biberon", quantite: 50, date: at(WEEK.prevStartMs, 0) },
+  { id: "before-prev", type: "biberon", quantite: 70, date: at(WEEK.prevStartMs, -1) },
+  { id: "end-excluded", type: "tetee", date: at(WEEK.endMs, 0) },
+];
+const night = at(WEEK.startMs, 2 * 86400000 + 21 * 3600000); // Wednesday 21:00
+const edgeSommeils = [
+  { id: "night", isNap: false, date: night, heureDebut: night, heureFin: at(night.getTime(), 8 * 3600000), quality: "agité", location: "lit" },
+  { id: "night-no-start", isNap: false, date: at(night.getTime(), 86400000), heureFin: at(night.getTime(), 86400000 + 3600000) },
+  { id: "nap-duree", isNap: true, duree: 45, date: at(WEEK.startMs, 10 * 3600000), location: "poussette" },
+  { id: "nap-zero", isNap: true, duree: 0, date: at(WEEK.startMs, 12 * 3600000) },
+];
+const edgeMeals = [
+  { id: "exactly-6h", type: "biberon", date: at(night.getTime(), -6 * 3600000) },
+  { id: "at-sleep-start", type: "biberon", date: night },
+  { id: "next-night-meal", type: "tetee", date: at(night.getTime(), 86400000 - 30 * 60000) },
+];
+
+describe("statsAggregations — edge cases against the previous code", () => {
+  it.each(FILTERS)("repas edge events, filter %s", (filter) => {
+    const expected = legacyRepas(edgeRepas, monday, filter);
+    const actual = aggregateRepasWeek(edgeRepas, WEEK, filter);
+    expect(actual.days).toEqual(expected.days);
+    expect(actual.prev).toEqual(expected.prev);
+    expect(actual.newFoods.map((e) => e.id)).toEqual(expected.newFoods.map((e: any) => e.id));
+    expect(actual.reactions).toBe(expected.reactions);
+  });
+
+  it("sleep edge events, 6 h meal bound inclusive and sleep start exclusive", () => {
+    const expected = legacySommeil(edgeSommeils, edgeMeals, monday);
+    const actual = aggregateSommeilWeek(edgeSommeils, WEEK);
+    expect(actual.days).toEqual(expected.days);
+    expect(actual.prev).toEqual(expected.prev);
+    expect(computeMealSleepCorrelation(actual.weekSommeils, sortedMealTimes(edgeMeals))).toEqual(
+      expected.correlation,
+    );
+  });
+
+  it("12-week PDF rows equal the old computation row by row", () => {
+    const allRepas = [...repas, ...edgeRepas];
+    const allSommeils = [...sommeils, ...edgeSommeils];
+    expect(buildReportWeekRows(allRepas, pompages, allSommeils, NOW)).toEqual(
+      legacyReportRows(allRepas, pompages, allSommeils, NOW),
+    );
+  });
+
+  it("meal filters: truth table of the stored types", () => {
+    const table: [any, Record<RepasTypeFilter, boolean>][] = [
+      [{}, { tous: true, seins: true, biberons: false, solides: false }],
+      [{ type: "tetee" }, { tous: true, seins: true, biberons: false, solides: false }],
+      [{ type: "seins" }, { tous: true, seins: true, biberons: false, solides: false }],
+      [{ type: "biberon" }, { tous: true, seins: false, biberons: true, solides: false }],
+      [{ type: "biberons" }, { tous: true, seins: false, biberons: true, solides: false }],
+      [{ type: "solide" }, { tous: true, seins: false, biberons: false, solides: true }],
+      [{ type: "autre" }, { tous: true, seins: false, biberons: false, solides: false }],
+    ];
+    for (const [event, expected] of table) {
+      for (const filter of FILTERS) expect(matchesRepasFilter(event, filter)).toBe(expected[filter]);
+    }
+  });
+});
+
+// Two deliberate differences with the old chart code (docs/STATS_PERF_REFONTE.md).
+describe("statsAggregations — deliberate fixes", () => {
+  it("reads { seconds } dates in the meals and pumping charts (they were dropped before)", () => {
+    const ms = WEEK.startMs + 3600000;
+    const result = aggregateRepasWeek([{ id: "o", type: "biberon", quantite: 80, date: { seconds: ms / 1000 } }], WEEK, "tous");
+    expect(result.days.Lun.biberonsQuantity).toBe(80);
+  });
+
+  it("counts an unreadable sleep time as 0 minutes instead of turning totals into NaN", () => {
+    expect(getDurationMinutes({ heureDebut: "not a date", heureFin: new Date() })).toBe(0);
+    expect(getDurationMinutes({ heureDebut: new Date() })).toBe(0);
+    expect(getDurationMinutes({ duree: 0, heureDebut: new Date(0), heureFin: new Date(60000) })).toBe(1);
+    expect(getDurationMinutes({ duree: 30 })).toBe(30);
   });
 });
 

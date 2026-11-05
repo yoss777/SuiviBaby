@@ -42,10 +42,32 @@ jest.mock("expo-router", () => ({
   router: { replace: jest.fn() },
   useLocalSearchParams: () => ({}),
 }));
+// Focus effects run on mount and again on each simulated refocus.
+const mockFocusEffects = new Set<{ current: () => void }>();
 jest.mock("@react-navigation/native", () => {
-  const { useEffect } = jest.requireActual("react");
-  return { useFocusEffect: (effect: () => void) => useEffect(effect, [effect]) };
+  const { useEffect, useRef } = jest.requireActual("react");
+  return {
+    useFocusEffect: (effect: () => void) => {
+      const ref = useRef(effect);
+      ref.current = effect;
+      useEffect(() => {
+        mockFocusEffects.add(ref);
+        return () => {
+          mockFocusEffects.delete(ref);
+        };
+      }, []);
+      useEffect(effect, [effect]);
+    },
+  };
 });
+function refocus() {
+  act(() => {
+    mockFocusEffects.forEach((ref) => ref.current());
+  });
+  act(() => {
+    jest.advanceTimersByTime(200);
+  });
+}
 jest.mock("@react-navigation/elements", () => ({ HeaderBackButton: () => null }));
 jest.mock("@/app/(drawer)/_layout", () => ({
   useHeaderLeft: () => ({ setHeaderLeft: jest.fn() }),
@@ -126,7 +148,7 @@ function openAndLoad(ui = <StatsScreen />) {
 }
 
 describe("StatsScreen loading", () => {
-  it("renders only the active tab's chart, a bounded number of times", () => {
+  it("renders each chart once or twice while loading", () => {
     openAndLoad();
 
     const counters = getStatsPerfCounters();
@@ -135,12 +157,13 @@ describe("StatsScreen loading", () => {
       `[stats-renders] listeners=${mockListeners.length} screen=${counters.StatsScreen} ` +
         `repas=${counters.RepasChart ?? 0} pompages=${counters.PompagesChart ?? 0} sommeil=${counters.SommeilChart ?? 0}`,
     );
+    // Active chart first; the two other tabs are pre-mounted once, after it.
     expect(counters.RepasChart).toBeGreaterThan(0);
     expect(counters.RepasChart).toBeLessThanOrEqual(2);
-    expect(counters.PompagesChart ?? 0).toBe(0);
-    expect(counters.SommeilChart ?? 0).toBe(0);
+    expect(counters.PompagesChart ?? 0).toBeLessThanOrEqual(1);
+    expect(counters.SommeilChart ?? 0).toBeLessThanOrEqual(1);
     // 21 before sprint 2; each snapshot still costs two renders (count, then merge).
-    expect(counters.StatsScreen).toBeLessThanOrEqual(14);
+    expect(counters.StatsScreen).toBeLessThanOrEqual(16);
   });
 
   it("shows each resume card as soon as its own data is there", () => {
@@ -163,9 +186,8 @@ describe("StatsScreen loading", () => {
   it("does not re-render when the screen regains focus without new data", () => {
     openAndLoad();
     const before = getStatsPerfCounters().StatsScreen;
-    act(() => {
-      jest.advanceTimersByTime(1000);
-    });
+    refocus();
+    refocus();
     expect(getStatsPerfCounters().StatsScreen).toBe(before);
   });
 });

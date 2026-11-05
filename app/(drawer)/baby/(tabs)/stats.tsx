@@ -198,7 +198,6 @@ export default function StatsScreen() {
   const [selectedTab, setSelectedTab] = useState<TabKey>(() => tabFromParam(rawTab));
   const selectedTabRef = useRef(selectedTab);
   const initialPageRef = useRef(tabIndexOf(selectedTab));
-  selectedTabRef.current = selectedTab;
   // Pages are mounted on their first visit only: opening the screen renders
   // one chart instead of three.
   const [visitedTabs, setVisitedTabs] = useState<Record<TabKey, boolean>>(() => ({
@@ -208,6 +207,7 @@ export default function StatsScreen() {
     [tabFromParam(rawTab)]: true,
   }));
   const selectTab = useCallback((next: TabKey) => {
+    selectedTabRef.current = next;
     setSelectedTab(next);
     setVisitedTabs((prev) => (prev[next] ? prev : { ...prev, [next]: true }));
   }, []);
@@ -215,8 +215,15 @@ export default function StatsScreen() {
   // meanwhile, so the screen responds from the first frame.
   const [chartsReady, setChartsReady] = useState(false);
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => setChartsReady(true));
-    return () => task.cancel();
+    const ready = () => setChartsReady(true);
+    const task = InteractionManager.runAfterInteractions(ready);
+    // Safety net: an animation registered as an interaction must never keep
+    // the charts on the loader.
+    const fallback = setTimeout(ready, 400);
+    return () => {
+      task.cancel();
+      clearTimeout(fallback);
+    };
   }, []);
 
   // Mapper le paramètre tab vers l'onglet stats + filtre RepasChart
@@ -465,12 +472,49 @@ export default function StatsScreen() {
   // A snapshot is merged after a short debounce: while events were received
   // but the merged list is still empty, keep the loader instead of flashing
   // the empty state (replaces the former fixed 300 ms delays).
-  const isTeteesReady = !isTeteesLoading && (repasCount === 0 || tetees.length > 0);
+  // Once a source has been shown, it stays shown until the next reset: a first
+  // event arriving on an empty list must not remount the chart (losing its
+  // week and filter) during the merge debounce.
+  const shownRef = useRef({ tetees: false, pompages: false, sommeil: false });
+  if (counts === NOT_LOADED) {
+    shownRef.current = { tetees: false, pompages: false, sommeil: false };
+  }
+  const isTeteesReady =
+    !isTeteesLoading &&
+    (shownRef.current.tetees || repasCount === 0 || tetees.length > 0);
   const isPompagesReady =
-    !isPompagesLoading && (counts.pompage === 0 || pompages.length > 0);
+    !isPompagesLoading &&
+    (shownRef.current.pompages || counts.pompage === 0 || pompages.length > 0);
   const isSommeilReady =
-    !isSommeilLoading && (counts.sommeil === 0 || sommeils.length > 0);
+    !isSommeilLoading &&
+    (shownRef.current.sommeil || counts.sommeil === 0 || sommeils.length > 0);
+  shownRef.current = {
+    tetees: isTeteesReady,
+    pompages: isPompagesReady,
+    sommeil: isSommeilReady,
+  };
   const isAllReady = isTeteesReady && isPompagesReady && isSommeilReady;
+
+  // Once the first chart is on screen, mount the other tabs in the background
+  // so a later swipe shows them at once.
+  const activeTabReady =
+    selectedTab === "tetees"
+      ? isTeteesReady
+      : selectedTab === "pompages"
+        ? isPompagesReady
+        : isSommeilReady;
+  const prewarmDone = visitedTabs.tetees && visitedTabs.pompages && visitedTabs.sommeil;
+  useEffect(() => {
+    if (!chartsReady || !activeTabReady || prewarmDone) return;
+    const prewarm = () =>
+      setVisitedTabs({ tetees: true, pompages: true, sommeil: true });
+    const task = InteractionManager.runAfterInteractions(prewarm);
+    const fallback = setTimeout(prewarm, 800);
+    return () => {
+      task.cancel();
+      clearTimeout(fallback);
+    };
+  }, [chartsReady, activeTabReady, prewarmDone]);
 
   // End refresh spinner when ALL data arrives (tab-agnostic to avoid stuck spinner)
   useEffect(() => {

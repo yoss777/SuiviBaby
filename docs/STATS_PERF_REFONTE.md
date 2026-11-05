@@ -277,6 +277,32 @@ n'émet que si la fusion a changé ; onglet initial via `initialPage`.
 L'appel `onWeekChange` au montage des graphiques est gardé (la garde du parent
 l'annule) pour ne pas toucher à leur navigation._
 
+### Revue ECC des sprints 1 et 2 (2026-11-05) · ✅
+
+Deux relecteurs indépendants (`ecc:react-reviewer`, `ecc:code-reviewer`).
+Équivalence des calculs approuvée (aucun point critique ou majeur). Corrigé :
+
+- **Loader infini possible** : les animations en boucle des loaders
+  (`IconPulseDots`, `SkeletonBlock`) étaient comptées comme des interactions et
+  pouvaient bloquer `InteractionManager` → `isInteraction: false` + délai de
+  secours de 400 ms avant de monter les graphiques.
+- **Mise à jour optimiste manquée au retour sur l'écran** : `remergeIfChanged`
+  compare maintenant à ce qui est réellement affiché (empreinte rendue), pas à
+  la dernière émission ; une liste vide n'émet plus de `[]` au montage.
+- **Remontage d'un graphique** quand le premier événement arrive sur une liste
+  vide (perte de la semaine et du filtre) : une source affichée le reste
+  jusqu'au prochain rechargement.
+- **Premier swipe vers un onglet** : les deux autres onglets sont montés en
+  arrière-plan dès que le premier graphique est affiché.
+- Tests renforcés : référence indépendante, événements sur les bornes exactes
+  (lundi 00:00, dimanche 23:59:59.999, repas pile 6 h avant), PDF comparé ligne
+  à ligne, table des types de repas, vrai retour de focus ; passent sous Paris,
+  UTC et São Paulo.
+
+Écarts assumés avec l'ancien code (testés) : les dates `{ seconds }` sont lues
+par les graphiques Repas et Pompages (elles étaient ignorées) ; une heure de
+sommeil illisible compte 0 min au lieu de rendre les totaux `NaN`.
+
 ### Sprint 3 — Charger seulement ce qui est affiché · US-1.4, US-3.2, US-5.1, US-6.1, US-7.1, US-7.2 · ⏳
 
 But : le volume chargé ne dépend plus de l'ancienneté du compte.
