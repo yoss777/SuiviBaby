@@ -1,4 +1,17 @@
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
+import {
+  JOURS,
+  addWeeks,
+  aggregateSommeilWeek,
+  computeMealSleepCorrelation,
+  getDurationMinutes,
+  getStartOfWeek,
+  getWeekBounds,
+  qualityScore,
+  sortedMealTimes,
+  toMillis,
+} from "@/utils/statsAggregations";
+import { countStatsRender, markStatsChartPainted } from "@/utils/statsPerf";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   Canvas,
@@ -12,9 +25,8 @@ import {
   vec,
 } from "@shopify/react-native-skia";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Timestamp } from "firebase/firestore";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   StyleSheet,
@@ -25,7 +37,6 @@ import {
 import {
   Gesture,
   GestureDetector,
-  GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -78,52 +89,12 @@ const MOMENT_LABELS: Record<string, string> = {
   nuit: "Nuit",
 };
 
-function getStartOfWeek(date: Date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const dayOfWeek = day === 0 ? 7 : day;
-  const diff = dayOfWeek - 1;
-  d.setDate(d.getDate() - diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addWeeks(date: Date, weeks: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + weeks * 7);
-  return d;
-}
-
-function toDate(d: any): Date {
-  if (d instanceof Timestamp) return d.toDate();
-  if (d instanceof Date) return d;
-  if (d && typeof d.toDate === "function") return d.toDate();
-  if (d && d.seconds) return new Date(d.seconds * 1000);
-  return new Date(d);
-}
-
-function getDurationMinutes(s: any): number {
-  if (s.duree && typeof s.duree === "number") return s.duree;
-  const start = s.heureDebut ? toDate(s.heureDebut) : null;
-  const end = s.heureFin ? toDate(s.heureFin) : null;
-  if (start && end) return Math.max(0, (end.getTime() - start.getTime()) / 60000);
-  return 0;
-}
-
 function getMoment(s: any): string {
-  const start = s.heureDebut ? toDate(s.heureDebut) : toDate(s.date);
-  const h = start.getHours();
+  const h = new Date(toMillis(s.heureDebut ? s.heureDebut : s.date)).getHours();
   if (h >= 6 && h < 12) return "matin";
   if (h >= 12 && h < 18) return "après-midi";
   if (h >= 18 && h < 22) return "soir";
   return "nuit";
-}
-
-function qualityScore(q: string | undefined): number {
-  if (q === "paisible") return 3;
-  if (q === "agité") return 2;
-  if (q === "mauvais") return 1;
-  return 2; // default moderate
 }
 
 function formatHours(minutes: number): string {
@@ -150,7 +121,7 @@ function makeRRect(
   return path;
 }
 
-export default function SommeilChart({
+function SommeilChart({
   sommeils,
   repas = [],
   babyName,
@@ -158,6 +129,10 @@ export default function SommeilChart({
   screenWidth: screenWidthProp,
   onWeekChange,
 }: Props) {
+  countStatsRender("SommeilChart");
+  useEffect(() => {
+    markStatsChartPainted("SommeilChart");
+  }, []);
   const SCREEN_WIDTH = screenWidthProp ?? DEFAULT_SCREEN_WIDTH;
   const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
   const C = getChartColors(colorScheme).sommeil;
@@ -170,7 +145,6 @@ export default function SommeilChart({
   const tooltipX = useSharedValue(0);
   const tooltipY = useSharedValue(0);
 
-  const jours = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
   useEffect(() => {
     AsyncStorage.getItem(TAP_HINT_KEY).then((val) => {
@@ -188,56 +162,49 @@ export default function SommeilChart({
 
   const isEmpty = !sommeils || sommeils.length === 0;
 
-  const start = getStartOfWeek(currentWeek);
-  const end = addWeeks(start, 1);
+  // Week bounds keyed on a number so the memos below only recompute when the
+  // displayed week or the data change.
+  const weekStartMs = getStartOfWeek(currentWeek).getTime();
+  const bounds = useMemo(() => getWeekBounds(weekStartMs), [weekStartMs]);
+  const start = useMemo(() => new Date(bounds.startMs), [bounds]);
+  const end = useMemo(() => new Date(bounds.endMs), [bounds]);
+  const weekRangeLabel = useMemo(() => {
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    return `${fmt(start)} - ${fmt(new Date(end.getTime() - 1))}`;
+  }, [start, end]);
 
   // ============================================
-  // WEEKLY DATA: nuit vs sieste stacked bars
+  // WEEKLY DATA: nuit vs sieste stacked bars, previous week totals
   // ============================================
-  const weeklyData = useMemo(() => {
-    const data: Record<string, { nuitMinutes: number; siesteMinutes: number; count: number; nuitCount: number; siesteCount: number }> = {};
-    jours.forEach((j) => {
-      data[j] = { nuitMinutes: 0, siesteMinutes: 0, count: 0, nuitCount: 0, siesteCount: 0 };
-    });
-
-    sommeils.forEach((s) => {
-      const d = toDate(s.date);
-      if (d >= start && d < end) {
-        const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
-        const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
-        const dur = getDurationMinutes(s);
-        if (data[jourKey]) {
-          data[jourKey].count += 1;
-          if (s.isNap) {
-            data[jourKey].siesteMinutes += dur;
-            data[jourKey].siesteCount += 1;
-          } else {
-            data[jourKey].nuitMinutes += dur;
-            data[jourKey].nuitCount += 1;
-          }
-        }
-      }
-    });
-    return data;
-  }, [sommeils, start, end]);
+  const weekAggregate = useMemo(
+    () => aggregateSommeilWeek(sommeils, bounds),
+    [sommeils, bounds],
+  );
+  const weeklyData = weekAggregate.days as Record<
+    string,
+    (typeof weekAggregate.days)["Lun"]
+  >;
+  const prevWeekData = weekAggregate.prev as Record<string, { total: number }>;
+  const weekSommeils = weekAggregate.weekSommeils;
 
   // ============================================
   // METRICS
   // ============================================
   const metrics = useMemo(() => {
-    const totalMinutes = jours.reduce((acc, j) => acc + weeklyData[j].nuitMinutes + weeklyData[j].siesteMinutes, 0);
-    const totalNuitMinutes = jours.reduce((acc, j) => acc + weeklyData[j].nuitMinutes, 0);
-    const totalSiesteMinutes = jours.reduce((acc, j) => acc + weeklyData[j].siesteMinutes, 0);
-    const totalSessions = jours.reduce((acc, j) => acc + weeklyData[j].count, 0);
-    const daysWithSleep = jours.filter((j) => weeklyData[j].count > 0).length;
+    const totalMinutes = JOURS.reduce((acc, j) => acc + weeklyData[j].nuitMinutes + weeklyData[j].siesteMinutes, 0);
+    const totalNuitMinutes = JOURS.reduce((acc, j) => acc + weeklyData[j].nuitMinutes, 0);
+    const totalSiesteMinutes = JOURS.reduce((acc, j) => acc + weeklyData[j].siesteMinutes, 0);
+    const totalSessions = JOURS.reduce((acc, j) => acc + weeklyData[j].count, 0);
+    const daysWithSleep = JOURS.filter((j) => weeklyData[j].count > 0).length;
     const avgPerDay = daysWithSleep > 0 ? totalMinutes / daysWithSleep : 0;
     const avgSiestesPerDay = daysWithSleep > 0
-      ? jours.reduce((acc, j) => acc + weeklyData[j].siesteCount, 0) / daysWithSleep
+      ? JOURS.reduce((acc, j) => acc + weeklyData[j].siesteCount, 0) / daysWithSleep
       : 0;
 
     let longestNuit = 0;
     let longestNuitDay = "";
-    jours.forEach((j) => {
+    JOURS.forEach((j) => {
       if (weeklyData[j].nuitMinutes > longestNuit) {
         longestNuit = weeklyData[j].nuitMinutes;
         longestNuitDay = j;
@@ -263,11 +230,6 @@ export default function SommeilChart({
   // LOCATION & MOMENT INSIGHTS ("Où bébé dort le mieux")
   // ============================================
   const locationInsights = useMemo(() => {
-    const weekSommeils = sommeils.filter((s) => {
-      const d = toDate(s.date);
-      return d >= start && d < end;
-    });
-
     // By location
     const byLocation: Record<string, { totalMinutes: number; totalQuality: number; count: number }> = {};
     // By moment
@@ -319,71 +281,28 @@ export default function SommeilChart({
     });
 
     return { locationRanking, momentRanking, bestLocation, bestMoment, qualityDist, totalEvents: weekSommeils.length };
-  }, [sommeils, start, end]);
+  }, [weekSommeils]);
 
   // ============================================
   // 5.1 CORRELATION REPAS / SOMMEIL
   // ============================================
-  const mealSleepCorrelation = useMemo(() => {
-    if (repas.length === 0 || sommeils.length === 0) return null;
-
-    // Find nighttime sleeps this week (isNap === false)
-    const nightSleeps = sommeils.filter((s) => {
-      const d = toDate(s.date);
-      return d >= start && d < end && !s.isNap;
-    });
-    if (nightSleeps.length === 0) return null;
-
-    const results: { gap: number; quality: number }[] = [];
-    nightSleeps.forEach((sleep) => {
-      const sleepStart = sleep.heureDebut ? toDate(sleep.heureDebut) : toDate(sleep.date);
-      // Find last meal before this sleep (within 6h window)
-      const sixHoursBefore = new Date(sleepStart.getTime() - 6 * 3600000);
-      const mealsBefore = repas
-        .map((r) => ({ ...r, d: toDate(r.date) }))
-        .filter((r) => r.d >= sixHoursBefore && r.d < sleepStart)
-        .sort((a, b) => b.d.getTime() - a.d.getTime());
-
-      if (mealsBefore.length > 0) {
-        const lastMeal = mealsBefore[0];
-        const gapMinutes = (sleepStart.getTime() - lastMeal.d.getTime()) / 60000;
-        results.push({ gap: gapMinutes, quality: qualityScore(sleep.quality) });
-      }
-    });
-
-    if (results.length === 0) return null;
-    const avgGap = results.reduce((a, r) => a + r.gap, 0) / results.length;
-    const avgQuality = results.reduce((a, r) => a + r.quality, 0) / results.length;
-
-    return { avgGapMinutes: avgGap, avgQuality, sampleSize: results.length };
-  }, [repas, sommeils, start, end]);
+  // Meal times sorted once per meals update; each night then looks up its
+  // last meal by binary search.
+  const mealTimes = useMemo(() => sortedMealTimes(repas), [repas]);
+  const mealSleepCorrelation = useMemo(
+    () =>
+      sommeils.length === 0
+        ? null
+        : computeMealSleepCorrelation(weekSommeils, mealTimes),
+    [sommeils.length, weekSommeils, mealTimes],
+  );
 
   // ============================================
   // 5.3 WEEK-OVER-WEEK COMPARISON
   // ============================================
-  const prevWeekStart = useMemo(() => addWeeks(start, -1), [start]);
-  const prevWeekEnd = useMemo(() => new Date(start.getTime()), [start]);
-
-  const prevWeekData = useMemo(() => {
-    const data: Record<string, { total: number }> = {};
-    jours.forEach((j) => { data[j] = { total: 0 }; });
-
-    sommeils.forEach((s) => {
-      const d = toDate(s.date);
-      if (d >= prevWeekStart && d < prevWeekEnd) {
-        const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
-        const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
-        if (data[jourKey]) {
-          data[jourKey].total += getDurationMinutes(s);
-        }
-      }
-    });
-    return data;
-  }, [sommeils, prevWeekStart, prevWeekEnd]);
-
   const weekTrend = useMemo(() => {
     const currentTotal = metrics.totalMinutes;
-    const prevTotal = jours.reduce((acc, j) => acc + prevWeekData[j].total, 0);
+    const prevTotal = JOURS.reduce((acc, j) => acc + prevWeekData[j].total, 0);
     if (prevTotal === 0) return null;
     const pct = Math.round(((currentTotal - prevTotal) / prevTotal) * 100);
     return { pct, direction: pct >= 0 ? "up" : "down" as const, prevTotal };
@@ -401,12 +320,14 @@ export default function SommeilChart({
     const threeDaysAgo = new Date(today);
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
+    const fromMs = threeDaysAgo.getTime();
+    const toMs = today.getTime();
     const recentSleeps = sommeils
       .filter((s) => {
-        const d = toDate(s.date);
-        return d >= threeDaysAgo && d <= today;
+        const ms = toMillis(s.date);
+        return ms >= fromMs && ms <= toMs;
       })
-      .map((s) => ({ quality: qualityScore(s.quality), date: toDate(s.date) }));
+      .map((s) => ({ quality: qualityScore(s.quality) }));
 
     if (recentSleeps.length < 3) return null;
 
@@ -425,19 +346,19 @@ export default function SommeilChart({
   // CHART BARS (stacked nuit + sieste)
   // ============================================
   const chartAreaHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
-  const barWidth = CHART_WIDTH / (jours.length * 1.45);
+  const barWidth = CHART_WIDTH / (JOURS.length * 1.45);
   const barSpacing = barWidth / 2.2;
 
   const maxMinutes = useMemo(() => {
     return Math.max(
-      ...jours.map((j) => weeklyData[j].nuitMinutes + weeklyData[j].siesteMinutes),
-      ...jours.map((j) => prevWeekData[j].total),
+      ...JOURS.map((j) => weeklyData[j].nuitMinutes + weeklyData[j].siesteMinutes),
+      ...JOURS.map((j) => prevWeekData[j].total),
       60, // minimum 1h scale
     );
   }, [weeklyData, prevWeekData]);
 
   const bars = useMemo(() => {
-    return jours.map((jour, index) => {
+    return JOURS.map((jour, index) => {
       const nuit = weeklyData[jour].nuitMinutes;
       const sieste = weeklyData[jour].siesteMinutes;
       const total = nuit + sieste;
@@ -462,7 +383,7 @@ export default function SommeilChart({
         totalHeight: Math.max(totalHeight, total > 0 ? 2 : 0),
         nuitHeight,
         siesteHeight,
-        isMax: total === Math.max(...jours.map((j) => weeklyData[j].nuitMinutes + weeklyData[j].siesteMinutes)) && total > 0,
+        isMax: total === Math.max(...JOURS.map((j) => weeklyData[j].nuitMinutes + weeklyData[j].siesteMinutes)) && total > 0,
         nuitCount: weeklyData[jour].nuitCount,
         siesteCount: weeklyData[jour].siesteCount,
         prevTotal,
@@ -539,7 +460,7 @@ export default function SommeilChart({
   // RENDER
   // ============================================
   return (
-    <GestureHandlerRootView style={[styles.container, { backgroundColor: nc.background }]}>
+    <View style={[styles.container, { backgroundColor: nc.background }]}>
       {isEmpty ? (
         <View style={styles.emptyContainer}>
           <FontAwesome name="bed" size={64} color={nc.textMuted} />
@@ -582,7 +503,7 @@ export default function SommeilChart({
                 Statistiques du sommeil
               </Text>
               <Text style={[styles.sectionSubtitle, { color: C.muted }]}>
-                {`${start.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} - ${new Date(end.getTime() - 1).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`}
+                {weekRangeLabel}
               </Text>
             </View>
           </View>
@@ -858,7 +779,7 @@ export default function SommeilChart({
                 )}
 
                 <View style={styles.xAxisContainer}>
-                  {jours.map((jour, index) => (
+                  {JOURS.map((jour, index) => (
                     <Text
                       key={`xlabel-${index}`}
                       style={[styles.xAxisText, { left: bars[index].x + bars[index].width / 2 - 15, color: C.muted }]}
@@ -1083,9 +1004,13 @@ export default function SommeilChart({
           )}
         </View>
       )}
-    </GestureHandlerRootView>
+    </View>
   );
 }
+
+// Memoized: the statistics screen re-renders on every tab, loading or week
+// change; the chart only needs to when its own props change.
+export default memo(SommeilChart);
 
 const styles = StyleSheet.create({
   container: {

@@ -1,4 +1,15 @@
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
+import {
+  JOURS,
+  SOLIDE_TYPES,
+  addWeeks,
+  aggregateRepasWeek,
+  getStartOfWeek,
+  getWeekBounds,
+  type RepasDayData,
+  type SolideType,
+} from "@/utils/statsAggregations";
+import { countStatsRender, markStatsChartPainted } from "@/utils/statsPerf";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
@@ -14,9 +25,8 @@ import {
   vec,
 } from "@shopify/react-native-skia";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Timestamp } from "firebase/firestore";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   StyleSheet,
@@ -27,7 +37,6 @@ import {
 import {
   Gesture,
   GestureDetector,
-  GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -50,8 +59,6 @@ const CHART_PADDING = { top: 18, right: 18, bottom: 46, left: 50 };
 
 const TAP_HINT_KEY = "tetees_chart_tap_hint_shown";
 
-const SOLIDE_TYPES = ["puree", "compote", "cereales", "yaourt", "morceaux", "autre"] as const;
-type SolideType = (typeof SOLIDE_TYPES)[number];
 const SOLIDE_LABELS: Record<SolideType, string> = {
   puree: "Purées",
   compote: "Compotes",
@@ -82,22 +89,6 @@ function getSolideColors(scheme: "light" | "dark"): Record<SolideType, string> {
   };
 }
 
-function getStartOfWeek(date: Date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const dayOfWeek = day === 0 ? 7 : day;
-  const diff = dayOfWeek - 1;
-  d.setDate(d.getDate() - diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addWeeks(date: Date, weeks: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + weeks * 7);
-  return d;
-}
-
 /** Build a Skia path for a rect with per-corner radii */
 function makeRRect(
   x: number, y: number, w: number, h: number,
@@ -114,13 +105,17 @@ function makeRRect(
   return path;
 }
 
-export default function RepasChart({
+function RepasChart({
   tetees,
   initialTypeFilter,
   colorScheme = "light",
   screenWidth: screenWidthProp,
   onWeekChange,
 }: Props) {
+  countStatsRender("RepasChart");
+  useEffect(() => {
+    markStatsChartPainted("RepasChart");
+  }, []);
   const SCREEN_WIDTH = screenWidthProp ?? DEFAULT_SCREEN_WIDTH;
   const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
   const C = getChartColors(colorScheme).tetees;
@@ -184,7 +179,6 @@ export default function RepasChart({
     width: viewTabWidth,
   }));
 
-  const jours = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
   useEffect(() => {
     AsyncStorage.getItem(TAP_HINT_KEY).then((val) => {
@@ -192,6 +186,9 @@ export default function RepasChart({
     });
   }, []);
 
+  // Only reacts to a new `initialTypeFilter` param (navigation from another
+  // screen); the user's own filter changes must not re-trigger it, hence the
+  // deliberately partial dependency list.
   useEffect(() => {
     if (initialTypeFilter && initialTypeFilter !== typeFilter) {
       setTypeFilter(initialTypeFilter);
@@ -227,124 +224,55 @@ export default function RepasChart({
 
   const isEmpty = !tetees || tetees.length === 0;
 
-  const start = getStartOfWeek(currentWeek);
-  const end = addWeeks(start, 1);
-
-  const filteredTetees = tetees.filter((t) => {
-    if (typeFilter === "tous") return true;
-    const type = t.type || "seins";
-    if (typeFilter === "seins") {
-      return type === "seins" || type === "tetee" || !t.type;
-    }
-    if (typeFilter === "biberons") {
-      return type === "biberons" || type === "biberon";
-    }
-    if (typeFilter === "solides") {
-      return type === "solide";
-    }
-    return false;
-  });
+  // Week bounds keyed on a number so every memo below only recomputes when
+  // the displayed week, the data or the filter actually change.
+  const weekStartMs = getStartOfWeek(currentWeek).getTime();
+  const bounds = useMemo(() => getWeekBounds(weekStartMs), [weekStartMs]);
+  const start = useMemo(() => new Date(bounds.startMs), [bounds]);
+  const end = useMemo(() => new Date(bounds.endMs), [bounds]);
 
   const solideColors = useMemo(() => getSolideColors(colorScheme), [colorScheme]);
+  const weekRangeLabel = useMemo(() => {
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    return `${fmt(start)} - ${fmt(new Date(end.getTime() - 1))}`;
+  }, [start, end]);
 
-  type DayData = {
-    quantity: number;
-    count: number;
-    seinsCount: number;
-    biberonsCount: number;
-    biberonsQuantity: number;
-    solidesCount: number;
-    solidesByType: Record<SolideType, number>;
-  };
-  const emptyDay = (): DayData => ({
-    quantity: 0,
-    count: 0,
-    seinsCount: 0,
-    biberonsCount: 0,
-    biberonsQuantity: 0,
-    solidesCount: 0,
-    solidesByType: { puree: 0, compote: 0, cereales: 0, yaourt: 0, morceaux: 0, autre: 0 },
-  });
-  const weeklyData: Record<string, DayData> = {
-    Lun: emptyDay(), Mar: emptyDay(), Mer: emptyDay(), Jeu: emptyDay(),
-    Ven: emptyDay(), Sam: emptyDay(), Dim: emptyDay(),
-  };
-
-  filteredTetees.forEach((t) => {
-    const d = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
-    if (d >= start && d < end) {
-      const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
-      const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
-      const type = t.type || "seins";
-      const quantite = t.quantite || 0;
-
-      if (weeklyData[jourKey]) {
-        weeklyData[jourKey].count += 1;
-        if (type === "seins" || type === "tetee" || !t.type) {
-          weeklyData[jourKey].seinsCount += 1;
-        } else if (type === "biberons" || type === "biberon") {
-          weeklyData[jourKey].biberonsCount += 1;
-          weeklyData[jourKey].biberonsQuantity += quantite;
-          weeklyData[jourKey].quantity += quantite;
-        } else if (type === "solide") {
-          weeklyData[jourKey].solidesCount += 1;
-          const ts = (t.typeSolide || "autre") as SolideType;
-          const validTs = SOLIDE_TYPES.includes(ts) ? ts : "autre";
-          weeklyData[jourKey].solidesByType[validTs] += 1;
-        }
-      }
-    }
-  });
-
-  // Previous week data for ghost bars + trend
-  const prevWeekStart = useMemo(() => addWeeks(start, -1), [start]);
-  const prevWeekEnd = useMemo(() => new Date(start.getTime()), [start]);
-
-  const prevWeekValues = useMemo(() => {
-    const data: Record<string, { count: number; quantity: number }> = {};
-    jours.forEach((j) => { data[j] = { count: 0, quantity: 0 }; });
-
-    tetees.forEach((t) => {
-      const d = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
-      if (d >= prevWeekStart && d < prevWeekEnd) {
-        const type = t.type || "seins";
-        // Apply same typeFilter logic
-        if (typeFilter !== "tous") {
-          if (typeFilter === "seins" && type !== "seins" && type !== "tetee" && t.type) return;
-          if (typeFilter === "biberons" && type !== "biberons" && type !== "biberon") return;
-          if (typeFilter === "solides" && type !== "solide") return;
-        }
-        const jour = d.toLocaleDateString("fr-FR", { weekday: "short" });
-        const jourKey = jour.charAt(0).toUpperCase() + jour.slice(1, 3);
-        if (data[jourKey]) {
-          data[jourKey].count += 1;
-          if (type === "biberons" || type === "biberon") {
-            data[jourKey].quantity += t.quantite || 0;
-          }
-        }
-      }
-    });
-    return data;
-  }, [tetees, prevWeekStart, prevWeekEnd, typeFilter]);
+  // One pass over the meals: displayed week, previous week, new foods, reactions.
+  const weekAggregate = useMemo(
+    () => aggregateRepasWeek(tetees, bounds, typeFilter),
+    [tetees, bounds, typeFilter],
+  );
+  const weeklyData: Record<string, RepasDayData> = weekAggregate.days;
+  const prevWeekValues: Record<string, { count: number; quantity: number }> =
+    weekAggregate.prev;
+  const newFoodsThisWeek = weekAggregate.newFoods;
+  const reactionsThisWeek = weekAggregate.reactions;
 
   const prevWeekTotalCount = useMemo(
-    () => jours.reduce((acc, j) => acc + prevWeekValues[j].count, 0), [prevWeekValues],
+    () => JOURS.reduce((acc, j) => acc + prevWeekValues[j].count, 0), [prevWeekValues],
   );
 
-  const quantityValues = jours.map((j) => weeklyData[j].quantity);
-  const countValues = jours.map((j) => weeklyData[j].count);
+  const quantityValues = useMemo(
+    () => JOURS.map((j) => weeklyData[j].quantity),
+    [weeklyData],
+  );
+  const countValues = useMemo(
+    () => JOURS.map((j) => weeklyData[j].count),
+    [weeklyData],
+  );
 
   const totalWeekQuantity = quantityValues.reduce((acc, v) => acc + v, 0);
   const totalWeekCount = countValues.reduce((acc, v) => acc + v, 0);
-  const totalSeinsCount = jours.reduce(
+  const totalSeinsCount = JOURS.reduce(
     (acc, j) => acc + weeklyData[j].seinsCount,
     0,
   );
-  const totalBiberonsCount = jours.reduce(
+  const totalBiberonsCount = JOURS.reduce(
     (acc, j) => acc + weeklyData[j].biberonsCount,
     0,
   );
-  const totalSolidesCount = jours.reduce(
+  const totalSolidesCount = JOURS.reduce(
     (acc, j) => acc + weeklyData[j].solidesCount,
     0,
   );
@@ -389,40 +317,31 @@ export default function RepasChart({
 
   const maxQuantity = Math.max(...quantityValues, 0);
   const maxCount = Math.max(...countValues, 0);
-  const bestQuantityDay = jours[quantityValues.indexOf(maxQuantity)];
-  const bestCountDay = jours[countValues.indexOf(maxCount)];
+  const bestQuantityDay = JOURS[quantityValues.indexOf(maxQuantity)];
+  const bestCountDay = JOURS[countValues.indexOf(maxCount)];
   const maxSeinsCount = Math.max(
-    ...jours.map((j) => weeklyData[j].seinsCount),
+    ...JOURS.map((j) => weeklyData[j].seinsCount),
     0,
   );
   const maxBiberonsCount = Math.max(
-    ...jours.map((j) => weeklyData[j].biberonsCount),
+    ...JOURS.map((j) => weeklyData[j].biberonsCount),
     0,
   );
   const maxSolidesCount = Math.max(
-    ...jours.map((j) => weeklyData[j].solidesCount),
+    ...JOURS.map((j) => weeklyData[j].solidesCount),
     0,
   );
 
   // Solide type totals for the week
   const solideTypeTotals = useMemo(() => {
     const totals: Record<SolideType, number> = { puree: 0, compote: 0, cereales: 0, yaourt: 0, morceaux: 0, autre: 0 };
-    jours.forEach((j) => {
+    JOURS.forEach((j) => {
       SOLIDE_TYPES.forEach((st) => {
         totals[st] += weeklyData[j].solidesByType[st];
       });
     });
     return totals;
   }, [weeklyData]);
-
-  // New foods introduced this week
-  const newFoodsThisWeek = useMemo(() => {
-    return filteredTetees.filter((t) => {
-      if (t.type !== "solide") return false;
-      const d = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
-      return d >= start && d < end && t.nouveauAliment;
-    });
-  }, [filteredTetees, start, end]);
 
   // Favorite solide type
   const favoriteSolideType = useMemo(() => {
@@ -431,15 +350,6 @@ export default function RepasChart({
     entries.sort((a, b) => b[1] - a[1]);
     return entries[0][0];
   }, [solideTypeTotals]);
-
-  // Reactions this week
-  const reactionsThisWeek = useMemo(() => {
-    return filteredTetees.filter((t) => {
-      if (t.type !== "solide") return false;
-      const d = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
-      return d >= start && d < end && t.reaction && t.reaction !== "aucune";
-    }).length;
-  }, [filteredTetees, start, end]);
 
   // Week-over-week trend
   const weekTrend = useMemo(() => {
@@ -454,8 +364,8 @@ export default function RepasChart({
     typeFilter === "tous" && viewMode === "frequency" && isGroupedView;
   const isStacked =
     typeFilter === "tous" && viewMode === "frequency" && !isGroupedView;
-  const prevCountMax = Math.max(...jours.map((j) => prevWeekValues[j].count), 0);
-  const prevQuantityMax = Math.max(...jours.map((j) => prevWeekValues[j].quantity), 0);
+  const prevCountMax = Math.max(...JOURS.map((j) => prevWeekValues[j].count), 0);
+  const prevQuantityMax = Math.max(...JOURS.map((j) => prevWeekValues[j].quantity), 0);
   const currentMax =
     viewMode === "quantity"
       ? Math.max(maxQuantity, prevQuantityMax)
@@ -463,13 +373,13 @@ export default function RepasChart({
         ? groupedMax
         : Math.max(maxCount, prevCountMax);
 
-  const barWidth = CHART_WIDTH / (jours.length * 1.45);
+  const barWidth = CHART_WIDTH / (JOURS.length * 1.45);
   const barSpacing = barWidth / 2.2;
   const chartAreaHeight =
     CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
 
   const bars = useMemo(() => {
-    return jours.map((jour, index) => {
+    return JOURS.map((jour, index) => {
       const value = currentValues[index];
       const x = CHART_PADDING.left + index * (barWidth + barSpacing);
 
@@ -669,7 +579,7 @@ export default function RepasChart({
   }));
 
   return (
-    <GestureHandlerRootView
+    <View
       style={[styles.container, { backgroundColor: nc.background }]}
     >
       {isEmpty ? (
@@ -715,16 +625,7 @@ export default function RepasChart({
                 Statistiques des repas
               </Text>
               <Text style={[styles.sectionSubtitle, { color: C.muted }]}>
-                {`${start.toLocaleDateString("fr-FR", {
-                  day: "numeric",
-                  month: "short",
-                })} - ${new Date(end.getTime() - 1).toLocaleDateString(
-                  "fr-FR",
-                  {
-                    day: "numeric",
-                    month: "short",
-                  },
-                )}`}
+                {weekRangeLabel}
               </Text>
             </View>
           </View>
@@ -1346,7 +1247,7 @@ export default function RepasChart({
             )}
 
             <View style={styles.xAxisContainer}>
-              {jours.map((jour, index) => (
+              {JOURS.map((jour, index) => (
                 <Text
                   key={`xlabel-${index}`}
                   style={[
@@ -1553,9 +1454,13 @@ export default function RepasChart({
           )}
         </View>
       )}
-    </GestureHandlerRootView>
+    </View>
   );
 }
+
+// Memoized: the statistics screen re-renders on every tab, loading or week
+// change; the chart only needs to when its own props change.
+export default memo(RepasChart);
 
 const styles = StyleSheet.create({
   container: {

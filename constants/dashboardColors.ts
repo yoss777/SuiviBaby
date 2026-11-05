@@ -235,7 +235,7 @@ export function getMoodFills(scheme: "light" | "dark") {
 // CHART COLORS (stats screen)
 // ============================================
 
-export function getChartColors(scheme: "light" | "dark") {
+function buildChartColors(scheme: "light" | "dark") {
   const nc = scheme === "dark" ? neutralColorsDark : neutralColors;
   if (scheme === "dark") {
     return {
@@ -405,6 +405,17 @@ export function getChartColors(scheme: "light" | "dark") {
       locationAutre: "#9ca3af",
     },
   };
+}
+
+// Built once per scheme: callers get the same object on every render, so it
+// can sit in useMemo / React.memo dependencies without invalidating them.
+const chartColorsByScheme = {
+  light: buildChartColors("light"),
+  dark: buildChartColors("dark"),
+};
+
+export function getChartColors(scheme: "light" | "dark") {
+  return chartColorsByScheme[scheme];
 }
 
 // ============================================

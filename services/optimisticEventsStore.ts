@@ -392,8 +392,19 @@ function markReconciled(entry: OptimisticEntry): void {
  * edit (humeur, note, quantite, heureFin, temperature, etc.) changes the
  * fingerprint and triggers a re-render.
  */
+// Events are never mutated in place (store entries and snapshot documents are
+// replaced by new objects), so a hash can be cached per object: re-merging the
+// same lists (focus, optimistic notifications) no longer re-serializes them.
+const hashCache = new WeakMap<object, string>();
+
 function hashEvent(e: any): string {
-  return JSON.stringify(normalizeValue(e));
+  if (e === null || typeof e !== 'object') return JSON.stringify(normalizeValue(e));
+  let hash = hashCache.get(e);
+  if (hash === undefined) {
+    hash = JSON.stringify(normalizeValue(e));
+    hashCache.set(e, hash);
+  }
+  return hash;
 }
 
 /**

@@ -37,6 +37,8 @@ export function IconPulseDots({
         duration: cycleDurationMs,
         easing: Easing.linear,
         useNativeDriver: true,
+        // Decorative loop: must not hold InteractionManager tasks forever.
+        isInteraction: false,
       }),
       // important pour éviter certains resets visibles selon versions RN
       { resetBeforeIteration: true }

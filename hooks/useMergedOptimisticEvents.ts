@@ -31,6 +31,12 @@ type UseMergedOptimisticEventsResult<T> = {
   refreshMerged: () => void;
   /** Alias honnête de `refreshMerged` — même fonction, nom non trompeur. */
   recomputeMerged: () => void;
+  /**
+   * Re-fusion locale sans reset du fingerprint : n'émet vers React que si le
+   * résultat a changé (ex. mise à jour optimiste manquée pendant que l'écran
+   * était gelé). Évite un re-render complet à chaque retour sur l'écran.
+   */
+  remergeIfChanged: () => void;
 };
 
 export function mergeFirestoreSnapshots(current: any[], incoming: any[]): any[] {
@@ -56,14 +62,24 @@ export function mergeFirestoreSnapshots(current: any[], incoming: any[]): any[] 
   return [...mergedById.values()];
 }
 
+// Fingerprint of an empty list: the initial state, so mounting does not emit
+// a fresh [] (and re-render the screen) for nothing.
+const EMPTY_FINGERPRINT = buildEventFingerprint([]);
+type MergedState<T> = { events: T[]; fingerprint: string };
+const EMPTY_STATE: MergedState<any> = { events: [], fingerprint: EMPTY_FINGERPRINT };
+
 export function useMergedOptimisticEvents<T = any>({
   childId,
   debounceMs = 50,
   transformMerged,
 }: UseMergedOptimisticEventsParams<T>): UseMergedOptimisticEventsResult<T> {
-  const [mergedEvents, setMergedEvents] = useState<T[]>([]);
+  // The fingerprint travels with the events it describes, so we always know
+  // what is actually rendered (see remergeIfChanged).
+  const [mergedState, setMergedState] = useState<MergedState<T>>(EMPTY_STATE);
+  const mergedEvents = mergedState.events;
   const latestFirestoreEventsRef = useRef<any[]>([]);
-  const lastFingerprintRef = useRef("");
+  const lastFingerprintRef = useRef(EMPTY_FINGERPRINT);
+  const renderedFingerprintRef = useRef(EMPTY_FINGERPRINT);
   const mergeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const childIdRef = useRef(childId);
   const debounceMsRef = useRef(debounceMs);
@@ -100,7 +116,7 @@ export function useMergedOptimisticEvents<T = any>({
 
       if (fingerprint === lastFingerprintRef.current) return;
       lastFingerprintRef.current = fingerprint;
-      setMergedEvents(normalized);
+      setMergedState({ events: normalized, fingerprint });
     }, debounceMsRef.current);
   }, []);
 
@@ -123,11 +139,24 @@ export function useMergedOptimisticEvents<T = any>({
   }, [scheduleMerge]);
 
   useEffect(() => {
+    renderedFingerprintRef.current = mergedState.fingerprint;
+  }, [mergedState]);
+
+  // Compare with what is rendered, not with what was last sent: if an update
+  // sent while the screen was frozen never got committed, force it again.
+  const remergeIfChanged = useCallback(() => {
+    if (renderedFingerprintRef.current !== lastFingerprintRef.current) {
+      lastFingerprintRef.current = "";
+    }
+    scheduleMerge();
+  }, [scheduleMerge]);
+
+  useEffect(() => {
     // Reset à chaque changement de childId (y compris childA → childB)
     // pour éviter de montrer les événements de l'ancien enfant.
     latestFirestoreEventsRef.current = [];
-    lastFingerprintRef.current = "";
-    setMergedEvents([]);
+    lastFingerprintRef.current = EMPTY_FINGERPRINT;
+    setMergedState((prev) => (prev.events.length === 0 ? prev : EMPTY_STATE));
 
     if (!childId) {
       return;
@@ -149,5 +178,6 @@ export function useMergedOptimisticEvents<T = any>({
     setFirestoreEvents,
     refreshMerged,
     recomputeMerged: refreshMerged,
+    remergeIfChanged,
   };
 }

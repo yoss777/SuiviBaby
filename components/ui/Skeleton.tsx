@@ -37,7 +37,13 @@ function useShimmer(): Animated.AnimatedInterpolation<number> | null {
   useEffect(() => {
     if (!enabled) return;
     const loop = Animated.loop(
-      Animated.timing(progress, { toValue: 1, duration: 1200, useNativeDriver: true }),
+      // Decorative loop: must not hold InteractionManager tasks forever.
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
     );
     loop.start();
     return () => loop.stop();
