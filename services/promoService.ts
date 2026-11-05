@@ -14,7 +14,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { auth, db } from "../config/firebase";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
 import type { Promotion, UserPromos } from "@/types/promo";
 import { DEFAULT_USER_PROMOS } from "@/types/promo";
@@ -99,15 +100,21 @@ export async function getUserPromoState(): Promise<UserPromos> {
     const docRef = doc(db, "user_promos", userId);
     const docSnap = await getDoc(docRef);
 
+    let state: UserPromos;
     if (docSnap.exists()) {
-      return { ...DEFAULT_USER_PROMOS, ...docSnap.data() } as UserPromos;
+      state = { ...DEFAULT_USER_PROMOS, ...docSnap.data() } as UserPromos;
+    } else {
+      state = { ...DEFAULT_USER_PROMOS };
+      await setDoc(docRef, state);
     }
 
-    // Generate referral code and create default state
-    const referralCode = generateReferralCode(userId);
-    const defaultState = { ...DEFAULT_USER_PROMOS, referralCode };
-    await setDoc(docRef, defaultState);
-    return defaultState;
+    // The referral code is created by the server (firestore.rules forbid the
+    // client from writing it); an old app-generated code is kept if free.
+    if (!state.referralCode) {
+      const referralCode = await ensureReferralCode();
+      if (referralCode) state = { ...state, referralCode };
+    }
+    return state;
   } catch (e) {
     console.error("[promoService] getUserPromoState error:", e);
     captureServiceError(e, { service: "promo", operation: "getUserPromoState" });
@@ -135,7 +142,6 @@ export async function trackImpression(promoId: string): Promise<void> {
         ...DEFAULT_USER_PROMOS,
         seenPromos: [promoId],
         lastPromoShownAt: new Date(),
-        referralCode: generateReferralCode(userId),
       });
     }
   } catch (e) {
@@ -179,7 +185,6 @@ export async function dismissPromo(promoId: string): Promise<void> {
       await setDoc(docRef, {
         ...DEFAULT_USER_PROMOS,
         dismissedPromos: [promoId],
-        referralCode: generateReferralCode(userId),
       });
     }
   } catch (e) {
@@ -193,19 +198,24 @@ export async function dismissPromo(promoId: string): Promise<void> {
 // ============================================
 
 /**
- * Generate a unique referral code from userId
+ * Ask the server for the user's referral code (created on first call).
+ * Returns null if the call fails; the referral card is then hidden.
  */
-function generateReferralCode(userId: string): string {
-  // Take first 4 chars of userId + random 4 chars
-  const prefix = userId.slice(0, 4).toUpperCase();
-  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `SAM-${prefix}-${suffix}`;
+async function ensureReferralCode(): Promise<string | null> {
+  try {
+    const call = httpsCallable<unknown, { referralCode: string }>(functions, "ensureReferralCode");
+    const { data } = await call({});
+    return data?.referralCode ?? null;
+  } catch (e) {
+    captureServiceError(e, { service: "promo", operation: "ensureReferralCode" });
+    return null;
+  }
 }
 
 /**
  * Get the user's referral code (creates one if missing)
  */
-export async function getReferralCode(): Promise<string> {
+export async function getReferralCode(): Promise<string | null> {
   const state = await getUserPromoState();
-  return state.referralCode ?? generateReferralCode(getUserId());
+  return state.referralCode ?? null;
 }

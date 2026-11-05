@@ -204,13 +204,6 @@ describe("grandfatherExistingUsers", () => {
   });
 });
 
-describe("validateReferralCode", () => {
-  it("rejects unauthenticated", async () => { await expect(fns.validateReferralCode({ auth: null, data: {} })).rejects.toThrow("Authentification"); });
-  it("rejects empty code", async () => { mockFirestore.doc.mockReturnValue({ get: jest.fn().mockResolvedValue(no()), set: jest.fn() }); await expect(fns.validateReferralCode(auth("u1", { referralCode: "" }))).rejects.toThrow("invalide"); });
-  it("rejects not found", async () => { mockFirestore.doc.mockReturnValue({ get: jest.fn().mockResolvedValue(no()), set: jest.fn() }); mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) }); await expect(fns.validateReferralCode(auth("u1", { referralCode: "ABC" }))).rejects.toThrow("introuvable"); });
-  it("rejects self-referral", async () => { mockFirestore.doc.mockReturnValue({ get: jest.fn().mockResolvedValue(no()), set: jest.fn() }); mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap([{ id: "u1" }])) }); await expect(fns.validateReferralCode(auth("u1", { referralCode: "ABC" }))).rejects.toThrow("propre code"); });
-});
-
 describe("usage quota functions", () => {
   const originalAssemblyKey = process.env.ASSEMBLYAI_API_KEY;
   const originalFetch = global.fetch;
@@ -2169,36 +2162,144 @@ describe("join flows re-check the child and the issuer (S13)", () => {
   });
 });
 
-describe("validateReferralCode — reward (S13)", () => {
-  const setup = (subs) => {
-    const batch = { set: jest.fn(), update: jest.fn(), delete: jest.fn(), commit: jest.fn(() => Promise.resolve()) };
-    mockFirestore.batch.mockReturnValueOnce(batch);
-    mockFirestore.doc.mockImplementation((p) => ({
-      path: p,
-      get: jest.fn().mockResolvedValue(p in subs ? doc(subs[p]) : no()),
-      set: jest.fn(),
-    }));
-    mockFirestore.collection.mockImplementation(() => ({
-      where: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      doc: jest.fn(() => ({ path: "referrals/new" })),
-      get: jest.fn().mockResolvedValue({ empty: false, docs: [{ id: "parrain", ref: { path: "user_promos/parrain" }, data: () => ({ referralCount: 0 }) }] }),
-    }));
-    return batch;
-  };
+// Small in-memory Firestore for the referral flow (audit A2): documents by
+// path, equality queries, and transactions whose create() fails on an
+// existing document — what the abuse cases depend on.
+const referralStore = (initial = {}) => {
+  const docs = new Map(Object.entries(initial));
+  const snapOf = (path) => (docs.has(path) ? { ...doc(docs.get(path)), id: path.split("/").pop() } : { ...no(), id: path.split("/").pop() });
+  const ref = (path) => ({
+    path,
+    id: path.split("/").pop(),
+    get: async () => snapOf(path),
+    set: async (data, opts) => docs.set(path, opts?.merge ? { ...(docs.get(path) || {}), ...data } : data),
+  });
+  mockFirestore.doc.mockImplementation((path) => ref(path));
+  mockFirestore.collection.mockImplementation((name) => {
+    const filters = [];
+    const q = {
+      where: (field, _op, value) => { filters.push([field, value]); return q; },
+      limit: () => q,
+      get: async () => {
+        const hits = [...docs.entries()]
+          .filter(([path, data]) => path.startsWith(`${name}/`) && path.split("/").length === 2 && filters.every(([f, v]) => data?.[f] === v))
+          .map(([path, data]) => ({ id: path.split("/")[1], ref: ref(path), data: () => data }));
+        return { empty: hits.length === 0, docs: hits };
+      },
+    };
+    return q;
+  });
+  mockRunTransaction.mockReset();
+  mockRunTransaction.mockImplementation(async (fn) => {
+    const writes = [];
+    const result = await fn({
+      get: async (r) => snapOf(r.path),
+      create: (r, data) => {
+        if (docs.has(r.path)) throw Object.assign(new Error("already exists"), { code: 6 });
+        writes.push([r.path, data, false]);
+      },
+      set: (r, data, opts) => writes.push([r.path, data, !!opts?.merge]),
+      update: (r, data) => writes.push([r.path, data, true]),
+    });
+    for (const [path, data, merge] of writes) docs.set(path, merge ? { ...(docs.get(path) || {}), ...data } : data);
+    return result;
+  });
+  return docs;
+};
+const verified = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, email_verified: true } }, data, app: true });
+const redeem = (uid, code) => fns.validateReferralCode(verified(uid, { referralCode: code }));
 
-  it("works with a valid code (no exists() crash) and rewards both users", async () => {
-    const batch = setup({});
-    await expect(fns.validateReferralCode(auth("filleul", { referralCode: "ABC" }))).resolves.toMatchObject({ success: true });
-    const rewarded = batch.set.mock.calls.filter(([ref, data]) => ref.path?.startsWith("subscriptions/") && data.source === "referral_reward").map(([ref]) => ref.path);
-    expect(rewarded.sort()).toEqual(["subscriptions/filleul", "subscriptions/parrain"]);
+describe("validateReferralCode — one referral per account (audit A2)", () => {
+  it("rejects unauthenticated calls and unverified e-mails", async () => {
+    await expect(fns.validateReferralCode({ auth: null, data: {} })).rejects.toThrow("Authentification");
+    referralStore();
+    await expect(fns.validateReferralCode(auth("u1", { referralCode: "SAM-AAAA-BBBB" }))).rejects.toThrow("Vérifiez");
+  });
+
+  it("rejects malformed, unknown and own codes", async () => {
+    referralStore({ "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" } });
+    await expect(redeem("filleul", "")).rejects.toThrow("invalide");
+    await expect(redeem("filleul", "SAM-ZZZZ-ZZZZ")).rejects.toThrow("introuvable");
+    await expect(redeem("parrain", "sam-aaaa-bbbb")).rejects.toThrow("propre code");
+  });
+
+  it("rewards both users, records the use and counts it for the referrer", async () => {
+    const docs = referralStore({ "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" } });
+    await expect(redeem("filleul", "sam-aaaa-bbbb")).resolves.toMatchObject({ success: true });
+    expect(docs.get("referrals/filleul")).toMatchObject({ parrainUid: "parrain", filleulUid: "filleul" });
+    expect(docs.get("user_promos/parrain").referralCount).toBe(1);
+    expect(docs.get("subscriptions/filleul")).toMatchObject({ tier: "premium", source: "referral_reward" });
+    expect(docs.get("subscriptions/parrain")).toMatchObject({ tier: "premium", source: "referral_reward" });
+  });
+
+  it("refuses a second use, even after referredBy was removed from user_promos", async () => {
+    const docs = referralStore({
+      "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" },
+      "referral_codes/SAM-CCCC-DDDD": { uid: "other" },
+    });
+    await redeem("filleul", "SAM-AAAA-BBBB");
+    docs.set("user_promos/filleul", {}); // the old exploit: wipe referredBy
+    await expect(redeem("filleul", "SAM-CCCC-DDDD")).rejects.toThrow("deja utilise");
+  });
+
+  it("refuses an account referred before the fix (random-id referral)", async () => {
+    referralStore({
+      "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" },
+      "referrals/old-random-id": { parrainUid: "x", filleulUid: "filleul" },
+    });
+    await expect(redeem("filleul", "SAM-AAAA-BBBB")).rejects.toThrow("deja utilise");
+  });
+
+  it("stops rewarding a referrer past the cap, still rewards the new user", async () => {
+    const docs = referralStore({
+      "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" },
+      "user_promos/parrain": { referralCount: 10 },
+    });
+    await redeem("filleul", "SAM-AAAA-BBBB");
+    expect(docs.get("subscriptions/filleul")).toMatchObject({ source: "referral_reward" });
+    expect(docs.has("subscriptions/parrain")).toBe(false);
+    expect(docs.get("user_promos/parrain").referralCount).toBe(11);
   });
 
   it("does not overwrite an active Family subscription", async () => {
-    const batch = setup({ "subscriptions/parrain": { tier: "family", status: "active" } });
-    await fns.validateReferralCode(auth("filleul", { referralCode: "ABC" }));
-    const rewarded = batch.set.mock.calls.filter(([ref]) => ref.path?.startsWith("subscriptions/")).map(([ref]) => ref.path);
-    expect(rewarded).toEqual(["subscriptions/filleul"]);
+    const docs = referralStore({
+      "referral_codes/SAM-AAAA-BBBB": { uid: "parrain" },
+      "subscriptions/parrain": { tier: "family", status: "active" },
+    });
+    await redeem("filleul", "SAM-AAAA-BBBB");
+    expect(docs.get("subscriptions/parrain")).toEqual({ tier: "family", status: "active" });
+  });
+
+  it("still accepts a code created by the app before the fix", async () => {
+    const docs = referralStore({ "user_promos/parrain": { referralCode: "SAM-PARR-X1Y2" } });
+    await expect(redeem("filleul", "SAM-PARR-X1Y2")).resolves.toMatchObject({ parrainUid: "parrain" });
+    expect(docs.has("referrals/filleul")).toBe(true);
+  });
+});
+
+describe("ensureReferralCode (audit A2)", () => {
+  it("creates a server code and its mapping when the user has none", async () => {
+    const docs = referralStore();
+    const { referralCode } = await fns.ensureReferralCode(verified("u1"));
+    expect(referralCode).toMatch(/^SAM-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    expect(docs.get(`referral_codes/${referralCode}`)).toMatchObject({ uid: "u1" });
+    expect(docs.get("user_promos/u1").referralCode).toBe(referralCode);
+  });
+
+  it("keeps an old app-generated code when nobody else owns it", async () => {
+    const docs = referralStore({ "user_promos/u1": { referralCode: "SAM-U1AB-CD34" } });
+    await expect(fns.ensureReferralCode(verified("u1"))).resolves.toEqual({ referralCode: "SAM-U1AB-CD34" });
+    expect(docs.get("referral_codes/SAM-U1AB-CD34")).toMatchObject({ uid: "u1", legacy: true });
+  });
+
+  it("replaces a copied code that belongs to someone else", async () => {
+    const docs = referralStore({
+      "user_promos/thief": { referralCode: "SAM-U1AB-CD34" },
+      "referral_codes/SAM-U1AB-CD34": { uid: "u1" },
+    });
+    const { referralCode } = await fns.ensureReferralCode(verified("thief"));
+    expect(referralCode).not.toBe("SAM-U1AB-CD34");
+    expect(docs.get(`referral_codes/${referralCode}`)).toMatchObject({ uid: "thief" });
   });
 });
 

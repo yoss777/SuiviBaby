@@ -21,6 +21,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   collection,
   getDocs,
   query,
@@ -1394,6 +1395,49 @@ describe("childDeletionRequests collection", () => {
 // ===========================================================================
 // 10. USAGE LIMITS
 // ===========================================================================
+
+describe("user_promos referral fields (audit A2)", () => {
+  beforeEach(async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "user_promos", ALICE_UID), {
+        seenPromos: [],
+        referralCode: "SAM-ALIC-E123",
+        referralCount: 2,
+        referredBy: BOB_UID,
+      });
+    });
+  });
+
+  test("user can still update their promo tracking fields", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertSucceeds(updateDoc(doc(db, "user_promos", ALICE_UID), { seenPromos: ["p1"] }));
+  });
+
+  test("user cannot remove referredBy to reuse a code", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(updateDoc(doc(db, "user_promos", ALICE_UID), { referredBy: deleteField() }));
+  });
+
+  test("user cannot change their code or their referral count", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(updateDoc(doc(db, "user_promos", ALICE_UID), { referralCode: "SAM-BOBB-0000" }));
+    await assertFails(updateDoc(doc(db, "user_promos", ALICE_UID), { referralCount: 50 }));
+  });
+
+  test("a new promo document cannot carry referral fields", async () => {
+    const db = authedFirestore(CHARLIE_UID);
+    await assertFails(setDoc(doc(db, "user_promos", CHARLIE_UID), { referralCode: "SAM-ALIC-E123" }));
+    await assertSucceeds(
+      setDoc(doc(db, "user_promos", CHARLIE_UID), { seenPromos: [], referralCount: 0, referralRewards: [] })
+    );
+  });
+
+  test("referral_codes is server-only", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(getDoc(doc(db, "referral_codes", "SAM-ALIC-E123")));
+    await assertFails(setDoc(doc(db, "referral_codes", "SAM-FAKE-0001"), { uid: ALICE_UID }));
+  });
+});
 
 describe("usage_limits collection", () => {
   beforeEach(async () => {
