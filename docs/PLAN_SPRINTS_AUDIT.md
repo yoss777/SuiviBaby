@@ -115,7 +115,7 @@ _Bilan 2026-11-06 (branche `sprint-1/argent-donnees`) :_
   échec garde la demande pour un nouvel essai. 10 tests._
 - _Fonctions : 234 tests (207 avant) ; règles : 138 ; app : 568._
 
-## S2 — Voir ce qui se passe · serveur + app · P0 A6 A7 · ⏳
+## S2 — Voir ce qui se passe · serveur + app · P0 A6 A7 · 🔄 code fait le 2026-11-06, reste Q1/Q2 avec Yoss
 
 But : être prévenu des erreurs et des incidents, pouvoir restaurer les
 données.
@@ -124,7 +124,7 @@ User story : en tant que propriétaire de l'app, je veux être alerté d'un cras
 ou d'une fonction en échec et pouvoir restaurer la base, afin de réagir avant
 les utilisateurs.
 
-- [ ] **2.1** Sentry, filtrage d'abord : `beforeBreadcrumb` (supprime la
+- [x] **2.1** Sentry, filtrage d'abord : `beforeBreadcrumb` (supprime la
   catégorie `console` et les corps HTTP), `beforeSend` (retire e-mail, prénom,
   transcriptions), `sendDefaultPii: false` explicite. Test unitaire des
   filtres. (`app/_layout.tsx:34-47`)
@@ -141,17 +141,28 @@ les utilisateurs.
   GCP avec seuils ; les 4 alertes Sentry de `FIREBASE_MONITORING.md` ;
   corriger le runbook (`eas update --rollback` et `functions:config:set`
   faux).
-- [ ] **2.5** Journaux serveur sans données personnelles : e-mails et prénoms
+- [x] **2.5** Journaux serveur sans données personnelles : e-mails et prénoms
   remplacés par des identifiants (`functions/index.js:3933`, `:4395-4433`) ;
   plus de réponse Resend complète dans les logs.
-- [ ] **2.6** `release.yml` : retirer le déclenchement par tag `v*` (cassé et
+- [x] **2.6** `release.yml` : retirer le déclenchement par tag `v*` (cassé et
   dangereux) en attendant S12.
-- [ ] **2.7** Région : `setGlobalOptions({ region: "europe-west1" })` en tête
+- [x] **2.7** Région : `setGlobalOptions({ region: "europe-west1" })` en tête
   de `functions/index.js` (règle 4.5 / D9 pour `cleanupExpiredShareCodes` et
   `purgeDeletedChildren`), miroirs US gardés jusqu'à 1.8.
 
 Contrôle : alerte de test reçue par e-mail ; sauvegarde visible dans la
 console ; événement Sentry de test.
+
+_Bilan 2026-11-06 (branche `sprint-2/observabilite`) : filtres Sentry
+(`utils/sentryFilters.ts`, 5 tests) branchés dans `Sentry.init` ; journaux des
+fonctions sans e-mails ni prénoms, erreurs Resend du récap remontées ;
+`setGlobalOptions({ region: "europe-west1" })` et déploiement CI en `--force`
+(les deux tâches planifiées passent en Europe au prochain déploiement) ;
+`release.yml` en lancement manuel ; runbook corrigé et procédures écrites
+(`docs/FIREBASE_MONITORING.md` §9) ; profil EAS `production` lié à
+l'environnement `production`. **Reste avec Yoss** : 2.2 (DSN Sentry et jeton
+d'envoi des source maps dans EAS, Q1), 2.3 et 2.4 (sauvegardes, alertes,
+budget : commandes prêtes, `gcloud auth login` nécessaire, Q2)._
 
 **Revue ECC (S1 + S2)** : `security-reviewer`, `silent-failure-hunter`.
 
