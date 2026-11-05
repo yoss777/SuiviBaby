@@ -84,6 +84,20 @@ Plan détaillé, user stories et mesures : [STATS_PERF_REFONTE.md](STATS_PERF_RE
 | P4 | Sprint 4 — cache affiché tout de suite, fusion optimiste allégée | 2026-11-21 | Claude | P3 | Ouverture sans spinner quand des données sont en cache | ✅ 2026-11-05 : cache affiché d'abord ; revue ECC corrigée (courses, hors ligne, PDF partiel) |
 | P5 | Sprint 5 — nettoyage (logs, code mort `*ChartSkia.tsx`, gestes) et mesure finale | 2026-11-24 | Claude | P4 | Mesures « après » remplies, branche prête à fusionner | ✅ 2026-11-05 : nettoyage fait ; reste la mesure sur le Samsung et la fusion sur `main` |
 
+## 4 quater. Audit complet ECC du 2026-11-05 — actions P0
+
+Rapport complet (P0, P1, P2, feuille de route) : [AUDIT_COMPLET_2026-11.md](AUDIT_COMPLET_2026-11.md).
+
+| # | Action | Échéance | Qui | Dépend de | Contrôle | Statut |
+|---|---|---|---|---|---|---|
+| A1 | Webhook RevenueCat : marqueur anti-doublon dans la transaction (aucun paiement perdu sur erreur) | 2026-11-12 | Claude | — | Test : transaction en échec puis retry → abonnement appliqué | ⏳ |
+| A2 | Parrainage : champs non modifiables par le client, usage tracé côté serveur, code serveur | 2026-11-12 | Claude | — | Tests de règles + test : 2ᵉ usage refusé même après effacement de `referredBy` | ⏳ |
+| A3 | Une seule purge `purgeUserData` pour les deux parcours de suppression ; e-mail seulement après succès Auth ; photos avant événements | 2026-11-12 | Claude | — | Test qui compare les collections purgées | ⏳ |
+| A4 | Comptes Apple/Google : consentement santé bloquant + suppression de compte par ré-authentification fournisseur + révocation Apple | 2026-11-19 | Claude | — | Parcours testé avec un compte Google et un compte Apple | ⏳ |
+| A5 | Messages de santé : alerte fièvre selon l'âge à la saisie, « C'est normal », « meilleur endroit », fiche cododo | 2026-11-26 | Claude (code) / Yoss (relecture pédiatre) | relecture pédiatre | Textes validés et notés | ⏳ |
+| A6 | Sentry en production : filtrage des données de santé, DSN EAS, source maps, release/dist | 2026-11-12 | Claude / Yoss (DSN) | D3 | Événement de test reçu, sans donnée de santé | ⏳ |
+| A7 | Sauvegardes Firestore + protection contre la suppression + alertes serveur et budget | 2026-11-19 | Yoss (gcloud) / Claude | D1 | Sauvegarde visible, restauration testée, alerte de test reçue | ⏳ |
+
 ## 5. Décisions en attente (questions détaillées)
 
 > Chaque question indique le contexte, ce qui a été **vérifié** dans le projet
