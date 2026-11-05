@@ -1,4 +1,5 @@
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
+import { countStatsRender, markStatsChartPainted } from "@/utils/statsPerf";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   Canvas,
@@ -158,6 +159,10 @@ export default function SommeilChart({
   screenWidth: screenWidthProp,
   onWeekChange,
 }: Props) {
+  countStatsRender("SommeilChart");
+  useEffect(() => {
+    markStatsChartPainted("SommeilChart");
+  }, []);
   const SCREEN_WIDTH = screenWidthProp ?? DEFAULT_SCREEN_WIDTH;
   const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
   const C = getChartColors(colorScheme).sommeil;

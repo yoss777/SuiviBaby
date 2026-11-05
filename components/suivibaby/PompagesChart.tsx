@@ -1,4 +1,5 @@
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
+import { countStatsRender, markStatsChartPainted } from "@/utils/statsPerf";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import {
   Canvas,
@@ -125,6 +126,10 @@ export default function PompagesChart({
   screenWidth: screenWidthProp,
   onWeekChange,
 }: Props) {
+  countStatsRender("PompagesChart");
+  useEffect(() => {
+    markStatsChartPainted("PompagesChart");
+  }, []);
   const SCREEN_WIDTH = screenWidthProp ?? DEFAULT_SCREEN_WIDTH;
   const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
   const C = getChartColors(colorScheme).pompages;

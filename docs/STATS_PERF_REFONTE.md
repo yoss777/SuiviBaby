@@ -161,20 +161,29 @@ Chaque sprint se termine par : `npm run lint`, `npx tsc --noEmit`, `npm test`
 verts, une vérification sur le Samsung (build de dev) et une mesure comparée à
 la référence du sprint 0. Un commit par tâche cohérente, sur `stats-review`.
 
-### Sprint 0 — Mesure de référence · US-T1 · ⏳
+### Sprint 0 — Mesure de référence · US-T1 · ✅ 2026-11-05
 
 But : savoir d'où on part, pour fixer des cibles chiffrées.
 
-- [ ] **0.1** Jeu de données de test : un enfant avec environ 3 000 événements
+- [x] **0.1** Jeu de données de test : un enfant avec environ 3 000 événements
   (repas, pompages, sommeils sur 12 mois) dans l'émulateur Firestore, via un
   script `scripts/seedStatsPerf.mjs`.
-- [ ] **0.2** Instrumentation `__DEV__` : temps entre le montage de
+  _Fait : générateur déterministe `scripts/statsPerfFixtures.js` (partagé
+  tests / émulateur) ; `scripts/seedStatsPerf.mjs` refuse de tourner hors
+  émulateur._
+- [x] **0.2** Instrumentation `__DEV__` : temps entre le montage de
   `StatsScreen` et le premier graphique affiché ; nombre de rendus de l'écran
   et de chaque graphique (compteur), nombre de snapshots reçus.
+  _Fait : `utils/statsPerf.ts` (compteurs toujours actifs, logs seulement en
+  dev avec `EXPO_PUBLIC_STATS_PERF=1`, lisibles par `adb logcat | grep stats-perf`)._
 - [ ] **0.3** Profils de référence sur le Samsung : React DevTools Profiler
   (ouverture, changement d'onglet, semaine précédente) et profiler Hermes
   (tâches > 100 ms).
-- [ ] **0.4** Noter les chiffres dans la section « Mesures » ci-dessous et
+  _Remplacé pour l'instant par deux mesures reproductibles : benchmark
+  `STATS_BENCH=1 npx jest __tests__/statsAggregations.test.ts -t bench` et
+  compteurs de rendus de `__tests__/StatsScreen.test.tsx` (snapshots livrés un
+  par un, 100 ms d'écart). Profil sur le Samsung à faire avec un build de dev._
+- [x] **0.4** Noter les chiffres dans la section « Mesures » ci-dessous et
   ajuster les cibles des US-1.1, 1.2, 3.1.
 
 Fin de sprint : tableau « Mesures » rempli (avant).
@@ -350,15 +359,19 @@ Fin de sprint : mesures « après » remplies ; branche prête à fusionner sur
 À remplir au sprint 0 (avant) et après chaque sprint. Appareil : Samsung de
 test, build de dev, jeu de 3 000 événements.
 
+Mesures reproductibles (Node sur le Mac, 3 000 événements sur 12 mois ; sur
+un Android d'entrée de gamme sous Hermes, compter 5 à 20 fois plus) :
+
 | Mesure | Avant | S1 | S2 | S3 | S4 | Après | Cible |
 |---|---|---|---|---|---|---|---|
-| Ouverture → premier graphique (ms) | | | | | | | < 300 avec cache |
-| Plus longue tâche JS au chargement (ms) | | | | | | | < 100 |
-| Rendus de `StatsScreen` à l'ouverture | | | | | | | ≤ 4 |
-| Rendus d'un graphique à l'ouverture | | | | | | | ≤ 2 |
+| Calcul des 3 graphiques par rendu (ms) | 28,3 (Repas 12,1 · Pompages 2,6 · Sommeil 15,6) | | | | | | < 3 |
+| Rendus de `StatsScreen` jusqu'aux données | 21 | | | | | | ≤ 8 |
+| Rendus des graphiques (Repas / Pompages / Sommeil) | 11 / 6 / 2 | | | | | | ≤ 2 chacun |
+| Calcul estimé au chargement (ms) | ≈ 180 | | | | | | < 20 |
 | Graphiques montés à l'ouverture | 3 | | | | | | 1 |
-| Documents lus à l'ouverture | | | | | | | fenêtre seulement |
-| Changement de semaine (ms) | | | | | | | < 100 |
+| Écouteurs Firestore | 5 | | | | | | 3 |
+| Événements lus à l'ouverture | tout l'historique (3 000) | | | | | | fenêtre (≈ 3 semaines) |
+| Ouverture → premier graphique sur le Samsung (ms) | à mesurer | | | | | | < 300 avec cache |
 
 ## Hors périmètre
 

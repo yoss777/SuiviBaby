@@ -1,4 +1,5 @@
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
+import { countStatsRender, markStatsChartPainted } from "@/utils/statsPerf";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
@@ -121,6 +122,10 @@ export default function RepasChart({
   screenWidth: screenWidthProp,
   onWeekChange,
 }: Props) {
+  countStatsRender("RepasChart");
+  useEffect(() => {
+    markStatsChartPainted("RepasChart");
+  }, []);
   const SCREEN_WIDTH = screenWidthProp ?? DEFAULT_SCREEN_WIDTH;
   const CHART_WIDTH = SCREEN_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
   const C = getChartColors(colorScheme).tetees;

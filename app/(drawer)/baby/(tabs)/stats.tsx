@@ -10,6 +10,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
+import { countStatsRender, markStatsMount } from "@/utils/statsPerf";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
@@ -76,6 +77,12 @@ const getDateTime = (value: any): number => {
 };
 
 export default function StatsScreen() {
+  countStatsRender("StatsScreen");
+  const mountMarkedRef = useRef(false);
+  if (!mountMarkedRef.current) {
+    mountMarkedRef.current = true;
+    markStatsMount();
+  }
   const { activeChild } = useBaby();
   const colorScheme = useColorScheme() ?? "light";
   const nc = useMemo(() => getNeutralColors(colorScheme), [colorScheme]);
