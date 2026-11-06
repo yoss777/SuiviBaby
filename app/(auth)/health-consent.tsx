@@ -6,6 +6,7 @@ import { InfoModal } from "@/components/ui/InfoModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useAccountDeletionFlow } from "@/hooks/useAccountDeletionFlow";
 import {
   HEALTH_CONSENT_VERSION,
   recordHealthConsent,
@@ -26,7 +27,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const COLLECTED_DATA =
-  "repas, sommeil, croissance, couches, symptômes, température, médicaments, vaccins, photos et notes vocales";
+  "repas, sommeil, croissance, couches, symptômes, température, médicaments, vaccins, allergies, notes libres, photos et notes vocales";
 
 export default function HealthConsentScreen() {
   const colorScheme = useColorScheme() ?? "light";
@@ -35,7 +36,17 @@ export default function HealthConsentScreen() {
   const [isAccepting, setIsAccepting] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const busy = isAccepting || isSigningOut;
+  const deletion = useAccountDeletionFlow({
+    backgroundCard: nc.backgroundCard,
+    textStrong: nc.textStrong,
+    textMuted: nc.textMuted,
+    borderLight: nc.borderLight,
+    error: nc.error,
+    white: nc.white,
+    accent: nc.todayAccent,
+  });
+  const busy =
+    isAccepting || isSigningOut || deletion.isChecking || deletion.isDeleting;
 
   useEffect(() => {
     if (loading || isSigningOut) return;
@@ -102,6 +113,8 @@ export default function HealthConsentScreen() {
         onClose={() => setErrorMessage(null)}
       />
 
+      {deletion.modals}
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator
@@ -134,7 +147,8 @@ export default function HealthConsentScreen() {
           <Text style={[styles.body, { color: nc.textMuted }]}>
             Pour le suivi de votre enfant : {COLLECTED_DATA}. Ce sont des
             données de santé : la loi exige votre consentement explicite pour
-            les traiter.
+            les traiter. En acceptant, vous confirmez agir en tant que
+            titulaire de l&apos;autorité parentale de cet enfant.
           </Text>
 
           <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>
@@ -150,16 +164,25 @@ export default function HealthConsentScreen() {
             Qui les traite
           </Text>
           <Bullet>
-            Google / Firebase : hébergement, authentification et fonctions
-            serveur, dans l&apos;Union européenne.
+            Google Cloud / Firebase : hébergement des données en Europe
+            (Firestore eur3), fonctions serveur et authentification (assurée
+            par Google).
           </Bullet>
           <Bullet>
             RevenueCat : gestion des abonnements (identifiant pseudonyme).
           </Bullet>
           <Bullet>Sentry (hébergé dans l'UE) : diagnostic des erreurs, sans identifiant de compte.</Bullet>
           <Bullet>
-            AssemblyAI et Anthropic : uniquement si vous utilisez la commande
-            vocale ou les conseils IA.
+            Resend : envoi des e-mails (confirmations, invitations).
+          </Bullet>
+          <Bullet>
+            Expo : notifications push, qui contiennent le prénom de
+            l&apos;enfant et des horaires.
+          </Bullet>
+          <Bullet>
+            AssemblyAI : transcription de la voix, uniquement si vous utilisez
+            la commande vocale. Anthropic : interprétation du texte dicté pour
+            cette même commande.
           </Bullet>
           <Text style={[styles.body, { color: nc.textMuted }]}>
             Certains prestataires sont situés aux États-Unis ; ces transferts
@@ -171,8 +194,11 @@ export default function HealthConsentScreen() {
             Retrait du consentement
           </Text>
           <Text style={[styles.body, { color: nc.textMuted }]}>
-            Vous pouvez retirer votre consentement à tout moment en supprimant
-            votre compte (Réglages, Supprimer mon compte).
+            Vous pouvez retirer votre consentement à tout moment dans les
+            Réglages (Retirer mon consentement aux données de santé) ou en
+            supprimant votre compte. La preuve de votre consentement (date,
+            version) est conservée 5 ans après la suppression du compte, pour
+            pouvoir se défendre en cas de litige.
           </Text>
 
           <TouchableOpacity
@@ -246,6 +272,23 @@ export default function HealthConsentScreen() {
             </Text>
           )}
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={deletion.start}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel="Supprimer mon compte"
+          accessibilityHint="Programme la suppression de votre compte et de vos données"
+          style={[styles.deleteButton, busy && styles.buttonDisabled]}
+        >
+          <Text style={[styles.deleteText, { color: nc.error }]}>
+            Supprimer mon compte
+          </Text>
+        </TouchableOpacity>
+        <Text style={[styles.declineNote, { color: nc.textMuted }]}>
+          Si vous refusez, vous serez déconnecté et aucune donnée de santé ne
+          sera traitée. Vous pouvez aussi supprimer votre compte ici, ou depuis
+          les Réglages (Supprimer le compte).
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -306,5 +349,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   secondaryButtonText: { fontSize: 15, fontWeight: "600" },
+  deleteButton: { minHeight: 44, alignItems: "center", justifyContent: "center" },
+  deleteText: { fontSize: 15, fontWeight: "600", textDecorationLine: "underline" },
+  declineNote: { fontSize: 12, lineHeight: 17, textAlign: "center" },
   buttonDisabled: { opacity: 0.6 },
 });

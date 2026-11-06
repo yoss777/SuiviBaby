@@ -9,6 +9,7 @@ import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { usePremium } from "@/contexts/PremiumContext";
 import { useVoiceCommand } from "@/hooks/useVoiceCommand";
@@ -41,6 +42,7 @@ export function formatRecordingDuration(totalSeconds: number): string {
 
 export function useVoiceInput() {
   const { activeChild } = useBaby();
+  const uid = useAuth().firebaseUser?.uid ?? null;
   const voice = useVoiceCommand(activeChild?.id || "", false);
   const { checkFeatureAccess } = usePremium();
 
@@ -120,8 +122,8 @@ export function useVoiceInput() {
   /** Closes the first-use notice for good; the next press records. */
   const dismissVoiceNotice = useCallback(() => {
     setVoiceNoticeVisible(false);
-    void markVoiceNoticeSeen();
-  }, []);
+    void markVoiceNoticeSeen(uid);
+  }, [uid]);
 
   const onPressIn = async () => {
     pressStartedAtRef.current = Date.now();
@@ -141,7 +143,7 @@ export function useVoiceInput() {
       return;
     }
     // First use: say what is sent and to whom before any audio is captured.
-    if (!(await hasSeenVoiceNotice())) {
+    if (!(await hasSeenVoiceNotice(uid))) {
       pressConsumedRef.current = true;
       setVoiceNoticeVisible(true);
       return;

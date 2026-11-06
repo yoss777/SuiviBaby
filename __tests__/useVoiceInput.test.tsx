@@ -28,6 +28,9 @@ jest.mock("expo-haptics", () => ({
   ImpactFeedbackStyle: { Light: "light", Medium: "medium" },
   NotificationFeedbackType: { Warning: "warning", Success: "success" },
 }));
+jest.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({ firebaseUser: { uid: "u1" } }),
+}));
 jest.mock("@/contexts/BabyContext", () => ({
   useBaby: () => ({ activeChild: { id: mockChildId } }),
 }));
@@ -114,7 +117,8 @@ describe("useVoiceInput gestures", () => {
 
     act(() => result.current.dismissVoiceNotice());
     expect(result.current.voiceNoticeVisible).toBe(false);
-    expect(notice.markVoiceNoticeSeen).toHaveBeenCalledTimes(1);
+    expect(notice.markVoiceNoticeSeen).toHaveBeenCalledWith("u1");
+    expect(notice.hasSeenVoiceNotice).toHaveBeenCalledWith("u1");
 
     mockNoticeSeen = true;
     await act(async () => {

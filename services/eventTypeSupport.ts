@@ -33,3 +33,10 @@ export const DIAPER_DOMAIN_EVENT_TYPES: EventType[] = [
   ...MODERN_UI_DIAPER_EVENT_TYPES,
   ...LEGACY_BACKEND_EVENT_TYPES,
 ];
+
+/** Every event type included in exports (modern UI + legacy), derived from the lists above. */
+export function getExportEventTypes(): EventType[] {
+  return Array.from(
+    new Set<EventType>([...MODERN_UI_EVENT_TYPES, ...LEGACY_BACKEND_EVENT_TYPES]),
+  );
+}

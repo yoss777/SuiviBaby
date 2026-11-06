@@ -36,6 +36,12 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Event, EventType } from "@/services/eventsService";
+import { getExportEventTypes } from "@/services/eventTypeSupport";
+import {
+  buildChildExportProfile,
+  collectEventPhotoPaths,
+  EXPORT_PHOTO_NOTE,
+} from "@/services/exportDataHelpers";
 import { obtenirPreferences } from "@/services/userPreferencesService";
 import type { ChildRole } from "@/types/permissions";
 import type { EventComment, EventLike } from "@/types/social";
@@ -50,6 +56,8 @@ interface ExportFormat {
 
 interface ExportChild {
   child: Child;
+  /** Full child document (allergies, notes, ...), technical fields removed. */
+  profile: Record<string, unknown>;
   events: Event[];
   likes: EventLike[];
   comments: EventComment[];
@@ -169,6 +177,12 @@ const EXTRA_EVENT_TYPES: ExportTypeItem[] = [
   },
 ];
 
+EXTRA_EVENT_TYPES.push({
+  id: "nettoyage_nez",
+  label: "Nettoyage du nez",
+  icon: { lib: "MaterialCommunityIcons", name: "water-outline" },
+});
+
 const INTERACTION_TYPES: ExportTypeItem[] = [
   { id: "likes", label: "Likes", icon: { lib: "Ionicons", name: "heart" } },
   {
@@ -178,16 +192,31 @@ const INTERACTION_TYPES: ExportTypeItem[] = [
   },
 ];
 
-const ALL_EVENT_TYPE_IDS = new Set<EventType>(
-  [...BASE_EVENT_TYPES, ...EXTRA_EVENT_TYPES].map(
-    (item) => item.id as EventType,
-  ),
+// Types offered to every role; the others are hidden for contributors.
+const CONTRIBUTOR_TYPE_IDS = new Set<string>(
+  BASE_EVENT_TYPES.map((item) => item.id),
 );
 
-const getEventTypes = (hideExtra: boolean) => [
-  ...BASE_EVENT_TYPES,
-  ...(hideExtra ? [] : EXTRA_EVENT_TYPES),
-];
+// Single source of truth: the list of exported types is derived from
+// services/eventTypeSupport.ts; the arrays above only provide labels and icons.
+const TYPE_META = new Map<string, ExportTypeItem>(
+  [...BASE_EVENT_TYPES, ...EXTRA_EVENT_TYPES].map((item) => [item.id, item]),
+);
+const EXPORT_TYPE_ITEMS: ExportTypeItem[] = getExportEventTypes().map(
+  (type) =>
+    TYPE_META.get(type) ?? {
+      id: type,
+      label: type,
+      icon: { lib: "Ionicons", name: "ellipse-outline" },
+    },
+);
+
+const ALL_EVENT_TYPE_IDS = new Set<EventType>(getExportEventTypes());
+
+const getEventTypes = (hideExtra: boolean) =>
+  hideExtra
+    ? EXPORT_TYPE_ITEMS.filter((item) => CONTRIBUTOR_TYPE_IDS.has(item.id))
+    : EXPORT_TYPE_ITEMS;
 
 export default function ExportScreen() {
   const colorScheme = useColorScheme() ?? "light";
@@ -262,58 +291,69 @@ export default function ExportScreen() {
           obtenirPreferences().catch(() => null),
           Promise.all(
             visibleChildren.map(async (child) => {
-              const [
-                eventsSnapshot,
-                likesSnapshot,
-                commentsSnapshot,
-                accessDoc,
-              ] = await Promise.all([
-                user?.uid
-                  ? getDocs(
-                      query(
-                        collection(db, "events"),
-                        where("childId", "==", child.id),
-                        where("userId", "==", user.uid),
-                        limit(10000),
-                      ),
-                    )
-                  : Promise.resolve({ docs: [] } as any),
-                user?.uid
-                  ? getDocs(
-                      query(
-                        collection(db, "eventLikes"),
-                        where("childId", "==", child.id),
-                        where("userId", "==", user.uid),
-                        limit(10000),
-                      ),
-                    )
-                  : Promise.resolve({ docs: [] } as any),
-                user?.uid
-                  ? getDocs(
-                      query(
-                        collection(db, "eventComments"),
-                        where("childId", "==", child.id),
-                        where("userId", "==", user.uid),
-                        limit(10000),
-                      ),
-                    )
-                  : Promise.resolve({ docs: [] } as any),
-                user?.uid
-                  ? getDoc(doc(db, "children", child.id, "access", user.uid))
-                  : Promise.resolve(null),
-              ]);
+              // Role first: owners/admins export ALL events of the child,
+              // others only their own entries.
+              const accessDoc = user?.uid
+                ? await getDoc(
+                    doc(db, "children", child.id, "access", user.uid),
+                  ).catch(() => null)
+                : null;
+              const role =
+                accessDoc && accessDoc.exists()
+                  ? ((accessDoc.data()?.role ?? null) as ChildRole | null)
+                  : null;
+              const seesAllEvents = role === "owner" || role === "admin";
+
+              const [eventsSnapshot, likesSnapshot, commentsSnapshot, childDoc] =
+                await Promise.all([
+                  user?.uid
+                    ? getDocs(
+                        query(
+                          collection(db, "events"),
+                          where("childId", "==", child.id),
+                          ...(seesAllEvents
+                            ? []
+                            : [where("userId", "==", user.uid)]),
+                          limit(10000),
+                        ),
+                      )
+                    : Promise.resolve({ docs: [] } as any),
+                  user?.uid
+                    ? getDocs(
+                        query(
+                          collection(db, "eventLikes"),
+                          where("childId", "==", child.id),
+                          where("userId", "==", user.uid),
+                          limit(10000),
+                        ),
+                      )
+                    : Promise.resolve({ docs: [] } as any),
+                  user?.uid
+                    ? getDocs(
+                        query(
+                          collection(db, "eventComments"),
+                          where("childId", "==", child.id),
+                          where("userId", "==", user.uid),
+                          limit(10000),
+                        ),
+                      )
+                    : Promise.resolve({ docs: [] } as any),
+                  getDoc(doc(db, "children", child.id)).catch(() => null),
+                ]);
 
               const events = eventsSnapshot.docs.map(
                 (d: any) => ({ id: d.id, ...d.data() }) as Event,
               );
 
-              const role =
-                accessDoc && accessDoc.exists()
-                  ? ((accessDoc.data()?.role ?? null) as ChildRole | null)
-                  : null;
+              const profile = buildChildExportProfile(
+                childDoc && childDoc.exists()
+                  ? (childDoc.data() as Record<string, unknown>)
+                  : null,
+              );
 
               return {
                 child,
+                profile,
                 events,
                 likes: likesSnapshot.docs.map(
                   (d: any) => ({ id: d.id, ...d.data() }) as EventLike,
@@ -787,6 +827,7 @@ export default function ExportScreen() {
           pseudo: userName ?? null,
         },
         format: "json",
+        notes: { photos: EXPORT_PHOTO_NOTE },
         filters: {
           eventTypes: effectiveEventTypes,
           interactionTypes: effectiveInteractionTypes,
@@ -812,7 +853,15 @@ export default function ExportScreen() {
               birthDate: item.child.birthDate ?? null,
               gender: item.child.gender ?? null,
               photoUri: item.child.photoUri ?? null,
-              events: filteredEvents.map(serializeValue),
+              // Full child document (allergies, notes, ...), technical fields removed.
+              profile: serializeValue(item.profile),
+              events: filteredEvents.map((event) => {
+                const photoPaths = collectEventPhotoPaths(event as any);
+                return {
+                  ...serializeValue(event),
+                  ...(photoPaths.length > 0 ? { photoStoragePaths: photoPaths } : {}),
+                };
+              }),
               likes: includeLikes ? item.likes.map(serializeValue) : [],
               comments: includeComments
                 ? item.comments.map(serializeValue)

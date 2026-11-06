@@ -6,6 +6,7 @@ import { registerPushToken, removePushTokens } from "@/services/pushTokenService
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
 import { signOutGoogle } from "@/services/socialAuthService";
+import { cleanupStaleExports } from "@/services/tempShareService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   disableBiometric,
@@ -305,6 +306,9 @@ export function AuthProvider({
       clearPermissionsCache();
       await onOfflineQueueSignOut();
       await cancelAllReminders();
+      // Exports (health data) must not outlive the session on a shared device.
+      // Best effort: cleanupStaleExports never throws, the catch is defensive.
+      await cleanupStaleExports(0).catch(() => {});
       // Supprimer les push tokens avant signOut (nécessite auth active)
       const uid = auth.currentUser?.uid;
       if (uid) await removePushTokens(uid).catch(() => {});

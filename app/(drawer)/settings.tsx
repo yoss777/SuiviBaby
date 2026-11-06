@@ -27,7 +27,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { OwnershipTransferModal } from "@/components/ui/OwnershipTransferModal";
 import { PromptModal } from "@/components/ui/PromptModal";
 import { db } from "@/config/firebase";
 import {
@@ -43,10 +42,6 @@ import {
   formatPendingDeletionDate,
   getPendingDeletionDateFromUser,
   getDeletionAuthMethod,
-  getOwnershipBlockers,
-  mapDeletionError,
-  requestAccountDeletion,
-  type OwnershipBlocker,
 } from "@/services/accountDeletionService";
 import {
   disableBiometric,
@@ -55,6 +50,8 @@ import {
   isBiometricAvailable,
   isBiometricEnabled,
 } from "@/services/biometricAuthService";
+import { withdrawHealthConsent } from "@/services/healthConsentService";
+import { useAccountDeletionFlow } from "@/hooks/useAccountDeletionFlow";
 import { useHiddenPhotos } from "@/hooks/useHiddenPhotos";
 
 interface SettingItem {
@@ -96,14 +93,8 @@ export default function SettingsScreen() {
     message: "",
   });
   const [showDeleteExportModal, setShowDeleteExportModal] = useState(false);
-  const [showDeletePasswordModal, setShowDeletePasswordModal] = useState(false);
-  const [deletePassword, setDeletePassword] = useState("");
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteSocialModal, setShowDeleteSocialModal] = useState(false);
-  const [isCheckingBlockers, setIsCheckingBlockers] = useState(false);
-  const [ownershipBlockers, setOwnershipBlockers] = useState<OwnershipBlocker[]>([]);
-  const [ownerChoices, setOwnerChoices] = useState<Record<string, string>>({});
-  const [showOwnerChoiceModal, setShowOwnerChoiceModal] = useState(false);
+  const [showWithdrawConsentModal, setShowWithdrawConsentModal] = useState(false);
+  const [isWithdrawingConsent, setIsWithdrawingConsent] = useState(false);
   const deleteParamHandledRef = useRef(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
@@ -258,40 +249,16 @@ export default function SettingsScreen() {
     return () => unsubscribe();
   }, [user]);
 
-  const openDeletionConfirmation = useCallback(() => {
-    if (deletionAuthMethod === "password") {
-      setShowDeletePasswordModal(true);
-    } else {
-      setShowDeleteSocialModal(true);
-    }
-  }, [deletionAuthMethod]);
-
-  // Before confirming, check whether the user is the only owner/admin of a
-  // shared child: they must then pick the new owner explicitly.
-  const startDeletionFlow = useCallback(async () => {
-    if (isCheckingBlockers) return;
-    setIsCheckingBlockers(true);
-    try {
-      const blockers = await getOwnershipBlockers();
-      if (blockers.length > 0) {
-        setOwnershipBlockers(blockers);
-        setOwnerChoices({});
-        setShowOwnerChoiceModal(true);
-      } else {
-        setOwnershipBlockers([]);
-        openDeletionConfirmation();
-      }
-    } catch {
-      setModalConfig({
-        visible: true,
-        title: "Erreur",
-        message:
-          "Impossible de vérifier vos enfants partagés pour le moment. Vérifiez votre connexion puis réessayez.",
-      });
-    } finally {
-      setIsCheckingBlockers(false);
-    }
-  }, [isCheckingBlockers, openDeletionConfirmation]);
+  const { start: startDeletionFlow, modals: deletionModals } =
+    useAccountDeletionFlow({
+      backgroundCard: nc.backgroundCard,
+      textStrong: nc.textStrong,
+      textMuted: nc.textMuted,
+      borderLight: nc.borderLight,
+      error: nc.error,
+      white: nc.white,
+      accent,
+    });
 
   useEffect(() => {
     if (deleteParam === "1" && !deleteParamHandledRef.current) {
@@ -301,46 +268,26 @@ export default function SettingsScreen() {
     }
   }, [deleteParam, router, startDeletionFlow]);
 
-  const performDeletion = useCallback(
-    async (password?: string) => {
-      if (isDeleting) return;
-      let deletionScheduled = false;
-      try {
-        setIsDeleting(true);
-        await requestAccountDeletion({
-          password,
-          transfers: ownershipBlockers.map((b) => ({
-            childId: b.childId,
-            newOwnerId: ownerChoices[b.childId],
-          })),
-        });
-        deletionScheduled = true;
-
-        // Envoyer email de confirmation (fire & forget)
-        const { httpsCallable } = await import("firebase/functions");
-        const { functions } = await import("@/config/firebase");
-        const sendEmail = httpsCallable(functions, "sendDeletionRequestEmail");
-        sendEmail().catch(() => {});
-
-        await refreshUser();
-
-        setShowDeletePasswordModal(false);
-        setShowDeleteSocialModal(false);
-        setDeletePassword("");
-        await signOut();
-        router.replace("/(auth)/login");
-      } catch (error: any) {
-        const message = deletionScheduled
-          ? "Votre compte est bien programmé pour suppression, mais la déconnexion automatique a échoué. Déconnectez-vous manuellement."
-          : mapDeletionError(error);
-        setShowDeleteSocialModal(false);
-        setModalConfig({ visible: true, title: "Erreur", message });
-      } finally {
-        setIsDeleting(false);
-      }
-    },
-    [isDeleting, ownershipBlockers, ownerChoices, refreshUser, signOut, router],
-  );
+  const performConsentWithdrawal = useCallback(async () => {
+    if (isWithdrawingConsent) return;
+    setIsWithdrawingConsent(true);
+    try {
+      // Server records the withdrawal and resets the local consent cache.
+      await withdrawHealthConsent();
+      setShowWithdrawConsentModal(false);
+      router.replace("/boot");
+    } catch {
+      setShowWithdrawConsentModal(false);
+      setModalConfig({
+        visible: true,
+        title: "Erreur",
+        message:
+          "Impossible de retirer votre consentement pour le moment. Vérifiez votre connexion puis réessayez.",
+      });
+    } finally {
+      setIsWithdrawingConsent(false);
+    }
+  }, [isWithdrawingConsent, router]);
 
   const handleBiometricToggle = useCallback(
     async (value: boolean) => {
@@ -581,6 +528,16 @@ export default function SettingsScreen() {
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           router.push("/settings/privacy");
+        },
+      },
+      {
+        id: "withdraw-consent",
+        icon: "hand-left-outline",
+        label: "Retirer mon consentement aux données de santé",
+        description: "Vous devrez accepter à nouveau pour utiliser l'application",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setShowWithdrawConsentModal(true);
         },
       },
       {
@@ -897,105 +854,21 @@ export default function SettingsScreen() {
           startDeletionFlow();
         }}
       />
-      <OwnershipTransferModal
-        visible={showOwnerChoiceModal}
-        blockers={ownershipBlockers}
-        choices={ownerChoices}
-        backgroundColor={nc.backgroundCard}
-        textColor={nc.textStrong}
-        mutedColor={nc.textMuted}
-        borderColor={nc.borderLight}
-        accentColor={accent}
-        onSelect={(childId, uid) =>
-          setOwnerChoices((prev) => ({ ...prev, [childId]: uid }))
-        }
-        onCancel={() => {
-          setShowOwnerChoiceModal(false);
-          setOwnershipBlockers([]);
-          setOwnerChoices({});
-        }}
-        onConfirm={() => {
-          setShowOwnerChoiceModal(false);
-          openDeletionConfirmation();
-        }}
-      />
+      {deletionModals}
       <ConfirmModal
-        visible={showDeleteSocialModal}
-        title="Confirmer la suppression"
-        message={
-          (isDeleting ? (
-            <View style={styles.deleteLoader}>
-              <IconPulseDots />
-              <Text style={[styles.deleteLoaderText, { color: nc.textStrong }]}>
-                Suppression en cours...
-              </Text>
-            </View>
-          ) : (
-            `Votre compte sera programmé pour suppression dans 30 jours. Vous pourrez annuler à tout moment depuis les paramètres. Pour confirmer, vous allez devoir vous reconnecter avec ${deletionAuthMethod === "apple" ? "Apple" : "Google"}.`
-          )) as any
-        }
-        confirmText={isDeleting ? "Suppression..." : "Continuer"}
+        visible={showWithdrawConsentModal}
+        title="Retirer mon consentement"
+        message="Sans votre consentement, l'application ne peut plus traiter les données de santé de votre enfant et vous ne pourrez plus l'utiliser. Vos données ne sont pas supprimées : pour cela, supprimez votre compte. Vous pourrez donner à nouveau votre consentement à tout moment."
+        confirmText={isWithdrawingConsent ? "Retrait..." : "Retirer"}
         cancelText="Annuler"
         backgroundColor={nc.backgroundCard}
         textColor={nc.textStrong}
         confirmButtonColor={nc.error}
         confirmTextColor={nc.white}
-        onConfirm={() => {
-          if (isDeleting) return;
-          performDeletion();
-        }}
+        onConfirm={performConsentWithdrawal}
         onCancel={() => {
-          if (isDeleting) return;
-          setShowDeleteSocialModal(false);
-        }}
-      />
-      <PromptModal
-        visible={showDeletePasswordModal}
-        title="Confirmer la suppression"
-        message={
-          (isDeleting ? (
-            <View style={styles.deleteLoader}>
-              <IconPulseDots />
-              <Text style={[styles.deleteLoaderText, { color: nc.textStrong }]}>
-                Suppression en cours...
-              </Text>
-            </View>
-          ) : (
-            "Votre compte sera programmé pour suppression dans 30 jours. Vous pourrez annuler à tout moment depuis les paramètres."
-          )) as any
-        }
-        value={deletePassword}
-        placeholder="Mot de passe"
-        secureTextEntry
-        multiline={false}
-        autoCapitalize="none"
-        confirmText={isDeleting ? "Suppression..." : "Supprimer"}
-        confirmButtonColor={nc.error}
-        confirmDisabled={isDeleting}
-        cancelText="Annuler"
-        backgroundColor={nc.backgroundCard}
-        textColor={nc.textStrong}
-        onChangeText={(value) => {
-          if (isDeleting) return;
-          setDeletePassword(value);
-        }}
-        onConfirm={async () => {
-          if (isDeleting) return;
-          if (!deletePassword.trim()) {
-            setModalConfig({
-              visible: true,
-              title: "Erreur",
-              message: "Veuillez saisir votre mot de passe.",
-            });
-            return;
-          }
-
-          await performDeletion(deletePassword);
-        }}
-        onCancel={() => {
-          if (isDeleting) return;
-          setShowDeletePasswordModal(false);
-          setDeletePassword("");
+          if (isWithdrawingConsent) return;
+          setShowWithdrawConsentModal(false);
         }}
       />
     </SafeAreaView>
@@ -1067,15 +940,6 @@ const styles = StyleSheet.create({
   },
   settingValue: {
     fontSize: 14,
-  },
-  deleteLoader: {
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 4,
-  },
-  deleteLoaderText: {
-    fontSize: 14,
-    fontWeight: "600",
   },
   tag: {
     borderRadius: 12,

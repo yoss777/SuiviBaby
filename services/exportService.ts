@@ -2,10 +2,7 @@ import * as FileSystem from "expo-file-system";
 import { deleteTempFile, prepareExportFile, shareTempFile } from "@/services/tempShareService";
 import { EventType, obtenirEvenements } from "./eventsService";
 import { getHiddenEventIds } from "./hiddenPhotosService";
-import {
-  LEGACY_BACKEND_EVENT_TYPES,
-  MODERN_UI_EVENT_TYPES,
-} from "./eventTypeSupport";
+import { getExportEventTypes } from "./eventTypeSupport";
 
 function toDate(value: any): Date {
   if (value?.seconds) return new Date(value.seconds * 1000);
@@ -113,52 +110,17 @@ function buildDetails(type: string, event: any): string {
   }
 }
 
+export interface CsvExportResult {
+  /** Types whose events could not be read: the file is incomplete for them. */
+  failedTypes: EventType[];
+}
+
 export async function exportAllEventsCSV(
   childId: string,
   childName: string,
-): Promise<void> {
-  // CSV export intentionally covers both the modern UI contract and legacy
-  // backend events so historical data stays visible to the user.
-  const eventTypes: EventType[] = [
-    "tetee",
-    "biberon",
-    "solide",
-    "pompage",
-    "miction",
-    "selle",
-    "sommeil",
-    "bain",
-    "temperature",
-    "medicament",
-    "symptome",
-    "vaccin",
-    "vitamine",
-    "croissance",
-    "activite",
-    "jalon",
-    ...MODERN_UI_EVENT_TYPES.filter(
-      (type) =>
-        ![
-          "tetee",
-          "biberon",
-          "solide",
-          "pompage",
-          "miction",
-          "selle",
-          "sommeil",
-          "bain",
-          "temperature",
-          "medicament",
-          "symptome",
-          "vaccin",
-          "vitamine",
-          "croissance",
-          "activite",
-          "jalon",
-        ].includes(type),
-    ),
-    ...LEGACY_BACKEND_EVENT_TYPES,
-  ];
+): Promise<CsvExportResult> {
+  const eventTypes = getExportEventTypes();
+  const failedTypes: EventType[] = [];
 
   const rows: string[][] = [];
   rows.push(["Date", "Heure", "Type", "Details", "Note"]);
@@ -192,7 +154,8 @@ export async function exportAllEventsCSV(
         ]);
       }
     } catch {
-      // Skip types that fail
+      // Keep going, but report the incomplete types to the caller.
+      failedTypes.push(type);
     }
   }
 
@@ -222,6 +185,7 @@ export async function exportAllEventsCSV(
       mimeType: "text/csv",
       UTI: "public.comma-separated-values-text",
     });
+    return { failedTypes };
   } catch (error) {
     await deleteTempFile(filePath);
     throw error;

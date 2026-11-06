@@ -2,10 +2,11 @@ import { auth, db } from "@/config/firebase";
 import type { User } from "@/types/user";
 import {
   EmailAuthProvider,
+  getIdToken,
   reauthenticateWithCredential,
   type AuthCredential,
 } from "firebase/auth";
-import { doc, getDoc, deleteField, updateDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/config/firebase";
 import {
@@ -18,7 +19,6 @@ import {
   getGoogleCredential,
 } from "@/services/socialAuthService";
 
-const GRACE_PERIOD_DAYS = 30;
 const QUEUE_SYNC_TIMEOUT_MS = 5000;
 
 /** True when the offline queue is empty (after a sync attempt bounded by a timeout). */
@@ -110,6 +110,10 @@ const CANCEL_CODES = new Set([
 ]);
 
 export function mapDeletionError(error: unknown): string {
+  const details = (error as { details?: { reason?: unknown } } | null)?.details;
+  if (details?.reason === "recent-login-required") {
+    return "Pour votre sécurité, confirmez votre identité à nouveau : votre dernière connexion est trop ancienne. Réessayez et validez la demande de confirmation.";
+  }
   const code = String((error as { code?: unknown } | null)?.code ?? "");
   if (CANCEL_CODES.has(code)) {
     return "Confirmation annulée. Votre compte n'a pas été modifié.";
@@ -128,6 +132,8 @@ export function mapDeletionError(error: unknown): string {
     case "functions/unavailable":
     case "functions/deadline-exceeded":
       return "Problème de connexion. Vérifiez votre réseau puis réessayez.";
+    case "deletion/child-delete-failed":
+      return "La suppression du suivi d'un enfant a échoué. Votre compte n'a pas été supprimé. Réessayez.";
     case "deletion/transfer-failed":
       return "Le transfert de propriété a échoué. Votre compte n'a pas été supprimé. Réessayez.";
     default:
@@ -147,9 +153,21 @@ export interface OwnershipBlocker {
   members: OwnershipBlockerMember[];
 }
 
+/** Choice value meaning "delete this child's tracking" (default in the modal). */
+export const DELETE_CHILD_CHOICE = "__delete__";
+
+/** Roles that get full owner rights when picked as the new owner: needs explicit confirmation. */
+export const LOW_PRIVILEGE_ROLES = ["contributor", "viewer"];
+
 export interface OwnershipTransfer {
   childId: string;
   newOwnerId: string;
+}
+
+/** Result of createDeletionRequest (pending when other owners must vote). */
+export interface ChildDeletionOutcome {
+  childId: string;
+  status: string;
 }
 
 /**
@@ -206,13 +224,19 @@ async function reauthenticate(
 
 /**
  * Demande la suppression du compte avec délai de grâce de 30 jours.
- * Ré-authentification selon le fournisseur (mot de passe, Google, Apple), puis
- * transfert de propriété éventuel, puis marquage `pendingDeletion` — la
- * suppression effective est déléguée à une Cloud Function schedulée.
- * L'utilisateur peut annuler pendant le délai via `cancelAccountDeletion()`.
+ * Ré-authentification selon le fournisseur (mot de passe, Google, Apple) puis
+ * rafraîchissement du jeton (auth_time), révocation Apple, transfert de
+ * propriété / suppression des enfants partagés, puis appel serveur
+ * `requestAccountDeletion` (date, `pendingDeletion`, jetons push et e-mail
+ * gérés côté serveur). L'utilisateur peut annuler via `cancelAccountDeletion()`.
  */
 export async function requestAccountDeletion(
-  options: { password?: string; transfers?: OwnershipTransfer[] } = {},
+  options: {
+    password?: string;
+    transfers?: OwnershipTransfer[];
+    /** Children whose tracking is deleted (30-day grace) instead of transferred. */
+    childDeletions?: string[];
+  } = {},
 ): Promise<PendingDeletionInfo> {
   const user = auth.currentUser;
   if (!user) {
@@ -228,6 +252,21 @@ export async function requestAccountDeletion(
     method,
     options.password,
   );
+  // Force a token carrying the fresh auth_time checked by the server.
+  await getIdToken(user, true);
+
+  // Apple token revocation must be registered BEFORE scheduling (the server
+  // needs the code at deletion time). Best effort: never block the deletion.
+  if (method === "apple" && appleAuthorizationCode) {
+    try {
+      await httpsCallable<{ authorizationCode: string }, { stored: boolean }>(
+        functions,
+        "registerAppleRevocation",
+      )({ authorizationCode: appleAuthorizationCode });
+    } catch (error) {
+      console.warn("[DELETION] registerAppleRevocation échoué:", error);
+    }
+  }
 
   // Hand over shared children first: stop here if any transfer fails.
   const transferCallable = httpsCallable<
@@ -243,18 +282,33 @@ export async function requestAccountDeletion(
     }
   }
 
-  // Marquer le compte pour suppression différée
-  const scheduledAt = new Date();
-  const deletionDate = new Date(scheduledAt);
-  deletionDate.setDate(deletionDate.getDate() + GRACE_PERIOD_DAYS);
-  const pendingDeletion: PendingDeletionInfo = {
-    scheduledAt: scheduledAt.toISOString(),
-    deletionDate: deletionDate.toISOString(),
-  };
+  // Children the owner chose to delete (30-day grace, other members lose access).
+  const childDeletionCallable = httpsCallable<
+    { childId: string },
+    { status: string; requestId?: string }
+  >(functions, "createDeletionRequest");
+  for (const childId of options.childDeletions ?? []) {
+    try {
+      await childDeletionCallable({ childId });
+    } catch (error) {
+      console.warn("[DELETION] createDeletionRequest échoué:", error);
+      throw new DeletionError("deletion/child-delete-failed");
+    }
+  }
 
-  await updateDoc(doc(db, "users", user.uid), {
-    pendingDeletion,
-  });
+  // Schedule the deletion server-side (date, pendingDeletion, push tokens, e-mail).
+  const scheduledAt = new Date().toISOString();
+  const result = await httpsCallable<
+    Record<string, never>,
+    { deletionDate: string }
+  >(
+    functions,
+    "requestAccountDeletion",
+  )({});
+  const pendingDeletion: PendingDeletionInfo = {
+    scheduledAt,
+    deletionDate: result.data.deletionDate,
+  };
 
   // Local copy of this account's unsent events. Deletion can still be cancelled
   // during the grace period, so first try to sync them (short timeout); purge
@@ -268,23 +322,11 @@ export async function requestAccountDeletion(
     console.warn("[DELETION] file hors-ligne non traitée:", error);
   }
 
-  // Apple token revocation is best effort: never block the deletion.
-  if (method === "apple" && appleAuthorizationCode) {
-    try {
-      await httpsCallable<{ authorizationCode: string }, { stored: boolean }>(
-        functions,
-        "registerAppleRevocation",
-      )({ authorizationCode: appleAuthorizationCode });
-    } catch (error) {
-      console.warn("[DELETION] registerAppleRevocation échoué:", error);
-    }
-  }
-
   return pendingDeletion;
 }
 
 /**
- * Annule une demande de suppression de compte en cours.
+ * Annule une demande de suppression de compte en cours (via le serveur).
  */
 export async function cancelAccountDeletion() {
   const user = auth.currentUser;
@@ -292,9 +334,10 @@ export async function cancelAccountDeletion() {
     throw new Error("Utilisateur non authentifié.");
   }
 
-  await updateDoc(doc(db, "users", user.uid), {
-    pendingDeletion: deleteField(),
-  });
+  await httpsCallable<Record<string, never>, { success: boolean }>(
+    functions,
+    "cancelAccountDeletion",
+  )({});
 }
 
 /**

@@ -7,7 +7,7 @@ import { Platform } from "react-native";
 import { db, functions } from "@/config/firebase";
 
 /** Bump whenever the consent text / privacy policy changes materially. */
-export const HEALTH_CONSENT_VERSION = "2.1";
+export const HEALTH_CONSENT_VERSION = "2.2";
 
 export interface HealthDataConsent {
   granted: boolean;
@@ -60,4 +60,18 @@ export async function recordHealthConsent(uid: string): Promise<void> {
     platform: Platform.OS,
   });
   verifiedUid = uid;
+}
+
+/**
+ * Withdraws the health data consent server-side (records the withdrawal and
+ * sets `healthDataConsent.granted = false`), then resets the local cache so the
+ * boot flow shows the consent screen again.
+ */
+export async function withdrawHealthConsent(): Promise<void> {
+  const callable = httpsCallable<Record<string, never>, { success: boolean }>(
+    functions,
+    "withdrawHealthConsent",
+  );
+  await callable({});
+  resetHealthConsentCache();
 }

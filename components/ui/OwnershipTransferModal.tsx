@@ -1,5 +1,9 @@
-import type { OwnershipBlocker } from "@/services/accountDeletionService";
-import React from "react";
+import {
+  DELETE_CHILD_CHOICE,
+  LOW_PRIVILEGE_ROLES,
+  type OwnershipBlocker,
+} from "@/services/accountDeletionService";
+import React, { useEffect, useState } from "react";
 import {
   Modal,
   ScrollView,
@@ -12,7 +16,7 @@ import {
 interface OwnershipTransferModalProps {
   visible: boolean;
   blockers: OwnershipBlocker[];
-  /** childId -> chosen new owner uid */
+  /** childId -> chosen new owner uid, or DELETE_CHILD_CHOICE (default when absent) */
   choices: Record<string, string>;
   backgroundColor: string;
   textColor: string;
@@ -43,8 +47,82 @@ export function OwnershipTransferModal({
   onConfirm,
   onCancel,
 }: OwnershipTransferModalProps) {
-  const allChosen =
-    blockers.length > 0 && blockers.every((b) => !!choices[b.childId]);
+  const [confirmingRisky, setConfirmingRisky] = useState(false);
+  const choiceOf = (childId: string) => choices[childId] ?? DELETE_CHILD_CHOICE;
+
+  useEffect(() => {
+    if (!visible) setConfirmingRisky(false);
+  }, [visible]);
+
+  // Contributors / viewers picked as owner: they get full rights.
+  const riskyPicks = blockers.flatMap((b) => {
+    const member = b.members.find((m) => m.uid === choiceOf(b.childId));
+    return member && LOW_PRIVILEGE_ROLES.includes(member.role)
+      ? [{ childName: b.childName, member }]
+      : [];
+  });
+  const hasDeletion = blockers.some(
+    (b) => choiceOf(b.childId) === DELETE_CHILD_CHOICE,
+  );
+  const allChosen = blockers.length > 0;
+
+  const handleContinue = () => {
+    if (riskyPicks.length > 0) {
+      setConfirmingRisky(true);
+      return;
+    }
+    onConfirm();
+  };
+
+  if (confirmingRisky) {
+    return (
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setConfirmingRisky(false)}>
+        <View style={styles.overlay}>
+          <View style={[styles.content, { backgroundColor }]}>
+            <Text style={[styles.title, { color: textColor }]} accessibilityRole="header">
+              Confirmer le transfert
+            </Text>
+            <ScrollView style={styles.list}>
+              {riskyPicks.map(({ childName, member }) => (
+                <Text key={`${childName}-${member.uid}`} style={[styles.intro, { color: textColor }]}>
+                  {member.displayName?.trim() || "Ce membre"} (
+                  {ROLE_LABELS[member.role] ?? "Membre"}) deviendra propriétaire
+                  du suivi de {childName}.
+                </Text>
+              ))}
+              <Text style={[styles.intro, { color: mutedColor }]}>
+                Attention : un propriétaire dispose de tous les droits. Il pourra
+                gérer les accès (inviter ou retirer des personnes) et verra
+                toutes les données de santé de l&apos;enfant. Vérifiez que vous
+                lui faites entièrement confiance.
+              </Text>
+            </ScrollView>
+            <View style={styles.buttons}>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: borderColor }]}
+                onPress={() => setConfirmingRisky(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Revenir au choix"
+              >
+                <Text style={[styles.buttonText, { color: textColor }]}>Revenir</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: accentColor }]}
+                onPress={() => {
+                  setConfirmingRisky(false);
+                  onConfirm();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Je confirme le transfert de tous les droits"
+              >
+                <Text style={[styles.buttonText, { color: "#fff" }]}>Je confirme</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -63,9 +141,10 @@ export function OwnershipTransferModal({
           </Text>
           <Text style={[styles.intro, { color: mutedColor }]}>
             Vous êtes le seul responsable de {blockers.length > 1 ? "ces enfants" : "cet enfant"}.
-            Choisissez la personne qui deviendra propriétaire : elle gardera
-            l&apos;accès au suivi, vos saisies resteront visibles pour elle
-            (anonymisées) et vous quitterez le partage.
+            Pour chacun, supprimez le suivi ou choisissez la personne qui
+            deviendra propriétaire : elle gardera l&apos;accès au suivi, vos
+            saisies resteront visibles pour elle (anonymisées) et vous quitterez
+            le partage.
           </Text>
 
           <ScrollView style={styles.list}>
@@ -74,6 +153,48 @@ export function OwnershipTransferModal({
                 <Text style={[styles.childName, { color: textColor }]}>
                   {blocker.childName}
                 </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.option,
+                    {
+                      borderColor:
+                        choiceOf(blocker.childId) === DELETE_CHILD_CHOICE
+                          ? accentColor
+                          : borderColor,
+                    },
+                  ]}
+                  onPress={() => onSelect(blocker.childId, DELETE_CHILD_CHOICE)}
+                  accessibilityRole="radio"
+                  accessibilityState={{
+                    selected: choiceOf(blocker.childId) === DELETE_CHILD_CHOICE,
+                  }}
+                  accessibilityLabel={`Supprimer le suivi de ${blocker.childName}`}
+                >
+                  <View
+                    style={[
+                      styles.radio,
+                      {
+                        borderColor:
+                          choiceOf(blocker.childId) === DELETE_CHILD_CHOICE
+                            ? accentColor
+                            : mutedColor,
+                      },
+                    ]}
+                  >
+                    {choiceOf(blocker.childId) === DELETE_CHILD_CHOICE && (
+                      <View style={[styles.radioDot, { backgroundColor: accentColor }]} />
+                    )}
+                  </View>
+                  <View style={styles.optionText}>
+                    <Text style={[styles.optionLabel, { color: textColor }]}>
+                      Supprimer le suivi de cet enfant
+                    </Text>
+                    <Text style={[styles.optionRole, { color: mutedColor }]}>
+                      Suppression après 30 jours, annulable pendant ce délai.
+                      Les autres membres perdent l&apos;accès.
+                    </Text>
+                  </View>
+                </TouchableOpacity>
                 {blocker.members.map((member) => {
                   const selected = choices[blocker.childId] === member.uid;
                   const label = member.displayName?.trim() || "Membre";
@@ -134,10 +255,14 @@ export function OwnershipTransferModal({
                 { backgroundColor: accentColor },
                 !allChosen && styles.disabled,
               ]}
-              onPress={onConfirm}
+              onPress={handleContinue}
               disabled={!allChosen}
               accessibilityRole="button"
-              accessibilityLabel="Transférer la propriété et continuer"
+              accessibilityLabel={
+                hasDeletion
+                  ? "Continuer avec les choix sélectionnés"
+                  : "Transférer la propriété et continuer"
+              }
               accessibilityState={{ disabled: !allChosen }}
             >
               <Text style={[styles.buttonText, { color: "#fff" }]}>Continuer</Text>
