@@ -4,7 +4,7 @@
 // Google/Apple confirm) -> requestAccountDeletion -> sign out -> login.
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
@@ -14,6 +14,7 @@ import { PromptModal } from "@/components/ui/PromptModal";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   DELETE_CHILD_CHOICE,
+  deletionEmailNotice,
   getDeletionAuthMethod,
   getOwnershipBlockers,
   mapDeletionError,
@@ -89,7 +90,7 @@ export function useAccountDeletionFlow(colors: AccountDeletionColors) {
           childId: b.childId,
           choice: choices[b.childId] ?? DELETE_CHILD_CHOICE,
         }));
-        await requestAccountDeletion({
+        const deletion = await requestAccountDeletion({
           password: pwd,
           transfers: chosen
             .filter((c) => c.choice !== DELETE_CHILD_CHOICE)
@@ -99,7 +100,10 @@ export function useAccountDeletionFlow(colors: AccountDeletionColors) {
             .map((c) => c.childId),
         });
         scheduled = true;
-        // The confirmation e-mail is sent by the server.
+        // The confirmation e-mail is sent by the server. If it could not be
+        // sent, say so (native alert: it outlives the redirect to the login).
+        const notice = deletionEmailNotice(deletion);
+        if (notice) Alert.alert(notice.title, notice.message);
         await refreshUser();
         setShowPasswordModal(false);
         setShowSocialModal(false);

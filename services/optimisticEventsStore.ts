@@ -3,6 +3,7 @@
 // show them instantly while the CF runs in the background.
 
 import { addBreadcrumb } from "@/utils/errorReporting";
+import { getEventTypeLabel } from "@/utils/eventTypeLabels";
 
 export type OptimisticOperation = 'create' | 'update';
 export type OptimisticStatus =
@@ -24,13 +25,35 @@ export interface OptimisticEntry {
   reconciledAt?: number;
 }
 
+/**
+ * What a failed optimistic operation leaves behind: enough for the UI to say
+ * which event failed and to offer « Réessayer » without asking the user to type
+ * everything again.
+ */
+export interface OptimisticFailure {
+  /** Data to roll back to (previous event for an update, the event for a create). */
+  event: any;
+  operation: OptimisticOperation;
+  eventType: string | null;
+  childId: string;
+  /** Firestore id for an update; undefined for a create. */
+  eventId?: string;
+  /** Data to send again: the optimistic event (new values for an update). */
+  retryData: any;
+  previousEvent?: any;
+  /** False when a retry cannot work (e.g. the uploaded photo was deleted). */
+  retryable: boolean;
+}
+
+export type OptimisticFailureCallback = (message: string, failure?: OptimisticFailure) => void;
+
 // ---------------------------------------------------------------------------
 // Internal state
 // ---------------------------------------------------------------------------
 
 const entries = new Map<string, OptimisticEntry>();
 const subscribers = new Set<() => void>();
-let onFailureCallback: ((message: string) => void) | null = null;
+let onFailureCallback: OptimisticFailureCallback | null = null;
 
 const STALE_THRESHOLD_MS = 60_000; // 60 seconds — handles CF cold starts without premature purge
 
@@ -38,7 +61,7 @@ const STALE_THRESHOLD_MS = 60_000; // 60 seconds — handles CF cold starts with
  * Register a callback to be called when an optimistic operation fails.
  * Used to show a toast/error to the user.
  */
-export function setOnFailure(cb: ((message: string) => void) | null): void {
+export function setOnFailure(cb: OptimisticFailureCallback | null): void {
   onFailureCallback = cb;
 }
 
@@ -217,7 +240,8 @@ export function markOptimisticQueued(tempIdOrEventId: string): void {
  */
 export function failOptimistic(
   tempIdOrEventId: string,
-): { event: any; operation: string } | null {
+  options: { retryable?: boolean } = {},
+): (OptimisticFailure & { event: any; operation: OptimisticOperation }) | null {
   let entry = entries.get(tempIdOrEventId);
 
   if (!entry) {
@@ -235,6 +259,12 @@ export function failOptimistic(
   const result = {
     event: entry.operation === 'update' ? entry.previousEvent : entry.event,
     operation: entry.operation,
+    eventType: (entry.event?.type ?? entry.previousEvent?.type ?? null) as string | null,
+    childId: entry.childId,
+    eventId: entry.operation === 'update' ? entry.realId : undefined,
+    retryData: entry.event,
+    previousEvent: entry.previousEvent,
+    retryable: options.retryable !== false,
   };
 
   const previousHadHeureFin = hasHeureFin(entry.previousEvent);
@@ -268,8 +298,12 @@ export function failOptimistic(
   entries.delete(entry.tempId);
 
   // Notify the user via the registered failure callback.
-  const action = entry.operation === 'create' ? "l'enregistrement" : 'la modification';
-  onFailureCallback?.(`Erreur lors de ${action}. Veuillez réessayer.`);
+  const label = getEventTypeLabel(result.eventType);
+  const what = entry.operation === 'create' ? "l'ajout" : 'la modification';
+  const message =
+    `Échec de ${what}${label ? ` : ${label}` : ''}.` +
+    (result.retryable ? '' : ' Veuillez recommencer.');
+  onFailureCallback?.(message, result);
 
   notify();
   return result;

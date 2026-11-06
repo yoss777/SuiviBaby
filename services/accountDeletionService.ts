@@ -45,6 +45,25 @@ async function flushOfflineQueue(): Promise<boolean> {
 
 export type PendingDeletionInfo = NonNullable<User["pendingDeletion"]>;
 
+/**
+ * Message à montrer quand la demande est enregistrée mais que l'e-mail de
+ * confirmation n'est pas parti (Resend en erreur). Null sinon.
+ */
+export function deletionEmailNotice(info: {
+  deletionDate: string;
+  emailSent?: boolean;
+}): { title: string; message: string } | null {
+  if (info.emailSent !== false) return null;
+  const date = new Date(info.deletionDate);
+  const when = Number.isNaN(date.getTime())
+    ? "dans 30 jours"
+    : `le ${date.toLocaleDateString("fr-FR")}`;
+  return {
+    title: "Suppression programmée",
+    message: `Votre compte sera supprimé ${when}. Nous n'avons pas pu envoyer l'e-mail de confirmation : notez cette date, vous pouvez annuler la suppression depuis l'application jusque-là.`,
+  };
+}
+
 export function getPendingDeletionInfo(
   user: Pick<User, "pendingDeletion"> | null | undefined,
 ): PendingDeletionInfo | null {
@@ -237,7 +256,7 @@ export async function requestAccountDeletion(
     /** Children whose tracking is deleted (30-day grace) instead of transferred. */
     childDeletions?: string[];
   } = {},
-): Promise<PendingDeletionInfo> {
+): Promise<PendingDeletionInfo & { emailSent?: boolean }> {
   const user = auth.currentUser;
   if (!user) {
     throw new Error("Utilisateur non authentifié.");
@@ -300,14 +319,16 @@ export async function requestAccountDeletion(
   const scheduledAt = new Date().toISOString();
   const result = await httpsCallable<
     Record<string, never>,
-    { deletionDate: string }
+    { deletionDate: string; emailSent?: boolean }
   >(
     functions,
     "requestAccountDeletion",
   )({});
-  const pendingDeletion: PendingDeletionInfo = {
+  const pendingDeletion: PendingDeletionInfo & { emailSent?: boolean } = {
     scheduledAt,
     deletionDate: result.data.deletionDate,
+    // false : la demande est bien enregistrée mais l'e-mail n'est pas parti.
+    emailSent: result.data.emailSent,
   };
 
   // Local copy of this account's unsent events. Deletion can still be cancelled

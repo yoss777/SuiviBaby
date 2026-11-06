@@ -253,9 +253,63 @@ export function isReceiptOwnedByAnotherAccount(error: unknown): boolean {
   return code !== undefined && String(code) === RECEIPT_ALREADY_IN_USE_ERROR_CODE;
 }
 
+export type RestoreFailureKind = "other-account" | "network" | "configuration" | "other";
+
+const OTHER_ACCOUNT_CODES = new Set(["7", "13"]);
+const NETWORK_CODES = new Set(["10", "32", "35"]);
+const CONFIGURATION_CODES = new Set(["11", "14", "23"]);
+
+/** Cause d'un échec de « Restaurer mes achats » (codes RevenueCat). */
+export function classifyRestoreError(error: unknown): RestoreFailureKind {
+  const raw = (error as { code?: string | number } | null | undefined)?.code;
+  const code = raw === undefined || raw === null ? "" : String(raw);
+  const readable = String(
+    (error as { userInfo?: { readableErrorCode?: unknown } } | null | undefined)?.userInfo
+      ?.readableErrorCode ?? "",
+  );
+  if (OTHER_ACCOUNT_CODES.has(code)) return "other-account";
+  if (NETWORK_CODES.has(code) || readable === "NETWORK_ERROR" || readable === "OFFLINE_CONNECTION_ERROR") {
+    return "network";
+  }
+  if (CONFIGURATION_CODES.has(code)) return "configuration";
+  return "other";
+}
+
+/** Aussi utilisé quand RevenueCat n'est pas configuré (restorePurchases renvoie null). */
+export const RESTORE_NOT_CONFIGURED_MESSAGE =
+  "La restauration des achats n'est pas disponible pour le moment. Réessayez plus tard ou contactez le support si le problème persiste.";
+
+export function restoreFailureMessage(kind: RestoreFailureKind): { title: string; message: string } {
+  switch (kind) {
+    case "other-account":
+      return {
+        title: "Abonnement lié à un autre compte",
+        message:
+          "Cet abonnement est rattaché à un autre compte SuiviBaby. Connectez-vous avec le compte qui a effectué l'achat pour en profiter.",
+      };
+    case "network":
+      return {
+        title: "Connexion indisponible",
+        message: "Impossible de restaurer les achats : vérifiez votre connexion internet puis réessayez.",
+      };
+    case "configuration":
+      return { title: "Restauration indisponible", message: RESTORE_NOT_CONFIGURED_MESSAGE };
+    default:
+      return {
+        title: "Erreur",
+        message: "La restauration des achats a échoué. Réessayez, ou contactez le support si le problème persiste.",
+      };
+  }
+}
+
+/**
+ * Retourne null quand RevenueCat n'est pas configuré (clé absente) : l'appelant
+ * doit l'annoncer, pas rester muet.
+ */
 export async function restorePurchases(): Promise<CustomerInfo | null> {
   try {
     await initRevenueCat();
+    if (!isInitialized) return null;
     return await Purchases.restorePurchases();
   } catch (error) {
     console.error("[RevenueCat] Restore failed:", error);

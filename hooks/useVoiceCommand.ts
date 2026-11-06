@@ -21,6 +21,7 @@ import {
 } from "./useVoiceParser";
 import {
   findEventByIdentifier,
+  lookupFailureMessage,
   executeCommand,
   isAmbiguous,
   type ModalFeedback,
@@ -245,7 +246,16 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       let targetEvent: AppEvent | null = null;
       if ((action === "modify" || action === "delete") && commandWithChildId.eventIdentifier) {
         console.log("🔍 Recherche de l'événement cible...");
-        const found = await findEventByIdentifier(commandWithChildId.eventIdentifier, childId);
+        let found: Awaited<ReturnType<typeof findEventByIdentifier>>;
+        try {
+          found = await findEventByIdentifier(commandWithChildId.eventIdentifier, childId);
+        } catch (lookupError) {
+          // Réseau ou autre échec : surtout pas « événement non trouvé ».
+          const { title, message } = lookupFailureMessage(lookupError);
+          setInfoModal({ visible: true, title, message });
+          setIsProcessing(false);
+          return;
+        }
 
         if (!found) {
           setInfoModal({

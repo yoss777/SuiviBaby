@@ -16,6 +16,7 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
@@ -286,7 +287,8 @@ export default function MilestonesScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { showToast } = useToast();
+  const scheduleDelete = useDeleteWithUndo();
   const { swipeableRef, triggerHint } = useSwipeHint();
   const navigation = useNavigation();
   const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId, selectAll, clearSelection } = useBatchSelect();
@@ -1177,38 +1179,32 @@ export default function MilestonesScreen() {
       return next;
     });
 
-    showUndoToast(
-      `${ids.length} jalon${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`,
-      // onUndo — restore visibility
-      () => {
+    scheduleDelete({
+      message: `${ids.length} jalon${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`,
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           ids.forEach((id) => next.delete(id));
           return next;
         });
       },
-      // onExpire — actually delete from Firestore
-      async () => {
-        try {
-          await Promise.all(ids.map((id) => supprimerJalon(childId, id)));
-        } catch {
-          // Restore if delete fails
-          setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            ids.forEach((id) => next.delete(id));
-            return next;
-          });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            Promise.all(ids.map((id) => supprimerJalon(childId, id))).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                Promise.all(ids.map((id) => supprimerJalon(childId, id)));
-              });
-            });
-          });
-        }
-      }
-    );
-  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showActionToast]);
+      run: () => Promise.all(ids.map((id) => supprimerJalon(childId, id))),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          ids.forEach((id) => next.delete(id));
+          return next;
+        });
+      },
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          ids.forEach((id) => next.add(id));
+          return next;
+        });
+      },
+    });
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, scheduleDelete]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });
@@ -1223,39 +1219,32 @@ export default function MilestonesScreen() {
     // Soft-delete: hide immediately from UI
     setSoftDeletedIds((prev) => new Set(prev).add(eventId));
 
-    showUndoToast(
-      "Jalon supprimé",
-      // onUndo — restore visibility
-      () => {
+    scheduleDelete({
+      message: "Jalon supprimé",
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           next.delete(eventId);
           return next;
         });
       },
-      // onExpire — actually delete from Firestore
-      async () => {
-        try {
-          await supprimerJalon(childId, eventId);
-        } catch {
-          // Restore if delete fails
-          setSoftDeletedIds((prev) => {
+      run: () => supprimerJalon(childId, eventId),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             next.delete(eventId);
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerJalon(childId, eventId).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerJalon(childId, eventId);
-              });
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.add(eventId);
+            return next;
+          });
+      },
+    });
+  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });

@@ -449,6 +449,19 @@ describe("revenueCatService", () => {
         "Restore failed",
       );
     });
+
+    it("returns null, without calling the SDK, when RevenueCat is not configured", async () => {
+      const g = globalThis as unknown as { __DEV__: boolean };
+      const previousDev = g.__DEV__;
+      g.__DEV__ = false; // release build: the placeholder key is refused
+      try {
+        const result = await revenueCatService.restorePurchases();
+        expect(result).toBeNull();
+        expect(mockPurchases.restorePurchases).not.toHaveBeenCalled();
+      } finally {
+        g.__DEV__ = previousDev;
+      }
+    });
   });
 
   // ============================================
@@ -512,5 +525,54 @@ describe("isReceiptOwnedByAnotherAccount", () => {
     expect(isReceiptOwnedByAnotherAccount({ code: "1" })).toBe(false);
     expect(isReceiptOwnedByAnotherAccount(new Error("network"))).toBe(false);
     expect(isReceiptOwnedByAnotherAccount(null)).toBe(false);
+  });
+});
+
+describe("restore failures (6.8)", () => {
+  const { classifyRestoreError, restoreFailureMessage, RESTORE_NOT_CONFIGURED_MESSAGE } = jest.requireActual(
+    "@/services/revenueCatService",
+  ) as typeof import("@/services/revenueCatService");
+
+  it("recognises a purchase that belongs to another account", () => {
+    expect(classifyRestoreError({ code: "7" })).toBe("other-account");
+    expect(classifyRestoreError({ code: 13 })).toBe("other-account");
+  });
+
+  it("recognises network problems", () => {
+    for (const code of ["10", 35, "32"]) expect(classifyRestoreError({ code })).toBe("network");
+    expect(classifyRestoreError({ userInfo: { readableErrorCode: "NETWORK_ERROR" } })).toBe("network");
+  });
+
+  it("recognises configuration problems", () => {
+    for (const code of ["23", "11", "14"]) expect(classifyRestoreError({ code })).toBe("configuration");
+  });
+
+  it("falls back to 'other' for anything else, including odd values", () => {
+    for (const e of [{ code: "0" }, { code: "2" }, new Error("x"), null, undefined, "boom", 42]) {
+      expect(classifyRestoreError(e)).toBe("other");
+    }
+  });
+
+  it("has a distinct message per cause, verbatim", () => {
+    expect(restoreFailureMessage("other-account")).toEqual({
+      title: "Abonnement lié à un autre compte",
+      message:
+        "Cet abonnement est rattaché à un autre compte SuiviBaby. Connectez-vous avec le compte qui a effectué l'achat pour en profiter.",
+    });
+    expect(restoreFailureMessage("network")).toEqual({
+      title: "Connexion indisponible",
+      message: "Impossible de restaurer les achats : vérifiez votre connexion internet puis réessayez.",
+    });
+    expect(restoreFailureMessage("configuration")).toEqual({
+      title: "Restauration indisponible",
+      message: RESTORE_NOT_CONFIGURED_MESSAGE,
+    });
+    expect(restoreFailureMessage("other")).toEqual({
+      title: "Erreur",
+      message: "La restauration des achats a échoué. Réessayez, ou contactez le support si le problème persiste.",
+    });
+    expect(RESTORE_NOT_CONFIGURED_MESSAGE).toBe(
+      "La restauration des achats n'est pas disponible pour le moment. Réessayez plus tard ou contactez le support si le problème persiste.",
+    );
   });
 });

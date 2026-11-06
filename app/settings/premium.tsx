@@ -10,6 +10,9 @@ import {
   getOfferings,
   purchasePackage,
   restorePurchases,
+  classifyRestoreError,
+  restoreFailureMessage,
+  RESTORE_NOT_CONFIGURED_MESSAGE,
   getTierFromCustomerInfo,
   isReceiptOwnedByAnotherAccount,
 } from "@/services/revenueCatService";
@@ -248,7 +251,15 @@ export default function PremiumScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const info = await restorePurchases();
-      if (!info) return;
+      if (!info) {
+        // SDK non configuré : ne pas rester muet.
+        setModalConfig({
+          visible: true,
+          title: "Restauration indisponible",
+          message: RESTORE_NOT_CONFIGURED_MESSAGE,
+        });
+        return;
+      }
       if (getTierFromCustomerInfo(info) === "free") {
         setModalConfig({
           visible: true,
@@ -264,21 +275,8 @@ export default function PremiumScreen() {
         message: "Vos achats précédents ont été restaurés avec succès.",
       });
     } catch (error) {
-      if (isReceiptOwnedByAnotherAccount(error)) {
-        setModalConfig({
-          visible: true,
-          title: "Abonnement lié à un autre compte",
-          message:
-            "Cet abonnement est rattaché à un autre compte SuiviBaby. Connectez-vous avec le compte qui a effectué l'achat pour en profiter.",
-        });
-        return;
-      }
-      setModalConfig({
-        visible: true,
-        title: "Erreur",
-        message:
-          "Impossible de restaurer les achats. Vérifiez votre connexion.",
-      });
+      const { title, message } = restoreFailureMessage(classifyRestoreError(error));
+      setModalConfig({ visible: true, title, message });
     }
   }, []);
 

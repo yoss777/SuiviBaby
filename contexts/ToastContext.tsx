@@ -1,5 +1,5 @@
-import React, { createContext, useCallback, useContext, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Portal } from "@gorhom/portal";
 
@@ -61,9 +61,31 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     clearTimer();
   }, [clearTimer]);
 
+  // Exécute tout de suite la suppression qui attendait la fin du délai
+  // d'annulation. Appelé quand un autre toast prend la place du toast
+  // d'annulation (sinon la suppression serait perdue : l'élément resterait
+  // masqué puis réapparaîtrait) et quand l'app passe en arrière-plan (le
+  // minuteur ne tourne plus de façon fiable une fois l'app suspendue).
+  const flushPendingUndo = useCallback(() => {
+    const pending = onExpireRef.current;
+    if (!pending) return;
+    onExpireRef.current = null;
+    clearTimer();
+    setMessage(null);
+    setAction(null);
+    pending();
+  }, [clearTimer]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "background") flushPendingUndo();
+    });
+    return () => subscription.remove();
+  }, [flushPendingUndo]);
+
   const showToast = useCallback(
     (text: string, durationMs = 2600, toastPosition: "top" | "bottom" = "bottom") => {
-    onExpireRef.current = null;
+    flushPendingUndo();
     setMessage(text);
     setAction(null);
     setPosition(toastPosition);
@@ -73,10 +95,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       setAction(null);
       timeoutRef.current = null;
     }, durationMs);
-  }, [clearTimer]);
+  }, [clearTimer, flushPendingUndo]);
 
   const showUndoToast = useCallback(
     (text: string, onUndo: () => void, onExpire?: () => void, durationMs = 4000) => {
+    flushPendingUndo();
     onExpireRef.current = onExpire ?? null;
     setMessage(text);
     setAction({
@@ -95,14 +118,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       setMessage(null);
       setAction(null);
       timeoutRef.current = null;
-      onExpireRef.current?.();
+      const expire = onExpireRef.current;
       onExpireRef.current = null;
+      expire?.();
     }, durationMs);
-  }, [clearTimer]);
+  }, [clearTimer, flushPendingUndo]);
 
   const showActionToast = useCallback(
     (text: string, actionLabel: string, onAction: () => void, durationMs = 4000) => {
-    onExpireRef.current = null;
+    flushPendingUndo();
     setMessage(text);
     setAction({
       label: actionLabel,
@@ -120,7 +144,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       setAction(null);
       timeoutRef.current = null;
     }, durationMs);
-  }, [clearTimer]);
+  }, [clearTimer, flushPendingUndo]);
 
   return (
     <ToastContext.Provider value={{ showToast, showUndoToast, showActionToast, dismissToast: dismiss }}>

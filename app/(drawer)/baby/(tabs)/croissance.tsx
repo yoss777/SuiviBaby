@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -813,7 +814,8 @@ export default function CroissanceScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = useMemo(() => getNeutralColors(colorScheme), [colorScheme]);
   const { openSheet } = useSheet();
-  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { showToast } = useToast();
+  const scheduleDelete = useDeleteWithUndo();
   const { openModal, returnTo } = useLocalSearchParams();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
@@ -1073,39 +1075,32 @@ export default function CroissanceScreen() {
     // Soft-delete: hide immediately from UI
     setSoftDeletedIds((prev) => new Set(prev).add(eventId));
 
-    showUndoToast(
-      "Mesure supprimée",
-      // onUndo — restore visibility
-      () => {
+    scheduleDelete({
+      message: "Mesure supprimée",
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           next.delete(eventId);
           return next;
         });
       },
-      // onExpire — actually delete from Firestore
-      async () => {
-        try {
-          await supprimerCroissance(childId, eventId);
-        } catch {
-          // Restore if delete fails
-          setSoftDeletedIds((prev) => {
+      run: () => supprimerCroissance(childId, eventId),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             next.delete(eventId);
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerCroissance(childId, eventId).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerCroissance(childId, eventId);
-              });
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.add(eventId);
+            return next;
+          });
+      },
+    });
+  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });

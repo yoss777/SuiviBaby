@@ -4,6 +4,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/config/firebase";
 import * as SQLite from "expo-sqlite";
+import { captureServiceError } from "@/utils/errorReporting";
 
 // ============================================
 // TYPES
@@ -20,7 +21,11 @@ interface QueuedEvent {
   retryCount: number;
   lastError: string | null;
   createdAt: number;
+  /** Échecs d'infrastructure cumulés (cf. MAX_TRANSIENT_FAILURES). */
+  transientFailures?: number;
 }
+
+export type QueuedWrite = QueuedEvent;
 
 type QueueChangeListener = (size: number) => void;
 
@@ -33,6 +38,25 @@ type QueueChangeListener = (size: number) => void;
 export const MAX_RETRIES = 3;
 
 /**
+ * Plafond d'échecs d'infrastructure PAR écriture. Sans lui, une écriture qui
+ * déclenche toujours une erreur « transitoire » (bug serveur renvoyant
+ * `internal`, par exemple) bloquait toute la file derrière elle, pour toujours.
+ * Au-delà, elle est mise de côté (visible et réarmable, jamais supprimée) et la
+ * file passe à la suivante.
+ */
+export const MAX_TRANSIENT_FAILURES = 8;
+
+/**
+ * Conflit de version (`aborted`, verrou optimiste T2.2) : l'écriture a été
+ * calculée sur une version périmée, la rejouer échouera toujours. Définitif.
+ * Testé sur le CODE : le message « The request was aborted because there was no
+ * available instance » est, lui, une panne d'infrastructure.
+ */
+function isConflictError(error: any): boolean {
+  const code = String(error?.code ?? "").toLowerCase();
+  return code === "aborted" || code === "functions/aborted";
+}
+/**
  * Erreurs d'infrastructure : le serveur est temporairement indisponible mais
  * l'écriture reste parfaitement valide. Incrémenter retryCount dessus fait
  * perdre des données lors d'une panne prolongée (facturation coupée, cold
@@ -42,6 +66,7 @@ export const MAX_RETRIES = 3;
  * échouera identiquement à chaque rejeu : elle consomme une tentative.
  */
 function isTransientError(error: any): boolean {
+  if (isConflictError(error)) return false;
   const code = String(error?.code ?? "").toLowerCase();
   const message = String(error?.message ?? "").toLowerCase();
   const haystack = `${code} ${message}`;
@@ -51,7 +76,6 @@ function isTransientError(error: any): boolean {
     haystack.includes("resource-exhausted") ||
     haystack.includes("deadline-exceeded") ||
     haystack.includes("internal") ||
-    haystack.includes("aborted") ||
     haystack.includes("no available instance") ||
     haystack.includes("billing") ||
     haystack.includes("network") ||
@@ -89,6 +113,14 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
     } catch {
       // Colonne existe déjà — OK
     }
+    // Migration S6 : compteur d'échecs d'infrastructure par écriture.
+    try {
+      await db.execAsync(
+        `ALTER TABLE pending_events ADD COLUMN transientFailures INTEGER NOT NULL DEFAULT 0`,
+      );
+    } catch {
+      // Colonne existe déjà — OK
+    }
 
     // Une écriture marquée 'syncing' dont le process est mort (app tuée,
     // crash, kill iOS pendant l'appel réseau) restait invisible à jamais :
@@ -107,7 +139,25 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
 // ============================================
 
 const listeners: Set<QueueChangeListener> = new Set();
+const exhaustedListeners: Set<QueueChangeListener> = new Set();
 let isProcessing = false;
+
+export type QueueFailureHandler = (info: { count: number; message: string }) => void;
+let onQueueFailure: QueueFailureHandler | null = null;
+
+/**
+ * Enregistre le rappel appelé quand des écritures deviennent définitivement
+ * impossibles à envoyer (pour afficher un message à l'utilisateur).
+ */
+export function setOnQueueFailure(handler: QueueFailureHandler | null): void {
+  onQueueFailure = handler;
+}
+
+function failureMessage(count: number): string {
+  return count === 1
+    ? "Un enregistrement n'a pas pu être envoyé. Touchez la bannière en haut de l'écran pour le réessayer."
+    : `${count} enregistrements n'ont pas pu être envoyés. Touchez la bannière en haut de l'écran pour les réessayer.`;
+}
 
 /** Pause entre deux écritures d'un même cycle, pour lisser la charge. */
 const INTER_WRITE_DELAY_MS = 300;
@@ -146,6 +196,17 @@ function notifyListeners(size: number) {
 }
 
 /**
+ * Publie les deux compteurs, qui ne se recouvrent jamais : écritures en
+ * attente d'envoi (encore rejouées) et écritures abandonnées (à réessayer ou
+ * supprimer par l'utilisateur).
+ */
+async function emitState(): Promise<void> {
+  notifyListeners(await getWaitingCount());
+  const exhausted = await getExhaustedCount();
+  exhaustedListeners.forEach((listener) => listener(exhausted));
+}
+
+/**
  * Ajoute un événement à la queue offline, scopé par uid
  */
 export async function enqueueEvent(
@@ -160,6 +221,11 @@ export async function enqueueEvent(
   const database = await getDb();
   const id = `offline_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
+  // Toute création porte une clé d'idempotence : le rejeu ne peut pas doubler.
+  if (action === "create" && !payload.idempotencyKey) {
+    payload = { ...payload, idempotencyKey: id };
+  }
+
   await database.runAsync(
     `INSERT INTO pending_events (id, uid, action, payload, status, retryCount, createdAt)
      VALUES (?, ?, ?, ?, 'pending', 0, ?)`,
@@ -170,8 +236,7 @@ export async function enqueueEvent(
     Date.now(),
   );
 
-  const size = await getQueueSize();
-  notifyListeners(size);
+  await emitState();
 
   return id;
 }
@@ -185,6 +250,33 @@ export async function getQueueSize(): Promise<number> {
   const database = await getDb();
   const result = await database.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM pending_events WHERE status IN ('pending', 'failed') AND uid = ?`,
+    uid,
+  );
+  return result?.count ?? 0;
+}
+
+/**
+ * Écritures encore rejouées (tentatives non épuisées). Distinct de
+ * getQueueSize, qui compte aussi les écritures abandonnées.
+ */
+export async function getWaitingCount(): Promise<number> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return 0;
+  const database = await getDb();
+  const result = await database.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM pending_events WHERE status IN ('pending', 'failed') AND retryCount < ${MAX_RETRIES} AND uid = ?`,
+    uid,
+  );
+  return result?.count ?? 0;
+}
+
+/** Écritures abandonnées (tentatives épuisées) de l'utilisateur courant. */
+export async function getExhaustedCount(): Promise<number> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return 0;
+  const database = await getDb();
+  const result = await database.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM pending_events WHERE retryCount >= ${MAX_RETRIES} AND uid = ?`,
     uid,
   );
   return result?.count ?? 0;
@@ -224,6 +316,8 @@ export async function processQueue(): Promise<number> {
     const database = await getDb();
     let isFirst = true;
 
+    let newlyExhausted = 0;
+
     for (const event of events) {
       // Espacer les envois : une queue rejouée d'un bloc après une panne
       // déclenche des cold starts en cascade sur Cloud Run, qui répond
@@ -245,6 +339,9 @@ export async function processQueue(): Promise<number> {
         // Appeler la Cloud Function appropriée
         switch (event.action) {
           case "create": {
+            // Écriture mise en file par une ancienne version (1.0.8) sans clé :
+            // l'identifiant de la ligne, stable d'un rejeu à l'autre, en tient lieu.
+            if (!payload.idempotencyKey) payload.idempotencyKey = event.id;
             const create = httpsCallable(functions, "validateAndCreateEvent");
             await create(payload);
             break;
@@ -270,32 +367,90 @@ export async function processQueue(): Promise<number> {
       } catch (error: any) {
         const errorMessage =
           error?.message || error?.code || "Erreur inconnue";
+        const conflict = isConflictError(error);
         const transient = isTransientError(error);
+        let exhausted = false;
+        let reason: "conflict" | "permanent" | "transient-cap" = "permanent";
 
-        // Erreur d'infrastructure : on repasse en 'pending' SANS consommer de
-        // tentative. L'écriture est valide, seul le serveur est indisponible —
-        // la perdre après 3 essais serait une perte de données utilisateur.
-        await database.runAsync(
-          transient
-            ? `UPDATE pending_events SET status = 'pending', lastError = ? WHERE id = ?`
-            : `UPDATE pending_events SET status = 'failed', retryCount = retryCount + 1, lastError = ? WHERE id = ?`,
-          errorMessage,
-          event.id,
-        );
+        if (conflict) {
+          // Conflit de version : définitif tout de suite, inutile de réessayer.
+          exhausted = true;
+          reason = "conflict";
+          await database.runAsync(
+            `UPDATE pending_events SET status = 'failed', retryCount = ?, lastError = ? WHERE id = ?`,
+            MAX_RETRIES,
+            errorMessage,
+            event.id,
+          );
+        } else if (transient) {
+          // Erreur d'infrastructure : on repasse en 'pending' SANS consommer de
+          // tentative. L'écriture est valide, seul le serveur est indisponible —
+          // la perdre après 3 essais serait une perte de données utilisateur.
+          const failures = (event.transientFailures ?? 0) + 1;
+          if (failures >= MAX_TRANSIENT_FAILURES) {
+            // Plafond atteint : on la met de côté (visible, réarmable) pour ne
+            // plus bloquer la file derrière elle.
+            exhausted = true;
+            reason = "transient-cap";
+            await database.runAsync(
+              `UPDATE pending_events SET status = 'failed', retryCount = ?, transientFailures = ?, lastError = ? WHERE id = ?`,
+              MAX_RETRIES,
+              failures,
+              errorMessage,
+              event.id,
+            );
+          } else {
+            await database.runAsync(
+              `UPDATE pending_events SET status = 'pending', transientFailures = transientFailures + 1, lastError = ? WHERE id = ?`,
+              errorMessage,
+              event.id,
+            );
+          }
+        } else {
+          exhausted = (event.retryCount ?? 0) + 1 >= MAX_RETRIES;
+          await database.runAsync(
+            `UPDATE pending_events SET status = 'failed', retryCount = retryCount + 1, lastError = ? WHERE id = ?`,
+            errorMessage,
+            event.id,
+          );
+        }
+
+        if (exhausted) {
+          newlyExhausted++;
+          // Plus rejouée : on le dit à Sentry (sans la charge utile, qui est
+          // une donnée de santé) et, plus bas, à l'utilisateur.
+          captureServiceError(error, {
+            service: "offlineQueue",
+            operation: "processQueue",
+            extra: {
+              action: event.action,
+              reason,
+              code: String(error?.code ?? ""),
+              retryCount: event.retryCount ?? 0,
+            },
+          });
+        }
 
         // Le serveur est en difficulté : inutile de marteler avec le reste de
         // la queue, on rendra la main et le prochain cycle réessaiera. Sans ça
         // le rejeu en rafale sature Cloud Run et provoque lui-même les
-        // "no available instance" qu'il tente de surmonter.
-        if (transient) {
+        // "no available instance" qu'il tente de surmonter. Une écriture mise
+        // de côté (plafond) ne compte pas : on passe à la suivante.
+        if (transient && !exhausted) {
           hitTransient = true;
           break;
         }
       }
     }
 
-    const size = await getQueueSize();
-    notifyListeners(size);
+    await emitState();
+    if (newlyExhausted > 0) {
+      try {
+        onQueueFailure?.({ count: newlyExhausted, message: failureMessage(newlyExhausted) });
+      } catch (error) {
+        captureServiceError(error, { service: "offlineQueue", operation: "onQueueFailure" });
+      }
+    }
     return synced;
   } finally {
     isProcessing = false;
@@ -320,6 +475,7 @@ export async function cleanupFailedEvents(): Promise<number> {
     `DELETE FROM pending_events WHERE retryCount >= 3 AND uid = ?`,
     uid,
   );
+  if (result.changes > 0) await emitState();
   return result.changes;
 }
 
@@ -339,12 +495,12 @@ export async function retryExhaustedEvents(): Promise<number> {
   if (!uid) return 0;
   const database = await getDb();
   const result = await database.runAsync(
-    `UPDATE pending_events SET status = 'pending', retryCount = 0 WHERE retryCount >= ? AND uid = ?`,
+    `UPDATE pending_events SET status = 'pending', retryCount = 0, transientFailures = 0 WHERE retryCount >= ? AND uid = ?`,
     MAX_RETRIES,
     uid,
   );
   if (result.changes > 0) {
-    notifyListeners(await getQueueSize());
+    await emitState();
     void processQueue();
   }
   return result.changes;
@@ -396,6 +552,7 @@ export async function onSignOut(): Promise<void> {
   // données utilisateur. Elles restent en base pour être rejouées au
   // re-login ; cleanupOrphanedEvents (>60j) reste le filet de sécurité.
   notifyListeners(0);
+  exhaustedListeners.forEach((listener) => listener(0));
 }
 
 /**
@@ -419,6 +576,7 @@ export async function onAccountDelete(uid: string): Promise<void> {
   // Nettoie aussi les orphans (uid vide hérité d'anciens flows).
   await cleanupOrphanedEvents();
   notifyListeners(0);
+  exhaustedListeners.forEach((listener) => listener(0));
 }
 
 // ============================================
@@ -432,9 +590,18 @@ let unsubscribeNetInfo: (() => void) | null = null;
  */
 export function onQueueChange(listener: QueueChangeListener): () => void {
   listeners.add(listener);
-  // Envoyer la taille actuelle immédiatement
-  getQueueSize().then((size) => listener(size));
+  // Envoyer la taille actuelle immédiatement (écritures encore en attente)
+  getWaitingCount().then((size) => listener(size));
   return () => listeners.delete(listener);
+}
+
+/**
+ * S'abonner au nombre d'écritures abandonnées (à réessayer ou supprimer).
+ */
+export function onExhaustedChange(listener: QueueChangeListener): () => void {
+  exhaustedListeners.add(listener);
+  getExhaustedCount().then((count) => listener(count));
+  return () => exhaustedListeners.delete(listener);
 }
 
 /**

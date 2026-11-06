@@ -3,6 +3,7 @@ import {
   getDeletionAuthMethod,
   cancelAccountDeletion,
   getOwnershipBlockers,
+  deletionEmailNotice,
   mapDeletionError,
   requestAccountDeletion,
 } from "@/services/accountDeletionService";
@@ -105,6 +106,28 @@ describe("accountDeletionService", () => {
       expect(callable("requestAccountDeletion")).toHaveBeenCalledWith({});
       expect(getIdToken).toHaveBeenCalledWith(mockAuth.currentUser, true);
       expect(getGoogleCredential).not.toHaveBeenCalled();
+    });
+
+    it("reports whether the confirmation e-mail was sent (6.8)", async () => {
+      setUser(["password"]);
+      callable("requestAccountDeletion").mockResolvedValue({
+        data: { deletionDate: "2099-01-01T00:00:00.000Z", emailSent: false },
+      });
+      await expect(requestAccountDeletion({ password: "secret" })).resolves.toMatchObject({
+        deletionDate: "2099-01-01T00:00:00.000Z",
+        emailSent: false,
+      });
+      callable("requestAccountDeletion").mockResolvedValue({
+        data: { deletionDate: "2099-01-01T00:00:00.000Z", emailSent: true },
+      });
+      await expect(requestAccountDeletion({ password: "secret" })).resolves.toMatchObject({ emailSent: true });
+    });
+
+    it("an older server answer without emailSent stays valid", async () => {
+      setUser(["password"]);
+      const info = await requestAccountDeletion({ password: "secret" });
+      expect(info.deletionDate).toBe("2099-01-01T00:00:00.000Z");
+      expect(info.emailSent).toBeUndefined();
     });
 
     it("purges directly when the offline queue is already empty", async () => {
@@ -370,5 +393,26 @@ describe("accountDeletionService", () => {
     it("handles non-error input", () => {
       expect(mapDeletionError(undefined)).toMatch(/Impossible de programmer/);
     });
+  });
+});
+
+describe("deletionEmailNotice (6.8)", () => {
+  it("is silent when the e-mail went out or the server did not say", () => {
+    expect(deletionEmailNotice({ deletionDate: "2099-01-01T00:00:00.000Z", emailSent: true })).toBeNull();
+    expect(deletionEmailNotice({ deletionDate: "2099-01-01T00:00:00.000Z" })).toBeNull();
+  });
+
+  it("tells the user the e-mail failed and keeps the date they must remember", () => {
+    const notice = deletionEmailNotice({ deletionDate: "2099-01-01T00:00:00.000Z", emailSent: false });
+    expect(notice).toEqual({
+      title: "Suppression programmée",
+      message: expect.stringContaining("Nous n'avons pas pu envoyer l'e-mail de confirmation"),
+    });
+    expect(notice?.message).toContain("2099");
+  });
+
+  it("survives an unusable date", () => {
+    const notice = deletionEmailNotice({ deletionDate: "nope", emailSent: false });
+    expect(notice?.message).toContain("dans 30 jours");
   });
 });

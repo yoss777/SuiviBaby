@@ -2648,6 +2648,17 @@ function validateEventData(type, data) {
 // EVENT CRUD CLOUD FUNCTIONS
 // ============================================
 
+/** Clé d'idempotence acceptée : alphanumérique, `_` et `-`, 100 caractères max. */
+function isValidIdempotencyKey(key) {
+  return typeof key === "string" && key.length > 0 && key.length <= 100 && /^[A-Za-z0-9_-]+$/.test(key);
+}
+
+/** Identifiant de document déterministe pour (uid, enfant, clé d'idempotence). */
+function idempotentEventId(uid, childId, key) {
+  const hash = crypto.createHash("sha256").update(`${uid}\u0000${childId}\u0000${key}`).digest("hex");
+  return `idem_${hash.slice(0, 40)}`;
+}
+
 /**
  * validateAndCreateEvent — Création d'événement avec validation serveur
  */
@@ -2682,23 +2693,20 @@ exports.validateAndCreateEvent = onCall(
     // Validation des données
     validateEventData(eventData.type, eventData);
 
-    // Idempotency: if the client sends an idempotencyKey, check whether an
-    // event with that key already exists to prevent duplicates on retry.
+    // Idempotence : une écriture rejouée (réponse perdue, file hors ligne) ne
+    // doit jamais créer un second événement.
     const { idempotencyKey, ...rawEventData } = eventData;
     const cleanEventData = convertEventDateFields(rawEventData);
     // Posés par le serveur ou la modération, jamais par le client.
     delete cleanEventData.reported;
     delete cleanEventData.id;
-    if (idempotencyKey && typeof idempotencyKey === "string") {
-      const existing = await db
-        .collection("events")
-        .where("childId", "==", childId)
-        .where("idempotencyKey", "==", idempotencyKey)
-        .limit(1)
-        .get();
-      if (!existing.empty) {
-        return { id: existing.docs[0].id };
-      }
+
+    const hasKey = idempotencyKey !== undefined && idempotencyKey !== null && idempotencyKey !== "";
+    if (hasKey && !isValidIdempotencyKey(idempotencyKey)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "idempotencyKey doit être une chaîne alphanumérique (max 100 caractères, _ et - autorisés)."
+      );
     }
 
     // Enrichissement serveur
@@ -2709,13 +2717,35 @@ exports.validateAndCreateEvent = onCall(
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    // Persist the idempotency key so future retries can detect the duplicate.
-    if (idempotencyKey) {
-      serverData.idempotencyKey = idempotencyKey;
+    // App 1.0.8 peut encore créer sans clé : création classique.
+    if (!hasKey) {
+      const ref = await db.collection("events").add(serverData);
+      return { id: ref.id };
     }
 
-    const ref = await db.collection("events").add(serverData);
-    return { id: ref.id };
+    serverData.idempotencyKey = idempotencyKey;
+    // Identifiant déterministe (uid + enfant + clé) : create() échoue si le
+    // document existe déjà, donc deux envois simultanés ne peuvent pas passer
+    // tous les deux. Le hachage évite qu'un utilisateur vise l'identifiant d'un autre.
+    const eventId = idempotentEventId(uid, childId, idempotencyKey);
+    const eventRef = db.collection("events").doc(eventId);
+    const legacyQuery = db
+      .collection("events")
+      .where("childId", "==", childId)
+      .where("userId", "==", uid)
+      .where("idempotencyKey", "==", idempotencyKey)
+      .limit(1);
+
+    return await db.runTransaction(async (tx) => {
+      const existing = await tx.get(eventRef);
+      if (existing.exists) return { id: eventId };
+      // Événement créé par une version précédente du serveur (identifiant
+      // aléatoire) avec la même clé : on le reconnaît aussi.
+      const legacy = await tx.get(legacyQuery);
+      if (!legacy.empty) return { id: legacy.docs[0].id };
+      tx.create(eventRef, serverData);
+      return { id: eventId };
+    });
   }
 );
 
@@ -4204,7 +4234,7 @@ async function deliverDeletionRequestEmail(db, uid, deletionDateIso) {
 
 /**
  * requestAccountDeletion — Schedules the account deletion (30-day grace
- * period) on the server. Input: {}. Output: { deletionDate: ISO string }.
+ * period) on the server. Input: {}. Output: { deletionDate: ISO string, emailSent?: boolean }.
  * Needs a login at most 5 minutes old (token auth_time), otherwise
  * failed-precondition with details.reason "recent-login-required".
  * Writes users/{uid}.pendingDeletion = { scheduledAt, deletionDate, email }
@@ -4258,12 +4288,16 @@ exports.requestAccountDeletion = onCall(
     // No push for an account that is leaving.
     await deleteDocsByFieldBatched(db, "device_tokens", "userId", uid);
 
+    // Une erreur d'e-mail n'annule pas la demande, mais elle est signalée au
+    // client (emailSent) pour qu'il ne promette pas un e-mail qui ne vient pas.
+    let emailSent = true;
     try {
       await deliverDeletionRequestEmail(db, uid, pendingDeletion.deletionDate);
     } catch (e) {
+      emailSent = false;
       console.error(`requestAccountDeletion: confirmation e-mail failed for uid=${uid}`, e?.message ?? e);
     }
-    return { deletionDate: pendingDeletion.deletionDate };
+    return { deletionDate: pendingDeletion.deletionDate, emailSent };
   }
 );
 

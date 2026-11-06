@@ -17,6 +17,7 @@ import {
   EventType,
 } from "@/services/eventsService";
 import type { BirthDateInput } from "@/utils/ageUtils";
+import { isNetworkError } from "@/utils/networkError";
 import { getTemperatureAlert, type TemperatureAlert } from "@/utils/temperatureAlert";
 
 // ---------------------------------------------------------------------------
@@ -172,11 +173,38 @@ export async function findEventByIdentifier(
     return null;
   } catch (error) {
     console.error("Erreur recherche événement:", error);
-    return null;
+    throw new EventLookupError(isNetworkError(error) ? "network" : "other");
   }
 }
 
 export { isAmbiguous };
+
+/**
+ * La recherche de l'événement a échoué (réseau, droits...) : ce n'est PAS « il
+ * n'existe pas ». Distingué pour ne pas dire « introuvable » à tort.
+ */
+export class EventLookupError extends Error {
+  readonly kind: "network" | "other";
+  constructor(kind: "network" | "other") {
+    super(`Event lookup failed (${kind})`);
+    this.name = "EventLookupError";
+    this.kind = kind;
+  }
+}
+
+/** Message à afficher pour un échec de recherche d'événement. */
+export function lookupFailureMessage(error: unknown): { title: string; message: string } {
+  if (error instanceof EventLookupError && error.kind === "network") {
+    return {
+      title: "Connexion indisponible",
+      message: "Impossible de rechercher l'événement : vérifiez votre connexion puis réessayez.",
+    };
+  }
+  return {
+    title: "Erreur",
+    message: "La recherche de l'événement a échoué. Réessayez dans un instant.",
+  };
+}
 
 // ---------------------------------------------------------------------------
 // executeDelete
@@ -191,11 +219,17 @@ export async function executeDelete(
   try {
     const deleteFn = type === "jalon" ? supprimerJalon : supprimerEvenement;
     if (deleteFn) {
-      await deleteFn(childId, eventId);
-      feedback.showInfo(
-        "Succès",
-        `${type.charAt(0).toUpperCase() + type.slice(1)} supprimé avec succès`,
-      );
+      const outcome = await deleteFn(childId, eventId);
+      const name = type.charAt(0).toUpperCase() + type.slice(1);
+      if (outcome === "queued") {
+        // Hors ligne : rien n'est supprimé tant que le réseau n'est pas revenu.
+        feedback.showInfo(
+          "Suppression en attente",
+          `${name} : suppression enregistrée, synchronisation en attente. Elle sera effectuée au retour du réseau.`,
+        );
+      } else {
+        feedback.showInfo("Succès", `${name} supprimé avec succès`);
+      }
       return true;
     } else {
       feedback.showInfo(
@@ -272,9 +306,8 @@ export async function executeModify(
       // If a concurrent edit landed since we read the event, the CF will
       // reject with code "aborted" and the optimistic store rolls back the
       // visual change. The user sees the original value reappear (via the
-      // existing failOptimistic path) — a clearer toast would require
-      // plumbing failure metadata through optimisticEventsStore, which is
-      // tracked separately.
+      // existing failOptimistic path) with a toast naming the event type and
+      // offering « Réessayer » (S6, 6.4).
       const expectedUpdatedAt = extractUpdatedAtMillis(previousEvent);
 
       modifierEvenementOptimistic(

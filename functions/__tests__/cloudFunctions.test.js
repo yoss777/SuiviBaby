@@ -20,7 +20,14 @@ describe("validateAndCreateEvent", () => {
   it("rejects croissance bad weight", async () => { access(); await expect(fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "croissance", poidsKg: 100 }))).rejects.toThrow("50 kg"); });
   it("rejects bain temp>45", async () => { access(); await expect(fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "bain", temperatureEau: 50 }))).rejects.toThrow("45°C"); });
   it("creates valid event", async () => { access(); mockFirestore.collection.mockReturnValue({ add: jest.fn().mockResolvedValue({ id: "e1" }), where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) }); expect(await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "biberon", quantite: 150 }))).toEqual({ id: "e1" }); });
-  it("deduplicates idempotencyKey", async () => { access(); mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap([{ id: "dup" }])) }); expect(await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "biberon", quantite: 100, idempotencyKey: "k" }))).toEqual({ id: "dup" }); });
+  it("deduplicates idempotencyKey (document déterministe déjà créé)", async () => {
+    const { memoryStore } = require("./memoryFirestore");
+    const docs = memoryStore({ "children/c1/access/u1": { role: "owner" } });
+    const data = { childId: "c1", type: "biberon", quantite: 100, idempotencyKey: "k" };
+    const first = await fns.validateAndCreateEvent(auth("u1", data));
+    expect(await fns.validateAndCreateEvent(auth("u1", data))).toEqual(first);
+    expect([...docs.keys()].filter((p) => p.startsWith("events/"))).toHaveLength(1);
+  });
   it("converts heureDebut and heureFin on create", async () => {
     access();
     const add = jest.fn().mockResolvedValue({ id: "e1" });
