@@ -1,36 +1,28 @@
-const { hasRequiredChildAccess } = require("../functions/accessControl");
+const { hasChildRole } = require("../functions/accessControl");
 
-describe("hasRequiredChildAccess", () => {
+describe("hasChildRole", () => {
   const requiredRoles = ["owner", "admin"];
 
   it("allows owner", () => {
-    expect(
-      hasRequiredChildAccess({ role: "owner" }, requiredRoles),
-    ).toBe(true);
+    expect(hasChildRole({ role: "owner" }, requiredRoles)).toBe(true);
   });
 
   it("allows admin", () => {
-    expect(
-      hasRequiredChildAccess({ role: "admin" }, requiredRoles),
-    ).toBe(true);
+    expect(hasChildRole({ role: "admin" }, requiredRoles)).toBe(true);
   });
 
-  it("rejects contributor without canWriteEvents", () => {
+  it("rejects contributor", () => {
+    expect(hasChildRole({ role: "contributor" }, requiredRoles)).toBe(false);
+  });
+
+  // S4: legacy write flags no longer grant anything, the role alone decides.
+  it("rejects contributor even with canWriteEvents", () => {
     expect(
-      hasRequiredChildAccess({ role: "contributor" }, requiredRoles),
+      hasChildRole({ role: "contributor", canWriteEvents: true }, requiredRoles),
     ).toBe(false);
   });
 
-  it("allows contributor with canWriteEvents", () => {
-    expect(
-      hasRequiredChildAccess(
-        { role: "contributor", canWriteEvents: true },
-        requiredRoles,
-      ),
-    ).toBe(true);
-  });
-
   it("rejects missing access data", () => {
-    expect(hasRequiredChildAccess(null, requiredRoles)).toBe(false);
+    expect(hasChildRole(null, requiredRoles)).toBe(false);
   });
 });
