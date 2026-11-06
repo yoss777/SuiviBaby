@@ -95,8 +95,8 @@ Rapport complet (P0, P1, P2, feuille de route) : [AUDIT_COMPLET_2026-11.md](AUDI
 | A3 | Une seule purge `purgeUserData` pour les deux parcours de suppression ; e-mail seulement après succès Auth ; photos avant événements | 2026-11-12 | Claude | — | Test qui compare les collections purgées | 🔄 corrigé et testé le 2026-11-06 (sprint 1), en attente de revue et de déploiement |
 | A4 | Comptes Apple/Google : consentement santé bloquant + suppression de compte par ré-authentification fournisseur + révocation Apple | 2026-11-19 | Claude | — | Parcours testé avec un compte Google et un compte Apple | ⏳ |
 | A5 | Messages de santé : alerte fièvre selon l'âge à la saisie, « C'est normal », « meilleur endroit », fiche cododo | 2026-11-26 | Claude (code) / Yoss (relecture pédiatre) | relecture pédiatre | Textes validés et notés | ⏳ |
-| A6 | Sentry en production : filtrage des données de santé, DSN EAS, source maps, release/dist | 2026-11-12 | Claude / Yoss (DSN) | D3 | Événement de test reçu, sans donnée de santé | ⏳ |
-| A7 | Sauvegardes Firestore + protection contre la suppression + alertes serveur et budget | 2026-11-19 | Yoss (gcloud) / Claude | D1 | Sauvegarde visible, restauration testée, alerte de test reçue | ⏳ |
+| A6 | Sentry en production : filtrage des données de santé, DSN EAS, source maps, release/dist | 2026-11-12 | Claude / Yoss (DSN) | D3 | Événement de test reçu, sans donnée de santé | 🔄 DSN (UE) et jeton dans EAS, source maps activées (PR #14) ; événement de test à la prochaine version |
+| A7 | Sauvegardes Firestore + protection contre la suppression + alertes serveur et budget | 2026-11-19 | Yoss (gcloud) / Claude | D1 | Sauvegarde visible, restauration testée, alerte de test reçue | 🔄 Sauvegardes 7 j / 30 j, protection, 3 alertes e-mail, budget 25 €/mois en place ; test de restauration après la 1ʳᵉ sauvegarde |
 
 ## 5. Décisions en attente (questions détaillées)
 

@@ -164,6 +164,24 @@ l'environnement `production`. **Reste avec Yoss** : 2.2 (DSN Sentry et jeton
 d'envoi des source maps dans EAS, Q1), 2.3 et 2.4 (sauvegardes, alertes,
 budget : commandes prêtes, `gcloud auth login` nécessaire, Q2)._
 
+_Suite 2026-11-06 (Q1, Q2 réglés) :_
+- _2.2 : Sentry en région UE (`ingest.de.sentry.io`) ; `EXPO_PUBLIC_SENTRY_DSN`
+  et `SENTRY_AUTH_TOKEN` (secret, jeton d'organisation) dans l'environnement
+  EAS `production` et dans le `.env` local (build Android) ;
+  `SENTRY_DISABLE_AUTO_UPLOAD` retiré du profil `production` (PR #14) ;
+  `release`/`dist` posés par le SDK natif. Ancien jeton inutilisé révoqué.
+  **Reste** : événement de test reçu après la prochaine version._
+- _2.3 : planning quotidien (7 j) et hebdomadaire le dimanche (30 j) sur
+  `(default)` (eur3) ; protection contre la suppression activée ; PITR non
+  activé. **Reste** : test de restauration dans une base séparée dès la
+  première sauvegarde (planning créé le 2026-11-06 à 00:18 UTC)._
+- _2.4 : métriques de journaux `functions_errors`, `webhook_5xx`,
+  `scheduled_job_failures` ; 3 alertes (> 0 sur 15 min) vers un canal e-mail ;
+  budget GCP de 25 €/mois (facture d'octobre : 10,37 €) avec seuils 50, 90,
+  100 % et dépense prévue 100 %. **Reste** : les 4 alertes Sentry
+  (`FIREBASE_MONITORING.md` §6.2), à créer dans Sentry une fois les premiers
+  événements reçus._
+
 **Revue ECC (S1 + S2)** : `security-reviewer`, `silent-failure-hunter`.
 
 ### Revue ECC des sprints 1 et 2 (2026-11-06) · ✅
