@@ -171,7 +171,7 @@ export default function HealthConsentScreen() {
           <Bullet>
             RevenueCat : gestion des abonnements (identifiant pseudonyme).
           </Bullet>
-          <Bullet>Sentry (hébergé dans l'UE) : diagnostic des erreurs, sans identifiant de compte.</Bullet>
+          <Bullet>Sentry (hébergé dans l’UE) : diagnostic des erreurs, sans identifiant de compte.</Bullet>
           <Bullet>
             Resend : envoi des e-mails (confirmations, invitations).
           </Bullet>
