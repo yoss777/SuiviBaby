@@ -9,7 +9,7 @@
 //   node scripts/compareTipsWithSeed.mjs
 //
 // Code de sortie : 0 si identique, 1 s'il y a des différences, 2 en cas d'erreur.
-// Le champ `publishedAt` est ignoré (ajouté par seedViaFirestore.mjs).
+// Les champs `publishedAt` et `updatedAt` sont ignorés (ajoutés par les scripts de publication).
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import admin from "firebase-admin";
 
 const PROJECT_ID = "samaye-53723";
-const IGNORED_FIELDS = new Set(["publishedAt"]);
+const IGNORED_FIELDS = new Set(["publishedAt", "updatedAt"]);
 const SEED_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "tips_seed.json");
 
 const stable = (v) => JSON.stringify(v);
