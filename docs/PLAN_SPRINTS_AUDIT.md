@@ -221,7 +221,7 @@ comptes (App Check, S13 / S4) ; fidélité de la base de test en mémoire
 (atomicité, `update` sur document absent) à améliorer avec les tests sur
 émulateur (S11).
 
-## S3 — Droits des utilisateurs (RGPD) · app + serveur · P0 A4 · ⏳
+## S3 — Droits des utilisateurs (RGPD) · app + serveur · P0 A4 · ✅ 2026-11-06 (PR en attente)
 
 But : chaque utilisateur, quel que soit son mode de connexion, donne son
 consentement santé, peut récupérer et supprimer ses données.
@@ -235,64 +235,95 @@ User stories :
 - En tant que parent, je veux exporter toutes mes données gratuitement, autant
   de fois que nécessaire.
 
-- [ ] **3.1** Écran de consentement santé bloquant après connexion sociale et
+- [x] **3.1** Écran de consentement santé bloquant après connexion sociale et
   au démarrage pour les comptes existants sans consentement ; texte complet
   (symptômes, médicaments, vaccins, photos, transferts hors UE).
-- [ ] **3.2** Preuve de consentement côté serveur : collection en ajout seul
+- [x] **3.2** Preuve de consentement côté serveur : collection en ajout seul
   (fonction), version de la politique, conservation selon la politique.
-- [ ] **3.3** Suppression de compte par ré-authentification selon le
+- [x] **3.3** Suppression de compte par ré-authentification selon le
   fournisseur (`GoogleAuthProvider`, `OAuthProvider('apple.com')`) ;
   révocation du jeton Sign in with Apple côté serveur
   (`appleid.apple.com/auth/revoke`). (`services/accountDeletionService.ts:61`,
   `app/(drawer)/settings.tsx:806-850`)
-- [ ] **3.4** Export JSON gratuit et illimité (limite de débit seulement) ;
+- [x] **3.4** Export JSON gratuit et illimité (limite de débit seulement) ;
   PDF reste Premium. (`app/settings/export.tsx:765`, `functions/index.js:33`)
-- [ ] **3.5** Récap hebdomadaire (Q5) : adresse de Firebase Auth (vérifiée),
+- [x] **3.5** Récap hebdomadaire (Q5) : adresse de Firebase Auth (vérifiée),
   owner et admin seulement, arrêt pendant `pendingDeletion`, en-tête
   `List-Unsubscribe`, contenu sans chiffres de santé si validé.
   (`functions/index.js:4326-4417`)
-- [ ] **3.6** Transfert de propriété : `owner` prioritaire, jamais de lecteur
+- [x] **3.6** Transfert de propriété : `owner` prioritaire, jamais de lecteur
   ou contributeur promu automatiquement ; sans co-owner ni admin, demander un
   choix avant de programmer la suppression ; décrire ce transfert dans
   `delete-account.html`. (`functions/index.js:484-514`)
 
-## S4 — Données sur l'appareil, voix et sécurité restante · app + serveur · ⏳
+## S4 — Données sur l'appareil, voix et sécurité restante · app + serveur · ✅ 2026-11-06 (PR en attente)
 
 But : ne rien laisser traîner (appareil, journaux, prestataires) et fermer les
 derniers points de sécurité.
 
-- [ ] **4.1** Audio de commande vocale supprimé après transcription
+- [x] **4.1** Audio de commande vocale supprimé après transcription
   (`finally` + `deleteAsync`) ; corriger « l'audio n'est jamais stocké ».
   (`services/voice/recorder.ts`)
-- [ ] **4.2** Politique de confidentialité (app + site) : prénom transmis à
+- [x] **4.2** Politique de confidentialité (app + site) : prénom transmis à
   Anthropic dans la transcription (ou remplacé par un jeton avant envoi),
   cache supprimé sous 24 h (TTL) ou suppression explicite, information au
   moment d'utiliser la voix ; transcriptions AssemblyAI abandonnées signalées.
-- [ ] **4.3** Exports écrits dans `cacheDirectory` et supprimés après le
+- [x] **4.3** Exports écrits dans `cacheDirectory` et supprimés après le
   partage ; `offlineQueueService.onAccountDelete()` appelé à la demande de
   suppression ; règles de sauvegarde Android excluant AsyncStorage, SQLite et
   les exports (ou `allowBackup=false`).
-- [ ] **4.4** Signalements : `escapeHtml` sur tous les champs des e-mails
+- [x] **4.4** Signalements : `escapeHtml` sur tous les champs des e-mails
   opérateur et de résolution ; `childId`/`eventId` validés ; `photoPath`
   limité à `children/{childId}/` et présent dans `event.photos` ; même
   vérification dans `deleteUserEventPhotos` et `photoRefToPath`.
-- [ ] **4.5** `createShareInvitation` : limite de débit, `childName` lu dans
+- [x] **4.5** `createShareInvitation` : limite de débit, `childName` lu dans
   `children/{id}`, réponse neutre si l'e-mail n'a pas de compte.
-- [ ] **4.6** `setAdminClaim` : `email_verified` exigé, bootstrap désactivé
+- [x] **4.6** `setAdminClaim` : `email_verified` exigé, bootstrap désactivé
   après le premier admin.
-- [ ] **4.7** Lien de réinitialisation Android : `/.well-known/assetlinks.json`
+- [x] **4.7** Lien de réinitialisation Android : `/.well-known/assetlinks.json`
   + App Links vérifiés ; `oobCode` validé par expression régulière dans l'app.
-- [ ] **4.8** Règles `events`/`eventComments` : champs modifiables limités
+- [x] **4.8** Règles `events`/`eventComments` : champs modifiables limités
   (`affectedKeys`), `childId`/`eventId` figés, contributeurs alignés sur D11
   (Q6) ; `validateAndUpdateEvent` interdit `createdAt` et `reported`.
-- [ ] **4.9** Supprimer les fonctions inutilisées : `generateAiInsight`,
+- [x] **4.9** Supprimer les fonctions inutilisées : `generateAiInsight`,
   `migrateUsersPublicRemoveEmail`, `grandfatherExistingUsers` si terminée ;
   `npm audit fix` et montée de `firebase-admin` / `firebase-functions` dans
   `functions/`.
-- [ ] **4.10** S5 (`email_verified` pour invitations et codes) et S14
+- [x] **4.10** S5 (`email_verified` pour invitations et codes) et S14
   (TRANSFER) traités ici s'ils ne l'ont pas été dans le chantier abonnements.
 
-**Revue ECC (S3 + S4)** : `healthcare-reviewer`, `security-reviewer`.
+**Revue ECC (S3 + S4)** : `healthcare-reviewer`, `security-reviewer` · ✅ 2026-11-06
+
+Décisions de Yoss : récap sans chiffres de santé (Q5) ; contributeur = lecture
+de tous les événements, écriture limitée aux j'aime et commentaires des photos
+(Q6) ; transfert de propriété dès la demande de suppression ; rapport PDF
+réservé à Premium et Famille (un essai gratuit), export JSON gratuit.
+
+Corrigé après revue :
+- `transferAndLeave` en transaction, seul le propriétaire principal transfère
+  (un co-owner pouvait évincer le propriétaire).
+- Suppression de compte par fonction serveur (connexion récente exigée, date
+  calculée côté serveur, jetons push supprimés) ; règle de transition pour
+  1.0.8 : `pendingDeletion` ≥ 29 jours.
+- Enfant jamais laissé sans responsable : choix « Supprimer le suivi » par
+  défaut, avertissement avant de confier à un contributeur ou lecteur,
+  suppression douce côté serveur à défaut de co-owner ou admin.
+- Retrait du consentement (Réglages et écran de consentement, suppression
+  accessible depuis cet écran) ; rappels et récap coupés sans consentement ou
+  pendant une suppression ; texte de consentement v2.2.
+- Accès et index créés par le serveur seulement ; réponses neutres des
+  invitations ; `findUserByEmail` supprimé ; Storage par rôle.
+- AssemblyAI : suppression toujours tentée puis mise en file ; TTL 90 jours
+  sur les historiques techniques (script de rattrapage à lancer).
+- Export JSON complet pour owner/admin ; révocation Apple retentée.
+- Bugs trouvés en production : la purge lisait le rôle dans l'index
+  (transfert jamais exécuté) ; demandes de suppression d'enfant effacées avec
+  le compte (enfant jamais purgé).
+
+Reportés : endpoint UE d'AssemblyAI et suppression des téléversements sans
+transcription (S12) ; exclusion iCloud de la file hors-ligne SQLite (module
+natif, S13) ; création des codes de partage par le client (S12) ; fin de la
+règle de transition 1.0 (après adoption de la version suivante).
 
 ## S5 — Messages de santé sûrs · app (+ contenu) · P0 A5 · ⏳
 
