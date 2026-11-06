@@ -379,11 +379,21 @@ service cloud.firestore {
       // Chaque utilisateur peut uniquement lire/écrire ses propres préférences,
       // sauf healthDataConsent : preuve de consentement écrite par le serveur
       // (recordHealthConsent) ; le client ne peut ni la créer ni la modifier.
+      // Transition : l'app ≤ 1.0.8 écrit encore elle-même un consentement
+      // version "1.0" à l'inscription. On le tolère (sinon l'inscription
+      // échoue) ; l'app actuelle exige la version serveur "2.1" et redemande.
+      // Jamais par-dessus un consentement serveur.
+      function isLegacyConsentWrite() {
+        return request.resource.data.healthDataConsent.version == '1.0' &&
+          !(resource != null && 'healthDataConsent' in resource.data &&
+            resource.data.healthDataConsent.version != '1.0');
+      }
       allow read: if isSignedIn() && request.auth.uid == userId;
       allow create: if isSignedIn() && request.auth.uid == userId &&
-        !('healthDataConsent' in request.resource.data);
+        (!('healthDataConsent' in request.resource.data) || isLegacyConsentWrite());
       allow update: if isSignedIn() && request.auth.uid == userId &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['healthDataConsent']);
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['healthDataConsent']) ||
+          ('healthDataConsent' in request.resource.data && isLegacyConsentWrite()));
       allow delete: if isSignedIn() && request.auth.uid == userId;
     }
 

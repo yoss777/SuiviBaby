@@ -1391,6 +1391,40 @@ describe("user_preferences collection", () => {
       const db = authedFirestore(ALICE_UID);
       await assertSucceeds(deleteDoc(doc(db, "user_preferences", ALICE_UID)));
     });
+
+    test("the legacy app cannot overwrite it with a 1.0 consent", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertFails(
+        setDoc(
+          doc(db, "user_preferences", ALICE_UID),
+          { healthDataConsent: { granted: true, grantedAt: "2026-11-07T00:00:00Z", version: "1.0" } },
+          { merge: true }
+        )
+      );
+    });
+  });
+
+  // App ≤ 1.0.8 still writes its own "1.0" consent at sign-up (transition).
+  test("legacy app can create preferences with a 1.0 consent", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertSucceeds(
+      setDoc(
+        doc(db, "user_preferences", BOB_UID),
+        { healthDataConsent: { granted: true, grantedAt: "2026-11-06T00:00:00Z", version: "1.0" } },
+        { merge: true }
+      )
+    );
+  });
+
+  test("legacy app can add a 1.0 consent to existing preferences", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertSucceeds(
+      setDoc(
+        doc(db, "user_preferences", ALICE_UID),
+        { healthDataConsent: { granted: true, grantedAt: "2026-11-06T00:00:00Z", version: "1.0" } },
+        { merge: true }
+      )
+    );
   });
 });
 
