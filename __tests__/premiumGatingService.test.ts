@@ -1,4 +1,5 @@
 import {
+  decidePdfExportAccess,
   FREE_LIMITS,
   getHistoryCutoffDate,
   PAYWALL_MESSAGES,
@@ -24,6 +25,7 @@ describe("premiumGatingService", () => {
     it("should define messages for all triggers", () => {
       const triggers = [
         "voice_limit",
+        "pdf_export_limit",
         "history_limit",
         "sharing_limit",
         "advanced_stats",
@@ -36,6 +38,38 @@ describe("premiumGatingService", () => {
         expect(PAYWALL_MESSAGES[trigger].description).toBeTruthy();
         expect(PAYWALL_MESSAGES[trigger].ctaText).toBeTruthy();
       }
+    });
+  });
+
+  describe("pdf_export_limit message", () => {
+    it("states the PDF is Premium/Famille and never limits the JSON export", () => {
+      const m = PAYWALL_MESSAGES.pdf_export_limit;
+      expect(m.title).toBe("Export PDF utilisé");
+      expect(m.description).toContain("Premium et Famille");
+      expect(m.description).toContain("JSON");
+      expect(m.description).toContain("gratuit");
+      for (const msg of Object.values(PAYWALL_MESSAGES)) {
+        expect(msg.description).not.toMatch(/export.*illimit/i);
+      }
+    });
+  });
+
+  describe("decidePdfExportAccess", () => {
+    it("allows users with access regardless of quota", () => {
+      expect(decidePdfExportAccess(true, null)).toBe("allow");
+      expect(decidePdfExportAccess(true, { allowed: false, remaining: 0 })).toBe("allow");
+    });
+    it("allows the free trial when one export remains", () => {
+      expect(decidePdfExportAccess(false, { allowed: true, remaining: 1 })).toBe("allow_trial");
+    });
+    it("shows the paywall when the trial is used up", () => {
+      expect(decidePdfExportAccess(false, { allowed: false, remaining: 0 })).toBe("paywall");
+      expect(decidePdfExportAccess(false, { allowed: true, remaining: 0 })).toBe("paywall");
+      expect(decidePdfExportAccess(false, { allowed: true, remaining: null })).toBe("paywall");
+    });
+    it("errors out when the quota status is unreadable", () => {
+      expect(decidePdfExportAccess(false, null)).toBe("error");
+      expect(decidePdfExportAccess(false, undefined)).toBe("error");
     });
   });
 
