@@ -41,16 +41,28 @@ jobs:
             rm "$RUNNER_TEMP/gcp-key.raw"
           fi
 
-      # --force: the code is the source of truth. Without it a non-interactive
-      # deploy fails as soon as a function is removed or moves region (old
-      # copy to delete), e.g. the move of the scheduled jobs to europe-west1.
-      - name: Deploy Functions & Rules
+      # Rules and indexes WITHOUT --force: with it, the CLI deletes every index
+      # and field override (TTL) not listed in firestore.indexes.json — which
+      # wiped 26 production indexes and 4 overrides on 2026-11-06.
+      - name: Deploy Firestore rules & indexes
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-key.json
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: >
           npx --yes firebase-tools@15 deploy
-          --only functions,firestore:rules,firestore:indexes
+          --only firestore:rules,firestore:indexes
+          --project "$PROJECT_ID" --non-interactive
+
+      # Functions WITH --force: the code is the source of truth. Without it a
+      # non-interactive deploy fails as soon as a function is removed or moves
+      # region (old copy to delete).
+      - name: Deploy Functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-key.json
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: >
+          npx --yes firebase-tools@15 deploy
+          --only functions
           --project "$PROJECT_ID" --non-interactive --force
 
       - name: Remove service account key
