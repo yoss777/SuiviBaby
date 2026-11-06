@@ -4,6 +4,7 @@ jest.mock("firebase/functions", () => ({ httpsCallable: jest.fn() }));
 jest.mock("expo-file-system", () => ({
   getInfoAsync: jest.fn(),
   readAsStringAsync: jest.fn(),
+  deleteAsync: jest.fn(),
   EncodingType: { Base64: "base64" },
 }));
 
@@ -41,8 +42,14 @@ import {
 // Typed local alias (AudioModule is a native-module object, not an ES namespace).
 const AudioRecorderMock = (AudioModule as unknown as { AudioRecorder: jest.Mock }).AudioRecorder;
 import { Platform } from "react-native";
+import * as FileSystem from "expo-file-system";
+import { httpsCallable } from "firebase/functions";
 import { captureServiceError } from "@/utils/errorReporting";
 import {
+  cancelRecording,
+  deleteRecording,
+  transcribeAudio,
+  EmptyAudioError,
   requestPermissions,
   startRecording,
   stopRecording,
@@ -151,5 +158,55 @@ describe("recorder (expo-audio)", () => {
     );
     await startRecording();
     expect(AudioRecorderMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("temporary audio file deletion (S4.1)", () => {
+  const uri = "file:///rec.m4a";
+  const info = FileSystem.getInfoAsync as jest.Mock;
+  const read = FileSystem.readAsStringAsync as jest.Mock;
+  const del = FileSystem.deleteAsync as jest.Mock;
+
+  beforeEach(() => {
+    del.mockResolvedValue(undefined);
+    info.mockResolvedValue({ exists: true, size: 50_000 });
+    read.mockResolvedValue("QUJD");
+  });
+
+  it("deletes the file after a successful transcription", async () => {
+    (httpsCallable as jest.Mock).mockReturnValue(jest.fn().mockResolvedValue({ data: { text: "biberon" } }));
+    expect(await transcribeAudio(uri)).toBe("biberon");
+    expect(del).toHaveBeenCalledWith(uri, { idempotent: true });
+  });
+
+  it("deletes the file when the transcription call fails", async () => {
+    (httpsCallable as jest.Mock).mockReturnValue(jest.fn().mockRejectedValue(new Error("network")));
+    await expect(transcribeAudio(uri)).rejects.toThrow("network");
+    expect(del).toHaveBeenCalledWith(uri, { idempotent: true });
+  });
+
+  it("deletes the file when it is too short to transcribe", async () => {
+    info.mockResolvedValue({ exists: true, size: 100 });
+    await expect(transcribeAudio(uri)).rejects.toBeInstanceOf(EmptyAudioError);
+    expect(del).toHaveBeenCalledWith(uri, { idempotent: true });
+  });
+
+  it("deletes the file when the user cancels the recording", async () => {
+    await startRecording();
+    await cancelRecording();
+    expect(mockRecorder.stop).toHaveBeenCalled();
+    expect(del).toHaveBeenCalledWith(uri, { idempotent: true });
+  });
+
+  it("cancelling with nothing recorded deletes nothing", async () => {
+    await cancelRecording();
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it("a failing delete never breaks the transcription result", async () => {
+    del.mockRejectedValue(new Error("busy"));
+    (httpsCallable as jest.Mock).mockReturnValue(jest.fn().mockResolvedValue({ data: { text: "ok" } }));
+    expect(await transcribeAudio(uri)).toBe("ok");
+    await expect(deleteRecording(uri)).resolves.toBeUndefined();
   });
 });

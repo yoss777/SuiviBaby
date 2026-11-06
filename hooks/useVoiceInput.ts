@@ -13,6 +13,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { usePremium } from "@/contexts/PremiumContext";
 import { useVoiceCommand } from "@/hooks/useVoiceCommand";
 import { getVoiceUsageStatus } from "@/services/premiumUsageService";
+import { hasSeenVoiceNotice, markVoiceNoticeSeen } from "@/services/voiceNoticeService";
 
 export type VoiceInputStatus = "idle" | "recording" | "processing" | "confirming";
 
@@ -46,6 +47,7 @@ export function useVoiceInput() {
   const [voiceLimitReached, setVoiceLimitReached] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isHandsFree, setIsHandsFree] = useState(false);
+  const [voiceNoticeVisible, setVoiceNoticeVisible] = useState(false);
 
   const pressStartedAtRef = useRef(0);
   // Set when a press stopped a hands-free recording, so its release is ignored.
@@ -115,6 +117,12 @@ export function useVoiceInput() {
     return true;
   }, [checkFeatureAccess]);
 
+  /** Closes the first-use notice for good; the next press records. */
+  const dismissVoiceNotice = useCallback(() => {
+    setVoiceNoticeVisible(false);
+    void markVoiceNoticeSeen();
+  }, []);
+
   const onPressIn = async () => {
     pressStartedAtRef.current = Date.now();
     pressConsumedRef.current = false;
@@ -130,6 +138,12 @@ export function useVoiceInput() {
     setIsHandsFree(false);
     if (!(await checkVoiceLimit())) {
       pressConsumedRef.current = true;
+      return;
+    }
+    // First use: say what is sent and to whom before any audio is captured.
+    if (!(await hasSeenVoiceNotice())) {
+      pressConsumedRef.current = true;
+      setVoiceNoticeVisible(true);
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -169,6 +183,8 @@ export function useVoiceInput() {
     isHandsFree,
     voiceLimitReached,
     setVoiceLimitReached,
+    voiceNoticeVisible,
+    dismissVoiceNotice,
     onPressIn,
     onPressOut,
     onPress,

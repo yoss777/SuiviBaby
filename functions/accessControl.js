@@ -1,33 +1,7 @@
 /**
- * Retourne true si le document d'accès satisfait les rôles requis
- * ou le fallback canWriteEvents.
- *
- * Cette fonction reste volontairement pure pour être testable sans
- * dépendance Firebase.
- *
- * @param {{ role?: string, canWriteEvents?: boolean } | null | undefined} accessData
- * @param {string[] | null | undefined} requiredRoles
- * @returns {boolean}
- */
-function hasRequiredChildAccess(accessData, requiredRoles) {
-  if (!accessData) return false;
-
-  const role = accessData.role;
-  if (!requiredRoles || requiredRoles.length === 0) {
-    return true;
-  }
-
-  if (requiredRoles.includes(role)) {
-    return true;
-  }
-
-  return accessData.canWriteEvents === true;
-}
-
-/**
- * Retourne true uniquement si le rôle fait partie des rôles requis, sans le
- * fallback canWriteEvents. À utiliser pour les actions de gestion (partage,
- * invitations) : un contributeur a canWriteEvents mais ne gère pas l'accès.
+ * Retourne true uniquement si le rôle fait partie des rôles requis. Le rôle
+ * seul décide (les anciens drapeaux canWriteEvents d'un document d'accès ne
+ * donnent aucun droit) : écriture d'événements, partage, invitations.
  *
  * @param {{ role?: string } | null | undefined} accessData
  * @param {string[]} requiredRoles
@@ -39,6 +13,5 @@ function hasChildRole(accessData, requiredRoles) {
 }
 
 module.exports = {
-  hasRequiredChildAccess,
   hasChildRole,
 };

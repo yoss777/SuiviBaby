@@ -20,7 +20,7 @@ export {
 } from "./detectors";
 export { parseCommand, parseMultipleCommands, parseSegmentForAllEvents, parseSingleCommand } from "./commandParser";
 export { formatDataForFirebase, commandTypeToEventType } from "./firebaseFormatter";
-export { requestPermissions, startRecording, stopRecording, transcribeAudio, hasApiKey } from "./recorder";
+export { requestPermissions, startRecording, stopRecording, cancelRecording, deleteRecording, transcribeAudio, hasApiKey } from "./recorder";
 export { parseVoiceText } from "./llmParser";
 export type { VoiceParseResult, ParseSource } from "./llmParser";
 export { mapLlmParseResult, resolveTimeRef } from "./llmMapper";

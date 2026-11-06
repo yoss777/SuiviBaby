@@ -129,7 +129,7 @@
             <li>le texte transcrit et l'heure locale sont envoyés à <strong>Anthropic</strong> (modèle Claude) pour identifier les événements à créer ;</li>
             <li>les événements proposés vous sont présentés : rien n'est enregistré sans votre validation.</li>
           </ol>
-          <p><strong>L'audio n'est jamais stocké par SuiviBaby.</strong> La transcription est supprimée chez AssemblyAI immédiatement après le traitement. Le texte est conservé au plus 5 minutes dans un cache technique pour éviter les doubles traitements. Le prénom de l'enfant et votre identifiant de compte ne sont pas transmis à Anthropic. Ces prestataires agissent comme sous-traitants et n'utilisent pas vos données pour entraîner leurs modèles <span class="todo">[À VÉRIFIER dans les contrats AssemblyAI et Anthropic]</span>.</p>
+          <p><strong>L'audio n'est pas conservé par SuiviBaby.</strong> Il est enregistré temporairement sur votre téléphone, puis supprimé dès la fin de la transcription (ou si vous annulez, ou en cas d'erreur) ; notre serveur ne le stocke pas. La transcription est supprimée chez AssemblyAI juste après le traitement ; si cette suppression échoue, elle est mise en file d'attente et retentée automatiquement (jusqu'à 5 essais), puis signalée à notre équipe pour suppression manuelle. Le texte transcrit est conservé dans un cache technique, utilisable 5 minutes pour éviter les doubles traitements, puis supprimé automatiquement (la purge peut prendre jusqu'à 24 heures). Le texte envoyé à Anthropic est celui que vous avez dicté, tel quel : <strong>si vous prononcez le prénom de votre enfant, ce prénom s'y trouve</strong>. SuiviBaby n'ajoute ni le profil de l'enfant ni votre identifiant de compte à ce qui est envoyé à Anthropic. Ces prestataires agissent comme sous-traitants et n'utilisent pas vos données pour entraîner leurs modèles <span class="todo">[À VÉRIFIER dans les contrats AssemblyAI et Anthropic]</span>.</p>
         </section>
 
         <section id="destinataires" aria-labelledby="h-destinataires">
@@ -142,7 +142,7 @@
               <tbody>
                 <tr><td>Google Ireland / Google LLC (Firebase)</td><td>Hébergement de la base de données et des photos, authentification, fonctions serveur, protection de l'application</td><td>Toutes les données de l'application</td><td>Base de données : UE (multi-région eur3 : Belgique, Pays-Bas, Finlande). Fonctions serveur : UE (Belgique). Photos : UE (Belgique, europe-west1)</td></tr>
                 <tr><td>AssemblyAI, Inc.</td><td>Transcription de la commande vocale</td><td>Enregistrement audio</td><td>États-Unis</td></tr>
-                <tr><td>Anthropic, PBC</td><td>Interprétation du texte dicté</td><td>Texte transcrit, heure locale ; pour les conseils, âge en mois, sexe et types d'événements récents, sans prénom ni identifiant</td><td>États-Unis</td></tr>
+                <tr><td>Anthropic, PBC</td><td>Interprétation du texte dicté</td><td>Texte transcrit tel que dicté (peut contenir un prénom), heure locale ; pour les conseils, âge en mois, sexe et types d'événements récents, sans prénom ni identifiant</td><td>États-Unis</td></tr>
                 <tr><td>RevenueCat, Inc.</td><td>Gestion des abonnements</td><td>Identifiant de compte pseudonyme, statut d'achat</td><td>États-Unis</td></tr>
                 <tr><td>Resend (Plus Five Five, Inc.)</td><td>Envoi des e-mails</td><td>Adresse e-mail, contenu de l'e-mail (invitation, récapitulatif…)</td><td>États-Unis</td></tr>
                 <tr><td>Expo (650 Industries, Inc.)</td><td>Acheminement des notifications push</td><td>Jeton de l'appareil, texte de la notification</td><td>États-Unis</td></tr>
@@ -168,8 +168,8 @@
                 <tr><td>Compte et suivi de l'enfant</td><td>Tant que votre compte est actif</td></tr>
                 <tr><td>Après une demande de suppression du compte</td><td>Délai de 30 jours pendant lequel vous pouvez annuler, puis effacement définitif de la base de production</td></tr>
                 <tr><td>Profil d'enfant supprimé</td><td>30 jours, puis effacement définitif, photos comprises</td></tr>
-                <tr><td>Enregistrement audio</td><td>Non conservé</td></tr>
-                <tr><td>Transcription vocale</td><td>Supprimée chez AssemblyAI aussitôt après traitement ; 5 minutes dans notre cache technique</td></tr>
+                <tr><td>Enregistrement audio</td><td>Supprimé de votre téléphone après la transcription ; non conservé sur nos serveurs</td></tr>
+                <tr><td>Transcription vocale</td><td>Supprimée chez AssemblyAI aussitôt après traitement ; cache technique utilisable 5 minutes, purge automatique sous 24 heures au plus</td></tr>
                 <tr><td>Codes d'invitation</td><td>7 jours</td></tr>
                 <tr><td>Journaux techniques et de sécurité</td><td>90 jours maximum</td></tr>
                 <tr><td>Preuve de consentement</td><td>5 ans après la suppression du compte, à titre de preuve (horodatage enregistré côté serveur)</td></tr>

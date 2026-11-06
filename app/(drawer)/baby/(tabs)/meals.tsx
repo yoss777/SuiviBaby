@@ -1,3 +1,4 @@
+import { canManageEvents } from "@/utils/eventPermissions";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
@@ -253,8 +254,7 @@ export default function MealsScreen() {
   const { showToast, showUndoToast, showActionToast } = useToast();
   const { swipeableRef, triggerHint } = useSwipeHint();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const canManageContent =
-    permissions.role === "owner" || permissions.role === "admin";
+  const canManageContent = canManageEvents(permissions.role);
   const headerOwnerId = useRef(`meals-${Math.random().toString(36).slice(2)}`);
   const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId, selectAll, clearSelection } = useBatchSelect();
   const navigation = useNavigation();

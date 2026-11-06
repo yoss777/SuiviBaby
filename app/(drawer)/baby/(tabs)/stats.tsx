@@ -46,7 +46,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Sharing from "expo-sharing";
+import { shareAndDelete } from "@/services/tempShareService";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   Animated,
@@ -912,10 +912,15 @@ export default function StatsScreen() {
       return false;
     }
     try {
-      await Sharing.shareAsync(uri, {
+      // Deleted once shared (or failed): the PDF holds the child's health data.
+      const shared = await shareAndDelete(uri, {
         mimeType: "application/pdf",
         UTI: "com.adobe.pdf",
       });
+      if (!shared) {
+        Alert.alert("Partage indisponible", "Le partage n'est pas disponible sur cet appareil.");
+        return false;
+      }
     } catch (e) {
       // Usually the user closing the share sheet; reported in case it is not.
       captureServiceError(e, { service: "stats", operation: "exportPDF.share" });

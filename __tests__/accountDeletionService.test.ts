@@ -6,6 +6,7 @@ import {
   mapDeletionError,
   requestAccountDeletion,
 } from "@/services/accountDeletionService";
+import { onAccountDelete } from "@/services/offlineQueueService";
 import {
   getAppleCredential,
   getGoogleCredential,
@@ -36,6 +37,10 @@ jest.mock("firebase/functions", () => ({
 jest.mock("@/services/socialAuthService", () => ({
   getGoogleCredential: jest.fn(),
   getAppleCredential: jest.fn(),
+}));
+
+jest.mock("@/services/offlineQueueService", () => ({
+  onAccountDelete: jest.fn(),
 }));
 
 jest.mock("react-native", () => ({ Platform: { OS: "ios" } }));
@@ -90,6 +95,25 @@ describe("accountDeletionService", () => {
       expect(updateDoc).toHaveBeenCalledTimes(1);
       expect(new Date(info.deletionDate).getTime()).toBeGreaterThan(Date.now());
       expect(getGoogleCredential).not.toHaveBeenCalled();
+    });
+
+    it("purges the local offline queue of this account once deletion is scheduled", async () => {
+      setUser(["password"]);
+      await requestAccountDeletion({ password: "secret" });
+      expect(onAccountDelete).toHaveBeenCalledWith("u1");
+    });
+
+    it("does not purge the queue when scheduling fails", async () => {
+      setUser(["password"]);
+      (updateDoc as jest.Mock).mockRejectedValue(new Error("offline"));
+      await expect(requestAccountDeletion({ password: "secret" })).rejects.toThrow("offline");
+      expect(onAccountDelete).not.toHaveBeenCalled();
+    });
+
+    it("a failing queue purge does not block the deletion", async () => {
+      setUser(["password"]);
+      (onAccountDelete as jest.Mock).mockRejectedValue(new Error("sqlite"));
+      await expect(requestAccountDeletion({ password: "secret" })).resolves.toBeDefined();
     });
 
     it("password: requires a password", async () => {

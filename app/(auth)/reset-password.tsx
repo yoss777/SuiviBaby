@@ -22,6 +22,7 @@ import {
   View,
 } from "react-native";
 import { auth } from "@/config/firebase";
+import { isValidOobCode } from "@/utils/passwordResetLink";
 
 const PASSWORD_RULES = [
   {
@@ -45,7 +46,9 @@ export default function ResetPasswordScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const router = useRouter();
-  const { oobCode } = useLocalSearchParams<{ oobCode: string }>();
+  const { oobCode: rawOobCode } = useLocalSearchParams<{ oobCode: string }>();
+  // Never trust the route param: only a well-formed code reaches Firebase.
+  const oobCode = isValidOobCode(rawOobCode) ? rawOobCode : undefined;
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

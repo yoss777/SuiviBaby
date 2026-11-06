@@ -6,6 +6,8 @@ import {
   requestPermissions,
   startRecording,
   stopRecording,
+  cancelRecording,
+  deleteRecording,
   transcribeAudio,
   hasApiKey,
 } from "./voice/recorder";
@@ -31,6 +33,8 @@ class VoiceCommandService {
   requestPermissions = requestPermissions;
   startRecording = startRecording;
   stopRecording = stopRecording;
+  cancelRecording = cancelRecording;
+  deleteRecording = deleteRecording;
   transcribeAudio = transcribeAudio;
   hasApiKey = hasApiKey;
   parseCommand = parseCommand;

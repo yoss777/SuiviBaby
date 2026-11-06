@@ -173,6 +173,29 @@ export async function startRecording(): Promise<void> {
 }
 
 /**
+ * Supprime le fichier audio temporaire (best-effort, idempotent).
+ * L'audio n'a aucune raison de rester sur l'appareil une fois transcrit,
+ * annulé ou en échec : on le supprime dans tous les cas.
+ */
+export async function deleteRecording(uri: string | null | undefined): Promise<void> {
+  if (!uri) return;
+  try {
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+  } catch (error) {
+    console.warn("Suppression de l'audio temporaire impossible:", error);
+    captureServiceError(error, { service: "voiceRecorder", operation: "deleteRecording" });
+  }
+}
+
+/**
+ * Annule l'enregistrement en cours : arrête le micro et supprime le fichier.
+ */
+export async function cancelRecording(): Promise<void> {
+  const uri = await stopRecording();
+  await deleteRecording(uri);
+}
+
+/**
  * Arrête l'enregistrement et retourne l'URI du fichier
  */
 export async function stopRecording(): Promise<string | null> {
@@ -221,6 +244,15 @@ function generateIdempotencyKey(): string {
  * EmptyAudioError without hitting the CF (saves quota + latency).
  */
 export async function transcribeAudio(audioUri: string): Promise<string> {
+  try {
+    return await transcribeAudioFile(audioUri);
+  } finally {
+    // Succès, erreur ou audio trop court : le fichier temporaire est supprimé.
+    await deleteRecording(audioUri);
+  }
+}
+
+async function transcribeAudioFile(audioUri: string): Promise<string> {
   try {
     // Check file size before reading the whole file into memory + base64ing it.
     const info = await FileSystem.getInfoAsync(audioUri, { size: true });

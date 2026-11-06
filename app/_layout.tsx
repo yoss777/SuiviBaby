@@ -1,3 +1,4 @@
+import { parseResetPasswordUrl } from "@/utils/passwordResetLink";
 import * as Sentry from "@sentry/react-native";
 import { Colors } from "@/constants/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -153,18 +154,13 @@ function AppNavigation() {
       const url = event.url;
       // Gérer les URLs Firebase action (mode=resetPassword&oobCode=xxx)
       // et les deep links suivibaby://reset-password?oobCode=xxx
-      const oobCodeMatch = url.match(/[?&]oobCode=([^&]+)/);
-      const modeMatch = url.match(/[?&]mode=([^&]+)/);
-
-      if (oobCodeMatch) {
-        const oobCode = oobCodeMatch[1];
-        const mode = modeMatch?.[1];
-        if (!mode || mode === "resetPassword") {
-          router.replace({
-            pathname: "/(auth)/reset-password",
-            params: { oobCode },
-          });
-        }
+      // Le code est validé (forme et mode) avant d'atteindre le routeur.
+      const oobCode = parseResetPasswordUrl(url);
+      if (oobCode) {
+        router.replace({
+          pathname: "/(auth)/reset-password",
+          params: { oobCode },
+        });
       }
     };
 

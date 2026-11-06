@@ -8,6 +8,7 @@ import {
 import { doc, getDoc, deleteField, updateDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/config/firebase";
+import { onAccountDelete as purgeOfflineQueue } from "@/services/offlineQueueService";
 import {
   getAppleCredential,
   getGoogleCredential,
@@ -227,6 +228,14 @@ export async function requestAccountDeletion(
   await updateDoc(doc(db, "users", user.uid), {
     pendingDeletion,
   });
+
+  // Local copy of this account's unsent events: nothing must be replayed or
+  // left on the device once deletion is requested. Best effort, never blocks.
+  try {
+    await purgeOfflineQueue(user.uid);
+  } catch (error) {
+    console.warn("[DELETION] purge de la file hors-ligne échouée:", error);
+  }
 
   // Apple token revocation is best effort: never block the deletion.
   if (method === "apple" && appleAuthorizationCode) {

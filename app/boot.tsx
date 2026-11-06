@@ -1,3 +1,4 @@
+import { canManageEvents } from "@/utils/eventPermissions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Image, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -163,7 +164,7 @@ function BootScreenContent() {
                 const role = accessDoc?.role ?? null;
                 setPermissionsCache({
                   role,
-                  canManageContent: role === "owner" || role === "admin",
+                  canManageContent: canManageEvents(role),
                 });
               })
               .catch(() => {})

@@ -52,25 +52,49 @@ service cloud.firestore {
     // redeemShareCodeCF, Admin SDK). Clients can no longer write their own access
     // from an invitation or a share code (privilege escalation, 2026-11-02 audit).
 
+    // Rôles et droits d'écriture sur les events (décision Q6, sprint 4.8) :
+    //   owner / admin : créer et modifier les events, liker et commenter tout.
+    //   contributor   : lire tous les events ; liker et commenter UNIQUEMENT
+    //                   ceux qui portent des photos ; aucune écriture d'event.
+    //   viewer        : lecture seule.
+    // Le rôle seul décide : les anciens drapeaux canWriteEvents d'un document
+    // d'accès ne donnent plus l'écriture d'events (un contributeur ou un
+    // observateur ne peut pas se l'accorder par ce biais).
+    function accessRole(childId) {
+      return getAccessDoc(childId).data.role;
+    }
+
     // Vérifie si l'utilisateur peut écrire des events (owner ou admin)
     function canWriteEvents(childId) {
-      return hasAccess(childId) &&
-        (getAccessDoc(childId).data.role in ['owner', 'admin'] ||
-         getAccessDoc(childId).data.get('canWriteEvents', false) == true);
+      return hasAccess(childId) && accessRole(childId) in ['owner', 'admin'];
     }
 
-    // Vérifie si l'utilisateur peut écrire des likes
-    function canWriteLikes(childId) {
-      return hasAccess(childId) &&
-        (getAccessDoc(childId).data.role in ['owner', 'admin', 'contributor'] ||
-         getAccessDoc(childId).data.get('canWriteLikes', false) == true);
+    // L'event existe, appartient à cet enfant et porte au moins une photo.
+    function isPhotoEventOf(childId, eventId) {
+      return eventId is string &&
+        exists(/databases/$(database)/documents/events/$(eventId)) &&
+        get(/databases/$(database)/documents/events/$(eventId)).data.childId == childId &&
+        get(/databases/$(database)/documents/events/$(eventId)).data.get('photos', []) is list &&
+        get(/databases/$(database)/documents/events/$(eventId)).data.get('photos', []).size() > 0;
     }
 
-    // Vérifie si l'utilisateur peut écrire des commentaires
-    function canWriteComments(childId) {
-      return hasAccess(childId) &&
-        (getAccessDoc(childId).data.role in ['owner', 'admin', 'contributor'] ||
-         getAccessDoc(childId).data.get('canWriteComments', false) == true);
+    // Likes : owner/admin sur tout event ; contributor (ou drapeau explicite)
+    // sur les events avec photos uniquement.
+    function canWriteLikes(childId, eventId) {
+      return hasAccess(childId) && (
+        accessRole(childId) in ['owner', 'admin'] ||
+        ((accessRole(childId) == 'contributor' ||
+          getAccessDoc(childId).data.get('canWriteLikes', false) == true) &&
+         isPhotoEventOf(childId, eventId)));
+    }
+
+    // Commentaires : mêmes règles que les likes.
+    function canWriteComments(childId, eventId) {
+      return hasAccess(childId) && (
+        accessRole(childId) in ['owner', 'admin'] ||
+        ((accessRole(childId) == 'contributor' ||
+          getAccessDoc(childId).data.get('canWriteComments', false) == true) &&
+         isPhotoEventOf(childId, eventId)));
     }
 
     // ============================================
@@ -154,16 +178,17 @@ service cloud.firestore {
       // Lecture : tous ceux qui ont accès à l'enfant
       allow read: if hasAccess(resource.data.childId);
 
-      // Création : owner/admin + vérifier que userId est bien l'uid de l'utilisateur
+      // Création : owner/admin + userId == auth.uid. `reported` est posé par le
+      // serveur (modération) : un event ne naît pas déjà masqué.
       allow create: if canWriteEvents(request.resource.data.childId) &&
-        request.resource.data.userId == request.auth.uid;
+        request.resource.data.userId == request.auth.uid &&
+        !('reported' in request.resource.data);
 
-      // Modification : owner/admin uniquement
+      // Modification : owner/admin uniquement. userId, childId, createdAt,
+      // idempotencyKey et reported (modération) ne changent jamais côté client.
       allow update: if canWriteEvents(resource.data.childId) &&
-        // Empêcher la modification du userId, childId et createdAt
-        request.resource.data.userId == resource.data.userId &&
-        request.resource.data.childId == resource.data.childId &&
-        request.resource.data.createdAt == resource.data.createdAt;
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['userId', 'childId', 'createdAt', 'idempotencyKey', 'reported']);
 
       // Suppression : désactivée côté client — utiliser deleteEventCascade CF
       // pour garantir la suppression atomique des likes/comments associés.
@@ -180,8 +205,8 @@ service cloud.firestore {
         && resource.data.childId is string
         && hasAccess(resource.data.childId);
 
-      // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
-      allow create: if canWriteLikes(request.resource.data.childId) &&
+      // Création : owner/admin, ou contributor sur un event avec photos ; userId == auth.uid
+      allow create: if canWriteLikes(request.resource.data.childId, request.resource.data.get('eventId', null)) &&
         request.resource.data.userId == request.auth.uid;
 
       // Suppression : son propre like OU owner/admin de l'enfant
@@ -201,14 +226,16 @@ service cloud.firestore {
         && resource.data.childId is string
         && hasAccess(resource.data.childId);
 
-      // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
-      allow create: if canWriteComments(request.resource.data.childId) &&
+      // Création : owner/admin, ou contributor sur un event avec photos ; userId == auth.uid
+      allow create: if canWriteComments(request.resource.data.childId, request.resource.data.get('eventId', null)) &&
         request.resource.data.userId == request.auth.uid;
 
-      // Modification : uniquement son propre commentaire
-      allow update: if canWriteComments(resource.data.childId) &&
+      // Modification : uniquement le texte de son propre commentaire ;
+      // childId, eventId, userId et createdAt sont figés.
+      allow update: if canWriteComments(resource.data.childId, resource.data.get('eventId', null)) &&
         resource.data.userId == request.auth.uid &&
-        request.resource.data.userId == request.auth.uid;
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['content', 'updatedAt', 'mentions']);
 
       // Suppression : son propre commentaire OU owner/admin de l'enfant
       allow delete: if (hasAccess(resource.data.childId) &&

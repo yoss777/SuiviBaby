@@ -19,6 +19,8 @@ import {
   where
 } from "firebase/firestore";
 
+import { canManageEvents } from "@/utils/eventPermissions";
+
 /**
  * Récupère les permissions d'un utilisateur pour un enfant
  */
@@ -60,13 +62,15 @@ export function calculatePermissions(
     };
   }
 
-  const { role, canWriteEvents, canWriteLikes, canWriteComments } = accessDoc;
+  const { role, canWriteLikes, canWriteComments } = accessDoc;
 
   return {
     hasAccess: true,
     role,
     canRead: true, // Tous les rôles peuvent lire
-    canWriteEvents,
+    // Derived from the role, not from the stored flag: a contributor can no
+    // longer write events even if an older access document says so.
+    canWriteEvents: canManageEvents(role),
     canWriteLikes,
     canWriteComments,
     canManageAccess: role === "owner",

@@ -37,6 +37,11 @@ jest.mock("@/contexts/PremiumContext", () => ({
 jest.mock("@/hooks/useVoiceCommand", () => ({
   useVoiceCommand: () => mockVoice,
 }));
+let mockNoticeSeen = true;
+jest.mock("@/services/voiceNoticeService", () => ({
+  hasSeenVoiceNotice: jest.fn(async () => mockNoticeSeen),
+  markVoiceNoticeSeen: jest.fn(async () => undefined),
+}));
 jest.mock("@/services/premiumUsageService", () => ({
   getVoiceUsageStatus: jest.fn(async () => mockQuota),
 }));
@@ -79,6 +84,7 @@ describe("useVoiceInput gestures", () => {
     mockHasUnlimitedVoice = false;
     mockQuota = { allowed: true, remaining: 2 };
     mockChildId = "child-1";
+    mockNoticeSeen = true;
     now = 1_000_000;
     jest.spyOn(Date, "now").mockImplementation(() => now);
   });
@@ -94,6 +100,27 @@ describe("useVoiceInput gestures", () => {
     });
     expect(mockVoice.startVoiceCommand).toHaveBeenCalledTimes(1);
     expect(result.current.voiceLimitReached).toBe(false);
+  });
+
+  it("shows the first-use notice instead of recording, then records once dismissed", async () => {
+    mockNoticeSeen = false;
+    const notice = jest.requireMock("@/services/voiceNoticeService");
+    const { result } = renderHook(() => useVoiceInput());
+    await act(async () => {
+      await result.current.onPressIn();
+    });
+    expect(result.current.voiceNoticeVisible).toBe(true);
+    expect(mockVoice.startVoiceCommand).not.toHaveBeenCalled();
+
+    act(() => result.current.dismissVoiceNotice());
+    expect(result.current.voiceNoticeVisible).toBe(false);
+    expect(notice.markVoiceNoticeSeen).toHaveBeenCalledTimes(1);
+
+    mockNoticeSeen = true;
+    await act(async () => {
+      await result.current.onPressIn();
+    });
+    expect(mockVoice.startVoiceCommand).toHaveBeenCalledTimes(1);
   });
 
   it("opens the quota paywall instead of recording when the quota is used up", async () => {

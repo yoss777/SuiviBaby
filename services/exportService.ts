@@ -1,5 +1,5 @@
 import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
+import { deleteTempFile, getCacheFileUri, shareAndDelete } from "@/services/tempShareService";
 import { EventType, obtenirEvenements } from "./eventsService";
 import { getHiddenEventIds } from "./hiddenPhotosService";
 import {
@@ -211,14 +211,18 @@ export async function exportAllEventsCSV(
 
   const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\n");
   const fileName = `${childName.replace(/\s+/g, "_")}_export_${new Date().toISOString().slice(0, 10)}.csv`;
-  const filePath = `${FileSystem.cacheDirectory}${fileName}`;
+  const filePath = getCacheFileUri(fileName);
 
-  await FileSystem.writeAsStringAsync(filePath, "\uFEFF" + csv, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  try {
+    await FileSystem.writeAsStringAsync(filePath, "\uFEFF" + csv, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
 
-  await Sharing.shareAsync(filePath, {
-    mimeType: "text/csv",
-    UTI: "public.comma-separated-values-text",
-  });
+    await shareAndDelete(filePath, {
+      mimeType: "text/csv",
+      UTI: "public.comma-separated-values-text",
+    });
+  } finally {
+    await deleteTempFile(filePath);
+  }
 }

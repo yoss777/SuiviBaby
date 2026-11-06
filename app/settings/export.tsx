@@ -3,7 +3,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import * as Sharing from "expo-sharing";
+import { deleteTempFile, getCacheFileUri, shareAndDelete } from "@/services/tempShareService";
 import {
   collection,
   doc,
@@ -825,22 +825,21 @@ export default function ExportScreen() {
       const fileName = `suivibaby_export_${new Date()
         .toISOString()
         .replace(/[:.]/g, "-")}.json`;
-      const baseDirectory = FileSystem.documentDirectory;
-      if (!baseDirectory) {
-        throw new Error("Répertoire de stockage indisponible");
-      }
-      const fileUri = `${baseDirectory}${fileName}`;
-      await FileSystem.writeAsStringAsync(
-        fileUri,
-        JSON.stringify(exportData, null, 2),
-        {
-          encoding: FileSystem.EncodingType.UTF8,
-        },
-      );
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(fileUri);
+      // Cache directory + deleted after sharing: health data must not stay
+      // in the app's persistent (and backed-up) storage.
+      const fileUri = getCacheFileUri(fileName);
+      try {
+        await FileSystem.writeAsStringAsync(
+          fileUri,
+          JSON.stringify(exportData, null, 2),
+          {
+            encoding: FileSystem.EncodingType.UTF8,
+          },
+        );
+        await shareAndDelete(fileUri);
+      } finally {
+        // Also covers a failed write (partial file).
+        await deleteTempFile(fileUri);
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

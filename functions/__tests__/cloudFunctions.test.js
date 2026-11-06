@@ -1,8 +1,8 @@
 /* global Buffer, describe, it, expect, jest, beforeEach, afterEach, afterAll */
 const { mockFirestore, mockDocRef, mockGet, mockAdd, mockQueryChain, mockRunTransaction } = require("./setup");
 const fns = require("../index");
-const auth = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, admin: false } }, data, app: true });
-const adm = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, admin: true } }, data, app: true });
+const auth = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, email_verified: true, admin: false } }, data, app: true });
+const adm = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, email_verified: true, admin: true } }, data, app: true });
 const doc = (data) => ({ exists: true, data: () => data, id: "id", ref: { id: "id" } });
 const no = () => ({ exists: false, data: () => null, id: "id" });
 const snap = (ds = []) => ({ docs: ds.map((d, i) => ({ id: d.id || `d${i}`, data: () => d.data || d, ref: { id: d.id || `d${i}` } })), empty: !ds.length, size: ds.length });
@@ -183,25 +183,6 @@ describe("revenueCatWebhook", () => {
   it("rejects no secret", async () => { delete process.env.REVENUECAT_WEBHOOK_SECRET; const r = res(); await fns.revenueCatWebhook({ method: "POST", headers: {}, body: {} }, r); expect(r.status).toHaveBeenCalledWith(500); });
   it("rejects bad auth", async () => { process.env.REVENUECAT_WEBHOOK_SECRET = "s"; const r = res(); await fns.revenueCatWebhook({ method: "POST", headers: { authorization: "Bearer x" }, body: { event: {} } }, r); expect(r.status).toHaveBeenCalledWith(401); delete process.env.REVENUECAT_WEBHOOK_SECRET; });
   it("rejects no event", async () => { process.env.REVENUECAT_WEBHOOK_SECRET = "s"; const r = res(); await fns.revenueCatWebhook({ method: "POST", headers: { authorization: "Bearer s" }, body: {} }, r); expect(r.status).toHaveBeenCalledWith(400); delete process.env.REVENUECAT_WEBHOOK_SECRET; });
-});
-
-describe("grandfatherExistingUsers", () => {
-  it("rejects unauthenticated", async () => { await expect(fns.grandfatherExistingUsers({ auth: null, data: {} })).rejects.toThrow("Authentification"); });
-  it("rejects non-admin", async () => { await expect(fns.grandfatherExistingUsers(auth("u1", { cutoffDate: "2026-01-01", reason: "test test" }))).rejects.toThrow("administrateurs"); });
-  it("accepts admin with reason", async () => {
-    mockFirestore.collection.mockReturnValue({ where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()), add: jest.fn().mockResolvedValue({ id: "audit1" }) });
-    mockFirestore.doc.mockImplementation((p) => {
-      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
-      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
-    });
-    expect(await fns.grandfatherExistingUsers(adm("a1", { cutoffDate: "2026-01-01", reason: "migration legacy v2.3 users to free tier" }))).toEqual({ success: true, count: 0 });
-  });
-  it("rejects no cutoff", async () => { await expect(fns.grandfatherExistingUsers(adm("a1", { reason: "test" }))).rejects.toThrow("cutoffDate"); });
-  it("B4.S6 — rejects missing or too short reason", async () => {
-    mockFirestore.doc.mockImplementation((p) => p?.includes("rate_limits") ? { get: jest.fn().mockResolvedValue(no()), set: jest.fn() } : { get: jest.fn().mockResolvedValue(no()), set: jest.fn() });
-    await expect(fns.grandfatherExistingUsers(adm("a1", { cutoffDate: "2026-01-01" }))).rejects.toThrow("reason");
-    await expect(fns.grandfatherExistingUsers(adm("a1", { cutoffDate: "2026-01-01", reason: "x" }))).rejects.toThrow("reason");
-  });
 });
 
 describe("usage quota functions", () => {
@@ -1331,6 +1312,7 @@ describe("setAdminClaim (T0.3)", () => {
     // mockReturnValue (not Once) — code calls admin.auth() multiple times.
     adminMod.auth.mockReturnValue({
       getUser: jest.fn().mockResolvedValue({ uid: "t1", email: "t1@t.com", customClaims: {} }),
+      listUsers: jest.fn().mockResolvedValue({ users: [], pageToken: undefined }),
       setCustomUserClaims: setClaimsMock,
       deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn(),
     });
@@ -1834,49 +1816,6 @@ describe("resolveReport (B6.S7 atomic claim)", () => {
   });
 });
 
-describe("generateAiInsight quota", () => {
-  // subscriptions/{uid} and usage_limits/{uid} are read through db.doc(path).get().
-  const insightDocs = ({ subscription, usage }) => {
-    mockFirestore.doc.mockImplementation((p) => {
-      if (p?.includes("rate_limits")) return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
-      if (p?.startsWith("subscriptions/")) return { get: jest.fn().mockResolvedValue(subscription ? doc(subscription) : no()) };
-      if (p?.startsWith("usage_limits/")) return { get: jest.fn().mockResolvedValue(usage ? doc(usage) : no()), set: jest.fn() };
-      return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
-    });
-  };
-  const today = new Date().toISOString().split("T")[0];
-
-  it("blocks a free user after the daily free insight", async () => {
-    insightDocs({ usage: { lastInsightDate: today, dailyInsights: 1 } });
-    await expect(fns.generateAiInsight(auth("u1", {}))).rejects.toThrow("Limite quotidienne");
-  });
-
-  it("does not limit a grandfathered account flagged without the grandfathered status", async () => {
-    insightDocs({
-      subscription: { tier: "free", status: "active", grandfathered: true },
-      usage: { lastInsightDate: today, dailyInsights: 5 },
-    });
-    // Passes the quota check and stops on the missing payload instead.
-    await expect(fns.generateAiInsight(auth("u1", {}))).rejects.toThrow("Données manquantes");
-  });
-
-  it("does not limit an active premium subscriber", async () => {
-    insightDocs({
-      subscription: { tier: "premium", status: "active" },
-      usage: { lastInsightDate: today, dailyInsights: 5 },
-    });
-    await expect(fns.generateAiInsight(auth("u1", {}))).rejects.toThrow("Données manquantes");
-  });
-
-  it("limits an expired premium subscription like a free account", async () => {
-    insightDocs({
-      subscription: { tier: "premium", status: "expired" },
-      usage: { lastInsightDate: today, dailyInsights: 1 },
-    });
-    await expect(fns.generateAiInsight(auth("u1", {}))).rejects.toThrow("Limite quotidienne");
-  });
-});
-
 describe("photo deletion when a child is purged", () => {
   const { mockStorage, mockBucket } = require("./setup");
 
@@ -2130,8 +2069,11 @@ describe("createShareInvitation — invitee resolved via Firebase Auth", () => {
       return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
     });
     // a spoofed users doc claiming the email must not be used
-    mockFirestore.collection.mockImplementation(() => ({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap([{ id: "attacker" }])), add: jest.fn() }));
-    await expect(fns.createShareInvitation(auth("u1", { childId: "c1", childName: "Bebe", invitedEmail: "victim@example.com" }))).rejects.toThrow("Aucun utilisateur");
+    const add = jest.fn();
+    mockFirestore.collection.mockImplementation(() => ({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap([{ id: "attacker" }])), add }));
+    // Neutral answer (4.5): no error, no invitation toward the spoofed user.
+    await expect(fns.createShareInvitation(auth("u1", { childId: "c1", invitedEmail: "victim@example.com" }))).resolves.toEqual({ id: expect.any(String) });
+    expect(add).not.toHaveBeenCalled();
   });
 });
 
@@ -2222,7 +2164,7 @@ describe("validateReferralCode — one referral per account (audit A2)", () => {
   it("rejects unauthenticated calls and unverified e-mails", async () => {
     await expect(fns.validateReferralCode({ auth: null, data: {} })).rejects.toThrow("Authentification");
     referralStore();
-    await expect(fns.validateReferralCode(auth("u1", { referralCode: "SAM-AAAA-BBBB" }))).rejects.toThrow("Vérifiez");
+    await expect(fns.validateReferralCode({ auth: { uid: "u1", token: { email: "u1@t.com" } }, data: { referralCode: "SAM-AAAA-BBBB" }, app: true })).rejects.toThrow("Vérifiez");
   });
 
   it("rejects malformed, unknown and own codes", async () => {

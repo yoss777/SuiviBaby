@@ -5,6 +5,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { canManageEvents } from "@/utils/eventPermissions";
 import { getPermissionsCache } from "@/services/userPreferencesCache";
 
 export function useCanManageContent(): boolean {
@@ -13,5 +14,5 @@ export function useCanManageContent(): boolean {
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const cached = getPermissionsCache();
   if (permissions.loading && cached) return cached.canManageContent;
-  return permissions.role === "owner" || permissions.role === "admin";
+  return canManageEvents(permissions.role);
 }
