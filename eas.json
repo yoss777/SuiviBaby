@@ -51,9 +51,6 @@
       "environment": "production",
       "autoIncrement": true,
       "distribution": "store",
-      "env": {
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
-      },
       "android": {
         "buildType": "app-bundle",
         "credentialsSource": "remote"
