@@ -28,7 +28,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { PaywallPrompt } from "@/components/ui/PaywallPrompt";
 import { db } from "@/config/firebase";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
@@ -36,11 +35,6 @@ import type { Child } from "@/contexts/BabyContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { usePremium } from "@/contexts/PremiumContext";
-import {
-  consumeExportQuota,
-  getExportUsageStatus,
-} from "@/services/premiumUsageService";
 import { Event, EventType } from "@/services/eventsService";
 import { obtenirPreferences } from "@/services/userPreferencesService";
 import type { ChildRole } from "@/types/permissions";
@@ -738,10 +732,11 @@ export default function ExportScreen() {
     !hasSelectedTypes ||
     !hasSelectedData;
 
-  const { checkFeatureAccess } = usePremium();
-  const [showPaywall, setShowPaywall] = useState(false);
+  // Synchronous guard against double taps (isExporting state updates async).
+  const exportInFlightRef = useRef(false);
 
   const handleExport = useCallback(async (force = false) => {
+    if (exportInFlightRef.current) return;
     if (Platform.OS === "web") {
       setModalConfig({
         visible: true,
@@ -762,14 +757,6 @@ export default function ExportScreen() {
       return;
     }
 
-    if (!checkFeatureAccess("unlimited_export")) {
-      const exportQuota = await getExportUsageStatus();
-      if (!exportQuota.allowed || (exportQuota.remaining ?? 0) <= 0) {
-        setShowPaywall(true);
-        return;
-      }
-    }
-
     if (!force && !hasSelectedTypes) {
       setModalConfig({
         visible: true,
@@ -781,6 +768,7 @@ export default function ExportScreen() {
     }
 
     try {
+      exportInFlightRef.current = true;
       setIsExporting(true);
       const effectiveEventTypes = force
         ? eventTypes.map((item) => item.id as EventType)
@@ -855,12 +843,6 @@ export default function ExportScreen() {
         await Sharing.shareAsync(fileUri);
       }
 
-      if (!checkFeatureAccess("unlimited_export")) {
-        // B5.S1 — passe les childIds pour que la CF valide l'accès à
-        // chaque enfant avant de débiter le quota free.
-        await consumeExportQuota(selectedChildren.map((item) => item.child.id));
-      }
-
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Export terminé avec succès");
 
@@ -893,10 +875,10 @@ export default function ExportScreen() {
         mode: "text",
       });
     } finally {
+      exportInFlightRef.current = false;
       setIsExporting(false);
     }
   }, [
-    checkFeatureAccess,
     children,
     email,
     eventTypes,
@@ -1145,14 +1127,6 @@ export default function ExportScreen() {
             headerBackTitle: "Retour",
           }}
         />
-        {showPaywall && (
-          <PaywallPrompt
-            trigger="export_limit"
-            variant="banner"
-            onDismiss={() => setShowPaywall(false)}
-          />
-        )}
-
         {isAutoDeleteFlow ? (
           <View style={styles.autoExportLoader}>
             <IconPulseDots color={nc.todayAccent} />

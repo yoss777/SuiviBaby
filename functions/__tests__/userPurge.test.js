@@ -193,6 +193,7 @@ const NOT_PURGED_BY_UID = {
   user_child_access: "index entries removed per child in purgeUserData",
   events: "deleted with the child, or anonymised (DELETED_USER_ID) in shared children",
   shareInvitations: "removed by inviter / invited e-mail in purgeUserData",
+  consent_records: "kept 5 years after deletion as proof of consent (GDPR art. 7.1): purgeUserData only sets expireAt, a TTL deletes them",
   adminAuditLog: "kept on purpose: investigation trail of admin actions",
   revenuecat_webhook_events: "event ids only, no personal data; TTL 30 days",
   app_config: "shared configuration",

@@ -653,6 +653,12 @@
       "indexes": []
     },
     {
+      "collectionGroup": "consent_records",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "access",
       "fieldPath": "userId",
       "indexes": [

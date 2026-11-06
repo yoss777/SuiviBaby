@@ -78,7 +78,7 @@ export default function TermsScreen() {
     {
       title: "11. Données personnelles",
       content:
-        "Le traitement de vos données, dont les données de santé de votre enfant, est décrit dans la politique de confidentialité. Il repose sur votre consentement explicite, recueilli à l'inscription. Vous pouvez exporter vos données à tout moment depuis Paramètres → Export ; nous vous recommandons de le faire régulièrement.",
+        "Le traitement de vos données, dont les données de santé de votre enfant, est décrit dans la politique de confidentialité. Il repose sur votre consentement explicite, recueilli à l'inscription ou à la première connexion, avec une preuve horodatée conservée côté serveur pendant 5 ans après la suppression de votre compte. Vous pouvez exporter vos données à tout moment depuis Paramètres → Export ; nous vous recommandons de le faire régulièrement.",
     },
     {
       title: "12. Disponibilité et évolution du service",

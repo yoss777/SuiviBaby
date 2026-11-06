@@ -43,10 +43,6 @@ export async function getVoiceUsageStatus(): Promise<UsageQuotaStatus> {
   return getUsageQuotaStatus("voice");
 }
 
-export async function getExportUsageStatus(): Promise<UsageQuotaStatus> {
-  return getUsageQuotaStatus("export");
-}
-
 export async function getSharingUsageStatus(
   childId: string,
 ): Promise<UsageQuotaStatus> {
@@ -55,13 +51,5 @@ export async function getSharingUsageStatus(
 
 export async function consumeVoiceQuota(): Promise<UsageQuotaStatus> {
   const result = await consumeUsageQuotaCF({ feature: "voice" });
-  return result.data;
-}
-
-export async function consumeExportQuota(childIds: string[]): Promise<UsageQuotaStatus> {
-  if (!Array.isArray(childIds) || childIds.length === 0) {
-    throw new Error("childIds (array non vide) requis pour consommer le quota export.");
-  }
-  const result = await consumeUsageQuotaCF({ feature: "export", childIds });
   return result.data;
 }

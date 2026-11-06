@@ -4,6 +4,7 @@ import {
   GoogleAuthProvider,
   OAuthProvider,
   signInWithCredential,
+  type AuthCredential,
 } from "firebase/auth";
 import { auth } from "@/config/firebase";
 import { createPatientUser, getUserById } from "./userService";
@@ -54,9 +55,10 @@ async function ensureUserProfile(user: {
 }
 
 /**
- * Sign in with Google. Returns the Firebase user.
+ * Run the native Google flow and return a Firebase credential
+ * (null when the user cancels). Shared by sign-in and re-authentication.
  */
-export async function signInWithGoogle() {
+export async function getGoogleCredential(): Promise<AuthCredential | null> {
   if (!GoogleSignin) {
     throw new Error("Google Sign-In non disponible");
   }
@@ -75,16 +77,21 @@ export async function signInWithGoogle() {
     throw new Error("Impossible de récupérer le token Google");
   }
 
-  const credential = GoogleAuthProvider.credential(idToken);
-  const result = await signInWithCredential(auth, credential);
-  await ensureUserProfile(result.user);
-  return result.user;
+  return GoogleAuthProvider.credential(idToken);
+}
+
+export interface AppleCredentialResult {
+  credential: AuthCredential;
+  /** Short-lived code used server-side to revoke the Apple token. */
+  authorizationCode: string | null;
+  fullName: { givenName?: string | null; familyName?: string | null } | null;
 }
 
 /**
- * Sign in with Apple (iOS only). Returns the Firebase user.
+ * Run the native Apple flow (iOS) with a nonce and return a Firebase credential
+ * plus the authorizationCode. Rejects with code ERR_REQUEST_CANCELED on cancel.
  */
-export async function signInWithApple() {
+export async function getAppleCredential(): Promise<AppleCredentialResult> {
   if (!AppleAuthentication || !Crypto) {
     throw new Error("Apple Sign-In non disponible");
   }
@@ -114,10 +121,34 @@ export async function signInWithApple() {
     rawNonce,
   });
 
+  return {
+    credential,
+    authorizationCode: appleCredential.authorizationCode ?? null,
+    fullName: appleCredential.fullName ?? null,
+  };
+}
+
+/**
+ * Sign in with Google. Returns the Firebase user.
+ */
+export async function signInWithGoogle() {
+  const credential = await getGoogleCredential();
+  if (!credential) return null;
+
+  const result = await signInWithCredential(auth, credential);
+  await ensureUserProfile(result.user);
+  return result.user;
+}
+
+/**
+ * Sign in with Apple (iOS only). Returns the Firebase user.
+ */
+export async function signInWithApple() {
+  const { credential, fullName } = await getAppleCredential();
+
   const result = await signInWithCredential(auth, credential);
 
   // Apple only provides name on first sign-in
-  const fullName = appleCredential.fullName;
   const displayName = fullName
     ? [fullName.givenName, fullName.familyName].filter(Boolean).join(" ")
     : null;

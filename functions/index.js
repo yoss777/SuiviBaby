@@ -6,6 +6,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onObjectFinalized, onObjectDeleted } = require("firebase-functions/v2/storage");
+const { defineSecret } = require("firebase-functions/params");
 
 // Every function runs in the EU unless it says otherwise (only the legacy US
 // bucket mirrors do). Without this, a function without an explicit region
@@ -27,6 +28,7 @@ const CONTRIBUTOR_PERMISSIONS = Object.freeze({
 const VOICE_ENUMS = require("./lib/enums");
 const voiceParse = require("./lib/voiceParse");
 const Anthropic = require("@anthropic-ai/sdk").default;
+const appleAuth = require("./lib/appleAuth");
 
 admin.initializeApp();
 
@@ -45,6 +47,38 @@ const FREE_MAX_SHARED_USERS = 2;
 const PHOTOS_BUCKET = "samaye-53723-photos-eu";
 const LEGACY_PHOTOS_BUCKET = "samaye-53723.firebasestorage.app";
 const PHOTO_BUCKETS = [PHOTOS_BUCKET, LEGACY_PHOTOS_BUCKET];
+
+// Sign in with Apple key (Apple Developer > Keys). Bound only to the functions
+// that call Apple: registerAppleRevocation and every caller of purgeUserData.
+const APPLE_TEAM_ID = defineSecret("APPLE_TEAM_ID");
+const APPLE_KEY_ID = defineSecret("APPLE_KEY_ID");
+const APPLE_PRIVATE_KEY = defineSecret("APPLE_PRIVATE_KEY");
+const APPLE_SECRETS = [APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY];
+// HMAC key of the weekly recap unsubscribe links.
+const RECAP_UNSUBSCRIBE_SECRET = defineSecret("RECAP_UNSUBSCRIBE_SECRET");
+
+/** Version of the privacy policy the health data consent refers to (public/privacy.html). */
+const HEALTH_CONSENT_VERSION = "2.1";
+/** Proof of consent is kept this long after the account is deleted. */
+const CONSENT_RETENTION_YEARS = 5;
+
+/** Public URL of an europe-west1 HTTPS function of this project. */
+const FUNCTIONS_BASE_URL = "https://europe-west1-samaye-53723.cloudfunctions.net";
+
+/** Reads a secret from the environment without the SDK warning when it is unset. */
+function secretValue(secret) {
+  return process.env[secret.name] || "";
+}
+
+/** Apple key material, or null when the secrets are not configured. */
+function getAppleCredentials() {
+  const teamId = secretValue(APPLE_TEAM_ID);
+  const keyId = secretValue(APPLE_KEY_ID);
+  const privateKey = secretValue(APPLE_PRIVATE_KEY);
+  // A placeholder value (secret created before the Apple key exists) counts as unset.
+  const looksLikeKey = privateKey.includes("PRIVATE KEY");
+  return teamId && keyId && looksLikeKey ? { teamId, keyId, privateKey } : null;
+}
 
 /** Deletes one photo path from every photo bucket. Missing objects are ignored. */
 async function deletePhotoEverywhere(path) {
@@ -281,13 +315,34 @@ async function updateDocsByFieldBatched(db, collectionName, field, value, patch)
 }
 
 /**
+ * Revokes the user's Sign in with Apple refresh token (apple_tokens/{uid}).
+ * Never throws: failures are logged (error alert) and the purge goes on.
+ */
+async function revokeAppleToken(db, uid) {
+  try {
+    const snap = await db.doc(`apple_tokens/${uid}`).get();
+    const refreshToken = snap.exists ? snap.data()?.refreshToken : null;
+    if (!refreshToken) return;
+    const creds = getAppleCredentials();
+    if (!creds) {
+      console.error(`purgeUserData: Apple secrets missing, token of uid=${uid} NOT revoked at Apple`);
+      return;
+    }
+    await appleAuth.revokeRefreshToken(creds, refreshToken);
+  } catch (e) {
+    console.error(`purgeUserData: Apple token revocation failed for uid=${uid}`, e?.message ?? e);
+  }
+}
+
+/**
  * Deletes everything about a user, in an order that can be retried:
  *   1. their event photos (a failure stops before anything is deleted);
  *   2. their children: deleted when they were the only member, otherwise
  *      ownership transferred or their access removed;
  *   3. events they wrote in children shared with others: kept for the other
  *      parent but anonymised (author removed, photos already deleted);
- *   4. every collection of USER_DATA_BY_FIELD / USER_DOCS_BY_ID, invitations;
+ *   4. Apple token revocation, consent proof kept 5 years (expireAt), then every
+ *      collection of USER_DATA_BY_FIELD / USER_DOCS_BY_ID, invitations;
  *   5. Firebase Auth (a failure other than "already gone" throws: the caller
  *      keeps users/{uid} so the next run retries);
  *   6. users/{uid} last.
@@ -356,6 +411,22 @@ async function purgeUserData(db, uid) {
   });
 
   // 4. Everything else about the user.
+  // Apple requires the Sign in with Apple token to be revoked at account
+  // deletion. Best effort: a refusal must not keep the user's data alive.
+  await revokeAppleToken(db, uid);
+  // Proof of consent is kept 5 years (GDPR art. 7.1): TTL on expireAt deletes it.
+  const consentExpireAt = new Date();
+  consentExpireAt.setFullYear(consentExpireAt.getFullYear() + CONSENT_RETENTION_YEARS);
+  // The patch keeps `uid`, so the query would match the same docs again:
+  // read them once and update in chunks instead of updateDocsByFieldBatched.
+  const consentSnap = await db.collection("consent_records").where("uid", "==", uid).get();
+  for (let i = 0; i < consentSnap.docs.length; i += BATCH_LIMIT) {
+    const batch = db.batch();
+    consentSnap.docs.slice(i, i + BATCH_LIMIT).forEach((doc) =>
+      batch.update(doc.ref, { expireAt: admin.firestore.Timestamp.fromDate(consentExpireAt) })
+    );
+    await batch.commit();
+  }
   await Promise.all(
     USER_DATA_BY_FIELD.map(([collectionName, field]) =>
       deleteDocsByFieldBatched(db, collectionName, field, uid)
@@ -647,36 +718,52 @@ async function getSharingQuotaStatus(db, uid, childId) {
 }
 
 /**
- * Transfère la propriété d'un enfant au meilleur candidat.
+ * Transfère la propriété d'un enfant quand son owner quitte (purge du compte).
+ * Seuls un autre owner (co-owner) puis, à défaut, un admin peuvent hériter :
+ * jamais un contributor ni un viewer. Départage : grantedAt le plus ancien.
+ * Sans candidat, personne n'est promu : l'enfant devient orphelin
+ * (ownerId = null, ownerlessSince) et un log d'erreur lève l'alerte.
+ * L'appelant supprime ensuite l'accès de l'owner sortant.
  */
 async function transferOwnership(db, childId, currentOwnerId, childAccessSnapshot) {
-  const rolePriority = { admin: 0, contributor: 1, viewer: 2 };
+  const rolePriority = { owner: 0, admin: 1 };
   const candidates = childAccessSnapshot.docs
-    .filter((d) => d.id !== currentOwnerId)
+    .filter((d) => d.id !== currentOwnerId && d.data()?.role in rolePriority)
     .map((d) => ({ id: d.id, ...d.data() }))
     .sort((a, b) => {
-      const rA = rolePriority[a.role] ?? 3;
-      const rB = rolePriority[b.role] ?? 3;
+      const rA = rolePriority[a.role];
+      const rB = rolePriority[b.role];
       if (rA !== rB) return rA - rB;
       const tA = a.grantedAt?.toMillis?.() ?? 0;
       const tB = b.grantedAt?.toMillis?.() ?? 0;
       return tA - tB;
     });
 
-  if (candidates.length === 0) return;
+  if (candidates.length === 0) {
+    await db.doc(`children/${childId}`).update({
+      ownerId: null,
+      ownerlessSince: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.error(
+      `transferOwnership: child ${childId} has no eligible owner (no co-owner or admin) after uid=${currentOwnerId} left: ownerless`
+    );
+    return;
+  }
 
   const newOwner = candidates[0];
   const batch = db.batch();
 
   batch.update(db.doc(`children/${childId}`), { ownerId: newOwner.id });
-  batch.update(db.doc(`children/${childId}/access/${newOwner.id}`), {
-    role: "owner",
-    canWriteEvents: true,
-    canWriteLikes: true,
-    canWriteComments: true,
-    grantedBy: newOwner.id,
-    grantedAt: admin.firestore.Timestamp.now(),
-  });
+  if (newOwner.role !== "owner") {
+    batch.update(db.doc(`children/${childId}/access/${newOwner.id}`), {
+      role: "owner",
+      canWriteEvents: true,
+      canWriteLikes: true,
+      canWriteComments: true,
+      grantedBy: newOwner.id,
+      grantedAt: admin.firestore.Timestamp.now(),
+    });
+  }
 
   await batch.commit();
 }
@@ -2698,6 +2785,116 @@ exports.deleteEventCascade = onCall(
 );
 
 // ============================================
+// HEALTH DATA CONSENT PROOF (RGPD art. 7.1)
+// ============================================
+
+/**
+ * recordHealthConsent — Server-side proof of the explicit consent to health
+ * data processing. Input: { version, platform? }. Output: { version }.
+ * Appends to consent_records (server-only, kept 5 years after account
+ * deletion) and sets user_preferences/{uid}.healthDataConsent, which the app
+ * reads to gate access (clients cannot write that field, see firestore.rules).
+ */
+exports.recordHealthConsent = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    monitorAppCheck(request, "recordHealthConsent");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    const uid = request.auth.uid;
+    const data = request.data || {};
+
+    if (data.version !== HEALTH_CONSENT_VERSION) {
+      throw new HttpsError("invalid-argument", "Version de la politique de confidentialité invalide.");
+    }
+    const { platform } = data;
+    if (platform !== undefined && platform !== null &&
+      (typeof platform !== "string" || !/^[A-Za-z0-9._-]{1,20}$/.test(platform))) {
+      throw new HttpsError("invalid-argument", "Plateforme invalide.");
+    }
+
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "consent", 10);
+
+    const record = {
+      uid,
+      type: "health_data",
+      version: HEALTH_CONSENT_VERSION,
+      granted: true,
+      grantedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (typeof platform === "string") record.platform = platform;
+    await db.collection("consent_records").add(record);
+
+    await db.doc(`user_preferences/${uid}`).set(
+      {
+        healthDataConsent: {
+          granted: true,
+          grantedAt: new Date().toISOString(),
+          version: HEALTH_CONSENT_VERSION,
+        },
+      },
+      { merge: true }
+    );
+
+    return { version: HEALTH_CONSENT_VERSION };
+  }
+);
+
+// ============================================
+// SIGN IN WITH APPLE — token revocation on account deletion
+// ============================================
+
+/**
+ * registerAppleRevocation — Exchanges the Sign in with Apple authorization
+ * code for a refresh token and keeps it (server-only apple_tokens/{uid}) so
+ * purgeUserData can revoke it at Apple. Input: { authorizationCode }.
+ * Output: { stored: boolean }. Never blocks the user: missing secrets or an
+ * Apple refusal give { stored: false } and are logged, not thrown.
+ */
+exports.registerAppleRevocation = onCall(
+  withAppCheck({ region: "europe-west1", secrets: APPLE_SECRETS }),
+  async (request) => {
+    monitorAppCheck(request, "registerAppleRevocation");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    const uid = request.auth.uid;
+    const code = request.data?.authorizationCode;
+    if (typeof code !== "string" || code.length === 0 || code.length > 1000) {
+      throw new HttpsError("invalid-argument", "Code d'autorisation Apple invalide.");
+    }
+
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "apple", 5);
+
+    const userRecord = await admin.auth().getUser(uid);
+    if (!userRecord.providerData?.some((p) => p.providerId === "apple.com")) {
+      throw new HttpsError("failed-precondition", "Ce compte n'utilise pas Sign in with Apple.");
+    }
+
+    const creds = getAppleCredentials();
+    if (!creds) {
+      console.warn("registerAppleRevocation: Apple secrets not configured, token not stored");
+      return { stored: false };
+    }
+
+    try {
+      const refreshToken = await appleAuth.exchangeAuthorizationCode(creds, code);
+      await db.doc(`apple_tokens/${uid}`).set({
+        refreshToken,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return { stored: true };
+    } catch (e) {
+      console.error(`registerAppleRevocation: failed for uid=${uid}`, e?.message ?? e);
+      return { stored: false };
+    }
+  }
+);
+
+// ============================================
 // ACCOUNT DELETION (RGPD)
 // ============================================
 
@@ -2706,7 +2903,7 @@ exports.deleteEventCascade = onCall(
  * Obligatoire pour conformité RGPD (Apple/Google Store requirement).
  */
 exports.deleteUserAccount = onCall(
-  withAppCheck({ region: "europe-west1", timeoutSeconds: 300, memory: "512MiB" }),
+  withAppCheck({ region: "europe-west1", timeoutSeconds: 300, memory: "512MiB", secrets: APPLE_SECRETS }),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -3988,7 +4185,7 @@ exports.sendDeletionRequestEmail = onCall(
  * Appelle la même logique que deleteUserAccount pour chaque compte expiré.
  */
 exports.processScheduledDeletions = onSchedule(
-  { schedule: "every 24 hours", region: "europe-west1", timeoutSeconds: 540, memory: "512MiB", secrets: ["RESEND_API_KEY"] },
+  { schedule: "every 24 hours", region: "europe-west1", timeoutSeconds: 540, memory: "512MiB", secrets: ["RESEND_API_KEY", ...APPLE_SECRETS] },
   async () => {
     const db = admin.firestore();
     const now = new Date().toISOString();
@@ -4249,97 +4446,37 @@ exports.checkAndSendReminders = onSchedule(
 // WEEKLY RECAP EMAIL (Scheduled)
 // ============================================
 
-/**
- * Calcule les stats d'une semaine pour un enfant.
- * @param {FirebaseFirestore.Firestore} db
- * @param {string} childId
- * @param {admin.firestore.Timestamp} weekStart
- * @param {admin.firestore.Timestamp} weekEnd
- */
-async function computeWeeklyStats(db, childId, weekStart, weekEnd) {
-  const eventsSnap = await db
+/** Deep link opened by the recap e-mail button. */
+const RECAP_OPEN_APP_URL = "suivibaby://baby/home";
+
+/** HMAC-SHA256(uid) hex: proves an unsubscribe link was issued by the server. */
+function recapUnsubscribeToken(uid, secret) {
+  return crypto.createHmac("sha256", secret).update(uid).digest("hex");
+}
+
+function recapUnsubscribeUrl(uid, secret) {
+  return `${FUNCTIONS_BASE_URL}/unsubscribeRecap?uid=${encodeURIComponent(uid)}&token=${recapUnsubscribeToken(uid, secret)}`;
+}
+
+/** Constant-time check of an unsubscribe token (length checked first: timingSafeEqual throws otherwise). */
+function isValidRecapToken(uid, token, secret) {
+  if (typeof uid !== "string" || typeof token !== "string" || !secret) return false;
+  const expected = Buffer.from(recapUnsubscribeToken(uid, secret));
+  const given = Buffer.from(token);
+  return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+}
+
+/** True when the child has at least one event in the week (no figure is read). */
+async function hadActivityInWeek(db, childId, weekStart, weekEnd) {
+  const snap = await db
     .collection("events")
     .where("childId", "==", childId)
     .where("date", ">=", weekStart)
     .where("date", "<=", weekEnd)
     .orderBy("date", "desc")
+    .limit(1)
     .get();
-
-  const stats = {
-    meals: { count: 0, biberonsCount: 0, biberonsMl: 0, teteesCount: 0, teteesMinutes: 0, solidesCount: 0 },
-    sleep: { totalMinutes: 0, nightCount: 0, napCount: 0 },
-    changes: { total: 0, mictions: 0, selles: 0 },
-    pompages: { count: 0, totalMl: 0 },
-    growth: { hasData: false, weight: null, height: null, head: null },
-    health: { vitamines: 0, medicaments: 0, vaccins: 0, symptomes: 0 },
-    activities: 0,
-  };
-
-  for (const doc of eventsSnap.docs) {
-    const e = doc.data();
-    switch (e.type) {
-      case "biberon":
-        stats.meals.count++;
-        stats.meals.biberonsCount++;
-        stats.meals.biberonsMl += e.quantite || 0;
-        break;
-      case "tetee":
-        stats.meals.count++;
-        stats.meals.teteesCount++;
-        stats.meals.teteesMinutes += (e.dureeGauche || 0) + (e.dureeDroite || 0);
-        break;
-      case "solide":
-        stats.meals.count++;
-        stats.meals.solidesCount++;
-        break;
-      case "pompage":
-        stats.pompages.count++;
-        stats.pompages.totalMl += (e.quantiteGauche || 0) + (e.quantiteDroite || 0);
-        break;
-      case "miction":
-        stats.changes.total++;
-        stats.changes.mictions++;
-        break;
-      case "selle":
-        stats.changes.total++;
-        stats.changes.selles++;
-        break;
-      case "couche":
-        stats.changes.total++;
-        break;
-      case "sommeil":
-        if (e.isNap) {
-          stats.sleep.napCount++;
-        } else {
-          stats.sleep.nightCount++;
-        }
-        stats.sleep.totalMinutes += e.duree || 0;
-        break;
-      case "croissance":
-        stats.growth.hasData = true;
-        if (e.poidsKg) stats.growth.weight = e.poidsKg;
-        if (e.tailleCm) stats.growth.height = e.tailleCm;
-        if (e.teteCm) stats.growth.head = e.teteCm;
-        break;
-      case "vitamine":
-        stats.health.vitamines++;
-        break;
-      case "medicament":
-        stats.health.medicaments++;
-        break;
-      case "vaccin":
-        stats.health.vaccins++;
-        break;
-      case "symptome":
-        stats.health.symptomes++;
-        break;
-      case "activite":
-        stats.activities++;
-        break;
-    }
-  }
-
-  return stats;
+  return !snap.empty;
 }
 
 /**
@@ -4355,10 +4492,11 @@ function formatDateFr(date) {
 
 /**
  * sendWeeklyRecap — Envoi du récap hebdomadaire chaque lundi à 8h.
- * Pour chaque utilisateur ayant activé l'email :
- *   - Calcule les stats de la semaine écoulée (lundi-dimanche)
- *   - Compare avec la semaine précédente
- *   - Envoie un email HTML via Resend
+ * L'e-mail ne contient AUCUNE donnée de santé : il dit seulement que le récap
+ * est prêt dans l'app. Destinataires : utilisateurs ayant activé l'e-mail,
+ * adresse issue de Firebase Auth (vérifiée, compte actif), hors suppression
+ * programmée, et seulement pour les enfants dont ils sont owner ou admin.
+ * Chaque e-mail porte un lien de désinscription en un clic (unsubscribeRecap).
  */
 exports.sendWeeklyRecap = onSchedule(
   {
@@ -4367,7 +4505,7 @@ exports.sendWeeklyRecap = onSchedule(
     region: "europe-west1",
     memory: "256MiB",
     timeoutSeconds: 300,
-    secrets: ["RESEND_API_KEY"],
+    secrets: ["RESEND_API_KEY", RECAP_UNSUBSCRIBE_SECRET],
   },
   async () => {
     console.log("sendWeeklyRecap: START");
@@ -4376,7 +4514,11 @@ exports.sendWeeklyRecap = onSchedule(
       console.error("sendWeeklyRecap: RESEND_API_KEY not configured");
       return;
     }
-    console.log("sendWeeklyRecap: API key OK");
+    const unsubscribeSecret = secretValue(RECAP_UNSUBSCRIBE_SECRET);
+    if (!unsubscribeSecret) {
+      console.error("sendWeeklyRecap: RECAP_UNSUBSCRIBE_SECRET not configured, no e-mail sent");
+      return;
+    }
 
     const resend = new Resend(apiKey);
     const db = admin.firestore();
@@ -4407,20 +4549,10 @@ exports.sendWeeklyRecap = onSchedule(
     }
     lastSunday.setHours(23, 59, 59, 999);
 
-    // Semaine d'avant (pour les tendances)
-    const prevMonday = new Date(lastMonday);
-    prevMonday.setDate(lastMonday.getDate() - 7);
-
-    const prevSunday = new Date(lastMonday);
-    prevSunday.setDate(lastMonday.getDate() - 1);
-    prevSunday.setHours(23, 59, 59, 999);
-
     console.log(`sendWeeklyRecap: date calc — now=${now.toISOString()}, dayOfWeek=${dayOfWeek}, isMonday=${isMonday}, lastMonday=${lastMonday.toISOString()}, lastSunday=${lastSunday.toISOString()}`);
 
     const weekStart = admin.firestore.Timestamp.fromDate(lastMonday);
     const weekEnd = admin.firestore.Timestamp.fromDate(lastSunday);
-    const prevWeekStart = admin.firestore.Timestamp.fromDate(prevMonday);
-    const prevWeekEnd = admin.firestore.Timestamp.fromDate(prevSunday);
 
     const weekLabel = `${formatDateFr(lastMonday)} au ${formatDateFr(lastSunday)}`;
 
@@ -4443,28 +4575,24 @@ exports.sendWeeklyRecap = onSchedule(
     for (const prefDoc of prefsSnap.docs) {
       const userId = prefDoc.id;
 
-      console.log(`sendWeeklyRecap: processing user ${userId}`);
-      // Récupérer l'email depuis le document utilisateur Firestore (pas Firebase Auth)
+      // Compte en cours de suppression : plus aucun e-mail.
+      const userDoc = await db.doc(`users/${userId}`).get();
+      if (userDoc.exists && userDoc.data()?.pendingDeletion) {
+        totalSkipped++;
+        continue;
+      }
+
+      // L'adresse vient de Firebase Auth uniquement : vérifiée, compte actif.
       let userEmail;
       try {
-        const userDoc = await db.doc(`users/${userId}`).get();
-        if (userDoc.exists) {
-          userEmail = userDoc.data().email;
-        }
-        // Fallback sur users_public si pas trouvé
-        if (!userEmail) {
-          const publicDoc = await db.doc(`users_public/${userId}`).get();
-          if (publicDoc.exists) {
-            userEmail = publicDoc.data().email;
-          }
-        }
-        if (!userEmail) {
-          console.warn(`sendWeeklyRecap: no email found for user ${userId}`);
+        const authUser = await admin.auth().getUser(userId);
+        if (!authUser.emailVerified || authUser.disabled || !authUser.email) {
           totalSkipped++;
           continue;
         }
+        userEmail = authUser.email;
       } catch (error) {
-        console.warn(`sendWeeklyRecap: error fetching email for ${userId}`, error.message);
+        console.warn(`sendWeeklyRecap: no usable Auth user for ${userId}`, error.message);
         totalSkipped++;
         continue;
       }
@@ -4479,6 +4607,14 @@ exports.sendWeeklyRecap = onSchedule(
         const { childId } = accessDoc.data();
         if (!childId) continue;
 
+        // Seuls les owners et admins reçoivent le récap d'un enfant.
+        const roleSnap = await db.doc(`children/${childId}/access/${userId}`).get();
+        const role = roleSnap.exists ? roleSnap.data()?.role : null;
+        if (role !== "owner" && role !== "admin") {
+          totalSkipped++;
+          continue;
+        }
+
         // Anti-doublon : vérifier si déjà envoyé pour cette semaine
         const existingSnap = await db
           .collection("recap_history")
@@ -4489,53 +4625,37 @@ exports.sendWeeklyRecap = onSchedule(
           .get();
 
         if (!existingSnap.empty) {
-          const existingDoc = existingSnap.docs[0].data();
-          console.log(`sendWeeklyRecap: SKIP ${childId} for user ${userId} - already sent this week (docId=${existingSnap.docs[0].id}, sentAt=${existingDoc.sentAt?.toDate?.()?.toISOString()})`);
+          console.log(`sendWeeklyRecap: SKIP ${childId} for user ${userId} - already sent this week (docId=${existingSnap.docs[0].id})`);
           totalSkipped++;
           continue;
         }
 
-        // Récupérer le nom de l'enfant
+        // Prénom de l'enfant (seule donnée personnelle du corps du message)
         const childDoc = await db.doc(`children/${childId}`).get();
-        if (!childDoc.exists) continue;
-        const childName = childDoc.data().name || "Bébé";
+        if (!childDoc.exists || childDoc.data()?.deletedAt) continue;
+        const childName = String(childDoc.data().name || "Bébé").trim().split(/\s+/)[0] || "Bébé";
 
-        // Calculer les stats des deux semaines
-        const [stats, previousStats] = await Promise.all([
-          computeWeeklyStats(db, childId, weekStart, weekEnd),
-          computeWeeklyStats(db, childId, prevWeekStart, prevWeekEnd),
-        ]);
-
-        // Vérifier qu'il y a eu de l'activité cette semaine
-        const hasActivity =
-          stats.meals.count > 0 ||
-          stats.sleep.totalMinutes > 0 ||
-          stats.changes.total > 0 ||
-          stats.pompages.count > 0;
-
-        if (!hasActivity) {
+        if (!(await hadActivityInWeek(db, childId, weekStart, weekEnd))) {
           console.log(`sendWeeklyRecap: SKIP child=${childId} - no activity this week`);
           totalSkipped++;
           continue;
         }
 
-        // Générer le HTML
-        const html = buildRecapHTML({
-          childName,
-          weekLabel,
-          stats,
-          previousStats,
-          unsubscribeUrl: "suivibaby://settings/notifications",
-        });
+        const unsubscribeUrl = recapUnsubscribeUrl(userId, unsubscribeSecret);
+        const html = buildRecapHTML({ childName, openAppUrl: RECAP_OPEN_APP_URL, unsubscribeUrl });
 
         // Envoyer via Resend
-        console.log(`sendWeeklyRecap: sending uid=${userId} child=${childId} (hasActivity=${hasActivity})`);
+        console.log(`sendWeeklyRecap: sending uid=${userId} child=${childId}`);
         try {
           const sendResult = await resend.emails.send({
             from: "Suivi Baby <noreply@suivibaby.com>",
             to: userEmail,
-            subject: `Récap semaine — ${childName}`,
+            subject: "Le récap de la semaine est prêt",
             html,
+            headers: {
+              "List-Unsubscribe": `<${unsubscribeUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
           });
           // Resend reports failures in the result instead of throwing.
           if (sendResult?.error) {
@@ -4543,14 +4663,13 @@ exports.sendWeeklyRecap = onSchedule(
           }
           console.log(`sendWeeklyRecap: sent id=${sendResult?.data?.id ?? sendResult?.id ?? "?"}`);
 
-          // Enregistrer dans l'historique
+          // Historique : métadonnées seulement (anti-doublon), aucune stat.
           await db.collection("recap_history").add({
             userId,
             childId,
             weekStart,
             weekEnd,
             sentAt: admin.firestore.Timestamp.now(),
-            stats,
           });
 
           totalSent++;
@@ -4566,6 +4685,75 @@ exports.sendWeeklyRecap = onSchedule(
     console.log(
       `sendWeeklyRecap: sent=${totalSent}, skipped=${totalSkipped}, users=${prefsSnap.size}`
     );
+  }
+);
+
+const escapeHtmlText = (str) =>
+  String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+function unsubscribePage(title, bodyHtml) {
+  return `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex"><title>${title}</title>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f8;margin:0;padding:48px 16px;color:#1e2a36}main{max-width:440px;margin:0 auto;background:#fff;border-radius:16px;padding:32px;text-align:center}button{background:#0891b2;color:#fff;border:0;border-radius:12px;padding:14px 28px;font-size:16px;font-weight:600;cursor:pointer}</style></head>
+<body><main><h1 style="font-size:20px">${title}</h1>${bodyHtml}</main></body></html>`;
+}
+
+/**
+ * unsubscribeRecap — HTTPS, public. GET ?uid=…&token=… shows a confirmation
+ * page; POST (button, or one-click unsubscribe from the mail client, RFC 8058)
+ * sets user_preferences/{uid}.notifications.email = false.
+ * token = hex HMAC-SHA256(uid) with RECAP_UNSUBSCRIBE_SECRET.
+ * URL: https://europe-west1-samaye-53723.cloudfunctions.net/unsubscribeRecap
+ */
+exports.unsubscribeRecap = onRequest(
+  { region: "europe-west1", secrets: [RECAP_UNSUBSCRIBE_SECRET] },
+  async (req, res) => {
+    res.set("Content-Type", "text/html; charset=utf-8");
+    if (req.method !== "GET" && req.method !== "POST") {
+      res.set("Allow", "GET, POST");
+      res.status(405).send(unsubscribePage("Méthode non autorisée", ""));
+      return;
+    }
+
+    const secret = secretValue(RECAP_UNSUBSCRIBE_SECRET);
+    if (!secret) {
+      console.error("unsubscribeRecap: RECAP_UNSUBSCRIBE_SECRET not configured");
+      res.status(500).send(unsubscribePage("Service indisponible", "<p>Réessayez plus tard.</p>"));
+      return;
+    }
+
+    const uid = req.query?.uid;
+    const token = req.query?.token;
+    if (typeof uid !== "string" || uid.length === 0 || uid.length > 128) {
+      res.status(400).send(unsubscribePage("Lien invalide", "<p>Ce lien de désinscription est incomplet.</p>"));
+      return;
+    }
+    if (!isValidRecapToken(uid, token, secret)) {
+      res.status(403).send(unsubscribePage("Lien invalide", "<p>Ce lien de désinscription n'est pas valide. Vous pouvez aussi désactiver les récaps dans l'application, rubrique Notifications.</p>"));
+      return;
+    }
+
+    if (req.method === "GET") {
+      const action = `${FUNCTIONS_BASE_URL}/unsubscribeRecap?uid=${encodeURIComponent(uid)}&token=${token}`;
+      res.status(200).send(unsubscribePage(
+        "Se désabonner des récaps",
+        `<p>Vous ne recevrez plus le récap hebdomadaire par e-mail.</p>
+<form method="POST" action="${escapeHtmlText(action)}"><button type="submit">Me désabonner</button></form>`
+      ));
+      return;
+    }
+
+    try {
+      await admin.firestore().doc(`user_preferences/${uid}`).set(
+        { notifications: { email: false } },
+        { merge: true }
+      );
+    } catch (e) {
+      console.error(`unsubscribeRecap: write failed for uid=${uid}`, e?.message ?? e);
+      res.status(500).send(unsubscribePage("Une erreur est survenue", "<p>Réessayez plus tard.</p>"));
+      return;
+    }
+    res.status(200).send(unsubscribePage("Vous êtes désabonné", "<p>Vous ne recevrez plus le récap hebdomadaire par e-mail. Vous pouvez le réactiver à tout moment dans l'application.</p>"));
   }
 );
 
@@ -4942,6 +5130,54 @@ exports.transferAndLeave = onCall(
 
     console.log(`transferAndLeave: childId=${childId}, from=${uid}, to=${newOwnerId}`);
     return { success: true };
+  }
+);
+
+/**
+ * getOwnershipBlockers — Read-only. Children for which the caller is the only
+ * owner/admin-level member while other members exist: the app asks the user to
+ * pick a new owner for each (then transferAndLeave) before scheduling the
+ * account deletion. Input: none. Output:
+ * { children: [{ childId, childName, members: [{ uid, role, displayName? }] }] }
+ */
+exports.getOwnershipBlockers = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    monitorAppCheck(request, "getOwnershipBlockers");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "ownership", 20);
+
+    const indexSnap = await db.collection("user_child_access").where("userId", "==", uid).get();
+    const children = [];
+    for (const entry of indexSnap.docs) {
+      const childId = entry.data()?.childId;
+      if (!childId) continue;
+
+      const [childSnap, accessSnap] = await Promise.all([
+        db.doc(`children/${childId}`).get(),
+        db.collection("children").doc(childId).collection("access").get(),
+      ]);
+      if (!childSnap.exists || childSnap.data()?.deletedAt) continue;
+
+      const members = accessSnap.docs.map((d) => ({ uid: d.id, role: d.data()?.role }));
+      const self = members.find((m) => m.uid === uid);
+      if (self?.role !== "owner") continue;
+      const others = members.filter((m) => m.uid !== uid);
+      if (others.length === 0) continue; // alone: the child goes with the account
+      if (others.some((m) => m.role === "owner" || m.role === "admin")) continue;
+
+      const named = await Promise.all(others.map(async (m) => {
+        const publicSnap = await db.doc(`users_public/${m.uid}`).get();
+        const displayName = publicSnap.exists ? publicSnap.data()?.userName : undefined;
+        return displayName ? { ...m, displayName } : m;
+      }));
+      children.push({ childId, childName: childSnap.data()?.name || "", members: named });
+    }
+    return { children };
   }
 );
 

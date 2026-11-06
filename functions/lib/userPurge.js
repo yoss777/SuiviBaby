@@ -37,6 +37,8 @@ const USER_DOCS_BY_ID = [
   "subscriptions",
   "rate_limits",
   "usage_limits",
+  // Sign in with Apple refresh token: revoked at Apple by purgeUserData first.
+  "apple_tokens",
 ];
 
 module.exports = { DELETED_USER_ID, USER_DATA_BY_FIELD, USER_DOCS_BY_ID };

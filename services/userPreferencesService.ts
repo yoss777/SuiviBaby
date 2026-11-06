@@ -2,18 +2,13 @@
 import { arrayRemove, arrayUnion, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
+import type { HealthDataConsent } from "./healthConsentService";
 
 const getUserId = () => {
   const user = auth.currentUser;
   if (!user) throw new Error("Utilisateur non connecté");
   return user.uid;
 };
-
-export interface HealthDataConsent {
-  granted: boolean;
-  grantedAt: string; // ISO 8601
-  version: string; // version de la politique au moment du consentement
-}
 
 interface UserPreferences {
   hiddenChildrenIds: string[];
@@ -230,21 +225,6 @@ export async function mettreAJourPreferenceLanguage(language: LanguagePreference
     captureServiceError(e, { service: "userPreferences", operation: "mettreAJourPreferenceLanguage" });
     throw e;
   }
-}
-
-/**
- * Sauvegarder le consentement données de santé (RGPD art. 9)
- * Appelé à l'inscription — preuve horodatée du consentement explicite.
- */
-export async function sauvegarderConsentementSante(uid: string) {
-  const docRef = doc(db, "user_preferences", uid);
-  const consent: HealthDataConsent = {
-    granted: true,
-    grantedAt: new Date().toISOString(),
-    version: "1.0", // incrémenter à chaque mise à jour de la politique de confidentialité
-  };
-
-  await setDoc(docRef, { healthDataConsent: consent, updatedAt: new Date() }, { merge: true });
 }
 
 /**

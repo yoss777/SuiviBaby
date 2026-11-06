@@ -14,6 +14,7 @@ import {
   isBiometricEnabled,
   unlockWithBiometric,
 } from "@/services/biometricAuthService";
+import { fetchHealthConsentStatus } from "@/services/healthConsentService";
 import { obtenirEvenementsDuJour } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { setPreferencesCache, setPermissionsCache } from "@/services/userPreferencesCache";
@@ -61,6 +62,11 @@ function BootScreenContent() {
     "pending" | "running" | "passed" | "failed"
   >("pending");
   const biometricCheckStartedRef = useRef(false);
+  // Health consent gate: one Firestore read per boot (no listener).
+  const [consentCheck, setConsentCheck] = useState<
+    "pending" | "running" | "granted" | "error"
+  >("pending");
+  const consentCheckStartedRef = useRef(false);
   const hasNavigatedRef = useRef(false);
   const bootResourceKeyRef = useRef<string | null>(null);
   const bootResourcePromiseRef = useRef<Promise<void> | null>(null);
@@ -224,6 +230,36 @@ function BootScreenContent() {
         return;
       }
 
+      // Étape 2.4 : consentement données de santé (RGPD art. 9). Absent ou
+      // version obsolète → écran de consentement bloquant. Lecture unique.
+      if (consentCheck === "pending" && !consentCheckStartedRef.current) {
+        const uid = firebaseUser?.uid;
+        if (!uid) return;
+        consentCheckStartedRef.current = true;
+        setConsentCheck("running");
+        try {
+          const granted = await fetchHealthConsentStatus(uid);
+          if (granted) {
+            setConsentCheck("granted");
+          } else {
+            if (hasNavigatedRef.current) return;
+            hasNavigatedRef.current = true;
+            logBoot("Consentement santé manquant, redirection");
+            router.replace("/(auth)/health-consent");
+          }
+        } catch (error) {
+          // Unknown state (offline...): do not let the user through, offer retry.
+          console.warn("[BOOT] Lecture du consentement échouée:", error);
+          consentCheckStartedRef.current = false;
+          setConsentCheck("error");
+        }
+        return;
+      }
+
+      if (consentCheck === "running" || consentCheck === "error") {
+        return;
+      }
+
       // Étape 2.5 : verrou biométrique. Si l'utilisateur a activé le verrou,
       // on prompte avant tout chargement enfants. Échec → signOut + login.
       if (biometricCheck === "pending" && !biometricCheckStartedRef.current) {
@@ -346,6 +382,7 @@ function BootScreenContent() {
     prefetchBootResources,
     bootStalled,
     biometricCheck,
+    consentCheck,
     signOut,
   ]);
 
@@ -355,11 +392,13 @@ function BootScreenContent() {
     netInfo.isConnected === false || netInfo.isInternetReachable === false;
   const showBootFallback =
     hasAuthDegradedSession ||
+    consentCheck === "error" ||
     (bootStalled && (authLoading || (!!user && babyLoading && children.length === 0)));
 
   const handleRetry = useCallback(() => {
     setBootStalled(false);
     setBootRetryKey((prev) => prev + 1);
+    if (consentCheck === "error") setConsentCheck("pending");
     bootAssignedChildIdRef.current = null;
     bootResourceKeyRef.current = null;
     bootResourcePromiseRef.current = null;
@@ -369,13 +408,13 @@ function BootScreenContent() {
         console.warn("[BOOT] refreshUser échoué:", error);
       });
     }
-  }, [firebaseUser, refreshUser]);
+  }, [consentCheck, firebaseUser, refreshUser]);
 
   const fallbackTitle = isOffline
     ? "Connexion indisponible"
     : "Connexion trop lente";
   const fallbackMessage =
-    hasAuthDegradedSession || stallPhase === "auth"
+    hasAuthDegradedSession || stallPhase === "auth" || consentCheck === "error"
       ? "Impossible de vérifier votre session pour le moment. Vérifiez votre réseau puis réessayez."
       : "Les données de votre enfant mettent trop de temps à charger. Vérifiez votre réseau puis réessayez.";
 

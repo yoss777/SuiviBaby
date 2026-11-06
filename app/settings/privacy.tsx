@@ -33,12 +33,12 @@ const sections = [
     {
       title: "2. Données traitées",
       content:
-        "Compte : adresse e-mail, pseudonyme, méthode de connexion. Profil de l'enfant : prénom, date de naissance, sexe, allergies éventuelles. Santé et suivi de l'enfant (données sensibles) : repas, sommeil, couches, température, médicaments, symptômes, vaccins, mesures de croissance, notes. Photos ajoutées aux jalons et souvenirs. Commande vocale (facultative) : enregistrement audio et texte transcrit. Partage : invitations, codes, droits d'accès, commentaires et réactions. Préférences et preuve horodatée de vos consentements. Appareil : jeton de notification et données techniques de diagnostic. Abonnement : offre et statut (jamais vos coordonnées bancaires). Signalements de contenu.",
+        "Compte : adresse e-mail, pseudonyme, méthode de connexion. Profil de l'enfant : prénom, date de naissance, sexe, allergies éventuelles. Santé et suivi de l'enfant (données sensibles) : repas, sommeil, couches, température, médicaments, symptômes, vaccins, mesures de croissance, notes. Photos ajoutées aux jalons et souvenirs. Commande vocale (facultative) : enregistrement audio et texte transcrit. Partage : invitations, codes, droits d'accès, commentaires et réactions. Préférences et preuve horodatée de vos consentements, enregistrée côté serveur. Appareil : jeton de notification et données techniques de diagnostic. Abonnement : offre et statut (jamais vos coordonnées bancaires). Signalements de contenu.",
     },
     {
       title: "3. Finalités et bases légales",
       content:
-        "Gestion du compte et synchronisation : exécution du contrat (art. 6.1.b RGPD). Suivi de santé de l'enfant, statistiques, courbes et conseils : votre consentement explicite (art. 9.2.a), recueilli par une case distincte à l'inscription. Commande vocale : consentement explicite, à chaque utilisation. Partage avec les personnes invitées : contrat et consentement. Notifications et récapitulatif hebdomadaire : consentement, uniquement si vous les activez. Abonnement : contrat et obligations comptables. Sécurité, prévention des abus et diagnostic des erreurs : intérêt légitime (art. 6.1.f). Nous n'utilisons pas vos données à des fins publicitaires et ne les vendons pas.",
+        "Gestion du compte et synchronisation : exécution du contrat (art. 6.1.b RGPD). Suivi de santé de l'enfant, statistiques, courbes et conseils : votre consentement explicite (art. 9.2.a), recueilli à l'inscription ou à la première connexion. Commande vocale : consentement explicite, à chaque utilisation. Partage avec les personnes invitées : contrat et consentement. Notifications et récapitulatif hebdomadaire : consentement, uniquement si vous les activez. Abonnement : contrat et obligations comptables. Sécurité, prévention des abus et diagnostic des erreurs : intérêt légitime (art. 6.1.f). Nous n'utilisons pas vos données à des fins publicitaires et ne les vendons pas.",
     },
     {
       title: "4. Données des enfants",
@@ -63,7 +63,7 @@ const sections = [
     {
       title: "8. Durées de conservation",
       content:
-        "Compte et suivi de l'enfant : tant que votre compte est actif. Après une demande de suppression du compte : 30 jours pendant lesquels vous pouvez annuler, puis effacement définitif. Profil d'enfant supprimé : 30 jours, puis effacement définitif. Audio : non conservé. Codes d'invitation : 7 jours. Journaux techniques : 90 jours maximum. Preuve de consentement : durée du compte, puis 5 ans. Données de facturation : 10 ans (obligation comptable), conservées par les stores et notre prestataire d'abonnement.",
+        "Compte et suivi de l'enfant : tant que votre compte est actif. Après une demande de suppression du compte : 30 jours pendant lesquels vous pouvez annuler, puis effacement définitif. Profil d'enfant supprimé : 30 jours, puis effacement définitif. Audio : non conservé. Codes d'invitation : 7 jours. Journaux techniques : 90 jours maximum. Preuve de consentement horodatée : 5 ans après la suppression du compte. Données de facturation : 10 ans (obligation comptable), conservées par les stores et notre prestataire d'abonnement.",
     },
     {
       title: "9. Sécurité",

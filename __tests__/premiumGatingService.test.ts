@@ -24,7 +24,6 @@ describe("premiumGatingService", () => {
     it("should define messages for all triggers", () => {
       const triggers = [
         "voice_limit",
-        "export_limit",
         "history_limit",
         "sharing_limit",
         "advanced_stats",
@@ -43,7 +42,6 @@ describe("premiumGatingService", () => {
   describe("FREE_LIMITS", () => {
     it("should expose the expected static limits", () => {
       expect(FREE_LIMITS.voiceCommandsPerDay).toBe(3);
-      expect(FREE_LIMITS.totalPdfExports).toBe(1);
       expect(FREE_LIMITS.historyDays).toBe(90);
       expect(FREE_LIMITS.maxSharedUsers).toBe(2);
     });

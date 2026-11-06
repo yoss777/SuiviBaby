@@ -105,7 +105,7 @@ service cloud.firestore {
       // propriété, suppression) : sinon un admin pourrait se déclarer owner.
       allow update: if isNotDeleted() && (
         isOwner(childId) || isAdmin(childId)
-      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'deletedAt']);
+      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'ownerlessSince', 'deletedAt']);
 
       // Suppression : uniquement via CF (purge RGPD) — plus de delete direct client
       allow delete: if false;
@@ -376,8 +376,27 @@ service cloud.firestore {
     }
 
     match /user_preferences/{userId} {
-      // Chaque utilisateur peut uniquement lire/écrire ses propres préférences
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      // Chaque utilisateur peut uniquement lire/écrire ses propres préférences,
+      // sauf healthDataConsent : preuve de consentement écrite par le serveur
+      // (recordHealthConsent) ; le client ne peut ni la créer ni la modifier.
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+        !('healthDataConsent' in request.resource.data);
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['healthDataConsent']);
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Preuves de consentement (RGPD art. 7.1) : serveur uniquement, conservées
+    // 5 ans après la suppression du compte (TTL expireAt posé par purgeUserData).
+    match /consent_records/{recordId} {
+      allow read, write: if false;
+    }
+
+    // Refresh token Sign in with Apple (révocation à la suppression du compte) :
+    // serveur uniquement.
+    match /apple_tokens/{userId} {
+      allow read, write: if false;
     }
 
     // ============================================

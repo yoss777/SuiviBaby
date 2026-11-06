@@ -1326,6 +1326,109 @@ describe("user_preferences collection", () => {
       updateDoc(doc(db, "user_preferences", ALICE_UID), { theme: "light" })
     );
   });
+
+  test("user cannot add healthDataConsent to existing preferences", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(
+      updateDoc(doc(db, "user_preferences", ALICE_UID), {
+        healthDataConsent: { granted: true, grantedAt: "2026-11-06T00:00:00Z", version: "2.1" },
+      })
+    );
+  });
+
+  test("user cannot create preferences carrying healthDataConsent", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertFails(
+      setDoc(doc(db, "user_preferences", BOB_UID), {
+        theme: "dark",
+        healthDataConsent: { granted: true, grantedAt: "2026-11-06T00:00:00Z", version: "2.1" },
+      })
+    );
+  });
+
+  test("user can create preferences without healthDataConsent", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertSucceeds(setDoc(doc(db, "user_preferences", BOB_UID), { theme: "dark" }));
+  });
+
+  describe("with a server-written consent", () => {
+    beforeEach(async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "user_preferences", ALICE_UID), {
+          theme: "dark",
+          healthDataConsent: { granted: true, grantedAt: "2026-11-06T00:00:00Z", version: "2.1" },
+        });
+      });
+    });
+
+    test("user can still read the consent", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertSucceeds(getDoc(doc(db, "user_preferences", ALICE_UID)));
+    });
+
+    test("user can update other fields", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertSucceeds(
+        updateDoc(doc(db, "user_preferences", ALICE_UID), { theme: "light" })
+      );
+    });
+
+    test("user cannot modify healthDataConsent", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertFails(
+        updateDoc(doc(db, "user_preferences", ALICE_UID), { "healthDataConsent.version": "9.9" })
+      );
+    });
+
+    test("user cannot remove healthDataConsent", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertFails(
+        updateDoc(doc(db, "user_preferences", ALICE_UID), { healthDataConsent: deleteField() })
+      );
+    });
+
+    test("user can delete own preferences", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertSucceeds(deleteDoc(doc(db, "user_preferences", ALICE_UID)));
+    });
+  });
+});
+
+// ===========================================================================
+// SERVER-ONLY PROOF COLLECTIONS (consent_records, apple_tokens)
+// ===========================================================================
+
+describe("consent_records and apple_tokens collections", () => {
+  beforeEach(async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "consent_records", "c1"), { uid: ALICE_UID, type: "health_data", version: "2.1" });
+      await setDoc(doc(db, "apple_tokens", ALICE_UID), { refreshToken: "r" });
+    });
+  });
+
+  test("owner cannot read own consent record", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(getDoc(doc(db, "consent_records", "c1")));
+  });
+
+  test("user cannot list consent records", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(getDocs(query(collection(db, "consent_records"), where("uid", "==", ALICE_UID))));
+  });
+
+  test("user cannot create, update or delete consent records", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(setDoc(doc(db, "consent_records", "c2"), { uid: ALICE_UID, version: "2.1" }));
+    await assertFails(updateDoc(doc(db, "consent_records", "c1"), { version: "1" }));
+    await assertFails(deleteDoc(doc(db, "consent_records", "c1")));
+  });
+
+  test("owner cannot read, write or delete own apple token", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(getDoc(doc(db, "apple_tokens", ALICE_UID)));
+    await assertFails(setDoc(doc(db, "apple_tokens", ALICE_UID), { refreshToken: "x" }));
+    await assertFails(deleteDoc(doc(db, "apple_tokens", ALICE_UID)));
+  });
 });
 
 // ===========================================================================

@@ -34,7 +34,6 @@ export type PremiumTier = "free" | "premium" | "family";
 
 export type PremiumFeature =
   | "unlimited_history"
-  | "unlimited_export"
   | "unlimited_voice"
   | "unlimited_sharing"
   | "advanced_stats"
@@ -86,7 +85,6 @@ interface PremiumContextValue {
 
 const PREMIUM_FEATURES: Set<PremiumFeature> = new Set([
   "unlimited_history",
-  "unlimited_export",
   "unlimited_voice",
   "unlimited_sharing",
   "advanced_stats",
@@ -287,11 +285,10 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     (feature: PremiumFeature): boolean => {
       // Grandfathered users keep existing features but not new Premium ones
       if (grandfathered && !devOverride) {
-        // Grandfathered = accès historique illimité + partage illimité + exports
+        // Grandfathered = accès historique illimité + partage illimité
         // Mais PAS : IA, widgets, rapport pédiatre, capsules
         const grandfatheredFeatures: Set<PremiumFeature> = new Set([
           "unlimited_history",
-          "unlimited_export",
           "unlimited_voice",
           "unlimited_sharing",
         ]);

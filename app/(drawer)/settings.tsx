@@ -27,6 +27,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
+import { OwnershipTransferModal } from "@/components/ui/OwnershipTransferModal";
 import { PromptModal } from "@/components/ui/PromptModal";
 import { db } from "@/config/firebase";
 import {
@@ -41,7 +42,11 @@ import {
   cancelAccountDeletion,
   formatPendingDeletionDate,
   getPendingDeletionDateFromUser,
+  getDeletionAuthMethod,
+  getOwnershipBlockers,
+  mapDeletionError,
   requestAccountDeletion,
+  type OwnershipBlocker,
 } from "@/services/accountDeletionService";
 import {
   disableBiometric,
@@ -73,7 +78,9 @@ export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const accent = nc.todayAccent;
-  const { user, signOut, refreshUser } = useAuth();
+  const { user, firebaseUser, signOut, refreshUser } = useAuth();
+  const deletionAuthMethod = getDeletionAuthMethod(firebaseUser);
+  const isPasswordUser = deletionAuthMethod === "password";
   const { activeChild, children, hiddenChildrenIds } = useBaby();
   const hiddenPhotoIds = useHiddenPhotos();
   const { preference: themePreference } = useThemePreference();
@@ -92,6 +99,11 @@ export default function SettingsScreen() {
   const [showDeletePasswordModal, setShowDeletePasswordModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteSocialModal, setShowDeleteSocialModal] = useState(false);
+  const [isCheckingBlockers, setIsCheckingBlockers] = useState(false);
+  const [ownershipBlockers, setOwnershipBlockers] = useState<OwnershipBlocker[]>([]);
+  const [ownerChoices, setOwnerChoices] = useState<Record<string, string>>({});
+  const [showOwnerChoiceModal, setShowOwnerChoiceModal] = useState(false);
   const deleteParamHandledRef = useRef(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
@@ -246,13 +258,89 @@ export default function SettingsScreen() {
     return () => unsubscribe();
   }, [user]);
 
+  const openDeletionConfirmation = useCallback(() => {
+    if (deletionAuthMethod === "password") {
+      setShowDeletePasswordModal(true);
+    } else {
+      setShowDeleteSocialModal(true);
+    }
+  }, [deletionAuthMethod]);
+
+  // Before confirming, check whether the user is the only owner/admin of a
+  // shared child: they must then pick the new owner explicitly.
+  const startDeletionFlow = useCallback(async () => {
+    if (isCheckingBlockers) return;
+    setIsCheckingBlockers(true);
+    try {
+      const blockers = await getOwnershipBlockers();
+      if (blockers.length > 0) {
+        setOwnershipBlockers(blockers);
+        setOwnerChoices({});
+        setShowOwnerChoiceModal(true);
+      } else {
+        setOwnershipBlockers([]);
+        openDeletionConfirmation();
+      }
+    } catch {
+      setModalConfig({
+        visible: true,
+        title: "Erreur",
+        message:
+          "Impossible de vérifier vos enfants partagés pour le moment. Vérifiez votre connexion puis réessayez.",
+      });
+    } finally {
+      setIsCheckingBlockers(false);
+    }
+  }, [isCheckingBlockers, openDeletionConfirmation]);
+
   useEffect(() => {
     if (deleteParam === "1" && !deleteParamHandledRef.current) {
       deleteParamHandledRef.current = true;
-      setShowDeletePasswordModal(true);
+      startDeletionFlow();
       router.setParams({ delete: undefined });
     }
-  }, [deleteParam, router]);
+  }, [deleteParam, router, startDeletionFlow]);
+
+  const performDeletion = useCallback(
+    async (password?: string) => {
+      if (isDeleting) return;
+      let deletionScheduled = false;
+      try {
+        setIsDeleting(true);
+        await requestAccountDeletion({
+          password,
+          transfers: ownershipBlockers.map((b) => ({
+            childId: b.childId,
+            newOwnerId: ownerChoices[b.childId],
+          })),
+        });
+        deletionScheduled = true;
+
+        // Envoyer email de confirmation (fire & forget)
+        const { httpsCallable } = await import("firebase/functions");
+        const { functions } = await import("@/config/firebase");
+        const sendEmail = httpsCallable(functions, "sendDeletionRequestEmail");
+        sendEmail().catch(() => {});
+
+        await refreshUser();
+
+        setShowDeletePasswordModal(false);
+        setShowDeleteSocialModal(false);
+        setDeletePassword("");
+        await signOut();
+        router.replace("/(auth)/login");
+      } catch (error: any) {
+        const message = deletionScheduled
+          ? "Votre compte est bien programmé pour suppression, mais la déconnexion automatique a échoué. Déconnectez-vous manuellement."
+          : mapDeletionError(error);
+        setShowDeleteSocialModal(false);
+        setModalConfig({ visible: true, title: "Erreur", message });
+      } finally {
+        setIsDeleting(false);
+      }
+    },
+    [isDeleting, ownershipBlockers, ownerChoices, refreshUser, signOut, router],
+  );
 
   const handleBiometricToggle = useCallback(
     async (value: boolean) => {
@@ -299,16 +387,21 @@ export default function SettingsScreen() {
           router.push("/settings/profile");
         },
       },
-      {
-        id: "password",
-        icon: "lock-closed-outline",
-        label: "Mot de passe",
-        description: "Changer votre mot de passe",
-        onPress: () => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/password");
-        },
-      },
+      // Password change only makes sense for e-mail/password accounts.
+      ...(isPasswordUser
+        ? ([
+            {
+              id: "password",
+              icon: "lock-closed-outline",
+              label: "Mot de passe",
+              description: "Changer votre mot de passe",
+              onPress: () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/settings/password");
+              },
+            },
+          ] as SettingItem[])
+        : []),
       {
         id: "premium",
         icon: "diamond-outline",
@@ -345,6 +438,7 @@ export default function SettingsScreen() {
     ],
     [
       router,
+      isPasswordUser,
       biometricAvailable,
       biometricEnabled,
       biometricLabel,
@@ -800,7 +894,59 @@ export default function SettingsScreen() {
         }}
         onCancel={() => {
           setShowDeleteExportModal(false);
-          setShowDeletePasswordModal(true);
+          startDeletionFlow();
+        }}
+      />
+      <OwnershipTransferModal
+        visible={showOwnerChoiceModal}
+        blockers={ownershipBlockers}
+        choices={ownerChoices}
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
+        mutedColor={nc.textMuted}
+        borderColor={nc.borderLight}
+        accentColor={accent}
+        onSelect={(childId, uid) =>
+          setOwnerChoices((prev) => ({ ...prev, [childId]: uid }))
+        }
+        onCancel={() => {
+          setShowOwnerChoiceModal(false);
+          setOwnershipBlockers([]);
+          setOwnerChoices({});
+        }}
+        onConfirm={() => {
+          setShowOwnerChoiceModal(false);
+          openDeletionConfirmation();
+        }}
+      />
+      <ConfirmModal
+        visible={showDeleteSocialModal}
+        title="Confirmer la suppression"
+        message={
+          (isDeleting ? (
+            <View style={styles.deleteLoader}>
+              <IconPulseDots />
+              <Text style={[styles.deleteLoaderText, { color: nc.textStrong }]}>
+                Suppression en cours...
+              </Text>
+            </View>
+          ) : (
+            `Votre compte sera programmé pour suppression dans 30 jours. Vous pourrez annuler à tout moment depuis les paramètres. Pour confirmer, vous allez devoir vous reconnecter avec ${deletionAuthMethod === "apple" ? "Apple" : "Google"}.`
+          )) as any
+        }
+        confirmText={isDeleting ? "Suppression..." : "Continuer"}
+        cancelText="Annuler"
+        backgroundColor={nc.backgroundCard}
+        textColor={nc.textStrong}
+        confirmButtonColor={nc.error}
+        confirmTextColor={nc.white}
+        onConfirm={() => {
+          if (isDeleting) return;
+          performDeletion();
+        }}
+        onCancel={() => {
+          if (isDeleting) return;
+          setShowDeleteSocialModal(false);
         }}
       />
       <PromptModal
@@ -844,44 +990,7 @@ export default function SettingsScreen() {
             return;
           }
 
-          let deletionScheduled = false;
-          try {
-            setIsDeleting(true);
-            await requestAccountDeletion(deletePassword);
-            deletionScheduled = true;
-
-            // Envoyer email de confirmation (fire & forget)
-            const { httpsCallable } = await import("firebase/functions");
-            const { functions } = await import("@/config/firebase");
-            const sendEmail = httpsCallable(
-              functions,
-              "sendDeletionRequestEmail",
-            );
-            sendEmail().catch(() => {});
-
-            await refreshUser();
-
-            setShowDeletePasswordModal(false);
-            setDeletePassword("");
-            await signOut();
-            router.replace("/(auth)/login");
-          } catch (error: any) {
-            const code = error?.code || "";
-            const message = deletionScheduled
-              ? "Votre compte est bien programmé pour suppression, mais la déconnexion automatique a échoué. Déconnectez-vous manuellement."
-              : code === "auth/wrong-password"
-                ? "Mot de passe incorrect."
-                : code === "auth/requires-recent-login"
-                  ? "Veuillez vous reconnecter puis réessayer."
-                  : "Impossible de programmer la suppression du compte.";
-            setModalConfig({
-              visible: true,
-              title: "Erreur",
-              message,
-            });
-          } finally {
-            setIsDeleting(false);
-          }
+          await performDeletion(deletePassword);
         }}
         onCancel={() => {
           if (isDeleting) return;
