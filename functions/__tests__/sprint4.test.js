@@ -389,7 +389,7 @@ describe("4.9 removed functions", () => {
     expect(fns[name]).toBeUndefined();
   });
   it("keeps the functions the app still calls", () => {
-    for (const name of ["findUserByEmail", "createShareInvitation", "setAdminClaim", "revenueCatWebhook"]) {
+    for (const name of ["createShareInvitation", "setAdminClaim", "revenueCatWebhook"]) {
       expect(typeof fns[name]).toBe("function");
     }
   });

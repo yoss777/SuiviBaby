@@ -34,6 +34,9 @@ admin.initializeApp();
 
 const BATCH_LIMIT = 450;
 const CHILD_DELETION_RETENTION_DAYS = 30;
+/** Operational logs (notification/recap history, webhook logs) live 90 days (TTL on expireAt). */
+const LOG_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+const logExpireAt = () => admin.firestore.Timestamp.fromMillis(Date.now() + LOG_RETENTION_MS);
 const DELETION_REQUEST_EXPIRY_DAYS = 7;
 const APP_CHECK_ENFORCED = process.env.APPCHECK_ENFORCE === "true";
 const expo = new Expo();
@@ -58,7 +61,7 @@ const APPLE_SECRETS = [APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY];
 const RECAP_UNSUBSCRIBE_SECRET = defineSecret("RECAP_UNSUBSCRIBE_SECRET");
 
 /** Version of the privacy policy the health data consent refers to (public/privacy.html). */
-const HEALTH_CONSENT_VERSION = "2.1";
+const HEALTH_CONSENT_VERSION = "2.2";
 /** Proof of consent is kept this long after the account is deleted. */
 const CONSENT_RETENTION_YEARS = 5;
 
@@ -356,24 +359,49 @@ async function updateDocsByFieldBatched(db, collectionName, field, value, patch)
   }
 }
 
+/** After this many failed revocations the purge goes on (STUCK_APPLE_REVOKE alert). */
+const MAX_APPLE_REVOKE_FAILURES = 5;
+
 /**
  * Revokes the user's Sign in with Apple refresh token (apple_tokens/{uid}).
- * Never throws: failures are logged (error alert) and the purge goes on.
+ * No token: nothing to do. Success: returns, the caller deletes the doc with
+ * the other by-id documents. Failure: the doc is kept with an incremented
+ * `revokeFailures` and the function throws, so the cron retries the whole
+ * purge. At MAX_APPLE_REVOKE_FAILURES it logs STUCK_APPLE_REVOKE and returns
+ * (the purge goes on and the token doc is deleted).
  */
 async function revokeAppleToken(db, uid) {
+  const ref = db.doc(`apple_tokens/${uid}`);
+  const snap = await ref.get();
+  const data = snap.exists ? snap.data() : null;
+  const refreshToken = data?.refreshToken;
+  if (!refreshToken) return;
+
+  let failure = null;
   try {
-    const snap = await db.doc(`apple_tokens/${uid}`).get();
-    const refreshToken = snap.exists ? snap.data()?.refreshToken : null;
-    if (!refreshToken) return;
     const creds = getAppleCredentials();
-    if (!creds) {
-      console.error(`purgeUserData: Apple secrets missing, token of uid=${uid} NOT revoked at Apple`);
-      return;
-    }
+    if (!creds) throw new Error("Apple secrets missing");
     await appleAuth.revokeRefreshToken(creds, refreshToken);
   } catch (e) {
-    console.error(`purgeUserData: Apple token revocation failed for uid=${uid}`, e?.message ?? e);
+    failure = e;
   }
+  if (!failure) return;
+
+  const failures = (Number(data.revokeFailures) || 0) + 1;
+  const reason = String(failure?.message ?? failure).slice(0, 300);
+  if (failures >= MAX_APPLE_REVOKE_FAILURES) {
+    console.error(
+      `purgeUserData: STUCK_APPLE_REVOKE uid=${uid} failures=${failures}, token NOT revoked at Apple, purge goes on`,
+      reason
+    );
+    return;
+  }
+  await ref.update({
+    revokeFailures: admin.firestore.FieldValue.increment(1),
+    lastRevokeError: reason,
+    lastRevokeAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  throw new Error(`Apple revocation failed (${failures}/${MAX_APPLE_REVOKE_FAILURES}): ${reason}`);
 }
 
 /**
@@ -383,7 +411,9 @@ async function revokeAppleToken(db, uid) {
  *      ownership transferred or their access removed;
  *   3. events they wrote in children shared with others: kept for the other
  *      parent but anonymised (author removed, photos already deleted);
- *   4. Apple token revocation, consent proof kept 5 years (expireAt), then every
+ *   4. Apple token revocation (a failure throws, retried by the cron, until
+ *      MAX_APPLE_REVOKE_FAILURES), withdrawal record + consent proof kept 5
+ *      years (expireAt), then every
  *      collection of USER_DATA_BY_FIELD / USER_DOCS_BY_ID, invitations;
  *   5. Firebase Auth (a failure other than "already gone" throws: the caller
  *      keeps users/{uid} so the next run retries);
@@ -419,12 +449,15 @@ async function purgeUserData(db, uid) {
     .where("userId", "==", uid)
     .get();
   for (const accessDoc of accessSnapshot.docs) {
-    const { childId, role } = accessDoc.data();
+    const { childId } = accessDoc.data();
     if (childId) {
       const childAccessSnap = await db
         .collection("children").doc(childId).collection("access")
         .get();
       const isMember = childAccessSnap.docs.some((d) => d.id === uid);
+      // The role comes from the access document: the user_child_access index
+      // written by the app carries no role.
+      const role = childAccessSnap.docs.find((d) => d.id === uid)?.data()?.role;
       const isAlone = isMember && childAccessSnap.docs.every((d) => d.id === uid);
       if (isAlone) {
         // Child document first: if a later step fails, the retry still finds
@@ -435,7 +468,7 @@ async function purgeUserData(db, uid) {
         // Transfer only while the user is still the recorded owner: on a retry
         // after a transfer, promoting someone else would create two owners.
         const childSnap = await db.doc(`children/${childId}`).get();
-        if (role === "owner" && childSnap.exists && childSnap.data()?.ownerId === uid) {
+        if (role === "owner" && childSnap.exists && !childSnap.data()?.deletedAt && childSnap.data()?.ownerId === uid) {
           await transferOwnership(db, childId, uid, childAccessSnap);
         }
         await db.doc(`children/${childId}/access/${uid}`).delete();
@@ -454,21 +487,41 @@ async function purgeUserData(db, uid) {
 
   // 4. Everything else about the user.
   // Apple requires the Sign in with Apple token to be revoked at account
-  // deletion. Best effort: a refusal must not keep the user's data alive.
+  // deletion: a failure throws (the cron retries) until the failure cap.
   await revokeAppleToken(db, uid);
   // Proof of consent is kept 5 years (GDPR art. 7.1): TTL on expireAt deletes it.
   const consentExpireAt = new Date();
   consentExpireAt.setFullYear(consentExpireAt.getFullYear() + CONSENT_RETENTION_YEARS);
+  const consentExpireTs = admin.firestore.Timestamp.fromDate(consentExpireAt);
   // The patch keeps `uid`, so the query would match the same docs again:
   // read them once and update in chunks instead of updateDocsByFieldBatched.
   const consentSnap = await db.collection("consent_records").where("uid", "==", uid).get();
+  // The account deletion withdraws the consent: record it once (a retry must
+  // not append a second one), with the same expireAt as the others.
+  if (!consentSnap.docs.some((d) => d.data()?.reason === "account_deleted")) {
+    await db.collection("consent_records").add({
+      uid,
+      type: "health_data",
+      granted: false,
+      reason: "account_deleted",
+      withdrawnAt: admin.firestore.FieldValue.serverTimestamp(),
+      expireAt: consentExpireTs,
+    });
+  }
   for (let i = 0; i < consentSnap.docs.length; i += BATCH_LIMIT) {
     const batch = db.batch();
     consentSnap.docs.slice(i, i + BATCH_LIMIT).forEach((doc) =>
-      batch.update(doc.ref, { expireAt: admin.firestore.Timestamp.fromDate(consentExpireAt) })
+      batch.update(doc.ref, { expireAt: consentExpireTs })
     );
     await batch.commit();
   }
+  // Child deletion requests the user made must outlive the account (the
+  // scheduled purge of the soft-deleted child depends on them): anonymise
+  // instead of deleting.
+  await updateDocsByFieldBatched(db, "childDeletionRequests", "requestedBy", uid, {
+    requestedBy: DELETED_USER_ID,
+    requestedByEmail: "",
+  });
   await Promise.all(
     USER_DATA_BY_FIELD.map(([collectionName, field]) =>
       deleteDocsByFieldBatched(db, collectionName, field, uid)
@@ -480,6 +533,10 @@ async function purgeUserData(db, uid) {
       deleteDocsByFieldBatched(db, "shareInvitations", "invitedEmail", email),
     ]);
   }
+  await Promise.all([
+    deleteDocsByFieldBatched(db, "shareInvitations", "inviterId", uid),
+    deleteDocsByFieldBatched(db, "shareInvitations", "invitedUserId", uid),
+  ]);
   const batch = db.batch();
   USER_DOCS_BY_ID.forEach((collectionName) => batch.delete(db.doc(`${collectionName}/${uid}`)));
   await batch.commit();
@@ -763,8 +820,10 @@ async function getSharingQuotaStatus(db, uid, childId) {
  * Transfère la propriété d'un enfant quand son owner quitte (purge du compte).
  * Seuls un autre owner (co-owner) puis, à défaut, un admin peuvent hériter :
  * jamais un contributor ni un viewer. Départage : grantedAt le plus ancien.
- * Sans candidat, personne n'est promu : l'enfant devient orphelin
- * (ownerId = null, ownerlessSince) et un log d'erreur lève l'alerte.
+ * Sans candidat, personne n'est promu et l'enfant n'est jamais laissé sans
+ * propriétaire : il est soft-deleted (délai de grâce standard, purgé ensuite
+ * par purgeDeletedChildren), les membres perdent l'accès comme pour une
+ * suppression normale.
  * L'appelant supprime ensuite l'accès de l'owner sortant.
  */
 async function transferOwnership(db, childId, currentOwnerId, childAccessSnapshot) {
@@ -782,12 +841,39 @@ async function transferOwnership(db, childId, currentOwnerId, childAccessSnapsho
     });
 
   if (candidates.length === 0) {
-    await db.doc(`children/${childId}`).update({
-      ownerId: null,
-      ownerlessSince: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    // Reuse an approved request left by an interrupted run, else create one.
+    const existing = await db
+      .collection("childDeletionRequests")
+      .where("childId", "==", childId)
+      .where("status", "==", "approved")
+      .limit(1)
+      .get();
+    let requestId;
+    if (!existing.empty) {
+      requestId = existing.docs[0].id;
+    } else {
+      const now = admin.firestore.Timestamp.now();
+      const ref = await db.collection("childDeletionRequests").add({
+        childId,
+        childName: "",
+        // Anonymous on purpose: the purge of the leaving user's data would
+        // delete a request they "requested", and purgeDeletedChildren needs it.
+        requestedBy: DELETED_USER_ID,
+        requestedByEmail: "",
+        requestedAt: now,
+        status: "approved",
+        approvedAt: now,
+        reason: "last_owner_account_deleted",
+        ownerVotes: {},
+        ownerIds: [], // nobody left to be notified or to vote
+        retentionDays: CHILD_DELETION_RETENTION_DAYS,
+        seenByUserIds: [],
+      });
+      requestId = ref.id;
+    }
+    await softDeleteChild(db, childId, requestId, DELETED_USER_ID);
     console.error(
-      `transferOwnership: child ${childId} has no eligible owner (no co-owner or admin) after uid=${currentOwnerId} left: ownerless`
+      `transferOwnership: child ${childId} has no eligible owner (no co-owner or admin) after uid=${currentOwnerId} left: soft-deleted, purged after the grace period`
     );
     return;
   }
@@ -1083,6 +1169,9 @@ exports.transcribeAudio = onCall(
     // 4. Business quota — enforced server-side, client checks are UX only.
     await reserveVoiceQuota(db, uid);
     let quotaReserved = true;
+    // Declared outside the try so the finally below always knows what to drop
+    // at AssemblyAI (HC4), whatever path ends the call (success, error, timeout).
+    let transcriptId = null;
 
     try {
       // 4. Upload audio to AssemblyAI
@@ -1134,7 +1223,7 @@ exports.transcribeAudio = onCall(
       }
 
       const transcript = await transcriptResponse.json();
-      const transcriptId = transcript.id;
+      transcriptId = transcript.id || null;
 
       // 6. Poll for completion (max 60s)
       let result = transcript;
@@ -1166,17 +1255,6 @@ exports.transcribeAudio = onCall(
 
       if (result.status !== "completed") {
         throw new HttpsError("deadline-exceeded", "Transcription timeout.");
-      }
-
-      // 7. Tell AssemblyAI to drop the upload + transcript (T2.1).
-      //    Awaited with a 3s timeout so we don't block the response on a slow
-      //    cleanup; if the DELETE fails or times out, the transcriptId is
-      //    queued for retry via the scheduled retryAssemblyAIDeletes job.
-      //    This bounds how long sensitive audio of a child sits on
-      //    AssemblyAI's side (GDPR Art. 17/33).
-      const deleted = await deleteAssemblyAITranscript(transcriptId, apiKey);
-      if (!deleted) {
-        await enqueueAssemblyAIDelete(db, transcriptId, "initial-delete-failed", uid);
       }
 
       const text = result.text || "";
@@ -1226,6 +1304,25 @@ exports.transcribeAudio = onCall(
         "internal",
         "Erreur lors de la transcription audio."
       );
+    } finally {
+      // 7. Tell AssemblyAI to drop the transcript (and its audio) on EVERY
+      //    path: success, provider error, timeout, polling failure (T2.1,
+      //    GDPR Art. 17/33). Bounded by a 3s timeout; if the DELETE fails or
+      //    throws, the transcriptId is queued for retryAssemblyAIDeletes.
+      //    Limit: when the upload worked but the transcript could not be
+      //    created there is no id and no documented DELETE endpoint for
+      //    /v2/upload files: the provider's own expiry applies (see report).
+      if (transcriptId) {
+        let deleted = false;
+        try {
+          deleted = await deleteAssemblyAITranscript(transcriptId, apiKey);
+        } catch (delErr) {
+          console.warn("transcribeAudio: transcript delete threw:", delErr?.message ?? delErr);
+        }
+        if (!deleted) {
+          await enqueueAssemblyAIDelete(db, transcriptId, "initial-delete-failed", uid);
+        }
+      }
     }
   }
 );
@@ -1290,6 +1387,8 @@ exports.retryAssemblyAIDeletes = onSchedule(
           attempts,
           lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
           abandonedAt: admin.firestore.FieldValue.serverTimestamp(),
+          // Kept for audit, then removed by the TTL policy on expireAt.
+          expireAt: logExpireAt(),
           lastError: `Abandoned after ${attempts} attempts`,
         });
         console.error(
@@ -1658,11 +1757,9 @@ exports.createShareInvitation = onCall(
     }
     const targetAccessDoc = await db.doc(`children/${childId}/access/${invitedUserId}`).get();
     if (targetAccessDoc.exists) {
-      throw new HttpsError(
-        "already-exists",
-        "Cet enfant est déjà lié à ce destinataire.",
-        { reason: "already-linked" }
-      );
+      // Même réponse neutre qu'un compte inconnu : sinon l'erreur disait qui
+      // a déjà accès à l'enfant (énumération).
+      return { id: randomNeutralId() };
     }
 
     const existingInvites = await db
@@ -1675,11 +1772,7 @@ exports.createShareInvitation = onCall(
       .get();
 
     if (!existingInvites.empty) {
-      throw new HttpsError(
-        "already-exists",
-        "Une invitation est déjà en attente pour cet email.",
-        { reason: "already-pending" }
-      );
+      return { id: randomNeutralId() };
     }
 
     const invitationRef = await db.collection("shareInvitations").add({
@@ -2303,51 +2396,6 @@ function convertEventDateFields(data) {
 // ============================================
 
 /**
- * findUserByEmail — Recherche un utilisateur par email (côté serveur uniquement)
- * Évite d'exposer les emails dans users_public via des queries client.
- */
-exports.findUserByEmail = onCall(
-  withAppCheck({ region: "europe-west1" }),
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Authentification requise.");
-    }
-    monitorAppCheck(request, "findUserByEmail");
-
-    const db = admin.firestore();
-    // B1.5 — resserré de 10/min à 3/min. L'usage légitime (inviter un
-    // co-parent via email) ne nécessite que 1-2 calls par session.
-    // 10/min × 60 min × 24h = 14400 tentatives/jour/user → énumération
-    // d'une base ~100k users en 7 jours. 3/min divise par 3+.
-    await checkRateLimit(db, request.auth.uid, "findUser", 3);
-
-    const { email } = request.data;
-    if (!email || typeof email !== "string") {
-      throw new HttpsError("invalid-argument", "Email requis.");
-    }
-
-    // Résolution via Firebase Auth : users/{uid}.email est modifiable par son
-    // titulaire et ne prouve pas la possession de l'adresse.
-    let uid;
-    try {
-      uid = (await admin.auth().getUserByEmail(email.toLowerCase())).uid;
-    } catch (err) {
-      if (err?.code === "auth/user-not-found") return { found: false, user: null };
-      throw err;
-    }
-
-    const userDoc = await db.doc(`users/${uid}`).get();
-    return {
-      found: true,
-      user: {
-        id: uid,
-        userName: (userDoc.exists && userDoc.data().userName) || "Utilisateur",
-      },
-    };
-  }
-);
-
-/**
  * Vérifie que l'utilisateur a accès à l'enfant (owner, admin ou contributor)
  */
 async function checkChildAccess(db, uid, childId, requiredRoles) {
@@ -2884,6 +2932,8 @@ exports.recordHealthConsent = onCall(
     if (typeof platform === "string") record.platform = platform;
     await db.collection("consent_records").add(record);
 
+    // mergeFields replaces the whole healthDataConsent map (no deep merge):
+    // a previous withdrawnAt or an older field must not survive a new grant.
     await db.doc(`user_preferences/${uid}`).set(
       {
         healthDataConsent: {
@@ -2892,10 +2942,49 @@ exports.recordHealthConsent = onCall(
           version: HEALTH_CONSENT_VERSION,
         },
       },
-      { merge: true }
+      { mergeFields: ["healthDataConsent"] }
     );
 
     return { version: HEALTH_CONSENT_VERSION };
+  }
+);
+
+/**
+ * withdrawHealthConsent — Withdraws the consent to health data processing
+ * (GDPR art. 7.3). Input: {}. Output: { success: true }.
+ * Appends the withdrawal to consent_records (proof, never edited) and replaces
+ * user_preferences/{uid}.healthDataConsent with { granted: false, withdrawnAt,
+ * version }. Scheduled jobs (reminders, recaps) stop processing the user.
+ */
+exports.withdrawHealthConsent = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    monitorAppCheck(request, "withdrawHealthConsent");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "consent", 10);
+
+    await db.collection("consent_records").add({
+      uid,
+      type: "health_data",
+      granted: false,
+      withdrawnAt: admin.firestore.FieldValue.serverTimestamp(),
+      version: HEALTH_CONSENT_VERSION,
+    });
+    await db.doc(`user_preferences/${uid}`).set(
+      {
+        healthDataConsent: {
+          granted: false,
+          withdrawnAt: new Date().toISOString(),
+          version: HEALTH_CONSENT_VERSION,
+        },
+      },
+      { mergeFields: ["healthDataConsent"] }
+    );
+    return { success: true };
   }
 );
 
@@ -3444,6 +3533,7 @@ exports.revenueCatWebhook = onRequest(
         status,
         productId,
         processedAt: admin.firestore.Timestamp.now(),
+        expireAt: logExpireAt(),
       });
     } catch (err) {
       console.error("revenueCatWebhook: webhook_logs write failed:", err?.message ?? err);
@@ -4055,6 +4145,150 @@ exports.validateReferralCode = onCall(
 );
 
 // ============================================
+// ACCOUNT DELETION REQUEST (server side)
+// ============================================
+
+const ACCOUNT_DELETION_GRACE_DAYS = 30;
+/** A deletion request needs a login at most this old (seconds). */
+const RECENT_LOGIN_MAX_AGE_S = 5 * 60;
+
+/**
+ * Sends the "deletion scheduled" e-mail to the Auth address of `uid` and keeps
+ * that address with the request (the confirmation can still be sent after the
+ * Auth account is gone). Throws HttpsError; shared by sendDeletionRequestEmail
+ * (app 1.0.8) and requestAccountDeletion.
+ */
+async function deliverDeletionRequestEmail(db, uid, deletionDateIso) {
+  let email = "";
+  try {
+    const userRecord = await admin.auth().getUser(uid);
+    email = userRecord.email || "";
+  } catch {
+    throw new HttpsError("internal", "Impossible de recuperer l'email.");
+  }
+
+  if (!email) {
+    throw new HttpsError("failed-precondition", "Aucun email associe au compte.");
+  }
+
+  const deletionDate = new Date(deletionDateIso).toLocaleDateString("fr-FR");
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error("deliverDeletionRequestEmail: RESEND_API_KEY not configured");
+    throw new HttpsError("unavailable", "Envoi d'e-mail indisponible.");
+  }
+
+  await db.doc(`users/${uid}`).update({ "pendingDeletion.email": email }).catch((e) => {
+    console.error(`deliverDeletionRequestEmail: could not store e-mail for uid=${uid}`, e);
+  });
+
+  const resend = new Resend(apiKey);
+  await sendEmailOrThrow(resend, {
+    from: "Suivi Baby <noreply@suivibaby.com>",
+    to: email,
+    subject: "Demande de suppression de votre compte Suivi Baby",
+    html: `
+        <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #1a1a1a;">Suppression programmee</h2>
+          <p>Vous avez demande la suppression de votre compte Suivi Baby.</p>
+          <p>Votre compte et toutes vos donnees seront definitivement supprimes le <strong>${deletionDate}</strong>.</p>
+          <p>Si vous changez d'avis, vous pouvez annuler cette demande a tout moment depuis les <strong>Parametres</strong> de l'application.</p>
+          <p>Si vous n'etes pas a l'origine de cette demande, connectez-vous immediatement a l'application et annulez la suppression, puis changez votre mot de passe.</p>
+          <p style="color: #666; font-size: 12px; margin-top: 30px;">Cet email a ete envoye automatiquement par Suivi Baby. Conformite RGPD art. 17.</p>
+        </div>
+      `,
+  });
+  return email;
+}
+
+/**
+ * requestAccountDeletion — Schedules the account deletion (30-day grace
+ * period) on the server. Input: {}. Output: { deletionDate: ISO string }.
+ * Needs a login at most 5 minutes old (token auth_time), otherwise
+ * failed-precondition with details.reason "recent-login-required".
+ * Writes users/{uid}.pendingDeletion = { scheduledAt, deletionDate, email }
+ * (ISO strings, the shape app 1.0.8 writes and processScheduledDeletions
+ * queries), deletes the device tokens and sends the confirmation e-mail
+ * (a failed e-mail does not undo the request). Idempotent: an existing request
+ * keeps its date.
+ */
+exports.requestAccountDeletion = onCall(
+  withAppCheck({ region: "europe-west1", secrets: ["RESEND_API_KEY"] }),
+  async (request) => {
+    monitorAppCheck(request, "requestAccountDeletion");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    const uid = request.auth.uid;
+    const authTime = Number(request.auth.token?.auth_time);
+    if (!Number.isFinite(authTime) || Date.now() / 1000 - authTime > RECENT_LOGIN_MAX_AGE_S) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Reconnectez-vous pour confirmer la suppression du compte.",
+        { reason: "recent-login-required" }
+      );
+    }
+
+    const db = admin.firestore();
+    await checkRateLimit(db, uid, "account_deletion", 5);
+
+    const userSnap = await db.doc(`users/${uid}`).get();
+    const existing = userSnap.exists ? userSnap.data()?.pendingDeletion : null;
+    if (existing?.deletionDate) {
+      return { deletionDate: String(existing.deletionDate) };
+    }
+
+    const scheduledAt = new Date();
+    const deletionDate = new Date(scheduledAt.getTime() + ACCOUNT_DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000);
+    let email = "";
+    try {
+      email = ((await admin.auth().getUser(uid)).email || "").toLowerCase();
+    } catch (e) {
+      console.warn(`requestAccountDeletion: no Auth e-mail for uid=${uid}`, e?.message ?? e);
+    }
+    const pendingDeletion = {
+      scheduledAt: scheduledAt.toISOString(),
+      deletionDate: deletionDate.toISOString(),
+      email,
+    };
+    // mergeFields: replaces the whole map and works when users/{uid} is missing.
+    await db.doc(`users/${uid}`).set({ pendingDeletion }, { mergeFields: ["pendingDeletion"] });
+
+    // No push for an account that is leaving.
+    await deleteDocsByFieldBatched(db, "device_tokens", "userId", uid);
+
+    try {
+      await deliverDeletionRequestEmail(db, uid, pendingDeletion.deletionDate);
+    } catch (e) {
+      console.error(`requestAccountDeletion: confirmation e-mail failed for uid=${uid}`, e?.message ?? e);
+    }
+    return { deletionDate: pendingDeletion.deletionDate };
+  }
+);
+
+/**
+ * cancelAccountDeletion — Removes users/{uid}.pendingDeletion during the grace
+ * period. Input: {}. Output: { success: true }.
+ */
+exports.cancelAccountDeletion = onCall(
+  withAppCheck({ region: "europe-west1" }),
+  async (request) => {
+    monitorAppCheck(request, "cancelAccountDeletion");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentification requise.");
+    }
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+    await db.doc(`users/${uid}`).set(
+      { pendingDeletion: admin.firestore.FieldValue.delete() },
+      { merge: true }
+    );
+    return { success: true };
+  }
+);
+
+// ============================================
 // ACCOUNT DELETION REQUEST EMAIL
 // ============================================
 
@@ -4078,48 +4312,7 @@ exports.sendDeletionRequestEmail = onCall(
       throw new HttpsError("failed-precondition", "Aucune suppression programmee.");
     }
 
-    let email = "";
-    try {
-      const userRecord = await admin.auth().getUser(uid);
-      email = userRecord.email || "";
-    } catch {
-      throw new HttpsError("internal", "Impossible de recuperer l'email.");
-    }
-
-    if (!email) {
-      throw new HttpsError("failed-precondition", "Aucun email associe au compte.");
-    }
-
-    const deletionDate = new Date(userData.pendingDeletion.deletionDate).toLocaleDateString("fr-FR");
-
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      console.error("sendDeletionRequestEmail: RESEND_API_KEY not configured");
-      throw new HttpsError("unavailable", "Envoi d'e-mail indisponible.");
-    }
-
-    // Kept with the request: the confirmation e-mail can still be sent after
-    // the Auth account is gone (retries of processScheduledDeletions).
-    await db.doc(`users/${uid}`).update({ "pendingDeletion.email": email }).catch((e) => {
-      console.error(`sendDeletionRequestEmail: could not store e-mail for uid=${uid}`, e);
-    });
-
-    const resend = new Resend(apiKey);
-    await sendEmailOrThrow(resend, {
-      from: "Suivi Baby <noreply@suivibaby.com>",
-      to: email,
-      subject: "Demande de suppression de votre compte Suivi Baby",
-      html: `
-        <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #1a1a1a;">Suppression programmee</h2>
-          <p>Vous avez demande la suppression de votre compte Suivi Baby.</p>
-          <p>Votre compte et toutes vos donnees seront definitivement supprimes le <strong>${deletionDate}</strong>.</p>
-          <p>Si vous changez d'avis, vous pouvez annuler cette demande a tout moment depuis les <strong>Parametres</strong> de l'application.</p>
-          <p>Si vous n'etes pas a l'origine de cette demande, connectez-vous immediatement a l'application et annulez la suppression, puis changez votre mot de passe.</p>
-          <p style="color: #666; font-size: 12px; margin-top: 30px;">Cet email a ete envoye automatiquement par Suivi Baby. Conformite RGPD art. 17.</p>
-        </div>
-      `,
-    });
+    await deliverDeletionRequestEmail(db, uid, userData.pendingDeletion.deletionDate);
 
     return { success: true };
   }
@@ -4128,6 +4321,18 @@ exports.sendDeletionRequestEmail = onCall(
 // ============================================
 // SCHEDULED ACCOUNT DELETION (Grace period 30 days)
 // ============================================
+
+const MIN_DELETION_WINDOW_MS = 29 * 24 * 60 * 60 * 1000;
+
+/** Millis of an ISO string, Timestamp, Date or number; null when unusable. */
+function pendingDateMillis(value) {
+  if (value === null || value === undefined) return null;
+  const ms = typeof value?.toMillis === "function" ? value.toMillis()
+    : value instanceof Date ? value.getTime()
+      : typeof value === "number" ? value
+        : typeof value === "string" ? new Date(value).getTime() : NaN;
+  return Number.isFinite(ms) ? ms : null;
+}
 
 /**
  * processScheduledDeletions — Exécutée toutes les 24h.
@@ -4156,6 +4361,16 @@ exports.processScheduledDeletions = onSchedule(
     for (const userDoc of snapshot.docs) {
       const uid = userDoc.id;
       const pending = userDoc.data()?.pendingDeletion || {};
+      // M1: a request must leave the 30-day grace period (29 days tolerated
+      // for DST). A shorter or undated window is never executed.
+      const scheduledMs = pendingDateMillis(pending.scheduledAt);
+      const deletionMs = pendingDateMillis(pending.deletionDate);
+      if (scheduledMs === null || deletionMs === null || deletionMs - scheduledMs < MIN_DELETION_WINDOW_MS) {
+        console.error(
+          `processScheduledDeletions: INVALID_PENDING_DELETION uid=${uid} ignored (deletion window shorter than 29 days or undated)`
+        );
+        continue;
+      }
       try {
         const purged = await purgeUserData(db, uid);
         // Auth may already be gone on a retry: fall back to the address kept
@@ -4216,6 +4431,28 @@ exports.processScheduledDeletions = onSchedule(
 // ============================================
 
 /**
+ * Health data consent gate for scheduled processing: any version counts as
+ * long as `granted` is true (consents given by app 1.0.x stay valid).
+ */
+function hasValidHealthConsent(prefs) {
+  return prefs?.healthDataConsent?.granted === true;
+}
+
+/** Uids (among `uids`) whose users/{uid} carries a pendingDeletion; batched reads. */
+async function usersWithPendingDeletion(db, uids) {
+  const pending = new Set();
+  const CHUNK = 200;
+  for (let i = 0; i < uids.length; i += CHUNK) {
+    const refs = uids.slice(i, i + CHUNK).map((uid) => db.doc(`users/${uid}`));
+    const snaps = await db.getAll(...refs);
+    snaps.forEach((snap, idx) => {
+      if (snap.exists && snap.data()?.pendingDeletion) pending.add(uids[i + idx]);
+    });
+  }
+  return pending;
+}
+
+/**
  * Mapping catégorie de rappel → types d'événements Firestore
  */
 const REMINDER_CATEGORIES = {
@@ -4265,8 +4502,13 @@ exports.checkAndSendReminders = onSchedule(
     let totalSent = 0;
     let totalSkipped = 0;
 
-    for (const prefDoc of prefsSnapshot.docs) {
+    // No consent, no processing; accounts being deleted get nothing either.
+    const consented = prefsSnapshot.docs.filter((d) => hasValidHealthConsent(d.data()));
+    const leaving = await usersWithPendingDeletion(db, consented.map((d) => d.id));
+
+    for (const prefDoc of consented) {
       const userId = prefDoc.id;
+      if (leaving.has(userId)) continue;
       const prefs = prefDoc.data();
       const thresholds = prefs.notifications?.reminders?.thresholds || {};
 
@@ -4373,6 +4615,7 @@ exports.checkAndSendReminders = onSchedule(
               sentAt: now,
               thresholdHours,
               elapsedHours,
+              expireAt: logExpireAt(),
             });
 
             totalSent++;
@@ -4522,12 +4765,15 @@ exports.sendWeeklyRecap = onSchedule(
     let totalSent = 0;
     let totalSkipped = 0;
 
-    for (const prefDoc of prefsSnap.docs) {
-      const userId = prefDoc.id;
+    // Sans consentement valide : aucun traitement. Compte en cours de
+    // suppression : plus aucun e-mail. Lectures groupées (pas de N+1).
+    const consented = prefsSnap.docs.filter((d) => hasValidHealthConsent(d.data()));
+    totalSkipped += prefsSnap.size - consented.length;
+    const leaving = await usersWithPendingDeletion(db, consented.map((d) => d.id));
 
-      // Compte en cours de suppression : plus aucun e-mail.
-      const userDoc = await db.doc(`users/${userId}`).get();
-      if (userDoc.exists && userDoc.data()?.pendingDeletion) {
+    for (const prefDoc of consented) {
+      const userId = prefDoc.id;
+      if (leaving.has(userId)) {
         totalSkipped++;
         continue;
       }
@@ -4620,6 +4866,7 @@ exports.sendWeeklyRecap = onSchedule(
             weekStart,
             weekEnd,
             sentAt: admin.firestore.Timestamp.now(),
+            expireAt: logExpireAt(),
           });
 
           totalSent++;
@@ -4659,6 +4906,9 @@ exports.unsubscribeRecap = onRequest(
   { region: "europe-west1", secrets: [RECAP_UNSUBSCRIBE_SECRET] },
   async (req, res) => {
     res.set("Content-Type", "text/html; charset=utf-8");
+    // The page must never be framed (clickjacking of the unsubscribe button).
+    res.set("X-Frame-Options", "DENY");
+    res.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'");
     if (req.method !== "GET" && req.method !== "POST") {
       res.set("Allow", "GET, POST");
       res.status(405).send(unsubscribePage("Méthode non autorisée", ""));
@@ -4694,14 +4944,15 @@ exports.unsubscribeRecap = onRequest(
     }
 
     try {
-      await admin.firestore().doc(`user_preferences/${uid}`).set(
-        { notifications: { email: false } },
-        { merge: true }
-      );
+      // update(): never creates a preferences document for an arbitrary uid.
+      // A missing document means there is nothing to unsubscribe from: success.
+      await admin.firestore().doc(`user_preferences/${uid}`).update({ "notifications.email": false });
     } catch (e) {
-      console.error(`unsubscribeRecap: write failed for uid=${uid}`, e?.message ?? e);
-      res.status(500).send(unsubscribePage("Une erreur est survenue", "<p>Réessayez plus tard.</p>"));
-      return;
+      if (e?.code !== 5 && e?.code !== "not-found") {
+        console.error(`unsubscribeRecap: write failed for uid=${uid}`, e?.message ?? e);
+        res.status(500).send(unsubscribePage("Une erreur est survenue", "<p>Réessayez plus tard.</p>"));
+        return;
+      }
     }
     res.status(200).send(unsubscribePage("Vous êtes désabonné", "<p>Vous ne recevrez plus le récap hebdomadaire par e-mail. Vous pouvez le réactiver à tout moment dans l'application.</p>"));
   }
@@ -5018,46 +5269,48 @@ exports.transferAndLeave = onCall(
     const db = admin.firestore();
     await checkRateLimit(db, uid, "deletion", 10);
 
-    // Verify caller is owner
-    const callerAccess = await db.doc(`children/${childId}/access/${uid}`).get();
-    if (!callerAccess.exists || callerAccess.data().role !== "owner") {
-      throw new HttpsError("permission-denied", "Seul un propriétaire peut transférer.");
-    }
-
-    // Pas de transfert d'un enfant en cours de suppression
-    const childSnap = await db.doc(`children/${childId}`).get();
-    if (!childSnap.exists || childSnap.data()?.deletedAt) {
-      throw new HttpsError("failed-precondition", "Cet enfant est en cours de suppression.");
-    }
-
-    // Verify new owner has existing access
-    const newOwnerAccess = await db.doc(`children/${childId}/access/${newOwnerId}`).get();
-    if (!newOwnerAccess.exists) {
-      throw new HttpsError("not-found", "Le nouveau propriétaire n'a pas accès à cet enfant.");
-    }
-
-    const now = admin.firestore.Timestamp.now();
-    const batch = db.batch();
-
-    // 1. Promote new owner
-    batch.update(db.doc(`children/${childId}/access/${newOwnerId}`), {
-      role: "owner",
-      canWriteEvents: true,
-      canWriteLikes: true,
-      canWriteComments: true,
-      grantedBy: uid,
-      grantedAt: now,
+    // Everything that decides who owns the child is re-read inside the
+    // transaction: a co-owner (role owner but not children.ownerId) must never
+    // be able to overwrite ownerId, and the new owner's access must still exist.
+    const childRef = db.doc(`children/${childId}`);
+    const callerRef = db.doc(`children/${childId}/access/${uid}`);
+    const newOwnerRef = db.doc(`children/${childId}/access/${newOwnerId}`);
+    const transferred = await db.runTransaction(async (tx) => {
+      const [childSnap, callerAccess, newOwnerAccess] = await Promise.all([
+        tx.get(childRef),
+        tx.get(callerRef),
+        tx.get(newOwnerRef),
+      ]);
+      if (!callerAccess.exists || callerAccess.data()?.role !== "owner") {
+        throw new HttpsError("permission-denied", "Seul un propriétaire peut transférer.");
+      }
+      // Pas de transfert d'un enfant en cours de suppression
+      if (!childSnap.exists || childSnap.data()?.deletedAt) {
+        throw new HttpsError("failed-precondition", "Cet enfant est en cours de suppression.");
+      }
+      if (childSnap.data()?.ownerId !== uid) {
+        // Co-owner: leaves without touching the primary owner.
+        tx.delete(callerRef);
+        return false;
+      }
+      if (!newOwnerAccess.exists) {
+        throw new HttpsError("not-found", "Le nouveau propriétaire n'a pas accès à cet enfant.");
+      }
+      // 1. Promote new owner
+      tx.update(newOwnerRef, {
+        role: "owner",
+        canWriteEvents: true,
+        canWriteLikes: true,
+        canWriteComments: true,
+        grantedBy: uid,
+        grantedAt: admin.firestore.Timestamp.now(),
+      });
+      // 2. Update ownerId on child document
+      tx.update(childRef, { ownerId: newOwnerId });
+      // 3. Delete former owner's access
+      tx.delete(callerRef);
+      return true;
     });
-
-    // 2. Update ownerId on child document
-    batch.update(db.doc(`children/${childId}`), {
-      ownerId: newOwnerId,
-    });
-
-    // 3. Delete former owner's access
-    batch.delete(db.doc(`children/${childId}/access/${uid}`));
-
-    await batch.commit();
 
     // 4. Delete former owner's user_child_access entry
     const userAccessSnap = await db
@@ -5078,8 +5331,8 @@ exports.transferAndLeave = onCall(
       { merge: true }
     ).catch(() => {});
 
-    console.log(`transferAndLeave: childId=${childId}, from=${uid}, to=${newOwnerId}`);
-    return { success: true };
+    console.log(`transferAndLeave: childId=${childId}, from=${uid}, to=${newOwnerId}, transferred=${transferred}`);
+    return { success: true, transferred };
   }
 );
 

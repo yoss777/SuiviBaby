@@ -463,6 +463,58 @@ describe("children/access subcollection", () => {
     );
   });
 
+  test("M4: an owner cannot create an access doc for another user client-side", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(
+      setDoc(doc(db, "children", CHILD_ID, "access", CHARLIE_UID), {
+        userId: CHARLIE_UID,
+        role: "viewer",
+        grantedBy: ALICE_UID,
+      })
+    );
+  });
+
+  test("M4: a co-owner cannot create an access doc for another user either", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", CHILD_ID, "access", CHARLIE_UID), {
+        userId: CHARLIE_UID,
+        role: "owner",
+        grantedBy: ALICE_UID,
+      });
+    });
+    await assertFails(
+      setDoc(doc(authedFirestore(CHARLIE_UID), "children", CHILD_ID, "access", "dana"), {
+        userId: "dana",
+        role: "owner",
+        grantedBy: CHARLIE_UID,
+      })
+    );
+  });
+
+  test("M4: user_child_access cannot be created for another user, even by the owner", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(
+      setDoc(doc(db, "user_child_access", `${CHARLIE_UID}_${CHILD_ID}`), {
+        userId: CHARLIE_UID,
+        childId: CHILD_ID,
+      })
+    );
+  });
+
+  test("M4: an owner can still update an existing user_child_access index entry", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "user_child_access", `${BOB_UID}_${CHILD_ID}`), {
+        userId: BOB_UID,
+        childId: CHILD_ID,
+      });
+    });
+    await assertSucceeds(
+      updateDoc(doc(authedFirestore(ALICE_UID), "user_child_access", `${BOB_UID}_${CHILD_ID}`), {
+        role: "viewer",
+      })
+    );
+  });
+
   test("owner can change a member's role", async () => {
     const db = authedFirestore(ALICE_UID);
     await assertSucceeds(
@@ -940,6 +992,65 @@ describe("users collection", () => {
     await assertFails(
       updateDoc(doc(db, "users", ALICE_UID), { displayName: "Hacked" })
     );
+  });
+
+  describe("pendingDeletion (M1: at least 29 days ahead)", () => {
+    const daysFromNow = (d: number) => new Date(Date.now() + d * 86400000);
+    const legacy = (deletionDate: string) => ({
+      pendingDeletion: { scheduledAt: new Date().toISOString(), deletionDate },
+    });
+    const stamped = (deletionDate: Date) => ({
+      pendingDeletion: { scheduledAt: Timestamp.now(), deletionDate: Timestamp.fromDate(deletionDate) },
+    });
+    const userRef = () => doc(authedFirestore(ALICE_UID), "users", ALICE_UID);
+
+    test("app 1.0.8 write (ISO strings, 30 days) is accepted", async () => {
+      await assertSucceeds(updateDoc(userRef(), legacy(daysFromNow(30).toISOString())));
+    });
+
+    test("ISO string only 1 day ahead, in the past or malformed is refused", async () => {
+      await assertFails(updateDoc(userRef(), legacy(daysFromNow(1).toISOString())));
+      await assertFails(updateDoc(userRef(), legacy(daysFromNow(-1).toISOString())));
+      await assertFails(updateDoc(userRef(), legacy("zzz")));
+      await assertFails(updateDoc(userRef(), legacy("2999")));
+    });
+
+    test("Timestamp 30 days ahead is accepted, 1 day ahead refused", async () => {
+      await assertSucceeds(updateDoc(userRef(), stamped(daysFromNow(30))));
+      await assertFails(updateDoc(userRef(), stamped(daysFromNow(1))));
+    });
+
+    test("other field types are refused", async () => {
+      await assertFails(updateDoc(userRef(), { pendingDeletion: { deletionDate: daysFromNow(30).getTime() } }));
+      await assertFails(updateDoc(userRef(), { pendingDeletion: { scheduledAt: "x" } }));
+    });
+
+    test("setDoc creating the user doc with a short pendingDeletion is refused", async () => {
+      const db = authedFirestore(BOB_UID);
+      await assertFails(setDoc(doc(db, "users", BOB_UID), legacy(daysFromNow(0).toISOString())));
+      await assertSucceeds(setDoc(doc(db, "users", BOB_UID), legacy(daysFromNow(30).toISOString())));
+    });
+
+    test("removing pendingDeletion stays allowed", async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "users", ALICE_UID), {
+          email: "alice@test.com",
+          ...legacy(daysFromNow(2).toISOString()),
+        });
+      });
+      await assertSucceeds(updateDoc(userRef(), { pendingDeletion: deleteField() }));
+    });
+
+    test("an unrelated update keeps working while a (short, server-set) pendingDeletion is untouched", async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "users", ALICE_UID), {
+          email: "alice@test.com",
+          ...legacy(daysFromNow(2).toISOString()),
+        });
+      });
+      await assertSucceeds(updateDoc(userRef(), { displayName: "New" }));
+      await assertFails(updateDoc(userRef(), { "pendingDeletion.deletionDate": daysFromNow(1).toISOString() }));
+    });
   });
 
   test("unauthenticated cannot read user doc", async () => {

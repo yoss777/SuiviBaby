@@ -19,11 +19,10 @@ service firebase.storage {
     }
 
     function canWriteChildMedia(childId) {
-      let access = accessDoc(childId).data;
-      return hasAccess(childId) && (
-        access.role in ['owner', 'admin'] ||
-        ('canWriteEvents' in access && access.canWriteEvents == true)
-      );
+      // Le rôle seul décide (HC9) : l'ancien drapeau canWriteEvents ne donne
+      // plus l'écriture des photos.
+      return hasAccess(childId) &&
+        accessDoc(childId).data.role in ['owner', 'admin'];
     }
 
     function isImageUpload() {

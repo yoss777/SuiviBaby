@@ -623,6 +623,7 @@ describe("deleteUserAccount (T4 — admin-only direct path)", () => {
       limit: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       get: jest.fn().mockResolvedValue(snap()),
+      add: jest.fn().mockResolvedValue({ id: "new" }),
     }));
   });
 
@@ -1905,23 +1906,8 @@ describe("transferAndLeave (ownership transfer, server-only since rules S1)", ()
     expect(b.commit).not.toHaveBeenCalled();
   });
 
-  it("promotes the new owner, moves ownerId and removes the former owner atomically", async () => {
-    setupDocs({ "children/c1": { ownerId: "u1" }, "children/c1/access/u1": { role: "owner" }, "children/c1/access/u2": { role: "contributor" } });
-    const b = captureBatch();
-    const res = await fns.transferAndLeave(auth("u1", { childId: "c1", newOwnerId: "u2" }));
-
-    expect(res).toEqual({ success: true });
-    expect(b.update).toHaveBeenCalledWith(
-      expect.objectContaining({ path: "children/c1/access/u2" }),
-      expect.objectContaining({ role: "owner", grantedBy: "u1" })
-    );
-    expect(b.update).toHaveBeenCalledWith(
-      expect.objectContaining({ path: "children/c1" }),
-      { ownerId: "u2" }
-    );
-    expect(b.delete).toHaveBeenCalledWith(expect.objectContaining({ path: "children/c1/access/u1" }));
-    expect(b.commit).toHaveBeenCalledTimes(1);
-  });
+  // The success path (promotion, ownerId, access removal in one transaction) and
+  // the co-owner hijack case run on the in-memory store in review.test.js.
 });
 
 describe("subscription kept until expiresAt after cancellation (S8)", () => {
@@ -2264,12 +2250,12 @@ describe("ensureReferralCode (audit A2)", () => {
 
 describe("checkRateLimit is transactional (S6)", () => {
   it("reads and writes the counter inside a transaction and rejects at the limit", async () => {
-    const full = Array.from({ length: 3 }, () => Date.now());
+    const full = Array.from({ length: 10 }, () => Date.now());
     mockFirestore.doc.mockImplementation((p) => {
-      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(doc({ findUser_timestamps: full })), set: jest.fn() };
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(doc({ consent_timestamps: full })), set: jest.fn() };
       return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
     });
-    await expect(fns.findUserByEmail(auth("u1", { email: "a@b.c" }))).rejects.toThrow("Trop de requêtes");
+    await expect(fns.recordHealthConsent(auth("u1", { version: "2.2" }))).rejects.toThrow("Trop de requêtes");
     const txFns = mockFirestore.runTransaction.mock.calls.map(([fn]) => fn.name);
     expect(txFns).toContain("rateLimitTxn");
   });

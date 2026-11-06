@@ -57,7 +57,7 @@ describe("sendWeeklyRecap", () => {
     const data = {};
     for (const [uid, { role = "owner", prefs = true, activity = true, userDoc }] of Object.entries(entries)) {
       const childId = `c-${uid}`;
-      data[`user_preferences/${uid}`] = { notifications: { email: prefs } };
+      data[`user_preferences/${uid}`] = { notifications: { email: prefs }, healthDataConsent: { granted: true, version: "2.2" } };
       if (userDoc) data[`users/${uid}`] = userDoc;
       data[`children/${childId}`] = { name: "Léo Martin" };
       data[`children/${childId}/access/${uid}`] = { role, userId: uid };
@@ -178,7 +178,7 @@ describe("sendWeeklyRecap", () => {
     await fns.sendWeeklyRecap();
     const histories = [...docs.entries()].filter(([p]) => p.startsWith("recap_history/")).map(([, d]) => d);
     expect(histories).toHaveLength(1);
-    expect(Object.keys(histories[0]).sort()).toEqual(["childId", "sentAt", "userId", "weekEnd", "weekStart"]);
+    expect(Object.keys(histories[0]).sort()).toEqual(["childId", "expireAt", "sentAt", "userId", "weekEnd", "weekStart"]);
     expect(histories[0]).not.toHaveProperty("stats");
 
     await fns.sendWeeklyRecap();
@@ -235,10 +235,12 @@ describe("unsubscribeRecap", () => {
     expect(res.body).toMatch(/désabonné/i);
   });
 
-  it("POST works even when the preferences document does not exist yet", async () => {
+  it("POST succeeds without creating a document when the preferences document does not exist (L2)", async () => {
     const docs = memoryStore({});
-    await fns.unsubscribeRecap(req("POST", { uid: "u1", token: tokenFor("u1") }), makeRes());
-    expect(prefs(docs, "u1").notifications.email).toBe(false);
+    const res = makeRes();
+    await fns.unsubscribeRecap(req("POST", { uid: "u1", token: tokenFor("u1") }), res);
+    expect(res.statusCode).toBe(200);
+    expect(docs.has("user_preferences/u1")).toBe(false);
   });
 
   it.each([

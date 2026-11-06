@@ -9,11 +9,12 @@ const adminMod = require("firebase-admin");
 const call = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com` } }, data, app: true });
 const ts = (ms) => ({ toMillis: () => ms, toDate: () => new Date(ms) });
 const past = new Date(Date.now() - 86400000).toISOString();
+const scheduled = new Date(Date.now() - 31 * 86400000).toISOString();
 
 /** Child c1 owned by "leaver", plus members: { uid: [role, grantedAtMs] }. */
 function family(members) {
   const data = {
-    "users/leaver": { email: "l@t.com", pendingDeletion: { deletionDate: past } },
+    "users/leaver": { email: "l@t.com", pendingDeletion: { scheduledAt: scheduled, deletionDate: past } },
     "children/c1": { name: "Léo", ownerId: "leaver" },
     "children/c1/access/leaver": { role: "owner", userId: "leaver", grantedAt: ts(1) },
     "user_child_access/leaver_c1": { userId: "leaver", childId: "c1", role: "owner" },
@@ -73,27 +74,26 @@ describe("ownership transfer when the owner's account is purged", () => {
     expect(docs.get("children/c1").ownerId).toBe("a");
   });
 
-  it("leaves the child ownerless, with an error log, when only contributors and viewers remain", async () => {
+  it("soft-deletes the child, with an error log, when only contributors and viewers remain (HC1)", async () => {
     const docs = memoryStore(family({ viewer: ["viewer", 2], contrib: ["contributor", 3] }));
     await fns.processScheduledDeletions();
 
-    expect(docs.get("children/c1")).toMatchObject({ ownerId: null, ownerlessSince: "TS", name: "Léo" });
-    expect(docs.get("children/c1/access/viewer").role).toBe("viewer");
-    expect(docs.get("children/c1/access/contrib").role).toBe("contributor");
-    expect([...docs.values()].some((d) => d.role === "owner")).toBe(false);
-    expect(docs.has("children/c1/access/leaver")).toBe(false);
+    expect(docs.get("children/c1")).toMatchObject({ ownerId: "leaver", name: "Léo", deletedBy: "deleted-user" });
+    expect(docs.get("children/c1")).not.toHaveProperty("ownerlessSince");
+    expect(docs.get("children/c1").deletedAt).toBeDefined();
+    expect([...docs.keys()].filter((k) => k.startsWith("children/c1/access/"))).toEqual([]);
     expect(docs.has("user_child_access/leaver_c1")).toBe(false);
+    expect(docs.has("user_child_access/viewer_c1")).toBe(false);
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("c1"));
     expect(docs.has("users/leaver")).toBe(false);
   });
 
-  it("does not promote anyone on a retry once the child is ownerless", async () => {
+  it("does not soft-delete twice on a retry", async () => {
     const state = family({ viewer: ["viewer", 2] });
-    state["children/c1"] = { name: "Léo", ownerId: null };
+    state["children/c1"] = { name: "Léo", ownerId: "leaver", deletedAt: ts(1) };
     const docs = memoryStore(state);
     await fns.processScheduledDeletions();
-    expect(docs.get("children/c1/access/viewer").role).toBe("viewer");
-    expect(docs.get("children/c1").ownerId).toBeNull();
+    expect([...docs.keys()].filter((k) => k.startsWith("childDeletionRequests/"))).toEqual([]);
   });
 });
 

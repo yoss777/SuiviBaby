@@ -15,10 +15,10 @@ describe("recordHealthConsent", () => {
 
   it("rejects unauthenticated callers", async () => {
     memoryStore({});
-    await expect(fns.recordHealthConsent({ auth: null, data: { version: "2.1" } })).rejects.toThrow("Authentification");
+    await expect(fns.recordHealthConsent({ auth: null, data: { version: "2.2" } })).rejects.toThrow("Authentification");
   });
 
-  it.each([[undefined], ["1.0"], [2.1], [null], ["2.1 "]])("rejects version %p", async (version) => {
+  it.each([[undefined], ["1.0"], [2.2], [null], ["2.2 "]])("rejects version %p", async (version) => {
     const docs = memoryStore({});
     await expect(fns.recordHealthConsent(call("u1", { version }))).rejects.toMatchObject({ code: "invalid-argument" });
     expect([...docs.keys()].filter((k) => k.startsWith("consent_records/"))).toEqual([]);
@@ -31,21 +31,21 @@ describe("recordHealthConsent", () => {
 
   it("appends a proof record and sets the preference read by the app", async () => {
     const docs = memoryStore({});
-    await expect(fns.recordHealthConsent(call("u1", { version: "2.1", platform: "ios" }))).resolves.toEqual({ version: "2.1" });
+    await expect(fns.recordHealthConsent(call("u1", { version: "2.2", platform: "ios" }))).resolves.toEqual({ version: "2.2" });
 
     const records = [...docs.entries()].filter(([p]) => p.startsWith("consent_records/"));
     expect(records).toHaveLength(1);
-    expect(records[0][1]).toEqual({ uid: "u1", type: "health_data", version: "2.1", granted: true, grantedAt: "TS", platform: "ios" });
+    expect(records[0][1]).toEqual({ uid: "u1", type: "health_data", version: "2.2", granted: true, grantedAt: "TS", platform: "ios" });
     expect(docs.get("user_preferences/u1").healthDataConsent).toEqual({
       granted: true,
       grantedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
-      version: "2.1",
+      version: "2.2",
     });
   });
 
   it("keeps other preferences and omits platform when absent", async () => {
     const docs = memoryStore({ "user_preferences/u1": { theme: "dark" } });
-    await fns.recordHealthConsent(call("u1", { version: "2.1" }));
+    await fns.recordHealthConsent(call("u1", { version: "2.2" }));
     expect(docs.get("user_preferences/u1")).toMatchObject({ theme: "dark" });
     const [, record] = [...docs.entries()].find(([p]) => p.startsWith("consent_records/"));
     expect(record).not.toHaveProperty("platform");
@@ -53,19 +53,19 @@ describe("recordHealthConsent", () => {
 
   it("appends a new record on each call (history)", async () => {
     const docs = memoryStore({});
-    await fns.recordHealthConsent(call("u1", { version: "2.1" }));
-    await fns.recordHealthConsent(call("u1", { version: "2.1" }));
+    await fns.recordHealthConsent(call("u1", { version: "2.2" }));
+    await fns.recordHealthConsent(call("u1", { version: "2.2" }));
     expect([...docs.keys()].filter((k) => k.startsWith("consent_records/"))).toHaveLength(2);
   });
 
   it.each([[""], ["x".repeat(21)], [42], ["ios<script>"]])("rejects platform %p", async (platform) => {
     memoryStore({});
-    await expect(fns.recordHealthConsent(call("u1", { version: "2.1", platform }))).rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(fns.recordHealthConsent(call("u1", { version: "2.2", platform }))).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
   it("is rate limited", async () => {
     memoryStore({ "rate_limits/u1": { consent_timestamps: Array(100).fill(Date.now()) } });
-    await expect(fns.recordHealthConsent(call("u1", { version: "2.1" }))).rejects.toMatchObject({ code: "resource-exhausted" });
+    await expect(fns.recordHealthConsent(call("u1", { version: "2.2" }))).rejects.toMatchObject({ code: "resource-exhausted" });
   });
 });
 
@@ -188,13 +188,14 @@ describe("registerAppleRevocation", () => {
 describe("purgeUserData: Apple revocation and consent retention", () => {
   const UID = "parent1";
   const past = new Date(Date.now() - 86400000).toISOString();
+  const scheduled = new Date(Date.now() - 31 * 86400000).toISOString();
   const { privateKey } = crypto.generateKeyPairSync("ec", { namedCurve: "P-256" });
   const pem = privateKey.export({ type: "pkcs8", format: "pem" });
   let authApi;
   let errorSpy;
 
   const base = () => ({
-    [`users/${UID}`]: { email: "p1@t.com", pendingDeletion: { deletionDate: past } },
+    [`users/${UID}`]: { email: "p1@t.com", pendingDeletion: { scheduledAt: scheduled, deletionDate: past } },
     [`apple_tokens/${UID}`]: { refreshToken: "rt-9" },
   });
 
@@ -246,30 +247,39 @@ describe("purgeUserData: Apple revocation and consent retention", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("logs an error but completes the purge when Apple refuses the revocation", async () => {
+  it("keeps the token and the account for a retry when Apple refuses the revocation (M6)", async () => {
     global.fetch.mockResolvedValue({ ok: false, status: 400, text: async () => "invalid_client" });
     const docs = memoryStore(base());
     await fns.processScheduledDeletions();
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Apple"), expect.anything());
-    expect(docs.has(`apple_tokens/${UID}`)).toBe(false);
-    expect(docs.has(`users/${UID}`)).toBe(false);
-    expect(authApi.deleteUser).toHaveBeenCalledWith(UID);
+    expect(errorSpy).toHaveBeenCalled();
+    expect(docs.get(`apple_tokens/${UID}`)).toMatchObject({ refreshToken: "rt-9", revokeFailures: 1 });
+    expect(docs.has(`users/${UID}`)).toBe(true);
+    expect(authApi.deleteUser).not.toHaveBeenCalled();
   });
 
-  it("logs an error but completes the purge when the network fails or secrets are missing", async () => {
+  it("retries on network failure and on missing secrets, counting each failure", async () => {
     global.fetch.mockRejectedValue(new Error("network"));
     let docs = memoryStore(base());
     await fns.processScheduledDeletions();
-    expect(errorSpy).toHaveBeenCalled();
-    expect(docs.has(`users/${UID}`)).toBe(false);
+    expect(docs.get(`apple_tokens/${UID}`).revokeFailures).toBe(1);
+    await fns.processScheduledDeletions();
+    expect(docs.get(`apple_tokens/${UID}`).revokeFailures).toBe(2);
+    expect(docs.has(`users/${UID}`)).toBe(true);
 
     delete process.env.APPLE_PRIVATE_KEY;
-    errorSpy.mockClear();
     global.fetch.mockClear();
     docs = memoryStore(base());
     await fns.processScheduledDeletions();
     expect(global.fetch).not.toHaveBeenCalled();
-    expect(errorSpy).toHaveBeenCalled();
+    expect(docs.get(`apple_tokens/${UID}`).revokeFailures).toBe(1);
+  });
+
+  it("completes the purge once the retry succeeds", async () => {
+    global.fetch.mockResolvedValueOnce({ ok: false, status: 500, text: async () => "down" });
+    const docs = memoryStore(base());
+    await fns.processScheduledDeletions();
+    expect(docs.has(`users/${UID}`)).toBe(true);
+    await fns.processScheduledDeletions();
     expect(docs.has(`apple_tokens/${UID}`)).toBe(false);
     expect(docs.has(`users/${UID}`)).toBe(false);
   });
@@ -278,9 +288,9 @@ describe("purgeUserData: Apple revocation and consent retention", () => {
     const before = Date.now();
     const docs = memoryStore({
       ...base(),
-      "consent_records/c1": { uid: UID, type: "health_data", version: "2.1", granted: true },
+      "consent_records/c1": { uid: UID, type: "health_data", version: "2.2", granted: true },
       "consent_records/c2": { uid: UID, type: "health_data", version: "2.0", granted: true },
-      "consent_records/other": { uid: "someone", type: "health_data", version: "2.1", granted: true },
+      "consent_records/other": { uid: "someone", type: "health_data", version: "2.2", granted: true },
     });
     await fns.processScheduledDeletions();
 

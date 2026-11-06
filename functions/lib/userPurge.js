@@ -22,7 +22,6 @@ const USER_DATA_BY_FIELD = [
   ["referrals", "filleulUid"],
   ["referral_codes", "uid"],
   ["childDeletionRequests", "requestedBy"],
-  ["user_hidden_photos", "userId"],
   ["pending_assemblyai_deletes", "userId"],
   ["voice_transcribe_cache", "uid"],
   ["reports", "reporterUserId"],
@@ -33,6 +32,8 @@ const USER_DOCS_BY_ID = [
   "users_public",
   "user_preferences",
   "user_content",
+  // Per-user photo masking, written by the report flow at user_hidden_photos/{uid}.
+  "user_hidden_photos",
   "user_promos",
   "subscriptions",
   "rate_limits",
